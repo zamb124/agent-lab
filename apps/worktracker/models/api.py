@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import Field
 
@@ -91,7 +92,7 @@ class WorkQueueUpdateRequest(StrictBaseModel):
 
 class WorkQueueMemberAddRequest(StrictBaseModel):
     member: WorkActor
-    role: str = "member"
+    role: Literal["owner", "member"] = "member"
 
 
 class WorkQueueMemberRemoveRequest(StrictBaseModel):

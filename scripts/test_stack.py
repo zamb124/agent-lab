@@ -51,6 +51,7 @@ from tests.fixtures.test_database_env import (
     TEST_DATABASE_ENV,
     TEST_LIVEKIT_API_SECRET,
     TEST_OFFICE_JWT_SECRET,
+    load_openfga_test_env_overlay,
 )
 
 STACK_MANIFEST_PATH = Path("/tmp/platform_test_stack.json")
@@ -69,7 +70,6 @@ COMMON_TEST_ENV: dict[str, str] = {
     TEST_SCOPE_DEFAULT_ENV: TEST_SCOPE_STATIC_E2E,
     "DATABASE__REDIS_URL": "redis://localhost:63792/0",
     "TASKS__BROKER_URL": "redis://localhost:63792/1",
-    "AUTH__PERMISSIONS_ENABLED": "false",
     # DevInterServiceProxy: браузер на :9021 с путём /flows/... → flows_service_url (см. dev_inter_service_proxy.mdc).
     "SERVER__ENV": "test",
     "SERVER__DEFAULT_TENANT_ID": "test_tenant",
@@ -197,26 +197,42 @@ def _scaled_code_runner_python_workers(pytest_workers: int | None = None) -> int
 
 
 def _test_flows_worker_concurrency(pytest_workers: int | None = None) -> int:
-    """Один consumer flows_worker под xdist: меньше гонок projection hash в durable ledger."""
-    workers = pytest_workers if pytest_workers is not None else resolve_pytest_workers()
-    if workers > 1:
-        return 1
-    return 4
+    """Параллельные process_flow_task: OCC ledger per-session, не глобальный lock.
+
+    Раньше при WORKERS>1 оставляли 1 consumer «против гонок projection hash».
+    Это сериализовало все A2A (включая CRM note-analyze) в одну очередь: под
+    -n10 SendMessage collect ждёт, пока единственный worker доест чужие графы,
+    CRM-задача остаётся running без error до poll 90 с. Hash mismatch —
+    per session_id; разные context_id не делят head. Baseline 8.
+    """
+    return scale_stack_workers(8, pytest_workers)
 
 
 def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianService, ...]:
     code_runner_workers = _scaled_code_runner_python_workers(pytest_workers)
     return (
-    GranianService(name="secrets", app_path="apps.secrets.main:app", port=9022, readiness_timeout=90.0),
+    GranianService(
+        name="secrets",
+        app_path="apps.secrets.main:app",
+        port=9022,
+        readiness_timeout=90.0,
+        workers=scale_stack_workers(4, pytest_workers),
+    ),
     GranianService(
         name="flows",
         app_path="apps.flows.main:app",
         port=9001,
         readiness_timeout=180.0,
-        workers=scale_stack_workers(2, pytest_workers),
+        workers=scale_stack_workers(14, pytest_workers),
     ),
     GranianService(name="rag", app_path="apps.rag.main:app", port=9002, readiness_timeout=120.0),
-    GranianService(name="crm", app_path="apps.crm.main:app", port=9003, readiness_timeout=120.0),
+    GranianService(
+        name="crm",
+        app_path="apps.crm.main:app",
+        port=9003,
+        readiness_timeout=120.0,
+        workers=scale_stack_workers(8, pytest_workers),
+    ),
     GranianService(
         name="frontend",
         app_path="apps.frontend.main:app",
@@ -284,18 +300,30 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
         app_path="apps.code_runner_node.main:app",
         port=9018,
         readiness_timeout=120.0,
+        workers=code_runner_workers,
+        env={
+            "CODE_RUNNER_NODE_WORKERS": str(code_runner_workers),
+        },
     ),
     GranianService(
         name="code_runner_go",
         app_path="apps.code_runner_go.main:app",
         port=9019,
         readiness_timeout=120.0,
+        workers=code_runner_workers,
+        env={
+            "CODE_RUNNER_GO_WORKERS": str(code_runner_workers),
+        },
     ),
     GranianService(
         name="code_runner_csharp",
         app_path="apps.code_runner_csharp.main:app",
         port=9020,
         readiness_timeout=150.0,
+        workers=code_runner_workers,
+        env={
+            "CODE_RUNNER_CSHARP_WORKERS": str(code_runner_workers),
+        },
     ),
     GranianService(
         name="worktracker",
@@ -356,7 +384,14 @@ def build_taskiq_worker_services(pytest_workers: int | None = None) -> tuple[Tas
         name="crm_worker",
         worker_module="apps.crm_worker.worker:worker_app",
         stream_name="crm",
-        workers=1,
+        workers=scale_stack_workers(16, pytest_workers),
+        readiness_timeout=120.0,
+    ),
+    TaskiqWorkerService(
+        name="crm_summary_worker",
+        worker_module="apps.crm_worker.summary_worker:worker_app",
+        stream_name="crm_summary",
+        workers=scale_stack_workers(2, pytest_workers),
         readiness_timeout=120.0,
     ),
     TaskiqWorkerService(
@@ -391,7 +426,12 @@ EXTERNAL_READINESS: tuple[ExternalReadiness, ...] = (
 
 
 def _build_process_env(service_env: dict[str, str]) -> dict[str, str]:
-    process_env: dict[str, str] = {**os.environ, **COMMON_TEST_ENV, **service_env}
+    process_env: dict[str, str] = {
+        **os.environ,
+        **COMMON_TEST_ENV,
+        **load_openfga_test_env_overlay(),
+        **service_env,
+    }
     process_env.pop("PYTEST_XDIST_WORKER", None)
     process_env.pop("PYTEST_XDIST_WORKER_COUNT", None)
     return process_env

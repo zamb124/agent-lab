@@ -12,6 +12,8 @@ from pydantic import TypeAdapter
 from sqlalchemy import text
 
 from core.auth.utils import compare_passwords
+from core.authz.group_sync import sync_user_groups
+from core.authz.service import AuthzService
 from core.config import get_settings
 from core.config.models import AuthProviderConfig
 from core.db.storage import Storage
@@ -59,19 +61,47 @@ class AuthService:
         company_repository: CompanyRepository,
         auth_session_repository: AuthSessionRepository,
         storage: Storage,
+        authz: AuthzService,
     ) -> None:
         """
         Аргументы:
             user_repository: Репозиторий для работы с пользователями
             company_repository: Репозиторий для работы с компаниями
             auth_session_repository: Репозиторий для работы с сессиями
+            authz: OpenFGA dual-write для User.groups
         """
         self._user_repository: UserRepository = user_repository
         self._company_repository: CompanyRepository = company_repository
         self._auth_session_repository: AuthSessionRepository = auth_session_repository
         self._storage: Storage = storage
+        self._authz: AuthzService = authz
         self._providers: dict[AuthProvider, BaseAuthProvider] = {}
         self._initialize_providers()
+
+    async def _persist_user(self, user: User) -> bool:
+        previous = await self._user_repository.get(user.user_id)
+        previous_groups = list(previous.groups) if previous is not None else []
+        previous_company_ids = (
+            list(previous.companies.keys()) if previous is not None else []
+        )
+        saved = await self._user_repository.set(user)
+        if saved:
+            try:
+                await sync_user_groups(
+                    self._authz,
+                    user_id=user.user_id,
+                    groups=user.groups,
+                    company_ids=list(user.companies.keys()),
+                    previous_groups=previous_groups,
+                    previous_company_ids=previous_company_ids,
+                )
+            except Exception:
+                if previous is not None:
+                    _ = await self._user_repository.set(previous)
+                else:
+                    _ = await self._user_repository.delete(user.user_id)
+                raise
+        return saved
 
     def _initialize_providers(self) -> None:
         """Инициализирует доступные провайдеры на основе конфигурации"""
@@ -298,7 +328,7 @@ class AuthService:
 
         if user.active_company_id != company_id:
             user.active_company_id = company_id
-            _ = await self._user_repository.set(user)
+            _ = await self._persist_user(user)
 
         session = await self._create_session(user, AuthProvider.DEMO, "demo", None)
 
@@ -377,7 +407,7 @@ class AuthService:
                 raise ValueError(f"Пользователь {user_id} не найден")
 
             user.updated_at = datetime.now(timezone.utc)
-            _ = await self._user_repository.set(user)
+            _ = await self._persist_user(user)
 
             await self._update_provider_data(user.user_id, provider, user_info)
 
@@ -401,7 +431,7 @@ class AuthService:
                     user.name = user_info.name
                 if user_info.avatar_url and not user.avatar_url:
                     user.avatar_url = user_info.avatar_url
-                _ = await self._user_repository.set(user)
+                _ = await self._persist_user(user)
                 await self._add_user_provider(user.user_id, provider, user_info)
                 logger.info(
                     "Провайдер %s привязан к существующему пользователю %s",
@@ -421,7 +451,7 @@ class AuthService:
                 active_company_id="",
             )
 
-            _ = await self._user_repository.set(user)
+            _ = await self._persist_user(user)
             await self._add_user_provider(user_id, provider, user_info)
 
             logger.info(f"Создан новый пользователь {user_info.email}")
@@ -506,8 +536,8 @@ class AuthService:
         return await self._user_repository.get(user_id)
 
     async def save_user(self, user: User) -> bool:
-        """Сохраняет пользователя."""
-        return await self._user_repository.set(user)
+        """Сохраняет пользователя и dual-write User.groups в OpenFGA."""
+        return await self._persist_user(user)
 
     async def get_company(self, company_id: str) -> Company | None:
         """Получает компанию по ID"""

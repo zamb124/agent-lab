@@ -32,7 +32,7 @@ export class OfficeAccessModal extends PlatformFormModal {
         _linkEnabled: { state: true },
         _linkPermission: { state: true },
         _publicUrl: { state: true },
-        _memberUserIds: { state: true },
+        _members: { state: true },
         _query: { state: true },
         _loading: { state: true },
     };
@@ -165,9 +165,9 @@ export class OfficeAccessModal extends PlatformFormModal {
         this.resourceTitle = '';
         this._companyVisible = true;
         this._linkEnabled = false;
-        this._linkPermission = 'view';
+        this._linkPermission = 'viewer';
         this._publicUrl = '';
-        this._memberUserIds = [];
+        this._members = [];
         this._query = '';
         this._loading = true;
         this.size = 'md';
@@ -202,10 +202,24 @@ export class OfficeAccessModal extends PlatformFormModal {
         if (data) {
             this._companyVisible = data.company_visible === true;
             this._linkEnabled = data.link_enabled === true;
-            this._linkPermission = data.link_permission === 'edit' ? 'edit' : 'view';
+            if (data.link_permission !== 'viewer' && data.link_permission !== 'editor') {
+                throw new Error('office.access: link_permission must be viewer|editor');
+            }
+            this._linkPermission = data.link_permission;
             this._publicUrl = typeof data.public_url === 'string' ? data.public_url : '';
-            this._memberUserIds = Array.isArray(data.members)
-                ? data.members.map((m) => m.user_id).filter((id) => typeof id === 'string')
+            this._members = Array.isArray(data.members)
+                ? data.members
+                    .filter((member) => typeof member === 'object' && member !== null)
+                    .map((member) => {
+                        if (member.relation !== 'viewer' && member.relation !== 'editor') {
+                            throw new Error('office.access: member.relation must be viewer|editor');
+                        }
+                        return {
+                            user_id: typeof member.user_id === 'string' ? member.user_id : '',
+                            relation: member.relation,
+                        };
+                    })
+                    .filter((member) => member.user_id.length > 0)
                 : [];
         }
         this._loading = false;
@@ -227,24 +241,31 @@ export class OfficeAccessModal extends PlatformFormModal {
     _linkPermissionConfig() {
         return {
             values: [
-                { value: 'view', label: this.t('access.permissionView') },
-                { value: 'edit', label: this.t('access.permissionEdit') },
+                { value: 'viewer', label: this.t('access.permissionViewer') },
+                { value: 'editor', label: this.t('access.permissionEditor') },
             ],
         };
     }
 
     _setLinkPermission(value) {
-        this._linkPermission = value === 'edit' ? 'edit' : 'view';
+        this._linkPermission = value === 'editor' ? 'editor' : 'viewer';
     }
 
     _removeMember(userId) {
-        this._memberUserIds = this._memberUserIds.filter((id) => id !== userId);
+        this._members = this._members.filter((member) => member.user_id !== userId);
     }
 
     _addMember(userId) {
-        if (this._memberUserIds.includes(userId)) return;
-        this._memberUserIds = [...this._memberUserIds, userId];
+        if (this._members.some((member) => member.user_id === userId)) return;
+        this._members = [...this._members, { user_id: userId, relation: 'viewer' }];
         this._query = '';
+    }
+
+    _buildMembersPayload() {
+        return this._members.map((member) => ({
+            user_id: member.user_id,
+            relation: member.relation === 'editor' ? 'editor' : 'viewer',
+        }));
     }
 
     _filteredCandidates() {
@@ -254,7 +275,7 @@ export class OfficeAccessModal extends PlatformFormModal {
         const q = this._query.trim().toLowerCase();
         return company.filter((item) => {
             if (typeof item.user_id !== 'string') return false;
-            if (this._memberUserIds.includes(item.user_id)) return false;
+            if (this._members.some((member) => member.user_id === item.user_id)) return false;
             if (q.length === 0) return true;
             const name = typeof item.name === 'string' ? item.name.toLowerCase() : '';
             const email = typeof item.email === 'string' ? item.email.toLowerCase() : '';
@@ -295,14 +316,14 @@ export class OfficeAccessModal extends PlatformFormModal {
                 fileId: this.resourceId,
                 linkEnabled: this._linkEnabled,
                 linkPermission: this._linkPermission,
-                memberUserIds: this._memberUserIds,
+                members: this._buildMembersPayload(),
             }
             : {
                 catalogId: this.resourceId,
                 companyVisible: this._companyVisible,
                 linkEnabled: this._linkEnabled,
                 linkPermission: this._linkPermission,
-                memberUserIds: this._companyVisible ? null : this._memberUserIds,
+                members: this._companyVisible ? null : this._buildMembersPayload(),
             };
         const result = await this._accessPatch.run(patchPayload);
         if (result) {
@@ -310,7 +331,10 @@ export class OfficeAccessModal extends PlatformFormModal {
                 this._publicUrl = result.public_url;
             }
             this._linkEnabled = result.link_enabled === true;
-            this._linkPermission = result.link_permission === 'edit' ? 'edit' : 'view';
+            if (result.link_permission !== 'viewer' && result.link_permission !== 'editor') {
+                throw new Error('office.access: link_permission must be viewer|editor');
+            }
+            this._linkPermission = result.link_permission;
             if (this._isCatalog()) {
                 this._companyVisible = result.company_visible === true;
             }
@@ -353,10 +377,10 @@ export class OfficeAccessModal extends PlatformFormModal {
                     <div>
                         <div class="section-title">${this.t('access.membersSection')}</div>
                         <div class="members-list">
-                            ${this._memberUserIds.map((userId) => html`
+                            ${this._members.map((member) => html`
                                 <div class="member-row">
-                                    <platform-user-chip user-id=${userId}></platform-user-chip>
-                                    <button class="remove-btn" type="button" @click=${() => this._removeMember(userId)}>
+                                    <platform-user-chip user-id=${member.user_id}></platform-user-chip>
+                                    <button class="remove-btn" type="button" @click=${() => this._removeMember(member.user_id)}>
                                         ${this.t('access.removeMember')}
                                     </button>
                                 </div>

@@ -4,8 +4,10 @@
 Изоляция по `unique_id`; teardown снимает созданные записи.
 """
 
+
 from __future__ import annotations
 
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import uuid
 
 import pytest

@@ -6,7 +6,7 @@ import { fixture, fixtureCleanup, html, expect, elementUpdated } from '../helper
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { registerFactory, collectFactories } from '@platform/lib/events/index.js';
 import { modelsListOp } from '../../../../apps/flows/ui/events/resources/models.resource.js';
-import { codeCompletionsOp } from '../../../../apps/flows/ui/events/resources/code.resource.js';
+import { codeLspSessionOp } from '../../../../apps/flows/ui/events/resources/code.resource.js';
 import { providersListOp } from '../../../../apps/flows/ui/events/resources/providers.resource.js';
 import '../../../../apps/flows/ui/components/editors/flows-llm-config-editor.js';
 
@@ -14,9 +14,9 @@ describe('flows-llm-config-editor', () => {
     beforeEach(() => {
         resetPlatformState();
         registerFactory(modelsListOp);
-        registerFactory(codeCompletionsOp);
+        registerFactory(codeLspSessionOp);
         registerFactory(providersListOp);
-        const collected = collectFactories([modelsListOp, codeCompletionsOp, providersListOp]);
+        const collected = collectFactories([modelsListOp, codeLspSessionOp, providersListOp]);
         bootstrapTestBus({ slices: collected.slices });
     });
     afterEach(() => fixtureCleanup());

@@ -2,7 +2,7 @@
  * platform.file_picker — выбор файла из Documents или загрузка нового.
  *
  * Props:
- *   acceptMimePrefix — 'image/' или '' (все типы)
+ *   acceptMimePrefix — 'image/' | 'application/vnd.sqlite3' | '' (все типы)
  *   uploadOpName, uploadSpec — platform/file_create
  *   catalogsOpName, documentsOpName, searchOpName — browse ops хоста
  *   onSelect(file) — { file_id, original_name, content_type, file_size, file_category? }
@@ -18,6 +18,9 @@ import './platform-file-card.js';
 import './fields/platform-field.js';
 
 const IMAGE_CATEGORY = 'image';
+const DATA_TABLE_CATEGORY = 'data_table';
+const DATA_TABLE_CONTENT_TYPE = 'application/vnd.sqlite3';
+const DATA_TABLE_CONTENT_TYPE_LEGACY = 'application/x-sqlite3';
 
 function _asNonEmptyString(value) {
     return typeof value === 'string' && value.length > 0 ? value : '';
@@ -31,10 +34,23 @@ function _fileMatchesAccept(item, acceptMimePrefix) {
         return item.file_category === IMAGE_CATEGORY
             || (typeof item.content_type === 'string' && item.content_type.startsWith('image/'));
     }
+    if (acceptMimePrefix === DATA_TABLE_CONTENT_TYPE) {
+        return item.file_category === DATA_TABLE_CATEGORY
+            || item.content_type === DATA_TABLE_CONTENT_TYPE
+            || item.content_type === DATA_TABLE_CONTENT_TYPE_LEGACY;
+    }
     if (typeof item.content_type === 'string' && item.content_type.startsWith(acceptMimePrefix)) {
         return true;
     }
     return false;
+}
+
+function _isSqliteLocalFile(file) {
+    const name = typeof file.name === 'string' ? file.name.toLowerCase() : '';
+    return file.type === DATA_TABLE_CONTENT_TYPE
+        || file.type === DATA_TABLE_CONTENT_TYPE_LEGACY
+        || name.endsWith('.sqlite')
+        || name.endsWith('.db');
 }
 
 function _pickedFromDocument(item) {
@@ -79,7 +95,11 @@ function _pickedFromUpload(result) {
         original_name: originalName,
         content_type: contentType,
         file_size: result.file_size,
-        file_category: contentType.startsWith('image/') ? IMAGE_CATEGORY : '',
+        file_category: contentType.startsWith('image/')
+            ? IMAGE_CATEGORY
+            : (contentType === DATA_TABLE_CONTENT_TYPE || contentType === DATA_TABLE_CONTENT_TYPE_LEGACY
+                ? DATA_TABLE_CATEGORY
+                : ''),
     };
 }
 
@@ -378,6 +398,9 @@ export class PlatformFilePickerModal extends PlatformModal {
         if (this.acceptMimePrefix === 'image/') {
             return 'image/*';
         }
+        if (this.acceptMimePrefix === DATA_TABLE_CONTENT_TYPE) {
+            return '.sqlite,.db,application/vnd.sqlite3,application/x-sqlite3';
+        }
         return '*/*';
     }
 
@@ -395,6 +418,10 @@ export class PlatformFilePickerModal extends PlatformModal {
         }
         if (this.acceptMimePrefix === 'image/' && !file.type.startsWith('image/')) {
             this._error = this.t('file_picker.error_not_image');
+            return;
+        }
+        if (this.acceptMimePrefix === DATA_TABLE_CONTENT_TYPE && !_isSqliteLocalFile(file)) {
+            this._error = this.t('file_picker.error_not_data_table');
             return;
         }
         this._uploading = true;

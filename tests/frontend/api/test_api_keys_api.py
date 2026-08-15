@@ -5,6 +5,8 @@ Integration тесты для API управления API ключами.
 Проверяем создание, управление и отзыв API ключей.
 """
 
+
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import pytest
 from httpx import AsyncClient
 
@@ -329,6 +331,20 @@ class TestApiKeysAPI:
 
         await frontend_container.user_repository.set(user1)
         await frontend_container.user_repository.set(user2)
+        await set_test_company_member_roles(
+            frontend_container.company_repository,
+            frontend_container.authz_service,
+            company_id=company1_id,
+            user_id="user1",
+            roles=["owner"],
+        )
+        await set_test_company_member_roles(
+            frontend_container.company_repository,
+            frontend_container.authz_service,
+            company_id=company2_id,
+            user_id="user2",
+            roles=["owner"],
+        )
 
         token_service = get_token_service()
         token1 = token_service.create_token("user1", company_id=company1_id)

@@ -83,29 +83,17 @@ _LLM_CAPABILITIES: tuple[AICapability, ...] = LLM_CAPABILITIES
 _VOICE_CAPABILITIES: tuple[AICapability, ...] = VOICE_CAPABILITIES
 
 
-def _require_admin() -> tuple[User, Company]:
+async def _require_admin(container: ContainerDep) -> tuple[User, Company]:
     context = require_context()
     company = context.active_company
     if company is None:
         raise HTTPException(status_code=400, detail="Компания не выбрана")
     user = context.user
-    roles = _current_company_roles(user, company)
-    if "owner" not in roles and "admin" not in roles and user.user_id != company.owner_user_id:
-        raise HTTPException(status_code=403, detail="Недостаточно прав")
+    await container.authz_service.require_company_admin(
+        company_id=company.company_id,
+        user_id=user.user_id,
+    )
     return user, company
-
-
-def _current_company_roles(user: User, company: Company) -> set[str]:
-    """Roles for the active company, accepting both sides of the platform membership mirror."""
-    company_id = company.company_id
-
-    roles: set[str] = set(company.members.get(user.user_id, []) or [])
-    roles.update(user.companies.get(company_id, []) or [])
-
-    if company_id == "system" and "admin" in user.groups:
-        roles.add("admin")
-
-    return roles
 
 
 def _load_aip(company: Company) -> CompanyAIProviders:
@@ -712,7 +700,7 @@ def _validated_ai_providers(aip: CompanyAIProviders) -> CompanyAIProviders:
 
 @router.get("")
 async def get_ai_providers(request: Request, container: ContainerDep) -> JsonObject:
-    _, company = _require_admin()
+    _, company = await _require_admin(container)
     aip = _load_aip(company)
     brand = _resolve_brand_for_ai_providers(request.headers.get("host"))
     humanitec_llms_models = await read_humanitec_llms_model_options(container.redis_client)
@@ -739,7 +727,7 @@ async def put_llm_context(
     payload: LLMContextPatch,
     container: ContainerDep,
 ) -> JsonObject:
-    _, company = _require_admin()
+    _, company = await _require_admin(container)
     aip = _load_aip(company)
     try:
         patch = LLMContextPatch.model_validate(
@@ -764,7 +752,7 @@ async def put_llm_context(
 
 @router.delete("/llm-context")
 async def delete_llm_context(container: ContainerDep) -> JsonObject:
-    _, company = _require_admin()
+    _, company = await _require_admin(container)
     aip = _load_aip(company)
     updated_aip = aip.model_copy(update={"llm_context": None})
     updated_aip = _validated_ai_providers(updated_aip)
@@ -782,7 +770,7 @@ async def put_capability(
     payload: AIProvidersCapabilityUpdate,
     container: ContainerDep,
 ) -> JsonObject:
-    _, company = _require_admin()
+    _, company = await _require_admin(container)
     cap = _capability_from_path(capability)
     aip = _load_aip(company)
 
@@ -822,7 +810,7 @@ async def delete_capability(
     capability: str,
     container: ContainerDep,
 ) -> JsonObject:
-    _, company = _require_admin()
+    _, company = await _require_admin(container)
     cap = _capability_from_path(capability)
     aip = _load_aip(company)
     updated_aip = aip.model_copy(update={cap.value: None})
@@ -841,7 +829,7 @@ async def create_custom_provider(
     payload: CustomProviderCreate,
     container: ContainerDep,
 ) -> JsonObject:
-    _, company = _require_admin()
+    _, company = await _require_admin(container)
     aip = _load_aip(company)
 
     if any(p.id == payload.id for p in aip.custom_providers):
@@ -875,7 +863,7 @@ async def update_custom_provider(
     payload: CustomProviderUpdate,
     container: ContainerDep,
 ) -> JsonObject:
-    _, company = _require_admin()
+    _, company = await _require_admin(container)
     aip = _load_aip(company)
 
     try:
@@ -929,7 +917,7 @@ async def delete_custom_provider(
     provider_id: str,
     container: ContainerDep,
 ) -> JsonObject:
-    _, company = _require_admin()
+    _, company = await _require_admin(container)
     aip = _load_aip(company)
 
     if not any(p.id == provider_id for p in aip.custom_providers):
@@ -967,9 +955,9 @@ async def delete_custom_provider(
 
 
 @router.get("/resolved")
-async def get_resolved() -> JsonObject:
+async def get_resolved(container: ContainerDep) -> JsonObject:
     """Диагностика: что резолвится для текущей компании по всем capabilities."""
-    user, company = _require_admin()
+    user, company = await _require_admin(container)
     ctx = Context(user=user, active_company=company, channel="settings_resolved")
     set_context(ctx)
     try:

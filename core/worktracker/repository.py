@@ -24,16 +24,13 @@ from core.worktracker.db_models import (
     BoardRow,
     WorkItemCommentRow,
     WorkItemRow,
-    WorkQueueMemberRow,
     WorkQueueRow,
 )
 from core.worktracker.models import (
     TERMINAL_WORK_ITEM_STATES,
-    ActorKind,
     AssigneeKind,
     Board,
     BoardColumn,
-    UserActor,
     WorkActor,
     WorkItem,
     WorkItemAssignment,
@@ -47,7 +44,6 @@ from core.worktracker.models import (
     WorkItemResolution,
     WorkItemState,
     WorkQueue,
-    WorkQueueMember,
 )
 
 _ACTOR_ADAPTER: TypeAdapter[WorkActor] = TypeAdapter(WorkActor)
@@ -62,18 +58,6 @@ def _actor_to_json(actor: WorkActor) -> JsonObject:
 
 def _actor_from_json(raw: JsonObject) -> WorkActor:
     return _ACTOR_ADAPTER.validate_python(raw)
-
-
-def _member_kind_ref(actor: WorkActor) -> tuple[str, str]:
-    if isinstance(actor, UserActor):
-        return ("user", actor.user_id)
-    raise ValueError("Участник очереди должен быть пользователем")
-
-
-def _member_actor(member_kind: str, member_ref: str) -> WorkActor:
-    if member_kind == "user":
-        return UserActor(user_id=member_ref)
-    raise ValueError(f"Неизвестный member_kind {member_kind!r}")
 
 
 def _assignment_text(key: str) -> ColumnElement[str]:
@@ -276,6 +260,7 @@ def _row_to_queue(row: WorkQueueRow) -> WorkQueue:
         name=row.name,
         work_queue_slug=row.slug,
         description=row.description,
+        owner_user_id=row.owner_user_id,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -521,6 +506,7 @@ class WorktrackerRepository:
                 name=queue.name,
                 slug=queue.work_queue_slug,
                 description=queue.description,
+                owner_user_id=queue.owner_user_id,
                 created_at=queue.created_at,
                 updated_at=queue.updated_at,
             )
@@ -528,6 +514,21 @@ class WorktrackerRepository:
             await session.commit()
             await session.refresh(row)
             return _row_to_queue(row)
+
+    async def delete_queue(self, company_id: str, work_queue_id: str) -> None:
+        async with self._db.session() as session:
+            row = (
+                await session.execute(
+                    select(WorkQueueRow).where(
+                        WorkQueueRow.company_id == company_id,
+                        WorkQueueRow.work_queue_id == work_queue_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                return
+            await session.delete(row)
+            await session.commit()
 
     async def save_queue(self, queue: WorkQueue) -> WorkQueue:
         async with self._db.session() as session:
@@ -537,6 +538,7 @@ class WorktrackerRepository:
                 name=queue.name,
                 slug=queue.work_queue_slug,
                 description=queue.description,
+                owner_user_id=queue.owner_user_id,
                 created_at=queue.created_at,
                 updated_at=queue.updated_at,
             )
@@ -572,67 +574,6 @@ class WorktrackerRepository:
             )
             rows = list((await session.execute(stmt)).scalars().all())
             return [_row_to_queue(row) for row in rows]
-
-    async def add_queue_member(self, member: WorkQueueMember, company_id: str) -> None:
-        member_kind, member_ref = _member_kind_ref(member.member)
-        async with self._db.session() as session:
-            row = WorkQueueMemberRow(
-                work_queue_id=member.work_queue_id,
-                member_kind=member_kind,
-                member_ref=member_ref,
-                company_id=company_id,
-                role=member.role,
-            )
-            merged = await session.merge(row)
-            session.add(merged)
-            await session.commit()
-
-    async def remove_queue_member(self, work_queue_id: str, member: WorkActor) -> bool:
-        member_kind, member_ref = _member_kind_ref(member)
-        async with self._db.session() as session:
-            stmt = delete(WorkQueueMemberRow).where(
-                WorkQueueMemberRow.work_queue_id == work_queue_id,
-                WorkQueueMemberRow.member_kind == member_kind,
-                WorkQueueMemberRow.member_ref == member_ref,
-            )
-            result = await session.execute(stmt)
-            await session.commit()
-            return get_rowcount(result) > 0
-
-    async def list_queue_ids_for_member(self, company_id: str, user_id: str) -> list[str]:
-        async with self._db.session() as session:
-            stmt = select(WorkQueueMemberRow.work_queue_id).where(
-                WorkQueueMemberRow.company_id == company_id,
-                WorkQueueMemberRow.member_kind == ActorKind.USER.value,
-                WorkQueueMemberRow.member_ref == user_id,
-            )
-            rows = list((await session.execute(stmt)).scalars().all())
-            return rows
-
-    async def list_queue_members(self, work_queue_id: str) -> list[WorkQueueMember]:
-        async with self._db.session() as session:
-            stmt = select(WorkQueueMemberRow).where(
-                WorkQueueMemberRow.work_queue_id == work_queue_id
-            )
-            rows = list((await session.execute(stmt)).scalars().all())
-            return [
-                WorkQueueMember(
-                    work_queue_id=row.work_queue_id,
-                    member=_member_actor(row.member_kind, row.member_ref),
-                    role=row.role,
-                )
-                for row in rows
-            ]
-
-    async def is_member(self, work_queue_id: str, member: WorkActor) -> bool:
-        member_kind, member_ref = _member_kind_ref(member)
-        async with self._db.session() as session:
-            stmt = select(WorkQueueMemberRow.member_ref).where(
-                WorkQueueMemberRow.work_queue_id == work_queue_id,
-                WorkQueueMemberRow.member_kind == member_kind,
-                WorkQueueMemberRow.member_ref == member_ref,
-            )
-            return (await session.execute(stmt)).scalar_one_or_none() is not None
 
     # === Доски ===
 

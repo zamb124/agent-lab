@@ -23,6 +23,7 @@
     python scripts/run.py rag_worker  # Запуск RAG worker
     python scripts/run.py sync_worker # Запуск Sync worker
     python scripts/run.py crm_worker  # Запуск CRM worker
+    python scripts/run.py crm_summary_worker  # Запуск CRM daily/period summary worker
     python scripts/run.py idle_worker # Запуск Idle worker
     python scripts/run.py all         # Все сервисы через mprocs (раздельные логи)
     python scripts/run.py all --kill  # то же, после SIGKILL процессов на портах HTTP-сервисов
@@ -36,6 +37,7 @@
 
 Конфигурация загружается из conf.json и conf.local.json.
 Переменные окружения имеют приоритет над конфигами.
+Перед стартом сервисов подгружается reports/openfga-dev.env (после make dev-up).
 """
 import os
 import shutil
@@ -221,6 +223,11 @@ SERVICES = {
     "crm_worker": {
         "type": "taskiq-worker",
         "worker_app": "apps.crm_worker.worker:worker_app",
+        "workers": "1",
+    },
+    "crm_summary_worker": {
+        "type": "taskiq-worker",
+        "worker_app": "apps.crm_worker.summary_worker:worker_app",
         "workers": "1",
     },
     "idle_worker": {
@@ -561,6 +568,12 @@ def main() -> None:
     if service == "kill-ports":
         kill_ports()
         return
+
+    # OpenFGA обязателен для локальных app-процессов (как Postgres).
+    if service in ("from-make", "all") or service in SERVICES:
+        from scripts.openfga_env_bootstrap import require_dev_openfga_env
+
+        _ = require_dev_openfga_env()
 
     if service == "from-make":
         _run_from_make()

@@ -7,6 +7,7 @@ from typing import cast
 
 import pytest
 
+from core.authz.factory import build_authz_service
 from core.config import get_settings
 from core.config.models import (
     MailConfig,
@@ -125,6 +126,7 @@ async def test_ensure_system_with_fake_port(
         connection_repository=mail_connection_repository,
         binding_repository=mailbox_binding_repository,
         sync_cursor_repository=MailboxSyncCursorRepository(db_url=shared_url),
+        authz=build_authz_service(),
         company_repository=container.company_repository,
         user_repository=container.user_repository,
         mail_config=mail_config,
@@ -158,8 +160,18 @@ async def test_ensure_system_user_bindings_skips_flow_employees(
     company = await container.company_repository.get(SYSTEM_COMPANY_ID)
     assert company is not None
     previous_members = dict(company.members)
-    company.members[employee_user_id] = ["member"]
+    from core.authz.company_sync import remove_company_member, sync_company_member_roles
+
+    # SQL roster only: ensure_system_user_bindings iterates company.members.
+    # Do not delete other users' company FGA tuples — shared system under xdist.
+    company.members = {employee_user_id: ["member"]}
     await container.company_repository.set(company)
+    await sync_company_member_roles(
+        container.authz_service,
+        company_id=SYSTEM_COMPANY_ID,
+        user_id=employee_user_id,
+        roles=["member"],
+    )
 
     mail_config = MailConfig(
         system=MailSystemConfig(
@@ -193,6 +205,7 @@ async def test_ensure_system_user_bindings_skips_flow_employees(
         connection_repository=mail_connection_repository,
         binding_repository=mailbox_binding_repository,
         sync_cursor_repository=MailboxSyncCursorRepository(db_url=shared_url),
+        authz=build_authz_service(),
         company_repository=container.company_repository,
         user_repository=container.user_repository,
         mail_config=mail_config,
@@ -208,6 +221,18 @@ async def test_ensure_system_user_bindings_skips_flow_employees(
     finally:
         company.members = previous_members
         await container.company_repository.set(company)
+        for restored_user_id, roles in previous_members.items():
+            await sync_company_member_roles(
+                container.authz_service,
+                company_id=SYSTEM_COMPANY_ID,
+                user_id=restored_user_id,
+                roles=roles,
+            )
+        await remove_company_member(
+            container.authz_service,
+            company_id=SYSTEM_COMPANY_ID,
+            user_id=employee_user_id,
+        )
 
 
 @pytest.mark.asyncio

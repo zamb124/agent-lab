@@ -62,6 +62,8 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         this._lastLoadKey = '';
         this._lastSemanticSearchKey = '';
         this._localeSel = this.select((s) => s.i18n.locale);
+        this._routerSearchSel = this.select((s) => s.router.search);
+        this._accessModalOpened = false;
     }
 
     connectedCallback() {
@@ -102,6 +104,32 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         this._maybeReloadDocs();
         this._maybeRunSemanticSearch();
         this._ensureActiveCatalog();
+        this._maybeOpenAccessFromQuery();
+    }
+
+    _maybeOpenAccessFromQuery() {
+        if (this._accessModalOpened) {
+            return;
+        }
+        const search = this._routerSearchSel.value;
+        const raw = typeof search === 'string' ? search : '';
+        const query = raw.startsWith('?') ? raw.slice(1) : raw;
+        const params = new URLSearchParams(query);
+        if (params.get('access') !== '1') {
+            return;
+        }
+        const catalogId = params.get('catalog_id');
+        if (typeof catalogId !== 'string' || catalogId.length === 0) {
+            return;
+        }
+        const catalog = this._catalogById(catalogId);
+        if (!catalog) {
+            return;
+        }
+        this._accessModalOpened = true;
+        this._documents.setActiveCatalog({ catalogId });
+        this._documents.setFilterCatalogs({ catalogIds: [catalogId] });
+        this._onCatalogAccess(catalog);
     }
 
     _ragIndexStatusLabel(status) {
@@ -379,7 +407,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         this.openModal('office.catalog_edit', {
             catalogId: catalog.catalog_id,
             title: catalog.title,
-            isPublic: Boolean(catalog.is_public),
+            companyVisible: Boolean(catalog.company_visible),
         });
     }
 
@@ -387,7 +415,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         this.openModal('office.catalog_members', {
             catalogId: catalog.catalog_id,
             catalogTitle: catalog.title,
-            isPublic: Boolean(catalog.is_public),
+            companyVisible: Boolean(catalog.company_visible),
         });
     }
 

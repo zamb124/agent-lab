@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import textwrap
@@ -27,6 +29,12 @@ from core.capabilities import (
     code_validation_failed_response,
     verify_execution_context,
 )
+from core.capabilities.sandbox_libraries import (
+    PYTHON_ALLOWED_IMPORT_ROOTS,
+    PYTHON_FORBIDDEN_BUILTIN_NAMES,
+    PYTHON_FORBIDDEN_IMPORT_ROOTS,
+    PYTHON_SANDBOX_BUILTINS,
+)
 from core.config import get_settings
 from core.tracing.operation_span import traced_operation
 
@@ -34,14 +42,59 @@ CAPABILITY_CALL_PATH = "/capability-gateway/api/v1/capabilities/call"
 SERVICE_NAME = "code_runner_python"
 WORKER_POOL_ENV = "CODE_RUNNER_PYTHON_WORKERS"
 WORKER_IPC_STREAM_LIMIT_BYTES = 64 * 1024 * 1024
+SANDBOX_SITE_ENV = "CODE_RUNNER_PYTHON_SANDBOX_SITE"
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_SANDBOX_REQUIREMENTS = Path(__file__).resolve().parents[1] / "sandbox-requirements.txt"
+
+
+def ensure_python_sandbox_site() -> Path:
+    """Ставит pandas/numpy/yaml/openpyxl в отдельный target, не в platform venv."""
+    cache_root = Path(
+        os.environ[SANDBOX_SITE_ENV]
+        if SANDBOX_SITE_ENV in os.environ
+        else str(_REPO_ROOT / ".cache" / "code-runner-python-sandbox-site")
+    )
+    requirements_text = _SANDBOX_REQUIREMENTS.read_text(encoding="utf-8")
+    digest = hashlib.sha256(requirements_text.encode("utf-8")).hexdigest()
+    marker = cache_root / ".requirements.sha256"
+    pandas_dir = cache_root / "pandas"
+    if marker.is_file() and marker.read_text(encoding="utf-8").strip() == digest and pandas_dir.is_dir():
+        return cache_root
+    if cache_root.exists():
+        shutil.rmtree(cache_root)
+    cache_root.mkdir(parents=True, exist_ok=True)
+    uv_bin = shutil.which("uv")
+    if uv_bin is None:
+        raise RuntimeError("uv is required to install python sandbox site-packages")
+    completed = subprocess.run(
+        [
+            uv_bin,
+            "pip",
+            "install",
+            "--python",
+            sys.executable,
+            "--target",
+            str(cache_root),
+            "-r",
+            str(_SANDBOX_REQUIREMENTS),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(f"python sandbox site-packages install failed: {completed.stderr}")
+    _ = marker.write_text(digest, encoding="utf-8")
+    return cache_root
 
 
 class _PythonWorker:
     """Один долгоживущий Python sandbox worker с JSON-lines IPC."""
 
-    def __init__(self, *, worker_path: Path, gateway_url: str):
+    def __init__(self, *, worker_path: Path, gateway_url: str, sandbox_site: Path):
         self._worker_path: Path = worker_path
         self._gateway_url: str = gateway_url
+        self._sandbox_site: Path = sandbox_site
         self._lock: asyncio.Lock = asyncio.Lock()
         self._process: asyncio.subprocess.Process | None = None
 
@@ -172,6 +225,7 @@ class _PythonWorker:
             "-S",
             str(self._worker_path),
             self._gateway_url,
+            str(self._sandbox_site),
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
@@ -207,6 +261,7 @@ class PythonSandboxExecutor:
         self._pool_lock: asyncio.Lock = asyncio.Lock()
         self._runtime_dir: Path = Path(tempfile.mkdtemp(prefix="code-runner-python-runtime-"))
         self._worker_path: Path = self._runtime_dir / "python_worker.py"
+        self._sandbox_site: Path = ensure_python_sandbox_site()
         _ = self._worker_path.write_text(self._worker_source(), encoding="utf-8")
 
     async def execute(self, request: CodeExecutionRequest) -> CodeExecutionResponse:
@@ -318,7 +373,11 @@ class PythonSandboxExecutor:
                 gateway_url = get_settings().server.get_service_url("capability_gateway")
                 count = self._worker_count()
                 self._workers = [
-                    _PythonWorker(worker_path=self._worker_path, gateway_url=gateway_url)
+                    _PythonWorker(
+                        worker_path=self._worker_path,
+                        gateway_url=gateway_url,
+                        sandbox_site=self._sandbox_site,
+                    )
                     for _ in range(count)
                 ]
                 for pooled_worker in self._workers:
@@ -436,18 +495,17 @@ class PythonSandboxExecutor:
             import urllib.request
 
             gateway_url = sys.argv[1]
+            sandbox_site = sys.argv[2]
+            if sandbox_site:
+                sys.path.insert(0, sandbox_site)
             capability_call_path = {json.dumps(CAPABILITY_CALL_PATH)}
             compiled_cache = {{}}
-            allowed_import_roots = {{
-                "__future__", "asyncio", "ast", "base64", "collections", "datetime", "decimal",
-                "functools", "hashlib", "html", "itertools", "json", "math", "operator",
-                "random", "re", "statistics", "string", "time", "typing", "uuid",
-            }}
-            forbidden_builtin_names = {{
-                "breakpoint", "compile", "delattr", "dir", "eval", "exec", "getattr",
-                "globals", "hasattr", "input", "locals", "memoryview", "open", "setattr",
-                "vars",
-            }}
+            base_allowed_import_roots = set({json.dumps(sorted(PYTHON_ALLOWED_IMPORT_ROOTS))})
+            forbidden_import_roots = set({json.dumps(sorted(PYTHON_FORBIDDEN_IMPORT_ROOTS))})
+            forbidden_builtin_names = set({json.dumps(sorted(PYTHON_FORBIDDEN_BUILTIN_NAMES))})
+            sandbox_builtin_names = {json.dumps([name for name in PYTHON_SANDBOX_BUILTINS if name != "FlowInterrupt"])}
+            installed_sdk_modules = set()
+            pathlib_locked = False
 
 
             class SandboxPolicyViolation(PermissionError):
@@ -598,7 +656,83 @@ class PythonSandboxExecutor:
 
 
             def build_sdk_namespaces():
-                manifest = current_request.get("capability_manifest") or {{}}
+                return build_sdk_namespaces_from(current_request)
+
+
+            def is_allowed_import(name, extra_roots):
+                if not name:
+                    return False
+                if name.split(".", 1)[0] in forbidden_import_roots:
+                    return False
+                if name in forbidden_import_roots:
+                    return False
+                allowed = base_allowed_import_roots | extra_roots
+                parts = name.split(".")
+                for index in range(len(parts), 0, -1):
+                    prefix = ".".join(parts[:index])
+                    if prefix in allowed:
+                        return True
+                    if prefix in forbidden_import_roots:
+                        return False
+                return False
+
+
+            def lock_pathlib(module):
+                global pathlib_locked
+                if pathlib_locked:
+                    return module
+                Path = module.Path
+
+                def blocked(self, *args, **kwargs):
+                    raise PermissionError(
+                        "pathlib filesystem access is not allowed; use files.*"
+                    )
+
+                for method_name in (
+                    "read_text", "read_bytes", "write_text", "write_bytes", "open",
+                    "unlink", "mkdir", "rmdir", "iterdir", "glob", "rglob", "stat",
+                    "exists", "is_file", "is_dir", "touch", "rename", "replace",
+                    "chmod", "absolute", "resolve", "cwd", "home",
+                ):
+                    setattr(Path, method_name, blocked)
+                pathlib_locked = True
+                return module
+
+
+            def install_sdk_modules(namespaces):
+                for name in list(installed_sdk_modules):
+                    sys.modules.pop(name, None)
+                installed_sdk_modules.clear()
+                modules = {{}}
+                for name, obj in namespaces.items():
+                    module = types.ModuleType(name)
+                    for attr, value in vars(obj).items():
+                        setattr(module, attr, value)
+                    sys.modules[name] = module
+                    installed_sdk_modules.add(name)
+                    modules[name] = module
+                return modules
+
+
+            def sdk_namespace_names(request):
+                manifest = request.get("capability_manifest") or {{}}
+                capabilities = manifest.get("capabilities") or []
+                names = set()
+                for item in capabilities:
+                    if not isinstance(item, dict):
+                        continue
+                    name = item.get("name")
+                    if not isinstance(name, str) or "." not in name:
+                        continue
+                    namespace = item.get("sdk_namespace")
+                    if not isinstance(namespace, str) or not namespace:
+                        namespace = name.split(".", 1)[0]
+                    names.add(namespace)
+                return names
+
+
+            def build_sdk_namespaces_from(request):
+                manifest = request.get("capability_manifest") or {{}}
                 capabilities = manifest.get("capabilities") or []
                 namespace_maps = {{}}
                 for item in capabilities:
@@ -621,75 +755,27 @@ class PythonSandboxExecutor:
 
 
             def build_namespace():
+                sdk_modules = install_sdk_modules(build_sdk_namespaces())
+                extra_roots = set(installed_sdk_modules)
+
                 def safe_import(name, globals=None, locals=None, fromlist=(), level=0):
                     if level != 0:
                         raise ImportError("relative imports are not allowed in code runner")
-                    root = name.split(".", 1)[0]
-                    if root not in allowed_import_roots:
+                    if not is_allowed_import(name, extra_roots):
                         raise ImportError(f"import is not allowed in code runner: {{name}}")
-                    return builtins.__import__(name, globals, locals, fromlist, level)
+                    root = name.split(".", 1)[0]
+                    if name in installed_sdk_modules:
+                        return sys.modules[name]
+                    if root in installed_sdk_modules:
+                        return sys.modules[root]
+                    module = builtins.__import__(name, globals, locals, fromlist, level)
+                    if name == "pathlib" or name.startswith("pathlib."):
+                        lock_pathlib(sys.modules["pathlib"])
+                    return module
 
-                safe_builtins = {{
-                    "BaseException": BaseException,
-                    "Exception": Exception,
-                    "AssertionError": AssertionError,
-                    "AttributeError": AttributeError,
-                    "ImportError": ImportError,
-                    "IndexError": IndexError,
-                    "KeyError": KeyError,
-                    "NameError": NameError,
-                    "NotImplementedError": NotImplementedError,
-                    "RuntimeError": RuntimeError,
-                    "TypeError": TypeError,
-                    "ValueError": ValueError,
-                    "ZeroDivisionError": ZeroDivisionError,
-                    "__build_class__": __build_class__,
-                    "abs": abs,
-                    "all": all,
-                    "any": any,
-                    "bin": bin,
-                    "bool": bool,
-                    "bytearray": bytearray,
-                    "bytes": bytes,
-                    "callable": callable,
-                    "chr": chr,
-                    "classmethod": classmethod,
-                    "dict": dict,
-                    "divmod": divmod,
-                    "enumerate": enumerate,
-                    "filter": filter,
-                    "float": float,
-                    "format": format,
-                    "hex": hex,
-                    "int": int,
-                    "iter": iter,
-                    "isinstance": isinstance,
-                    "len": len,
-                    "list": list,
-                    "map": map,
-                    "max": max,
-                    "min": min,
-                    "next": next,
-                    "object": object,
-                    "oct": oct,
-                    "ord": ord,
-                    "pow": pow,
-                    "print": print,
-                    "property": property,
-                    "range": range,
-                    "repr": repr,
-                    "reversed": reversed,
-                    "round": round,
-                    "set": set,
-                    "sorted": sorted,
-                    "staticmethod": staticmethod,
-                    "str": str,
-                    "sum": sum,
-                    "tuple": tuple,
-                    "type": type,
-                    "zip": zip,
-                    "__import__": safe_import,
-                }}
+                safe_builtins = {{name: getattr(builtins, name) for name in sandbox_builtin_names}}
+                safe_builtins["__import__"] = safe_import
+                safe_builtins["__build_class__"] = __build_class__
                 namespace = {{
                     "__builtins__": safe_builtins,
                     "__name__": "__sandbox__",
@@ -711,7 +797,7 @@ class PythonSandboxExecutor:
                     "math": math,
                     "typing": typing,
                 }}
-                namespace.update(build_sdk_namespaces())
+                namespace.update(sdk_modules)
                 return namespace
 
 
@@ -724,11 +810,11 @@ class PythonSandboxExecutor:
 
 
             def validate_sandbox_source(tree):
+                extra_roots = sdk_namespace_names(current_request)
                 for node in ast.walk(tree):
                     if isinstance(node, ast.Import):
                         for alias in node.names:
-                            root = alias.name.split(".", 1)[0]
-                            if root not in allowed_import_roots:
+                            if not is_allowed_import(alias.name, extra_roots):
                                 raise SandboxPolicyViolation(
                                     f"import is not allowed in code runner: {{alias.name}}"
                                 )
@@ -736,8 +822,7 @@ class PythonSandboxExecutor:
                         if node.level != 0:
                             raise SandboxPolicyViolation("relative imports are not allowed in code runner")
                         module = node.module or ""
-                        root = module.split(".", 1)[0]
-                        if root not in allowed_import_roots:
+                        if not is_allowed_import(module, extra_roots):
                             raise SandboxPolicyViolation(
                                 f"import is not allowed in code runner: {{module}}"
                             )

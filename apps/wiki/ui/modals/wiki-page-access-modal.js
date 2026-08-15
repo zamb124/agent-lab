@@ -1,11 +1,11 @@
 /**
  * Доступ к странице: публикация, участники и публичная ссылка.
  *
- * Ограничение доступа задаётся не отдельным полем, а списком участников:
- * появился хотя бы один — страница и её поддерево становятся `restricted`,
- * пропали все — страница снова видна всему пространству. Поэтому переключатель
- * «только участники» добавляет текущего пользователя администратором, а
- * обратный ход снимает всех участников.
+ * Ограничение доступа задаётся флагом `company_visible` на самой странице:
+ * `false` — видят только явные участники (FGA `viewer`/`editor` + `owner`),
+ * `true` — видна всей компании. Переключатель «только участники» просто
+ * патчит `company_visible`; владелец страницы уже имеет `can_admin` через
+ * FGA `owner` relation, добавлять его отдельным участником не нужно.
  *
  * Адрес публичной ссылки в базе лежит хешем, поэтому показать его можно только
  * сразу после выпуска. Позже остаётся перевыпуск с новым адресом.
@@ -22,10 +22,8 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-user-chip.js';
 
-const VISIBILITY_RESTRICTED = 'restricted';
-const PERMISSION_ADMIN = 'admin';
-const PERMISSION_READ = 'read';
-const LINK_PERMISSION_VIEW = 'view';
+const RELATION_VIEWER = 'viewer';
+const LINK_PERMISSION_VIEWER = 'viewer';
 
 export class WikiPageAccessModal extends PlatformModal {
     static modalKind = 'wiki.page_access';
@@ -34,7 +32,7 @@ export class WikiPageAccessModal extends PlatformModal {
     static properties = {
         pageId: { type: String, attribute: 'page-id' },
         _newMemberId: { state: true },
-        _newPermission: { state: true },
+        _newRelation: { state: true },
         /** Адрес известен только в этой сессии — сразу после выпуска ссылки. */
         _issuedLinkUrl: { state: true },
     };
@@ -135,16 +133,16 @@ export class WikiPageAccessModal extends PlatformModal {
         this.size = 'md';
         this.pageId = '';
         this._newMemberId = '';
-        this._newPermission = PERMISSION_READ;
+        this._newRelation = RELATION_VIEWER;
         this._issuedLinkUrl = '';
         this._access = this.useOp('wiki/access_read');
         this._page = this.useOp('wiki/page_read');
+        this._companyVisible = this.useOp('wiki/company_visible');
         this._memberAdd = this.useOp('wiki/member_add');
         this._memberRemove = this.useOp('wiki/member_remove');
         this._publicLink = this.useOp('wiki/public_link');
         this._properties = this.useOp('wiki/page_properties');
         this._pages = this.useResource('wiki/pages');
-        this._userSel = this.select((s) => s.auth.user);
         this._teamMembersSel = this.select((s) => s.team.members);
         this._teamLoadingSel = this.select((s) => s.team.loading);
     }
@@ -171,7 +169,7 @@ export class WikiPageAccessModal extends PlatformModal {
 
     _isRestricted() {
         const access = this._accessState();
-        return Boolean(access) && access.visibility === VISIBILITY_RESTRICTED;
+        return Boolean(access) && access.company_visible === false;
     }
 
     /** Ограничение с предка снимается только на самом предке. */
@@ -197,15 +195,7 @@ export class WikiPageAccessModal extends PlatformModal {
         const access = this._accessState();
         return access && typeof access.link_permission === 'string'
             ? access.link_permission
-            : LINK_PERMISSION_VIEW;
-    }
-
-    _currentUserId() {
-        const user = this._userSel.value;
-        if (!user || typeof user.user_id !== 'string' || user.user_id === '') {
-            throw new Error('wiki page access: в сессии нет user_id');
-        }
-        return user.user_id;
+            : LINK_PERMISSION_VIEWER;
     }
 
     async _reload() {
@@ -227,21 +217,10 @@ export class WikiPageAccessModal extends PlatformModal {
     // --- участники ---
 
     async _onRestrictedToggle(event) {
-        if (Boolean(event.detail.value)) {
-            await this._memberAdd.run({
-                wiki_page_id: this.pageId,
-                user_id: this._currentUserId(),
-                permission: PERMISSION_ADMIN,
-            });
-            await this._reload();
-            return;
-        }
-        for (const member of this._members()) {
-            await this._memberRemove.run({
-                wiki_page_id: this.pageId,
-                member_user_id: member.user_id,
-            });
-        }
+        await this._companyVisible.run({
+            wiki_page_id: this.pageId,
+            company_visible: !Boolean(event.detail.value),
+        });
         await this._reload();
     }
 
@@ -252,7 +231,7 @@ export class WikiPageAccessModal extends PlatformModal {
         await this._memberAdd.run({
             wiki_page_id: this.pageId,
             user_id: this._newMemberId,
-            permission: this._newPermission,
+            relation: this._newRelation,
         });
         this._newMemberId = '';
         await this._reload();
@@ -321,12 +300,11 @@ export class WikiPageAccessModal extends PlatformModal {
 
     // --- справочники полей ---
 
-    _permissionConfig() {
+    _relationConfig() {
         return {
             values: [
-                { value: 'read', label: this.t('access.permission_read') },
-                { value: 'write', label: this.t('access.permission_write') },
-                { value: 'admin', label: this.t('access.permission_admin') },
+                { value: 'viewer', label: this.t('access.relation_viewer') },
+                { value: 'editor', label: this.t('access.relation_editor') },
             ],
         };
     }
@@ -334,8 +312,8 @@ export class WikiPageAccessModal extends PlatformModal {
     _linkPermissionConfig() {
         return {
             values: [
-                { value: 'view', label: this.t('access.link_permission_view') },
-                { value: 'comment', label: this.t('access.link_permission_comment') },
+                { value: 'viewer', label: this.t('access.link_permission_viewer') },
+                { value: 'editor', label: this.t('access.link_permission_editor') },
             ],
         };
     }
@@ -440,7 +418,7 @@ export class WikiPageAccessModal extends PlatformModal {
                           <div class="member" data-wiki-member=${member.user_id}>
                               <platform-user-chip user-id=${member.user_id} size="sm"></platform-user-chip>
                               <span class="member-permission">
-                                  ${this.t(`access.permission_${member.permission}`)}
+                                  ${this.t(`access.relation_${member.relation}`)}
                               </span>
                               <platform-button
                                   variant="ghost"
@@ -461,10 +439,10 @@ export class WikiPageAccessModal extends PlatformModal {
                     <platform-field
                         type="enum"
                         mode="edit"
-                        label=${this.t('access.permission_label')}
-                        .value=${this._newPermission}
-                        .config=${this._permissionConfig()}
-                        @change=${(event) => { this._newPermission = event.detail.value; }}
+                        label=${this.t('access.relation_label')}
+                        .value=${this._newRelation}
+                        .config=${this._relationConfig()}
+                        @change=${(event) => { this._newRelation = event.detail.value; }}
                     ></platform-field>
                     <platform-button variant="primary" data-wiki-member-add @click=${this._addMember}>
                         <platform-icon name="plus" size="16"></platform-icon>

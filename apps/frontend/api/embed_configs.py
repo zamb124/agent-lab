@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from apps.flows.src.models.flow_config import FlowType
 from apps.frontend.dependencies import ContainerDep
+from core.authz.models import AuthzObject
 from core.config import get_settings
 from core.context import require_context
 from core.identity.embed_guest_turns import EMBED_SESSION_ID_METADATA_KEY
@@ -48,6 +49,24 @@ def _require_embed_principal() -> tuple[User, Company]:
     if company is None:
         raise HTTPException(status_code=400, detail="Необходимо выбрать компанию")
     return context.user, company
+
+
+async def _require_company_view(container: ContainerDep) -> tuple[User, Company]:
+    user, company = _require_embed_principal()
+    await container.authz_service.require_can_view(
+        AuthzObject.company(company.company_id), user_id=user.user_id
+    )
+    return user, company
+
+
+async def _require_edit_embed_flow(
+    container: ContainerDep, flow_id: str
+) -> tuple[User, Company]:
+    user, company = await _require_company_view(container)
+    await container.authz_service.require_can_edit(
+        AuthzObject.flow(flow_id), user_id=user.user_id
+    )
+    return user, company
 
 
 def _build_embed_integration_snippets(
@@ -331,9 +350,6 @@ async def create_embed_config(
     1. EmbedConfig в компании
     2. Глобальный маппинг embed_id -> company_id
     """
-    user, company = _require_embed_principal()
-    company_id = company.company_id
-
     flow = await container.flows_flow_repository.get(request_data.flow_id)
     if flow is None:
         raise HTTPException(
@@ -343,6 +359,8 @@ async def create_embed_config(
                 "(проверьте flow_id в редакторе flows и совпадение компании)."
             ),
         )
+    user, company = await _require_edit_embed_flow(container, request_data.flow_id)
+    company_id = company.company_id
 
     branch_id = request_data.branch_id
     if flow.type == FlowType.EXTERNAL:
@@ -451,7 +469,7 @@ async def list_embed_configs(
 
     Автоматически фильтруется по активной компании (is_global=False).
     """
-    _, company = _require_embed_principal()
+    _, company = await _require_company_view(container)
 
     embed_config_repo = container.embed_config_repository
     configs = await embed_config_repo.list(limit=limit, offset=offset)
@@ -469,7 +487,7 @@ async def get_embed_config(
     container: ContainerDep,
 ) -> EmbedConfigResponse:
     """Получение конфигурации виджета по ID"""
-    _ = _require_embed_principal()
+    _ = await _require_company_view(container)
 
     embed_config_repo = container.embed_config_repository
     config = await embed_config_repo.get(embed_id)
@@ -489,8 +507,6 @@ async def update_embed_config(
     container: ContainerDep,
 ) -> EmbedConfigResponse:
     """Обновление конфигурации виджета"""
-    _, company = _require_embed_principal()
-
     embed_config_repo = container.embed_config_repository
     config = await embed_config_repo.get(embed_id)
 
@@ -499,6 +515,7 @@ async def update_embed_config(
 
     if config.preview_share_link:
         raise HTTPException(status_code=404, detail="Конфигурация не найдена")
+    user, company = await _require_edit_embed_flow(container, config.flow_id)
 
     fields = request_data.model_fields_set
     if "name" in fields:
@@ -508,6 +525,9 @@ async def update_embed_config(
     if "flow_id" in fields:
         if request_data.flow_id is None:
             raise HTTPException(status_code=400, detail="flow_id не может быть null")
+        await container.authz_service.require_can_edit(
+            AuthzObject.flow(request_data.flow_id), user_id=user.user_id
+        )
         config.flow_id = request_data.flow_id
     if "branch_id" in fields:
         if request_data.branch_id is None:
@@ -627,8 +647,6 @@ async def delete_embed_config(
     1. EmbedConfig из компании
     2. Глобальный маппинг embed_id -> company_id
     """
-    _ = _require_embed_principal()
-
     embed_config_repo = container.embed_config_repository
     config = await embed_config_repo.get(embed_id)
 
@@ -637,6 +655,7 @@ async def delete_embed_config(
 
     if config.preview_share_link:
         raise HTTPException(status_code=404, detail="Конфигурация не найдена")
+    _ = await _require_edit_embed_flow(container, config.flow_id)
 
     # Удаляем конфигурацию
     _ = await embed_config_repo.delete(embed_id)
@@ -660,7 +679,7 @@ async def get_embed_code(
 
     Возвращает готовый HTML код со скриптом для вставки на сайт.
     """
-    _, company = _require_embed_principal()
+    _, company = await _require_company_view(container)
 
     embed_config_repo = container.embed_config_repository
     config = await embed_config_repo.get(embed_id)
@@ -769,7 +788,7 @@ async def issue_embed_session_token(
     container: ContainerDep,
 ) -> EmbedSessionTokenResponse:
     """Выдает short-lived embed-session токен для канонического A2A embed-пути."""
-    user, company = _require_embed_principal()
+    user, company = await _require_company_view(container)
     company_id = company.company_id
 
     embed_config_repo = container.embed_config_repository

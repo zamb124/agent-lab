@@ -1,9 +1,12 @@
 """Unit tests for NamespaceService personal/kind canon."""
 
+
 from __future__ import annotations
 
 import pytest
 
+from core.authz.company_sync import sync_company_member_roles
+from core.authz.models import AuthzObject
 from core.context import clear_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import Company, NamespaceKind, User, UserStatus
@@ -12,6 +15,7 @@ from core.namespace.service import (
     infer_namespace_kind,
     personal_namespace_name,
 )
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
 def test_personal_namespace_name() -> None:
@@ -121,3 +125,28 @@ async def test_list_excludes_technical(
     assert all(ns.kind != NamespaceKind.TECHNICAL for ns in product)
     workspaces = await namespace_service.list_company_workspaces(limit=500)
     assert all(ns.kind == NamespaceKind.COMPANY_WORKSPACE for ns in workspaces)
+
+
+@pytest.mark.asyncio
+async def test_ensure_exists_repairs_missing_platform_namespace_tuples(
+    namespace_service: NamespaceService,
+    company_context: tuple[Company, User],
+    container,
+) -> None:
+    company, user = company_context
+    await sync_company_member_roles(
+        container.authz_service,
+        company_id=company.company_id,
+        user_id=user.user_id,
+        roles=["owner"],
+    )
+    created = await namespace_service.create(name=f"ws_{user.user_id}")
+    obj = AuthzObject.platform_namespace(company.company_id, created.name)
+    existing = await container.authz_service.list_tuples(obj)
+    assert existing
+    await container.authz_service.delete(existing)
+    assert await container.authz_service.can_view(obj, user_id=user.user_id) is False
+
+    repaired = await namespace_service.ensure_exists(created.name)
+    assert repaired.name == created.name
+    assert await container.authz_service.can_view(obj, user_id=user.user_id) is True

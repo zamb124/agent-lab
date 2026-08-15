@@ -1270,7 +1270,7 @@
     "tags": "Tags",
     "permission": "Access groups",
     "permission_placeholder": "admin, managers…",
-    "permission_hint": "Empty list — available to all flow participants. Otherwise the user needs one of these groups (JWT grps)."
+    "permission_hint": "Empty list — available to all flow participants. Otherwise the user needs membership in one of these OpenFGA groups."
   },
   "rag_resource_editor": {
     "what_is_hint": "Flow knowledge base: documents live in a Namespace; llm_node pulls fragments into context. Explicit search/write uses rag_search / rag_add_text.",
@@ -1304,6 +1304,24 @@
     "field_default_ttl": "Document TTL (seconds)",
     "hint_default_ttl": "After how many seconds background cleanup removes this resource’s documents. 0 = keep forever. Empty = platform default.",
     "ttl_placeholder": "empty = platform default; 0 = forever"
+  },
+  "data_table_resource_editor": {
+    "field_file_id": "Link file",
+    "file_id_placeholder": "file_…",
+    "field_name": "File name",
+    "create": "Create",
+    "open": "Open",
+    "empty_title": "No table file yet",
+    "stat_tables": "{count} tables",
+    "stat_rows": "{count} rows",
+    "schema_table_rows": "{count} rows",
+    "schema_loading": "Loading tables…",
+    "schema_empty": "No tables yet. Open the file to add one.",
+    "flow_id_required": "Open a flow editor to create a table file",
+    "name_required": "File name is required",
+    "file_id_required": "Create or link a file first",
+    "toast_created": "Table file created",
+    "toast_create_failed": "Failed to create table file"
   },
   "code_resource_editor": {
     "field_code": "Code (Python)",
@@ -1703,7 +1721,8 @@
   "code_editor": {
     "fullscreen": "Fullscreen",
     "exit_fullscreen": "Exit fullscreen",
-    "save": "Save (Ctrl+S / Cmd+S)"
+    "save": "Save (Ctrl+S / Cmd+S)",
+    "lsp_failed": "Failed to connect the code editor language server"
   },
   "state_mapping_editor": {
     "empty": "No mappings",
@@ -1974,6 +1993,10 @@
     "inspector_image_pick": "Choose image",
     "inspector_image_replace": "Replace",
     "inspector_image_clear": "Clear",
+    "inspector_file_id_empty": "No file_id selected",
+    "inspector_file_id_pick": "Choose table file",
+    "inspector_file_id_replace": "Replace",
+    "inspector_file_id_clear": "Clear",
     "history_validation": "Field validation",
     "inspector_layout": "Layout",
     "inspector_delete": "Delete component",

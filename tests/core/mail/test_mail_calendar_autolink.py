@@ -15,7 +15,6 @@ from core.mail.models import (
 )
 from core.mail.repositories import (
     CompanyMailConnectionRepository,
-    MailboxBindingMemberRepository,
     MailboxBindingRepository,
     MailboxFolderRepository,
     MailboxSyncCursorRepository,
@@ -34,7 +33,6 @@ def mail_service_with_calendar(
     mailbox_sync_cursor_repository: MailboxSyncCursorRepository,
     mailbox_folder_repository: MailboxFolderRepository,
     mail_message_repository: MailMessageRepository,
-    mailbox_binding_member_repository: MailboxBindingMemberRepository,
     recording_mail_port: RecordingMailServerPort,
     container,
 ) -> MailService:
@@ -45,7 +43,7 @@ def mail_service_with_calendar(
         sync_cursor_repository=mailbox_sync_cursor_repository,
         folder_repository=mailbox_folder_repository,
         message_repository=mail_message_repository,
-        member_repository=mailbox_binding_member_repository,
+        authz=container.authz_service,
         namespace_service=container.namespace_service,
         company_repository=container.company_repository,
         user_repository=container.user_repository,

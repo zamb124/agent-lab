@@ -202,6 +202,7 @@ class User(BaseModel):
 - `set_nx` / `setex` — TTL обязателен по контракту метода.
 - `rpush(key, *values, ttl_seconds=...)` — после RPUSH выставляет EXPIRE.
 - Прямой `redis.from_url` / `Redis.from_url` в `apps/` и `core/` запрещён (allowlist: session lock, invites, TaskIQ broker, WS manager, CRM daily summary, sync presence) — CI `scripts/check_redis_ttl_canon.py`.
+- Async Redis привязан к event loop. `RedisClient` при смене loop (Starlette `TestClient` lifespan, как `events_redis_client`) дропает соединение и reconnect. Нельзя держать raw `redis.asyncio.Redis` на process-singleton через разные loop.
 
 Исключения:
 

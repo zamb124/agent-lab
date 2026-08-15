@@ -114,6 +114,7 @@ core = [
     "trafilatura>=2.0.0",
     "aiosmtplib>=5.1.2",
     "aioimaplib>=2.0.1",
+    "openfga-sdk>=0.10.4",
 ]
 
 agents = [

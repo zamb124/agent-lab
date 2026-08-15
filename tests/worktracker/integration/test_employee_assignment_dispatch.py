@@ -184,16 +184,19 @@ async def test_repository_assignee_flow_id_filter(
 
 async def test_queue_member_is_user_actor(app, worktracker_service, unique_id):
     _ = app
+    owner_id = f"owner_{unique_id}"
     queue = await worktracker_service.create_queue(
         company_id="system",
         name=f"Q {unique_id}",
         slug=f"disp-q-{unique_id}",
+        creator=UserActor(user_id=owner_id),
     )
     emp_id = flow_employee_user_id(f"queue_flow_{unique_id}")
     member = await worktracker_service.add_queue_member(
         company_id="system",
         work_queue_id=queue.work_queue_id,
         member=UserActor(user_id=emp_id),
+        actor_user_id=owner_id,
     )
     assert member.member.actor_kind == ActorKind.USER
     assert isinstance(member.member, UserActor)

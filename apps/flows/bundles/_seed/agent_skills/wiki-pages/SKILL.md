@@ -27,5 +27,5 @@ Operate the Wiki page tree and content in the active namespace without inventing
 
 - Never invent `wiki_page_id`. Take it from tools, UI context, or search.
 - Namespace comes from session (`X-Platform-Namespace`); tools fail closed if missing.
-- Do not PATCH `visibility` — restricted/company is member-driven (`wiki-access`).
+- Do not manage `company_visible` or members here — skill `wiki-access`.
 - Search/backlinks — skill `wiki-discovery`. ACL/public link — `wiki-access`.

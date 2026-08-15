@@ -11,10 +11,12 @@ CRM использует реляционную БД для:
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from typing import ClassVar, Generic, TypeVar
 from typing import cast as type_cast
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -22,6 +24,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase, InstrumentedAttribute
+from sqlalchemy.pool import NullPool
 
 from core.config import get_settings
 from core.context import get_context
@@ -51,6 +54,15 @@ class CRMDatabase:
         self._session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
             bind=self._engine, class_=AsyncSession, expire_on_commit=False
         )
+        # Lock connection не из рабочего пула: иначе N concurrent initialize_company
+        # (asyncio в одном процессе) занимают pool_size+overflow и deadlock'атся
+        # с session() репозиториев. NullPool — отдельные PG sessions только под lock.
+        self._lock_engine: AsyncEngine = create_async_engine(
+            db_url,
+            echo=False,
+            poolclass=NullPool,
+            isolation_level="AUTOCOMMIT",
+        )
 
     @classmethod
     def get_instance(cls, db_url: str | None = None) -> "CRMDatabase":
@@ -71,6 +83,33 @@ class CRMDatabase:
     def session(self) -> AsyncSession:
         """Создает новую сессию"""
         return self._session_factory()
+
+    @asynccontextmanager
+    async def advisory_lock(self, namespace: str, lock_name: str) -> AsyncGenerator[None, None]:
+        """Session-level Postgres lock: N granian/xdist процессов сериализуют критическую секцию.
+
+        Lock живёт на выделенном connection, пока другие сессии делают короткие
+        транзакции. ``pg_advisory_xact_lock`` здесь нельзя — init коммитит много раз.
+        """
+        connection = await self._lock_engine.connect()
+        try:
+            _ = await connection.execute(
+                text(
+                    "SELECT pg_advisory_lock(hashtext(:namespace), hashtext(:lock_name))"
+                ),
+                {"namespace": namespace, "lock_name": lock_name},
+            )
+            yield
+        finally:
+            try:
+                _ = await connection.execute(
+                    text(
+                        "SELECT pg_advisory_unlock(hashtext(:namespace), hashtext(:lock_name))"
+                    ),
+                    {"namespace": namespace, "lock_name": lock_name},
+                )
+            finally:
+                await connection.close()
 
 
 class BaseCRMRepository(ABC, Generic[T]):

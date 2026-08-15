@@ -29,6 +29,8 @@ def test_is_rag_indexable_file_category_whitelist() -> None:
     assert is_rag_indexable_file_category(FileCategory.ARCHIVE.value) is False
     assert is_rag_indexable_file_category(UNKNOWN_FILE_CATEGORY) is False
     assert FileCategory.SIGNATURE not in RAG_INDEXABLE_FILE_CATEGORIES
+    assert FileCategory.DATA_TABLE not in RAG_INDEXABLE_FILE_CATEGORIES
+    assert is_rag_indexable_file_category(FileCategory.DATA_TABLE.value) is False
 
 
 def test_is_rag_indexable_file_category_rejects_empty() -> None:

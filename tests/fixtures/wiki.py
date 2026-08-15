@@ -78,18 +78,54 @@ async def wiki_app(rag_service):
 @pytest_asyncio.fixture
 async def wiki_namespace(wiki_container, unique_id: str) -> str:
     """Отдельное пространство на тест — граница изоляции данных."""
+    from core.context import clear_context, set_context
+    from core.models.context_models import Context
+    from core.models.identity_models import User
+    from tests.fixtures.ai_provider_defaults import make_test_company
+
     service: NamespaceService = wiki_container.namespace_service
     name = f"wiki-test-{unique_id}"
-    _ = await service.get_or_create(name, description=f"Wiki test namespace {unique_id}")
+    set_context(
+        Context(
+            user=User(user_id="test_user", name="Test User"),
+            active_company=make_test_company(company_id="system", name="System"),
+            session_id="wiki_namespace_setup",
+            channel="test",
+        )
+    )
+    try:
+        _ = await service.get_or_create(
+            name, description=f"Wiki test namespace {unique_id}"
+        )
+    finally:
+        clear_context()
     return name
 
 
 @pytest_asyncio.fixture
 async def wiki_other_namespace(wiki_container, unique_id: str) -> str:
     """Второе пространство той же компании — для проверок изоляции."""
+    from core.context import clear_context, set_context
+    from core.models.context_models import Context
+    from core.models.identity_models import User
+    from tests.fixtures.ai_provider_defaults import make_test_company
+
     service: NamespaceService = wiki_container.namespace_service
     name = f"wiki-other-{unique_id}"
-    _ = await service.get_or_create(name, description=f"Wiki other namespace {unique_id}")
+    set_context(
+        Context(
+            user=User(user_id="test_user", name="Test User"),
+            active_company=make_test_company(company_id="system", name="System"),
+            session_id="wiki_namespace_setup",
+            channel="test",
+        )
+    )
+    try:
+        _ = await service.get_or_create(
+            name, description=f"Wiki other namespace {unique_id}"
+        )
+    finally:
+        clear_context()
     return name
 
 

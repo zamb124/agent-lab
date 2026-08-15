@@ -64,7 +64,7 @@ export const catalogMemberAddOp = createAsyncOp({
         return httpRequest({
             method: 'POST',
             url: `/documents/api/v1/catalogs/${encodeURIComponent(payload.catalogId)}/members`,
-            body: { user_id: payload.userId },
+            body: { user_id: payload.userId, relation: payload.relation || 'viewer' },
             headers: nsHeader(ctx),
         });
     },

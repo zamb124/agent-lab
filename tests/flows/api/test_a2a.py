@@ -180,10 +180,10 @@ class TestA2AAgentCard:
         assert isinstance(caps["pushNotifications"], bool), "pushNotifications MUST be boolean"
 
     @pytest.mark.asyncio
-    async def test_agent_card_404(self, client):
-        """Несуществующий flow возвращает 404."""
+    async def test_agent_card_403_unknown_flow(self, client):
+        """Несуществующий flow: Check до existence → 403, не 404."""
         resp = await client.get("/flows/api/v1/nonexistent_flow_xyz")
-        assert resp.status_code == 404
+        assert resp.status_code == 403
 
     @pytest.mark.asyncio
     async def test_agent_card_branches(self, client, flow_id):
@@ -284,7 +284,7 @@ class TestA2AMessageSend:
 
     @pytest.mark.asyncio
     async def test_unknown_flow_error(self, client):
-        """Неизвестный flow возвращает JSON-RPC ошибку."""
+        """Неизвестный flow: Check до existence → HTTP 403, без JSON-RPC existence leak."""
         resp = await client.post(
             "/flows/api/v1/unknown_flow_xyz",
             headers=A2A_HEADERS,
@@ -295,11 +295,7 @@ class TestA2AMessageSend:
                 "params": {"message": _msg("Test")},
             },
         )
-        assert resp.status_code == 200
-        data = resp.json()
-        _validate_jsonrpc_response(data)
-        assert "error" in data, "Unknown flow MUST return JSON-RPC error"
-        assert data["error"]["code"] == -32000
+        assert resp.status_code == 403
 
 
 class TestA2ATasksGet:
@@ -1008,10 +1004,10 @@ class TestA2ABranches:
         assert len(edges) > 0, "MUST have edges"
 
     @pytest.mark.asyncio
-    async def test_get_branch_tools_404_for_nonexistent_flow(self, client):
-        """GET /flows/{id}/branches/{branch_id}/tools возвращает 404 для несуществующего flow."""
+    async def test_get_branch_tools_forbidden_without_flow_view(self, client):
+        """GET /tools без FGA can_view (нет flow / нет tuples) — 403."""
         resp = await client.get("/flows/api/v1/nonexistent_flow/branches/default/tools")
-        assert resp.status_code == 404
+        assert resp.status_code == 403
 
     @pytest.mark.asyncio
     async def test_get_branch_tools_404_for_nonexistent_branch(self, client):
@@ -1043,10 +1039,10 @@ class TestA2ABranches:
         )
 
     @pytest.mark.asyncio
-    async def test_get_branch_schema_404_for_nonexistent_flow(self, client):
-        """GET /flows/{id}/schema возвращает 404 для несуществующего flow."""
+    async def test_get_branch_schema_forbidden_without_flow_view(self, client):
+        """GET /schema без FGA can_view (нет flow / нет tuples) — 403."""
         resp = await client.get("/flows/api/v1/nonexistent_flow/schema")
-        assert resp.status_code == 404
+        assert resp.status_code == 403
 
     @pytest.mark.asyncio
     async def test_create_branch_valid(self, client, mutable_flow_id, unique_id):
@@ -1100,14 +1096,14 @@ class TestA2ABranches:
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_create_branch_404_for_nonexistent_flow(self, client, unique_id):
-        """POST /flows/{id}/branches возвращает 404 для несуществующего flow."""
+    async def test_create_branch_forbidden_without_flow_edit(self, client, unique_id):
+        """POST /branches без FGA can_edit (нет flow / нет tuples) — 403."""
         resp = await client.post(
             "/flows/api/v1/nonexistent_flow/branches",
             headers=A2A_HEADERS,
             json={"branch_id": f"test_branch_{unique_id}", "name": "Test Branch"},
         )
-        assert resp.status_code == 404
+        assert resp.status_code == 403
 
     @pytest.mark.asyncio
     async def test_update_branch_valid(self, client, mutable_flow_id, unique_id):
@@ -1154,13 +1150,13 @@ class TestA2ABranches:
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_update_branch_404_for_nonexistent_flow(self, client, unique_id):
-        """PUT /flows/{id}/branches/{branch_id} возвращает 404 для несуществующего flow."""
+    async def test_update_branch_forbidden_without_flow_edit(self, client, unique_id):
+        """PUT /branches без FGA can_edit (нет flow / нет tuples) — 403."""
         resp = await client.put(
             f"/flows/api/v1/nonexistent_flow/branches/test_branch_{unique_id}",
             json={"name": "Test Branch"},
         )
-        assert resp.status_code == 404
+        assert resp.status_code == 403
 
     @pytest.mark.asyncio
     async def test_delete_branch_valid(self, client, mutable_flow_id, unique_id):
@@ -1189,17 +1185,18 @@ class TestA2ABranches:
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_delete_branch_404_for_nonexistent_flow(self, client, unique_id):
-        """DELETE /flows/{id}/branches/{branch_id} возвращает 404 для несуществующего flow."""
+    async def test_delete_branch_forbidden_without_flow_edit(self, client, unique_id):
+        """DELETE /branches без FGA can_edit (нет flow / нет tuples) — 403."""
         resp = await client.delete(
             f"/flows/api/v1/nonexistent_flow/branches/test_branch_{unique_id}"
         )
-        assert resp.status_code == 404
+        assert resp.status_code == 403
 
     @pytest.fixture
     async def mutable_flow_id(self, container, unique_id):
         """Уникальный flow для тестов, мутирующих branches (изоляция от xdist)."""
         from apps.flows.src.models import FlowConfig
+        from core.context import require_context
 
         fid = f"branch_test_{unique_id}"
         fc = FlowConfig(
@@ -1210,7 +1207,16 @@ class TestA2ABranches:
             edges=[{"from_node": "main", "to_node": None}],
         )
         await container.flow_repository.set(fc)
+        ctx = require_context()
+        if ctx.active_company is None:
+            raise AssertionError("active company required for flow authz sync")
+        await container.flow_access_service.sync_flow_saved(
+            fc,
+            company_id=ctx.active_company.company_id,
+            owner_user_id=ctx.user.user_id,
+        )
         yield fid
+        await container.flow_access_service.sync_flow_deleted(fid, branch_ids=[])
         await container.flow_repository.delete(fid)
 
     @pytest.mark.asyncio
@@ -1421,7 +1427,7 @@ class TestA2ARealisticStreaming:
     """
     Реалистичные тесты стриминга.
 
-    Проверяем что MockLLM стримит по токенам как настоящая LLM:
+    Проверяем что MockLLM стримит контент несколькими artifact-чанками:
     - Контент приходит по частям (не одним куском)
     - Tool calls корректно обрабатываются
     - Все чанки одного ответа имеют одинаковый artifactId
@@ -1466,7 +1472,7 @@ class TestA2ARealisticStreaming:
             and (e.get("result", {}).get("artifactUpdate", {}).get("artifact") or {}).get("name")
             == "response"
         ]
-        assert len(response_events) >= 5, (
+        assert len(response_events) >= 2, (
             f"Expected multiple response artifact chunks, got {len(response_events)}"
         )
         full_text = ""

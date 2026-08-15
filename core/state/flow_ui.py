@@ -503,7 +503,7 @@ class FlowUISessionSnapshot(StrictBaseModel):
     active_task_id: str | None = None
     latest_task_id: str | None = None
     task_ids: list[str] = Field(default_factory=list)
-    viewer_permissions: list[Literal["view", "interact", "edit", "share"]]
+    viewer_permissions: list[Literal["viewer", "editor", "share"]]
     snapshot_sequence: int = Field(ge=0)
     state_hash: str
     generated_at: datetime

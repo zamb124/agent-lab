@@ -92,15 +92,15 @@ async def test_indexed_chunk_carries_full_metadata(
 
 
 async def test_restricting_page_moves_it_out_of_shared_namespace(
-    wiki_client, create_page, rag_index_session, wiki_namespace, system_user_id, unique_id
+    wiki_client, create_page, rag_index_session, wiki_namespace, unique_id
 ):
     page = await create_page(f"Закрываемая {unique_id}", markdown="Чувствительный текст.")
     page_id = page["wiki_page_id"]
     assert await _indexed_namespaces(rag_index_session, page_id) == {wiki_namespace}
 
-    restricted = await wiki_client.post(
-        f"{PAGES_URL}/{page_id}/access/members",
-        json={"user_id": system_user_id, "permission": "admin"},
+    restricted = await wiki_client.patch(
+        f"{PAGES_URL}/{page_id}/access/company-visible",
+        json={"company_visible": False},
     )
     assert restricted.status_code == 200, restricted.text
 
@@ -110,30 +110,58 @@ async def test_restricting_page_moves_it_out_of_shared_namespace(
 
 
 async def test_reopening_page_returns_it_to_shared_namespace(
-    wiki_client, create_page, rag_index_session, wiki_namespace, system_user_id, unique_id
+    wiki_client, create_page, rag_index_session, wiki_namespace, unique_id
 ):
     page = await create_page(f"Возвращаемая {unique_id}", markdown="Текст возврата.")
     page_id = page["wiki_page_id"]
 
-    _ = await wiki_client.post(
-        f"{PAGES_URL}/{page_id}/access/members",
-        json={"user_id": system_user_id, "permission": "admin"},
+    _ = await wiki_client.patch(
+        f"{PAGES_URL}/{page_id}/access/company-visible",
+        json={"company_visible": False},
     )
     assert await _indexed_namespaces(rag_index_session, page_id) == {
         restricted_namespace_id(wiki_namespace)
     }
 
-    reopened = await wiki_client.delete(
-        f"{PAGES_URL}/{page_id}/access/members/{system_user_id}"
+    reopened = await wiki_client.patch(
+        f"{PAGES_URL}/{page_id}/access/company-visible",
+        json={"company_visible": True},
     )
     assert reopened.status_code == 200, reopened.text
 
     assert await _indexed_namespaces(rag_index_session, page_id) == {wiki_namespace}
 
 
-async def test_restricting_parent_moves_whole_subtree(
-    wiki_client, create_page, rag_index_session, wiki_namespace, system_user_id, unique_id
+async def test_new_child_under_restricted_parent_lands_in_restricted_namespace(
+    wiki_client, create_page, rag_index_session, wiki_namespace, unique_id
 ):
+    """`company_visible` не каскадирует по существующему поддереву, но новый
+
+    потомок наследует значение родителя в момент создания (см. `WikiService.create_page`).
+    """
+    parent = await create_page(f"Родитель {unique_id}", markdown="Текст родителя.")
+
+    restricted = await wiki_client.patch(
+        f"{PAGES_URL}/{parent['wiki_page_id']}/access/company-visible",
+        json={"company_visible": False},
+    )
+    assert restricted.status_code == 200, restricted.text
+
+    child = await create_page(
+        f"Ребёнок {unique_id}",
+        markdown="Текст ребёнка.",
+        parent_page_id=parent["wiki_page_id"],
+    )
+
+    restricted_id = restricted_namespace_id(wiki_namespace)
+    assert await _indexed_namespaces(rag_index_session, parent["wiki_page_id"]) == {restricted_id}
+    assert await _indexed_namespaces(rag_index_session, child["wiki_page_id"]) == {restricted_id}
+
+
+async def test_restricting_parent_does_not_move_already_indexed_children(
+    wiki_client, create_page, rag_index_session, wiki_namespace, unique_id
+):
+    """Дети, созданные до ограничения родителя, свой tuple `company` не теряют."""
     parent = await create_page(f"Родитель {unique_id}", markdown="Текст родителя.")
     child = await create_page(
         f"Ребёнок {unique_id}",
@@ -141,15 +169,15 @@ async def test_restricting_parent_moves_whole_subtree(
         parent_page_id=parent["wiki_page_id"],
     )
 
-    granted = await wiki_client.post(
-        f"{PAGES_URL}/{parent['wiki_page_id']}/access/members",
-        json={"user_id": system_user_id, "permission": "admin"},
+    restricted = await wiki_client.patch(
+        f"{PAGES_URL}/{parent['wiki_page_id']}/access/company-visible",
+        json={"company_visible": False},
     )
-    assert granted.status_code == 200, granted.text
+    assert restricted.status_code == 200, restricted.text
 
     restricted_id = restricted_namespace_id(wiki_namespace)
     assert await _indexed_namespaces(rag_index_session, parent["wiki_page_id"]) == {restricted_id}
-    assert await _indexed_namespaces(rag_index_session, child["wiki_page_id"]) == {restricted_id}
+    assert await _indexed_namespaces(rag_index_session, child["wiki_page_id"]) == {wiki_namespace}
 
 
 async def test_moving_page_between_namespaces_reindexes_it(
@@ -203,7 +231,7 @@ async def test_updating_page_replaces_indexed_text(
 
 
 async def test_restricted_page_is_hidden_from_colleague_search(
-    wiki_client, wiki_client_member, create_page, system_user_id, unique_id
+    wiki_client, wiki_client_member, create_page, unique_id
 ):
     marker = f"закрытыймаркер{unique_id}"
     page = await create_page(f"Секретная {unique_id}", markdown=f"Текст {marker}.")
@@ -213,9 +241,9 @@ async def test_restricted_page_is_hidden_from_colleague_search(
     )
     assert {item["wiki_page_id"] for item in visible.json()["items"]} == {page["wiki_page_id"]}
 
-    _ = await wiki_client.post(
-        f"{PAGES_URL}/{page['wiki_page_id']}/access/members",
-        json={"user_id": system_user_id, "permission": "admin"},
+    _ = await wiki_client.patch(
+        f"{PAGES_URL}/{page['wiki_page_id']}/access/company-visible",
+        json={"company_visible": False},
     )
 
     hidden = await wiki_client_member.post(
@@ -224,15 +252,13 @@ async def test_restricted_page_is_hidden_from_colleague_search(
     assert hidden.json()["items"] == []
 
 
-async def test_owner_still_finds_restricted_page(
-    wiki_client, create_page, system_user_id, unique_id
-):
+async def test_owner_still_finds_restricted_page(wiki_client, create_page, unique_id):
     marker = f"мойзакрытый{unique_id}"
     page = await create_page(f"Моя закрытая {unique_id}", markdown=f"Текст {marker}.")
 
-    _ = await wiki_client.post(
-        f"{PAGES_URL}/{page['wiki_page_id']}/access/members",
-        json={"user_id": system_user_id, "permission": "admin"},
+    _ = await wiki_client.patch(
+        f"{PAGES_URL}/{page['wiki_page_id']}/access/company-visible",
+        json={"company_visible": False},
     )
 
     found = await wiki_client.post(

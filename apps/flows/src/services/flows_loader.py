@@ -32,6 +32,7 @@ from apps.flows.src.models import (
 )
 from apps.flows.src.models.bundle_registry import FlowBundleRegistry
 from apps.flows.src.models.node_config import NodeLLMConfig
+from apps.flows.src.services.flow_access_service import FlowAccessService
 from apps.flows.src.tools.decorator import FunctionTool
 from apps.flows.src.tools.json_schema_parameters import pydantic_model_to_parameters_schema
 from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS
@@ -89,11 +90,13 @@ class FlowsLoader:
         node_repository: NodeRepository,
         tool_repository: ToolRepository,
         registry_path: Path | None = None,
+        flow_access_service: FlowAccessService | None = None,
     ):
         self.bundles_dir: Path = bundles_dir
         self.flow_repository: FlowRepository = flow_repository
         self.node_repository: NodeRepository = node_repository
         self.tool_repository: ToolRepository = tool_repository
+        self.flow_access_service: FlowAccessService | None = flow_access_service
         self.registry_path: Path = registry_path or (bundles_dir / "registry.yaml")
         self._registry: JsonObject = {}
         self._bundle_registry: FlowBundleRegistry = FlowBundleRegistry()
@@ -103,6 +106,16 @@ class FlowsLoader:
         self._nodes_cache: dict[str, NodeConfig] = {}  # session memo: nodes для инлайнинга
         self._preloaded_bundle_ids: set[str] = set()
         self._target_company_id: str | None = None
+
+    async def _sync_loaded_flow(self, flow_config: FlowConfig) -> None:
+        if self.flow_access_service is None:
+            raise RuntimeError("flow_access_service required for OpenFGA dual-write on flow load")
+        company_id = self._resolve_target_company_id()
+        await self.flow_access_service.sync_flow_saved(
+            flow_config,
+            company_id=company_id,
+            owner_user_id="system",
+        )
 
     def load_registry_yaml(self) -> None:
         """Загружает ``registry.yaml`` в ``_registry`` и ``_defaults`` (секция ``defaults``)."""
@@ -304,8 +317,16 @@ class FlowsLoader:
         if flow_config is None:
             return None
 
-        # Сохраняем в БД
+        previous = await self.flow_repository.get(flow_config.flow_id)
         _ = await self.flow_repository.set(flow_config)
+        try:
+            await self._sync_loaded_flow(flow_config)
+        except Exception:
+            if previous is None:
+                _ = await self.flow_repository.delete(flow_config.flow_id)
+            else:
+                _ = await self.flow_repository.set(previous)
+            raise
 
         logger.info(f"  {bundle_id}: {flow_config.name}")
         return flow_config.flow_id
@@ -1316,6 +1337,7 @@ async def load_flows_to_db(
     flow_repository: FlowRepository,
     node_repository: NodeRepository,
     tool_repository: ToolRepository,
+    flow_access_service: FlowAccessService,
     bundles_dir: Path | None = None,
 ) -> tuple[list[str], list[str]]:
     """
@@ -1345,7 +1367,12 @@ async def load_flows_to_db(
         registry_path = None  # будет использован bundles_dir / "registry.yaml"
 
     loader = FlowsLoader(
-        bundles_dir, flow_repository, node_repository, tool_repository, registry_path=registry_path
+        bundles_dir,
+        flow_repository,
+        node_repository,
+        tool_repository,
+        registry_path=registry_path,
+        flow_access_service=flow_access_service,
     )
     return await loader.load_all()
 
@@ -1353,6 +1380,9 @@ async def load_flows_to_db(
 async def load_tools_to_db(
     tool_repository: ToolRepository,
     modules: list[str] | None = None,
+    *,
+    flow_access_service: FlowAccessService,
+    company_id: str = "system",
 ) -> list[str]:
     """
     Загружает контракты trusted platform tools из Python модулей в БД.
@@ -1363,6 +1393,8 @@ async def load_tools_to_db(
     Аргументы:
         tool_repository: ToolRepository для сохранения
         modules: Список модулей для загрузки
+        flow_access_service: dual-write OpenFGA для tool tuples
+        company_id: компания для company#member viewer (seed — system)
 
     Возвращает:
         Список загруженных tool_id
@@ -1408,6 +1440,11 @@ async def load_tools_to_db(
         )
 
         _ = await tool_repository.set(tool_ref)
+        await flow_access_service.sync_tool_saved(
+            tool_id,
+            company_id=company_id,
+            permission=tool_ref.permission,
+        )
         loaded.append(tool_id)
         loaded_ids.add(tool_id)
         logger.info(f"  {tool_id}: FunctionTool")

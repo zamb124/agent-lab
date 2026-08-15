@@ -13,6 +13,10 @@ alwaysApply: true
 - Минимизация blast radius заплатами вокруг устаревшего интерфейса запрещена: обновляй callers, тесты и payload'ы.
 - Конвертация — только на внешней границе (wire спеки, SDK, сырой JSON→typed boundary, ORM→domain в repository). Внутри платформы (`service`↔`api`↔`ui`↔`events`) — общий нативный тип.
 
+## Authorization (sole PDP)
+
+Единственный PDP — **`AuthzService`** (`core/authz`) через OpenFGA. Domain `*AccessService` — orchestration tuples only, не второй Check. Roster/`Company.members`/JWT roles — identity + dual-write + directory, никогда Check. Канон → **`authorization.mdc`**.
+
 ## REST-зеркало команд (платформенный инвариант)
 
 | Тип события | REST-зеркало | WS-доступность | Источник правды |
@@ -48,6 +52,10 @@ CI `scripts/check_command_rest_mirror.py` (`make check-events-canon`):
 Один сокет `/<svc>/api/ws/notifications` (`core.websocket.router`) несёт push (из `platform:events`) и RPC request-reply. Сервис регистрирует handlers через `register_ws_command_handler(command_type, handler)` (`core.websocket.command_router`). Reply-тип механически: `*_requested` → `*_succeeded`/`*_failed`.
 
 Frontend `core/.../events/effects/ws.effect.js` шлёт `{request_id, type, payload}`, ждёт reply. `wsTimeoutMs` обязателен у фабрики. **No-fallback:** WS оборвался / timeout — `*_failed` с `error_code: 'ws_disconnected'|'ws_timeout'`. Никакого retry через HTTP.
+
+### Code node LSP session
+
+LSP JSON-RPC — долгая сессия language server, не команда `command_router`. Bootstrap: `POST /flows/api/v1/code/lsp/session` (фабрика `flows/code_lsp_session`, REST-зеркало обязательно). Кадры протокола: `WS /flows/api/v1/code/lsp/ws/{language}/{session_id}` (flows проверяет `GET {runner}/lsp/session/{id}`, затем проксирует на `code-runner-*` через `core/clients/service_websocket.py`; language в пути, без in-memory map на flows). Нет сессии / нет cookie — close `1008`. REST-зеркало JSON-RPC кадров не требуется. Аналог voice session, не request-reply команды.
 
 ### Запреты
 
@@ -146,7 +154,7 @@ WebSocket: HTTP-хендлеры voice используют `ContainerDep` + `ge
 ## Межсервисный доступ к данным
 
 - **Репозиторий приоритетнее.** Если у процесса есть доступ к БД peer-домена (`database.mdc`, `configuration.mdc`) — данные через репозиторий (`core/`, `apps/<service>/db/`, DI `@lazy`). Не дублировать те же операции через REST к peer-сервису.
-- **`ServiceClient`** (`core/clients/service_client.py`) — только когда контракт намеренно REST или БД недоступна. Передаёт `X-Trace-Id`/`Authorization`/`X-Company-Id`/`X-User-Id`/`X-Request-Id` из контекста.
+- **`ServiceClient`** (`core/clients/service_client.py`) — только когда контракт намеренно REST или БД недоступна. Передаёт `X-Trace-Id`/`Authorization`/`X-Request-Id` и **всегда** signed `X-Platform-Context-*` при `active_company` (не `elif` вместо JWT: anonymous peer вроде capability-gateway `/manifest` не берёт company из Bearer). То же для outbound `A2AClient` (CRM worker → flows A2A). `AuthMiddleware` применяет валидные internal headers на **любом** пути; allowlist префиксов запрещён.
 - Прямой `httpx.AsyncClient` между сервисами **запрещён** (`integrations.mdc`).
 - Самодельные HTTP-клиенты к peer за теми же таблицами; «тонкий» прокси без причины — запрещены.
 
@@ -211,6 +219,8 @@ ctx = get_context()  # ctx.user, ctx.active_company.id, ctx.trace_id
 ```
 
 Репозитории берут `company_id` из контекста автоматически.
+
+HTTP/временный scope: `set_context` возвращает token, выход — `reset_context(token)`, не `clear_context()`. Иначе in-process вызов после ASGI теряет внешний Context.
 
 ## Breadcrumbs (обязательно)
 

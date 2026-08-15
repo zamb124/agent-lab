@@ -10,6 +10,10 @@ from datetime import datetime, timezone
 from typing import Final, final
 
 from core.ai.company_settings import decrypt_secret, encrypt_secret
+from core.authz.errors import AuthzDenied
+from core.authz.models import AuthzCheckItem, AuthzObject, AuthzSubject
+from core.authz.service import AuthzService
+from core.authz.types import AuthzRelation, AuthzSubjectKind
 from core.clients.rag_client import RagClient
 from core.config import get_settings
 from core.config.models import MailConfig, MailLocalDevConfig
@@ -23,6 +27,11 @@ from core.files.service import FilesService
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.logging import get_logger
 from core.mail.attachment_index import MailAttachmentFileIndex
+from core.mail.authz.tuples import (
+    mailbox_binding_company_link,
+    mailbox_binding_member_tuple,
+    mailbox_binding_owner_tuple,
+)
 from core.mail.calendar_colors import default_calendar_color, require_mail_calendar_color
 from core.mail.enqueue import enqueue_mail_rag_index, enqueue_mail_sync_binding
 from core.mail.exceptions import (
@@ -53,6 +62,7 @@ from core.mail.models import (
     MailboxBindingKind,
     MailboxBindingMember,
     MailboxBindingMemberPayload,
+    MailboxBindingMemberRole,
     MailboxBindingPatchPayload,
     MailboxBindingPublic,
     MailboxEnsureSpec,
@@ -107,7 +117,6 @@ from core.mail.ports import MailCalendarBridge, MailServerPort
 from core.mail.repositories import (
     INBOX_FOLDER,
     CompanyMailConnectionRepository,
-    MailboxBindingMemberRepository,
     MailboxBindingRepository,
     MailboxFolderRepository,
     MailboxSyncCursorRepository,
@@ -327,7 +336,7 @@ class MailService:
         sync_cursor_repository: MailboxSyncCursorRepository,
         folder_repository: MailboxFolderRepository | None = None,
         message_repository: MailMessageRepository | None = None,
-        member_repository: MailboxBindingMemberRepository | None = None,
+        authz: AuthzService,
         namespace_service: NamespaceService | None = None,
         rag_client: RagClient | None = None,
         company_repository: CompanyRepository,
@@ -345,7 +354,7 @@ class MailService:
         self._sync_cursor_repository: Final[MailboxSyncCursorRepository] = sync_cursor_repository
         self._folder_repository: Final[MailboxFolderRepository | None] = folder_repository
         self._message_repository: Final[MailMessageRepository | None] = message_repository
-        self._member_repository: Final[MailboxBindingMemberRepository | None] = member_repository
+        self._authz: Final[AuthzService] = authz
         self._namespace_service: Final[NamespaceService | None] = namespace_service
         self._rag_client: Final[RagClient | None] = rag_client
         self._company_repository: Final[CompanyRepository] = company_repository
@@ -487,47 +496,86 @@ class MailService:
             raise MailConfigError("authenticated user is required for mail operations")
         return ctx.user.user_id
 
-    def _is_company_admin(self, company_id: str) -> bool:
-        ctx = get_context()
-        if ctx is None:
-            return False
-        roles = ctx.user.companies.get(company_id, [])
-        return "admin" in roles
+    async def _is_company_admin(self, company_id: str) -> bool:
+        return await self._authz.check_company_admin(company_id=company_id)
 
-    def require_company_admin(self, company_id: str | None = None) -> None:
+    async def require_company_admin(self, company_id: str | None = None) -> None:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        if not self._is_company_admin(resolved_company_id):
+        try:
+            await self._authz.require_company_admin(company_id=resolved_company_id)
+        except AuthzDenied as exc:
             raise MailPermissionError(
                 f"admin role required for company_id={resolved_company_id}"
-            )
+            ) from exc
+
+    async def check_company_admin(self, company_id: str | None = None) -> bool:
+        resolved_company_id = company_id if company_id is not None else self._active_company_id()
+        return await self._is_company_admin(resolved_company_id)
 
     async def _require_binding_access(
         self,
         binding: MailboxBinding,
         *,
         company_id: str,
+        level: str = "viewer",
     ) -> None:
+        _ = company_id
         user_id = self._active_user_id()
-        if binding.user_id == user_id:
-            return
-        if self._is_company_admin(company_id):
-            return
-        if (
-            binding.kind == MailboxBindingKind.ROLE
-            and self._member_repository is not None
-            and await self._member_repository.is_member(binding.mailbox_binding_id, user_id)
-        ):
-            return
-        raise MailPermissionError(
-            f"no access to mailbox_binding_id={binding.mailbox_binding_id}"
+        obj = AuthzObject.mailbox_binding(binding.mailbox_binding_id)
+        try:
+            if level == "viewer":
+                await self._authz.require_can_view(obj, user_id=user_id)
+            elif level == "editor":
+                await self._authz.require_can_edit(obj, user_id=user_id)
+            elif level == "admin":
+                await self._authz.require_can_admin(obj, user_id=user_id)
+            else:
+                raise ValueError(f"unsupported mailbox binding access level: {level}")
+        except AuthzDenied as exc:
+            raise MailPermissionError(
+                f"no access to mailbox_binding_id={binding.mailbox_binding_id}"
+            ) from exc
+
+    async def _write_binding_owner(
+        self,
+        mailbox_binding_id: str,
+        owner_user_id: str,
+        *,
+        company_id: str,
+    ) -> None:
+        await self._authz.write(
+            [
+                mailbox_binding_company_link(mailbox_binding_id, company_id),
+                mailbox_binding_owner_tuple(mailbox_binding_id, owner_user_id),
+            ]
         )
+
+    async def _clear_binding_tuples(self, mailbox_binding_id: str) -> None:
+        deletes = await self._authz.list_tuples(AuthzObject.mailbox_binding(mailbox_binding_id))
+        if deletes:
+            await self._authz.delete(deletes)
 
     async def list_my_bindings(self, company_id: str | None = None) -> list[MailboxBinding]:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
         user_id = self._active_user_id()
-        return await self._binding_repository.list_accessible_bindings(
-            resolved_company_id, user_id
-        )
+        candidates = await self._binding_repository.list_by_company(resolved_company_id)
+        if not candidates:
+            return []
+        checks = [
+            AuthzCheckItem(
+                subject=AuthzSubject.user(user_id),
+                relation=AuthzRelation.CAN_VIEW,
+                obj=AuthzObject.mailbox_binding(binding.mailbox_binding_id),
+                correlation_id=binding.mailbox_binding_id,
+            )
+            for binding in candidates
+        ]
+        allowed = await self._authz.batch_check(checks)
+        return [
+            binding
+            for binding, ok in zip(candidates, allowed, strict=True)
+            if ok
+        ]
 
     async def list_bindings(self, company_id: str | None = None) -> list[MailboxBinding]:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
@@ -586,7 +634,7 @@ class MailService:
             raise ValueError("only user bindings can be default")
         if not acting_as_admin:
             user_id = self._active_user_id()
-            if binding.user_id != user_id and not self._is_company_admin(resolved_company_id):
+            if binding.user_id != user_id and not await self._is_company_admin(resolved_company_id):
                 raise MailPermissionError(
                     f"no access to mailbox_binding_id={mailbox_binding_id}"
                 )
@@ -631,7 +679,7 @@ class MailService:
         if not has_admin_fields and not has_color and not has_host_fields:
             raise ValueError("MailboxBindingPatchPayload is empty")
 
-        is_admin = self._is_company_admin(resolved_company_id)
+        is_admin = await self._is_company_admin(resolved_company_id)
         acting_user_id = self._active_user_id()
         is_owner = (
             binding.kind == MailboxBindingKind.USER
@@ -661,6 +709,7 @@ class MailService:
                     f"no access to patch calendar_color for mailbox_binding_id={mailbox_binding_id}"
                 )
 
+        previous_owner_user_id = binding.user_id
         user_id = binding.user_id
         if payload.user_id is not None:
             if not payload.user_id.strip():
@@ -728,6 +777,29 @@ class MailService:
             }
         )
         stored = await self._binding_repository.upsert(updated)
+        if (
+            payload.user_id is not None
+            and stored.kind == MailboxBindingKind.USER
+            and stored.user_id is not None
+            and stored.user_id != previous_owner_user_id
+        ):
+            try:
+                await self._clear_binding_tuples(stored.mailbox_binding_id)
+                await self._write_binding_owner(
+                    stored.mailbox_binding_id,
+                    stored.user_id,
+                    company_id=resolved_company_id,
+                )
+            except Exception:
+                _ = await self._binding_repository.upsert(binding)
+                if previous_owner_user_id is not None:
+                    await self._clear_binding_tuples(stored.mailbox_binding_id)
+                    await self._write_binding_owner(
+                        stored.mailbox_binding_id,
+                        previous_owner_user_id,
+                        company_id=resolved_company_id,
+                    )
+                raise
         if (
             payload.user_id is not None
             and stored.kind == MailboxBindingKind.USER
@@ -879,6 +951,17 @@ class MailService:
                 except_binding_id=binding.mailbox_binding_id,
             )
         stored = await self._binding_repository.upsert(binding)
+        try:
+            await self._write_binding_owner(
+                stored.mailbox_binding_id,
+                acting_user_id,
+                company_id=resolved_company_id,
+            )
+        except Exception:
+            _ = await self._binding_repository.delete(
+                stored.mailbox_binding_id, resolved_company_id
+            )
+            raise
         _ = await self.refresh_folders_from_imap(
             stored.mailbox_binding_id,
             company_id=resolved_company_id,
@@ -949,7 +1032,7 @@ class MailService:
         *,
         company_id: str,
     ) -> None:
-        if self._is_company_admin(company_id):
+        if await self._is_company_admin(company_id):
             return
         acting_user_id = self._active_user_id()
         is_owner = (
@@ -1170,7 +1253,7 @@ class MailService:
             raise MailPermissionError(
                 "binding healthcheck is only for personal mailboxes"
             )
-        is_admin = self._is_company_admin(resolved_company_id)
+        is_admin = await self._is_company_admin(resolved_company_id)
         acting_user_id = self._active_user_id()
         is_owner = (
             binding.kind == MailboxBindingKind.USER
@@ -1414,6 +1497,21 @@ class MailService:
             updated_at=now,
         )
         stored = await self._binding_repository.upsert(binding)
+        owner_user_id = (
+            stored.user_id if stored.user_id is not None else self._active_user_id()
+        )
+        try:
+            await self._write_binding_owner(
+                stored.mailbox_binding_id,
+                owner_user_id,
+                company_id=resolved_company_id,
+            )
+        except Exception:
+            if existing is None:
+                _ = await self._binding_repository.delete(
+                    stored.mailbox_binding_id, resolved_company_id
+                )
+            raise
         if (
             previous_user_id is not None
             and previous_was_default
@@ -1447,7 +1545,7 @@ class MailService:
         is_personal = (
             connection is not None and connection.scope == MailConnectionScope.PERSONAL
         )
-        is_admin = self._is_company_admin(resolved_company_id)
+        is_admin = await self._is_company_admin(resolved_company_id)
         acting_user_id = self._active_user_id()
         is_owner = (
             binding.kind == MailboxBindingKind.USER
@@ -1466,6 +1564,7 @@ class MailService:
         deleted = await self._binding_repository.delete(mailbox_binding_id, resolved_company_id)
         if not deleted:
             raise MailBindingNotFoundError(mailbox_binding_id)
+        await self._clear_binding_tuples(mailbox_binding_id)
         await self._unlink_mailbox_calendar(binding)
         if is_personal and connection is not None:
             _ = await self._connection_repository.delete(
@@ -2327,15 +2426,36 @@ class MailService:
         company_id: str | None = None,
     ) -> list[MailboxBindingMember]:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        self.require_company_admin()
         binding = await self._binding_repository.get(mailbox_binding_id, resolved_company_id)
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
         if binding.kind != MailboxBindingKind.ROLE:
             raise MailConfigError("members only for kind=role bindings")
-        if self._member_repository is None:
-            return []
-        return await self._member_repository.list_for_binding(mailbox_binding_id)
+        await self._require_binding_access(binding, company_id=resolved_company_id, level="admin")
+        items: list[MailboxBindingMember] = []
+        now = _utcnow()
+        for relation, role in (
+            (AuthzRelation.MEMBER, MailboxBindingMemberRole.MEMBER),
+            (AuthzRelation.MANAGER, MailboxBindingMemberRole.MANAGER),
+        ):
+            tuples = await self._authz.list_tuples(
+                AuthzObject.mailbox_binding(mailbox_binding_id),
+                relation=relation,
+            )
+            for item in tuples:
+                if item.subject.kind is not AuthzSubjectKind.USER:
+                    continue
+                items.append(
+                    MailboxBindingMember(
+                        mailbox_binding_id=mailbox_binding_id,
+                        user_id=item.subject.value,
+                        company_id=resolved_company_id,
+                        role=role,
+                        created_at=now,
+                    )
+                )
+        items.sort(key=lambda row: row.user_id)
+        return items
 
     async def add_binding_member(
         self,
@@ -2345,22 +2465,30 @@ class MailService:
         company_id: str | None = None,
     ) -> MailboxBindingMember:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
-        self.require_company_admin()
         binding = await self._binding_repository.get(mailbox_binding_id, resolved_company_id)
         if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
         if binding.kind != MailboxBindingKind.ROLE:
             raise MailConfigError("members only for kind=role bindings")
-        if self._member_repository is None:
-            raise MailConfigError("member repository required")
-        return await self._member_repository.upsert(
-            MailboxBindingMember(
-                mailbox_binding_id=mailbox_binding_id,
-                user_id=payload.user_id,
-                company_id=resolved_company_id,
-                role=payload.role,
-                created_at=_utcnow(),
-            )
+        await self._require_binding_access(binding, company_id=resolved_company_id, level="admin")
+        relation = (
+            AuthzRelation.MANAGER
+            if payload.role is MailboxBindingMemberRole.MANAGER
+            else AuthzRelation.MEMBER
+        )
+        deletes = [
+            mailbox_binding_member_tuple(mailbox_binding_id, payload.user_id, item)
+            for item in (AuthzRelation.MEMBER, AuthzRelation.MANAGER)
+            if item is not relation
+        ]
+        write = mailbox_binding_member_tuple(mailbox_binding_id, payload.user_id, relation)
+        await self._authz.write_and_delete([write], deletes)
+        return MailboxBindingMember(
+            mailbox_binding_id=mailbox_binding_id,
+            user_id=payload.user_id,
+            company_id=resolved_company_id,
+            role=payload.role,
+            created_at=_utcnow(),
         )
 
     async def remove_binding_member(
@@ -2370,12 +2498,25 @@ class MailService:
         *,
         company_id: str | None = None,
     ) -> None:
-        self.require_company_admin(company_id)
-        if self._member_repository is None:
-            raise MailConfigError("member repository required")
-        deleted = await self._member_repository.delete(mailbox_binding_id, user_id)
-        if not deleted:
+        resolved_company_id = company_id if company_id is not None else self._active_company_id()
+        binding = await self._binding_repository.get(mailbox_binding_id, resolved_company_id)
+        if binding is None:
             raise MailBindingNotFoundError(mailbox_binding_id)
+        await self._require_binding_access(binding, company_id=resolved_company_id, level="admin")
+        deletes = [
+            mailbox_binding_member_tuple(mailbox_binding_id, user_id, item)
+            for item in (AuthzRelation.MEMBER, AuthzRelation.MANAGER)
+        ]
+        existing = await self._authz.list_tuples(AuthzObject.mailbox_binding(mailbox_binding_id))
+        subject_ids = {
+            item.subject.value
+            for item in existing
+            if item.subject.kind is AuthzSubjectKind.USER
+            and item.relation in (AuthzRelation.MEMBER, AuthzRelation.MANAGER)
+        }
+        if user_id not in subject_ids:
+            raise MailBindingNotFoundError(mailbox_binding_id)
+        await self._authz.delete(deletes)
 
     async def _resolve_outbound_attachments(
         self,

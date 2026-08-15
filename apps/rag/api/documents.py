@@ -9,6 +9,7 @@ from pydantic import Field
 
 from apps.rag.config import get_rag_settings
 from apps.rag_worker.tasks.task_names import RAG_INDEX_DOCUMENT_S3
+from core.authz.models import AuthzObject
 from core.context import require_active_company, require_context
 from core.logging import get_logger
 from core.models import StrictBaseModel
@@ -35,6 +36,12 @@ from .namespace_access import (
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["documents"])
+
+
+async def _require_company_view(container: ContainerDep) -> str:
+    company_id = require_active_company().company_id
+    await container.authz_service.require_can_view(AuthzObject.company(company_id))
+    return company_id
 
 
 # DocumentListResponse заменён на OffsetPage[RAGDocument]
@@ -134,6 +141,7 @@ async def list_documents(
     provider: Annotated[str | None, Query()] = None,
 ) -> OffsetPage[RAGDocument]:
     """Список документов в namespace (completed + in-progress)."""
+    await require_registered_rag_namespace(namespace_id, container)
     settings = get_rag_settings()
     rag_provider = (
         get_rag_provider(provider, settings=settings)
@@ -300,6 +308,7 @@ async def delete_document(
     provider: Annotated[str | None, Query()] = None,
 ) -> JsonObject:
     """Удаляет документ из S3, shared DB и векторного индекса."""
+    await require_registered_rag_namespace(namespace_id, container)
     status_repo = container.document_status_repository
     status = await status_repo.get_by_document_id(document_id)
 
@@ -392,6 +401,7 @@ async def get_document_status(
     container: ContainerDep,
 ) -> DocumentProcessingStatus:
     """Статус обработки документа."""
+    _ = await _require_company_view(container)
     status_repo = container.document_status_repository
     status = await status_repo.get_by_document_id(document_id)
     if not status:
@@ -405,6 +415,7 @@ async def get_documents_statuses_batch(
     container: ContainerDep,
 ) -> DocumentStatusesBatchResponse:
     """Batch-статусы обработки документов; отсутствующие id → null."""
+    _ = await _require_company_view(container)
     normalized_ids: list[str] = []
     seen: set[str] = set()
     for raw_id in body.document_ids:

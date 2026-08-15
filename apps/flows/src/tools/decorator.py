@@ -151,7 +151,7 @@ def tool(
         tariff_limits: Лимиты использования по тарифам
         parameters_model: Pydantic-модель аргументов — JSON Schema для LLM (`Field(description=...)`)
             и `model_validate` перед вызовом функции.
-        listed_in_platform_tool_docs: участие в разделе platform tools у `/code/completions` и markdown-документации.
+        listed_in_platform_tool_docs: участие в разделе platform tools у markdown-документации `/code/documentation`.
 
     Использование:
         @tool(

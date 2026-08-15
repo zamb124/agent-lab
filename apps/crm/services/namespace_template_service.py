@@ -2,6 +2,8 @@
 
 from typing import ClassVar, TypedDict
 
+from sqlalchemy.exc import IntegrityError
+
 from apps.crm.constants_graph import (
     ENTITY_TYPES_CLONED_INTO_NEW_NAMESPACE,
     ENTITY_TYPES_EXCLUDED_FROM_NAMESPACE_EDITABILITY_COUNTS,
@@ -131,7 +133,17 @@ class NamespaceTemplateService:
                 is_context_anchor=item.is_context_anchor,
                 is_voice_target=item.is_voice_target,
             )
-            return await self._entity_type_repo.create(entity_type)
+            try:
+                return await self._entity_type_repo.create(entity_type)
+            except IntegrityError:
+                raced = await self._entity_type_repo.get_by_type_id(
+                    item.type_id,
+                    namespace=target_namespace,
+                    company_id=company_id,
+                )
+                if raced is None:
+                    raise
+                row = raced
         await self._entity_type_repo.update_metadata(
             item.type_id,
             namespace=target_namespace,

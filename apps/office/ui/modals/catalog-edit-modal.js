@@ -1,7 +1,7 @@
 /**
- * OfficeCatalogEditModal — изменение каталога (title + is_public).
+ * OfficeCatalogEditModal — изменение каталога (title + company_visible).
  *
- * props (`UI_MODAL_OPEN.payload.props`): { catalogId, title, isPublic }.
+ * props (`UI_MODAL_OPEN.payload.props`): { catalogId, title, companyVisible }.
  * `useForm('office/catalog_edit_form')` openForm с props в connectedCallback.
  * Отправка диспатчит `catalogsResource.events.UPDATE_REQUESTED`.
  * После UPDATED — closeAfterSave.
@@ -24,7 +24,7 @@ export class OfficeCatalogEditModal extends PlatformFormModal {
         ...PlatformFormModal.properties,
         catalogId: { type: String },
         title: { type: String },
-        isPublic: { type: Boolean },
+        companyVisible: { type: Boolean },
     };
 
     static styles = [
@@ -55,7 +55,7 @@ export class OfficeCatalogEditModal extends PlatformFormModal {
         this.headerSavePrimary = true;
         this.catalogId = '';
         this.title = '';
-        this.isPublic = false;
+        this.companyVisible = false;
         this._catalogs = this.useResource(CATALOGS_NAME);
         this._form = this.useForm(FORM_NAME);
         this._seeded = false;
@@ -77,21 +77,21 @@ export class OfficeCatalogEditModal extends PlatformFormModal {
             this._form.openForm({
                 catalog_id: this.catalogId,
                 title: this.title,
-                is_public: Boolean(this.isPublic),
+                company_visible: Boolean(this.companyVisible),
             });
             this._seeded = true;
         }
         const draft = this._form.draft;
         const dirty_title = typeof draft.title === 'string' && draft.title !== this.title;
-        const dirty_public = Boolean(draft.is_public) !== Boolean(this.isPublic);
-        this.isDirty = dirty_title || dirty_public;
+        const dirty_company_visible = Boolean(draft.company_visible) !== Boolean(this.companyVisible);
+        this.isDirty = dirty_title || dirty_company_visible;
     }
 
     _onTitleChange(e) {
         const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
         this._form.setField('title', v);
     }
-    _onPublicChange(e) { this._form.setField('is_public', Boolean(e.detail.value)); }
+    _onCompanyVisibleChange(e) { this._form.setField('company_visible', Boolean(e.detail.value)); }
 
     async _performSave() { this._form.submit(); }
 
@@ -134,15 +134,15 @@ export class OfficeCatalogEditModal extends PlatformFormModal {
                 ${this._renderFieldError('title')}
                 <div class="form-group">
                     <div class="switch-row">
-                        <span class="switch-label">${this.t('catalog_edit_modal.switch_public')}</span>
+                        <span class="switch-label">${this.t('catalog_edit_modal.switch_company_visible')}</span>
                         <platform-switch
-                            ?checked=${Boolean(draft.is_public)}
-                            @change=${this._onPublicChange}
+                            ?checked=${Boolean(draft.company_visible)}
+                            @change=${this._onCompanyVisibleChange}
                         ></platform-switch>
                     </div>
                     <div class="hint">
-                        ${draft.is_public
-                            ? this.t('catalog_edit_modal.members_public_hint')
+                        ${draft.company_visible
+                            ? this.t('catalog_edit_modal.members_company_visible_hint')
                             : this.t('catalog_edit_modal.members_private_hint')}
                     </div>
                 </div>

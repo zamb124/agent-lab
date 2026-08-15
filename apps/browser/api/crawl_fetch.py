@@ -22,10 +22,12 @@ from apps.browser.engine.types import (
 )
 from apps.browser.interaction.human_interaction import HumanInteraction, InteractionRng
 from apps.browser.interaction.interaction_profiles import get_interaction_profile
+from core.authz.models import AuthzObject
 from core.clients.browser.crawl_fetch_types import (
     BrowserCrawlFetchRequest,
     BrowserCrawlFetchResponse,
 )
+from core.context import get_context
 from core.logging import get_logger
 from core.logging.attributes import (
     EVENT_BROWSER_CRAWL_FETCH_COMPLETED,
@@ -43,6 +45,14 @@ logger = get_logger(__name__)
 _CRAWL_ANTI_BOT_TIER = "gray"
 _crawl_fetch_inflight_semaphore: asyncio.Semaphore | None = None
 _crawl_fetch_inflight_limit: int | None = None
+
+
+async def _require_company_view_when_user_context(container: ContainerDep) -> None:
+    context = get_context()
+    if context is None or context.active_company is None:
+        return
+    company_id = context.active_company.company_id
+    await container.authz_service.require_can_view(AuthzObject.company(company_id))
 
 
 def _crawl_fetch_semaphore(max_inflight: int) -> asyncio.Semaphore:
@@ -77,6 +87,7 @@ async def crawl_fetch(
     body: BrowserCrawlFetchRequest,
     container: ContainerDep,
 ) -> BrowserCrawlFetchResponse:
+    await _require_company_view_when_user_context(container)
     runtime = container.browser_runtime
     settings = runtime.settings
     semaphore = _crawl_fetch_semaphore(settings.crawl_fetch_max_inflight)

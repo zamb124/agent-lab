@@ -65,7 +65,7 @@ async def test_flow_ui_shares_create_list_exchange_revoke_and_short_link(
             "context_id": context_id,
             "document_id": f"flow-ui:{context_id}",
             "minimum_revision": 1,
-            "permission": "view",
+            "permission": "viewer",
             "expires_in_seconds": 300,
         },
     )
@@ -79,7 +79,7 @@ async def test_flow_ui_shares_create_list_exchange_revoke_and_short_link(
             "context_id": context_id,
             "document_id": f"flow-ui:{context_id}",
             "minimum_revision": 2,
-            "permission": "view",
+            "permission": "viewer",
             "expires_in_seconds": 300,
         },
     )
@@ -88,7 +88,7 @@ async def test_flow_ui_shares_create_list_exchange_revoke_and_short_link(
     grant = body["grant"]
     share_url = body["share_url"]
     grant_id = grant["grant_id"]
-    assert grant["permission"] == "view"
+    assert grant["permission"] == "viewer"
     assert grant["minimum_revision"] == 2
     assert grant["context_id"] == context_id
     assert "/l/" in share_url
@@ -113,7 +113,7 @@ async def test_flow_ui_shares_create_list_exchange_revoke_and_short_link(
     assert exchanged.status_code == 200, exchanged.text
     token_payload = exchanged.json()
     assert token_payload["token_type"] == "Bearer"
-    assert token_payload["permission"] == "view"
+    assert token_payload["permission"] == "viewer"
     assert token_payload["flow_id"] == flow_id
     assert token_payload["context_id"] == context_id
     assert token_payload["document_id"] == f"flow-ui:{context_id}"
@@ -199,7 +199,7 @@ async def test_flow_ui_share_interact_grant_authorizes_mutations(
             "context_id": context_id,
             "document_id": f"flow-ui:{context_id}",
             "minimum_revision": bootstrapped.state.ui_document.revision,
-            "permission": "interact",
+            "permission": "editor",
             "expires_in_seconds": 300,
         },
     )
@@ -210,9 +210,9 @@ async def test_flow_ui_share_interact_grant_authorizes_mutations(
         company_id=company_id,
         flow_id=flow_id,
         context_id=context_id,
-        require_interact=True,
+        require_editor=True,
     )
-    assert grant.permission == "interact"
+    assert grant.permission == "editor"
 
 
 @pytest.mark.asyncio
@@ -243,7 +243,7 @@ async def test_flow_ui_share_token_interface_profile_is_read_only_for_view(
                 "context_id": context_id,
                 "document_id": f"flow-ui:{context_id}",
                 "minimum_revision": bootstrapped.state.ui_document.revision,
-                "permission": "view",
+                "permission": "viewer",
                 "expires_in_seconds": 300,
             },
         )
@@ -287,7 +287,7 @@ async def test_flow_ui_share_token_interface_profile_is_read_only_for_view(
                 "context_id": context_id,
                 "document_id": f"flow-ui:{context_id}",
                 "minimum_revision": bootstrapped.state.ui_document.revision,
-                "permission": "interact",
+                "permission": "editor",
                 "expires_in_seconds": 300,
             },
         )

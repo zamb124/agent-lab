@@ -22,6 +22,7 @@ def loader(bundles_dir: Path, container) -> FlowsLoader:
         node_repository=container.node_repository,
         tool_repository=container.tool_repository,
         registry_path=bundles_dir.parent / "registry.yaml",
+        flow_access_service=container.flow_access_service,
     )
 
 
@@ -54,6 +55,7 @@ def test_expand_detects_cycle(loader: FlowsLoader, tmp_path: Path, container) ->
         node_repository=container.node_repository,
         tool_repository=container.tool_repository,
         registry_path=tmp_path / "registry.yaml",
+        flow_access_service=container.flow_access_service,
     )
     with pytest.raises(ValueError, match="Cycle in depends_on_flow_ids"):
         cycle_loader._expand_bundle_ids_with_dependencies(["cycle_parent"])

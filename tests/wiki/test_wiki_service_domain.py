@@ -10,11 +10,7 @@ from __future__ import annotations
 import pytest
 
 from apps.wiki.content.markdown_parser import markdown_to_document
-from apps.wiki.models.domain import (
-    WikiLinkTargetKind,
-    WikiPagePermission,
-    WikiVisibility,
-)
+from apps.wiki.models.domain import WikiLinkTargetKind
 from apps.wiki.services.wiki_service import WikiAccessDeniedError, WikiPageNotFoundError
 
 pytestmark = pytest.mark.no_test_doubles
@@ -152,13 +148,12 @@ async def test_restricted_page_denies_stranger_in_service_layer(
     wiki_service, wiki_namespace, page_factory, unique_id
 ):
     page = await page_factory(f"Закрытая {unique_id}", markdown="Текст.")
-    _ = await wiki_service.set_member(
+    _ = await wiki_service.set_company_visible(
         company_id=COMPANY,
         namespace=wiki_namespace,
         user_id=OWNER,
         wiki_page_id=page.wiki_page_id,
-        member_user_id=OWNER,
-        permission=WikiPagePermission.ADMIN,
+        company_visible=False,
     )
 
     with pytest.raises(WikiAccessDeniedError):
@@ -167,26 +162,32 @@ async def test_restricted_page_denies_stranger_in_service_layer(
         )
 
 
-async def test_visibility_is_recalculated_for_subtree(
+async def test_company_visible_recalculation_does_not_cascade_to_existing_children(
     wiki_service, wiki_repository, wiki_namespace, page_factory, unique_id
 ):
+    """`company_visible` — прямой тег FGA `company_viewer`, а не наследуемый TTU.
+
+    Ограничение родителя не переносится на уже созданных потомков: их
+    собственный tuple менять нужно отдельно.
+    """
     parent = await page_factory(f"Родитель {unique_id}", markdown="Текст.")
     child = await page_factory(
         f"Ребёнок {unique_id}", parent_page_id=parent.wiki_page_id, markdown="Текст."
     )
 
-    _ = await wiki_service.set_member(
+    _ = await wiki_service.set_company_visible(
         company_id=COMPANY,
         namespace=wiki_namespace,
         user_id=OWNER,
         wiki_page_id=parent.wiki_page_id,
-        member_user_id=OWNER,
-        permission=WikiPagePermission.ADMIN,
+        company_visible=False,
     )
 
+    stored_parent = await wiki_repository.get_page(COMPANY, wiki_namespace, parent.wiki_page_id)
     stored_child = await wiki_repository.get_page(COMPANY, wiki_namespace, child.wiki_page_id)
-    assert stored_child is not None
-    assert stored_child.visibility == WikiVisibility.RESTRICTED
+    assert stored_parent is not None and stored_child is not None
+    assert stored_parent.company_visible is False
+    assert stored_child.company_visible is True
 
 
 async def test_links_are_rewritten_on_each_save(

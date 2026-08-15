@@ -184,7 +184,10 @@ async def on_startup(_app: FastAPI, container: FlowContainer, settings: FlowSett
         )
         set_context(system_context)
         try:
-            loaded_tools = await load_tools_to_db(container.tool_repository)
+            loaded_tools = await load_tools_to_db(
+                container.tool_repository,
+                flow_access_service=container.flow_access_service,
+            )
             logger.info(f"Загружено tools: {loaded_tools}")
 
             logger.info("Загрузка flows из bundles синхронно (TESTING=true)...")
@@ -192,6 +195,7 @@ async def on_startup(_app: FastAPI, container: FlowContainer, settings: FlowSett
                 container.flow_repository,
                 container.node_repository,
                 container.tool_repository,
+                container.flow_access_service,
             )
             logger.info(f"Загружено flows: {loaded_flow_ids}")
 
@@ -223,7 +227,7 @@ async def on_startup(_app: FastAPI, container: FlowContainer, settings: FlowSett
             logger.info("platform_assistant skills system: count=%s", seeded_skills)
             stored_company = await container.company_repository.get("system")
             member_user_ids = (
-                hitl_demo_operator_user_ids(stored_company)
+                await hitl_demo_operator_user_ids(container.authz_service, "system")
                 if stored_company is not None
                 else []
             )

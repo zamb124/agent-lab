@@ -57,7 +57,7 @@ def build_wiki_chunk_metadata(page: WikiPage, heading_path: str = "") -> RAGMeta
         "wiki_parent_page_id": page.parent_page_id if page.parent_page_id else "",
         "wiki_root_page_id": page.root_page_id,
         "wiki_depth": page.depth,
-        "wiki_visibility": page.visibility.value,
+        "wiki_visibility": page.rag_visibility.value,
         "wiki_is_published": page.is_published,
         "wiki_title": page.title,
         "wiki_heading_path": heading_path,

@@ -9,15 +9,22 @@
 на короткое время для seed'а, потом сбрасываем.
 """
 
+
 from __future__ import annotations
 
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 from contextlib import contextmanager
 from typing import Iterator
 
 from core.context import clear_context, get_context, set_context
 from core.models.context_models import Context
 from core.models.i18n_models import Language
-from core.models.identity_models import Company, Namespace, User
+from core.models.identity_models import Company, User
+from core.namespace.authz.tuples import (
+    platform_namespace_company_editor_tuple,
+    platform_namespace_company_link,
+    platform_namespace_company_viewer_tuple,
+)
 
 
 @contextmanager
@@ -71,9 +78,8 @@ async def seed_namespace_via_repo(
     *,
     subdomain: str | None = None,
 ) -> str:
-    """Создаёт namespace в shared `NamespaceRepository` для тестовой компании."""
+    """Создаёт namespace через NamespaceService (SQL + OpenFGA dual-write)."""
     from apps.frontend.container import get_frontend_container
-    from apps.sync.container import get_sync_container
 
     resolved_subdomain = subdomain
     if resolved_subdomain is None:
@@ -81,16 +87,22 @@ async def seed_namespace_via_repo(
         if company is not None and company.subdomain is not None and company.subdomain.strip() != "":
             resolved_subdomain = company.subdomain
 
-    container = get_sync_container()
+    container = get_frontend_container()
     with _temporary_company_context(company_id, subdomain=resolved_subdomain):
-        await container.namespace_repository.set(
-            Namespace(
+        existing = await container.namespace_service.get(name)
+        if existing is None:
+            _ = await container.namespace_service.create(
                 name=name,
-                company_id=company_id,
                 description="sync test namespace",
-                is_default=False,
             )
-        )
+        else:
+            await container.authz_service.write(
+                [
+                    platform_namespace_company_link(company_id, name),
+                    platform_namespace_company_viewer_tuple(company_id, name),
+                    platform_namespace_company_editor_tuple(company_id, name),
+                ]
+            )
     return name
 
 

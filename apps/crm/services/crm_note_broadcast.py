@@ -2,32 +2,32 @@
 
 Публикует **два** типа на один факт (разная семантика):
 
-1. ``notify/crm/crm_note_updated_received`` через ``notify_user`` — toast /
-   notification-center + offline web-push.
-2. ``crm/note/updated`` — одно доменное push-событие с ``delivery.user_ids``
+1. ``notify/crm/crm_note_updated_received`` через ``notify_company`` — toast /
+   notification-center (company delivery; offline push не фанится на roster).
+2. ``crm/note/updated`` — доменное push-событие с ``delivery.company_id``
    для slice ``crm/notes_list`` (snapshot ``note`` при create/update;
    при delete — только ``note_id`` + ``action``).
+
+``crm_namespace.can_view`` включает ``company#member`` — ``list_users``
+разворачивает весь roster компании и под xdist/долгоживущим store даёт
+``deadline_exceeded``. Канон доставки — ``publish_event_to_company`` (как wiki).
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, TypedDict
+from typing import Literal, TypedDict
 
 from apps.crm.db.models import CRMEntity
 from apps.crm.models.api import EntityResponse
 from apps.crm.services.crm_realtime_events import CRM_NOTE_UPDATED
 from apps.crm.services.namespace_notification_recipients import (
     normalize_namespace_for_broadcast,
-    resolve_user_ids_for_namespace_broadcast,
 )
-from core.events import publish_event_to_users
+from core.authz.service import AuthzService
+from core.events import publish_event_to_company
 from core.logging import get_logger
 from core.types import JsonObject, require_json_object
-from core.websocket.publisher import Notification, NotificationType, notify_user
-
-if TYPE_CHECKING:
-    from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
-    from core.db.repositories import CompanyRepository
+from core.websocket.publisher import Notification, NotificationType, notify_company
 
 logger = get_logger(__name__)
 
@@ -59,13 +59,13 @@ async def broadcast_crm_note_event(
     note_date_iso: str | None,
     action: CrmNoteAction,
     *,
-    company_repository: CompanyRepository,
-    access_grant_repository: AccessGrantRepository,
+    authz: AuthzService,
     note: CRMEntity | None = None,
     skip_notification_center: bool = False,
     markdown_format: MarkdownFormatProgressPayload | None = None,
     draft_repair: DraftRepairProgressPayload | None = None,
 ) -> None:
+    _ = authz
     if action == "deleted":
         if note is not None:
             raise ValueError("broadcast_crm_note_event: note must be None when action=deleted")
@@ -77,12 +77,6 @@ async def broadcast_crm_note_event(
         )
 
     normalized_namespace = normalize_namespace_for_broadcast(namespace)
-    recipient_user_ids = await resolve_user_ids_for_namespace_broadcast(
-        company_id=company_id,
-        namespace=normalized_namespace,
-        company_repository=company_repository,
-        access_grant_repository=access_grant_repository,
-    )
     notification_data: JsonObject = {
         "event": "crm/note/updated",
         "company_id": company_id,
@@ -120,28 +114,24 @@ async def broadcast_crm_note_event(
             "crm_note_broadcast.draft_repair",
         )
     if not skip_notification_center:
-        for user_id in recipient_user_ids:
-            await notify_user(
-                user_id=user_id,
-                notification=Notification(
-                    type=NotificationType.CRM_NOTE_UPDATED,
-                    title=title,
-                    message=message,
-                    service="crm",
-                    data=notification_data,
-                ),
-            )
-    if recipient_user_ids:
-        await publish_event_to_users(
-            recipient_user_ids,
-            CRM_NOTE_UPDATED,
-            domain_event_payload,
+        await notify_company(
             company_id=company_id,
+            notification=Notification(
+                type=NotificationType.CRM_NOTE_UPDATED,
+                title=title,
+                message=message,
+                service="crm",
+                data=notification_data,
+            ),
         )
+    await publish_event_to_company(
+        company_id,
+        CRM_NOTE_UPDATED,
+        domain_event_payload,
+    )
     logger.debug(
-        "CRM note broadcast: action=%s note_id=%s namespace=%s recipients=%s",
+        "CRM note broadcast: action=%s note_id=%s namespace=%s delivery=company",
         action,
         note_id,
         normalized_namespace,
-        len(recipient_user_ids),
     )

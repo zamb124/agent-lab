@@ -6,12 +6,13 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from apps.flows.src.container import FlowContainer
+from apps.flows.src.container import FlowContainer, get_container
 from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.services.flows_loader import FlowsLoader
 from apps.flows.src.services.platform_assistant_skills import (
     LARA_PLATFORM_SKILL_ROOTS,
 )
+from core.authz.company_sync import sync_company_member_roles
 from core.context import Context, clear_context, get_context, set_context
 from core.models.identity_models import Company, User
 from core.state import ExecutionState
@@ -38,7 +39,15 @@ def company_context(company_id: str, unique_id: str) -> Context:
 @asynccontextmanager
 async def company_scope(company_id: str, unique_id: str) -> AsyncIterator[None]:
     previous = get_context()
-    set_context(company_context(company_id, unique_id))
+    ctx = company_context(company_id, unique_id)
+    set_context(ctx)
+    container = get_container()
+    await sync_company_member_roles(
+        container.authz_service,
+        company_id=company_id,
+        user_id=ctx.user.user_id,
+        roles=["owner", "admin"],
+    )
     try:
         yield
     finally:
@@ -128,6 +137,7 @@ async def ensure_flow_bundle(container: FlowContainer, flow_id: str) -> FlowConf
         node_repository=container.node_repository,
         tool_repository=container.tool_repository,
         registry_path=_REGISTRY_PATH,
+        flow_access_service=container.flow_access_service,
     )
     loader.load_registry_yaml()
     await loader.preload_nodes_to_cache(flow_id)

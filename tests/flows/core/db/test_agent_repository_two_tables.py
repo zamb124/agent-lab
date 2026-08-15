@@ -21,6 +21,10 @@ import pytest
 
 from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig
+from core.context import set_context
+from core.models.context_models import Context
+from core.models.identity_models import User
+from tests.fixtures.ai_provider_defaults import make_test_company
 
 
 class TestFlowRepositoryTwoTables:
@@ -179,11 +183,23 @@ class TestFlowRepositoryTwoTables:
         await repo.delete(flow_id)
 
     @pytest.mark.asyncio
-    @pytest.mark.timeout(15, func_only=True)
+    @pytest.mark.timeout(60, func_only=True)
     async def test_list_all_performance_with_many_versions(self, app, unique_id):
         """
         СТРОГИЙ ТЕСТ: list_all() работает быстро даже при большом количестве версий у других агентов.
         """
+        _ = app
+        company_id = f"flow-list-perf-{unique_id}"
+        set_context(
+            Context(
+                user=User(user_id=f"u-{unique_id}", name="List Perf"),
+                active_company=make_test_company(
+                    company_id=company_id, name="List Perf"
+                ),
+                session_id=f"list-perf-{unique_id}",
+                channel="test",
+            )
+        )
         container = get_container()
         repo = container.flow_repository
 

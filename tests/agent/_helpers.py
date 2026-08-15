@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from urllib.parse import urlparse
 
 from httpx import AsyncClient
 
@@ -45,6 +46,18 @@ async def agent_base_url_from_token(auth_token: str, frontend_container) -> str:
     if not company.subdomain:
         raise AssertionError(f"company {company_id} has no subdomain")
     return f"http://{company.subdomain}.lvh.me:9004"
+
+
+def loopback_frontend_http_target(public_origin: str) -> tuple[str, dict[str, str]]:
+    """HTTP к granian 127.0.0.1 + Host компании. Без публичного DNS `*.lvh.me`."""
+    parsed = urlparse(public_origin)
+    if parsed.scheme != "http":
+        raise AssertionError(f"agent test origin must be http: {public_origin}")
+    if parsed.hostname is None:
+        raise AssertionError(f"agent test origin missing host: {public_origin}")
+    if parsed.port is None:
+        raise AssertionError(f"agent test origin missing port: {public_origin}")
+    return f"http://127.0.0.1:{parsed.port}", {"Host": parsed.netloc}
 
 
 async def create_pairing_via_http(
@@ -170,13 +183,17 @@ async def ensure_company_public_flows(company_id: str) -> None:
         existing_lara = await container.flow_repository.get("lara")
         if existing_lara is not None:
             return
-        _ = await load_tools_to_db(container.tool_repository)
+        _ = await load_tools_to_db(
+        container.tool_repository,
+        flow_access_service=container.flow_access_service,
+    )
         loader = FlowsLoader(
             bundles_dir=_FLOWS_BUNDLES_DIR,
             flow_repository=container.flow_repository,
             node_repository=container.node_repository,
             tool_repository=container.tool_repository,
             registry_path=_FLOWS_REGISTRY_PATH,
+            flow_access_service=container.flow_access_service,
         )
         loaded_flow_id = await loader.reload_flow_bundle("lara")
         if loaded_flow_id != "lara":

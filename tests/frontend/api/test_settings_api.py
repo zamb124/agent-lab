@@ -5,6 +5,8 @@ Integration тесты для API настроек.
 Проверяем управление настройками компании, безопасностью и интеграциями.
 """
 
+
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import pytest
 from httpx import AsyncClient
 
@@ -460,12 +462,12 @@ class TestSettingsAPI:
             {"value": model_id, "label": model_id, "kind": "custom_model"}
         ]
 
-    async def test_ai_providers_accept_user_company_admin_role_when_company_members_stale(
+    async def test_ai_providers_rejects_user_company_admin_role_when_company_members_stale(
         self,
         frontend_client: AsyncClient,
         frontend_container,
     ):
-        """AI providers не падает 403, если admin роль есть в user.companies, но company.members устарел."""
+        """Roster JWT admin без FGA dual-write → 403 (sole PDP = OpenFGA)."""
         import uuid
 
         from core.models.identity_models import Company, User
@@ -496,14 +498,14 @@ class TestSettingsAPI:
             "/frontend/api/settings/ai-providers",
             headers=headers,
         )
-        assert snapshot.status_code == 200
+        assert snapshot.status_code == 403
 
         updated = await frontend_client.put(
             "/frontend/api/settings/ai-providers/llm-context",
             headers=headers,
             json={"profile": "standard"},
         )
-        assert updated.status_code == 200
+        assert updated.status_code == 403
 
     async def test_search_providers_company_key_crud(
         self,

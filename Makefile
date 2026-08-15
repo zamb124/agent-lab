@@ -1,8 +1,8 @@
-.PHONY: help runtime-bootstrap dev dev-up dev-down dev-logs dev-clean dev-minio-restart dev-bootstrap-postgres stress lint lint-ts lint-file mcp-branding-seed agent agent-ensure agent-release ui ui-doc sync-example-docs
+.PHONY: help runtime-bootstrap dev dev-up dev-down dev-logs dev-clean dev-minio-restart dev-bootstrap-postgres openfga-backfill stress lint lint-ts lint-file mcp-branding-seed agent agent-ensure agent-release ui ui-doc sync-example-docs
 .PHONY: test-frontend test-rag test-crawl-llm-live
 .PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-platform-events-canon check-core-frontend-canon check-embed-esm check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon check-field-canon check-rag-post-retrieval-rerank check-company-ai check-files-canon check-tool-tags check-taskiq-canon build-i18n
 .PHONY: clean-i18n-unused base
-.PHONY: render-helm-app-conf require-image-tag k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-helm-clear-pending k8s-helm-adopt-orphans k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore k8s-decommission-compose k8s-cluster-reset
+.PHONY: render-helm-app-conf require-image-tag k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-helm-clear-pending k8s-helm-adopt-orphans k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore k8s-decommission-compose k8s-cluster-reset k8s-openfga-bootstrap
 
 STRESS_NUMERIC_TARGETS := $(shell seq 1 300 2>/dev/null)
 STRESS_GOAL_RPS := $(firstword $(filter $(STRESS_NUMERIC_TARGETS),$(MAKECMDGOALS)))
@@ -45,9 +45,28 @@ dev: dev-up
 
 # Development инфраструктура: postgres :54321, redis :63791, MinIO :19001/19011, Chromium CDP :9222
 dev-up: runtime-bootstrap
-	@echo "Запуск Development окружения (БД/Redis/MinIO в Docker)..."
+	@echo "Запуск Development окружения (БД/Redis/MinIO/OpenFGA в Docker)..."
 	docker-compose -f docker-compose-dev.yaml up -d
-	@echo "Dev окружение запущено (PostgreSQL: 54321, Redis: 63791, MinIO: 19001/19011, Chromium CDP: 9222)"
+	@echo "Bootstrap OpenFGA store + model → reports/openfga-dev.env..."
+	@uv run python scripts/openfga_env_bootstrap.py --api-url http://127.0.0.1:9090 --env-path reports/openfga-dev.env
+	@$(MAKE) openfga-backfill
+	@echo "Dev окружение запущено (PostgreSQL: 54321, Redis: 63791, MinIO: 19001/19011, OpenFGA: 9090, Chromium CDP: 9222)"
+
+# SQL roster / domain rows → OpenFGA tuples (идемпотентно). Нужен reports/openfga-dev.env.
+openfga-backfill:
+	@test -f reports/openfga-dev.env || (echo "missing reports/openfga-dev.env — run make dev-up"; exit 1)
+	@set -a; . ./reports/openfga-dev.env; set +a; \
+	uv run python -m core.authz.backfill_company && \
+	uv run python -m core.authz.backfill_groups && \
+	uv run python -m core.namespace.authz && \
+	uv run python -m apps.flows.authz && \
+	uv run python -m apps.crm.authz && \
+	uv run python -m apps.office.authz && \
+	uv run python -m apps.wiki.authz && \
+	uv run python -m apps.sync.authz && \
+	uv run python -m apps.worktracker.authz && \
+	uv run python -m core.mail.authz && \
+	uv run python -m apps.agent.authz
 
 dev-down:
 	@echo "Остановка Development окружения..."
@@ -257,24 +276,37 @@ k8s-template: render-helm-app-conf require-image-tag
 
 # Применить чарт в текущий kubeconfig-кластер. Атомарно, ждёт rollout.
 # Секреты: jq + deploy/scripts/helm_platform_secrets_json.sh → helm --set-json (устойчиво к многострочным значениям).
+# После helm — openfga_bootstrap_cluster.sh (Secret openfga-ids + pin store/model).
 k8s-deploy: render-helm-app-conf require-image-tag
 	@bash -ec '\
 	set -euo pipefail; \
 	JSON_ARGS=(); \
+	OPENFGA_SET_ARGS=(); \
+	eval "$$(PLATFORM_NS="$(K8S_NAMESPACE)" bash deploy/scripts/openfga_load_pinned_ids.sh)"; \
 	if [ -n "$${POSTGRES_PASSWORD:-}" ]; then \
 	  JSON_ARGS=(--set-json "platformSecrets=$$(bash deploy/scripts/helm_platform_secrets_json.sh)"); \
 	  HELM_WILL_CREATE_PLATFORM_SECRET=1 HELM_RELEASE="$(K8S_RELEASE)" HELM_NAMESPACE="$(K8S_NAMESPACE)" bash deploy/scripts/helm_precheck_install_secret_conflict.sh; \
 	fi; \
+	if [ -n "$${OPENFGA_STORE_ID:-}" ]; then OPENFGA_SET_ARGS+=(--set "openfga.storeId=$${OPENFGA_STORE_ID}"); fi; \
+	if [ -n "$${OPENFGA_AUTHORIZATION_MODEL_ID:-}" ]; then OPENFGA_SET_ARGS+=(--set "openfga.authorizationModelId=$${OPENFGA_AUTHORIZATION_MODEL_ID}"); fi; \
 	helm upgrade --install $(K8S_RELEASE) $(HELM_CHART) \
 	  --namespace $(K8S_NAMESPACE) \
 	  --create-namespace \
 	  --values $(HELM_VALUES) \
 	  --values $(HELM_VALUES_PROD) \
 	  --set image.tag=$(IMAGE_TAG) \
+	  $${OPENFGA_SET_ARGS[@]+"$${OPENFGA_SET_ARGS[@]}"} \
 	  $${JSON_ARGS[@]+"$${JSON_ARGS[@]}"} \
-	  --wait --timeout $(HELM_WAIT_TIMEOUT) \
+	  --wait --timeout $(HELM_WAIT_TIMEOUT); \
+	PLATFORM_NS="$(K8S_NAMESPACE)" HELM_RELEASE="$(K8S_RELEASE)" HELM_CHART="$(HELM_CHART)" APPLY=1 \
+	  bash deploy/scripts/openfga_bootstrap_cluster.sh \
 	'
 	@PLATFORM_NS=$(K8S_NAMESPACE) bash deploy/scripts/helm_cleanup_stale_ingress.sh
+
+# Bootstrap OpenFGA store+model (+ Secret openfga-ids). APPLY=0 — без helm pin.
+k8s-openfga-bootstrap:
+	@PLATFORM_NS=$(K8S_NAMESPACE) HELM_RELEASE=$(K8S_RELEASE) HELM_CHART=$(HELM_CHART) \
+	  APPLY=$${APPLY:-1} bash deploy/scripts/openfga_bootstrap_cluster.sh
 
 # Снимок состояния кластера: ноды, поды, сервисы, ingress, PVC.
 k8s-status:
@@ -377,13 +409,14 @@ help:
 	@echo "============================================================================"
 	@echo "Локальная разработка (Docker для БД/Redis, Python — на хосте):"
 	@echo "============================================================================"
-	@echo "  make dev-up          - Запустить инфраструктуру (Postgres :54321, Redis :63791, MinIO)"
+	@echo "  make dev-up          - Инфра: Postgres :54321, Redis :63791, MinIO, OpenFGA :9090 (+ bootstrap reports/openfga-dev.env + backfill tuples)"
+	@echo "  make openfga-backfill - SQL roster/domain → OpenFGA tuples (после нового store / wipe)"
 	@echo "  make dev-down        - Остановить dev"
 	@echo "  make dev-logs        - Логи dev"
 	@echo "  make dev-clean       - Полная очистка (включая volumes)"
 	@echo "  make dev-minio-restart - Перезапуск MinIO (фикс RequestTimeTooSkewed на macOS)"
 	@echo ""
-	@echo "  make app             - все Python-сервисы через mprocs (раздельные логи; см. mprocs.yaml)"
+	@echo "  make app             - все Python-сервисы через mprocs (нужен make dev-up / openfga-dev.env)"
 	@echo "  make app APP_KILL=1  - то же, освободив порты HTTP-сервисов перед запуском"
 	@echo ""
 	@echo "============================================================================"
@@ -448,6 +481,7 @@ help:
 	@echo "  make k8s-helm-clear-pending - снять pending-upgrade/install/rollback у Helm (не откат Pod)"
 	@echo "  make k8s-secrets-sync    - Обновить Secret platform-secrets через helm (--reuse-values)"
 	@echo "  make k8s-uninstall       - helm uninstall (PVC сохраняются)"
+	@echo "  make k8s-openfga-bootstrap [APPLY=0] - Bootstrap OpenFGA (default APPLY=1: Secret openfga-ids + helm pin)"
 	@echo "  make k8s-health          - Полная проверка кластера (deploy/scripts/cluster-health.sh)"
 	@echo "  make k8s-backup [S3=s3://...] - pg_dumpall в backups/ (опционально в Selectel S3)"
 	@echo "  make k8s-restore FILE=<path>  - Восстановление дампа в pod postgres-0"

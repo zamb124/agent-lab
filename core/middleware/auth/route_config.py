@@ -329,6 +329,12 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/api/team/*", context_type="api", auth_required=True),
     RouteRule("/*/api/team/*", context_type="api", auth_required=True),
 
+    # Access Explorer (company admin)
+    RouteRule("/api/authz/explorer", context_type="api", auth_required=True),
+    RouteRule("/api/authz/explorer/*", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/authz/explorer", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/authz/explorer/*", context_type="api", auth_required=True),
+
     # API фронтенда для управления API ключами
     RouteRule("/api/api-keys/*", context_type="api", auth_required=True),
     RouteRule("/api/api-keys", context_type="api", auth_required=True),
@@ -404,6 +410,7 @@ ROUTE_RULES: list[RouteRule] = [
 
     # Страницы консоли фронтенда
     RouteRule("/team", context_type="frontend", auth_required=True),
+    RouteRule("/access", context_type="frontend", auth_required=True),
     RouteRule("/api-keys", context_type="frontend", auth_required=True),
     RouteRule("/billing", context_type="frontend", auth_required=True),
     RouteRule("/embed-configs", context_type="frontend", auth_required=True),
@@ -420,6 +427,7 @@ ROUTE_RULES: list[RouteRule] = [
     # Иначе refresh даёт 404: префикс /frontend/ исключён из анонимного SPA-fallback.
     RouteRule("/frontend/dashboard", context_type="frontend", auth_required=True),
     RouteRule("/frontend/team", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/access", context_type="frontend", auth_required=True),
     RouteRule("/frontend/api-keys", context_type="frontend", auth_required=True),
     RouteRule("/frontend/billing", context_type="frontend", auth_required=True),
     RouteRule("/frontend/embed-configs", context_type="frontend", auth_required=True),
@@ -474,6 +482,8 @@ ROUTE_RULES: list[RouteRule] = [
     # OpenAI LLM proxy: multi-auth device JWT | OnlyOffice editor JWT (см. apps/agent/llm_auth.py)
     RouteRule("/flows/api/v1/agent/llm/*", auth_required=False, context_type="anonymous"),
     RouteRule("/flows/api/v1/auth/me", context_type="api", auth_required=True),
+    # code_node LSP JSON-RPC — auth внутри хендлера через get_user_from_websocket()
+    RouteRule("/flows/api/v1/code/lsp/ws/*", auth_required=False, context_type="anonymous"),
     RouteRule("/flows/api/v1/*", context_type="api", auth_required=True),
 
     # Эндпоинты протокола A2A (выполнение агента без префикса /api/)

@@ -16,9 +16,15 @@ alwaysApply: false
 
 См. также: `ui_factories.mdc` (контракт фабрик и событий), `ui_components.mdc` (core UI Kit).
 
+## Authorization (UI)
+
+ACL в UI — только backend OpenFGA через API. Share/link wire = `viewer` \| `editor`; CRM grants могут `admin`/`owner`; mail binding = `owner`/`member`/`manager`; company roster roles = identity directory only. Admin mutate gate — `state.auth.user.canAdmin` из `GET /auth/me` (FGA), не JWT `roles` / `companies[].includes`. Канон → **`authorization.mdc`**.
+
 ## Стек
 
 Lit 3, ES modules через import map, нативные web components. Бандлера **нет** — браузер грузит модули напрямую. Никакого Zustand/Redux/MobX.
+
+Code editor code_node (`flows-code-editor`) — vendored CodeMirror (`codemirror-bundle.js`) + `@codemirror/lsp-client`. Intelligence — language server, не JSON-каталог имён. Bootstrap LSP — фабрика `flows/code_lsp_session`; JSON-RPC — WS, не `fetch` из page. Markdown `/code/documentation` не кормит editor.
 
 ## PWA и обновление статики
 

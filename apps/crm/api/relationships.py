@@ -21,10 +21,7 @@ from apps.crm.models.api import (
 from apps.crm.models.graph import ShortestPathResponse
 from apps.crm.services.graph_service import GraphEntityLimitExceededError
 from core.context import get_context
-from core.logging import get_logger
 from core.pagination import CursorPage, OffsetPage
-
-logger = get_logger(__name__)
 
 router = APIRouter(prefix="/relationships", tags=["Relationships"])
 
@@ -89,7 +86,7 @@ async def create_relationship(
         raise HTTPException(status_code=401, detail="Not authenticated")
     company_id = context.active_company.company_id
 
-    all_types = await container.relationship_type_repository.list_by_company(
+    all_types = await container.relationship_type_repository.list_all_by_company(
         include_system=True
     )
     valid_type_ids = {t.type_id for t in all_types}
@@ -247,6 +244,3 @@ async def find_shortest_path(
         raise HTTPException(status_code=404, detail=str(e))
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error finding shortest path: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")

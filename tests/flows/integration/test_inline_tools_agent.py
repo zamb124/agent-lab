@@ -155,7 +155,7 @@ class TestCodeToolSchema:
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
-            user_id="123",
+            user_id="test_user",
             session_id=f"test-agent:test-context-{unique_id}",
             user={"name": "Alice", "id": 123},
         )

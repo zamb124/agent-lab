@@ -53,7 +53,10 @@ async def test_build_example_react_resolves_calculator_without_bulk_tool_list(
     """
     _ = app
     container = get_container()
-    _ = await load_tools_to_db(container.tool_repository)
+    _ = await load_tools_to_db(
+        container.tool_repository,
+        flow_access_service=container.flow_access_service,
+    )
 
     calculator = await container.tool_repository.get("calculator")
     assert calculator is not None
@@ -79,6 +82,7 @@ async def test_build_example_react_resolves_calculator_without_bulk_tool_list(
         node_repository=container.node_repository,
         tool_repository=container.tool_repository,
         registry_path=registry_path,
+        flow_access_service=container.flow_access_service,
     )
     loader._target_company_id = "system"
 

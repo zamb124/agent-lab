@@ -21,6 +21,7 @@ pytestmark = pytest.mark.real_taskiq
 
 # Impl-модули требуют брокер очереди до import (@platform_task).
 _ = wire_worker("crm")
+_ = wire_worker("crm_summary")
 
 from apps.crm_worker.tasks.daily_summary_tasks import (  # noqa: E402
     reconcile_daily_summary_task,
@@ -35,13 +36,6 @@ from apps.crm_worker.tasks.suggest_tasks import (  # noqa: E402
     crm_generate_namespace_suggests_tick,
 )
 
-CRM_SCHEDULER_TASK_NAMES = (
-    SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC.name,
-    CRM_REEMBED_STALE_DOCUMENTS.name,
-    CRM_GENERATE_NAMESPACE_SUGGESTS.name,
-    CRM_RECONCILE_DAILY_SUMMARY.name,
-)
-
 
 def _task_signature(task: object) -> inspect.Signature:
     wrapped = cast(Callable[..., object], task)
@@ -51,13 +45,18 @@ def _task_signature(task: object) -> inspect.Signature:
 
 def test_crm_scheduler_tasks_are_registered_for_scheduler() -> None:
     wire_all()
-    scheduled_names = {spec.name for spec in scheduled_task_specs() if spec.queue == "crm"}
+    scheduled_by_name = {spec.name: spec for spec in scheduled_task_specs()}
     brokers = registered_queue_brokers()
-    crm_broker = brokers["crm"]
+    expected_queues = {
+        SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC.name: "crm",
+        CRM_REEMBED_STALE_DOCUMENTS.name: "crm",
+        CRM_GENERATE_NAMESPACE_SUGGESTS.name: "crm",
+        CRM_RECONCILE_DAILY_SUMMARY.name: "crm_summary",
+    }
 
-    for task_name in CRM_SCHEDULER_TASK_NAMES:
-        assert task_name in scheduled_names
-        assert crm_broker.find_task(task_name) is not None
+    for task_name, queue in expected_queues.items():
+        assert scheduled_by_name[task_name].queue == queue
+        assert brokers[queue].find_task(task_name) is not None
 
 
 def test_crm_scheduled_tasks_accept_scheduler_payload() -> None:
@@ -76,3 +75,4 @@ def test_crm_scheduled_tasks_accept_scheduler_payload() -> None:
 
 def test_crm_queue_is_in_platform_wiring() -> None:
     assert "crm" in all_queues()
+    assert "crm_summary" in all_queues()

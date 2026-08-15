@@ -64,6 +64,7 @@ LEGAL__COMPANY_NAME_RU=...
 | **`ws_presence_heartbeat_interval_seconds`** / **`_ttl_seconds`** / **`sync_taskiq_wait_result_timeout_seconds`** | Sync WS presence и `task.wait_result` из HTTP/WS. Валидатор: TTL ≥ 2×heartbeat + 1с. |
 | **`llm`** | `provider`, `default_model`, `openrouter`/`bothub`/`yandex`/…. Опционально `llm.models` — только переопределение `temperature`/`max_tokens` по id; **каталог цен в JSON не храним**. |
 | **`llm_context`** | Platform-default профили/бюджеты контекстного слоя (`core.llm_context.models.LLMContextConfig`). Company default хранится не здесь, а в `CompanyAIProviders.llm_context`. |
+| **`openfga`** | Единый PDP. Поля: `enabled`, `api_url`, `store_id`, `authorization_model_id`, `api_token`, `timeout_ms`, `default_consistency` (`MINIMIZE_LATENCY` \| `HIGHER_CONSISTENCY`). ENV: `OPENFGA__*`. Один store на платформу; `enabled=true` без `store_id`/`authorization_model_id` → `AuthzConfigError` на старте. Нет `enabled_object_types` / `OPENFGA__ENABLED_OBJECT_TYPES`. Local/test pin — `reports/openfga-dev.env` / `openfga-test.env` через `scripts/openfga_env_bootstrap.py`. Канон → **`authorization.mdc`**. |
 
 `llm.models.<model>.context_length` — опциональное знание платформы о реальном окне модели. Если задано, LLM context layer использует его для hard clamp prompt budget; это не лимит ответа (`max_tokens`) и не должно подменяться эвристикой в call-site.
 | **`billing`** | См. ниже. |
@@ -74,7 +75,7 @@ LEGAL__COMPANY_NAME_RU=...
 | **`auth.providers.amocrm`** | CRM → AmoCRM OAuth. Включить через `AUTH__PROVIDERS__AMOCRM__ENABLED|CLIENT_ID|CLIENT_SECRET`. Callback платформы — `OAuthService.build_auth_url`: `{platform_public_base_url}/{server.name}/api/v1/integrations/oauth/callback`. У процесса CRM `server.name = "crm"`. |
 | **`auth.demo`** | Демо-вход. `login_enabled: true/false`. При `true` — обязателен непустой `auth.demo.password` (или ENV `AUTH__DEMO__PASSWORD`). Опц. переопределяются `email`, `company_id`, `subdomain`, `company_name`. |
 
-`services.<имя>` содержит **только отличия** от общего слоя (порт, `auth.permissions_enabled`, свой `llm` для flows, override `rag.providers` у rag и т.д.).
+`services.<имя>` содержит **только отличия** от общего слоя (порт, свой `llm` для flows, override `rag.providers` у rag и т.д.).
 
 Воркеры (rag_worker и др.) настраиваются через ENV, **не** через плейсхолдеры `${...}` в JSON.
 

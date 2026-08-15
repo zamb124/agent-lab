@@ -49,7 +49,7 @@ description: "CRM (NetWorkle): entities, relationships, graph, namespaces, AI an
 
 **Описание заметки (UI):** edit — `<platform-markdown-editor variant="embed" .enableMentions=${true} .showHeader=${false} .showPreview=${false} .showHint=${false} .showFormatToolbar=${true}>` (палитра H2/B/list без mode tabs; диктовка — встроенный `<platform-voice-dictation>` / `platform/voice_dictation`, не CRM API); view — `flowsChatMarkdownToHtml` + mention chips. Mentions в тексте: `@[Имя](entity_id)`. Boolean chrome — только `.showHeader=${false}` (не `?show-header=${false}`).
 
-**Подтипы заметки** (`meeting`/`call` из AI-черновика): `entity_type=note`, `entity_subtype=meeting|call` — попадают в `/crm/notes`. Push ``crm/note/updated`` несёт ``action`` + snapshot ``note`` (EntityResponse) при create/update; при delete — только ``note_id``. Опционально ``markdown_format``: ``phase: 'started'`` при постановке TaskIQ format Markdown (UI спиннер); ``complete`` + ``chunks_done``/``chunks_total`` после ответа общего `TextTransformService`. UI: `crm/notes_list` мержит push в `extraReducer` (без full list reload).
+**Подтипы заметки** (`meeting`/`call` из AI-черновика): `entity_type=note`, `entity_subtype=meeting|call` — попадают в `/crm/notes`. Push ``crm/note/updated`` (и toast ``notify/crm/crm_note_updated_received``) идут через ``publish_event_to_company`` / ``notify_company`` — `crm_namespace.can_view` включает `company#member`, поэтому `list_users` на hot-path запрещён. Payload: ``action`` + snapshot ``note`` (EntityResponse) при create/update; при delete — только ``note_id``. Опционально ``markdown_format``: ``phase: 'started'`` при постановке TaskIQ format Markdown (UI спиннер); ``complete`` + ``chunks_done``/``chunks_total`` после ответа общего `TextTransformService`. UI: `crm/notes_list` мержит push в `extraReducer` (без full list reload).
 
 **Доменные события entity (шина `platform:events`, → `events.mdc`):** `EntityService.create_entity/update_entity/delete_entity` публикуют `crm/entity/created|updated|deleted` (`apps/crm/services/crm_entity_events.py`, payload `CrmEntityEventPayload`: `entity_id`, `entity_type`, `entity_subtype`, `namespace`, `name`, `status`, `tags`, `actor_user_id`; `delivery=None`). Это вход триггеров flows `platform_event`; UI-push notes живёт отдельно (`crm/note/updated`).
 
@@ -59,7 +59,7 @@ description: "CRM (NetWorkle): entities, relationships, graph, namespaces, AI an
 
 **Шаблоны пространств** (`NAMESPACE_TEMPLATE_SEEDS`): `sales`, `agile_project`, `development`, `hr`, `marketing`, `support`, `product_management`, `recruiting`, `real_estate`, `legal`, `finance`, `education`. В каждый seed дотягиваются `note` + `task` (`REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS`), `COMMON_NAMESPACE_ANCHOR_TYPES`, и парент-типы по транзитивным `parent_type_id`. `crm_settings` сидов содержит дефолты голоса (`default_note_voice="self"`, `show_note_voice_ui=true`); канбан-пресетов задач в CRM нет (доски — в worktracker).
 
-**Reseed на рестарте:** `CompanyInitService._init_namespace_templates` обновляет только системные строки и шаблоны+типы пространства `default`. Уже созданные пользователями копии шаблона **не обновляются автоматически**.
+**Reseed на рестарте:** `CompanyInitService.initialize_company(company_id, reseed=True)` — только lifespan CRM для `"system"`. `update_metadata` / upsert шаблонов / FGA repair / backfill personal namespace. Уже созданные пользователями копии шаблона **не обновляются автоматически**. Первый запрос компании и pytest (`reseed=False`, дефолт) — insert-only: существующие типы не переписываются, иначе xdist ×10 на волне CRM e2e душит Postgres/OpenFGA. Сам `initialize_company` сериализуется `pg_advisory_lock(hashtext('crm.company_init'), hashtext(company_id))` на `CRMDatabase._lock_engine` (`NullPool` + AUTOCOMMIT, не рабочий pool): N granian workers на пустой БД иначе параллельно INSERT `company_mapping` → UniqueViolation → ASGI lifespan fail всего процесса. Lock из рабочего пула при `pool_size=1` (TESTING) deadlock'ает `session()` репозиториев. UniqueViolation на `company_mapping` / seed-INSERT всё равно успех (второй writer). Check/видимость — только OpenFGA, не SQL mapping.
 
 ### Интеграции — канон `attributes.external_refs`
 
@@ -76,7 +76,7 @@ description: "CRM (NetWorkle): entities, relationships, graph, namespaces, AI an
 
 - Каждая CRM-задача TaskIQ отражается в `crm_tasks`: пользовательские запуски через `TaskService.start_*` (строка до `enqueue`), крон-тики и координаторы — создание строки в соответствующем `@platform_task` (например `crm_generate_namespace_suggests_tick`, `scheduled_namespace_integration_unified_sync`, `crm_reconcile_daily_summary`, `crm_reembed_stale_documents_tick`). Типы `task_type` перечислены в docstring `CRMTask` (`apps/crm/db/models.py`).
 - После изменения строки воркеры по возможности вызывают `apps/crm/services/crm_task_broadcast.py`: `crm/task/updated` с `payload: { task: TaskResponse }` на `user_id` инициатора (для `user_id="system"` событие может не доходить до живых сессий — список доступен через `GET /tasks`). Фронт: slice `crm/tasks` мержит событие в `extraReducer`.
-- **Reconcile зависших строк:** `TaskService.reconcile_stale_worker_tasks` — сначала все ``pending``/``running`` с ``cancel_requested`` → ``cancelled`` (без порога по времени; воркер не успел обработать отмену). Затем строки с ``updated_at`` старше ``STALE_CRM_TASK_INACTIVITY`` (``task_service.py``, сейчас 10 мин) → ``failed`` или ``cancelled`` (запасной путь по времени для записей без флага отмены). Запуск при старте **HTTP `crm`** (`main.py`) и при старте **`crm_worker`** (`broker.py`): reconcile выполняется **до** Redis ``XAUTOCLAIM`` восстановления очереди, чтобы сообщение не успело снова выставить ``running`` до закрытия журнала; хендлеры summary/draft_repair при терминальной строке журнала завершаются без работы. Пока без отмены прошло меньше 10 мин с последнего ``patch_progress``, «тихий» завис без отмены reconcile не тронет.
+- **Reconcile зависших строк:** `TaskService.reconcile_stale_worker_tasks` — сначала все ``pending``/``running`` с ``cancel_requested`` → ``cancelled`` (без порога по времени; воркер не успел обработать отмену). Затем строки с ``updated_at`` старше ``STALE_CRM_TASK_INACTIVITY`` (``task_service.py``, сейчас 10 мин) → ``failed`` или ``cancelled`` (запасной путь по времени для записей без флага отмены). SQL — ``UPDATE … RETURNING`` (`TaskRepository.reconcile_*`): параллельные HTTP `crm` и N процессов `crm_worker` забирают каждую строку один раз. Запись ошибки анализа — `record_note_analysis_failure` / `clear_note_analysis_error` пишут только `attributes` (без `update_entity` → без resync `note_voice`). `_sync_note_graph_edges` при `UniqueViolation` на `uq_relationships_unique_edge` считает ребро уже созданным. Запуск при старте **HTTP `crm`** (`main.py`) и при старте **`crm_worker`** (`worker.py`): reconcile выполняется **до** Redis ``XAUTOCLAIM`` восстановления очереди, чтобы сообщение не успело снова выставить ``running`` до закрытия журнала; хендлеры summary/draft_repair при терминальной строке журнала завершаются без работы. Пока без отмены прошло меньше 10 мин с последнего ``patch_progress``, «тихий» завис без отмены reconcile не тронет. `crm_summary_worker` reconcile журнала не дублирует.
 
 ### `RelationshipType` — системные
 
@@ -151,7 +151,7 @@ Redis hot cache + locks + S3 долговечные снимки.
 - **Period summary** (`POST /entities/period-summary` или `daily-summary` с `date_from`/`date_to`): merge готовых дневных. Лимит `period_summary_max_days` — усечение с начала; `period_truncated` в ответе.
 - **Push:** rebuild → `crm_daily_summary_updated`; create/update/delete note → `crm_note_updated` (`event`/`note_id`/`note_date`/`action`); смена `note_date` → push для обеих дат.
 - Redis ключи: `crm:daily_summary:v1:{company}:{namespace_or_all}:{date}:state` (`:lock`, `:revalidating`).
-- TaskIQ: `crm_rebuild_daily_summary`, `crm_rebuild_period_summary`, `crm_reconcile_daily_summary`. Reconcile — только через platform scheduler (`apps/scheduler`), не локальный `schedule_by_cron` в `crm_worker`.
+- TaskIQ: `crm_rebuild_daily_summary`, `crm_rebuild_period_summary`, `crm_reconcile_daily_summary` на очереди **`crm_summary`** (`apps.crm_worker.summary_worker`, брокер `summary_broker.py`). Analyze/import остаются на `crm`. Reconcile — только через platform scheduler (`apps/scheduler`), не локальный `schedule_by_cron` в worker. Event-driven enqueue в тестах ставит label `test_scope={parent}:crm_summary` (`mock_llm_side_effect_enqueue_labels`): A2A/MockLLM фона не снимает FIFO `mock_llm:responses:<parent>`, который тест готовил для note-analyze.
 
 ## Suggests
 
@@ -185,20 +185,25 @@ Redis hot cache + locks + S3 долговечные снимки.
 - UI: непустой `entities.filters.search` → `searchEntities` → `/entities/search`; иначе `/entities`.
 - `POST /entities/search/mentions` — кандидаты для @-упоминания.
 
-## Access Control
+## Access Control (OpenFGA sole source)
 
-### `AccessGrant`
+Единственный источник прав — OpenFGA через `container.authz_service` / CRM `AccessGrantService` / `CrmEntityAccessService` (thin façade). SQL `AccessGrant` **нет**. Ensure/company_init IntegrityError race → idempotent `sync_entity_created(existing)` (не return без FGA).
 
-`resource_type ∈ {entity,namespace}`, `resource_id`, `grant_type ∈ {public,user,company}`, `target_user_id?`/`target_company_id?`, `role ∈ {viewer,editor,admin}`.
+### Grants (tuples)
 
-- **public:** все видят, но только `public_fields` из `EntityType`.
-- **user:** полный доступ конкретному `user_id` другой компании.
-- **company:** полный доступ всем пользователям компании; для `namespace` — весь namespace.
-- **Грант не копирует данные** — real-time доступ к оригиналу.
-- `can_read_entity`: owner → same company+namespace → entity grants → namespace grants. **Public-грант на namespace не даёт доступ к entity внутри.**
-- `filter_fields`: при отсутствии полного доступа урезает до `public_fields`.
+`resource` = `crm_entity` | `crm_namespace`. Relations: `viewer` / `editor` / `admin` / `owner`. Subjects: `user`, `user:*` (public **только** на entity), `company#member`.
+
+- **public entity:** `user:*#viewer` на `crm_entity` → видят `public_fields` из `EntityType`.
+- **user / company:** полный view/edit по relation; данные не копируются.
+- **namespace public ACL запрещён** (TTU на entity унаследовал бы `user:*`).
+- List/revoke/share — `list_users` / `write` / `delete`; share gate — `CAN_SHARE` (`can_admin`).
+- `can_view` / `can_edit` / graph filter — только FGA Check/BatchCheck.
+- `filter_fields`: allow через FGA Check; public projection если прямой `list_tuples(VIEWER)` содержит `user:*` и нет `can_edit` / прямого user-grant. List/export — только `batch_check` (не `list_users`).
 
 ### Access Requests (Copy)
+
+Copy-workflow document. Approve/reject — FGA `CAN_SHARE` на entity, не сравнение `owner_id`.
+
 
 В отличие от грантов — **копируют** entity в другую компанию (`source_entity_id`/`source_company_id`). **Shallow** — entity, relationships как текст в `external_relationships`. **Deep** — entity + связанные рекурсивно до `max_depth`, новые relationships между копиями.
 
@@ -222,31 +227,37 @@ Redis hot cache + locks + S3 долговечные снимки.
 - Заметки-чанки: `note_date = UTC сегодня` → попадают в daily notes.
 - Откат: удаляет `created_relationship_ids` → `created_entity_ids`; merge-цели не трогает.
 - Review после завершения — `ai-analysis-modal`; строки с `draft_entity_id = ki:{entity_id}`; `POST /tasks/{id}/review-complete`.
-- API: `POST/GET /tasks/knowledge-import`, `GET /tasks/{id}`, `GET /tasks/{id}/created-entities`, `POST /tasks/{id}/{review-complete|cancel|rollback|retry}`.
+- API: `POST /tasks/knowledge-import` — `require_can_edit(crm_namespace)` до enqueue; `GET /tasks/{id}` — `require_can_view(crm_namespace)` (нет строки — `require_can_view(company)` затем 404). `GET /tasks/{id}/created-entities`, `POST /tasks/{id}/{review-complete|cancel|rollback|retry}`.
 
 ## Инициализация компании
 
-`CompanyInitService.initialize_company(company_id)` — при старте CRM (lifespan для `"system"`) и при первом запросе каждой компании в процессе (`dependencies.py`, in-memory set).
+`CompanyInitService.initialize_company(company_id, *, reseed=False)` — insert-only. Lifespan CRM (`apps/crm/main.py`) зовёт `reseed=True` только для `"system"`. Первый запрос компании в процессе (`dependencies.py`, in-memory set) — `reseed=False`.
 
-- `_init_entity_types`: создаёт новые / `update_metadata` существующих системных (перезаписывает `optional_fields`/`prompt` из шаблонов).
-- `_init_relationship_types`: structural fields из seed; `prompt` на existing не затирается (только заполняется если `None`).
-- `_init_namespace_templates`.
-- `_ensure_company_entity` / `_ensure_namespace_entity("default")` (идемпотентно).
+- `_init_entity_types`: INSERT новых; `update_metadata` существующих только при `reseed=True`.
+- `_init_relationship_types`: structural fields из seed при `reseed=True`; `prompt` на existing не затирается (только заполняется если `None`).
+- `_init_namespace_templates`: upsert типов шаблона только для новых шаблонов или при `reseed=True`.
+- `_ensure_company_entity` / `_ensure_namespace_entity("default")`: FGA `sync_entity_created` на already-existing только при `reseed=True` (create path всегда dual-write).
+- `_ensure_personal_namespaces_for_members`: при `reseed=True` или если этот вызов реально создал типы/шаблоны. Membership сам зовёт `ensure_personal_namespace_for_user`.
 
-## `crm_worker` и TaskIQ
+## `crm_worker` / `crm_summary_worker` и TaskIQ
 
-Очередь `crm` (`apps.crm_worker`). Задачи:
+Очередь `crm` (`apps.crm_worker.worker`): analyze/import/suggests/reembed.
+Очередь `crm_summary` (`apps.crm_worker.summary_worker`): daily/period rebuild и reconcile — отдельно, чтобы LLM-summary не занимал consumer note-analyze.
+
+Задачи `crm`:
 - `process_note_task` (mode: `analyze`|`apply`|`process`) — из `POST /tasks/note-analyze`, `wait_result` (timeout `CRMSettings.taskiq_sync_timeout_seconds`, default 300с).
 - `run_knowledge_import_task` — из `POST /tasks/knowledge-import`.
 - `repair_note_analysis_draft_task` — из `TaskService.start_note_analysis_draft_repair` / `POST .../notes/{id}/analysis-draft-repair`.
 - `format_note_description_markdown_task` — из `TaskService.start_note_markdown_format` / расписание вложений / `POST .../format-markdown`.
-- `crm_rebuild_daily_summary`, `crm_rebuild_period_summary`, `crm_reconcile_daily_summary` (`crm_reconcile_daily_summary` регистрируется в `apps/scheduler`, worker только исполняет).
 - `crm_reembed_stale_documents_tick` — перевекторизация stale chunks (`execute_reembed_tick`), строки `crm_tasks` по затронутым компаниям.
 - `run_namespace_integration_job`.
 - `scheduled_namespace_integration_unified_sync` — cron unified sync интеграции namespace.
 - `crm_generate_namespace_suggests_tick` — scheduler-triggered генерация `CRMSuggest` по namespace.
 
-Контекст в воркере — `await _set_crm_context(company_id, namespace, auth_token?, user_id?, interface_language?)` (`apps/crm_worker/tasks/daily_summary_tasks.py`): загружает `Company` из `company_repository`, в том числе `metadata` (AI-переопределения с `/settings` frontend). При старте: `set_billing_service(container.billing_service)` + `initialize_default_processors(container.file_repository)` (без них — RAG и файловый импорт упадут). Язык ответов LLM: `EntityService` мержит `interface_language_*` в `metadata.variables`; фоновые задачи без языка → RU.
+Задачи `crm_summary`:
+- `crm_rebuild_daily_summary`, `crm_rebuild_period_summary`, `crm_reconcile_daily_summary` (`crm_reconcile_daily_summary` регистрируется в `apps/scheduler`, worker только исполняет).
+
+Контекст в воркере — `await set_crm_context(company_id, namespace, auth_token?, user_id?, interface_language?)` (`apps/crm_worker/tasks/crm_context.py`): загружает `Company` из `company_repository`, в том числе `metadata` (AI-переопределения с `/settings` frontend). A2A на live flows (`A2AClient`) несёт signed `X-Platform-Context-*` при `active_company` — JWT на hop worker→`:9001` часто пустой/`Host=localhost`, иначе 401 и poll note-analyze до hang-guard. При старте: `set_billing_service(container.billing_service)` + `initialize_default_processors(container.file_repository)` (без них — RAG и файловый импорт упадут). Язык ответов LLM: `EntityService` мержит `interface_language_*` в `metadata.variables`; фоновые задачи без языка → RU.
 
 ## API Endpoints (`/crm/api/v1/`)
 
@@ -274,7 +285,7 @@ Redis hot cache + locks + S3 долговечные снимки.
 
 1. **Company-изоляция:** `company_id` всегда из контекста; репозитории фильтруют автоматически. Системные типы — `is_system=True` с `company_id` компании. Исключение: graph traversal `cross_company=True` для granted entities.
 2. **Grants ≠ Copy.** Гранты дают доступ к оригиналу.
-3. **Cascade удаление (saga):** `crm_entities` + `vector_documents` → `Relationship` (source/target) → `AccessGrant`.
+3. **Cascade удаление (saga):** `crm_entities` + `vector_documents` → `Relationship` (source/target) → OpenFGA entity tuples.
 4. **Namespace-изоляция:** SQL-фильтр по `company_id` + `namespace`.
 5. **AI behavior — из `EntityType.prompt`.**
 
@@ -288,4 +299,4 @@ Redis hot cache + locks + S3 долговечные снимки.
 
 ## Тестирование
 
-Реальные PostgreSQL (+ pgvector), Redis, HTTP (`crm_client`). Фикстуры: `crm_client`, `auth_headers_system`, `unique_id`, `unique_namespace_name`. E2E: `tests/crm/e2e/`. Cross-company graph-тесты — на отдельном namespace на тест (например `g_{unique_id}`).
+Реальные PostgreSQL (+ pgvector), Redis, HTTP (`crm_client`), OpenFGA (`openfga-test`). Фикстуры: `crm_client`, `auth_headers_system`, `unique_id`, `unique_namespace_name`. Auth-фикстуры (`tests/fixtures/auth.py`, `tests/ui/auth_worker_fixtures.py`) dual-write company membership в OpenFGA — без этого note create/ACL падают. Note/summary UI-push — company delivery (не `list_users` roster). E2E: `tests/crm/e2e/` (`test_17_access_grants`, `test_12_access_requests`, graph ACL в `test_08_*`). Cross-company graph-тесты — на отдельном namespace на тест (например `g_{unique_id}`). Public projection — задавать `public_fields` у типа перед assert'ами.

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import cast
+from typing import Protocol, cast
 from urllib.parse import urlparse
 
 import httpx
@@ -20,6 +20,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 from pydantic import Field
 
+from core.authz.models import AuthzObject
+from core.authz.service import AuthzService
 from core.config import get_settings
 from core.context import require_active_company
 from core.documents.placement import DocsPlacement
@@ -46,6 +48,43 @@ from core.logging import get_logger
 from core.models import StrictBaseModel
 
 logger = get_logger(__name__)
+
+
+class _AuthzContainerView(Protocol):
+    @property
+    def authz_service(self) -> AuthzService: ...
+
+
+class _AppStateView(Protocol):
+    container: object
+
+
+class _AppView(Protocol):
+    state: _AppStateView
+
+
+def _authz_container(request: Request) -> _AuthzContainerView:
+    app = cast(_AppView, request.app)
+    return cast(_AuthzContainerView, app.state.container)
+
+
+async def _require_company_can_view(request: Request) -> str:
+    company_id = require_active_company().company_id
+    await _authz_container(request).authz_service.require_can_view(AuthzObject.company(company_id))
+    return company_id
+
+
+async def _ensure_file_record_access(request: Request, file_record: FileRecord) -> None:
+    if file_record.is_public:
+        return
+    active_company = require_active_company()
+    if file_record.company_id is None:
+        raise HTTPException(status_code=403, detail="File access denied.")
+    if active_company.company_id != file_record.company_id:
+        raise HTTPException(status_code=403, detail="File access denied.")
+    await _authz_container(request).authz_service.require_can_view(
+        AuthzObject.company(file_record.company_id)
+    )
 
 
 class RegisterS3Request(StrictBaseModel):
@@ -101,16 +140,6 @@ def _is_http_url(url: str) -> bool:
     return parsed.scheme in ("http", "https")
 
 
-def _ensure_file_record_access(file_record: FileRecord) -> None:
-    if file_record.is_public:
-        return
-    active_company = require_active_company()
-    if file_record.company_id is None:
-        raise HTTPException(status_code=403, detail="File access denied.")
-    if active_company.company_id != file_record.company_id:
-        raise HTTPException(status_code=403, detail="File access denied.")
-
-
 def build_files_router(
     get_files_service: Callable[[], FilesService],
     get_chunked_upload_service: Callable[[], ChunkedUploadService] | None = None,
@@ -137,7 +166,10 @@ def build_files_router(
             upload_session_ttl_seconds=files_cfg.upload_session_ttl_seconds,
         )
 
-    async def init_chunked_upload(body: ChunkedUploadInitRequest) -> ChunkedUploadInitResult:
+    async def init_chunked_upload(
+        body: ChunkedUploadInitRequest, request: Request
+    ) -> ChunkedUploadInitResult:
+        _ = await _require_company_can_view(request)
         upload_settings = get_settings()
         if not upload_settings.s3.enabled or not upload_settings.s3.default_bucket:
             raise HTTPException(status_code=503, detail="S3 is not configured.")
@@ -161,6 +193,7 @@ def build_files_router(
         part_number: int,
         request: Request,
     ) -> ChunkedUploadPartRecord:
+        _ = await _require_company_can_view(request)
         upload_settings = get_settings()
         max_part = upload_settings.files.chunk_size_bytes
         data = await _read_body_with_limit(request, max_part)
@@ -170,7 +203,8 @@ def build_files_router(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    async def complete_chunked_upload(upload_id: str) -> FileResponse:
+    async def complete_chunked_upload(upload_id: str, request: Request) -> FileResponse:
+        _ = await _require_company_can_view(request)
         service = _chunked()
         try:
             file_record = await service.complete_upload(upload_id)
@@ -180,7 +214,8 @@ def build_files_router(
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         return FileResponse.from_record(file_record, route_segment=route_segment)
 
-    async def abort_chunked_upload(upload_id: str) -> Response:
+    async def abort_chunked_upload(upload_id: str, request: Request) -> Response:
+        _ = await _require_company_can_view(request)
         service = _chunked()
         try:
             await service.abort_upload(upload_id)
@@ -188,7 +223,8 @@ def build_files_router(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return Response(status_code=204)
 
-    async def register_s3(body: RegisterS3Request) -> FileResponse:
+    async def register_s3(body: RegisterS3Request, request: Request) -> FileResponse:
+        _ = await _require_company_can_view(request)
         register_settings = get_settings()
         if not register_settings.s3.enabled:
             raise HTTPException(status_code=503, detail="S3 is not configured.")
@@ -207,7 +243,8 @@ def build_files_router(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return FileResponse.from_record(file_record, route_segment=route_segment)
 
-    async def bind_file(file_id: str, placement: DocsPlacement) -> dict[str, str]:
+    async def bind_file(file_id: str, placement: DocsPlacement, request: Request) -> dict[str, str]:
+        _ = await _require_company_can_view(request)
         service = get_files_service()
         try:
             result = await service.bind(file_id, placement)
@@ -224,7 +261,7 @@ def build_files_router(
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-        _ensure_file_record_access(file_record)
+        await _ensure_file_record_access(request, file_record)
 
         s3_bucket = file_record.s3_bucket
         s3_key = file_record.s3_key
@@ -253,7 +290,9 @@ def build_files_router(
                 status = exc.response["ResponseMetadata"]["HTTPStatusCode"]
                 not_found = code in ("404", "NoSuchKey", "NotFound") or status == 404
                 if not_found:
-                    raise HTTPException(status_code=404, detail="File not found in storage.") from exc
+                    raise HTTPException(
+                        status_code=404, detail="File not found in storage."
+                    ) from exc
                 logger.exception("files.download_s3_failed", file_id=file_id)
                 raise HTTPException(status_code=502, detail="Storage download failed.") from exc
 
@@ -270,7 +309,9 @@ def build_files_router(
         except httpx.HTTPStatusError as exc:
             st = exc.response.status_code
             if st == 404:
-                raise HTTPException(status_code=404, detail="File not found at storage URL.") from exc
+                raise HTTPException(
+                    status_code=404, detail="File not found at storage URL."
+                ) from exc
             raise HTTPException(status_code=502, detail="Upstream download failed.") from exc
         except httpx.HTTPError as exc:
             raise HTTPException(status_code=502, detail="Upstream download failed.") from exc
@@ -279,7 +320,10 @@ def build_files_router(
             str | None,
             upstream_response.headers.get("content-type"),
         )
-        if not isinstance(response_content_type_raw, str) or response_content_type_raw.strip() == "":
+        if (
+            not isinstance(response_content_type_raw, str)
+            or response_content_type_raw.strip() == ""
+        ):
             raise HTTPException(status_code=502, detail="Upstream response missing content-type.")
         media_type = response_content_type_raw.split(";")[0].strip()
         return StreamingResponse(
@@ -287,14 +331,14 @@ def build_files_router(
             media_type=media_type,
         )
 
-    async def get_file_text_preview(file_id: str) -> FileReadPreviewResponse:
+    async def get_file_text_preview(file_id: str, request: Request) -> FileReadPreviewResponse:
         service = get_files_service()
         try:
             file_record = await service.get(file_id)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-        _ensure_file_record_access(file_record)
+        await _ensure_file_record_access(request, file_record)
         try:
             return await build_stored_file_text_preview(
                 file_id=file_id,
@@ -303,14 +347,14 @@ def build_files_router(
         except FileReadError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    async def get_file_metadata(file_id: str) -> FileResponse:
+    async def get_file_metadata(file_id: str, request: Request) -> FileResponse:
         service = get_files_service()
         try:
             file_record = await service.get(file_id)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-        _ensure_file_record_access(file_record)
+        await _ensure_file_record_access(request, file_record)
         return FileResponse.from_record(file_record)
 
     router.add_api_route(

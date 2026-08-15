@@ -37,6 +37,9 @@ from apps.sync.realtime.events import (
     event_call_participant_left,
 )
 from apps.sync.realtime.speech_to_chat_workflow import stop_speech_egresses_for_call_room
+from apps.sync.services.sync_channel_access_service import SyncChannelAccessService
+from core.authz.models import AuthzObject
+from core.authz.service import AuthzService
 from core.calls.livekit_client import LiveKitClient
 from core.calls.livekit_usage_spans import trace_livekit_room_session_usage
 from core.config import get_settings
@@ -47,12 +50,11 @@ logger = get_logger(__name__)
 
 
 async def _call_event_recipients(
-    channels: ChannelRepository,
+    channel_access: SyncChannelAccessService,
     *,
     channel_id: str,
-    company_id: str,
 ) -> list[str]:
-    return await channels.list_member_user_ids(channel_id, company_id=company_id)
+    return await channel_access.list_member_user_ids(channel_id)
 
 
 # P2P сигналинг (RTCPeerConnection + offer/answer/ICE relay) не реализован на клиенте.
@@ -122,10 +124,14 @@ async def handle_call_invite(
     company_id: str,
     calls: CallRepository,
     channels: ChannelRepository,
+    channel_access: SyncChannelAccessService,
+    authz: AuthzService,
     user_repository: UserRepository | None = None,
 ) -> tuple[CallRead, list[RealtimeEvent]]:
     """Создаёт звонок и событие call.incoming только для участников канала."""
-    if not await channels.is_member(payload.channel_id, actor_user_id, company_id=company_id):
+    if not await authz.can_view(
+        AuthzObject.sync_channel(payload.channel_id), user_id=actor_user_id
+    ):
         raise PermissionError("Нет доступа к каналу.")
 
     existing = await calls.get_active_call_for_channel(payload.channel_id, company_id)
@@ -136,7 +142,8 @@ async def handle_call_invite(
             if p.status == "joined":
                 await calls.update_participant_status(existing.call_id, p.user_id, "left", left_at=now)
 
-    member_ids = await channels.list_member_user_ids(payload.channel_id, company_id=company_id)
+    member_rows = await channel_access.list_member_rows(payload.channel_id)
+    member_ids = [user_id for user_id, _role in member_rows]
     mode = "p2p" if len(member_ids) <= P2P_MAX else "sfu"
 
     livekit_room_name: str | None = None
@@ -218,7 +225,7 @@ async def handle_call_accept(
     actor_user_id: str,
     company_id: str,
     calls: CallRepository,
-    channels: ChannelRepository,
+    channel_access: SyncChannelAccessService,
 ) -> tuple[CallRead, list[RealtimeEvent], bool]:
     """Третий элемент: звонок только что перешёл ringing → active (для маркера в чате)."""
     call = await calls.get_call(payload.call_id, company_id)
@@ -244,7 +251,7 @@ async def handle_call_accept(
     )
 
     recipients = await _call_event_recipients(
-        channels, channel_id=call.channel_id, company_id=company_id
+        channel_access, channel_id=call.channel_id
     )
     return call_read, [
         event_call_accepted(
@@ -268,7 +275,7 @@ async def handle_call_decline(
     actor_user_id: str,
     company_id: str,
     calls: CallRepository,
-    channels: ChannelRepository,
+    channel_access: SyncChannelAccessService,
 ) -> tuple[CallRead, list[RealtimeEvent]]:
     call = await calls.get_call(payload.call_id, company_id)
 
@@ -280,7 +287,7 @@ async def handle_call_decline(
     call_read = call_read_from_entities(call, participants)
 
     recipients = await _call_event_recipients(
-        channels, channel_id=call.channel_id, company_id=company_id
+        channel_access, channel_id=call.channel_id
     )
     return call_read, [
         event_call_declined(
@@ -298,7 +305,7 @@ async def handle_call_hangup(
     actor_user_id: str,
     company_id: str,
     calls: CallRepository,
-    channels: ChannelRepository,
+    channel_access: SyncChannelAccessService,
 ) -> tuple[CallRead, list[RealtimeEvent], bool]:
     """Третий элемент: звонок полностью завершён (последний участник вышел)."""
     call = await calls.get_call(payload.call_id, company_id)
@@ -315,7 +322,7 @@ async def handle_call_hangup(
     active_count = sum(1 for p in participants if p.status == "joined")
 
     recipients = await _call_event_recipients(
-        channels, channel_id=call.channel_id, company_id=company_id
+        channel_access, channel_id=call.channel_id
     )
     events: list[RealtimeEvent] = [
         event_call_participant_left(

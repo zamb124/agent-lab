@@ -316,6 +316,9 @@ jobs:
           LITSERVE_NODE: ${{ inputs.litserve_node }}
           SERVICE_OVERRIDES: ${{ inputs.service_overrides }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          OPENFGA_API_TOKEN: ${{ secrets.OPENFGA_API_TOKEN }}
+          OPENFGA_STORE_ID: ${{ secrets.OPENFGA_STORE_ID }}
+          OPENFGA_AUTHORIZATION_MODEL_ID: ${{ secrets.OPENFGA_AUTHORIZATION_MODEL_ID }}
           AUTH_JWT_SECRET: ${{ secrets.AUTH_JWT_SECRET }}
           SECRETS_ENCRYPTION_KEY: ${{ secrets.SECRETS_ENCRYPTION_KEY }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -391,7 +394,7 @@ jobs:
           set -euo pipefail
 
           MISSING=""
-          for required in POSTGRES_PASSWORD AUTH_JWT_SECRET SECRETS_ENCRYPTION_KEY SELECTEL_ACCESS_KEY SELECTEL_SECRET_KEY LIVEKIT_API_KEY LIVEKIT_API_SECRET TURN_SECRET ONLYOFFICE_JWT_SECRET GRAFANA_ADMIN_PASSWORD; do
+          for required in POSTGRES_PASSWORD AUTH_JWT_SECRET SECRETS_ENCRYPTION_KEY SELECTEL_ACCESS_KEY SELECTEL_SECRET_KEY LIVEKIT_API_KEY LIVEKIT_API_SECRET TURN_SECRET ONLYOFFICE_JWT_SECRET GRAFANA_ADMIN_PASSWORD OPENFGA_API_TOKEN; do
             if [ -z "${!required:-}" ]; then
               MISSING="${MISSING}${MISSING:+ }${required}"
             fi
@@ -400,6 +403,13 @@ jobs:
             echo "::error title=Missing GitHub Secrets::Обязательные секреты пустые или не заданы: ${MISSING}"
             echo "Репозиторий → Settings → Secrets and variables → Actions. Имена см. deploy/github-actions-secrets-checklist.md (раздел 2)."
             exit 1
+          fi
+          # Pin ids: GitHub Secrets (override) → Secret openfga-ids (канон после первого bootstrap).
+          eval "$(PLATFORM_NS="$K8S_NAMESPACE" bash deploy/scripts/openfga_load_pinned_ids.sh)"
+          if [ -z "${OPENFGA_STORE_ID:-}" ] || [ -z "${OPENFGA_AUTHORIZATION_MODEL_ID:-}" ]; then
+            echo "OpenFGA store/model ids ещё нет — helm без pin; post-step openfga_bootstrap_cluster.sh создаст Secret openfga-ids и применит --set."
+          else
+            echo "OpenFGA pin: store_id=${OPENFGA_STORE_ID} model_id=${OPENFGA_AUTHORIZATION_MODEL_ID}"
           fi
 
           NODE_SETS=$(bash deploy/scripts/build_helm_node_sets.sh)
@@ -411,6 +421,14 @@ jobs:
             HELM_NAMESPACE="$K8S_NAMESPACE" \
             bash deploy/scripts/helm_precheck_install_secret_conflict.sh
 
+          OPENFGA_SET_ARGS=()
+          if [ -n "${OPENFGA_STORE_ID:-}" ]; then
+            OPENFGA_SET_ARGS+=(--set "openfga.storeId=${OPENFGA_STORE_ID}")
+          fi
+          if [ -n "${OPENFGA_AUTHORIZATION_MODEL_ID:-}" ]; then
+            OPENFGA_SET_ARGS+=(--set "openfga.authorizationModelId=${OPENFGA_AUTHORIZATION_MODEL_ID}")
+          fi
+
           echo "helm upgrade --install --wait (до 60m почти без вывода; смотри параллельно kubectl get pods -n ${K8S_NAMESPACE} -w)..."
           # shellcheck disable=SC2086
           helm upgrade --install "$K8S_RELEASE" "$HELM_CHART" \
@@ -420,9 +438,24 @@ jobs:
             --values "$HELM_CHART/values-prod.yaml" \
             --set image.tag="${{ steps.tag.outputs.image_tag }}" \
             --set litserve.image="${IMAGE_GPU}:${{ steps.tag.outputs.image_tag }}" \
+            "${OPENFGA_SET_ARGS[@]}" \
             $NODE_SETS \
             --set-json "platformSecrets=$(bash deploy/scripts/helm_platform_secrets_json.sh)" \
             --wait --timeout 60m
+
+      - name: Bootstrap OpenFGA store+model (auto pin)
+        env:
+          PLATFORM_NS: ${{ env.K8S_NAMESPACE }}
+          HELM_NAMESPACE: ${{ env.K8S_NAMESPACE }}
+          HELM_RELEASE: ${{ env.K8S_RELEASE }}
+          HELM_CHART: ${{ env.HELM_CHART }}
+          APPLY: "1"
+          OPENFGA_STORE_ID: ${{ secrets.OPENFGA_STORE_ID }}
+          OPENFGA_AUTHORIZATION_MODEL_ID: ${{ secrets.OPENFGA_AUTHORIZATION_MODEL_ID }}
+        run: |
+          set -euo pipefail
+          eval "$(PLATFORM_NS="$PLATFORM_NS" bash deploy/scripts/openfga_load_pinned_ids.sh)"
+          bash deploy/scripts/openfga_bootstrap_cluster.sh
 
       - name: Remove stale monolithic Ingress platform
         env:

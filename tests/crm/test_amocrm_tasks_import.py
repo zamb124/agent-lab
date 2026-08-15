@@ -39,6 +39,7 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
         )
         _, _ = await upsert_canonical_by_external_ref(
             entity_repo=crm_container.entity_repository,
+            entity_access=crm_container.crm_entity_access_service,
             namespace=ns,
             company_id="system",
             user_id=system_user_id,
@@ -51,6 +52,7 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
         )
         _, _ = await upsert_canonical_by_external_ref(
             entity_repo=crm_container.entity_repository,
+            entity_access=crm_container.crm_entity_access_service,
             namespace=ns,
             company_id="system",
             user_id=system_user_id,
@@ -71,6 +73,7 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
             namespace_service=crm_container.namespace_service,
             task_service=crm_container.task_service,
             integration_external_author=crm_container.integration_external_author_service,
+            entity_access=crm_container.crm_entity_access_service,
         )
 
         task_payload: dict = {
@@ -196,6 +199,7 @@ async def test_amocrm_import_tasks_skips_unmapped_parent(
             namespace_service=crm_container.namespace_service,
             task_service=crm_container.task_service,
             integration_external_author=crm_container.integration_external_author_service,
+            entity_access=crm_container.crm_entity_access_service,
         )
 
         task_payload: dict = {

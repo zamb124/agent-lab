@@ -16,6 +16,7 @@ from httpx import AsyncClient
 
 from apps.sync.container import get_sync_container
 from apps.sync.ws_presence import is_user_sync_ws_online
+from core.authz.company_sync import sync_company_member_roles
 from core.config import get_settings
 from core.models.identity_models import Company, User
 from core.utils.tokens import get_token_service
@@ -135,7 +136,7 @@ async def add_third_user(
     user_id: str,
     name: str = "Sync test user3",
 ) -> str:
-    """Создаёт третьего пользователя в shared, добавляет в `Company.members`,
+    """Создаёт третьего пользователя в shared, dual-write membership в OpenFGA,
     возвращает свежий JWT токен.
     """
     container = get_sync_container()
@@ -163,6 +164,12 @@ async def add_third_user(
         active_company_id=company_id,
     )
     await container.user_repository.set(user)
+    await sync_company_member_roles(
+        container.authz_service,
+        company_id=company_id,
+        user_id=user_id,
+        roles=["member"],
+    )
     token_service = get_token_service()
     return token_service.create_token(user_id, company_id=company_id)
 

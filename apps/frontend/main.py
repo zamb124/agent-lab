@@ -25,6 +25,7 @@ from apps.frontend.api.agent import router as agent_settings_router
 from apps.frontend.api.ai_providers import router as ai_providers_router
 from apps.frontend.api.api_keys import router as api_keys_router
 from apps.frontend.api.auth import router as auth_router
+from apps.frontend.api.authz_explorer import router as authz_explorer_router
 from apps.frontend.api.billing import router as billing_router
 from apps.frontend.api.companies import router as companies_router
 from apps.frontend.api.company_pronunciation_rules import (
@@ -304,11 +305,13 @@ async def on_startup(app: FastAPI, container: FrontendContainer, settings: Front
         company_repository=container.company_repository,
         subdomain_repository=container.subdomain_repository,
         user_repository=container.user_repository,
+        authz=container.authz_service,
     )
     await ensure_demo_company_and_user(
         company_repository=container.company_repository,
         user_repository=container.user_repository,
         subdomain_repository=container.subdomain_repository,
+        authz=container.authz_service,
     )
     if get_settings().mail.system.enabled:
         reconcile_result = await container.mail_service.reconcile_system()
@@ -365,6 +368,7 @@ app = create_service_app(
         design_system_router,
         invites_router,
         team_router,
+        authz_explorer_router,
         namespaces_router,
         api_keys_router,
         billing_router,

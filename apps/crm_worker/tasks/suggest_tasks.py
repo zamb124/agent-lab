@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from apps.crm.container import get_crm_container
 from apps.crm.db.models import CRMTask
-from apps.crm_worker.tasks.daily_summary_tasks import set_crm_context
+from apps.crm_worker.tasks.crm_context import set_crm_context
 from apps.crm_worker.tasks.task_names import CRM_GENERATE_NAMESPACE_SUGGESTS
 from core.logging import get_logger
 from core.tasks import platform_task

@@ -13,7 +13,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 
-from apps.wiki.api._scope import load_viewable_page, require_scope
+from apps.wiki.api._scope import load_viewable_page, require_scope, wiki_page_response
 from apps.wiki.content.markdown_file import markdown_file_name, split_markdown_file
 from apps.wiki.content.markdown_parser import (
     WikiMarkdownError,
@@ -79,9 +79,7 @@ async def list_tree(container: ContainerDep) -> WikiTreeResponse:
 @router.get("/deleted", response_model=WikiTreeResponse)
 async def list_deleted(container: ContainerDep) -> WikiTreeResponse:
     scope = await require_scope(container)
-    items = await container.wiki_service.list_deleted(
-        scope.company_id, scope.namespace, scope.user_id
-    )
+    items = await container.wiki_service.list_deleted(scope.company_id, scope.namespace)
     return WikiTreeResponse(namespace=scope.namespace, items=items)
 
 
@@ -107,21 +105,14 @@ async def create_page(
         raise HTTPException(status_code=404, detail="Родительская страница не найдена") from exc
     except WikiAccessDeniedError as exc:
         raise HTTPException(status_code=403, detail="Нет прав на создание страницы") from exc
-    return WikiPageResponse(page=page, can_edit=True, can_administer=True)
+    return await wiki_page_response(container, page, user_id=scope.user_id)
 
 
 @router.get("/{wiki_page_id}", response_model=WikiPageResponse)
 async def get_page(container: ContainerDep, wiki_page_id: str) -> WikiPageResponse:
     scope = await require_scope(container)
     page = await load_viewable_page(container, scope, wiki_page_id)
-    resolver = await container.wiki_service.build_access_resolver(
-        scope.company_id, scope.namespace, scope.user_id
-    )
-    return WikiPageResponse(
-        page=page,
-        can_edit=resolver.can_edit(wiki_page_id),
-        can_administer=resolver.can_administer(wiki_page_id),
-    )
+    return await wiki_page_response(container, page, user_id=scope.user_id)
 
 
 @router.get("/{wiki_page_id}/markdown", response_model=WikiMarkdownResponse)
@@ -256,7 +247,7 @@ async def update_content(
         raise HTTPException(status_code=404, detail="Страница не найдена") from exc
     except WikiAccessDeniedError as exc:
         raise HTTPException(status_code=403, detail="Нет прав на изменение страницы") from exc
-    return WikiPageResponse(page=page, can_edit=True, can_administer=False)
+    return await wiki_page_response(container, page, user_id=scope.user_id)
 
 
 @router.patch("/{wiki_page_id}", response_model=WikiPageResponse)
@@ -281,7 +272,7 @@ async def update_properties(
         raise HTTPException(status_code=404, detail="Страница не найдена") from exc
     except WikiAccessDeniedError as exc:
         raise HTTPException(status_code=403, detail="Нет прав на изменение страницы") from exc
-    return WikiPageResponse(page=page, can_edit=True, can_administer=False)
+    return await wiki_page_response(container, page, user_id=scope.user_id)
 
 
 @router.post("/{wiki_page_id}/move", response_model=WikiPageResponse)
@@ -304,7 +295,7 @@ async def move_page(
         raise HTTPException(status_code=403, detail="Нет прав на перемещение") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return WikiPageResponse(page=page, can_edit=True, can_administer=False)
+    return await wiki_page_response(container, page, user_id=scope.user_id)
 
 
 @router.post("/{wiki_page_id}/move-namespace", response_model=WikiPageResponse)
@@ -332,7 +323,7 @@ async def move_page_to_namespace(
         raise HTTPException(status_code=403, detail="Нет прав на перенос страницы") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return WikiPageResponse(page=page, can_edit=True, can_administer=False)
+    return await wiki_page_response(container, page, user_id=scope.user_id)
 
 
 @router.delete("/{wiki_page_id}", status_code=204)
@@ -361,7 +352,7 @@ async def restore_page(container: ContainerDep, wiki_page_id: str) -> WikiPageRe
         )
     except WikiPageNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Страница не найдена") from exc
-    return WikiPageResponse(page=page, can_edit=True, can_administer=False)
+    return await wiki_page_response(container, page, user_id=scope.user_id)
 
 
 @router.get("/{wiki_page_id}/children", response_model=list[WikiPageSummary])

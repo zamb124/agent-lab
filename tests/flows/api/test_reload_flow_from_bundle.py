@@ -89,14 +89,12 @@ async def test_has_bundle_update_false_when_only_metadata_differs_from_bundle(
 
 
 @pytest.mark.asyncio
-async def test_reload_from_bundle_returns_404_when_flow_absent(client, auth_headers_system):
+async def test_reload_from_bundle_returns_403_when_flow_absent(client, auth_headers_system):
     response = await client.post(
         "/flows/api/v1/flows/nonexistent_flow_id_xyz999/reload-from-bundle",
         headers=auth_headers_system,
     )
-    assert response.status_code == 404
-    detail = response.json().get("detail", "").lower()
-    assert "found" in detail or "найден" in detail
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio

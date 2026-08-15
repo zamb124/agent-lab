@@ -48,6 +48,9 @@ export function createAuthEffect({ baseUrl }) {
 
     async function fetchCurrentUser() {
         const data = await httpRequest({ method: 'GET', url: `${base}/api/auth/me` });
+        if (typeof data.can_admin !== 'boolean') {
+            throw new Error('auth/me: can_admin must be a boolean');
+        }
         return {
             id: data.user_id,
             user_id: data.user_id,
@@ -56,6 +59,7 @@ export function createAuthEffect({ baseUrl }) {
             avatar_url: data.avatar_url,
             company_id: data.company_id,
             roles: data.roles || [],
+            canAdmin: data.can_admin,
             raw: data,
         };
     }

@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from apps.frontend.dependencies import ContainerDep, require_frontend_user
 from core.ai.runtime import invalidate_voice_company_overrides_cache
+from core.authz.models import AuthzObject
 from core.clients.tts_pronunciation.models import (
     CompiledPronunciation,
     NormalizationConfig,
@@ -118,18 +119,18 @@ class PronunciationRulesListResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Вспомогательные функции
 # ---------------------------------------------------------------------------
-def _ensure_member(user: User, company_id: str) -> None:
-    if company_id not in user.companies:
-        raise HTTPException(status_code=403, detail="Доступ только участникам компании")
+async def _ensure_member(container: ContainerDep, user: User, company_id: str) -> None:
+    await container.authz_service.require_can_view(
+        AuthzObject.company(company_id),
+        user_id=user.user_id,
+    )
 
 
-def _ensure_admin(user: User, company_id: str) -> None:
-    roles = user.companies.get(company_id, [])
-    if not any(r in ("owner", "admin") for r in roles):
-        raise HTTPException(
-            status_code=403,
-            detail="Изменять правила произношения могут только owner/admin компании",
-        )
+async def _ensure_admin(container: ContainerDep, user: User, company_id: str) -> None:
+    await container.authz_service.require_company_admin(
+        company_id=company_id,
+        user_id=user.user_id,
+    )
 
 
 def _rule_kind(value: str) -> PronunciationRuleKind:
@@ -165,7 +166,7 @@ async def list_company_pronunciation_rules(
 ) -> PronunciationRulesListResponse:
     """Список правил произношения TTS компании."""
     user = require_frontend_user()
-    _ensure_member(user, company_id)
+    await _ensure_member(container, user, company_id)
     rows = await container.company_pronunciation_rule_repository.list_all(
         company_id=company_id
     )
@@ -183,7 +184,7 @@ async def create_company_pronunciation_rule(
 ) -> PronunciationRuleDTO:
     """Создать правило произношения TTS для компании."""
     user = require_frontend_user()
-    _ensure_admin(user, company_id)
+    await _ensure_admin(container, user, company_id)
 
     try:
         row = await container.company_pronunciation_rule_repository.create(
@@ -223,7 +224,7 @@ async def update_company_pronunciation_rule(
 ) -> PronunciationRuleDTO:
     """Обновить правило произношения TTS компании."""
     user = require_frontend_user()
-    _ensure_admin(user, company_id)
+    await _ensure_admin(container, user, company_id)
 
     row = await container.company_pronunciation_rule_repository.update(
         company_id=company_id,
@@ -260,7 +261,7 @@ async def delete_company_pronunciation_rule(
 ) -> dict[str, bool]:
     """Удалить правило произношения TTS компании."""
     user = require_frontend_user()
-    _ensure_admin(user, company_id)
+    await _ensure_admin(container, user, company_id)
 
     deleted = await container.company_pronunciation_rule_repository.delete(
         company_id=company_id,
@@ -288,7 +289,7 @@ async def test_company_pronunciation_rules(
     Включает только per-company правила (без платформенных).
     """
     user = require_frontend_user()
-    _ensure_member(user, company_id)
+    await _ensure_member(container, user, company_id)
 
     rows = await container.company_pronunciation_rule_repository.list_enabled(
         company_id=company_id

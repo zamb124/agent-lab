@@ -1,5 +1,5 @@
 """
-API для управления грантами (общие операции).
+API для управления грантами (общие операции, OpenFGA).
 """
 
 from fastapi import APIRouter, HTTPException
@@ -15,29 +15,20 @@ router = APIRouter(prefix="/grants", tags=["Grants Management"])
 async def revoke_grant(
     grant_id: str,
     container: ContainerDep,
-):
-    """Отозвать grant"""
+) -> dict[str, bool]:
     ctx = get_context()
     if not ctx or not ctx.user:
         raise HTTPException(status_code=401, detail="Authentication required")
-
-    try:
-        success = await container.access_grant_service.revoke_grant(grant_id, ctx.user.user_id)
-        return {"success": success}
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+    success = await container.access_grant_service.revoke_grant(grant_id, ctx.user.user_id)
+    return {"success": success}
 
 
 @router.get("/{grant_id}", response_model=AccessGrantResponse)
 async def get_grant(
     grant_id: str,
     container: ContainerDep,
-):
-    """Получить grant по ID"""
+) -> AccessGrantResponse:
     try:
-        grant = await container.access_grant_service.get_grant(grant_id)
-        return AccessGrantResponse.model_validate(grant)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        return await container.access_grant_service.get_grant(grant_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

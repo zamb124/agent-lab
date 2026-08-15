@@ -10,14 +10,23 @@
 2. auth_token_system_user2 / auth_headers_system_user2 — system, member
 3. auth_token_company2 / auth_headers_company2 — company2, owner+admin
 4. auth_token_company2_user2 / auth_headers_company2_user2 — company2, member
+
+Membership roster пишется в shared storage и dual-write в OpenFGA
+(`sync_company_member_roles`) — PDP/broadcast читают только FGA.
 """
 
 import uuid
+from collections.abc import Sequence
 from contextlib import contextmanager
 
 import pytest_asyncio
 
+from core.authz.company_sync import sync_company_member_roles
+from core.authz.group_sync import sync_user_groups
+from core.authz.service import AuthzService
+from core.config.models import OpenFGAConfig
 from core.context import clear_context, set_context
+from core.db.repositories.company_repository import CompanyRepository
 from core.models.context_models import Context
 from core.models.identity_models import User
 from core.utils.tokens import get_token_service
@@ -26,14 +35,88 @@ from tests.fixtures.ai_provider_defaults import (
     make_test_company,
 )
 
+_TEST_ADMIN_GROUPS: tuple[str, ...] = ("admin", "developers")
+
+
+async def _sync_test_company_membership(
+    authz: AuthzService,
+    *,
+    company_id: str,
+    user_id: str,
+    roles: Sequence[str],
+) -> None:
+    await sync_company_member_roles(
+        authz,
+        company_id=company_id,
+        user_id=user_id,
+        roles=roles,
+    )
+
+
+async def _sync_test_admin_groups(
+    authz: AuthzService, *, user_id: str, company_ids: Sequence[str]
+) -> None:
+    """Platform groups for group-locked flows (example_react permission admin/developers)."""
+    await sync_user_groups(
+        authz,
+        user_id=user_id,
+        groups=_TEST_ADMIN_GROUPS,
+        company_ids=company_ids,
+        previous_groups=[],
+    )
+
+
+async def set_test_company_member_roles(
+    company_repository: CompanyRepository,
+    authz: AuthzService,
+    *,
+    company_id: str,
+    user_id: str,
+    roles: Sequence[str],
+) -> None:
+    """Roster + OpenFGA dual-write for test membership mutations."""
+    company = await company_repository.get(company_id)
+    if company is None:
+        raise ValueError(f"company not found: {company_id}")
+    company.members[user_id] = list(roles)
+    await company_repository.set(company)
+    await _sync_test_company_membership(
+        authz,
+        company_id=company_id,
+        user_id=user_id,
+        roles=roles,
+    )
+
+
+@pytest_asyncio.fixture(scope="session", autouse=True)
+async def ensure_default_test_user_authz(openfga_settings: OpenFGAConfig) -> None:
+    """Dual-write FGA для in-process test_user/system и startup user:system."""
+    from core.authz.factory import build_authz_service
+
+    authz = build_authz_service(openfga_settings)
+    for user_id, roles in (
+        ("test_user", ["owner", "admin"]),
+        ("test-user", ["owner", "admin"]),
+        ("system", ["owner", "admin"]),
+        ("seed_owner", ["owner", "admin"]),
+    ):
+        await _sync_test_company_membership(
+            authz,
+            company_id="system",
+            user_id=user_id,
+            roles=roles,
+        )
+        await _sync_test_admin_groups(authz, user_id=user_id, company_ids=["system"])
+
 
 @pytest_asyncio.fixture(scope="session")
-async def auth_token_system(frontend_container):
+async def auth_token_system(frontend_container, openfga_settings: OpenFGAConfig):
     """
     Создает основного пользователя с компанией "system" для всей сессии тестов.
 
     scope="session" - токен создается один раз на все тесты.
     """
+    _ = openfga_settings
     user_id = f"test_user_system_{uuid.uuid4().hex[:8]}"
     company_id = "system"
     company_roles = ["owner", "admin"]
@@ -64,6 +147,15 @@ async def auth_token_system(frontend_container):
         active_company_id=company_id
     )
     await frontend_container.user_repository.set(user)
+    await _sync_test_company_membership(
+        frontend_container.authz_service,
+        company_id=company_id,
+        user_id=user_id,
+        roles=company_roles,
+    )
+    await _sync_test_admin_groups(
+        frontend_container.authz_service, user_id=user_id, company_ids=[company_id]
+    )
 
     token_service = get_token_service()
     token = token_service.create_token(user_id, company_id=company_id, roles=company_roles)
@@ -110,20 +202,22 @@ async def ws_cookie_system(auth_token_system, system_user_id):
 
 
 @pytest_asyncio.fixture(scope="session")
-async def auth_token_system_user2(frontend_container):
+async def auth_token_system_user2(frontend_container, openfga_settings: OpenFGAConfig):
     """
     Создает второго пользователя в компании "system" для всей сессии тестов.
     Используется для проверки доступа между пользователями одной компании.
     """
+    _ = openfga_settings
     user_id = f"test_user_system2_{uuid.uuid4().hex[:8]}"
     company_id = "system"
+    company_roles = ["member"]
 
     # Компания system уже должна существовать (создана в auth_token_system)
     existing_company = await frontend_container.company_repository.get(company_id)
     if existing_company:
         existing_company = company_with_test_ai_provider_defaults(existing_company)
         if user_id not in existing_company.members:
-            existing_company.members[user_id] = ["member"]
+            existing_company.members[user_id] = company_roles
         await frontend_container.company_repository.set(existing_company)
     else:
         # Если почему-то не существует - создаем
@@ -131,7 +225,7 @@ async def auth_token_system_user2(frontend_container):
             company_id=company_id,
             name="System Company",
             owner_user_id=user_id,
-            members={user_id: ["member"]},
+            members={user_id: company_roles},
         )
         await frontend_container.company_repository.set(company)
 
@@ -140,10 +234,16 @@ async def auth_token_system_user2(frontend_container):
         user_id=user_id,
         name="System User 2",
         emails=[f"{user_id}@system.com"],
-        companies={company_id: ["member"]},
+        companies={company_id: company_roles},
         active_company_id=company_id
     )
     await frontend_container.user_repository.set(user)
+    await _sync_test_company_membership(
+        frontend_container.authz_service,
+        company_id=company_id,
+        user_id=user_id,
+        roles=company_roles,
+    )
 
     token_service = get_token_service()
     token = token_service.create_token(user_id, company_id=company_id)
@@ -183,13 +283,15 @@ async def ws_cookie_system_user2(auth_token_system_user2, system_user2_id):
 
 
 @pytest_asyncio.fixture(scope="session")
-async def auth_token_company2(frontend_container):
+async def auth_token_company2(frontend_container, openfga_settings: OpenFGAConfig):
     """
     Создает пользователя из другой компании (company2) для всей сессии тестов.
     Используется для проверки cross-company доступа.
     """
+    _ = openfga_settings
     user_id = f"test_user_company2_{uuid.uuid4().hex[:8]}"
     company_id = "company2"
+    company_roles = ["owner", "admin"]
 
     # Создаем компанию company2
     existing_company = await frontend_container.company_repository.get(company_id)
@@ -198,14 +300,14 @@ async def auth_token_company2(frontend_container):
             company_id=company_id,
             name="Company 2",
             owner_user_id=user_id,
-            members={user_id: ["owner", "admin"]},
+            members={user_id: company_roles},
         )
         await frontend_container.company_repository.set(company)
         await frontend_container.subdomain_repository.set_mapping("company2", company_id)
     else:
         existing_company = company_with_test_ai_provider_defaults(existing_company)
         if user_id not in existing_company.members:
-            existing_company.members[user_id] = ["owner", "admin"]
+            existing_company.members[user_id] = company_roles
         await frontend_container.company_repository.set(existing_company)
 
     # Создаем пользователя
@@ -213,10 +315,19 @@ async def auth_token_company2(frontend_container):
         user_id=user_id,
         name="Company2 User 1",
         emails=[f"{user_id}@company2.com"],
-        companies={company_id: ["owner", "admin"]},
+        companies={company_id: company_roles},
         active_company_id=company_id
     )
     await frontend_container.user_repository.set(user)
+    await _sync_test_company_membership(
+        frontend_container.authz_service,
+        company_id=company_id,
+        user_id=user_id,
+        roles=company_roles,
+    )
+    await _sync_test_admin_groups(
+        frontend_container.authz_service, user_id=user_id, company_ids=[company_id]
+    )
 
     token_service = get_token_service()
     token = token_service.create_token(user_id, company_id=company_id)
@@ -245,20 +356,22 @@ async def auth_headers_company2(auth_token_company2):
 
 
 @pytest_asyncio.fixture(scope="session")
-async def auth_token_company2_user2(frontend_container):
+async def auth_token_company2_user2(frontend_container, openfga_settings: OpenFGAConfig):
     """
     Создает второго пользователя в компании company2 для всей сессии тестов.
     Используется для проверки доступа между пользователями другой компании.
     """
+    _ = openfga_settings
     user_id = f"test_user_company2_u2_{uuid.uuid4().hex[:8]}"
     company_id = "company2"
+    company_roles = ["member"]
 
     # Компания company2 уже должна существовать (создана в auth_token_company2)
     existing_company = await frontend_container.company_repository.get(company_id)
     if existing_company:
         existing_company = company_with_test_ai_provider_defaults(existing_company)
         if user_id not in existing_company.members:
-            existing_company.members[user_id] = ["member"]
+            existing_company.members[user_id] = company_roles
         await frontend_container.company_repository.set(existing_company)
     else:
         # Если почему-то не существует - создаем
@@ -266,7 +379,7 @@ async def auth_token_company2_user2(frontend_container):
             company_id=company_id,
             name="Company 2",
             owner_user_id=user_id,
-            members={user_id: ["member"]},
+            members={user_id: company_roles},
         )
         await frontend_container.company_repository.set(company)
 
@@ -275,10 +388,16 @@ async def auth_token_company2_user2(frontend_container):
         user_id=user_id,
         name="Company2 User 2",
         emails=[f"{user_id}@company2.com"],
-        companies={company_id: ["member"]},
+        companies={company_id: company_roles},
         active_company_id=company_id
     )
     await frontend_container.user_repository.set(user)
+    await _sync_test_company_membership(
+        frontend_container.authz_service,
+        company_id=company_id,
+        user_id=user_id,
+        roles=company_roles,
+    )
 
     token_service = get_token_service()
     token = token_service.create_token(user_id, company_id=company_id)

@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 from apps.crm.container import get_crm_container
 from apps.crm.db.models import CRMTask
-from apps.crm_worker.tasks.daily_summary_tasks import (
+from apps.crm_worker.tasks.crm_context import (
     build_auth_token_for_company,
     set_crm_context,
 )

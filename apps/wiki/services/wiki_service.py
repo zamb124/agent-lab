@@ -4,11 +4,17 @@
 Единственная точка записи страницы. Здесь и только здесь:
 
 * из `content` выводится `text_markdown` — снаружи это поле не пишется;
-* пересчитывается видимость поддерева и переносится индекс RAG;
+* пересчитывается материализация `company_visible` поддерева и переносится
+  индекс RAG;
 * переписываются исходящие ссылки и публикуются доменные события.
 
 Namespace передаётся во все методы явно и уходит в каждый запрос репозитория:
 операции «по одному id» без пространства не существует.
+
+Права — единственный источник истины OpenFGA (`AuthzService`). SQL
+`company_visible` на странице — материализация FGA `company_viewer`
+(`company#member`) для дешёвого выбора RAG-слоя; PDP-решения принимает
+только `AuthzService`. `company` tuple — tenancy, сам доступ не даёт.
 """
 
 from __future__ import annotations
@@ -43,6 +49,7 @@ from apps.wiki.events import (
     publish_wiki_page_moved,
 )
 from apps.wiki.models.domain import (
+    WikiAccessMemberRelation,
     WikiBacklink,
     WikiComment,
     WikiLinkPermission,
@@ -51,14 +58,11 @@ from apps.wiki.models.domain import (
     WikiPageAccess,
     WikiPageLink,
     WikiPageMember,
-    WikiPagePermission,
     WikiPageSummary,
     WikiRevision,
     WikiRevisionSummary,
     WikiSearchHit,
-    WikiVisibility,
 )
-from apps.wiki.services.access import WikiAccessResolver
 from apps.wiki.services.links import ExtractedMention, extract_links, extract_user_mentions
 from apps.wiki.services.rag_index import WikiRagIndexService
 from apps.wiki.services.rag_metadata import (
@@ -67,8 +71,12 @@ from apps.wiki.services.rag_metadata import (
     build_wiki_search_filter,
     ensure_page_filter_size,
 )
+from apps.wiki.services.wiki_access_service import WikiAccessService
+from core.authz.errors import AuthzDenied
+from core.authz.models import AuthzObject
+from core.authz.service import AuthzService
+from core.authz.types import AuthzRelation
 from core.logging import get_logger
-from core.rag.models import RAGMetadataFilter
 
 logger = get_logger(__name__)
 
@@ -101,41 +109,19 @@ def _hash_link_token(raw_token: str) -> str:
 class WikiService:
     """Операции над страницами и их окружением."""
 
-    def __init__(self, repository: WikiRepository, rag_index: WikiRagIndexService) -> None:
+    def __init__(
+        self,
+        repository: WikiRepository,
+        rag_index: WikiRagIndexService,
+        access: WikiAccessService,
+        authz: AuthzService,
+    ) -> None:
         self._repo: WikiRepository = repository
         self._rag: WikiRagIndexService = rag_index
+        self._access: WikiAccessService = access
+        self._authz: AuthzService = authz
 
     # --- доступ ---
-
-    async def build_access_resolver(
-        self, company_id: str, namespace: str, user_id: str | None
-    ) -> WikiAccessResolver:
-        tree = await self._repo.list_tree(company_id, namespace)
-        parents = {item.wiki_page_id: item.parent_page_id for item in tree}
-        restricted = await self._repo.list_restricted_page_ids(company_id, namespace)
-
-        user_permissions: dict[str, WikiPagePermission] = {}
-        if user_id is not None:
-            member_pages = await self._repo.list_members_for_pages(
-                company_id, namespace, list(restricted)
-            )
-            for page_id, members in member_pages.items():
-                for member in members:
-                    if member.user_id == user_id:
-                        user_permissions[page_id] = member.permission
-
-        page_owners = await self._page_owners(company_id, namespace)
-        return WikiAccessResolver(
-            parents=parents,
-            restricted_page_ids=restricted,
-            user_permissions=user_permissions,
-            page_owners=page_owners,
-            user_id=user_id,
-        )
-
-    async def _page_owners(self, company_id: str, namespace: str) -> dict[str, str]:
-        pages = await self._repo.list_tree(company_id, namespace)
-        return {item.wiki_page_id: item.last_edited_by_user_id for item in pages}
 
     async def require_page(
         self, company_id: str, namespace: str, wiki_page_id: str
@@ -149,18 +135,24 @@ class WikiService:
         self, company_id: str, namespace: str, wiki_page_id: str, user_id: str
     ) -> WikiPage:
         page = await self.require_page(company_id, namespace, wiki_page_id)
-        resolver = await self.build_access_resolver(company_id, namespace, user_id)
-        if not resolver.can_view(wiki_page_id):
-            raise WikiAccessDeniedError(f"Нет доступа к странице {wiki_page_id}")
+        try:
+            await self._authz.require_can_view(
+                AuthzObject.wiki_page(wiki_page_id), user_id=user_id
+            )
+        except AuthzDenied as exc:
+            raise WikiAccessDeniedError(f"Нет доступа к странице {wiki_page_id}") from exc
         return page
 
     async def require_editable_page(
         self, company_id: str, namespace: str, wiki_page_id: str, user_id: str
     ) -> WikiPage:
         page = await self.require_page(company_id, namespace, wiki_page_id)
-        resolver = await self.build_access_resolver(company_id, namespace, user_id)
-        if not resolver.can_edit(wiki_page_id):
-            raise WikiAccessDeniedError(f"Нет прав на изменение страницы {wiki_page_id}")
+        try:
+            await self._authz.require_can_edit(
+                AuthzObject.wiki_page(wiki_page_id), user_id=user_id
+            )
+        except AuthzDenied as exc:
+            raise WikiAccessDeniedError(f"Нет прав на изменение страницы {wiki_page_id}") from exc
         return page
 
     # --- чтение ---
@@ -169,15 +161,21 @@ class WikiService:
         self, company_id: str, namespace: str, user_id: str
     ) -> list[WikiPageSummary]:
         tree = await self._repo.list_tree(company_id, namespace)
-        resolver = await self.build_access_resolver(company_id, namespace, user_id)
-        return [item for item in tree if resolver.can_view(item.wiki_page_id)]
+        allowed = set(
+            await self._access.filter_viewable_page_ids(
+                [item.wiki_page_id for item in tree], user_id=user_id
+            )
+        )
+        return [item for item in tree if item.wiki_page_id in allowed]
 
-    async def list_deleted(
-        self, company_id: str, namespace: str, user_id: str
-    ) -> list[WikiPageSummary]:
-        deleted = await self._repo.list_deleted(company_id, namespace)
-        resolver = await self.build_access_resolver(company_id, namespace, user_id)
-        return [item for item in deleted if resolver.can_view(item.wiki_page_id)]
+    async def list_deleted(self, company_id: str, namespace: str) -> list[WikiPageSummary]:
+        """Корзина пространства: удаление зачищает FGA-tuples страницы,
+
+        поэтому доступ к корзине определяется одной проверкой членства в
+        namespace (`require_scope`), не FGA per-page `can_view` — его после
+        удаления не осталось ни у кого, включая владельца.
+        """
+        return await self._repo.list_deleted(company_id, namespace)
 
     async def get_public_page(self, raw_token: str) -> WikiPage | None:
         """Корень публичного сайта — страница, на которой включена ссылка.
@@ -282,7 +280,7 @@ class WikiService:
             icon=icon,
             content=document,
             text_markdown=document_to_markdown(document),
-            visibility=WikiVisibility.COMPANY,
+            company_visible=parent.company_visible if parent is not None else True,
             created_by_user_id=user_id,
             last_edited_by_user_id=user_id,
             published_at=now,
@@ -290,11 +288,14 @@ class WikiService:
             updated_at=now,
         )
 
-        resolver = await self.build_access_resolver(company_id, namespace, user_id)
-        if parent_page_id is not None:
-            page.visibility = resolver.visibility(parent_page_id)
-
         stored = await self._repo.insert_page(page)
+        try:
+            await self._access.sync_page_created(
+                stored, owner_user_id=user_id, company_visible=stored.company_visible
+            )
+        except Exception:
+            await self._repo.hard_delete_page(company_id, namespace, stored.wiki_page_id)
+            raise
         await self._sync_links(stored)
         await self._rag.index_page(stored)
         await publish_wiki_page_event(
@@ -492,7 +493,12 @@ class WikiService:
             company_id, namespace, wiki_page_id, new_parent_page_id, new_root, target_position
         )
         await self._apply_depths(company_id, namespace, subtree, wiki_page_id, new_depth, new_root)
-        await self._recalculate_visibility(company_id, namespace, wiki_page_id)
+        await self._access.sync_page_moved(
+            wiki_page_id,
+            old_parent_page_id=previous_parent,
+            new_parent_page_id=new_parent_page_id,
+        )
+        await self._recalculate_company_visible(company_id, namespace, wiki_page_id)
 
         stored = await self.require_page(company_id, namespace, wiki_page_id)
         await publish_wiki_page_moved(
@@ -547,11 +553,16 @@ class WikiService:
             new_parent_page_id=new_parent_page_id,
             moved_page_id=wiki_page_id,
         )
+        await self._access.sync_page_moved(
+            wiki_page_id,
+            old_parent_page_id=page.parent_page_id,
+            new_parent_page_id=new_parent_page_id,
+        )
 
         moved_subtree = await self._repo.list_subtree(
             company_id, target_namespace, wiki_page_id
         )
-        await self._recalculate_visibility(company_id, target_namespace, wiki_page_id)
+        await self._recalculate_company_visible(company_id, target_namespace, wiki_page_id)
         refreshed = await self._repo.list_subtree(company_id, target_namespace, wiki_page_id)
         await self._rag.reindex_subtree(refreshed)
 
@@ -577,10 +588,13 @@ class WikiService:
         self, company_id: str, namespace: str, user_id: str, wiki_page_id: str
     ) -> list[str]:
         """Мягко удалить страницу вместе с поддеревом."""
-        resolver = await self.build_access_resolver(company_id, namespace, user_id)
         _ = await self.require_page(company_id, namespace, wiki_page_id)
-        if not resolver.can_administer(wiki_page_id):
-            raise WikiAccessDeniedError(f"Нет прав на удаление страницы {wiki_page_id}")
+        try:
+            await self._authz.require_can_admin(
+                AuthzObject.wiki_page(wiki_page_id), user_id=user_id
+            )
+        except AuthzDenied as exc:
+            raise WikiAccessDeniedError(f"Нет прав на удаление страницы {wiki_page_id}") from exc
 
         subtree = await self._repo.list_subtree(company_id, namespace, wiki_page_id)
         page_ids = [item.wiki_page_id for item in subtree]
@@ -588,16 +602,32 @@ class WikiService:
         for item in subtree:
             await self._rag.remove_page(item)
         await self._repo.soft_delete_pages(company_id, namespace, page_ids)
+        await self._access.sync_pages_deleted(page_ids)
         await publish_wiki_page_deleted(wiki_page_id, namespace, company_id, page_ids)
         return page_ids
 
     async def restore_page(
         self, company_id: str, namespace: str, user_id: str, wiki_page_id: str
     ) -> WikiPage:
+        """Восстановить страницу из корзины.
+
+        Удаление зачищает все FGA-tuples страницы (`sync_pages_deleted`), так
+        что восстановление обязано пересобрать owner/parent/company заново —
+        иначе восстановленная страница осталась бы без единого администратора.
+        """
         await self._repo.restore_pages(company_id, namespace, [wiki_page_id])
         page = await self.require_page(company_id, namespace, wiki_page_id)
         page.last_edited_by_user_id = user_id
         stored = await self._repo.update_page(page)
+        try:
+            await self._access.sync_page_created(
+                stored,
+                owner_user_id=stored.created_by_user_id,
+                company_visible=stored.company_visible,
+            )
+        except Exception:
+            await self._repo.soft_delete_pages(company_id, namespace, [wiki_page_id])
+            raise
         await self._rag.index_page(stored)
         await publish_wiki_page_event(
             WIKI_PAGE_RESTORED, self._to_summary(stored, False), company_id
@@ -656,19 +686,18 @@ class WikiService:
         self, company_id: str, namespace: str, user_id: str, wiki_page_id: str
     ) -> WikiPageAccess:
         page = await self.require_viewable_page(company_id, namespace, wiki_page_id, user_id)
-        resolver = await self.build_access_resolver(company_id, namespace, user_id)
-        members = await self._repo.list_members(company_id, namespace, wiki_page_id)
-        restriction = resolver.nearest_restriction(wiki_page_id)
-        return WikiPageAccess(
-            wiki_page_id=wiki_page_id,
-            visibility=resolver.visibility(wiki_page_id),
-            inherited_from_page_id=(
-                restriction if restriction is not None and restriction != wiki_page_id else None
-            ),
-            members=members,
-            link_enabled=page.link_enabled,
-            link_permission=page.link_permission,
+        tree = await self._repo.list_tree(company_id, namespace)
+        parents = {item.wiki_page_id: item.parent_page_id for item in tree}
+        company_visible_by_id = {item.wiki_page_id: item.company_visible for item in tree}
+        restriction_root = await self._access.inherited_restriction_root(
+            wiki_page_id,
+            parents=parents,
+            company_visible_by_id=company_visible_by_id,
         )
+        inherited_from = (
+            restriction_root if restriction_root is not None and restriction_root != wiki_page_id else None
+        )
+        return await self._access.build_access(page, inherited_from_page_id=inherited_from)
 
     async def set_member(
         self,
@@ -677,17 +706,24 @@ class WikiService:
         user_id: str,
         wiki_page_id: str,
         member_user_id: str,
-        permission: WikiPagePermission,
+        relation: WikiAccessMemberRelation,
     ) -> WikiPageAccess:
-        resolver = await self.build_access_resolver(company_id, namespace, user_id)
-        _ = await self.require_page(company_id, namespace, wiki_page_id)
-        if not resolver.can_administer(wiki_page_id):
-            raise WikiAccessDeniedError(f"Нет прав на изменение доступа {wiki_page_id}")
+        page = await self.require_page(company_id, namespace, wiki_page_id)
+        try:
+            await self._authz.require_relation(
+                AuthzRelation.CAN_SHARE,
+                AuthzObject.wiki_page(wiki_page_id),
+                user_id=user_id,
+            )
+        except AuthzDenied as exc:
+            raise WikiAccessDeniedError(f"Нет прав на изменение доступа {wiki_page_id}") from exc
+        if page.company_visible:
+            raise ValueError(
+                "Страница доступна всей компании; участники добавляются только после "
+                + "ограничения доступа"
+            )
 
-        await self._repo.upsert_member(
-            company_id, namespace, wiki_page_id, member_user_id, permission
-        )
-        await self._recalculate_visibility(company_id, namespace, wiki_page_id)
+        await self._access.add_member(wiki_page_id, user_id=member_user_id, relation=relation)
         return await self.get_access(company_id, namespace, user_id, wiki_page_id)
 
     async def remove_member(
@@ -698,13 +734,48 @@ class WikiService:
         wiki_page_id: str,
         member_user_id: str,
     ) -> WikiPageAccess:
-        resolver = await self.build_access_resolver(company_id, namespace, user_id)
         _ = await self.require_page(company_id, namespace, wiki_page_id)
-        if not resolver.can_administer(wiki_page_id):
-            raise WikiAccessDeniedError(f"Нет прав на изменение доступа {wiki_page_id}")
+        try:
+            await self._authz.require_relation(
+                AuthzRelation.CAN_SHARE,
+                AuthzObject.wiki_page(wiki_page_id),
+                user_id=user_id,
+            )
+        except AuthzDenied as exc:
+            raise WikiAccessDeniedError(f"Нет прав на изменение доступа {wiki_page_id}") from exc
 
-        await self._repo.delete_member(company_id, namespace, wiki_page_id, member_user_id)
-        await self._recalculate_visibility(company_id, namespace, wiki_page_id)
+        await self._access.remove_member(wiki_page_id, user_id=member_user_id)
+        return await self.get_access(company_id, namespace, user_id, wiki_page_id)
+
+    async def set_company_visible(
+        self,
+        company_id: str,
+        namespace: str,
+        user_id: str,
+        wiki_page_id: str,
+        company_visible: bool,
+    ) -> WikiPageAccess:
+        """Переключить страницу между «вся компания» и «по участникам».
+
+        Включение company-visible снимает всех явных участников: смысл этого
+        режима — доступ всей компании, а не компания плюс отдельный список.
+        """
+        _ = await self.require_page(company_id, namespace, wiki_page_id)
+        try:
+            await self._authz.require_relation(
+                AuthzRelation.CAN_SHARE,
+                AuthzObject.wiki_page(wiki_page_id),
+                user_id=user_id,
+            )
+        except AuthzDenied as exc:
+            raise WikiAccessDeniedError(f"Нет прав на изменение доступа {wiki_page_id}") from exc
+
+        if company_visible:
+            await self._access.clear_members(wiki_page_id)
+        await self._access.set_company_visible(
+            wiki_page_id, company_id, company_visible=company_visible
+        )
+        await self._recalculate_company_visible(company_id, namespace, wiki_page_id)
         return await self.get_access(company_id, namespace, user_id, wiki_page_id)
 
     async def rotate_public_link(
@@ -714,16 +785,21 @@ class WikiService:
         user_id: str,
         wiki_page_id: str,
         enabled: bool,
-        permission: WikiLinkPermission = WikiLinkPermission.VIEW,
+        permission: WikiLinkPermission = WikiLinkPermission.VIEWER,
     ) -> str | None:
         """Включить, перевыпустить или отключить публичную ссылку.
 
         Возвращает сырой токен ровно один раз — в базе лежит только его хеш.
         """
-        resolver = await self.build_access_resolver(company_id, namespace, user_id)
         _ = await self.require_page(company_id, namespace, wiki_page_id)
-        if not resolver.can_administer(wiki_page_id):
-            raise WikiAccessDeniedError(f"Нет прав на публикацию ссылки {wiki_page_id}")
+        try:
+            await self._authz.require_relation(
+                AuthzRelation.CAN_SHARE,
+                AuthzObject.wiki_page(wiki_page_id),
+                user_id=user_id,
+            )
+        except AuthzDenied as exc:
+            raise WikiAccessDeniedError(f"Нет прав на публикацию ссылки {wiki_page_id}") from exc
 
         if not enabled:
             await self._repo.set_link_token(
@@ -742,47 +818,48 @@ class WikiService:
         )
         return raw_token
 
-    async def _recalculate_visibility(
+    async def _recalculate_company_visible(
         self, company_id: str, namespace: str, wiki_page_id: str
     ) -> None:
-        """Пересчитать видимость поддерева и перенести индекс.
+        """Сверить SQL `company_visible` с FGA `company_viewer` tuple по поддереву.
 
-        Вызывается после любой правки прав или структуры. Перенос индекса
-        делается тем же вызовом: разошедшиеся ACL и индекс — это утечка.
+        `company_visible` в БД — материализация FGA для RAG, PDP-решения через
+        неё не принимаются. Вызывается после любой правки company/members или
+        переноса страницы: расхождение синхронизируется, а изменившиеся
+        страницы переносятся между слоями индекса тем же вызовом — разошедшиеся
+        ACL и индекс это утечка.
         """
-        resolver = await self.build_access_resolver(company_id, namespace, None)
         subtree = await self._repo.list_subtree(company_id, namespace, wiki_page_id)
         if not subtree:
             return
 
-        changed: dict[WikiVisibility, list[str]] = {
-            WikiVisibility.COMPANY: [],
-            WikiVisibility.RESTRICTED: [],
-        }
+        changed_to_true: list[str] = []
+        changed_to_false: list[str] = []
         for item in subtree:
-            actual = resolver.visibility(item.wiki_page_id)
-            if actual != item.visibility:
-                changed[actual].append(item.wiki_page_id)
+            actual = await self._access.page_is_company_visible(item.wiki_page_id, company_id)
+            if actual == item.company_visible:
+                continue
+            (changed_to_true if actual else changed_to_false).append(item.wiki_page_id)
 
-        if not changed[WikiVisibility.COMPANY] and not changed[WikiVisibility.RESTRICTED]:
+        if not changed_to_true and not changed_to_false:
             return
 
-        for visibility, page_ids in changed.items():
-            await self._repo.set_visibility(company_id, namespace, page_ids, visibility)
+        if changed_to_true:
+            await self._repo.set_company_visible(company_id, namespace, changed_to_true, True)
+        if changed_to_false:
+            await self._repo.set_company_visible(company_id, namespace, changed_to_false, False)
 
+        changed_ids = set(changed_to_true) | set(changed_to_false)
         refreshed = await self._repo.list_subtree(company_id, namespace, wiki_page_id)
-        moved = [
-            item
-            for item in refreshed
-            if item.wiki_page_id
-            in set(changed[WikiVisibility.COMPANY]) | set(changed[WikiVisibility.RESTRICTED])
-        ]
+        moved = [item for item in refreshed if item.wiki_page_id in changed_ids]
         await self._rag.reindex_subtree(moved)
+
+        root = await self.require_page(company_id, namespace, wiki_page_id)
         await publish_wiki_access_changed(
             wiki_page_id,
             namespace,
             company_id,
-            resolver.visibility(wiki_page_id),
+            root.rag_visibility,
             [item.wiki_page_id for item in moved],
         )
 
@@ -846,9 +923,13 @@ class WikiService:
             by_namespace.setdefault(item.namespace, []).append(item)
 
         allowed: list[WikiBacklink] = []
-        for namespace, items in by_namespace.items():
-            resolver = await self.build_access_resolver(company_id, namespace, user_id)
-            allowed.extend(item for item in items if resolver.can_view(item.wiki_page_id))
+        for items in by_namespace.values():
+            allowed_ids = set(
+                await self._access.filter_viewable_page_ids(
+                    [item.wiki_page_id for item in items], user_id=user_id
+                )
+            )
+            allowed.extend(item for item in items if item.wiki_page_id in allowed_ids)
         return allowed
 
     def mentioned_users(self, page: WikiPage) -> list[ExtractedMention]:
@@ -859,9 +940,10 @@ class WikiService:
     async def search_pages(
         self, company_id: str, namespace: str, user_id: str, query: str, limit: int = 20
     ) -> list[WikiSearchHit]:
-        resolver = await self.build_access_resolver(company_id, namespace, user_id)
         tree = await self._repo.list_tree(company_id, namespace)
-        allowed = [item.wiki_page_id for item in tree if resolver.can_view(item.wiki_page_id)]
+        allowed = await self._access.filter_viewable_page_ids(
+            [item.wiki_page_id for item in tree], user_id=user_id
+        )
         if not allowed:
             return []
         return await self._repo.search_pages(company_id, namespace, query, limit, allowed)
@@ -869,9 +951,10 @@ class WikiService:
     async def accessible_page_ids(
         self, company_id: str, namespace: str, user_id: str
     ) -> list[str]:
-        resolver = await self.build_access_resolver(company_id, namespace, user_id)
         tree = await self._repo.list_tree(company_id, namespace)
-        return [item.wiki_page_id for item in tree if resolver.can_view(item.wiki_page_id)]
+        return await self._access.filter_viewable_page_ids(
+            [item.wiki_page_id for item in tree], user_id=user_id
+        )
 
     async def semantic_search(
         self,
@@ -887,19 +970,21 @@ class WikiService:
     ) -> list[WikiSearchHit]:
         """Смысловой поиск по страницам пространства.
 
-        Ограниченные страницы попадают в выдачу только через явный список
-        разрешённых идентификаторов. Если список оказался длиннее предела
-        фильтра, поиск сужается до общедоступного слоя, а не молча теряет
-        часть результатов.
+        Кандидатный set всегда фильтруется через Authz (`filter_viewable_page_ids`).
+        SQL `company_visible` — только RAG metadata / restricted namespace, не ACL.
         """
-        resolver = await self.build_access_resolver(company_id, namespace, user_id)
         tree = await self._repo.list_tree(company_id, namespace)
-        restricted_visible = [
-            item.wiki_page_id
-            for item in tree
-            if item.visibility == WikiVisibility.RESTRICTED
-            and resolver.can_view(item.wiki_page_id)
-        ]
+        tree_ids = [item.wiki_page_id for item in tree]
+        allowed_ids = set(
+            await self._access.filter_viewable_page_ids(tree_ids, user_id=user_id)
+        )
+        if not allowed_ids:
+            return []
+
+        allowed_list = list(allowed_ids)
+        has_restricted_access = any(
+            (not item.company_visible) and item.wiki_page_id in allowed_ids for item in tree
+        )
 
         spec = WikiSearchFilter(
             namespace=namespace,
@@ -907,39 +992,24 @@ class WikiService:
             published_only=published_only,
             updated_after=updated_after,
             editor_user_id=editor_user_id,
+            allowed_page_ids=allowed_list,
         )
         try:
-            base_filter = build_wiki_search_filter(spec)
-            filters: RAGMetadataFilter = base_filter
-            if restricted_visible:
-                ensure_page_filter_size(len(restricted_visible), "доступных")
-                company_branch: RAGMetadataFilter = {
-                    "$and": [
-                        base_filter,
-                        {"wiki_visibility": {"$eq": WikiVisibility.COMPANY.value}},
-                    ]
-                }
-                restricted_branch: RAGMetadataFilter = {
-                    "$and": [
-                        base_filter,
-                        {"wiki_page_id": {"$in": list(restricted_visible)}},
-                    ]
-                }
-                filters = {"$or": [company_branch, restricted_branch]}
+            ensure_page_filter_size(len(allowed_list), "доступных")
+            filters = build_wiki_search_filter(spec)
         except WikiRagFilterOverflowError:
             logger.warning(
-                "wiki.search.restricted_filter_overflow",
-                extra={"namespace": namespace, "restricted": len(restricted_visible)},
+                "wiki.search.allowed_filter_overflow",
+                extra={"namespace": namespace, "allowed": len(allowed_list)},
             )
-            spec.visibility = WikiVisibility.COMPANY
-            filters = build_wiki_search_filter(spec)
+            raise
 
         results = await self._rag.search(
             namespace,
             query,
             limit,
             filters,
-            include_restricted=bool(restricted_visible),
+            include_restricted=has_restricted_access,
         )
         titles = {item.wiki_page_id: item for item in tree}
 
@@ -947,7 +1017,7 @@ class WikiService:
         for result in results:
             page_id = result.document_id
             summary = titles.get(page_id)
-            if summary is None or not resolver.can_view(page_id):
+            if summary is None or page_id not in allowed_ids:
                 continue
             raw_heading = result.metadata.get("wiki_heading_path")
             hits.append(
@@ -1034,7 +1104,7 @@ class WikiService:
             position=page.position,
             title=page.title,
             icon=page.icon,
-            visibility=page.visibility,
+            company_visible=page.company_visible,
             is_published=page.is_published,
             is_template=page.is_template,
             has_children=has_children,
@@ -1042,10 +1112,8 @@ class WikiService:
             last_edited_by_user_id=page.last_edited_by_user_id,
         )
 
-    async def list_members(
-        self, company_id: str, namespace: str, wiki_page_id: str
-    ) -> list[WikiPageMember]:
-        return await self._repo.list_members(company_id, namespace, wiki_page_id)
+    async def list_members(self, wiki_page_id: str) -> list[WikiPageMember]:
+        return await self._access.list_member_items(wiki_page_id)
 
 
 __all__ = [

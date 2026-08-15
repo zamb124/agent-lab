@@ -23,6 +23,7 @@ async def _system_context(container: FlowContainer) -> Context:
         company_repository=container.company_repository,
         subdomain_repository=container.subdomain_repository,
         user_repository=container.user_repository,
+        authz=container.authz_service,
     )
     if user is None:
         raise ValueError("system admin user is required for MCP branding seed")

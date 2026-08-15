@@ -58,12 +58,12 @@ async def _create_catalog(
     headers: dict[str, str],
     title: str,
     *,
-    is_public: bool = True,
+    company_visible: bool = True,
 ) -> str:
     response = await office_client.post(
         "/documents/api/v1/catalogs",
         headers=headers,
-        json={"title": title, "is_public": is_public},
+        json={"title": title, "company_visible": company_visible},
     )
     assert response.status_code == 200
     return response.json()["catalog_id"]
@@ -416,12 +416,12 @@ async def test_non_owner_cannot_manage_rag_index(
         office_client,
         auth_headers_system,
         f"rag-acl-{unique_id}",
-        is_public=False,
+        company_visible=False,
     )
-    add_member = await office_client.post(
-        f"/documents/api/v1/catalogs/{catalog_id}/members",
+    add_member = await office_client.patch(
+        f"/documents/api/v1/catalogs/{catalog_id}/access",
         headers=auth_headers_system,
-        json={"user_id": system_user2_id},
+        json={"members": [{"user_id": system_user2_id, "relation": "viewer"}]},
     )
     assert add_member.status_code == 200
 
@@ -430,7 +430,8 @@ async def test_non_owner_cannot_manage_rag_index(
         headers=auth_headers_system_user2,
     )
     assert enable_response.status_code == 403
-    assert enable_response.json()["detail"] == "Только владелец может управлять RAG-индексом каталога"
+    body = enable_response.json()
+    assert body.get("code") == "authz_denied" or "can_admin" in str(body.get("detail", "")).lower()
 
 
 @pytest.mark.asyncio
@@ -1348,7 +1349,7 @@ async def _create_subcatalog(
         headers=headers,
         json={
             "title": title,
-            "is_public": True,
+            "company_visible": True,
             "parent_catalog_id": parent_catalog_id,
         },
     )

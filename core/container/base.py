@@ -31,6 +31,8 @@ from pydantic import BaseModel
 
 from core.ai.model_catalog_repository import AIModelCatalogRepository
 from core.api.crud_router import CRUDRouterGenerator
+from core.authz import AuthzService
+from core.authz.factory import build_authz_service
 from core.billing import BillingService
 from core.calendar.repositories import CalendarEventSqlRepository
 from core.calendar.service import CalendarService
@@ -72,7 +74,6 @@ from core.logging import get_logger
 from core.mail.attachment_index import MailAttachmentFileIndex
 from core.mail.repositories import (
     CompanyMailConnectionRepository,
-    MailboxBindingMemberRepository,
     MailboxBindingRepository,
     MailboxFolderRepository,
     MailboxSyncCursorRepository,
@@ -379,7 +380,10 @@ class BaseContainer:
     @lazy
     def namespace_service(self) -> NamespaceService:
         """Единый вход жизненного цикла записи namespace для всех сервисов."""
-        return NamespaceService(repository=self.namespace_repository)
+        return NamespaceService(
+            repository=self.namespace_repository,
+            authz_service=self.authz_service,
+        )
 
     @lazy
     def llm_context_memory_store(self) -> RAGLLMContextMemoryStore:
@@ -425,7 +429,13 @@ class BaseContainer:
             company_repository=self.company_repository,
             auth_session_repository=self.auth_session_repository,
             storage=self.shared_storage,
+            authz=self.authz_service,
         )
+
+    @lazy
+    def authz_service(self) -> AuthzService:
+        """AuthzService — единый OpenFGA PDP для resource ACL."""
+        return build_authz_service()
 
     @lazy
     def integration_external_author_service(self) -> IntegrationExternalAuthorService:
@@ -434,6 +444,7 @@ class BaseContainer:
             storage=self.shared_storage,
             user_repository=self.user_repository,
             company_repository=self.company_repository,
+            authz=self.authz_service,
         )
 
     @lazy
@@ -492,6 +503,7 @@ class BaseContainer:
         return CompanyIntegrationCredentialService(
             repository=self.integration_credential_repository,
             google_workspace_config=get_settings().google_workspace,
+            authz=self.authz_service,
         )
 
     @lazy
@@ -528,10 +540,6 @@ class BaseContainer:
         return MailboxFolderRepository(db_url=self.required_shared_db_url)
 
     @lazy
-    def mailbox_binding_member_repository(self) -> MailboxBindingMemberRepository:
-        return MailboxBindingMemberRepository(db_url=self.required_shared_db_url)
-
-    @lazy
     def mail_message_repository(self) -> MailMessageRepository:
         return MailMessageRepository(db_url=self.required_shared_db_url)
 
@@ -548,7 +556,7 @@ class BaseContainer:
             sync_cursor_repository=self.mailbox_sync_cursor_repository,
             folder_repository=self.mailbox_folder_repository,
             message_repository=self.mail_message_repository,
-            member_repository=self.mailbox_binding_member_repository,
+            authz=self.authz_service,
             namespace_service=self.namespace_service,
             rag_client=RagClient(http=self.service_client),
             company_repository=self.company_repository,

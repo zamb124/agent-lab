@@ -22,10 +22,22 @@ from apps.crm.models.api import (
     TaskResponse,
 )
 from apps.crm.services.task_service import ActiveTaskExistsError
+from core.authz.models import AuthzObject
 from core.context import get_context, resolve_namespace_or_raise
 from core.pagination import OffsetPage
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
+
+
+def _actor_user_and_company() -> tuple[str, str]:
+    ctx = get_context()
+    user_id = ctx.user.user_id if ctx and ctx.user else None
+    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+    if not user_id or not company_id:
+        raise HTTPException(
+            status_code=500, detail="Контекст пользователя или компании отсутствует"
+        )
+    return user_id, company_id
 
 
 def _to_response(row: CRMTask) -> TaskResponse:
@@ -58,6 +70,11 @@ async def start_knowledge_import(
     container: ContainerDep,
 ) -> TaskResponse:
     """Запустить импорт знаний. Возвращает 202 с task_id для отслеживания прогресса."""
+    user_id, company_id = _actor_user_and_company()
+    await container.authz_service.require_can_edit(
+        AuthzObject.crm_namespace(company_id, body.namespace.strip()),
+        user_id=user_id,
+    )
     try:
         row = await container.task_service.start_knowledge_import(
             namespace=body.namespace,
@@ -85,15 +102,11 @@ async def start_note_analyze(
     if not note:
         raise HTTPException(status_code=404, detail="Заметка не найдена")
 
-    ctx = get_context()
-    user_id = ctx.user.user_id if ctx and ctx.user else None
-    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
-    if not user_id or not company_id:
-        raise HTTPException(
-            status_code=500, detail="Контекст пользователя или компании отсутствует"
-        )
-    if not await container.access_control_service.can_write_entity(note, user_id, company_id):
-        raise HTTPException(status_code=403, detail="Access denied")
+    user_id, company_id = _actor_user_and_company()
+    _ = company_id
+    await container.authz_service.require_can_edit(
+        AuthzObject.crm_entity(note.entity_id), user_id=user_id
+    )
 
     config = NoteProcessingConfig(
         include_attachments=body.include_attachments,
@@ -148,9 +161,17 @@ async def list_tasks(
 
 @router.get("/{task_id}", response_model=TaskResponse)
 async def get_task(task_id: str, container: ContainerDep) -> TaskResponse:
+    user_id, company_id = _actor_user_and_company()
     row = await container.task_service.get_task(task_id)
     if row is None:
+        await container.authz_service.require_can_view(
+            AuthzObject.company(company_id), user_id=user_id
+        )
         raise HTTPException(status_code=404, detail="Задача не найдена")
+    await container.authz_service.require_can_view(
+        AuthzObject.crm_namespace(company_id, row.namespace),
+        user_id=user_id,
+    )
     return _to_response(row)
 
 

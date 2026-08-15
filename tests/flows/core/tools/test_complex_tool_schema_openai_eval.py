@@ -269,7 +269,7 @@ async def test_llm_node_runner_build_tools_schema_matches_openai_canon(app) -> N
         type="llm_node",
         name="Agent",
         prompt="p",
-        llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
+        llm=NodeLLMConfig(provider="mock", model="mock-gpt-4", temperature=0.0),
     )
     runner = LlmNodeRunner(
         node_config=cfg,

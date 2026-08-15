@@ -134,6 +134,11 @@ async def system_landing_embed_guest_capped(frontend_container, unique_id):
         edges=[{"from_node": "main", "to_node": None}],
     )
     await flows_container.flow_repository.set(agent)
+    await flows_container.flow_access_service.sync_flow_saved(
+        agent,
+        company_id=SYSTEM_COMPANY_ID,
+        owner_user_id=user_for_ctx.user_id,
+    )
     embed_id = f"embed_landing_cap_{uuid.uuid4().hex[:12]}"
     config = EmbedConfig(
         embed_id=embed_id,
@@ -164,6 +169,7 @@ async def system_landing_embed_guest_capped(frontend_container, unique_id):
     )
     await frontend_container.embed_config_repository.delete(embed_id)
     await frontend_container.embed_mapping_repository.delete_by_embed_id(embed_id)
+    await flows_container.flow_access_service.sync_flow_deleted(flow_id, branch_ids=[])
     await flows_container.flow_repository.delete(flow_id)
     clear_context()
 

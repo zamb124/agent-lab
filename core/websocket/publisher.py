@@ -20,7 +20,11 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
-from core.events import assert_platform_event_type, publish_event_to_user
+from core.events import (
+    assert_platform_event_type,
+    publish_event_to_company,
+    publish_event_to_user,
+)
 from core.logging import get_logger
 from core.push.delivery import deliver_offline_push
 from core.types import JsonArray, JsonObject, parse_json_object
@@ -83,22 +87,12 @@ def _event_type_for(notification: Notification) -> str:
     return assert_platform_event_type(candidate)
 
 
-async def notify_user(user_id: str, notification: Notification) -> None:
-    """
-    Доставить уведомление пользователю.
-
-    1. Публикуется как событие шины `platform:events` с UI-доставкой
-       пользователю — фронт получает его через WebSocket и обрабатывает
-       в EventBus.
-    2. Если пользователь offline — отправляется Web Push / APNs через
-       `deliver_offline_push`.
-    """
-    event_type = _event_type_for(notification)
+def _notification_payload(notification: Notification) -> JsonObject:
     actions_payload: JsonArray = [
         parse_json_object(action.model_dump_json(), "NotificationAction")
         for action in notification.actions
     ]
-    payload: JsonObject = {
+    return {
         "title": notification.title,
         "message": notification.message,
         "title_i18n_key": notification.title_i18n_key,
@@ -115,6 +109,20 @@ async def notify_user(user_id: str, notification: Notification) -> None:
         "service": notification.service,
         "kind": notification.type.value,
     }
+
+
+async def notify_user(user_id: str, notification: Notification) -> None:
+    """
+    Доставить уведомление пользователю.
+
+    1. Публикуется как событие шины `platform:events` с UI-доставкой
+       пользователю — фронт получает его через WebSocket и обрабатывает
+       в EventBus.
+    2. Если пользователь offline — отправляется Web Push / APNs через
+       `deliver_offline_push`.
+    """
+    event_type = _event_type_for(notification)
+    payload = _notification_payload(notification)
     await publish_event_to_user(user_id, event_type, payload)
     logger.info(
         "Notification published: user=%s service=%s kind=%s",
@@ -133,3 +141,23 @@ async def notify_user(user_id: str, notification: Notification) -> None:
             priority=notification.priority,
             data=notification.data,
         )
+
+
+async def notify_company(company_id: str, notification: Notification) -> None:
+    """
+    Доставить уведомление всем сокетам компании (без offline-push fanout).
+
+    Используется когда FGA relation раскрывается в весь roster (`company#member`):
+    ``list_users`` + per-user ``notify_user`` даёт deadline_exceeded / зависания.
+    """
+    if not company_id.strip():
+        raise ValueError("notify_company: company_id is required")
+    event_type = _event_type_for(notification)
+    payload = _notification_payload(notification)
+    await publish_event_to_company(company_id, event_type, payload)
+    logger.info(
+        "Notification published: company=%s service=%s kind=%s",
+        company_id,
+        notification.service,
+        notification.type.value,
+    )

@@ -24,14 +24,14 @@ _current_channel: contextvars.ContextVar[RuntimeChannel | None] = contextvars.Co
 )
 
 
-def set_context(context: "Context") -> None:
+def set_context(context: "Context") -> contextvars.Token["Context | None"]:
     """
     Устанавливает контекст.
 
-    Аргументы:
-        context: Контекст для установки
+    Возвращает token для ``reset_context``: HTTP/временный scope не затирает
+    внешний Context (in-process вызов после ASGI).
     """
-    _ = _context.set(context)
+    return _context.set(context)
 
 
 def get_context() -> Context | None:
@@ -93,8 +93,13 @@ def resolve_namespace_or_raise(override: str | None = None) -> str:
 
 
 def clear_context() -> None:
-    """Очищает контекст"""
+    """Очищает контекст (явный wipe, не для выхода из nested HTTP scope)."""
     _ = _context.set(None)
+
+
+def reset_context(token: contextvars.Token["Context | None"]) -> None:
+    """Восстанавливает Context, который был до соответствующего ``set_context``."""
+    _context.reset(token)
 
 
 def set_current_channel(channel: RuntimeChannel) -> None:

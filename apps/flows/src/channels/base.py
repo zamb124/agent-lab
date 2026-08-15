@@ -120,8 +120,9 @@ from core.a2a import (
     struct_from_mapping,
 )
 from core.a2a.representation import A2ARepresentationSnapshot
-from core.auth import permission_checker
 from core.auth.errors import PermissionDeniedA2AError
+from core.authz.errors import AuthzDenied
+from core.authz.models import AuthzObject
 from core.billing.exceptions import BillingBalanceBlockedError
 from core.clients.llm.mock_control import (
     parse_mock_control_metadata,
@@ -388,52 +389,73 @@ class BaseChannel(ABC):
 
     async def check_permissions(
         self,
-        user_groups: list[str],
+        user_id: str,
         branch_id: str = "default",
     ) -> None:
         """
-        Проверяет permissions на агента и ветку (branch).
+        Проверяет permissions на flow и ветку через OpenFGA.
 
         Аргументы:
-            user_groups: группы пользователя из JWT (grps claim)
+            user_id: идентификатор пользователя
             branch_id: ID ветки
 
         Исключения:
             PermissionDenied: если нет доступа к агенту или ветке
         """
-        config = get_settings()
-
-        # Если проверка прав доступа отключена — пропускаем
-        if not config.auth.permissions_enabled:
-            return
-
-        container = self.container
-        flow_config = await container.flow_repository.get(self.flow_id)
-
-        if flow_config is None:
-            return
-
-        # Проверка permission на агента
-        if not permission_checker.check_flow_permission(user_groups, flow_config.permission):
-            required = permission_checker.normalize(flow_config.permission)
-            raise PermissionDenied(PermissionDeniedA2AError.for_flow(self.flow_id, required))
-
-        # Проверка permission на ветку графа
-        branch_config = None
-        if flow_config.branches and branch_id in flow_config.branches:
-            branch_config = flow_config.branches[branch_id]
-
-        if branch_config is not None:
-            if not permission_checker.check_branch_permission(
-                user_groups, branch_config.permission, flow_config.permission
+        authz = self.container.authz_service
+        try:
+            await authz.require_can_view(AuthzObject.flow(self.flow_id), user_id=user_id)
+            flow_config = await self.container.flow_repository.get(self.flow_id)
+            if (
+                flow_config is not None
+                and flow_config.branches
+                and branch_id in flow_config.branches
             ):
-                effective_perm = (
-                    branch_config.permission if branch_config.permission else flow_config.permission
+                await authz.require_can_view(
+                    AuthzObject.flow_branch(self.flow_id, branch_id),
+                    user_id=user_id,
                 )
-                required = permission_checker.normalize(effective_perm)
+        except AuthzDenied as exc:
+            flow_config = await self.container.flow_repository.get(self.flow_id)
+            required = list(flow_config.permission) if flow_config is not None else []
+            if (
+                flow_config is not None
+                and branch_id in flow_config.branches
+                and flow_config.branches[branch_id].permission
+            ):
                 raise PermissionDenied(
-                    PermissionDeniedA2AError.for_branch(branch_id, self.flow_id, required)
-                )
+                    PermissionDeniedA2AError.for_branch(
+                        branch_id,
+                        self.flow_id,
+                        list(flow_config.branches[branch_id].permission),
+                    )
+                ) from exc
+            raise PermissionDenied(
+                PermissionDeniedA2AError.for_flow(self.flow_id, required)
+            ) from exc
+
+    async def _sync_flow_authz(self, config: FlowConfig) -> None:
+        ctx = self.context
+        if ctx is None or ctx.active_company is None:
+            raise ValueError("active company required for flow authz sync")
+        await self.container.flow_access_service.sync_flow_saved(
+            config,
+            company_id=ctx.active_company.company_id,
+            owner_user_id=ctx.user.user_id,
+        )
+
+    async def _persist_flow_with_authz(self, config: FlowConfig) -> None:
+        container = self.container
+        previous = await container.flow_repository.get(config.flow_id)
+        _ = await container.flow_repository.set(config)
+        try:
+            await self._sync_flow_authz(config)
+        except Exception:
+            if previous is None:
+                _ = await container.flow_repository.delete(config.flow_id)
+            else:
+                _ = await container.flow_repository.set(previous)
+            raise
 
     async def _get_state(self, session_id: str) -> ExecutionState | None:
         """Получает projection state из durable workflow runtime."""
@@ -945,7 +967,8 @@ class BaseChannel(ABC):
                 container.redis_client,
                 params.session_id,
                 mock_config,
-                user_groups=self._get_user_groups_from_context(self.context),
+                authz=container.authz_service,
+                user_id=ctx.user.user_id,
             )
 
         user_id = ctx.user.user_id
@@ -1602,36 +1625,35 @@ class BaseChannel(ABC):
 
         Гонка с worker (OCC / уже completed): Redis cancel flag уже выставлен;
         если ledger уже terminal completed/failed — ``TASK_NOT_CANCELABLE`` (-32002).
+        Пока run ещё живой — OCC повторяется с актуальной проекцией (как другие
+        durable append'ы), а не утекает наружу как JSON-RPC -32000.
         """
         session_id = await self._resolve_session_id_for_a2a_lookup(lookup_id)
 
         if session_id is None:
             return None
 
-        state = await self._get_state(session_id)
-
-        if state is None:
-            return None
-
-        if state.terminal_task_state == "canceled":
-            return self._canceled_task_from_state(state)
-        self._raise_if_not_cancelable(state)
-
-        await self._cancel_handoff_children(state)
-
-        try:
-            await self._save_terminal_state(session_id, state, "canceled")
-        except WorkflowConcurrencyError:
-            # Worker дописал ledger раньше (часто completed) — читаем актуальную проекцию.
-            raced = await self._get_state(session_id)
-            if raced is None:
+        children_canceled = False
+        for attempt_index in range(5):
+            state = await self._get_state(session_id)
+            if state is None:
                 return None
-            if raced.terminal_task_state == "canceled":
-                return self._canceled_task_from_state(raced)
-            self._raise_if_not_cancelable(raced)
-            raise
-
-        return self._canceled_task_from_state(state)
+            if state.terminal_task_state == "canceled":
+                return self._canceled_task_from_state(state)
+            self._raise_if_not_cancelable(state)
+            if not children_canceled:
+                await self._cancel_handoff_children(state)
+                children_canceled = True
+            try:
+                await self._save_terminal_state(session_id, state, "canceled")
+            except WorkflowConcurrencyError:
+                if attempt_index == 4:
+                    raise
+                continue
+            return self._canceled_task_from_state(state)
+        raise WorkflowConcurrencyError(
+            f"Failed to cancel workflow {session_id!r}"
+        )
 
     # === Обязательные методы (abstract) ===
 
@@ -1809,7 +1831,7 @@ class BaseChannel(ABC):
             ]
             raise ValueError(f"Ошибка валидации ветки: {'; '.join(errors)}")
 
-        _ = await container.flow_repository.set(candidate_config)
+        await self._persist_flow_with_authz(candidate_config)
 
         logger.info(f"Создана ветка: {branch_id}")
 
@@ -1868,7 +1890,7 @@ class BaseChannel(ABC):
             ]
             raise ValueError(f"Ошибка валидации ветки: {'; '.join(errors)}")
 
-        _ = await container.flow_repository.set(candidate_config)
+        await self._persist_flow_with_authz(candidate_config)
 
         logger.info(f"Обновлена ветка: {branch_id}")
 
@@ -1890,8 +1912,15 @@ class BaseChannel(ABC):
         if not config.branches or branch_id not in config.branches:
             raise ValueError(f"Ветка '{branch_id}' не найдена")
 
+        previous = config.model_copy(deep=True)
         del config.branches[branch_id]
         _ = await container.flow_repository.set(config)
+        try:
+            await container.flow_access_service.sync_branch_deleted(self.flow_id, branch_id)
+            await self._sync_flow_authz(config)
+        except Exception:
+            _ = await container.flow_repository.set(previous)
+            raise
         logger.info(f"Удалена ветка: {branch_id}")
         return {
             "status": "success",

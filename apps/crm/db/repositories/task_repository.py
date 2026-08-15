@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import cast as type_cast
 from typing import override
 
-from sqlalchemy import func, select, update
+from sqlalchemy import case, func, null, select, update
 from sqlalchemy.sql import ColumnElement
 
 from apps.crm.db.base import BaseCRMRepository
@@ -129,25 +129,30 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
         """``pending``/``running`` с ``cancel_requested`` → ``cancelled`` (воркер не подхватил отмену).
 
         Без порога по ``updated_at``: после рестарта не ждём ``STALE_CRM_TASK_INACTIVITY``.
+        ``UPDATE … RETURNING``: параллельные HTTP crm и процессы crm_worker забирают
+        каждую строку один раз (второй UPDATE не видит ``pending``/``running``).
         """
+        now = datetime.now(UTC)
         async with self._db.session() as session:
-            stmt = select(CRMTask).where(
-                CRMTask.status.in_(("pending", "running")),
-                CRMTask.cancel_requested.is_(True),
+            stmt = (
+                update(CRMTask)
+                .where(
+                    CRMTask.status.in_(("pending", "running")),
+                    CRMTask.cancel_requested.is_(True),
+                )
+                .values(
+                    status="cancelled",
+                    stage="cancelled",
+                    completed_at=now,
+                    cancel_requested=False,
+                    error_message=None,
+                    updated_at=now,
+                )
+                .returning(CRMTask)
             )
             result = await session.execute(stmt)
             rows = list(result.scalars().all())
-            now = datetime.now(UTC)
-            for row in rows:
-                row.status = "cancelled"
-                row.stage = "cancelled"
-                row.completed_at = now
-                row.cancel_requested = False
-                row.error_message = None
-                row.updated_at = now
             await session.commit()
-            for row in rows:
-                await session.refresh(row)
         return rows
 
     async def reconcile_stale_active_tasks_older_than(self, *, cutoff: datetime) -> list[CRMTask]:
@@ -157,35 +162,45 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
         ``reconcile_cancel_requested_active_tasks`` (без порога по времени).
 
         cancel_requested в этом методе — запасной путь для строк, попавших под cutoff.
+        ``UPDATE … RETURNING`` — тот же claim, что у cancel-requested reconcile.
         """
+        now = datetime.now(UTC)
+        msg_failed = (
+            "Задача прервана: нет активности воркера (перезапуск сервиса или сбой процесса)."
+        )
         async with self._db.session() as session:
-            stmt = select(CRMTask).where(
-                CRMTask.status.in_(("pending", "running")),
-                CRMTask.updated_at < cutoff,
+            stmt = (
+                update(CRMTask)
+                .where(
+                    CRMTask.status.in_(("pending", "running")),
+                    CRMTask.updated_at < cutoff,
+                )
+                .values(
+                    status=case(
+                        (CRMTask.cancel_requested.is_(True), "cancelled"),
+                        else_="failed",
+                    ),
+                    stage=case(
+                        (CRMTask.cancel_requested.is_(True), "cancelled"),
+                        else_="failed",
+                    ),
+                    progress_pct=case(
+                        (CRMTask.cancel_requested.is_(True), CRMTask.progress_pct),
+                        else_=100,
+                    ),
+                    completed_at=now,
+                    cancel_requested=False,
+                    error_message=case(
+                        (CRMTask.cancel_requested.is_(True), null()),
+                        else_=msg_failed,
+                    ),
+                    updated_at=now,
+                )
+                .returning(CRMTask)
             )
             result = await session.execute(stmt)
             rows = list(result.scalars().all())
-            now = datetime.now(UTC)
-            msg_failed = (
-                "Задача прервана: нет активности воркера (перезапуск сервиса или сбой процесса)."
-            )
-            for row in rows:
-                if row.cancel_requested:
-                    row.status = "cancelled"
-                    row.stage = "cancelled"
-                    row.completed_at = now
-                    row.cancel_requested = False
-                    row.error_message = None
-                else:
-                    row.status = "failed"
-                    row.stage = "failed"
-                    row.progress_pct = 100
-                    row.completed_at = now
-                    row.error_message = msg_failed
-                row.updated_at = now
             await session.commit()
-            for row in rows:
-                await session.refresh(row)
         return rows
 
     async def list_for_namespace(

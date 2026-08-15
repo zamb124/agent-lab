@@ -32,7 +32,27 @@ class TestA2AClient:
         async def handle_send_task(request):
             assert request.headers.get("A2A-Version") == "1.0"
             data = await request.json()
-            assert data["method"] == "SendMessage"
+            method = data["method"]
+            if method == "GetTask":
+                task_id = data["params"]["id"]
+                return web.json_response({
+                    "jsonrpc": "2.0",
+                    "id": data["id"],
+                    "result": {
+                        "id": task_id,
+                        "contextId": "test-session",
+                        "status": {"state": "TASK_STATE_COMPLETED"},
+                        "artifacts": [
+                            {
+                                "artifactId": "echo-1",
+                                "name": "response",
+                                "parts": [{"text": "Echo: polled"}],
+                            }
+                        ],
+                    },
+                })
+            assert method == "SendMessage"
+            assert data["params"]["configuration"]["returnImmediately"] is True
             assert data["params"]["message"]["role"] == "ROLE_USER"
             content = data["params"]["message"]["parts"][0]["text"]
             context_id = data["params"]["message"].get("contextId")
@@ -128,6 +148,55 @@ class TestA2AClient:
         )
 
         assert result.response
+
+    @pytest.mark.asyncio
+    async def test_send_task_polls_get_task_when_submitted(self):
+        """returnImmediately: SUBMITTED → GetTask COMPLETED."""
+        methods: list[str] = []
+
+        async def handle_rpc(request):
+            data = await request.json()
+            methods.append(data["method"])
+            if data["method"] == "SendMessage":
+                assert data["params"]["configuration"]["returnImmediately"] is True
+                return web.json_response({
+                    "jsonrpc": "2.0",
+                    "id": data["id"],
+                    "result": {
+                        "id": "task-async-1",
+                        "contextId": "ctx-1",
+                        "status": {"state": "TASK_STATE_SUBMITTED"},
+                        "artifacts": [],
+                    },
+                })
+            assert data["method"] == "GetTask"
+            assert data["params"]["id"] == "task-async-1"
+            return web.json_response({
+                "jsonrpc": "2.0",
+                "id": data["id"],
+                "result": {
+                    "id": "task-async-1",
+                    "contextId": "ctx-1",
+                    "status": {"state": "TASK_STATE_COMPLETED"},
+                    "artifacts": [
+                        {
+                            "artifactId": "done-1",
+                            "name": "response",
+                            "parts": [{"text": "done"}],
+                        }
+                    ],
+                },
+            })
+
+        app = web.Application()
+        app.router.add_post("/", handle_rpc)
+        async with ephemeral_web_server(app) as base_url:
+            client = A2AClient()
+            result = await client.send_task(base_url=base_url, content="go")
+
+        assert methods == ["SendMessage", "GetTask"]
+        assert result.status == "completed"
+        assert result.response == "done"
 
     @pytest.mark.asyncio
     async def test_send_task_error_response(self, error_server):

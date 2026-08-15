@@ -11,6 +11,7 @@ from tests.office.access_helpers import (
     enable_catalog_link,
     enable_document_link,
     extract_public_token,
+    patch_access_members,
     upload_txt_document,
 )
 
@@ -51,7 +52,8 @@ async def test_catalog_access_non_owner_get_forbidden(
         headers=auth_headers_system_user2,
     )
     assert response.status_code == 403
-    assert "владелец" in (response.json().get("detail") or "").lower()
+    body = response.json()
+    assert body.get("code") == "authz_denied"
 
 
 @pytest.mark.asyncio
@@ -67,7 +69,7 @@ async def test_catalog_access_missing_catalog_returns_forbidden_for_non_owner(
         headers=auth_headers_system,
     )
     assert response.status_code == 403
-    assert "владелец" in (response.json().get("detail") or "").lower()
+    assert response.json().get("code") == "authz_denied"
 
 
 @pytest.mark.asyncio
@@ -131,7 +133,7 @@ async def test_catalog_access_patch_link_enabled_returns_public_url(
     patch = await office_client.patch(
         f"/documents/api/v1/catalogs/{catalog_id}/access",
         headers=auth_headers_system,
-        json={"link_enabled": True, "link_permission": "view"},
+        json={"link_enabled": True, "link_permission": "viewer"},
     )
     assert patch.status_code == 200, patch.text
     body = patch.json()
@@ -174,15 +176,15 @@ async def test_catalog_access_patch_link_permission_edit_reflected_in_resolve(
         office_client,
         auth_headers_system,
         catalog_id,
-        link_permission="edit",
+        link_permission="editor",
     )
     resolve = await office_client.get(f"/documents/api/v1/public/resolve/{token}")
     assert resolve.status_code == 200
-    assert resolve.json()["link_permission"] == "edit"
+    assert resolve.json()["link_permission"] == "editor"
 
 
 @pytest.mark.asyncio
-async def test_catalog_access_patch_member_user_ids_grants_peer_access(
+async def test_catalog_access_patch_members_grants_peer_access(
     office_client,
     frontend_client,
     auth_headers_system,
@@ -191,13 +193,13 @@ async def test_catalog_access_patch_member_user_ids_grants_peer_access(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    patch = await office_client.patch(
-        f"/documents/api/v1/catalogs/{catalog_id}/access",
-        headers=auth_headers_system,
-        json={"member_user_ids": [system_user2_id]},
+    patch = await patch_access_members(
+        office_client,
+        auth_headers_system,
+        resource_path=f"/documents/api/v1/catalogs/{catalog_id}/access",
+        members=[{"user_id": system_user2_id, "relation": "viewer"}],
     )
-    assert patch.status_code == 200
-    member_ids = {row["user_id"] for row in patch.json()["members"]}
+    member_ids = {row["user_id"] for row in patch["members"]}
     assert system_user2_id in member_ids
 
     ok = await office_client.get(
@@ -220,10 +222,11 @@ async def test_catalog_access_patch_members_on_public_catalog_rejected(
     patch = await office_client.patch(
         f"/documents/api/v1/catalogs/{catalog_id}/access",
         headers=auth_headers_system,
-        json={"member_user_ids": [system_user2_id]},
+        json={"members": [{"user_id": system_user2_id, "relation": "viewer"}]},
     )
     assert patch.status_code == 400
-    assert "публичный" in (patch.json().get("detail") or "").lower()
+    detail = (patch.json().get("detail") or "").lower()
+    assert "company-visible" in detail or "компании" in detail
 
 
 @pytest.mark.asyncio
@@ -274,7 +277,7 @@ async def test_catalog_access_reenable_link_preserves_token_hash(
     first_patch = await office_client.patch(
         f"/documents/api/v1/catalogs/{catalog_id}/access",
         headers=auth_headers_system,
-        json={"link_enabled": True, "link_permission": "view"},
+        json={"link_enabled": True, "link_permission": "viewer"},
     )
     assert first_patch.status_code == 200
     token = extract_public_token(first_patch.json()["public_url"])
@@ -322,10 +325,11 @@ async def test_binding_access_catalog_member_can_get(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    await office_client.patch(
-        f"/documents/api/v1/catalogs/{catalog_id}/access",
-        headers=auth_headers_system,
-        json={"member_user_ids": [system_user2_id]},
+    await patch_access_members(
+        office_client,
+        auth_headers_system,
+        resource_path=f"/documents/api/v1/catalogs/{catalog_id}/access",
+        members=[{"user_id": system_user2_id, "relation": "viewer"}],
     )
     file_id = await upload_txt_document(
         office_client,
@@ -356,12 +360,12 @@ async def test_binding_access_binding_only_member_can_get_not_catalog_access(
         catalog_id=catalog_id,
         title=f"bind-only-{unique_id}",
     )
-    patch = await office_client.patch(
-        f"/documents/api/v1/documents/{file_id}/access",
-        headers=auth_headers_system,
-        json={"member_user_ids": [system_user2_id]},
+    await patch_access_members(
+        office_client,
+        auth_headers_system,
+        resource_path=f"/documents/api/v1/documents/{file_id}/access",
+        members=[{"user_id": system_user2_id, "relation": "viewer"}],
     )
-    assert patch.status_code == 200
 
     binding_get = await office_client.get(
         f"/documents/api/v1/documents/{file_id}/access",
@@ -408,10 +412,11 @@ async def test_binding_access_patch_link_enable_returns_public_url(
     unique_id,
 ):
     catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
-    await office_client.patch(
-        f"/documents/api/v1/catalogs/{catalog_id}/access",
-        headers=auth_headers_system,
-        json={"member_user_ids": [system_user2_id]},
+    await patch_access_members(
+        office_client,
+        auth_headers_system,
+        resource_path=f"/documents/api/v1/catalogs/{catalog_id}/access",
+        members=[{"user_id": system_user2_id, "relation": "viewer"}],
     )
     file_id = await upload_txt_document(
         office_client,
@@ -422,14 +427,14 @@ async def test_binding_access_patch_link_enable_returns_public_url(
     patch = await office_client.patch(
         f"/documents/api/v1/documents/{file_id}/access",
         headers=auth_headers_system_user2,
-        json={"link_enabled": True, "link_permission": "view"},
+        json={"link_enabled": True, "link_permission": "viewer"},
     )
     assert patch.status_code == 200
     assert isinstance(patch.json()["public_url"], str)
 
 
 @pytest.mark.asyncio
-async def test_binding_access_patch_member_user_ids_sync(
+async def test_binding_access_patch_members_sync(
     office_client,
     frontend_client,
     auth_headers_system,
@@ -443,22 +448,22 @@ async def test_binding_access_patch_member_user_ids_sync(
         catalog_id=catalog_id,
         title=f"members-sync-{unique_id}",
     )
-    add = await office_client.patch(
-        f"/documents/api/v1/documents/{file_id}/access",
-        headers=auth_headers_system,
-        json={"member_user_ids": [system_user2_id]},
+    add = await patch_access_members(
+        office_client,
+        auth_headers_system,
+        resource_path=f"/documents/api/v1/documents/{file_id}/access",
+        members=[{"user_id": system_user2_id, "relation": "viewer"}],
     )
-    assert add.status_code == 200
-    add_ids = {row["user_id"] for row in add.json()["members"]}
+    add_ids = {row["user_id"] for row in add["members"]}
     assert system_user2_id in add_ids
 
-    remove = await office_client.patch(
-        f"/documents/api/v1/documents/{file_id}/access",
-        headers=auth_headers_system,
-        json={"member_user_ids": []},
+    remove = await patch_access_members(
+        office_client,
+        auth_headers_system,
+        resource_path=f"/documents/api/v1/documents/{file_id}/access",
+        members=[],
     )
-    assert remove.status_code == 200
-    remove_ids = {row["user_id"] for row in remove.json()["members"]}
+    remove_ids = {row["user_id"] for row in remove["members"]}
     assert system_user2_id not in remove_ids
 
 
@@ -480,11 +485,11 @@ async def test_binding_access_patch_link_permission_edit(
         office_client,
         auth_headers_system,
         file_id,
-        link_permission="edit",
+        link_permission="editor",
     )
     resolve = await office_client.get(f"/documents/api/v1/public/resolve/{token}")
     assert resolve.status_code == 200
-    assert resolve.json()["link_permission"] == "edit"
+    assert resolve.json()["link_permission"] == "editor"
 
 
 @pytest.mark.asyncio
@@ -724,7 +729,7 @@ async def test_cross_axis_nested_public_parent_allows_peer_list_child_docs(
         auth_headers_system,
         unique_id,
         parent_catalog_id=parent_id,
-        is_public=False,
+        company_visible=False,
     )
     await upload_txt_document(
         office_client,
@@ -754,7 +759,7 @@ async def test_cross_axis_nested_catalog_peer_without_binding_membership_forbidd
         auth_headers_system,
         unique_id,
         parent_catalog_id=parent_id,
-        is_public=False,
+        company_visible=False,
     )
     file_id = await upload_txt_document(
         office_client,
@@ -785,16 +790,225 @@ async def test_catalog_access_owner_cannot_remove_self_from_members(
         )
     ).json()["owner_user_id"]
 
-    patch = await office_client.patch(
-        f"/documents/api/v1/catalogs/{catalog_id}/access",
-        headers=auth_headers_system,
-        json={"member_user_ids": []},
+    patch = await patch_access_members(
+        office_client,
+        auth_headers_system,
+        resource_path=f"/documents/api/v1/catalogs/{catalog_id}/access",
+        members=[],
     )
-    assert patch.status_code == 200
-    member_ids = {row["user_id"] for row in patch.json()["members"]}
+    member_ids = {row["user_id"] for row in patch["members"]}
     assert owner_id not in member_ids
     catalog_still_owned = await office_client.get(
         f"/documents/api/v1/catalogs/{catalog_id}/access",
         headers=auth_headers_system,
     )
     assert catalog_still_owned.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_catalog_editor_member_can_view_but_not_share_or_admin(
+    office_client,
+    frontend_client,
+    auth_headers_system,
+    auth_headers_system_user2,
+    system_user2_id,
+    unique_id,
+):
+    catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
+    await upload_txt_document(
+        office_client,
+        auth_headers_system,
+        catalog_id=catalog_id,
+        title=f"editor-doc-{unique_id}",
+    )
+    patch = await patch_access_members(
+        office_client,
+        auth_headers_system,
+        resource_path=f"/documents/api/v1/catalogs/{catalog_id}/access",
+        members=[{"user_id": system_user2_id, "relation": "editor"}],
+    )
+    assert any(
+        row["user_id"] == system_user2_id and row["relation"] == "editor"
+        for row in patch["members"]
+    )
+
+    listed = await office_client.get(
+        "/documents/api/v1/documents",
+        params={"catalog_id": catalog_id},
+        headers=auth_headers_system_user2,
+    )
+    assert listed.status_code == 200
+    assert len(listed.json()["items"]) == 1
+
+    share = await office_client.get(
+        f"/documents/api/v1/catalogs/{catalog_id}/access",
+        headers=auth_headers_system_user2,
+    )
+    assert share.status_code == 403
+    assert share.json().get("code") == "authz_denied"
+
+    rag = await office_client.post(
+        f"/documents/api/v1/catalogs/{catalog_id}/rag-index/enable",
+        headers=auth_headers_system_user2,
+    )
+    assert rag.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_catalog_members_endpoint_uses_relation_canon(
+    office_client,
+    frontend_client,
+    auth_headers_system,
+    system_user2_id,
+    unique_id,
+):
+    catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
+    add = await office_client.post(
+        f"/documents/api/v1/catalogs/{catalog_id}/members",
+        headers=auth_headers_system,
+        json={"user_id": system_user2_id, "relation": "editor"},
+    )
+    assert add.status_code == 200, add.text
+    members = add.json()["members"]
+    assert any(
+        row["user_id"] == system_user2_id and row["relation"] == "editor" for row in members
+    )
+
+    listed = await office_client.get(
+        f"/documents/api/v1/catalogs/{catalog_id}/members",
+        headers=auth_headers_system,
+    )
+    assert listed.status_code == 200
+    assert any(
+        row["user_id"] == system_user2_id and row["relation"] == "editor"
+        for row in listed.json()["members"]
+    )
+
+    remove = await office_client.delete(
+        f"/documents/api/v1/catalogs/{catalog_id}/members/{system_user2_id}",
+        headers=auth_headers_system,
+    )
+    assert remove.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_document_move_rewrites_fga_catalog_inheritance(
+    office_client,
+    frontend_client,
+    auth_headers_system,
+    auth_headers_system_user2,
+    system_user2_id,
+    unique_id,
+):
+    source_id = await create_private_catalog(
+        office_client, auth_headers_system, unique_id, title_prefix="move-src"
+    )
+    target_id = await create_private_catalog(
+        office_client, auth_headers_system, unique_id, title_prefix="move-dst"
+    )
+    file_id = await upload_txt_document(
+        office_client,
+        auth_headers_system,
+        catalog_id=source_id,
+        title=f"move-doc-{unique_id}",
+    )
+    await patch_access_members(
+        office_client,
+        auth_headers_system,
+        resource_path=f"/documents/api/v1/catalogs/{source_id}/access",
+        members=[{"user_id": system_user2_id, "relation": "viewer"}],
+    )
+    before = await office_client.get(
+        "/documents/api/v1/documents",
+        params={"catalog_id": source_id},
+        headers=auth_headers_system_user2,
+    )
+    assert before.status_code == 200
+    assert file_id in {item["file_id"] for item in before.json()["items"]}
+
+    moved = await office_client.post(
+        f"/documents/api/v1/documents/{file_id}/move",
+        headers=auth_headers_system,
+        json={"catalog_id": target_id},
+    )
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["catalog_id"] == target_id
+
+    after_source = await office_client.get(
+        "/documents/api/v1/documents",
+        params={"catalog_id": source_id},
+        headers=auth_headers_system_user2,
+    )
+    assert after_source.status_code == 200
+    assert file_id not in {item["file_id"] for item in after_source.json()["items"]}
+
+    after_target = await office_client.get(
+        "/documents/api/v1/documents",
+        params={"catalog_id": target_id},
+        headers=auth_headers_system_user2,
+    )
+    assert after_target.status_code == 403
+
+    peer_doc = await office_client.get(
+        f"/documents/api/v1/documents/{file_id}/preview",
+        headers=auth_headers_system_user2,
+    )
+    assert peer_doc.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_permanent_delete_clears_document_fga_access(
+    office_client,
+    frontend_client,
+    auth_headers_system,
+    auth_headers_system_user2,
+    system_user2_id,
+    unique_id,
+):
+    catalog_id = await create_private_catalog(office_client, auth_headers_system, unique_id)
+    file_id = await upload_txt_document(
+        office_client,
+        auth_headers_system,
+        catalog_id=catalog_id,
+        title=f"purge-doc-{unique_id}",
+    )
+    await patch_access_members(
+        office_client,
+        auth_headers_system,
+        resource_path=f"/documents/api/v1/documents/{file_id}/access",
+        members=[{"user_id": system_user2_id, "relation": "viewer"}],
+    )
+    peer_before = await office_client.get(
+        f"/documents/api/v1/documents/{file_id}/preview",
+        headers=auth_headers_system_user2,
+    )
+    assert peer_before.status_code == 200
+
+    soft = await office_client.delete(
+        f"/documents/api/v1/documents/{file_id}",
+        headers=auth_headers_system,
+    )
+    assert soft.status_code == 204
+    permanent = await office_client.delete(
+        f"/documents/api/v1/documents/{file_id}/permanent",
+        headers=auth_headers_system,
+    )
+    assert permanent.status_code == 204, permanent.text
+
+    peer_after = await office_client.get(
+        f"/documents/api/v1/documents/{file_id}/preview",
+        headers=auth_headers_system_user2,
+    )
+    assert peer_after.status_code == 404
+
+    owner_after = await office_client.get(
+        f"/documents/api/v1/documents/{file_id}/preview",
+        headers=auth_headers_system,
+    )
+    assert owner_after.status_code == 404
+
+    owner_access = await office_client.get(
+        f"/documents/api/v1/documents/{file_id}/access",
+        headers=auth_headers_system,
+    )
+    assert owner_access.status_code == 404

@@ -27,6 +27,7 @@ from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.utils.merge import deep_merge
 from apps.flows.src.variables import VariablesService
 from core.compiler import GraphCompiler
+from core.context import require_context
 from core.errors import InvalidGraphError
 from core.logging import get_logger
 from core.types import JsonArray, JsonObject, JsonValue, require_json_object
@@ -436,13 +437,36 @@ class FlowFactory:
         Возвращает:
             Flow
         """
+        previous = await self.flow_repository.get(config.flow_id)
         _ = await self.flow_repository.set(config)
+        ctx = require_context()
+        if ctx.active_company is None:
+            raise ValueError("active company required for flow authz sync")
+        try:
+            await self.container.flow_access_service.sync_flow_saved(
+                config,
+                company_id=ctx.active_company.company_id,
+                owner_user_id=ctx.user.user_id,
+            )
+        except Exception:
+            if previous is None:
+                _ = await self.flow_repository.delete(config.flow_id)
+            else:
+                _ = await self.flow_repository.set(previous)
+            raise
         logger.info(f"Flow сохранён: {config.flow_id}")
         return await self._create_flow(config, branch_id)
 
     async def delete_flow(self, flow_id: str) -> bool:
         """Удаляет flow из БД"""
-        return await self.flow_repository.delete(flow_id)
+        config = await self.flow_repository.get(flow_id)
+        branch_ids = list(config.branches.keys()) if config is not None else []
+        deleted = await self.flow_repository.delete(flow_id)
+        if deleted:
+            await self.container.flow_access_service.sync_flow_deleted(
+                flow_id, branch_ids=branch_ids
+            )
+        return deleted
 
     async def get_branches(self, flow_id: str) -> dict[str, BranchConfig]:
         """

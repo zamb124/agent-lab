@@ -3,8 +3,10 @@
 Реальная БД platform_tracing и shared storage.
 """
 
+
 from __future__ import annotations
 
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 from datetime import datetime, timedelta, timezone
 
 import pytest

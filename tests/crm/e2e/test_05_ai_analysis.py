@@ -80,7 +80,7 @@ async def _analyze_note(
     task_id_raw = start_payload.get("task_id")
     assert isinstance(task_id_raw, str)
     task_id = task_id_raw
-    deadline = time.monotonic() + 60.0
+    deadline = time.monotonic() + 90.0
     last: dict[str, object] = {}
     while time.monotonic() < deadline:
         tr = await crm_client.get(f"/crm/api/v1/tasks/{task_id}", headers=headers)

@@ -1,11 +1,11 @@
 """
-API для управления грантами доступа к entities.
+API для управления грантами доступа к entities (OpenFGA).
 """
 
 import asyncio
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 
 from apps.crm.dependencies import ContainerDep
 from apps.crm.models.grant_models import (
@@ -23,21 +23,13 @@ router = APIRouter(prefix="/entities/{entity_id}/grants", tags=["Entity Grants"]
 async def make_entity_public(
     entity_id: str,
     container: ContainerDep,
-):
-    """Сделать entity публичной"""
+) -> AccessGrantResponse:
     ctx = get_context()
     if not ctx or not ctx.user:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
-    try:
-        grant = await container.access_grant_service.grant_entity_public(
-            entity_id=entity_id, created_by=ctx.user.user_id
-        )
-        return AccessGrantResponse.model_validate(grant)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        raise ValueError("Authentication required")
+    return await container.access_grant_service.grant_entity_public(
+        entity_id=entity_id, created_by=ctx.user.user_id
+    )
 
 
 @router.post("/user", response_model=AccessGrantResponse)
@@ -45,24 +37,16 @@ async def grant_to_user(
     entity_id: str,
     request: GrantToUserRequest,
     container: ContainerDep,
-):
-    """Пошерить entity конкретному user"""
+) -> AccessGrantResponse:
     ctx = get_context()
     if not ctx or not ctx.user:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
-    try:
-        grant = await container.access_grant_service.grant_entity_to_user(
-            entity_id=entity_id,
-            target_user_id=request.user_id,
-            role=request.role,
-            created_by=ctx.user.user_id,
-        )
-        return AccessGrantResponse.model_validate(grant)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        raise ValueError("Authentication required")
+    return await container.access_grant_service.grant_entity_to_user(
+        entity_id=entity_id,
+        target_user_id=request.user_id,
+        role=request.role,
+        created_by=ctx.user.user_id,
+    )
 
 
 @router.post("/company", response_model=AccessGrantResponse)
@@ -70,24 +54,16 @@ async def grant_to_company(
     entity_id: str,
     request: GrantToCompanyRequest,
     container: ContainerDep,
-):
-    """Пошерить entity целой компании"""
+) -> AccessGrantResponse:
     ctx = get_context()
     if not ctx or not ctx.user:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
-    try:
-        grant = await container.access_grant_service.grant_entity_to_company(
-            entity_id=entity_id,
-            target_company_id=request.company_id,
-            role=request.role,
-            created_by=ctx.user.user_id,
-        )
-        return AccessGrantResponse.model_validate(grant)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        raise ValueError("Authentication required")
+    return await container.access_grant_service.grant_entity_to_company(
+        entity_id=entity_id,
+        target_company_id=request.company_id,
+        role=request.role,
+        created_by=ctx.user.user_id,
+    )
 
 
 @router.get("", response_model=OffsetPage[AccessGrantResponse])
@@ -101,6 +77,5 @@ async def list_grants(
         container.access_grant_service.list_grants("entity", entity_id),
         container.access_grant_service.count_grants("entity", entity_id),
     )
-    all_items = [AccessGrantResponse.model_validate(g) for g in grants]
-    page = all_items[offset : offset + limit]
+    page = grants[offset : offset + limit]
     return OffsetPage[AccessGrantResponse](items=page, total=total, limit=limit, offset=offset)

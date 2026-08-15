@@ -21,7 +21,6 @@ from core.worktracker.db_models import (  # noqa: F401
     BoardRow,
     WorkItemCommentRow,
     WorkItemRow,
-    WorkQueueMemberRow,
     WorkQueueRow,
 )
 from core.db.models import Base
@@ -37,7 +36,6 @@ target_metadata = Base.metadata
 MANAGED_TABLES = {
     "work_items",
     "work_queues",
-    "work_queue_members",
     "work_boards",
     "work_item_comments",
 }

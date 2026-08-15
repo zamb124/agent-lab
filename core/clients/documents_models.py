@@ -13,7 +13,7 @@ SpreadsheetFormat = Literal["xlsx", "csv"]
 FindMode = Literal["auto", "semantic", "lexical"]
 LinkKind = Literal["editor", "preview"]
 AccessResourceKind = Literal["catalog", "document"]
-LinkPermission = Literal["view", "edit"]
+LinkPermission = Literal["viewer", "editor"]
 CellValue = str | int | float | bool | None
 
 
@@ -203,13 +203,23 @@ class DocumentsGetLinkArgs(BaseModel):
     )
 
 
+class DocumentsAccessMemberItem(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    user_id: str = Field(..., min_length=1, description="Member user_id.")
+    relation: Literal["viewer", "editor"] = Field(
+        "viewer",
+        description="Member relation: viewer or editor.",
+    )
+
+
 class DocumentsCreateCatalogArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     title: str = Field(..., min_length=1, max_length=500, description="Catalog folder title.")
-    is_public: bool = Field(
+    company_visible: bool = Field(
         True,
-        description="company_visible for the whole company in this namespace.",
+        description="Visible to the whole company in this namespace.",
     )
     parent_catalog_id: str | None = Field(
         None,
@@ -222,7 +232,7 @@ class DocumentsUpdateCatalogArgs(BaseModel):
 
     catalog_id: str = Field(..., min_length=1, description="catalog_id to update.")
     title: str | None = Field(None, min_length=1, max_length=500, description="New title.")
-    is_public: bool | None = Field(None, description="Company-visible flag.")
+    company_visible: bool | None = Field(None, description="Company-visible flag.")
 
 
 class DocumentsCatalogIdArgs(BaseModel):
@@ -263,7 +273,7 @@ class DocumentsPatchAccessArgs(DocumentsAccessArgs):
         None,
         description="Public link permission when link is enabled.",
     )
-    member_user_ids: list[str] | None = Field(
+    members: list[DocumentsAccessMemberItem] | None = Field(
         None,
         description="Full replacement member list when provided.",
     )

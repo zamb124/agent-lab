@@ -1,5 +1,5 @@
 """
-Репозитории shares, revisions и activity events для Documents.
+Репозитории revisions и activity events для Documents.
 """
 
 import json
@@ -13,72 +13,8 @@ from apps.office.db.base import OfficeDatabase
 from apps.office.db.models import (
     OfficeDocumentEvent,
     OfficeDocumentRevision,
-    OfficeDocumentShare,
 )
 from core.types import JsonObject, require_json_object
-
-
-class DocumentShareRepository:
-    def __init__(self, db: OfficeDatabase) -> None:
-        self._db: OfficeDatabase = db
-
-    async def create(
-        self,
-        *,
-        file_id: str,
-        company_id: str,
-        created_by_user_id: str,
-        permission: str,
-        token_hash: str,
-        expires_at: datetime | None,
-    ) -> OfficeDocumentShare:
-        share_id = uuid.uuid4().hex
-        row = OfficeDocumentShare(
-            share_id=share_id,
-            file_id=file_id,
-            company_id=company_id,
-            created_by_user_id=created_by_user_id,
-            permission=permission,
-            token_hash=token_hash,
-            expires_at=expires_at,
-            created_at=datetime.now(timezone.utc),
-        )
-        async with self._db.session() as session:
-            session.add(row)
-            await session.commit()
-            await session.refresh(row)
-        return row
-
-    async def get_by_token_hash(self, token_hash: str) -> OfficeDocumentShare | None:
-        async with self._db.session() as session:
-            result = await session.execute(
-                select(OfficeDocumentShare).where(OfficeDocumentShare.token_hash == token_hash)
-            )
-            return result.scalar_one_or_none()
-
-    async def list_for_file(self, file_id: str) -> list[OfficeDocumentShare]:
-        async with self._db.session() as session:
-            result = await session.execute(
-                select(OfficeDocumentShare)
-                .where(OfficeDocumentShare.file_id == file_id)
-                .order_by(OfficeDocumentShare.created_at.desc())
-            )
-            return list(result.scalars().all())
-
-    async def delete(self, share_id: str, file_id: str) -> bool:
-        async with self._db.session() as session:
-            result = await session.execute(
-                select(OfficeDocumentShare).where(
-                    OfficeDocumentShare.share_id == share_id,
-                    OfficeDocumentShare.file_id == file_id,
-                )
-            )
-            row = result.scalar_one_or_none()
-            if row is None:
-                return False
-            await session.delete(row)
-            await session.commit()
-            return True
 
 
 class DocumentRevisionRepository:

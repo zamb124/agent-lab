@@ -12,7 +12,7 @@ from typing import ClassVar, override
 from pydantic import ValidationError
 
 from apps.flows.src.models import FlowConfig
-from apps.flows.src.models.flow_config import FlowToolPickerItem
+from apps.flows.src.models.flow_config import FlowListIndexItem, FlowToolPickerItem
 from core.db import BaseRepository, Storage
 from core.logging import get_logger
 from core.types import parse_json_object
@@ -214,6 +214,33 @@ class FlowRepository(BaseRepository[FlowConfig]):
                 continue
 
         return items
+
+    _LIST_INDEX_PAGE: ClassVar[int] = 1000
+
+    async def list_index(self) -> list[FlowListIndexItem]:
+        """Все flow компании: flow_id + type, без полного JSON (filter до offset)."""
+        base_prefix = self._get_prefix()
+        final_prefix = self._build_final_key(base_prefix)
+        table_name = self._get_table_name()
+        items: list[FlowListIndexItem] = []
+        offset = 0
+        while True:
+            rows = await self._storage.list_json_fields_by_prefix_and_table(
+                final_prefix,
+                table_name,
+                fields=("flow_id", "type"),
+                limit=self._LIST_INDEX_PAGE,
+                offset=offset,
+            )
+            for row in rows:
+                try:
+                    items.append(FlowListIndexItem.model_validate(row))
+                except ValidationError as e:
+                    logger.warning("Failed to parse flow list index: %s", e)
+                    continue
+            if len(rows) < self._LIST_INDEX_PAGE:
+                return items
+            offset += self._LIST_INDEX_PAGE
 
     async def list_for_tool_picker(self, *, limit: int, offset: int = 0) -> list[FlowToolPickerItem]:
         """Страница flow только с полями tool picker (SQL projection, без полного JSON)."""

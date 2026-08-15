@@ -12,8 +12,6 @@ from core.pagination import OffsetPage
 
 router = APIRouter(prefix="/api/namespaces", tags=["namespaces"])
 
-_ADMIN_ROLES = frozenset({"owner", "admin"})
-
 
 class ConsoleNamespaceItem(BaseModel):
     """Запись namespace для admin console."""
@@ -33,16 +31,15 @@ class ConsoleNamespaceCreateRequest(BaseModel):
     description: str | None = None
 
 
-def _require_company_admin() -> None:
+async def _require_company_admin(container: ContainerDep) -> None:
     user = require_frontend_user()
     company_id = user.active_company_id.strip()
     if company_id == "":
         raise HTTPException(status_code=400, detail="active_company_id is required")
-    roles = user.companies.get(company_id)
-    if roles is None:
-        raise HTTPException(status_code=403, detail="Not a company member")
-    if not _ADMIN_ROLES.intersection(roles):
-        raise HTTPException(status_code=403, detail="Admin or owner role required")
+    await container.authz_service.require_company_admin(
+        company_id=company_id,
+        user_id=user.user_id,
+    )
 
 
 @router.get("", response_model=OffsetPage[ConsoleNamespaceItem])
@@ -56,7 +53,7 @@ async def list_console_namespaces(
     ] = "all",
 ) -> OffsetPage[ConsoleNamespaceItem]:
     """Список namespaces: company_workspace + personal (technical скрыты). Admin only."""
-    _require_company_admin()
+    await _require_company_admin(container)
     if kind == "company_workspace":
         kinds = frozenset({NamespaceKind.COMPANY_WORKSPACE})
     elif kind == "personal":
@@ -92,7 +89,7 @@ async def create_console_namespace(
     container: ContainerDep,
 ) -> ConsoleNamespaceItem:
     """Lightweight company_workspace без CRM template. Admin only."""
-    _require_company_admin()
+    await _require_company_admin(container)
     name = body.name.strip()
     if name == "":
         raise HTTPException(status_code=422, detail="name is required")

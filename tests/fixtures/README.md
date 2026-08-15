@@ -100,7 +100,7 @@ Redis Stream группы `taskiq`):
 - `rag_worker` — rag_worker (stream `rag`)
 - `search_worker` — search_worker (stream `search`)
 - `sync_worker` — sync_worker (stream `sync`)
-- `crm_worker` — crm_worker (stream `crm`)
+- `crm_worker` — crm_worker (stream `crm`) + crm_summary_worker (stream `crm_summary`)
 - `taskiq_scheduler` — единственное исключение: subprocess на время сессии
   (scheduler не входит в стек, его тики мешали бы остальным тестам)
 

@@ -17,9 +17,10 @@ from apps.flows.src.models.registry_contracts import (
 from apps.flows.src.services.flows_loader import get_all_flows
 from core.ai.company_settings import CUSTOM_PROVIDER_REF_PREFIX, CompanyAIProviders
 from core.ai.providers import HUMANITEC_LLM_PROVIDER, AICapability
+from core.authz.models import AuthzObject
 from core.config import get_settings
 from core.config.models import PlatformBrandConfig
-from core.context import get_context
+from core.context import get_context, require_context
 from core.frontend.viewport import PLATFORM_MOBILE_VIEWPORT_CONTENT
 from core.logging import get_logger
 from core.middleware.auth.company_resolver import build_service_base_url
@@ -746,6 +747,9 @@ async def get_flow_schema(flow_id: str, container: ContainerDep) -> HTMLResponse
     HTML страница с визуализацией схемы агента для всех веток (branches).
     Использует Mermaid.js для отрисовки графов.
     """
+    await container.authz_service.require_can_view(
+        AuthzObject.flow(flow_id), user_id=require_context().user.user_id
+    )
     schema = await container.flow_factory.get_flow_schema(flow_id)
 
     if schema is None:

@@ -14,8 +14,8 @@
  *   - headerOnly: boolean — только шапка (слот + Save/Fullscreen), без CodeMirror (для соседнего контента под шапкой)
  *   - lineWrapping: boolean — принудительно переносить длинные строки; для JSON включено автоматически.
  *   - slot `toolbar-start` — светлый DOM слева в шапке (вкладки «Код»/«Схема» и т.п.).
- *   - completionContext: object (опц.) — query для `flows/code_completions` (`language`, `perspective`, `include_runtime_namespace_extras`).
- *   - completionVariableKeys: string[] (опц.) — ключи `variables` / `state.variables` для автодополнения.
+ *   - completionContext: object (опц.) — `{ parameters_schema }` для typed `args` stub LSP.
+ *   - completionVariableKeys: string[] (опц.) — ключи `variables` / `state.variables` в stub LSP.
  *
  * События (emit, slot-композиция):
  *   - 'change' { value }
@@ -28,14 +28,11 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import { asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
-import {
-    buildCodeCompletions,
-    fetchCompletionCatalog,
-} from '../../_helpers/flows-python-completion-catalog.js';
 import { editorBodyPortalZIndex } from '@platform/lib/utils/modal-z-stack.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 
 const CODEMIRROR_URL = '/static/core/assets/codemirror/codemirror-bundle.js';
+const LSP_LANGUAGES = new Set(['python', 'javascript', 'typescript', 'go', 'csharp']);
 
 const FLOWS_CM_TOOLTIP_MOUNT_ID = 'flows-cm-tooltip-mount';
 
@@ -61,7 +58,13 @@ function ensureFlowsCmTooltipMount() {
 let _cmPromise = null;
 function loadCodeMirror() {
     if (!_cmPromise) {
-        _cmPromise = import(CODEMIRROR_URL);
+        _cmPromise = import(CODEMIRROR_URL).then(
+            (mod) => mod,
+            (err) => {
+                _cmPromise = null;
+                throw err;
+            },
+        );
     }
     return _cmPromise;
 }
@@ -286,7 +289,12 @@ export class FlowsCodeEditor extends PlatformElement {
         this._languageCompartment = null;
         this._themeCompartment = null;
         this._wrappingCompartment = null;
-        this._completionsOp = this.useOp('flows/code_completions');
+        this._lspCompartment = null;
+        this._lspSessionOp = this.useOp('flows/code_lsp_session');
+        this._lspClient = null;
+        this._lspSocket = null;
+        this._lspGeneration = 0;
+        this._lspRestartTimer = 0;
         this._themeSel = this.select((s) => (isPlainObject(s.theme) && s.theme.mode === 'light' ? 'light' : 'dark'));
         this._lastTheme = undefined;
         this._initInFlight = null;
@@ -310,6 +318,11 @@ export class FlowsCodeEditor extends PlatformElement {
 
     disconnectedCallback() {
         window.removeEventListener('keydown', this._onWindowKeydown, true);
+        this._stopLsp();
+        if (this._lspRestartTimer) {
+            window.clearTimeout(this._lspRestartTimer);
+            this._lspRestartTimer = 0;
+        }
         if (this._editorView) {
             this._editorView.destroy();
             this._editorView = null;
@@ -322,6 +335,7 @@ export class FlowsCodeEditor extends PlatformElement {
         super.updated?.(changed);
         if (changed.has('headerOnly')) {
             if (this.headerOnly) {
+                this._stopLsp();
                 if (this._editorView) {
                     this._editorView.destroy();
                     this._editorView = null;
@@ -374,6 +388,10 @@ export class FlowsCodeEditor extends PlatformElement {
             this._editorView.dispatch({
                 effects: this._languageCompartment.reconfigure(this._buildLanguageExtension()),
             });
+            this._scheduleLspRestart();
+        }
+        if (changed.has('completionContext') || changed.has('completionVariableKeys')) {
+            this._scheduleLspRestart();
         }
         if ((changed.has('language') || changed.has('lineWrapping')) && this._wrappingCompartment) {
             this._editorView.dispatch({
@@ -408,6 +426,27 @@ export class FlowsCodeEditor extends PlatformElement {
         this._initInFlight = this._init(host).finally(() => {
             this._initInFlight = null;
         });
+        void this._initInFlight.then(
+            () => {
+                if (this.isConnected && !this.headerOnly && !this._editorView) {
+                    queueMicrotask(() => {
+                        if (this.isConnected && !this._editorView) {
+                            void this._ensureEditorMounted();
+                        }
+                    });
+                }
+            },
+            () => {
+                if (!this.isConnected || this.headerOnly || this._editorView) {
+                    return;
+                }
+                window.setTimeout(() => {
+                    if (this.isConnected && !this._editorView) {
+                        void this._ensureEditorMounted();
+                    }
+                }, 200);
+            },
+        );
         return this._initInFlight;
     }
 
@@ -421,6 +460,7 @@ export class FlowsCodeEditor extends PlatformElement {
         this._languageCompartment = new cm.Compartment();
         this._themeCompartment = new cm.Compartment();
         this._wrappingCompartment = new cm.Compartment();
+        this._lspCompartment = new cm.Compartment();
         this._lastTheme = this._themeSel.value;
         const fourSpaces = '    ';
         const keymapForTab = [
@@ -452,8 +492,8 @@ export class FlowsCodeEditor extends PlatformElement {
             this._languageCompartment.of(this._buildLanguageExtension()),
             this._themeCompartment.of(this._buildThemeExtension()),
             this._wrappingCompartment.of(this._buildWrappingExtension()),
+            this._lspCompartment.of([]),
             cm.EditorState.tabSize.of(4),
-            cm.autocompletion({ override: [(ctx) => this._completionSource(ctx)] }),
             cm.keymap.of(keymapForTab),
             cm.EditorView.updateListener.of((update) => {
                 if (update.docChanged) {
@@ -489,6 +529,7 @@ export class FlowsCodeEditor extends PlatformElement {
                 }
             });
         }
+        this._scheduleLspRestart();
     }
 
     _buildLanguageExtension() {
@@ -536,35 +577,133 @@ export class FlowsCodeEditor extends PlatformElement {
         return [];
     }
 
-    async _completionSource(ctx) {
+    _scheduleLspRestart() {
+        if (this._lspRestartTimer) {
+            window.clearTimeout(this._lspRestartTimer);
+        }
+        this._lspRestartTimer = window.setTimeout(() => {
+            this._lspRestartTimer = 0;
+            void this._restartLsp();
+        }, 250);
+    }
+
+    _stopLsp() {
+        this._lspGeneration += 1;
+        if (this._lspClient && typeof this._lspClient.disconnect === 'function') {
+            this._lspClient.disconnect();
+        }
+        this._lspClient = null;
+        if (this._lspSocket) {
+            this._lspSocket.close();
+            this._lspSocket = null;
+        }
+        if (this._editorView && this._lspCompartment && this._cm) {
+            this._editorView.dispatch({
+                effects: this._lspCompartment.reconfigure([]),
+            });
+        }
+    }
+
+    async _restartLsp() {
+        if (!this._editorView || !this._cm || !this._lspCompartment) {
+            return;
+        }
         const language = typeof this.language === 'string' && this.language.length > 0 ? this.language : 'text';
-        if (language === 'json' || language === 'text') {
-            return null;
+        this._stopLsp();
+        if (!LSP_LANGUAGES.has(language)) {
+            return;
         }
-        let catalog;
-        try {
-            catalog = await fetchCompletionCatalog(
-                (payload) => this._completionsOp.run(payload),
-                this.completionContext,
-            );
-        } catch {
-            return null;
-        }
+        const generation = this._lspGeneration;
+        const ctx = isPlainObject(this.completionContext) ? this.completionContext : {};
+        const parametersSchema = isPlainObject(ctx.parameters_schema)
+            ? ctx.parameters_schema
+            : { type: 'object', properties: {} };
         const variableKeys = Array.isArray(this.completionVariableKeys)
-            ? this.completionVariableKeys.filter((k) => typeof k === 'string')
+            ? this.completionVariableKeys.filter((key) => typeof key === 'string' && key.length > 0)
             : [];
-        const built = buildCodeCompletions({
-            language,
-            docText: ctx.state.doc.toString(),
-            pos: ctx.pos,
-            catalog,
-            variableKeys,
-            explicit: ctx.explicit === true,
-        });
-        if (!built || built.options.length === 0) {
-            return null;
+        let session;
+        try {
+            session = await this._lspSessionOp.run({
+                language,
+                source: this._editorView.state.doc.toString(),
+                parameters_schema: parametersSchema,
+                variable_keys: variableKeys,
+            });
+        } catch (err) {
+            if (generation !== this._lspGeneration) {
+                return;
+            }
+            this.toast('code_editor.lsp_failed', { type: 'error' });
+            if (err instanceof Error) {
+                return;
+            }
+            throw err;
         }
-        return built;
+        if (generation !== this._lspGeneration || !this.isConnected || !this._editorView) {
+            return;
+        }
+        if (!isPlainObject(session)) {
+            throw new Error('code lsp session must be an object');
+        }
+        if (typeof session.ws_path !== 'string' || !session.ws_path.startsWith('/')) {
+            throw new Error('code lsp ws_path required');
+        }
+        if (typeof session.document_uri !== 'string' || session.document_uri.length === 0) {
+            throw new Error('code lsp document_uri required');
+        }
+        if (typeof session.root_uri !== 'string' || session.root_uri.length === 0) {
+            throw new Error('code lsp root_uri required');
+        }
+        if (typeof session.language_id !== 'string' || session.language_id.length === 0) {
+            throw new Error('code lsp language_id required');
+        }
+        if (typeof this._cm.LSPClient !== 'function' || typeof this._cm.languageServerExtensions !== 'function') {
+            throw new Error('codemirror lsp-client is required');
+        }
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const socket = new WebSocket(`${protocol}//${window.location.host}${session.ws_path}`);
+        await new Promise((resolve, reject) => {
+            socket.addEventListener('open', () => resolve(undefined), { once: true });
+            socket.addEventListener('error', () => reject(new Error('code lsp websocket failed')), { once: true });
+        });
+        if (generation !== this._lspGeneration) {
+            socket.close();
+            return;
+        }
+        const listeners = new Map();
+        const transport = {
+            send(message) {
+                socket.send(message);
+            },
+            subscribe(handler) {
+                const listener = (event) => {
+                    handler(event.data);
+                };
+                listeners.set(handler, listener);
+                socket.addEventListener('message', listener);
+            },
+            unsubscribe(handler) {
+                const listener = listeners.get(handler);
+                if (!listener) {
+                    throw new Error('lsp transport handler is not subscribed');
+                }
+                socket.removeEventListener('message', listener);
+                listeners.delete(handler);
+            },
+        };
+        const client = new this._cm.LSPClient({
+            rootUri: session.root_uri,
+            timeout: 20000,
+            extensions: this._cm.languageServerExtensions(),
+        });
+        client.connect(transport);
+        this._lspClient = client;
+        this._lspSocket = socket;
+        this._editorView.dispatch({
+            effects: this._lspCompartment.reconfigure(
+                client.plugin(session.document_uri, session.language_id),
+            ),
+        });
     }
 
     _onSaveFromToolbar() {

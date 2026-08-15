@@ -14,6 +14,7 @@ from pydantic import ConfigDict, Field, ValidationError
 from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import (
+    FlowConfig,
     PlatformEventTriggerConfig,
     TelegramUpdate,
     TriggerConfig,
@@ -49,7 +50,8 @@ from apps.flows.src.triggers.webhook_inbound import (
     parse_webhook_json_body,
     webhook_secret_from_request,
 )
-from core.context import get_context, set_context
+from core.authz.models import AuthzObject
+from core.context import get_context, require_context, set_context
 from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.models.context_models import Context
@@ -59,6 +61,38 @@ from core.types import JsonObject
 from core.variables.resolver import VariableResolutionError
 
 logger = get_logger(__name__)
+
+
+def _actor_user_id() -> str:
+    return require_context().user.user_id
+
+
+async def _require_view_flow(container: ContainerDep, flow_id: str) -> None:
+    await container.authz_service.require_can_view(
+        AuthzObject.flow(flow_id), user_id=_actor_user_id()
+    )
+
+
+async def _require_edit_flow(container: ContainerDep, flow_id: str) -> None:
+    await container.authz_service.require_can_edit(
+        AuthzObject.flow(flow_id), user_id=_actor_user_id()
+    )
+
+
+async def _visible_flow(container: ContainerDep, flow_id: str) -> FlowConfig:
+    await _require_view_flow(container, flow_id)
+    flow_config = await container.flow_repository.get(flow_id)
+    if flow_config is None:
+        raise HTTPException(status_code=404, detail=f"Flow not found: {flow_id}")
+    return flow_config
+
+
+async def _editable_flow(container: ContainerDep, flow_id: str) -> FlowConfig:
+    await _require_edit_flow(container, flow_id)
+    flow_config = await container.flow_repository.get(flow_id)
+    if flow_config is None:
+        raise HTTPException(status_code=404, detail=f"Flow not found: {flow_id}")
+    return flow_config
 
 _SENSITIVE_TRIGGER_CONFIG_KEYS = frozenset(
     {"bot_token", "secret_token", "imap_password", "password"},
@@ -225,10 +259,7 @@ class TriggerVerifyResponse(StrictBaseModel):
 @router.get("/flows/{flow_id}/triggers")
 async def list_triggers(flow_id: str, container: ContainerDep) -> list[TriggerResponse]:
     """Получить список триггеров агента."""
-    flow_config = await container.flow_repository.get(flow_id)
-
-    if not flow_config:
-        raise HTTPException(status_code=404, detail=f"Flow not found: {flow_id}")
+    flow_config = await _visible_flow(container, flow_id)
 
     return [
         TriggerResponse(
@@ -253,10 +284,7 @@ async def list_triggers(flow_id: str, container: ContainerDep) -> list[TriggerRe
 @router.get("/flows/{flow_id}/triggers/{trigger_id}")
 async def get_trigger(flow_id: str, trigger_id: str, container: ContainerDep) -> TriggerResponse:
     """Получить триггер по ID."""
-    flow_config = await container.flow_repository.get(flow_id)
-
-    if not flow_config:
-        raise HTTPException(status_code=404, detail=f"Flow not found: {flow_id}")
+    flow_config = await _visible_flow(container, flow_id)
 
     trigger = flow_config.triggers.get(trigger_id)
 
@@ -287,9 +315,7 @@ async def verify_trigger_draft(
     """
     Проверяет черновик конфига: Telegram getMe, валидность cron, подсказки для webhook.
     """
-    flow_config = await container.flow_repository.get(flow_id)
-    if not flow_config:
-        raise HTTPException(status_code=404, detail=f"Flow not found: {flow_id}")
+    flow_config = await _editable_flow(container, flow_id)
 
     cfg: JsonObject = dict(request.config)
     if request.type == TriggerType.TELEGRAM:
@@ -354,10 +380,7 @@ async def verify_trigger_draft(
 @router.post("/flows/{flow_id}/triggers")
 async def create_trigger(flow_id: str, request: TriggerCreateRequest, container: ContainerDep) -> TriggerResponse:
     """Создать новый триггер."""
-    flow_config = await container.flow_repository.get(flow_id)
-
-    if not flow_config:
-        raise HTTPException(status_code=404, detail=f"Flow not found: {flow_id}")
+    flow_config = await _editable_flow(container, flow_id)
 
     if request.trigger_id in flow_config.triggers:
         raise HTTPException(
@@ -390,7 +413,7 @@ async def create_trigger(flow_id: str, request: TriggerCreateRequest, container:
     )
 
     # Сохраняем старый конфиг для sync
-    old_config = await container.flow_repository.get(flow_id)
+    old_config = flow_config.model_copy(deep=True)
 
     # Добавляем триггер в конфиг
     flow_config.triggers[request.trigger_id] = trigger
@@ -436,10 +459,7 @@ async def update_trigger(
     container: ContainerDep,
 ) -> TriggerResponse:
     """Обновить триггер."""
-    old_config = await container.flow_repository.get(flow_id)
-
-    if not old_config:
-        raise HTTPException(status_code=404, detail=f"Flow not found: {flow_id}")
+    old_config = await _editable_flow(container, flow_id)
 
     trigger = old_config.triggers.get(trigger_id)
 
@@ -514,9 +534,7 @@ async def reregister_flow_trigger(
     """
     Снимает триггер с внешней стороны и регистрирует заново (для Telegram — deleteWebhook + setWebhook).
     """
-    old_config = await container.flow_repository.get(flow_id)
-    if not old_config:
-        raise HTTPException(status_code=404, detail=f"Flow not found: {flow_id}")
+    old_config = await _editable_flow(container, flow_id)
     if trigger_id not in old_config.triggers:
         raise HTTPException(status_code=404, detail=f"Trigger not found: {trigger_id}")
 
@@ -563,10 +581,7 @@ async def reregister_flow_trigger(
 @router.delete("/flows/{flow_id}/triggers/{trigger_id}")
 async def delete_trigger(flow_id: str, trigger_id: str, container: ContainerDep) -> dict[str, str]:
     """Удалить триггер."""
-    old_config = await container.flow_repository.get(flow_id)
-
-    if not old_config:
-        raise HTTPException(status_code=404, detail=f"Flow not found: {flow_id}")
+    old_config = await _editable_flow(container, flow_id)
 
     if trigger_id not in old_config.triggers:
         raise HTTPException(status_code=404, detail=f"Trigger not found: {trigger_id}")
@@ -855,10 +870,7 @@ async def test_trigger(
 
     Полезно для отладки input_mapping.
     """
-    flow_config = await container.flow_repository.get(flow_id)
-
-    if not flow_config:
-        raise HTTPException(status_code=404, detail=f"Flow not found: {flow_id}")
+    flow_config = await _editable_flow(container, flow_id)
 
     trigger = flow_config.triggers.get(trigger_id)
 

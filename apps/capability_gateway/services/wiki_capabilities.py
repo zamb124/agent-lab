@@ -13,6 +13,7 @@ from core.clients.wiki_client import WikiClient
 from core.clients.wiki_models import (
     WikiBacklinksArgs,
     WikiCommentIdArgs,
+    WikiCompanyVisibleArgs,
     WikiCreateCommentArgs,
     WikiCreatePageArgs,
     WikiEmptyArgs,
@@ -81,7 +82,7 @@ WIKI_CAPABILITY_SPECS: tuple[tuple[str, str, str, WikiArgsModel], ...] = (
     (
         "get_page",
         "Get wiki page",
-        "Returns page brief plus can_edit / can_administer for wiki_page_id.",
+        "Returns page brief plus can_edit / can_admin for wiki_page_id.",
         WikiPageIdArgs,
     ),
     (
@@ -195,13 +196,19 @@ WIKI_CAPABILITY_SPECS: tuple[tuple[str, str, str, WikiArgsModel], ...] = (
     (
         "get_access",
         "Get wiki page access",
-        "Returns visibility, members, and public-link flags for a page.",
+        "Returns company_visible, members, and public-link flags for a page.",
         WikiPageIdArgs,
+    ),
+    (
+        "set_company_visible",
+        "Set wiki page company visibility",
+        "Switches a page between company-wide and members-only access.",
+        WikiCompanyVisibleArgs,
     ),
     (
         "set_member",
         "Set wiki page member",
-        "Grants read/write/admin permission to a user on a page.",
+        "Grants a viewer/editor relation to a user on a page (requires company_visible=false).",
         WikiSetMemberArgs,
     ),
     (
@@ -298,6 +305,8 @@ def _wiki_method_call(method: str, args: BaseModel) -> Awaitable[JsonObject]:
         return client.delete_comment(args)
     if method == "get_access" and isinstance(args, WikiPageIdArgs):
         return client.get_access(args)
+    if method == "set_company_visible" and isinstance(args, WikiCompanyVisibleArgs):
+        return client.set_company_visible(args)
     if method == "set_member" and isinstance(args, WikiSetMemberArgs):
         return client.set_member(args)
     if method == "remove_member" and isinstance(args, WikiRemoveMemberArgs):

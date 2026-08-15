@@ -50,7 +50,8 @@ async def list_agent_devices(
     items = await list_company_devices(
         container,
         company_id=company.company_id,
-        user_id=context.user.user_id if mine else None,
+        viewer_user_id=context.user.user_id,
+        owner_user_id=context.user.user_id if mine else None,
     )
     return AgentDeviceListResponse(items=items)
 
@@ -65,6 +66,7 @@ async def revoke_agent_device(device_id: str, container: ContainerDep) -> None:
         container,
         device_id=device_id,
         company_id=company.company_id,
+        actor_user_id=context.user.user_id,
     )
 
 

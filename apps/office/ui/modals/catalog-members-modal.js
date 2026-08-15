@@ -1,7 +1,7 @@
 /**
  * OfficeCatalogMembersModal — управление участниками приватного каталога.
  *
- * props: { catalogId, catalogTitle, isPublic }.
+ * props: { catalogId, catalogTitle, companyVisible }.
  *   - useOp('office/catalog_members') autoload в connectedCallback по catalogId
  *   - useOp('office/company_members') autoload (общий список компании)
  *   - useOp('office/catalog_member_add')   — кнопка add
@@ -30,7 +30,7 @@ export class OfficeCatalogMembersModal extends PlatformFormModal {
         ...PlatformFormModal.properties,
         catalogId: { type: String },
         catalogTitle: { type: String },
-        isPublic: { type: Boolean },
+        companyVisible: { type: Boolean },
         _query: { state: true },
     };
 
@@ -104,7 +104,7 @@ export class OfficeCatalogMembersModal extends PlatformFormModal {
         this.hideHeaderClose = false;
         this.catalogId = '';
         this.catalogTitle = '';
-        this.isPublic = false;
+        this.companyVisible = false;
         this._query = '';
         this._members = this.useOp(MEMBERS_NAME);
         this._company = this.useOp(COMPANY_MEMBERS_NAME);
@@ -197,8 +197,8 @@ export class OfficeCatalogMembersModal extends PlatformFormModal {
     }
 
     _renderInvite() {
-        if (this.isPublic) {
-            return html`<div class="hint">${this.t('catalog_members_modal.members_public_hint')}</div>`;
+        if (this.companyVisible) {
+            return html`<div class="hint">${this.t('catalog_members_modal.members_company_visible_hint')}</div>`;
         }
         const candidates = this._candidates();
         return html`

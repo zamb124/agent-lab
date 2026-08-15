@@ -128,17 +128,6 @@ export class FlowsIntegrationsModal extends PlatformModal {
         }
     }
 
-    _isCompanyAdmin() {
-        const auth = this._authSelect.value;
-        const companyId = auth.activeCompanyId;
-        const raw = auth.user && auth.user.raw;
-        if (!companyId || !raw || !raw.companies || typeof raw.companies !== 'object') {
-            return false;
-        }
-        const roles = raw.companies[companyId];
-        return Array.isArray(roles) && roles.includes('admin');
-    }
-
     _listItems() {
         const result = this._listOp.lastResult;
         if (Array.isArray(result?.items)) {
@@ -325,7 +314,7 @@ export class FlowsIntegrationsModal extends PlatformModal {
             company && typeof company.impersonate_email === 'string' && company.impersonate_email.length > 0
                 ? company.impersonate_email
                 : '';
-        const isAdmin = this._isCompanyAdmin();
+        const isAdmin = company && company.can_admin === true;
         const busy = this._companyPutOp.busy || this._companyDeleteOp.busy || this._companyGetOp.busy;
         return html`
             <section class="int-section">

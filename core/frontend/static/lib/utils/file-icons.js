@@ -42,6 +42,7 @@ export const FILE_ICON_ALIASES = Object.freeze({
     sh: '024-text', bash: '024-text', zsh: '024-text', ps1: '024-text', dockerfile: '024-text',
     lock: '024-text', wasm: '024-text', eml: '012-mail', msg: '012-mail',
     viz: '028-vector',
+    sqlite: '006-excel', db: '006-excel', data_table: '006-excel',
 });
 
 export const FILE_ICON_ALIAS_KEYS = new Set(Object.keys(FILE_ICON_ALIASES));
@@ -71,6 +72,8 @@ const FILE_MIME_TO_ICON_KEY = Object.freeze({
     'image/vnd.adobe.photoshop': 'psd',
     'application/x-php': 'php', 'application/x-httpd-php': 'php', 'text/php': 'php',
     'application/vnd.platform.viz+json': 'viz',
+    'application/vnd.sqlite3': 'sqlite',
+    'application/x-sqlite3': 'sqlite',
 });
 
 export function resolveFileIconKey(filename = '', mimeType = '') {

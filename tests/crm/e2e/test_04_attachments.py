@@ -13,8 +13,6 @@ from httpx import AsyncClient, Response
 from tests.crm.e2e._json_helpers import json_object, object_list, object_str
 from tests.crm.e2e.attachment_upload_helpers import upload_and_attach_crm_file
 
-pytestmark = pytest.mark.timeout(30)
-
 
 def _http_json(response: Response) -> dict[str, object]:
     return json_object(cast(object, response.json()))

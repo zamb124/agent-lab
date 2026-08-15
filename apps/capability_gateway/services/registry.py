@@ -33,15 +33,30 @@ from apps.capability_gateway.services.invoke_helpers import (
     invoke_text_format_markdown,
     invoke_text_summarize,
 )
+from apps.capability_gateway.services.rag_capabilities import (
+    RAG_CAPABILITY_SPECS,
+    invoke_rag_client,
+    rag_capability_definitions,
+)
 from apps.capability_gateway.services.sync_capabilities import (
     SYNC_CAPABILITY_SPECS,
     invoke_sync_client,
     sync_capability_definitions,
 )
+from apps.capability_gateway.services.tables_capabilities import (
+    TABLES_CAPABILITY_SPECS,
+    invoke_tables_client,
+    tables_capability_definitions,
+)
 from apps.capability_gateway.services.wiki_capabilities import (
     WIKI_CAPABILITY_SPECS,
     invoke_wiki_client,
     wiki_capability_definitions,
+)
+from apps.capability_gateway.services.worktracker_capabilities import (
+    WORKTRACKER_CAPABILITY_SPECS,
+    invoke_worktracker_client,
+    worktracker_capability_definitions,
 )
 from apps.voice.services.voice_usage import record_stt_usage, record_tts_usage
 from core.a2a import message_to_json_dict, struct_from_mapping
@@ -66,6 +81,7 @@ from core.capabilities import (
     UIApplyEffect,
     UINavigateEffect,
     UIResetEffect,
+    sandbox_modules_for_language,
     verify_execution_context,
     verify_execution_token,
 )
@@ -588,6 +604,12 @@ class CapabilityRegistry:
             self._handlers[f"crm.{method}"] = self._make_crm_handler(method)
         for method, _title, _description, _args_model in SYNC_CAPABILITY_SPECS:
             self._handlers[f"sync.{method}"] = self._make_sync_handler(method)
+        for method, _title, _description, _args_model in RAG_CAPABILITY_SPECS:
+            self._handlers[f"rag.{method}"] = self._make_rag_handler(method)
+        for method, _title, _description, _args_model in WORKTRACKER_CAPABILITY_SPECS:
+            self._handlers[f"worktracker.{method}"] = self._make_worktracker_handler(method)
+        for method, _title, _description, _args_model in TABLES_CAPABILITY_SPECS:
+            self._handlers[f"tables.{method}"] = self._make_tables_handler(method)
         definition_names = set(self._static_definitions)
         handler_names = set(self._handlers)
         if not definition_names.issubset(handler_names):
@@ -621,7 +643,8 @@ class CapabilityRegistry:
             "",
             "User code calls platform SDK namespaces generated from the same manifest: "
             + "`tools`, `files`, `http`, `text`, `voice`, `flow_state`, `log`, `trace`, "
-            + "`platform`, `channel`, `flow`, `wiki`, `documents`, `crm`.",
+            + "`platform`, `channel`, `flow`, `wiki`, `documents`, `crm`, `sync`, "
+            + "`worktracker`, `rag`, `ui`.",
             "The structured `capabilities` and `namespaces` fields in this response are the backend source for editor autocomplete.",
             "If `entrypoint` is omitted, the runner executes the first function declared in the source. "
             + "Node/tool configs may set any valid language function name via `entrypoint`.",
@@ -630,6 +653,7 @@ class CapabilityRegistry:
             + '`state["key"]`. Reading a missing field in Python raises `AttributeError`.',
         ]
         if language is not None:
+            lines.extend(self._imports_markdown(language))
             lines.extend(["", "Entry point:", "", *self._entrypoint_block(language)])
         if namespace_docs:
             lines.extend(["", "## SDK namespaces", ""])
@@ -687,6 +711,48 @@ class CapabilityRegistry:
                 )
             )
         return namespaces
+
+    def _imports_markdown(self, language: CapabilityLanguage) -> list[str]:
+        modules = sandbox_modules_for_language(language)
+        listed = ", ".join(f"`{name}`" for name in modules)
+        lines = ["", "## Imports", "", listed, ""]
+        if language == "python":
+            lines.extend(
+                [
+                    "`import wiki` / `import crm` / `import rag` / `import worktracker` / `from files import read` resolve to the same SDK objects as the injected globals.",
+                    "HTTP is only `await http.get(url=...)` / `http.request` — `requests`, `httpx`, and `urllib.request` are rejected.",
+                    "`pathlib.Path` supports path math (`.suffix`, `/`); `Path.read_text()` / `open()` are forbidden — platform files go through `files.*`.",
+                    '`raise FlowInterrupt(question="...")` is a sandbox builtin; `from apps.flows...` is rejected.',
+                    "Playground POST `/flows/api/v1/code/execute` accepts `args`; without it the entrypoint receives `{}`. Graph runs fill `args` from node inputs.",
+                ]
+            )
+            return lines
+        if language in {"javascript", "typescript"}:
+            lines.extend(
+                [
+                    "`JSON`, `Date`, `Map`, `Object`, `Array`, `ArrayBuffer`/`Uint8Array`, `Intl` and the other listed builtins are injected into the vm.",
+                    "Allowlisted packages: `import lodash from 'lodash'` and `import { parse } from 'csv-parse/sync'`.",
+                    "Dynamic `import()`, `require()`, `fetch`, and `process` are forbidden. HTTP is `await http.get({url})`.",
+                ]
+            )
+            return lines
+        if language == "go":
+            lines.extend(
+                [
+                    "Only modules listed above are allowed (the same allowlist as completions).",
+                    "`net/http` is forbidden — use `http.Get`.",
+                ]
+            )
+            return lines
+        if language == "csharp":
+            lines.extend(
+                [
+                    "`System.Text.Json.JsonSerializer` and `System.Text.RegularExpressions` are allowed.",
+                    "`System.IO`, `HttpClient`, `Process`, and `DllImport` are forbidden.",
+                ]
+            )
+            return lines
+        raise ValueError(f"Unsupported language: {language}")
 
     def _namespace_type(self, language: CapabilityLanguage) -> str:
         if language == "go":
@@ -1427,6 +1493,9 @@ class CapabilityRegistry:
         definitions.update(documents_capability_definitions())
         definitions.update(crm_capability_definitions())
         definitions.update(sync_capability_definitions())
+        definitions.update(rag_capability_definitions())
+        definitions.update(worktracker_capability_definitions())
+        definitions.update(tables_capability_definitions())
         definitions.update(
             {
                 "channel.send": CapabilityDefinition(
@@ -1787,6 +1856,35 @@ class CapabilityRegistry:
             context = await self._context_service.build_context(request.context)
             with self._context_service.activate(context):
                 return await invoke_sync_client(method, request.kwargs)
+
+        return _handler
+
+    def _make_rag_handler(self, method: str) -> CapabilityHandler:
+        async def _handler(request: CapabilityCallRequest) -> JsonValue:
+            self._reject_positional_args(request)
+            context = await self._context_service.build_context(request.context)
+            with self._context_service.activate(context):
+                return await invoke_rag_client(method, request.kwargs)
+
+        return _handler
+
+    def _make_worktracker_handler(self, method: str) -> CapabilityHandler:
+        async def _handler(request: CapabilityCallRequest) -> JsonValue:
+            self._reject_positional_args(request)
+            context = await self._context_service.build_context(request.context)
+            with self._context_service.activate(context):
+                return await invoke_worktracker_client(method, request.kwargs)
+
+        return _handler
+
+    def _make_tables_handler(self, method: str) -> CapabilityHandler:
+        async def _handler(request: CapabilityCallRequest) -> JsonValue:
+            self._reject_positional_args(request)
+            context = await self._context_service.build_context(request.context)
+            with self._context_service.activate(context):
+                return await invoke_tables_client(
+                    method, request.kwargs, self._container.data_table_service
+                )
 
         return _handler
 

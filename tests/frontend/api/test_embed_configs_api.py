@@ -5,11 +5,99 @@ Integration тесты для API управления конфигурация�
 Проверяем изоляцию по компаниям.
 """
 
+import uuid
 from urllib.parse import urlparse
 
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
+
+from apps.flows.src.container import FlowContainer, get_container
+from apps.flows.src.models.flow_config import FlowConfig
+from apps.frontend.container import FrontendContainer
+from core.context import clear_context, set_context
+from core.models.context_models import Context
+from core.models.identity_models import Company, User
+from core.utils.tokens import get_token_service
+from tests.fixtures.auth import set_test_company_member_roles
+
+
+async def _seed_embed_company_flow(
+    frontend_container: FrontendContainer,
+    *,
+    company_id: str,
+    user_id: str,
+    flow_id: str,
+    company_name: str,
+    user_name: str,
+) -> tuple[dict[str, str], FlowContainer, User, Company]:
+    roles = ["admin"]
+    user = User(
+        user_id=user_id,
+        name=user_name,
+        emails=[f"{user_id}@test.com"],
+        companies={company_id: roles},
+        active_company_id=company_id,
+    )
+    await frontend_container.user_repository.set(user)
+    company = Company(
+        company_id=company_id,
+        name=company_name,
+        owner_user_id=user_id,
+        members={user_id: roles},
+    )
+    await frontend_container.company_repository.set(company)
+    await set_test_company_member_roles(
+        frontend_container.company_repository,
+        frontend_container.authz_service,
+        company_id=company_id,
+        user_id=user_id,
+        roles=roles,
+    )
+    set_context(
+        Context(
+            user=user,
+            active_company=company,
+            session_id="test",
+            channel="test",
+        )
+    )
+    flows_container = get_container()
+    agent = FlowConfig(
+        flow_id=flow_id,
+        name="Test Agent",
+        entry="main",
+        nodes={"main": {"type": "llm_node", "prompt": "Test", "next": None}},
+    )
+    await flows_container.flow_repository.set(agent)
+    await flows_container.flow_access_service.sync_flow_saved(
+        agent,
+        company_id=company_id,
+        owner_user_id=user_id,
+    )
+    clear_context()
+    token = get_token_service().create_token(user_id, company_id=company_id, roles=roles)
+    return {"Authorization": f"Bearer {token}"}, flows_container, user, company
+
+
+async def _cleanup_embed_flow(
+    flows_container: FlowContainer,
+    *,
+    user: User,
+    company: Company,
+    flow_id: str,
+) -> None:
+    set_context(
+        Context(
+            user=user,
+            active_company=company,
+            session_id="test",
+            channel="test",
+        )
+    )
+    await flows_container.flow_access_service.sync_flow_deleted(flow_id, branch_ids=[])
+    await flows_container.flow_repository.delete(flow_id)
+    clear_context()
 
 
 @pytest_asyncio.fixture
@@ -36,183 +124,86 @@ async def test_agent():
         },
     )
     await flows_container.flow_repository.set(agent)
+    await flows_container.flow_access_service.sync_flow_saved(
+        agent,
+        company_id="system",
+        owner_user_id="system",
+    )
 
     yield agent
 
     # Cleanup
+    await flows_container.flow_access_service.sync_flow_deleted("test_agent", branch_ids=[])
     await flows_container.flow_repository.delete("test_agent")
 
 
 @pytest_asyncio.fixture
-async def auth_headers_other_company(frontend_client, frontend_container):
-    """Фикстура для заголовков другой компании"""
-    import uuid
-
-    from core.models.identity_models import Company, User
-    from core.utils.tokens import get_token_service
-
-    company_id = "other_company"
-
-    # Создаем компанию
-    company = Company(
-        company_id=company_id,
-        name="Other Company",
-        owner_id="other_user",
-    )
-    await frontend_container.company_repository.set(company)
-
+async def auth_headers_other_company(frontend_container: FrontendContainer) -> dict[str, str]:
+    company_id = f"other_company_{uuid.uuid4().hex[:8]}"
     user_id = f"test_user_other_{uuid.uuid4().hex[:8]}"
+    roles = ["admin"]
     user = User(
         user_id=user_id,
         name="Other User",
-        email=f"{user_id}@test.com",
-        companies={company_id: ["admin"]},
-        active_company_id=company_id
+        emails=[f"{user_id}@test.com"],
+        companies={company_id: roles},
+        active_company_id=company_id,
     )
-
     await frontend_container.user_repository.set(user)
-
-    token_service = get_token_service()
-    token = token_service.create_token(user_id, company_id=company_id)
-
+    company = Company(
+        company_id=company_id,
+        name="Other Company",
+        owner_user_id=user_id,
+        members={user_id: roles},
+    )
+    await frontend_container.company_repository.set(company)
+    await set_test_company_member_roles(
+        frontend_container.company_repository,
+        frontend_container.authz_service,
+        company_id=company_id,
+        user_id=user_id,
+        roles=roles,
+    )
+    token = get_token_service().create_token(user_id, company_id=company_id, roles=roles)
     return {"Authorization": f"Bearer {token}"}
 
 
 @pytest_asyncio.fixture
-async def test_auth_with_agent(frontend_container):
-    """
-    Создаёт пользователя, компанию И агента в одной компании.
-    Возвращает headers и flows_container для cleanup.
-    """
-    import uuid
-
-    from apps.flows.src.container import get_container
-    from apps.flows.src.models.flow_config import FlowConfig
-    from core.context import Context, clear_context, set_context
-    from core.models.identity_models import Company, User
-    from core.utils.tokens import get_token_service
-
-    # Создаём компанию
+async def test_auth_with_agent(frontend_container: FrontendContainer):
     company_id = f"test_company_{uuid.uuid4().hex[:8]}"
-    company = Company(
-        company_id=company_id,
-        name="Test Company",
-        owner_id="test_user",
-    )
-    await frontend_container.company_repository.set(company)
-
-    # Создаём юзера
     user_id = f"test_user_{uuid.uuid4().hex[:8]}"
-    user = User(
+    flow_id = "test_agent"
+    headers, flows_container, user, company = await _seed_embed_company_flow(
+        frontend_container,
+        company_id=company_id,
         user_id=user_id,
-        name="Test User",
-        email=f"{user_id}@test.com",
-        companies={company_id: ["admin"]},
-        active_company_id=company_id
+        flow_id=flow_id,
+        company_name="Test Company",
+        user_name="Test User",
     )
-    await frontend_container.user_repository.set(user)
-
-    # Создаём агента В ЭТОЙ ЖЕ КОМПАНИИ
-    set_context(Context(
-        user=User(user_id=user_id, name="Test"),
-        active_company=Company(company_id=company_id, name="Test Company"),
-        session_id="test",
-        channel="test",
-    ))
-
-    flows_container = get_container()
-    agent = FlowConfig(
-        flow_id="test_agent",
-        name="Test Agent",
-        entry="main",
-        nodes={"main": {"type": "llm_node", "prompt": "Test", "next": None}},
+    yield headers, flows_container, company_id
+    await _cleanup_embed_flow(
+        flows_container, user=user, company=company, flow_id=flow_id
     )
-    await flows_container.flow_repository.set(agent)
-    clear_context()
-
-    # Генерируем токен
-    token_service = get_token_service()
-    token = token_service.create_token(user_id, company_id=company_id)
-
-    yield {"Authorization": f"Bearer {token}"}, flows_container, company_id
-
-    # Cleanup агента
-    set_context(Context(
-        user=User(user_id=user_id, name="Test"),
-        active_company=Company(company_id=company_id, name="Test Company"),
-        session_id="test",
-        channel="test",
-    ))
-    await flows_container.flow_repository.delete("test_agent")
-    clear_context()
 
 
 @pytest_asyncio.fixture
-async def test_auth_with_agent_other_company(frontend_container):
-    """
-    Создаёт ДРУГУЮ компанию с пользователем и агентом для тестирования изоляции.
-    """
-    import uuid
-
-    from apps.flows.src.container import get_container
-    from apps.flows.src.models.flow_config import FlowConfig
-    from core.context import Context, clear_context, set_context
-    from core.models.identity_models import Company, User
-    from core.utils.tokens import get_token_service
-
-    # Создаём ДРУГУЮ компанию
+async def test_auth_with_agent_other_company(frontend_container: FrontendContainer):
     company_id = f"test_company_other_{uuid.uuid4().hex[:8]}"
-    company = Company(
-        company_id=company_id,
-        name="Other Test Company",
-        owner_id="test_user_other",
-    )
-    await frontend_container.company_repository.set(company)
-
-    # Создаём другого юзера
     user_id = f"test_user_other_{uuid.uuid4().hex[:8]}"
-    user = User(
+    flow_id = "test_agent_other"
+    headers, flows_container, user, company = await _seed_embed_company_flow(
+        frontend_container,
+        company_id=company_id,
         user_id=user_id,
-        name="Other Test User",
-        email=f"{user_id}@test.com",
-        companies={company_id: ["admin"]},
-        active_company_id=company_id
+        flow_id=flow_id,
+        company_name="Other Test Company",
+        user_name="Other Test User",
     )
-    await frontend_container.user_repository.set(user)
-
-    # Создаём агента В ЭТОЙ ЖЕ КОМПАНИИ
-    set_context(Context(
-        user=User(user_id=user_id, name="Other Test"),
-        active_company=Company(company_id=company_id, name="Other Test Company"),
-        session_id="test",
-        channel="test",
-    ))
-
-    flows_container = get_container()
-    agent = FlowConfig(
-        flow_id="test_agent_other",
-        name="Other Test Agent",
-        entry="main",
-        nodes={"main": {"type": "llm_node", "prompt": "Test", "next": None}},
+    yield headers, flows_container, company_id
+    await _cleanup_embed_flow(
+        flows_container, user=user, company=company, flow_id=flow_id
     )
-    await flows_container.flow_repository.set(agent)
-    clear_context()
-
-    # Генерируем токен
-    token_service = get_token_service()
-    token = token_service.create_token(user_id, company_id=company_id)
-
-    yield {"Authorization": f"Bearer {token}"}, flows_container, company_id
-
-    # Cleanup агента
-    set_context(Context(
-        user=User(user_id=user_id, name="Other Test"),
-        active_company=Company(company_id=company_id, name="Other Test Company"),
-        session_id="test",
-        channel="test",
-    ))
-    await flows_container.flow_repository.delete("test_agent_other")
-    clear_context()
 
 
 @pytest.mark.asyncio
@@ -933,16 +924,17 @@ async def test_issue_embed_session_token_with_hum_api_key(frontend_client: Async
     embed_id = create_response.json()["embed_id"]
 
     from apps.frontend.container import get_frontend_container
-    from core.utils.tokens import get_token_service
 
     token_data = get_token_service().validate_token(auth_headers["Authorization"].replace("Bearer ", ""))
     assert token_data is not None
-    company = await get_frontend_container().company_repository.get(token_data.company_id)
-    assert company is not None
-    members = dict(company.members or {})
-    members[token_data.user_id] = ["admin"]
-    company.members = members
-    await get_frontend_container().company_repository.set(company)
+    frontend = get_frontend_container()
+    await set_test_company_member_roles(
+        frontend.company_repository,
+        frontend.authz_service,
+        company_id=token_data.company_id,
+        user_id=token_data.user_id,
+        roles=["admin"],
+    )
 
     api_key_response = await frontend_client.post(
         "/frontend/api/api-keys",
@@ -1071,29 +1063,39 @@ async def test_get_embed_code_production_urls(
 @pytest.mark.asyncio
 async def test_create_embed_config_allowed_origins_normalized(frontend_client: AsyncClient, test_auth_with_agent):
     auth_headers, flows_container, company_id = test_auth_with_agent
-    import uuid
-
-    from apps.flows.src.models.flow_config import FlowConfig
-    from core.context import Context, clear_context, set_context
-    from core.models.identity_models import Company, User
-
+    token_data = get_token_service().validate_token(
+        auth_headers["Authorization"].replace("Bearer ", "")
+    )
+    if token_data is None:
+        raise AssertionError("embed auth token is required")
     flow_id = f"test_embed_origins_{uuid.uuid4().hex[:8]}"
+    user = User(
+        user_id=token_data.user_id,
+        name="Test",
+        companies={company_id: ["admin"]},
+        active_company_id=company_id,
+    )
+    company = Company(company_id=company_id, name="Test Company", owner_user_id=token_data.user_id)
+    flow = FlowConfig(
+        flow_id=flow_id,
+        name="Test Embed Origins Flow",
+        entry="main",
+        nodes={"main": {"type": "llm_node", "prompt": "Test", "next": None}},
+    )
     set_context(
         Context(
-            user=User(user_id="test_user", name="Test"),
-            active_company=Company(company_id=company_id, name="Test Company"),
+            user=user,
+            active_company=company,
             session_id="test",
             channel="test",
         )
     )
     try:
-        await flows_container.flow_repository.set(
-            FlowConfig(
-                flow_id=flow_id,
-                name="Test Embed Origins Flow",
-                entry="main",
-                nodes={"main": {"type": "llm_node", "prompt": "Test", "next": None}},
-            )
+        await flows_container.flow_repository.set(flow)
+        await flows_container.flow_access_service.sync_flow_saved(
+            flow,
+            company_id=company_id,
+            owner_user_id=token_data.user_id,
         )
     finally:
         clear_context()
@@ -1119,16 +1121,7 @@ async def test_create_embed_config_allowed_origins_normalized(frontend_client: A
 
     await frontend_client.delete(f"/frontend/api/embed/configs/{data['embed_id']}", headers=auth_headers)
 
-    set_context(
-        Context(
-            user=User(user_id="test_user", name="Test"),
-            active_company=Company(company_id=company_id, name="Test Company"),
-            session_id="test",
-            channel="test",
-        )
+    await _cleanup_embed_flow(
+        flows_container, user=user, company=company, flow_id=flow_id
     )
-    try:
-        await flows_container.flow_repository.delete(flow_id)
-    finally:
-        clear_context()
 

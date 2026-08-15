@@ -1,4 +1,4 @@
-"""Sync SDK capabilities: definitions + SyncClient invoke helper (hot-path subset)."""
+"""Sync SDK capabilities: definitions + SyncClient invoke helper."""
 
 from __future__ import annotations
 
@@ -11,10 +11,23 @@ from core.capabilities import CAPABILITY_LANGUAGES, CapabilityDefinition
 from core.clients.service_client import ServiceClientError
 from core.clients.sync_client import SyncClient
 from core.clients.sync_models import (
+    SyncAddChannelMemberArgs,
+    SyncChannelNotificationSettingsArgs,
+    SyncCreateChannelArgs,
+    SyncCreateThreadArgs,
+    SyncDeleteMessageArgs,
+    SyncEditMessageArgs,
+    SyncGetThreadArgs,
+    SyncListChannelMembersArgs,
     SyncListChannelsArgs,
     SyncListMessagesArgs,
+    SyncListThreadMessagesArgs,
     SyncListThreadsArgs,
+    SyncMarkChannelReadArgs,
+    SyncMarkMessageReadArgs,
+    SyncReactMessageArgs,
     SyncSendMessageArgs,
+    SyncUpdateChannelArgs,
 )
 from core.types import JsonObject, JsonValue, require_json_object
 
@@ -52,10 +65,10 @@ def _definition(
 
 SYNC_CAPABILITY_SPECS: tuple[tuple[str, str, str, SyncArgsModel], ...] = (
     (
-        "list_channels",
-        "List Sync channels",
-        "Lists Sync channels where the current actor is a member.",
-        SyncListChannelsArgs,
+        "list_messages",
+        "List Sync messages",
+        "Lists root-lane messages of a Sync channel.",
+        SyncListMessagesArgs,
     ),
     (
         "send_message",
@@ -64,10 +77,70 @@ SYNC_CAPABILITY_SPECS: tuple[tuple[str, str, str, SyncArgsModel], ...] = (
         SyncSendMessageArgs,
     ),
     (
-        "list_messages",
-        "List Sync messages",
-        "Lists root-lane messages of a Sync channel.",
-        SyncListMessagesArgs,
+        "edit_message",
+        "Edit Sync message",
+        "Replaces the text of an existing Sync message.",
+        SyncEditMessageArgs,
+    ),
+    (
+        "delete_message",
+        "Delete Sync message",
+        "Deletes a Sync message.",
+        SyncDeleteMessageArgs,
+    ),
+    (
+        "react_message",
+        "React to Sync message",
+        "Adds or updates an emoji reaction on a message.",
+        SyncReactMessageArgs,
+    ),
+    (
+        "mark_message_read",
+        "Mark Sync message read",
+        "Marks a message as read for the current actor.",
+        SyncMarkMessageReadArgs,
+    ),
+    (
+        "list_channels",
+        "List Sync channels",
+        "Lists Sync channels where the current actor is a member.",
+        SyncListChannelsArgs,
+    ),
+    (
+        "list_channel_members",
+        "List Sync channel members",
+        "Lists members of a Sync channel.",
+        SyncListChannelMembersArgs,
+    ),
+    (
+        "mark_channel_read",
+        "Mark Sync channel read",
+        "Marks a channel as read for the current actor.",
+        SyncMarkChannelReadArgs,
+    ),
+    (
+        "create_channel",
+        "Create Sync channel",
+        "Creates a topic or direct Sync channel.",
+        SyncCreateChannelArgs,
+    ),
+    (
+        "update_channel",
+        "Update Sync channel",
+        "Patches channel name and/or is_private.",
+        SyncUpdateChannelArgs,
+    ),
+    (
+        "add_channel_member",
+        "Add Sync channel member",
+        "Adds a user to a Sync channel.",
+        SyncAddChannelMemberArgs,
+    ),
+    (
+        "channel_notification_settings",
+        "Update Sync channel notifications",
+        "Mutes or unmutes notifications for a channel.",
+        SyncChannelNotificationSettingsArgs,
     ),
     (
         "list_threads",
@@ -75,7 +148,27 @@ SYNC_CAPABILITY_SPECS: tuple[tuple[str, str, str, SyncArgsModel], ...] = (
         "Lists threads in a Sync channel.",
         SyncListThreadsArgs,
     ),
+    (
+        "get_thread",
+        "Get Sync thread",
+        "Returns a thread by thread_id.",
+        SyncGetThreadArgs,
+    ),
+    (
+        "create_thread",
+        "Create Sync thread",
+        "Creates a thread from a root message.",
+        SyncCreateThreadArgs,
+    ),
+    (
+        "list_thread_messages",
+        "List Sync thread messages",
+        "Lists messages inside a thread.",
+        SyncListThreadMessagesArgs,
+    ),
 )
+
+SYNC_CLIENT_METHOD_NAMES: frozenset[str] = frozenset(spec[0] for spec in SYNC_CAPABILITY_SPECS)
 
 
 def sync_capability_definitions() -> dict[str, CapabilityDefinition]:
@@ -99,14 +192,42 @@ def sync_args_model_for(method: str) -> SyncArgsModel:
 
 def _sync_method_call(method: str, args: BaseModel) -> Awaitable[JsonObject]:
     client = SyncClient()
-    if method == "list_channels" and isinstance(args, SyncListChannelsArgs):
-        return client.list_channels(args)
-    if method == "send_message" and isinstance(args, SyncSendMessageArgs):
-        return client.send_message(args)
     if method == "list_messages" and isinstance(args, SyncListMessagesArgs):
         return client.list_messages(args)
+    if method == "send_message" and isinstance(args, SyncSendMessageArgs):
+        return client.send_message(args)
+    if method == "edit_message" and isinstance(args, SyncEditMessageArgs):
+        return client.edit_message(args)
+    if method == "delete_message" and isinstance(args, SyncDeleteMessageArgs):
+        return client.delete_message(args)
+    if method == "react_message" and isinstance(args, SyncReactMessageArgs):
+        return client.react_message(args)
+    if method == "mark_message_read" and isinstance(args, SyncMarkMessageReadArgs):
+        return client.mark_message_read(args)
+    if method == "list_channels" and isinstance(args, SyncListChannelsArgs):
+        return client.list_channels(args)
+    if method == "list_channel_members" and isinstance(args, SyncListChannelMembersArgs):
+        return client.list_channel_members(args)
+    if method == "mark_channel_read" and isinstance(args, SyncMarkChannelReadArgs):
+        return client.mark_channel_read(args)
+    if method == "create_channel" and isinstance(args, SyncCreateChannelArgs):
+        return client.create_channel(args)
+    if method == "update_channel" and isinstance(args, SyncUpdateChannelArgs):
+        return client.update_channel(args)
+    if method == "add_channel_member" and isinstance(args, SyncAddChannelMemberArgs):
+        return client.add_channel_member(args)
+    if method == "channel_notification_settings" and isinstance(
+        args, SyncChannelNotificationSettingsArgs
+    ):
+        return client.channel_notification_settings(args)
     if method == "list_threads" and isinstance(args, SyncListThreadsArgs):
         return client.list_threads(args)
+    if method == "get_thread" and isinstance(args, SyncGetThreadArgs):
+        return client.get_thread(args)
+    if method == "create_thread" and isinstance(args, SyncCreateThreadArgs):
+        return client.create_thread(args)
+    if method == "list_thread_messages" and isinstance(args, SyncListThreadMessagesArgs):
+        return client.list_thread_messages(args)
     raise ValueError(f"Unsupported sync capability invoke: {method}")
 
 

@@ -6,7 +6,7 @@ import hashlib
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, NamedTuple
 
-from apps.flows.config import get_settings
+from apps.flows.src.container_state import get_current_container
 from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.models import ResourceType
 from apps.flows.src.models.resource import ResourceReference, ResourceReferenceInput
@@ -14,7 +14,11 @@ from apps.flows.src.resources.merge import (
     merge_flow_skill_node_resource_maps,
     merge_shared_definition_config_with_patch,
 )
-from core.auth import permission_checker
+from core.authz.errors import AuthzDenied
+from core.authz.ids import PLATFORM_ADMIN_GROUP
+from core.authz.models import AuthzObject, AuthzSubject
+from core.authz.types import AuthzRelation
+from core.context import require_active_company
 from core.llm_context import LLMContextSourceRegistry
 from core.namespace import NamespaceService
 from core.rag.llm_context_source import RAGLLMContextSource
@@ -88,7 +92,7 @@ async def resolve_rag_resource_binds_for_runtime(
         )
         if resolved is None:
             continue
-        _assert_rag_resource_permission(
+        await _assert_rag_resource_permission(
             key=key,
             permission=resolved.permission,
             state=state,
@@ -135,40 +139,51 @@ async def _resolve_rag_config_for_reference(
     return _ResolvedRagConfig(config=config, permission=list(definition.permission))
 
 
-def _assert_rag_resource_permission(
+async def _assert_rag_resource_permission(
     *,
     key: str,
     permission: list[str],
     state: ExecutionState | None,
 ) -> None:
-    settings = get_settings()
-    if not settings.auth.permissions_enabled:
-        return
-    if permission == []:
-        return
-    user_groups = _user_groups_from_state(state)
-    if permission_checker.check_tool_permission(user_groups, permission):
-        return
-    required = permission_checker.normalize(permission)
-    groups = ", ".join(required)
+    if state is None:
+        raise PermissionError(f"У пользователя нет прав на RAG-ресурс '{key}'")
+    runtime = get_current_container()
+    if runtime is None:
+        raise RuntimeError("FlowContainer is required for RAG permission checks")
+    authz = runtime.authz_service
+    user_id = state.user_id
+    try:
+        if not permission:
+            company = require_active_company()
+            await authz.require_can_view(
+                AuthzObject.company(company.company_id), user_id=user_id
+            )
+            return
+        company = require_active_company()
+        for group_name in permission:
+            clean = group_name.strip()
+            if not clean:
+                continue
+            group_obj = (
+                AuthzObject.group(PLATFORM_ADMIN_GROUP)
+                if clean == PLATFORM_ADMIN_GROUP
+                else AuthzObject.group(clean, company_id=company.company_id)
+            )
+            if await authz.check(
+                AuthzSubject.user(user_id),
+                AuthzRelation.MEMBER,
+                group_obj,
+            ):
+                return
+    except AuthzDenied as exc:
+        groups = ", ".join(permission)
+        raise PermissionError(
+            f"У пользователя нет прав на RAG-ресурс '{key}'. Требуется одна из групп: {groups}"
+        ) from exc
+    groups = ", ".join(permission)
     raise PermissionError(
         f"У пользователя нет прав на RAG-ресурс '{key}'. Требуется одна из групп: {groups}"
     )
-
-
-def _user_groups_from_state(state: ExecutionState | None) -> list[str]:
-    if state is None:
-        return []
-    if state.user_groups:
-        return list(state.user_groups)
-    extra = state.json_extra()
-    raw_user = extra.get("user")
-    if isinstance(raw_user, Mapping):
-        user = require_json_object(raw_user, "state.user")
-        raw_groups = user.get("grps")
-        if isinstance(raw_groups, list) and all(isinstance(group, str) for group in raw_groups):
-            return [group for group in raw_groups if isinstance(group, str)]
-    return []
 
 
 async def _ensure_rag_namespace(

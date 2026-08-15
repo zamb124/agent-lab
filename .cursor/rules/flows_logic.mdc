@@ -75,11 +75,13 @@ Merge:
 
 ## CodeNode
 
-    def execute(args, state):
+    async def run(args, state):
         state.result = args['value'] * 2
         return {'result': state.result}
 
-Последняя функция в коде = entry point.
+Если `entrypoint` не задан, runner вызывает **первую** объявленную функцию. `run` — только имя в стартерах, не требование.
+
+`args` в графе — входы ноды (`input_mapping` / рёбра). Playground `POST /flows/api/v1/code/execute` принимает поле `args` (defaults `parameters_schema`); без него entrypoint получает `{}`.
 
 ## Маппинги
 
@@ -240,7 +242,6 @@ output_mapping - куда пишем результат:
 
 В CodeNode/tool:
 
-    from apps.flows.src.runtime.exceptions import FlowInterrupt
     raise FlowInterrupt(question="Как вас зовут?")
 
 Или использовать builtin tool `ask_user` из `apps/flows/tools/agent_session_tools.py`.

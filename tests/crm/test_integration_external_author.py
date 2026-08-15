@@ -1,7 +1,9 @@
 """IntegrationExternalAuthorService: pre-provision и ключ маппинга в shared storage."""
 
+
 from __future__ import annotations
 
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import json
 from typing import cast
 
@@ -39,6 +41,7 @@ async def test_resolve_creates_user_and_mapping(
         storage=crm_container.shared_storage,
         user_repository=crm_container.user_repository,
         company_repository=crm_container.company_repository,
+        authz=crm_container.authz_service,
     )
     uid1 = await svc.resolve_platform_user_id(
         company_id=company_id,

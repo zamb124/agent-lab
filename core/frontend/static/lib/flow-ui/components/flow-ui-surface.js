@@ -892,6 +892,20 @@ export class FlowUISurfaceElement extends LitElement {
         .badge { display: inline-flex; width: fit-content; padding: 4px 9px; border-radius: 999px; background: var(--flow-ui-accent-muted); color: var(--flow-ui-text); font-size: .75rem; font-weight: 700; }
         .progress { width: 100%; accent-color: var(--flow-ui-accent); }
         .table-wrap { overflow: auto; border: 1px solid var(--flow-ui-border); border-radius: 13px; }
+        .table-wrap.table-live {
+            display: flex;
+            flex-direction: column;
+            min-height: 240px;
+        }
+        .table-wrap.table-live platform-data-table-host {
+            flex: 1;
+            min-height: 240px;
+        }
+        .table-wrap.table-empty {
+            padding: 16px;
+            color: var(--flow-ui-muted);
+            font-size: .85rem;
+        }
         table { width: 100%; border-collapse: collapse; font-size: .88rem; }
         th, td { padding: 10px 12px; text-align: start; border-bottom: 1px solid var(--flow-ui-border); }
         th { color: var(--flow-ui-muted); font-weight: 650; }

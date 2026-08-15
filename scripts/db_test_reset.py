@@ -11,7 +11,8 @@
     отсутствия ORDER BY и накопленного списка типов company `system`
 
 Канон:
-  - TRUNCATE всех user-таблиц (кроме alembic_version) во всех 7 service-БД
+  - TRUNCATE всех user-таблиц (кроме alembic_version) во всех platform service-БД
+  - БД `openfga` не трогаем: схема goose OpenFGA, truncate ломает `openfga migrate`
   - `pg_terminate_backend` всех сторонних сессий перед TRUNCATE
   - если backend завис в `BgworkerShutdown` и terminate не снимает lock'и —
     один `docker restart agentlab_postgres_test` и повтор drain
@@ -39,6 +40,10 @@ import redis.asyncio as redis_asyncio
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _MANIFEST_PATH = _REPO_ROOT / "migrations" / "services.json"
+
+# OpenFGA владеет своей схемой (goose_db_version). TRUNCATE ломает migrate:
+# "failed to get db version: no next version found".
+_SKIP_TRUNCATE_DATABASES = frozenset({"openfga"})
 
 _TEST_POSTGRES_PORT = 54322
 _TEST_REDIS_PORT = 63792
@@ -438,13 +443,19 @@ async def _main() -> int:
     total_tables = 0
     postgres_restarted = False
     for db_name in databases:
+        if db_name in _SKIP_TRUNCATE_DATABASES:
+            print(f"  [{db_name}] пропуск (не platform Alembic schema)")
+            continue
         table_count, postgres_restarted = await _truncate_database(
             base_dsn,
             db_name,
             postgres_restarted=postgres_restarted,
         )
         total_tables += table_count
-    print(f"Postgres: очищено {total_tables} таблиц в {len(databases)} БД")
+    truncated_db_count = sum(
+        1 for name in databases if name not in _SKIP_TRUNCATE_DATABASES
+    )
+    print(f"Postgres: очищено {total_tables} таблиц в {truncated_db_count} БД")
 
     print(f"Сброс тестового Redis: {redis_host}:{redis_port}")
     for db in (0, 1):

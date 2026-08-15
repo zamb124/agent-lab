@@ -16,8 +16,10 @@ from __future__ import annotations
 from fastapi import HTTPException
 
 from apps.wiki.container import WikiContainer
+from apps.wiki.models.api import WikiPageResponse
 from apps.wiki.models.domain import WikiPage
 from apps.wiki.services.wiki_service import WikiAccessDeniedError, WikiPageNotFoundError
+from core.authz.models import AuthzObject
 from core.context import get_context
 from core.models.base import StrictBaseModel
 
@@ -58,6 +60,12 @@ async def require_scope(container: WikiContainer) -> WikiRequestScope:
         )
     if found.company_id != context.active_company.company_id:
         raise HTTPException(status_code=403, detail="Пространство не принадлежит компании")
+    await container.authz_service.require_can_view(
+        AuthzObject.platform_namespace(
+            context.active_company.company_id, found.name
+        ),
+        user_id=context.user.user_id,
+    )
 
     return WikiRequestScope(
         company_id=context.active_company.company_id,
@@ -98,9 +106,20 @@ async def load_editable_page(
         raise HTTPException(status_code=403, detail="Нет прав на изменение страницы") from exc
 
 
+async def wiki_page_response(
+    container: WikiContainer, page: WikiPage, *, user_id: str
+) -> WikiPageResponse:
+    """can_edit / can_admin только из AuthzService (включая mutating-ответы)."""
+    obj = AuthzObject.wiki_page(page.wiki_page_id)
+    can_edit = await container.authz_service.can_edit(obj, user_id=user_id)
+    can_admin = await container.authz_service.can_admin(obj, user_id=user_id)
+    return WikiPageResponse(page=page, can_edit=can_edit, can_admin=can_admin)
+
+
 __all__ = [
     "WikiRequestScope",
     "load_editable_page",
     "load_viewable_page",
     "require_scope",
+    "wiki_page_response",
 ]

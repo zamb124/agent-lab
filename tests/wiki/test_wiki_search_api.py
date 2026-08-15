@@ -85,13 +85,13 @@ async def test_updated_text_replaces_old_search_terms(wiki_client, create_page, 
 
 
 async def test_restricted_page_is_excluded_from_colleague_results(
-    wiki_client, wiki_client_member, create_page, system_user_id, unique_id
+    wiki_client, wiki_client_member, create_page, unique_id
 ):
     marker = f"ограниченный{unique_id}"
     page = await create_page(f"Закрытая {unique_id}", markdown=f"Текст {marker}.")
-    _ = await wiki_client.post(
-        f"{PAGES_URL}/{page['wiki_page_id']}/access/members",
-        json={"user_id": system_user_id, "permission": "admin"},
+    _ = await wiki_client.patch(
+        f"{PAGES_URL}/{page['wiki_page_id']}/access/company-visible",
+        json={"company_visible": False},
     )
 
     assert await _search(wiki_client_member, marker, mode="lexical") == []
@@ -113,15 +113,15 @@ async def test_semantic_search_finds_page_by_meaning(wiki_client, create_page, u
 
 
 async def test_semantic_search_hides_restricted_page_from_colleague(
-    wiki_client, wiki_client_member, create_page, system_user_id, unique_id
+    wiki_client, wiki_client_member, create_page, unique_id
 ):
     page = await create_page(
         f"Премии {unique_id}",
         markdown="Порядок начисления квартальной премии сотрудникам отдела продаж.",
     )
-    _ = await wiki_client.post(
-        f"{PAGES_URL}/{page['wiki_page_id']}/access/members",
-        json={"user_id": system_user_id, "permission": "admin"},
+    _ = await wiki_client.patch(
+        f"{PAGES_URL}/{page['wiki_page_id']}/access/company-visible",
+        json={"company_visible": False},
     )
 
     items = await _search(wiki_client_member, "начисление премии", mode="semantic", limit=10)
@@ -130,15 +130,15 @@ async def test_semantic_search_hides_restricted_page_from_colleague(
 
 
 async def test_semantic_search_finds_own_restricted_page(
-    wiki_client, create_page, system_user_id, unique_id
+    wiki_client, create_page, unique_id
 ):
     page = await create_page(
         f"Закрытая инструкция {unique_id}",
         markdown="Внутренний регламент согласования бюджета подразделения.",
     )
-    _ = await wiki_client.post(
-        f"{PAGES_URL}/{page['wiki_page_id']}/access/members",
-        json={"user_id": system_user_id, "permission": "admin"},
+    _ = await wiki_client.patch(
+        f"{PAGES_URL}/{page['wiki_page_id']}/access/company-visible",
+        json={"company_visible": False},
     )
 
     items = await _search(wiki_client, "согласование бюджета", mode="semantic", limit=10)

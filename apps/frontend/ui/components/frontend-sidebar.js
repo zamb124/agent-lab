@@ -130,6 +130,7 @@ export class FrontendSidebar extends PlatformElement {
                 <nav>
                     ${this._renderNavItem('dashboard', 'chart', t('console_sidebar.dashboard', 'Dashboard'), currentView)}
                     ${this._renderNavItem('team', 'user', t('console_sidebar.team', 'Team'), currentView)}
+                    ${this._renderNavItem('access', 'shield', t('console_sidebar.access', 'Access'), currentView)}
                     ${this._renderNavItem('namespaces', 'folder', t('console_sidebar.namespaces', 'Namespaces'), currentView)}
                     ${this._renderNavItem('api-keys', 'key', t('console_sidebar.api_keys', 'API keys'), currentView)}
                     ${this._renderNavItem('company-variables', 'variable', t('console_sidebar.company_variables', 'Company variables'), currentView)}

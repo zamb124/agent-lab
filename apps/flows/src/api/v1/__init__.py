@@ -7,7 +7,9 @@ from .agent_toolkits import router as agent_toolkits_router
 from .browser_preview import router as browser_preview_router
 from .certificate import router as certificate_router
 from .code import router as code_router
+from .code_lsp import router as code_lsp_router
 from .company import router as company_router
+from .data_tables import router as data_tables_router
 from .evaluation import router as evaluation_router
 from .flow_ui_shares import router as flow_ui_shares_router
 from .flows import router as flows_router
@@ -54,7 +56,9 @@ api_v1_router.include_router(platform_events_router, prefix="/platform-events")
 api_v1_router.include_router(triggers_router)
 api_v1_router.include_router(prompts_router, prefix="/prompts")
 api_v1_router.include_router(code_router, prefix="/code")
+api_v1_router.include_router(code_lsp_router, prefix="/code")
 api_v1_router.include_router(company_router)
+api_v1_router.include_router(data_tables_router)
 api_v1_router.include_router(mcp_router, prefix="/mcp")
 api_v1_router.include_router(resources_router, prefix="/resources")
 api_v1_router.include_router(hitl_conversation_router)

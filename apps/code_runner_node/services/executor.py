@@ -8,8 +8,11 @@ JS/TS source превращается в cached vm.Script по artifact-key, а 
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
+import shutil
+import subprocess
 import tempfile
 import textwrap
 import traceback
@@ -28,6 +31,7 @@ from core.capabilities.runtime_executables import (
     resolve_runtime_executable,
     runtime_executable_required_message,
 )
+from core.capabilities.sandbox_libraries import NODE_ALLOWED_PACKAGES, NODE_SAFE_GLOBALS
 from core.config import get_settings
 from core.tracing.operation_span import traced_operation
 
@@ -36,15 +40,93 @@ SERVICE_NAME = "code_runner_node"
 WORKER_POOL_ENV = "CODE_RUNNER_NODE_WORKERS"
 NODE_BIN_ENV = "CODE_RUNNER_NODE_BIN"
 WORKER_IPC_STREAM_LIMIT_BYTES = 64 * 1024 * 1024
+_REWRITE_ALLOWED_IMPORTS_JS = """
+            function rewriteAllowedImports(source) {
+              const failUnknown = (spec) => {
+                throw new Error(`sandbox policy violation: import is not allowed: ${spec}`);
+              };
+              const load = (spec) => {
+                if (!allowedPackages.has(spec)) failUnknown(spec);
+                return `__sandboxModules[${JSON.stringify(spec)}]`;
+              };
+              let rewritten = source.replace(
+                /^[ \\t]*import\\s+type\\s+[\\s\\S]*?from\\s+['"]([^'"]+)['"][ \\t]*;?[ \\t]*$/gm,
+                (_match, spec) => {
+                  if (!allowedPackages.has(spec)) failUnknown(spec);
+                  return '';
+                }
+              );
+              rewritten = rewritten.replace(
+                /^[ \\t]*import\\s+([A-Za-z_$][\\w$]*)\\s*,\\s*(\\{[^}]+\\})\\s+from\\s+['"]([^'"]+)['"][ \\t]*;?[ \\t]*$/gm,
+                (_match, ident, named, spec) => {
+                  const moduleRef = load(spec);
+                  return `const ${ident} = ${moduleRef}; const ${named} = ${ident};`;
+                }
+              );
+              rewritten = rewritten.replace(
+                /^[ \\t]*import\\s+\\*\\s+as\\s+([A-Za-z_$][\\w$]*)\\s+from\\s+['"]([^'"]+)['"][ \\t]*;?[ \\t]*$/gm,
+                (_match, ident, spec) => `const ${ident} = ${load(spec)};`
+              );
+              rewritten = rewritten.replace(
+                /^[ \\t]*import\\s+(\\{[^}]+\\})\\s+from\\s+['"]([^'"]+)['"][ \\t]*;?[ \\t]*$/gm,
+                (_match, named, spec) => `const ${named} = ${load(spec)};`
+              );
+              rewritten = rewritten.replace(
+                /^[ \\t]*import\\s+([A-Za-z_$][\\w$]*)\\s+from\\s+['"]([^'"]+)['"][ \\t]*;?[ \\t]*$/gm,
+                (_match, ident, spec) => `const ${ident} = ${load(spec)};`
+              );
+              if (/^[ \\t]*import\\s+/m.test(rewritten)) {
+                throw new Error('sandbox policy violation: unsupported import form');
+              }
+              return rewritten;
+            }
+""".strip()
+SANDBOX_MODULES_ENV = "CODE_RUNNER_NODE_SANDBOX_MODULES"
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_SANDBOX_PACKAGE_JSON = Path(__file__).resolve().parents[1] / "sandbox_modules" / "package.json"
+
+
+def ensure_node_sandbox_modules() -> Path:
+    """Прединсталл allowlisted npm packages в отдельный prefix, не в platform node_modules."""
+    cache_root = Path(
+        os.environ[SANDBOX_MODULES_ENV]
+        if SANDBOX_MODULES_ENV in os.environ
+        else str(_REPO_ROOT / ".cache" / "code-runner-node-sandbox-modules")
+    )
+    package_bytes = _SANDBOX_PACKAGE_JSON.read_bytes()
+    digest = hashlib.sha256(package_bytes).hexdigest()
+    marker = cache_root / ".package.sha256"
+    lodash_dir = cache_root / "node_modules" / "lodash"
+    if marker.is_file() and marker.read_text(encoding="utf-8").strip() == digest and lodash_dir.is_dir():
+        return cache_root
+    if cache_root.exists():
+        shutil.rmtree(cache_root)
+    cache_root.mkdir(parents=True, exist_ok=True)
+    _ = (cache_root / "package.json").write_bytes(package_bytes)
+    npm_bin = shutil.which("npm")
+    if npm_bin is None:
+        raise RuntimeError("npm is required to install node sandbox modules")
+    completed = subprocess.run(
+        [npm_bin, "install", "--omit=dev"],
+        cwd=cache_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(f"node sandbox modules install failed: {completed.stderr}")
+    _ = marker.write_text(digest, encoding="utf-8")
+    return cache_root
 
 
 class _NodeWorker:
     """Один persistent Node worker с JSON-lines IPC."""
 
-    def __init__(self, *, node_bin: str, worker_path: Path, gateway_url: str):
+    def __init__(self, *, node_bin: str, worker_path: Path, gateway_url: str, sandbox_modules: Path):
         self._node_bin: str = node_bin
         self._worker_path: Path = worker_path
         self._gateway_url: str = gateway_url
+        self._sandbox_modules: Path = sandbox_modules
         self._lock: asyncio.Lock = asyncio.Lock()
         self._process: asyncio.subprocess.Process | None = None
 
@@ -165,6 +247,7 @@ class _NodeWorker:
             self._node_bin,
             str(self._worker_path),
             self._gateway_url,
+            str(self._sandbox_modules),
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
@@ -190,6 +273,7 @@ class NodeSandboxExecutor:
         self._pool_lock: asyncio.Lock = asyncio.Lock()
         self._runtime_dir: Path = Path(tempfile.mkdtemp(prefix="code-runner-node-runtime-"))
         self._worker_path: Path = self._runtime_dir / "node_worker.mjs"
+        self._sandbox_modules: Path = ensure_node_sandbox_modules()
         _ = self._worker_path.write_text(self._worker_source(), encoding="utf-8")
 
     async def execute(self, request: CodeExecutionRequest) -> CodeExecutionResponse:
@@ -309,7 +393,12 @@ class NodeSandboxExecutor:
                 gateway_url = get_settings().server.get_service_url("capability_gateway")
                 count = self._worker_count()
                 self._workers = [
-                    _NodeWorker(node_bin=node_bin, worker_path=self._worker_path, gateway_url=gateway_url)
+                    _NodeWorker(
+                        node_bin=node_bin,
+                        worker_path=self._worker_path,
+                        gateway_url=gateway_url,
+                        sandbox_modules=self._sandbox_modules,
+                    )
                     for _ in range(count)
                 ]
                 for pooled_worker in self._workers:
@@ -405,12 +494,21 @@ class NodeSandboxExecutor:
         return textwrap.dedent(
             f"""
             import {{ createHash }} from 'node:crypto';
+            import {{ createRequire }} from 'node:module';
             import {{ createInterface }} from 'node:readline';
             import {{ stripTypeScriptTypes }} from 'node:module';
+            import path from 'node:path';
             import vm from 'node:vm';
 
             const gatewayUrl = process.argv[2];
+            const sandboxModulesPath = process.argv[3];
             const capabilityCallPath = {json.dumps(CAPABILITY_CALL_PATH)};
+            const nodeSafeGlobals = {json.dumps(list(NODE_SAFE_GLOBALS))};
+            const allowedPackages = new Set({json.dumps(sorted(NODE_ALLOWED_PACKAGES))});
+            const require = createRequire(path.join(sandboxModulesPath, 'package.json'));
+            const sandboxModules = Object.fromEntries(
+              [...allowedPackages].map((name) => [name, require(name)])
+            );
             const scriptCache = new Map();
             const forbiddenSourcePatterns = [
               /\\bimport\\s*\\(/,
@@ -423,6 +521,8 @@ class NodeSandboxExecutor:
               /\\bprocess\\b/,
               /\\bchild_process\\b/,
             ];
+
+            {_REWRITE_ALLOWED_IMPORTS_JS}
 
             class CapabilityInterrupt extends Error {{
               constructor(payload) {{
@@ -460,6 +560,7 @@ class NodeSandboxExecutor:
 
             function normalizeSource(request, entrypointName) {{
               let source = String(request.code ?? '');
+              source = rewriteAllowedImports(source);
               validateSandboxSource(source);
               if (request.language === 'typescript') {{
                 source = stripTypeScriptTypes(source, {{ mode: 'strip' }});
@@ -663,13 +764,16 @@ class NodeSandboxExecutor:
                 }};
 
                 stage = 'user';
-                const sandbox = {{
-                  capability,
-                  console: makeConsole(logs),
-                  setTimeout,
-                  clearTimeout,
-                  Promise,
-                }};
+                const sandbox = {{}};
+                for (const name of nodeSafeGlobals) {{
+                  sandbox[name] = globalThis[name];
+                }}
+                sandbox.capability = capability;
+                sandbox.console = makeConsole(logs);
+                sandbox.setTimeout = setTimeout;
+                sandbox.clearTimeout = clearTimeout;
+                sandbox.Promise = Promise;
+                sandbox.__sandboxModules = Object.freeze({{ ...sandboxModules }});
                 installSdkNamespaces(sandbox, request, capability);
                 const context = vm.createContext(sandbox, {{ name: 'code-runner-node-sandbox' }});
                 script.runInContext(context, {{ timeout: Math.max(1, Number(request.wall_time_limit_seconds || 1)) * 1000 }});

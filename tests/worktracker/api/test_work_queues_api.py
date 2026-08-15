@@ -48,32 +48,42 @@ async def test_update_queue(worktracker_client, worktracker_queue) -> None:
     assert body["description"] == "desc"
 
 
+async def test_update_queue_without_admin_returns_403(
+    worktracker_client_company2, worktracker_queue
+) -> None:
+    response = await worktracker_client_company2.patch(
+        f"{QUEUES}/{worktracker_queue.work_queue_id}",
+        json={"name": "Nope"},
+    )
+    assert response.status_code == 403
+
+
 async def test_queue_members_add_list_remove(
     worktracker_client,
     worktracker_queue,
-    system_user_id: str,
-    unique_id: str,
+    system_user2_id: str,
 ) -> None:
     queue_id = worktracker_queue.work_queue_id
+    member_user_id = system_user2_id
     add_resp = await worktracker_client.post(
         f"{QUEUES}/{queue_id}/members",
-        json={"member": {"actor_kind": "user", "user_id": system_user_id}, "role": "member"},
+        json={"member": {"actor_kind": "user", "user_id": member_user_id}, "role": "member"},
     )
     assert add_resp.status_code == 201
 
     list_resp = await worktracker_client.get(f"{QUEUES}/{queue_id}/members")
     assert list_resp.status_code == 200
     members = list_resp.json()
-    assert any(m["member"]["user_id"] == system_user_id for m in members)
+    assert any(m["member"]["user_id"] == member_user_id for m in members)
 
     remove_resp = await worktracker_client.post(
         f"{QUEUES}/{queue_id}/members/remove",
-        json={"member": {"actor_kind": "user", "user_id": system_user_id}},
+        json={"member": {"actor_kind": "user", "user_id": member_user_id}},
     )
     assert remove_resp.status_code == 204
 
     list_after = await worktracker_client.get(f"{QUEUES}/{queue_id}/members")
-    assert not any(m["member"]["user_id"] == system_user_id for m in list_after.json())
+    assert not any(m["member"]["user_id"] == member_user_id for m in list_after.json())
 
 
 async def test_remove_unknown_member_returns_404(worktracker_client, worktracker_queue) -> None:

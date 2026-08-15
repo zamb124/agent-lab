@@ -31,7 +31,7 @@ def flow_config():
         name="Test Agent",
         description="Agent for testing prompt resolution",
         prompt="",
-        llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
+        llm=NodeLLMConfig(provider="mock", model="mock-gpt-4", temperature=0.0),
     )
 
 

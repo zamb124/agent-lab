@@ -47,6 +47,14 @@ _lint-py:
 	uv run python scripts/check_mcp_branding_bundle.py
 	@echo "=== lint: platform brand hardcode ==="
 	uv run python scripts/check_platform_brand_hardcode.py
+	@echo "=== lint: authz canon ==="
+	uv run python scripts/check_authz_canon.py
+	@echo "=== lint: authz dual-write ==="
+	uv run python scripts/check_authz_dual_write.py
+	@echo "=== lint: authz backfill completeness ==="
+	uv run python scripts/check_authz_backfill_completeness.py
+	@echo "=== lint: authz model tests ==="
+	uv run python scripts/check_authz_model.py
 	@echo "=== lint: basedpyright ==="
 	uv run basedpyright $(BASEDPYRIGHT_CHECK_ARGS)
 	@echo "=== lint: local imports ==="

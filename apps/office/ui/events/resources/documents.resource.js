@@ -788,7 +788,10 @@ export const documentShareCreateOp = createAsyncOp({
         if (!payload || typeof payload.fileId !== 'string' || payload.fileId.length === 0) {
             throw new Error('office/document_share_create: payload.fileId required');
         }
-        const permission = payload.permission === 'edit' ? 'edit' : 'view';
+        if (payload.permission !== 'viewer' && payload.permission !== 'editor') {
+            throw new Error('office/document_share_create: payload.permission must be viewer|editor');
+        }
+        const permission = payload.permission;
         const expiresInHours = typeof payload.expiresInHours === 'number' ? payload.expiresInHours : null;
         return httpRequest({
             method: 'POST',

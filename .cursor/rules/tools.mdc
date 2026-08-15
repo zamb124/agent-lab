@@ -32,6 +32,7 @@ alwaysApply: false
 |---|---|---|
 | Wiki | `WikiClient` | `core/clients/wiki_client.py` |
 | Documents | `DocumentsClient` | `core/clients/documents_client.py` |
+| DataTable | `DataTableClient` | `core/clients/data_table_client.py` |
 | CRM | `CrmClient` | `core/clients/crm_client.py` |
 | Lara confirm-first | `LaraClient` | `apps/flows/src/clients/lara_client.py` (propose/apply CRM note и др.) |
 | Sync | `SyncClient` | `core/clients/sync_client.py` |
@@ -53,11 +54,13 @@ In-process clients резолвят зависимости через `require_c
 
 CI `scripts/check_tool_contracts.py`: в `apps/flows/tools/*.py` запрещены `ServiceClient` / `get_container` / `require_current_container`, импорт `platform_facades` / `runtime_deps`, имена Port/Facade и `get_*_service` / `get_*_facade` из legacy-списка.
 
-## Документация для редактора кода
+## Документация и IDE для редактора кода
 
-- `GET /flows/api/v1/code/completions?language=python|javascript|typescript|go|csharp`
-- `GET /flows/api/v1/code/documentation?language=...`
+- `GET /flows/api/v1/code/documentation?language=...` — markdown для человека, не кормит редактор.
+- `POST /flows/api/v1/code/lsp/session` — bootstrap language server (фабрика `flows/code_lsp_session`).
+- Intelligence редактора — language-native stubs из `CapabilityManifest` + `sandbox_libraries.py` + LSP в `code-runner-*`. JSON-каталог имён запрещён.
 - Источник правды — `CapabilityManifest` из `capability-gateway`, не Python namespace.
+- `GET /flows/api/v1/tool-runtime/manifest`: builtin tools с `listed_in_platform_tool_docs` + `tool_repository` текущей компании, если есть context. Нет context — builtins only (capability-gateway без AuthMiddleware). `RemoteCodeRunner._load_manifest` мержит gateway (platform caps) + flows tool-runtime (company tools через signed context).
 
 ## Материализация
 
@@ -72,32 +75,37 @@ CI `scripts/check_tool_contracts.py`: в `apps/flows/tools/*.py` запреще�
 
 ## Builtin tools
 
+Builtin specs — `apps/flows/tools/builtin_specs.py`. Runtime gate — `ToolAuthzGate` (`apps/flows/src/tools/authz_gate.py`) bound from `FlowContainer`: empty `permission` → FGA company membership; иначе group check via OpenFGA. Sole PDP = `AuthzService` (не JWT `grps`). Tool grants / tag groups — не PDP. `BaseTool.run()` всегда зовёт gate: unit-тест без `tests/flows/core/tools/conftest.py` — `bind_flow_tool_authz_context` (не `_run_impl` в обход PDP, кроме явной проверки HTTP-слоя Lara).
+
 - Lifecycle: `reason`, `ask_user`, `hitl_operator_task`, `self_check`, `final_answer`, `finish` — tag `misc`.
 - Agent plan: `agent_plan_write`, `agent_plan_get` — tag `flows`; flat checklist в `ExecutionState.agent_plan` (→ **`agent_plan.mdc`**).
 - Files: `read_file`, `create_file`, `fill_docx_template` — tag `files`; `create_file`/`read_file` = `FileWriter`/`FileReader` (как caps `files.create`/`files.read`).
 - Documents (Office) mutate/open + catalog: `documents_*` — tag `documents`; тонкие обёртки над `DocumentsClient`. Eval SDK: `await documents.*`.
+- DataTable (SQLite file): `tables_create` / `tables_list` / `tables_schema` / `tables_query` / `tables_insert` / `tables_update` / `tables_delete_rows` — tag `tables`; тонкие обёртки над `DataTableClient` → office `/documents/api/v1/data-tables`. Eval SDK: `import tables` / `await tables.*`. Публичный id = `file_id`.
 - Wiki: `wiki_*` — tag `wiki`; тонкие обёртки над `WikiClient`. Eval SDK: `await wiki.*`. Write tools несут `effects`/`confirmation_floor` на `@tool()`.
 - Viz (`.viz`): `create_viz`, `update_viz`, `export_viz`, `viz_open_file` — tag `viz`. Persistence = `FileRecord` (`application/vnd.platform.viz+json`).
 - Text: `summarize_text`, `format_text_markdown` — tag `text`; через `TextClient`; sandbox caps `text.summarize` / `text.format_markdown` — `invoke_text_*` над `TextTransformService`.
 - Scheduling: `schedule_*`, `list_scheduled_tasks`, `cancel_scheduled_task` — tag `scheduling`; через `FlowScheduleClient`. Write tools с `effects`/`confirmation_floor`.
 - Google Docs/Sheets: `gdocs_*` / `sheets_*` — tags `google_docs` / `google_sheets`; auth `GoogleWorkspaceClient().resolve_auth`, API `GoogleDocsClient` / `GoogleSheetsClient`.
 - Web: `browser_*`, index/web search — tag `web`; `browser_*` через `BrowserClient`.
-- Knowledge: `rag_*`, platform docs, `pravo_*` — tag `knowledge`.
-- CRM: `crm_*` — tag `crm`; тонкие обёртки над `CrmClient`. `crm_create_note` — `LaraClient.propose_create_note` / `apply_create_note`. Eval SDK hot-path: `await crm.search_entities|get_entity|create_note|list_notes`. Activity tasks — dual `crm`+`worktracker`.
-- Worktracker: `work_item_*` / `work_queue_*` / `work_board_*` — tag `worktracker`; через `WorktrackerClient`.
+- Knowledge: `rag_*`, platform docs, `pravo_*` — tag `knowledge`. Eval SDK: `await rag.*` (полный `RagClient`; `collection_id` обязателен на ingest_text/search).
+- CRM: `crm_*` — tag `crm`; тонкие обёртки над `CrmClient`. `crm_create_note` — `LaraClient.propose_create_note` / `apply_create_note`. Eval SDK: `await crm.*` (полный `CrmClient`). Activity tasks — dual `crm`+`worktracker`.
+- Worktracker: `work_item_*` / `work_queue_*` / `work_board_*` — tag `worktracker`; через `WorktrackerClient`. Eval SDK: `await worktracker.*` (REST surface WorkItem/queue/board; `get_queue_by_slug` только у in-process client).
 - Team: `team_list_members`, `team_resolve_user` — tag `misc`; через `TeamClient`.
 - Device: `device_tools_list`, `device_tools_call` — tag `device`; через `DeviceClient`.
-- Sync: `sync_*` — tag `sync`; тонкие обёртки над `SyncClient`. Eval SDK hot-path: `await sync.list_channels|send_message|list_messages|list_threads`.
+- Sync: `sync_*` — tag `sync`; тонкие обёртки над `SyncClient`. Eval SDK: `await sync.*` (полный `SyncClient`).
 - Flows editor: `flows_get_node` / `flows_list_nodes` / `flows_read_context` / `flows_patch_*` / `push_embed_blocks` — tag `flows`; тонкие обёртки над `FlowsClient`. Patch: LLM `mode=propose|apply` — workflow switch, **не** authorization; apply требует prior propose и server-validated `pending_action_id` (LaraActionEngine). Phase 3: `ToolApprovalStore` пишется alongside (`approval_id`); полная миграция apply — Phase 4.
 - Agent handoff: `handoff_to_flow`, `handback_to_parent` (`apps/flows/src/tools/handoff_tools.py` → **`handoff.mdc`**) — tag `flows`.
 
 ## Tag groups (tool picker)
 
+`GET /flows/api/v1/tools/all` — SQL/registry candidates ∩ `FlowAccessService.list_viewable_tool_ids` / `list_viewable_flow_ids` (`authz.list_objects`). Не `batch_check` всего каталога на каждую страницу. Нет tuple → tool в picker не виден (sole PDP = OpenFGA).
+
 Группа в UI picker = **tag** tool (`BaseTool.tags` / `ToolReference.tags`).
 
 ### Whitelist (builtins)
 
-`crm`, `documents`, `files`, `sync`, `worktracker`, `wiki`, `web`, `knowledge`, `scheduling`, `google_docs`, `google_sheets`, `viz`, `flows`, `device`, `text`, `misc`.
+`crm`, `documents`, `files`, `sync`, `worktracker`, `wiki`, `web`, `knowledge`, `scheduling`, `google_docs`, `google_sheets`, `viz`, `tables`, `flows`, `device`, `text`, `misc`.
 
 ### Правила
 

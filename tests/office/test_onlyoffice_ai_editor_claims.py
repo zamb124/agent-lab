@@ -54,7 +54,7 @@ def _ctx(*, public_link_token_hash: str | None = None) -> ViewerOpenContext:
         download_token_ttl_seconds=3600,
         browser_public_base_url="http://localhost:8002",
         browser_document_server_url="http://localhost:8002",
-        link_permission="edit",
+        link_permission="editor",
         public_link_token_hash=public_link_token_hash,
     )
 

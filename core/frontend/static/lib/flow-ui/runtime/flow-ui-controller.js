@@ -618,7 +618,7 @@ export class FlowUIController extends EventTarget {
     }
 
     async createShare({
-        permission = 'view',
+        permission = 'viewer',
         expiresInSeconds = 86_400,
         redactedValuePaths = [],
     } = {}) {
@@ -626,7 +626,7 @@ export class FlowUIController extends EventTarget {
         if (this.profile?.viewer?.can_share !== true) {
             throw new Error('flow-ui: sharing is unavailable for this viewer');
         }
-        if (!['view', 'interact'].includes(permission)) {
+        if (!['viewer', 'editor'].includes(permission)) {
             throw new Error(`flow-ui: unsupported share permission ${permission}`);
         }
         if (!Array.isArray(redactedValuePaths)) {

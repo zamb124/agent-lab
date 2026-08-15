@@ -3,15 +3,22 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 from fastapi import HTTPException
 
+from core.authz.models import AuthzObject
 from core.clients.browser.crawl_fetch_types import BrowserCrawlFetchRequest
 from core.clients.browser_fetch_client import BrowserFetchClient
 
 pytestmark = pytest.mark.unit
+
+
+class _StubAuthz:
+    async def require_can_view(self, obj: AuthzObject) -> None:
+        _ = obj
 
 
 @pytest.mark.asyncio
@@ -25,10 +32,12 @@ async def test_crawl_fetch_returns_429_when_concurrency_limit_exceeded() -> None
         def release(self) -> None:
             return None
 
-    runtime = MagicMock()
-    runtime.settings.crawl_fetch_max_inflight = 2
-    container = MagicMock()
-    container.browser_runtime = runtime
+    container = SimpleNamespace(
+        authz_service=_StubAuthz(),
+        browser_runtime=SimpleNamespace(
+            settings=SimpleNamespace(crawl_fetch_max_inflight=2),
+        ),
+    )
 
     async def _wait_for_timeout(coro: object, /, **kwargs: object) -> None:
         if asyncio.iscoroutine(coro):
@@ -40,7 +49,7 @@ async def test_crawl_fetch_returns_429_when_concurrency_limit_exceeded() -> None
             with pytest.raises(HTTPException) as exc_info:
                 await crawl_fetch_module.crawl_fetch(
                     BrowserCrawlFetchRequest(url="https://example.com/page"),
-                    container,
+                    container,  # pyright: ignore[reportArgumentType]
                 )
 
     assert exc_info.value.status_code == 429

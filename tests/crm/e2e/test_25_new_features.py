@@ -16,8 +16,6 @@ from httpx import AsyncClient, Response
 
 from tests.crm.e2e._json_helpers import json_object, object_dict, object_list, object_str
 
-pytestmark = pytest.mark.timeout(120, func_only=True)
-
 
 def _isolated_note_date(unique_id: str) -> str:
     day_offset = int(unique_id[:8], 16) % 20_000

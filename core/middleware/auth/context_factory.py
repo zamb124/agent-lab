@@ -4,8 +4,10 @@
 
 from fastapi import HTTPException, Request
 
+from core.authz.errors import AuthzDenied, AuthzUnavailable
+from core.authz.models import AuthzObject
 from core.container import BaseContainer
-from core.context import clear_context, set_context
+from core.context import reset_context, set_context
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.i18n_models import Language
@@ -228,22 +230,29 @@ class ContextFactory:
             auth_token=auth_token,
             trace_id=trace_id,
         )
-        set_context(preliminary)
+        context_token = set_context(preliminary)
         try:
             ns = await self.container.namespace_repository.get(raw)
         finally:
-            clear_context()
+            reset_context(context_token)
 
         if ns is None:
             raise HTTPException(
                 status_code=400,
                 detail=f"Namespace «{raw}» не найден",
             )
-        if ns.company_id != company.company_id:
+        try:
+            await self.container.authz_service.require_can_view(
+                AuthzObject.platform_namespace(company.company_id, ns.name),
+                user_id=user.user_id,
+            )
+        except AuthzDenied as exc:
             raise HTTPException(
                 status_code=403,
                 detail="Namespace не принадлежит активной компании",
-            )
+            ) from exc
+        except AuthzUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         return ns.name
 
     async def _get_user_companies(self, user: User) -> list[Company]:

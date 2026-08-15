@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 from taskiq.scheduler.scheduled_task import ScheduledTask
 
+from apps.idle_worker.tasks.task_names import TASK_SYNC_LLM_MODELS
 from apps.scheduler import dispatch as scheduler_dispatch
 
 
@@ -24,7 +25,7 @@ class _FakeScheduleSource:
 
 def _scheduled_task(kwargs: dict[str, Any]) -> ScheduledTask:
     return ScheduledTask(
-        task_name="sync_llm_models_task",
+        task_name=TASK_SYNC_LLM_MODELS.name,
         labels={"queue_name": "idle"},
         args=[],
         kwargs=kwargs,
@@ -75,7 +76,7 @@ async def test_dispatch_forwards_canonical_schedule_task_kwargs(
         ),
     )
 
-    assert captured["task_name"] == "sync_llm_models_task"
+    assert captured["task_name"] == TASK_SYNC_LLM_MODELS.name
     assert captured["task_id"] == "taskiq-message-1"
     assert captured["args"] == ()
     assert captured["kwargs"] == {

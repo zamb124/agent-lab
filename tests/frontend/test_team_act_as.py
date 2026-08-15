@@ -15,6 +15,7 @@ from core.identity.flow_employee import (
     flow_employee_user_id,
 )
 from core.utils.tokens import get_token_service
+from tests.fixtures.auth import set_test_company_member_roles
 
 pytestmark = pytest.mark.asyncio
 
@@ -27,39 +28,27 @@ async def _ensure_system_team_members(
     company = await frontend_container.company_repository.get("system")
     if company is None:
         raise RuntimeError("system company отсутствует в тестовой БД")
-    changed = False
     if system_user_id not in company.members:
-        company.members[system_user_id] = ["owner", "admin"]
-        changed = True
+        await set_test_company_member_roles(
+            frontend_container.company_repository,
+            frontend_container.authz_service,
+            company_id="system",
+            user_id=system_user_id,
+            roles=["owner", "admin"],
+        )
     if system_user2_id not in company.members:
-        company.members[system_user2_id] = ["member"]
-        changed = True
-    if changed:
-        await frontend_container.company_repository.set(company)
+        await set_test_company_member_roles(
+            frontend_container.company_repository,
+            frontend_container.authz_service,
+            company_id="system",
+            user_id=system_user2_id,
+            roles=["member"],
+        )
 
 
 async def _cleanup_employee(frontend_container, flow_id: str) -> None:
     await deactivate_flow_employee(frontend_container, flow_id=flow_id, company_id="system")
     await frontend_container.user_repository.delete(flow_employee_user_id(flow_id))
-
-
-@pytest_asyncio.fixture(autouse=True)
-async def _ensure_system_team_members(
-    frontend_container, system_user_id, system_user2_id
-) -> None:
-    """Под -n10 другие тесты могут перезаписать company.members — восстанавливаем session users."""
-    company = await frontend_container.company_repository.get("system")
-    if company is None:
-        raise RuntimeError("system company отсутствует в тестовой БД")
-    changed = False
-    if system_user_id not in company.members:
-        company.members[system_user_id] = ["owner", "admin"]
-        changed = True
-    if system_user2_id not in company.members:
-        company.members[system_user2_id] = ["member"]
-        changed = True
-    if changed:
-        await frontend_container.company_repository.set(company)
 
 
 @pytest_asyncio.fixture

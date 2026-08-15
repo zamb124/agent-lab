@@ -1,4 +1,4 @@
-import { html, css, unsafeCSS, nothing } from 'lit';
+import { html, css, unsafeCSS, nothing } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
 import './platform-popover.js';

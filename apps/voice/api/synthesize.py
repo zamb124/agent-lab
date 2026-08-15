@@ -26,8 +26,10 @@ from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from apps.voice.dependencies import ContainerDep
 from apps.voice.services.voice_usage import record_tts_usage
 from core.ai.runtime import create_voice_tts_streamer
+from core.authz.models import AuthzObject
 from core.clients.speech_override import (
     SpeechOverride,
     SpeechProviderName,
@@ -35,13 +37,24 @@ from core.clients.speech_override import (
 )
 from core.clients.tts_client import TTSLitserveHttpError
 from core.clients.tts_streaming import BaseTTSStreamer
-from core.context import require_context
+from core.context import get_context, require_context
 from core.files.media.wav_merge import merge_wav_s16le_mono_files
 from core.logging import get_logger
 
 logger = get_logger(__name__)
 
 synthesize_router = APIRouter(prefix="/api/v1", tags=["voice-synthesize"])
+
+
+async def _require_company_view_when_user_context(
+    container: ContainerDep,
+    *,
+    company_id: str,
+) -> None:
+    context = get_context()
+    if context is None or context.active_company is None:
+        return
+    await container.authz_service.require_can_view(AuthzObject.company(company_id))
 
 
 def _http_status_for_litserve_tts_error(exc: TTSLitserveHttpError) -> int:
@@ -83,7 +96,7 @@ class SynthesizeRequest(BaseModel):
         },
     },
 )
-async def synthesize(body: SynthesizeRequest) -> StreamingResponse:
+async def synthesize(body: SynthesizeRequest, container: ContainerDep) -> StreamingResponse:
     ctx = require_context()
     company = ctx.active_company
     if company is None or company.company_id == "":
@@ -92,6 +105,8 @@ async def synthesize(body: SynthesizeRequest) -> StreamingResponse:
             detail="Активная компания не определена в контексте запроса.",
         )
     company_id = company.company_id
+
+    await _require_company_view_when_user_context(container, company_id=company_id)
 
     override = SpeechOverride(
         provider=body.provider,

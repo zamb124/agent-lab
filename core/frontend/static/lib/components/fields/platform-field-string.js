@@ -1,4 +1,4 @@
-import { html, css, nothing } from 'lit';
+import { html, css, nothing } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 
 const ALLOWED_INPUT_TYPES = Object.freeze(['text', 'email', 'password', 'url', 'tel', 'search']);

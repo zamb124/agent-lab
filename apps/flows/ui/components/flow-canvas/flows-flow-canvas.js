@@ -93,6 +93,7 @@ import {
 import {
     defaultResourceConfigForType,
     defaultResourceDisplayName,
+    dataTableCreateRequest,
 } from '../../_helpers/flows-resource-defaults.js';
 import {
     canvasNodeTypeSubtitle,
@@ -1181,6 +1182,8 @@ export class FlowsFlowCanvas extends PlatformElement {
         this._editor = this.useOp('flows/editor');
         this._bulkDelete = this.useOp('flows/editor_bulk_delete');
         this._stickyUpsert = this.useOp('flows/sticky_note_upsert');
+        this._dataTableCreate = this.useOp('flows/data_table_create');
+        this._dataTableCreateInFlight = new Set();
         this._onDocKeyDown = this._onDocKeyDown.bind(this);
         this._onDocKeyUp = this._onDocKeyUp.bind(this);
         this._stickyResize = null;
@@ -2279,6 +2282,57 @@ export class FlowsFlowCanvas extends PlatformElement {
                 this._editor.selectNode({ nodeId: newWrapperNodeId });
                 this.toast('flows:canvas.resource_dropped_new_node', { type: 'success', vars: { resource: resourceType } });
             }
+            if (resourceType === 'data_table') {
+                void this._autoCreateDataTableFile(rid);
+            }
+        }
+    }
+
+    async _autoCreateDataTableFile(resourceId) {
+        if (typeof resourceId !== 'string' || resourceId.length === 0) {
+            throw new Error('flows-flow-canvas: resourceId required for DataTable create');
+        }
+        if (this._dataTableCreateInFlight.has(resourceId)) {
+            return;
+        }
+        const flowId = typeof this.flowId === 'string' ? this.flowId.trim() : '';
+        if (flowId.length === 0) {
+            return;
+        }
+        const data = this._branchData();
+        const resource = asObject(data.resources)[resourceId];
+        if (!isPlainObject(resource)) {
+            return;
+        }
+        const cfg = isPlainObject(resource.config) ? resource.config : {};
+        if (typeof cfg.file_id === 'string' && cfg.file_id.length > 0) {
+            return;
+        }
+        const stem = typeof resource.name === 'string' && resource.name.trim().length > 0
+            ? resource.name.trim()
+            : 'data';
+        this._dataTableCreateInFlight.add(resourceId);
+        try {
+            const created = await this._dataTableCreate.run(dataTableCreateRequest(flowId, stem));
+            if (!created || typeof created.file_id !== 'string' || created.file_id.length === 0) {
+                return;
+            }
+            const latest = this._branchData();
+            const resources = { ...asObject(latest.resources) };
+            const current = resources[resourceId];
+            if (!isPlainObject(current)) {
+                return;
+            }
+            const currentCfg = isPlainObject(current.config) ? current.config : {};
+            if (typeof currentCfg.file_id === 'string' && currentCfg.file_id.length > 0) {
+                return;
+            }
+            resources[resourceId] = { ...current, config: { ...currentCfg, file_id: created.file_id } };
+            this._editor.updateBranchData({ data: { ...latest, resources } });
+            this._editor.setDirty({ dirty: true });
+            this.toast('flows:data_table_resource_editor.toast_created', { type: 'success' });
+        } finally {
+            this._dataTableCreateInFlight.delete(resourceId);
         }
     }
 

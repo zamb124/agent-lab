@@ -3,8 +3,10 @@ BillingService: can_use_resource, stats, reset_monthly_billing, ошибки mer
 Реальные репозитории и storage (frontend_container).
 """
 
+
 from __future__ import annotations
 
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import json
 
 import pytest

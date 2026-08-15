@@ -13,7 +13,7 @@ from core.types import JsonObject
 
 
 class OfficeDocumentCatalog(Base):
-    """Каталог документов в рамках компании и CRM namespace; владелец управляет участниками."""
+    """Каталог документов в рамках компании и namespace."""
 
     __tablename__: str = "office_document_catalogs"
 
@@ -28,14 +28,13 @@ class OfficeDocumentCatalog(Base):
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     owner_user_id: Mapped[str] = mapped_column(String(100), nullable=False)
-    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     rag_index_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     rag_index_include_subcatalogs: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     rag_index_search_options: Mapped[JsonObject | None] = mapped_column(JSONB, nullable=True)
     rag_index_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     link_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     link_token_hash: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True)
-    link_permission: Mapped[str] = mapped_column(String(16), nullable=False, default="view")
+    link_permission: Mapped[str] = mapped_column(String(16), nullable=False, default="viewer")
     link_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -51,42 +50,6 @@ class OfficeDocumentCatalog(Base):
             "namespace",
             "parent_catalog_id",
         ),
-    )
-
-
-class OfficeBindingMember(Base):
-    """Пользователь с доступом к документу вне company-wide ACL каталога."""
-
-    __tablename__: str = "office_binding_members"
-
-    file_id: Mapped[str] = mapped_column(
-        String(128),
-        ForeignKey("office_document_bindings.file_id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    user_id: Mapped[str] = mapped_column(String(100), primary_key=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=lambda: datetime.now(timezone.utc),
-    )
-
-
-class OfficeCatalogMember(Base):
-    """Пользователь с доступом к каталогу (владелец хранится в catalog.owner_user_id)."""
-
-    __tablename__: str = "office_catalog_members"
-
-    catalog_id: Mapped[str] = mapped_column(
-        String(64),
-        ForeignKey("office_document_catalogs.catalog_id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    user_id: Mapped[str] = mapped_column(String(100), primary_key=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=lambda: datetime.now(timezone.utc),
     )
 
 
@@ -126,7 +89,7 @@ class OfficeDocumentBinding(Base):
     deleted_by_user_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     link_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     link_token_hash: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True)
-    link_permission: Mapped[str] = mapped_column(String(16), nullable=False, default="view")
+    link_permission: Mapped[str] = mapped_column(String(16), nullable=False, default="viewer")
     link_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     __table_args__: tuple[Index, ...] = (
         Index("ix_office_bindings_company_namespace_created", "company_id", "namespace", "created_at"),
@@ -135,30 +98,6 @@ class OfficeDocumentBinding(Base):
         # партиальный (WHERE deleted_at IS NULL), создаётся миграцией office_0013,
         # чтобы soft-deleted привязка не блокировала повторное создание по тому же file_id.
         Index("uq_office_bindings_company_namespace_file", "company_id", "namespace", "file_id", unique=True),
-    )
-
-
-class OfficeDocumentShare(Base):
-    """Внутренняя ссылка на документ с ограниченным доступом."""
-
-    __tablename__: str = "office_document_shares"
-
-    share_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    file_id: Mapped[str] = mapped_column(
-        String(128),
-        ForeignKey("office_document_bindings.file_id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    created_by_user_id: Mapped[str] = mapped_column(String(100), nullable=False)
-    permission: Mapped[str] = mapped_column(String(16), nullable=False, default="view")
-    token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
-    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=lambda: datetime.now(timezone.utc),
     )
 
 

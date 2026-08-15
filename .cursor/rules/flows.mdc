@@ -11,6 +11,8 @@ alwaysApply: false
 
 ## Принципы
 
+Access (OpenFGA): sole PDP = `AuthzService`. HTTP get/mutate / A2A / channels — `authz.require_can_view|edit(AuthzObject.flow|tool|flow_branch)`. List = company index ∩ `page_viewable_flow_ids` (`batch_check` окна страницы `offset+limit`, TTU `admin from platform` входит в Check; `total` = размер каталога), hydrate page (не `list_objects` для HTTP list: ListObjects не перечисляет TTU; не N+1 toolkit list; не Check всего каталога). Picker flows = `list_objects(can_view, flow)` без второго Check; tools = SQL ∩ `batch_check`. Platform admin = TTU `admin from platform` (`platform:global`), не Python bypass. `permission: []` = company-visible. Named groups = `group:{company}/{name}`. Groups dual-write via `core/authz/group_sync.py`. Share wire = `viewer`|`editor` only. HITL / work-queue recipients = `authz.list_users` (`CAN_ADMIN` / members), не roster. Backfill: `python -m apps.flows.authz` (flows + tools + `flow_ui_share` + platform links). JWT `grps` — UI directory only, не PDP.
+
 1. **DB-First** — конфигурация в БД (`flows`/`flows_versions`), код только исполняет.
 2. **Stream-First** — все события через Redis Pub/Sub (см. `streaming.mdc`).
 3. **Zero-Guess** — нет fallback значений, ошибка = exception.
@@ -52,7 +54,7 @@ alwaysApply: false
 | Тип | Класс | Назначение |
 |---|---|---|
 | `llm_node` | `LlmNode` | LLM + tools, ReAct |
-| `code` | `CodeNode` | Inline Python |
+| `code` | `CodeNode` | Isolated Python / JS / TS / Go / C# через code-runner
 | `flow` | `FlowNode` | Вызов вложенного flow (`flow_id` + `branch_id`) |
 | `remote_flow` | `RemoteFlowNode` | A2A ≥1.0: direct URL + Skill ID (`branch_id` → `metadata.branch`) + `metadata_template` → `params.metadata` (`@state:`/`@var:`); без registry `flow_id` |
 | `external_api` | `ExternalAPINode` | HTTP-запросы |
@@ -188,10 +190,13 @@ Webhook URL: `/flows/api/v1/triggers/{telegram|webhook}/{flow_id}/{trigger_id}`.
 | `llm` | `LLMResource` | LLM-вызовы (в т.ч. пресет для `llm_node` через `llm_resource_key`) |
 | `llm_context` | `LLMContextPatch` | Пресет policy контекстного слоя (`profile`, `memory`, `retrieval`, `budget`, `compaction`, `cache`) |
 | `rag` | `RagResourceBindParams` | Привязка к platform **Namespace** (`namespace` = `Namespace.name` = RAG `namespace_id`): search/index overlays для context layer и runtime-кода; ensure namespace при resolve |
+| `data_table` | `DataTableResourceConfig` | Привязка к SQLite DataTable-файлу (`file_id`). Строки не копируются в `ExecutionState`; доступ — тулы `tables_*` / capability `tables.*`. Create scope по умолчанию `flow_asset`. |
 
 Семантический поиск по RAG для пользователя — платформенные тулы (`rag_search`, …) и фасады sandbox; `type: rag` в `resources` — bind namespace/search options для runtime/context layer, не новый RAG-пайплайн. Обёртка для кода — `core.rag.rag_resource.RAGResource` (контейнер с `rag_repository`).
 
-**RAG resource DX:** палитра `_RESOURCE_TYPES` включает `rag`; editor — `flows-rag-resource-editor` (namespace picker/create, `platform-rag-retrieval-panel`, index overlay, `default_ttl_seconds`). Runtime `resolve_rag_resource_binds_for_runtime` ensure'ит namespace через `NamespaceService.get_or_create` и проверяет `permission` (группы JWT `grps`; `[]` = всем) как у tools. Поле `permission` редактируется в `flows-base-resource-editor` для всех shared/inline resources.
+**RAG resource DX:** палитра `_RESOURCE_TYPES` включает `rag`; editor — `flows-rag-resource-editor` (namespace picker/create, `platform-rag-retrieval-panel`, index overlay, `default_ttl_seconds`). Runtime `resolve_rag_resource_binds_for_runtime` ensure'ит namespace через `NamespaceService.get_or_create` и проверяет `permission` через OpenFGA (`AuthzService`: `[]` = `require_can_view(company)`; named groups = `check` `group#member`; без platform-admin bypass). Поле `permission` редактируется в `flows-base-resource-editor` для всех shared/inline resources.
+
+**DataTable resource DX:** палитра `_RESOURCE_TYPES` включает `data_table`; drop на Logic-канву сразу `POST /flows/api/v1/data-tables` (`scope: flow_asset`) и пишет `config.file_id` (повторно не создаёт, если `file_id` уже непустой; кнопка Create в editor — fallback без `file_id`). Create создаёт первую таблицу (ident из stem ресурса, колонка `value`). Новые таблицы/колонки/строки — только в Documents viewer, не в инспекторе ноды. Compact-нода: snapshot схемы карточками (имя, колонки-chips, `row_count`) + кнопка Open (`openFile(file_id)`: строки, колонки, фильтр в заголовках, Excel-правка ячеек, удаление строки, экспорт CSV/Excel). Interface: catalog `DataTable` биндит `file_id` на `/content/<name>_file_id` (или `/values/...`); агент `tables_create` пишет тот же путь — host ходит в office, строки в document не кладутся. Runtime: `llm_node` с ресурсом `data_table` в merge flow/skill/node получает builtin `tables_*` (без дубля, если уже стоят). `tables_create` пишет `FileRef` в `state.files`. Не путать с CRM entity / Office xlsx / Google Sheets.
 
 Иерархия слоёв (инвариант merge): **L0** `FlowConfig.resources` (база), **L1** `BranchConfig.resources` (skill/variant), **L2** `NodeConfig.resources`. Для одного логического ключа карты **склеиваются по ключам**: последующий слой перекрывает предыдущий при конфликте **разных ссылок** на тот же ключ; реализация — `merge_flow_skill_node_resource_maps` (`apps/flows/src/resources/merge.py`), тот же порядок, что в `ResourceResolver.resolve_for_node`.
 
@@ -207,7 +212,7 @@ Inline на слое — полный `config` целевого типа. **Ти
 
 ## Bundles
 
-Запись в БД из `apps/flows/bundles/<id>/flow.json` задаёт `FlowConfig.source == "file"`. Реинициализация одного агента: `POST /flows/api/v1/flows/{flow_id}/reload-from-bundle` → `FlowsLoader.reload_flow_bundle(flow_id)` (тот же путь, что при `company/init`). UI: кнопка в `editor-header`, активна при `source=file`.
+Запись в БД из `apps/flows/bundles/<id>/flow.json` задаёт `FlowConfig.source == "file"`. `POST /flows/api/v1/flows/{flow_id}/reload-from-bundle` → `FlowsLoader.reload_flow_bundle(flow_id)` (тот же путь, что при `company/init`): перезапись существующего flow — `can_edit`; установка каталожного bundle без FGA tuples — член компании (как create), затем dual-write. Нет tuples и нет каталога — **403**, не 404. UI: кнопка в `editor-header`, активна при `source=file`.
 
 **Зависимости platform flows (bundle-only):** поле `depends_on_flow_ids: list[str]` в `flow.json` (alias на один релиз: `install_with_bundles`). При `reload-from-bundle`, `load_all` и `load_all_for_company` зависимости ставятся **до** зависимого flow (`FlowsLoader._expand_bundle_ids_with_dependencies`). Значение сохраняется в `FlowConfig.depends_on_flow_ids` для `source=file`. UI для редактирования deps нет — только bundle JSON.
 

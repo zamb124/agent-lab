@@ -1,4 +1,4 @@
-"""Declaration-модуль CRM задач (очередь ``crm``).
+"""Declaration-модуль CRM задач (очереди ``crm`` и ``crm_summary``).
 
 Лёгкий: только объявления TaskSpec. Импортируется и producer'ами (для ``enqueue``),
 и impl-модулями (для ``@platform_task``).
@@ -20,11 +20,15 @@ CRM_REPAIR_NOTE_ANALYSIS_DRAFT = declare_task(
 CRM_FORMAT_NOTE_DESCRIPTION_MARKDOWN = declare_task(
     "crm_format_note_description_markdown", queue="crm"
 )
-CRM_REBUILD_DAILY_SUMMARY = declare_task("crm_rebuild_daily_summary", queue="crm")
-CRM_REBUILD_PERIOD_SUMMARY = declare_task("crm_rebuild_period_summary", queue="crm")
+CRM_REBUILD_DAILY_SUMMARY = declare_task(
+    "crm_rebuild_daily_summary", queue="crm_summary"
+)
+CRM_REBUILD_PERIOD_SUMMARY = declare_task(
+    "crm_rebuild_period_summary", queue="crm_summary"
+)
 
 CRM_RECONCILE_DAILY_SUMMARY = declare_task(
-    "crm_reconcile_daily_summary", queue="crm", scheduled=True
+    "crm_reconcile_daily_summary", queue="crm_summary", scheduled=True
 )
 CRM_GENERATE_NAMESPACE_SUGGESTS = declare_task(
     "crm_generate_namespace_suggests_tick",

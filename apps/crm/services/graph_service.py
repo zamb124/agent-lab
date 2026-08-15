@@ -23,7 +23,9 @@ from apps.crm.models.graph import (
     RelatedEntitiesResponse,
     ShortestPathResponse,
 )
-from apps.crm.services.access_control_service import AccessControlService
+from apps.crm.services.crm_entity_access_service import CrmEntityAccessService
+from core.authz.models import AuthzObject
+from core.authz.service import AuthzService
 from core.context import get_context
 from core.logging import get_logger
 from core.types import JsonObject, require_json_object
@@ -89,12 +91,14 @@ class GraphService:
         relationship_repo: RelationshipRepository,
         relationship_type_repo: RelationshipTypeRepository,
         entity_repo: EntityRepository,
-        access_control: AccessControlService,
+        entity_access: CrmEntityAccessService,
+        authz: AuthzService,
     ) -> None:
         self._relationship_repo: RelationshipRepository = relationship_repo
         self._relationship_type_repo: RelationshipTypeRepository = relationship_type_repo
         self._entity_repo: EntityRepository = entity_repo
-        self._access_control: AccessControlService = access_control
+        self._entity_access: CrmEntityAccessService = entity_access
+        self._authz: AuthzService = authz
 
     def _timeline_filters_for_count(
         self,
@@ -143,6 +147,17 @@ class GraphService:
         user_id = ctx.user.user_id if ctx and ctx.user else None
         company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
         return user_id, company_id
+
+    async def _require_viewable_entity(
+        self, entity_id: str, user_id: str | None
+    ) -> CRMEntity:
+        await self._authz.require_can_view(
+            AuthzObject.crm_entity(entity_id), user_id=user_id
+        )
+        entity = await self._entity_repo.get(entity_id)
+        if entity is None:
+            raise ValueError(f"Entity not found: {entity_id}")
+        return entity
 
     @staticmethod
     def _normalize_datetime(value: datetime | None) -> datetime | None:
@@ -219,14 +234,8 @@ class GraphService:
 
         await self._ensure_graph_entity_count_within_limit(namespace, timeline_from, timeline_to)
 
-        root_entity = await self._entity_repo.get(entity_id)
-        if not root_entity:
-            raise ValueError(f"Entity not found: {entity_id}")
+        root_entity = await self._require_viewable_entity(entity_id, user_id)
         # Фильтр периода задаёт обход соседей; корневая сущность всегда остаётся в графе.
-
-        can_read = await self._access_control.can_read_entity(root_entity, user_id, company_id)
-        if not can_read:
-            raise PermissionError(f"Access denied to root entity: {entity_id}")
 
         direction_map = await self._build_direction_map()
 
@@ -355,7 +364,7 @@ class GraphService:
         edges_dict: dict[str, Relationship] = {}
 
         seed_entities = await self._entity_repo.get_by_ids(entity_ids)
-        readable_seeds = await self._access_control.batch_filter_readable(
+        readable_seeds = await self._entity_access.batch_filter_readable(
             seed_entities,
             user_id,
             company_id,
@@ -502,23 +511,12 @@ class GraphService:
             f"Finding shortest path: from={from_entity_id}, to={to_entity_id}, user={user_id}, company={company_id}"
         )
 
-        from_entity = await self._entity_repo.get(from_entity_id)
-        to_entity = await self._entity_repo.get(to_entity_id)
-
-        if not from_entity:
-            raise ValueError(f"Entity not found: {from_entity_id}")
-        if not to_entity:
-            raise ValueError(f"Entity not found: {to_entity_id}")
+        from_entity = await self._require_viewable_entity(from_entity_id, user_id)
+        to_entity = await self._require_viewable_entity(to_entity_id, user_id)
         if not self._is_entity_in_time_window(from_entity, timeline_from, timeline_to):
             raise ValueError(f"From entity is out of created_at range: {from_entity_id}")
         if not self._is_entity_in_time_window(to_entity, timeline_from, timeline_to):
             raise ValueError(f"To entity is out of created_at range: {to_entity_id}")
-
-        can_read_from = await self._access_control.can_read_entity(from_entity, user_id, company_id)
-        can_read_to = await self._access_control.can_read_entity(to_entity, user_id, company_id)
-
-        if not can_read_from or not can_read_to:
-            raise PermissionError("Access denied to one or both entities")
 
         direction_map = await self._build_direction_map()
 
@@ -604,8 +602,7 @@ class GraphService:
 
         await self._ensure_graph_entity_count_within_limit(namespace, timeline_from, timeline_to)
 
-        if (await self._entity_repo.get(entity_id)) is None:
-            raise ValueError(f"Entity not found: {entity_id}")
+        _ = await self._require_viewable_entity(entity_id, user_id)
 
         direction_map = await self._build_direction_map()
         relationships = await self._relationship_repo.get_by_entity_for_graph(
@@ -683,7 +680,7 @@ class GraphService:
 
     async def _build_direction_map(self) -> _RelationshipDirectionMap:
         """Строит карту направленности для быстрого доступа."""
-        relationship_types = await self._relationship_type_repo.list_by_company(
+        relationship_types = await self._relationship_type_repo.list_all_by_company(
             include_system=True
         )
 
@@ -738,7 +735,7 @@ class GraphService:
         query_namespace: str | None = None,
     ) -> list[GraphNode]:
         """Применяет access control к entities, возвращая placeholder для скрытых."""
-        readable = await self._access_control.batch_filter_readable(
+        readable = await self._entity_access.batch_filter_readable(
             list(entities_dict.values()),
             user_id,
             company_id,

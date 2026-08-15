@@ -39,7 +39,7 @@ export const catalogAccessPatchOp = createAsyncOp({
                 company_visible: payload.companyVisible,
                 link_enabled: payload.linkEnabled,
                 link_permission: payload.linkPermission,
-                member_user_ids: payload.memberUserIds,
+                members: payload.members,
             },
         });
     },
@@ -94,7 +94,7 @@ export const documentAccessPatchOp = createAsyncOp({
             body: {
                 link_enabled: payload.linkEnabled,
                 link_permission: payload.linkPermission,
-                member_user_ids: payload.memberUserIds,
+                members: payload.members,
             },
         });
     },

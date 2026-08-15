@@ -30,12 +30,12 @@ async def test_tools_preview_masks_secrets_and_returns_model_view(client, app) -
     assert plan["requires_approval"] is False
 
 
-async def test_tools_preview_unknown_tool_returns_404(client, app) -> None:
+async def test_tools_preview_unknown_tool_returns_403(client, app) -> None:
     response = await client.post(
         "/flows/api/v1/tools/preview",
         json={"tool_id": "definitely_missing_tool_xyz"},
     )
-    assert response.status_code == 404
+    assert response.status_code == 403
 
 
 async def test_tools_contract_returns_definition_shape(client, app) -> None:

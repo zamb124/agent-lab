@@ -8,6 +8,10 @@ from typing import final
 
 from apps.flows.src.db.flow_ui_share_repository import FlowUIShareRepository
 from apps.flows.src.durable_execution import DurableWorkflowRuntime
+from apps.flows.src.services.flow_access_service import FlowAccessService
+from core.authz.models import AuthzObject
+from core.authz.service import AuthzService
+from core.authz.types import AuthzRelation
 from core.models.flow_ui_share import (
     FlowUIShareCreateRequest,
     FlowUIShareCreateResponse,
@@ -28,6 +32,13 @@ def _session_id(flow_id: str, context_id: str) -> str:
     return f"{flow_id}:{context_id}"
 
 
+def flow_ui_share_visitor_user_id(grant_id: str) -> str:
+    """AuthN id share-посетителя. Без ``:`` — OpenFGA ``user:<id>`` иначе malformed."""
+    if not grant_id:
+        raise ValueError("grant_id is required for share visitor user_id")
+    return f"flow-ui-share-{grant_id}"
+
+
 def _assert_owner(state: ExecutionState, user_id: str) -> None:
     if user_id not in {state.user_id, state.initiator_user_id}:
         raise PermissionError("Only the Flow UI session owner can manage share grants")
@@ -42,11 +53,15 @@ class FlowUIShareService:
         workflow_runtime: DurableWorkflowRuntime,
         short_link_service: ShortLinkService,
         token_service: TokenService,
+        flow_access_service: FlowAccessService,
+        authz: AuthzService,
     ) -> None:
         self._repository = repository
         self._workflow_runtime = workflow_runtime
         self._short_links = short_link_service
         self._tokens = token_service
+        self._flow_access = flow_access_service
+        self._authz = authz
 
     async def create(
         self,
@@ -62,6 +77,11 @@ class FlowUIShareService:
         if state is None:
             raise ValueError("Flow UI session does not exist")
         _assert_owner(state, user_id)
+        await self._authz.require_relation(
+            AuthzRelation.CAN_SHARE,
+            AuthzObject.flow(request.flow_id),
+            user_id=user_id,
+        )
         if state.session_flow_id != request.flow_id or state.context_id != request.context_id:
             raise ValueError("Flow UI share target identity mismatch")
         document = state.ui_document
@@ -92,6 +112,12 @@ class FlowUIShareService:
         )
         _ = await self._repository.create(grant)
         try:
+            await self._flow_access.sync_share_created(
+                share_grant_id=grant.grant_id,
+                flow_id=grant.flow_id,
+                owner_user_id=user_id,
+                permission=grant.permission,
+            )
             share_url = await self._short_links.mint_flow_ui_session_share(
                 grant.grant_id,
                 expires_at,
@@ -99,6 +125,7 @@ class FlowUIShareService:
             )
         except Exception:
             # Never leave a usable orphan grant when public-link minting fails.
+            await self._flow_access.sync_share_revoked(grant.grant_id)
             _ = await self._repository.revoke(
                 grant_id=grant.grant_id,
                 company_id=company_id,
@@ -133,11 +160,14 @@ class FlowUIShareService:
         company_id: str,
         user_id: str,
     ) -> bool:
-        return await self._repository.revoke(
+        revoked = await self._repository.revoke(
             grant_id=grant_id,
             company_id=company_id,
             created_by_user_id=user_id,
         )
+        if revoked:
+            await self._flow_access.sync_share_revoked(grant_id)
+        return revoked
 
     async def authorize(
         self,
@@ -147,7 +177,8 @@ class FlowUIShareService:
         flow_id: str,
         context_id: str,
         document_id: str | None = None,
-        require_interact: bool = False,
+        require_editor: bool = False,
+        user_id: str | None = None,
     ) -> FlowUIShareGrant:
         grant = await self._repository.get_active(grant_id)
         if grant is None:
@@ -160,8 +191,19 @@ class FlowUIShareService:
             raise PermissionError("Flow UI share grant scope mismatch")
         if document_id is not None and document_id != grant.document_id:
             raise PermissionError("Flow UI share document scope mismatch")
-        if require_interact and grant.permission != "interact":
+        if require_editor and grant.permission != "editor":
             raise PermissionError("Flow UI share grant is read-only")
+        subject_user_id = user_id if user_id is not None else "share_visitor"
+        if require_editor:
+            await self._authz.require_can_edit(
+                AuthzObject.flow_ui_share(grant.grant_id),
+                user_id=subject_user_id,
+            )
+        else:
+            await self._authz.require_can_view(
+                AuthzObject.flow_ui_share(grant.grant_id),
+                user_id=subject_user_id,
+            )
         state = await self._workflow_runtime.get_state(
             _session_id(flow_id, context_id),
             company_id=grant.company_id,
@@ -191,12 +233,13 @@ class FlowUIShareService:
             flow_id=grant.flow_id,
             context_id=grant.context_id,
             document_id=grant.document_id,
+            user_id="share_visitor",
         )
         now = datetime.now(UTC)
         seconds_left = max(1, int((grant.expires_at - now).total_seconds()))
         token_seconds = min(_SHARE_TOKEN_MAX_SECONDS, seconds_left)
         token = self._tokens.create_flow_ui_share_token(
-            user_id=f"flow-ui-share:{grant.grant_id}",
+            user_id=flow_ui_share_visitor_user_id(grant.grant_id),
             company_id=grant.company_id,
             expires_in=token_seconds,
             metadata={

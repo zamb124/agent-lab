@@ -79,6 +79,7 @@ class WorkQueueRow(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(120), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    owner_user_id: Mapped[str] = mapped_column(String(100), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
@@ -87,24 +88,6 @@ class WorkQueueRow(Base):
     __table_args__: tuple[object, ...] = (
         UniqueConstraint("company_id", "slug", name="uq_work_queues_company_slug"),
         Index("ix_work_queues_company", "company_id"),
-    )
-
-
-class WorkQueueMemberRow(Base):
-    """Участник очереди: пользователь (member_kind=user, member_ref=user_id) или
-    агент (member_kind=agent, member_ref=flow_id)."""
-
-    __tablename__: str = "work_queue_members"
-
-    work_queue_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    member_kind: Mapped[str] = mapped_column(String(16), primary_key=True)
-    member_ref: Mapped[str] = mapped_column(String(100), primary_key=True)
-    company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    role: Mapped[str] = mapped_column(String(32), nullable=False, default="member")
-
-    __table_args__: tuple[Index, ...] = (
-        Index("ix_work_queue_members_company", "company_id"),
-        Index("ix_work_queue_members_ref", "member_kind", "member_ref"),
     )
 
 

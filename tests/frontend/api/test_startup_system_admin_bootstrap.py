@@ -1,12 +1,23 @@
 from __future__ import annotations
 
+
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
+from unittest.mock import AsyncMock
+
 import pytest
 
+from core.authz.service import AuthzService
 from core.identity.system_bootstrap import (
     ensure_system_admin_membership,
     ensure_system_company_exists,
 )
 from core.models.identity_models import Company, User
+
+
+def _fake_authz() -> AuthzService:
+    authz = AsyncMock(spec=AuthzService)
+    authz.write_and_delete = AsyncMock()
+    return authz
 
 
 class _InMemoryRepo:
@@ -64,6 +75,7 @@ async def test_bootstrap_adds_admin_role_to_system_company_and_user():
         company_repository=container.company_repository,
         subdomain_repository=container.subdomain_repository,
         user_repository=container.user_repository,
+        authz=_fake_authz(),
     )
 
     assert "admin" in container.company_repository._entities["system"].members["user-1"]
@@ -83,6 +95,7 @@ async def test_bootstrap_skips_admin_when_target_email_user_missing():
         company_repository=container.company_repository,
         subdomain_repository=container.subdomain_repository,
         user_repository=container.user_repository,
+        authz=_fake_authz(),
     )
 
     assert returned_company.company_id == "system"

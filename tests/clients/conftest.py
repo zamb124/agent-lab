@@ -26,6 +26,23 @@ def setup_database_before_tests():
     yield
 
 
+@pytest.fixture(scope="session", autouse=True)
+def platform_notification_manager_redis(setup_database_before_tests):
+    _ = setup_database_before_tests
+    yield
+
+
+@pytest.fixture(scope="session", autouse=True)
+def ensure_minio_bucket():
+    yield
+
+
+@pytest.fixture(scope="session", autouse=True)
+def ensure_default_test_user_authz():
+    """Пустышка: клиентские тесты без OpenFGA store."""
+    yield
+
+
 @pytest.fixture
 def unique_id() -> str:
     return uuid.uuid4().hex[:12]

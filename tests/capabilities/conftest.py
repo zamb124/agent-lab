@@ -5,8 +5,22 @@ from uuid import uuid4
 
 import pytest
 
+from apps.code_runner_csharp.services.lsp import csharp_lsp_command
+from apps.code_runner_go.services.lsp import go_lsp_command
+from apps.code_runner_node.services.lsp import node_lsp_command
 from core.capabilities import CAPABILITY_LANGUAGES
+from core.capabilities.lsp_commands import python_lsp_command
 from tests.capabilities.capability_language_helpers import tool_payloads
+
+
+@pytest.fixture(scope="session")
+def code_lsp_toolchains_ready(sandbox_services: dict[str, str]) -> None:
+    """Прогрев LSP cache: python/node/go/csharp language servers, один раз на сессию."""
+    _ = sandbox_services
+    _ = python_lsp_command()
+    _ = node_lsp_command()
+    _ = go_lsp_command()
+    _ = csharp_lsp_command()
 
 
 @pytest.fixture

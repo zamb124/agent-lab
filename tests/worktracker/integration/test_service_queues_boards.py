@@ -29,46 +29,54 @@ async def test_get_queue_by_slug(worktracker_service, unique_id: str) -> None:
 
 
 async def test_queue_members_and_is_member(worktracker_service, unique_id: str) -> None:
+    owner_id = f"owner_{unique_id}"
     queue = await worktracker_service.create_queue(
         company_id="system",
         name="Members",
         slug=f"m-{unique_id}",
+        creator=UserActor(user_id=owner_id),
     )
     user_id = f"user_{unique_id}"
     await worktracker_service.add_queue_member(
         company_id="system",
         work_queue_id=queue.work_queue_id,
         member=UserActor(user_id=user_id),
+        actor_user_id=owner_id,
     )
     assert await worktracker_service.is_member(queue.work_queue_id, UserActor(user_id=user_id))
     members = await worktracker_service.list_queue_members(queue.work_queue_id)
-    assert len(members) == 1
+    assert {m.member.user_id for m in members if isinstance(m.member, UserActor)} == {
+        owner_id,
+        user_id,
+    }
 
     removed = await worktracker_service.remove_queue_member(
         work_queue_id=queue.work_queue_id,
         member=UserActor(user_id=user_id),
+        actor_user_id=owner_id,
     )
     assert removed is True
     assert not await worktracker_service.is_member(queue.work_queue_id, UserActor(user_id=user_id))
 
 
 async def test_add_flow_employee_queue_member(worktracker_service, unique_id: str) -> None:
+    owner_id = f"owner_{unique_id}"
     queue = await worktracker_service.create_queue(
         company_id="system",
         name="Agents",
         slug=f"ag-{unique_id}",
+        creator=UserActor(user_id=owner_id),
     )
-    employee_user_id = flow_employee_user_id(f"flow_{unique_id}")
+    emp_id = flow_employee_user_id(f"flow_{unique_id}")
     await worktracker_service.add_queue_member(
         company_id="system",
         work_queue_id=queue.work_queue_id,
-        member=UserActor(user_id=employee_user_id),
-        role="agent",
+        member=UserActor(user_id=emp_id),
+        actor_user_id=owner_id,
     )
     members = await worktracker_service.list_queue_members(queue.work_queue_id)
     assert any(
-        isinstance(m.member, UserActor) and m.member.user_id == employee_user_id
-        for m in members
+        isinstance(m.member, UserActor) and m.member.user_id == emp_id for m in members
     )
 
 
@@ -76,7 +84,7 @@ async def test_list_boards_by_namespace(worktracker_service, unique_id: str) -> 
     namespace = f"ns-{unique_id}"
     board = await worktracker_service.create_board(
         company_id="system",
-        name=f"Board {unique_id}",
+        name="Board",
         namespace=namespace,
         columns=[
             BoardColumn(
@@ -84,12 +92,11 @@ async def test_list_boards_by_namespace(worktracker_service, unique_id: str) -> 
                 label="To do",
                 state=WorkItemState.OPEN,
                 position=0,
-            ),
+            )
         ],
     )
     boards = await worktracker_service.list_boards("system", namespace=namespace)
-    ids = {b.board_id for b in boards}
-    assert board.board_id in ids
+    assert any(b.board_id == board.board_id for b in boards)
 
 
 async def test_ensure_generic_board_idempotent(worktracker_service) -> None:

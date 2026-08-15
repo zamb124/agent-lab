@@ -3,71 +3,136 @@
 
 core/api/team.py подключается в factory.py — эндпоинт GET /members
 должен отвечать из любого сервиса с одним и тем же результатом.
+
+Не сканировать shared `company:system`: xdist копит roster, N сервисов × N+1 get
+даёт timeout. Выделенная компания + OpenFGA tuples.
 """
 
+
 from __future__ import annotations
+
+from collections.abc import AsyncIterator
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+from apps.frontend.container import FrontendContainer
+from core.models.identity_models import Company, User
+from core.utils.tokens import get_token_service
+from tests.fixtures.auth import set_test_company_member_roles
+
 pytestmark = [pytest.mark.timeout(30)]
+
+_PLATFORM_ASGI_BASE_URL = "http://humanitec.ru"
+_PLATFORM_ASGI_HOST_HEADERS = {"Host": "humanitec.ru"}
+
+
+async def _asgi_client(app: object) -> AsyncIterator[AsyncClient]:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(
+        transport=transport,
+        base_url=_PLATFORM_ASGI_BASE_URL,
+        headers=_PLATFORM_ASGI_HOST_HEADERS,
+    ) as client:
+        yield client
 
 
 @pytest_asyncio.fixture
-async def flows_team_client():
-    from apps.flows.main import app
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        yield client
+async def flows_team_client(flows_client: AsyncClient) -> AsyncClient:
+    return flows_client
 
 
 @pytest_asyncio.fixture
 async def crm_team_client():
-    from apps.crm.main import create_app
-    crm_app = create_app()
-    transport = ASGITransport(app=crm_app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+    from apps.crm.main import app
+
+    async for client in _asgi_client(app):
         yield client
 
 
 @pytest_asyncio.fixture
-async def rag_team_client():
-    from apps.rag.main import app
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+async def rag_team_client(rag_app: object):
+    async for client in _asgi_client(rag_app):
         yield client
 
 
 @pytest_asyncio.fixture
-async def sync_team_client():
-    from apps.sync.main import app
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+async def sync_team_client(sync_app: object):
+    async for client in _asgi_client(sync_app):
         yield client
 
 
 @pytest_asyncio.fixture
-async def office_team_client():
-    from apps.office.main import app
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        yield client
+async def office_team_client(office_client: AsyncClient) -> AsyncClient:
+    return office_client
 
 
-@pytest.mark.asyncio
-async def test_team_members_endpoint_available_in_all_services(
+async def _seed_team_company(
+    frontend_container: FrontendContainer,
     unique_id: str,
-    frontend_client,
-    flows_team_client,
-    crm_team_client,
-    rag_team_client,
-    sync_team_client,
-    office_team_client,
-    auth_headers_system,
-) -> None:
-    _ = unique_id
-    clients = [
+    *,
+    extra_member: bool = False,
+) -> tuple[dict[str, str], set[str]]:
+    company_id = f"team_xsvc_{unique_id}"
+    owner_id = f"team_owner_{unique_id}"
+    member_id = f"team_member_{unique_id}"
+    await frontend_container.user_repository.set(
+        User(
+            user_id=owner_id,
+            name="Team Owner",
+            companies={company_id: ["owner", "admin"]},
+            active_company_id=company_id,
+        )
+    )
+    await frontend_container.company_repository.set(
+        Company(
+            company_id=company_id,
+            name=f"Team cross-service {unique_id}",
+            owner_user_id=owner_id,
+            members={owner_id: ["owner", "admin"]},
+        )
+    )
+    await set_test_company_member_roles(
+        frontend_container.company_repository,
+        frontend_container.authz_service,
+        company_id=company_id,
+        user_id=owner_id,
+        roles=["owner", "admin"],
+    )
+    expected = {owner_id}
+    if extra_member:
+        await frontend_container.user_repository.set(
+            User(
+                user_id=member_id,
+                name="Team Member",
+                companies={company_id: ["member"]},
+                active_company_id=company_id,
+            )
+        )
+        await set_test_company_member_roles(
+            frontend_container.company_repository,
+            frontend_container.authz_service,
+            company_id=company_id,
+            user_id=member_id,
+            roles=["member"],
+        )
+        expected.add(member_id)
+    token = get_token_service().create_token(
+        owner_id, company_id=company_id, roles=["owner", "admin"]
+    )
+    return {"Authorization": f"Bearer {token}"}, expected
+
+
+def _team_clients(
+    frontend_client: AsyncClient,
+    flows_team_client: AsyncClient,
+    crm_team_client: AsyncClient,
+    rag_team_client: AsyncClient,
+    sync_team_client: AsyncClient,
+    office_team_client: AsyncClient,
+) -> list[tuple[str, AsyncClient, str]]:
+    return [
         ("frontend", frontend_client, "/frontend/api/team/members"),
         ("flows", flows_team_client, "/flows/api/team/members"),
         ("crm", crm_team_client, "/crm/api/team/members"),
@@ -76,8 +141,30 @@ async def test_team_members_endpoint_available_in_all_services(
         ("office", office_team_client, "/documents/api/team/members"),
     ]
 
+
+@pytest.mark.asyncio
+async def test_team_members_endpoint_available_in_all_services(
+    unique_id: str,
+    frontend_client: AsyncClient,
+    frontend_container: FrontendContainer,
+    flows_team_client: AsyncClient,
+    crm_team_client: AsyncClient,
+    rag_team_client: AsyncClient,
+    sync_team_client: AsyncClient,
+    office_team_client: AsyncClient,
+) -> None:
+    headers, _expected = await _seed_team_company(frontend_container, unique_id)
+    clients = _team_clients(
+        frontend_client,
+        flows_team_client,
+        crm_team_client,
+        rag_team_client,
+        sync_team_client,
+        office_team_client,
+    )
+
     for service_name, client, url in clients:
-        response = await client.get(url, headers=auth_headers_system)
+        response = await client.get(url, headers=headers)
         assert response.status_code == 200, (
             f"{service_name} must expose team members endpoint, got {response.status_code}"
         )
@@ -91,13 +178,13 @@ async def test_team_members_endpoint_available_in_all_services(
 @pytest.mark.asyncio
 async def test_team_members_consistent_across_services(
     unique_id: str,
-    frontend_client,
-    frontend_container,
-    flows_team_client,
-    crm_team_client,
-    rag_team_client,
-    sync_team_client,
-    office_team_client,
+    frontend_client: AsyncClient,
+    frontend_container: FrontendContainer,
+    flows_team_client: AsyncClient,
+    crm_team_client: AsyncClient,
+    rag_team_client: AsyncClient,
+    sync_team_client: AsyncClient,
+    office_team_client: AsyncClient,
 ) -> None:
     """Состав команды одинаков во всех сервисах.
 
@@ -105,51 +192,18 @@ async def test_team_members_consistent_across_services(
     параллельные session-фикстуры других xdist-воркеров добавляют участников
     между запросами к разным сервисам, и сравнение множеств флейкает.
     """
-    from core.models.identity_models import Company, User
-    from core.utils.tokens import get_token_service
+    headers, expected = await _seed_team_company(
+        frontend_container, unique_id, extra_member=True
+    )
+    clients = _team_clients(
+        frontend_client,
+        flows_team_client,
+        crm_team_client,
+        rag_team_client,
+        sync_team_client,
+        office_team_client,
+    )
 
-    company_id = f"team_xsvc_{unique_id}"
-    owner_id = f"team_owner_{unique_id}"
-    member_id = f"team_member_{unique_id}"
-    await frontend_container.user_repository.set(
-        User(
-            user_id=owner_id,
-            name="Team Owner",
-            companies={company_id: ["owner", "admin"]},
-            active_company_id=company_id,
-        )
-    )
-    await frontend_container.user_repository.set(
-        User(
-            user_id=member_id,
-            name="Team Member",
-            companies={company_id: ["member"]},
-            active_company_id=company_id,
-        )
-    )
-    await frontend_container.company_repository.set(
-        Company(
-            company_id=company_id,
-            name=f"Team cross-service {unique_id}",
-            owner_user_id=owner_id,
-            members={owner_id: ["owner", "admin"], member_id: ["member"]},
-        )
-    )
-    token = get_token_service().create_token(
-        owner_id, company_id=company_id, roles=["owner", "admin"]
-    )
-    headers = {"Authorization": f"Bearer {token}"}
-
-    clients = [
-        ("frontend", frontend_client, "/frontend/api/team/members"),
-        ("flows", flows_team_client, "/flows/api/team/members"),
-        ("crm", crm_team_client, "/crm/api/team/members"),
-        ("rag", rag_team_client, "/rag/api/team/members"),
-        ("sync", sync_team_client, "/sync/api/team/members"),
-        ("office", office_team_client, "/documents/api/team/members"),
-    ]
-
-    expected = {owner_id, member_id}
     for service_name, client, url in clients:
         response = await client.get(url, headers=headers)
         assert response.status_code == 200, service_name
@@ -163,13 +217,13 @@ async def test_team_members_consistent_across_services(
 @pytest.mark.asyncio
 async def test_team_members_response_schema(
     unique_id: str,
-    frontend_client,
-    auth_headers_system,
+    frontend_client: AsyncClient,
+    frontend_container: FrontendContainer,
 ) -> None:
-    _ = unique_id
+    headers, _expected = await _seed_team_company(frontend_container, unique_id)
     response = await frontend_client.get(
         "/frontend/api/team/members",
-        headers=auth_headers_system,
+        headers=headers,
     )
     assert response.status_code == 200
     response_data = response.json()
@@ -188,9 +242,9 @@ async def test_team_members_response_schema(
 @pytest.mark.asyncio
 async def test_team_members_unauthorized(
     unique_id: str,
-    frontend_client,
-    flows_team_client,
-    crm_team_client,
+    frontend_client: AsyncClient,
+    flows_team_client: AsyncClient,
+    crm_team_client: AsyncClient,
 ) -> None:
     _ = unique_id
     clients = [

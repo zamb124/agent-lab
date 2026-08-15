@@ -15,7 +15,6 @@ from sqlalchemy.ext.asyncio import create_async_engine
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from apps.office.db.models import (  # noqa: F401
-    OfficeCatalogMember,
     OfficeDocumentBinding,
     OfficeDocumentCatalog,
 )
@@ -32,7 +31,6 @@ target_metadata = Base.metadata
 MANAGED_TABLES = {
     "office_document_bindings",
     "office_document_catalogs",
-    "office_catalog_members",
 }
 
 

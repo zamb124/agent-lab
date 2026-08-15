@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
 from apps.sync.models.common import UserBrief
+
+ChannelMemberRole = Literal["owner", "admin", "member"]
 
 
 def _validate_avatar_url(v: str | None) -> str | None:
@@ -154,14 +157,14 @@ class ChannelMemberRead(BaseModel):
     """Участник канала."""
 
     user_id: str = Field(description="Идентификатор пользователя.")
-    role: str = Field(description="Роль пользователя в канале (owner/admin/member/viewer).")
+    role: ChannelMemberRole = Field(description="Роль пользователя в канале.")
 
 
 class ChannelMemberAdd(BaseModel):
     """Добавление участника в канал."""
 
     user_id: str = Field(description="Идентификатор пользователя.")
-    role: str = Field(
+    role: ChannelMemberRole = Field(
         default="member",
         description="Роль участника (по умолчанию member).",
     )

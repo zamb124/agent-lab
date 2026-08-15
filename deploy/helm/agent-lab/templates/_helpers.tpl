@@ -76,6 +76,22 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
   value: postgresql+asyncpg://platform_user:$(POSTGRES_PASSWORD)@{{ .Values.appCommonEnv.postgresService }}:{{ .Values.appCommonEnv.postgresPort }}/platform_search
 - name: DATABASE__WIKI_URL
   value: postgresql+asyncpg://platform_user:$(POSTGRES_PASSWORD)@{{ .Values.appCommonEnv.postgresService }}:{{ .Values.appCommonEnv.postgresPort }}/platform_wiki
+- name: OPENFGA__API_URL
+  value: http://openfga:8080
+{{- /* Server (Deployment) смотрит openfga.enabled; client authz включаем только с pin ids — иначе CrashLoop на первом деплое до bootstrap. */}}
+- name: OPENFGA__ENABLED
+  value: {{ if and .Values.openfga.enabled .Values.openfga.storeId .Values.openfga.authorizationModelId }}"true"{{ else }}"false"{{ end }}
+- name: OPENFGA__STORE_ID
+  value: {{ .Values.openfga.storeId | quote }}
+- name: OPENFGA__AUTHORIZATION_MODEL_ID
+  value: {{ .Values.openfga.authorizationModelId | quote }}
+- name: OPENFGA_API_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: openfga-api-token
+- name: OPENFGA__API_TOKEN
+  value: $(OPENFGA_API_TOKEN)
 - name: DATABASE__REDIS_URL
   value: redis://{{ .Values.appCommonEnv.redisService }}:{{ .Values.appCommonEnv.redisPort }}/0
 - name: DATABASE__AUTO_MIGRATE

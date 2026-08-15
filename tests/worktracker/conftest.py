@@ -15,7 +15,14 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from core.worktracker.models import Board, BoardColumn, WorkItem, WorkItemState, WorkQueue
+from core.worktracker.models import (
+    Board,
+    BoardColumn,
+    UserActor,
+    WorkItem,
+    WorkItemState,
+    WorkQueue,
+)
 from tests.fixtures.platform_events import (
     PlatformEventsReceive,
 )
@@ -75,11 +82,14 @@ async def worktracker_client_company2(worktracker_app, auth_headers_company2):
 
 
 @pytest_asyncio.fixture
-async def worktracker_queue(worktracker_service, unique_id: str) -> WorkQueue:
+async def worktracker_queue(
+    worktracker_service, unique_id: str, system_user_id: str
+) -> WorkQueue:
     return await worktracker_service.create_queue(
         company_id="system",
         name=f"Queue {unique_id}",
         slug=f"q-{unique_id}",
+        creator=UserActor(user_id=system_user_id),
     )
 
 

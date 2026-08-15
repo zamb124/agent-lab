@@ -7,7 +7,6 @@ SQLAlchemy модели для CRM Service.
 - relationship_types: Типы связей с промптами
 - relationships: Граф связей между entities
 - company_mapping: Связь платформенной Company с CRM entity
-- access_grants: Гранты доступа
 - access_requests: Запросы на доступ
 """
 
@@ -352,82 +351,6 @@ class CompanyMapping(Base):
     @override
     def __repr__(self) -> str:
         return f"<CompanyMapping(company_id='{self.company_id}', entity_id='{self.entity_id}')>"
-
-
-class AccessGrant(Base):
-    """
-    Универсальные гранты доступа.
-
-    Позволяет шарить:
-    - Конкретную entity
-    - Весь namespace
-
-    Кому:
-    - public (весь интернет, анонимы)
-    - user (конкретный user_id из любой компании)
-    - company (вся компания)
-    """
-
-    __tablename__: str = "access_grants"
-
-    grant_id: Mapped[str] = mapped_column(String(100), primary_key=True)
-
-    # Владелец
-    company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    created_by: Mapped[str] = mapped_column(String(100), nullable=False)
-
-    # ЧТО шарим
-    resource_type: Mapped[str] = mapped_column(
-        String(50), nullable=False, comment="entity | namespace"
-    )
-    resource_id: Mapped[str] = mapped_column(
-        String(200), nullable=False, index=True, comment="entity_id или namespace name"
-    )
-
-    # КОМУ шарим
-    grant_type: Mapped[str] = mapped_column(
-        String(50), nullable=False, comment="public | user | company"
-    )
-
-    # Для grant_type="user"
-    target_user_id: Mapped[str | None] = mapped_column(
-        String(100), nullable=True, index=True, comment="ID пользователя (может быть из любой компании)"
-    )
-
-    # Для grant_type="company"
-    target_company_id: Mapped[str | None] = mapped_column(
-        String(100), nullable=True, index=True, comment="ID компании"
-    )
-
-    # Права
-    role: Mapped[str] = mapped_column(
-        String(50), default="viewer", nullable=False, comment="viewer | editor | admin"
-    )
-
-    # Опционально: временный доступ
-    expires_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True, comment="Срок действия (опционально)"
-    )
-
-    # Опционально: токен для анонимного доступа
-    access_token: Mapped[str | None] = mapped_column(
-        String(100), nullable=True, unique=True, comment="Токен для шаринга по ссылке"
-    )
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
-
-    __table_args__: tuple[object, ...] = (
-        Index("idx_grants_resource", "resource_type", "resource_id", "company_id"),
-        Index("idx_grants_target_user", "target_user_id"),
-        Index("idx_grants_target_company", "target_company_id"),
-        Index("idx_grants_token", "access_token"),
-    )
-
-    @override
-    def __repr__(self) -> str:
-        return f"<AccessGrant(grant_id='{self.grant_id}', type='{self.grant_type}', resource='{self.resource_type}:{self.resource_id}')>"
 
 
 class AccessRequest(Base):

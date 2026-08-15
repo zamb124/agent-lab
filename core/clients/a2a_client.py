@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
 import uuid
 from collections.abc import Sequence
 from typing import cast
@@ -15,11 +17,12 @@ from core.a2a.extensions import (
     A2UI_MIME_TYPE,
     parse_a2a_extensions_header,
 )
-from core.a2a.methods import SEND_MESSAGE
+from core.a2a.methods import GET_TASK, SEND_MESSAGE
 from core.a2a.task_json import extract_text_from_parts_json, extract_text_from_task_json
 from core.a2a.task_states import wire_task_state_to_platform
 from core.context import get_context
 from core.http import get_httpx_client
+from core.internal_context_headers import build_internal_context_headers
 from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.test_scope import TEST_SCOPE_HEADER, resolve_test_scope
@@ -29,6 +32,9 @@ logger = get_logger(__name__)
 
 A2A_PROTOCOL_VERSION = "1.0"
 A2A_VERSION_HEADER = "A2A-Version"
+_SEND_TASK_OPEN_STATES = frozenset({"submitted", "working"})
+_SEND_TASK_ENQUEUE_HTTP_TIMEOUT_SECONDS = 30.0
+_SEND_TASK_POLL_INTERVAL_SECONDS = 0.3
 
 
 class A2ATaskResult(StrictBaseModel):
@@ -144,6 +150,13 @@ def _agent_card_supports_a2ui(agent_card: JsonObject) -> bool:
     return False
 
 
+def _task_id_from_result(task_result: JsonObject) -> str:
+    task_id = task_result.get("id")
+    if not isinstance(task_id, str) or task_id.strip() == "":
+        raise A2AClientError("A2A Task.id is required")
+    return task_id
+
+
 class A2AClient:
     """HTTP client for A2A Protocol 1.0 SendMessage / AgentCard."""
 
@@ -183,6 +196,7 @@ class A2AClient:
         accepted_output_modes: Sequence[str] | None = None,
         activated_extensions: Sequence[str] = (),
         timeout: float | None = None,
+        return_immediately: bool = False,
     ) -> A2ATaskResult:
         """Send a structured A2A Message (Parts preserved, no text collapse on wire)."""
         if not parts:
@@ -190,8 +204,6 @@ class A2AClient:
         for index, part in enumerate(parts):
             _ = require_json_object(part, f"SendMessage.parts[{index}]")
 
-        url = base_url.rstrip("/")
-        rpc_id = str(uuid.uuid4())
         message_payload: JsonObject = {
             "role": role,
             "parts": list(parts),
@@ -207,50 +219,21 @@ class A2AClient:
             "message": message_payload,
             "configuration": {
                 "acceptedOutputModes": modes,
+                "returnImmediately": return_immediately,
             },
         }
         if metadata:
             params_payload["metadata"] = dict(metadata)
 
-        payload: JsonObject = {
-            "jsonrpc": "2.0",
-            "id": rpc_id,
-            "method": SEND_MESSAGE,
-            "params": params_payload,
-        }
-
-        request_headers = self._build_request_headers(
-            headers,
+        return await self._post_rpc(
+            base_url,
+            method=SEND_MESSAGE,
+            params=params_payload,
+            headers=headers,
             activated_extensions=activated_extensions,
+            timeout=timeout,
+            rpc_label="SendMessage",
         )
-        effective_timeout = self.timeout if timeout is None else timeout
-        try:
-            async with get_httpx_client(
-                timeout=effective_timeout,
-                follow_redirects=True,
-            ) as client:
-                response = await client.post(url, json=payload, headers=request_headers)
-                if response.status_code != 200:
-                    raise A2AClientError(
-                        f"Failed to send task to {url}: {response.status_code} - {response.text}"
-                    )
-                result = parse_json_object(response.content, "A2A SendMessage response")
-                if "error" in result:
-                    raise A2AClientError(f"A2A error: {result['error']}")
-                extension_header = cast(
-                    str | None,
-                    response.headers.get(A2A_EXTENSIONS_HEADER),
-                )
-                header_extensions = parse_a2a_extensions_header(extension_header)
-                return self._parse_a2a_response(
-                    result,
-                    header_extensions=header_extensions,
-                )
-        except httpx.HTTPError as exc:
-            error_str = str(exc) or type(exc).__name__
-            raise A2AClientError(f"HTTP error sending task to {url}: {error_str}") from exc
-        except ValueError as exc:
-            raise A2AClientError(f"Invalid JSON response from {url}: {exc}") from exc
 
     async def send_task(
         self,
@@ -262,9 +245,15 @@ class A2AClient:
         headers: dict[str, str] | None = None,
         *,
         timeout: float | None = None,
-        negotiate_extensions: bool = True,
+        negotiate_extensions: bool = False,
     ) -> A2ATaskResult:
-        """Convenience SendMessage with a single text Part."""
+        """Convenience SendMessage with a single text Part.
+
+        Internal callers (CRM skills, remote_flow) do not hold the peer HTTP
+        worker for the graph: SendMessageConfiguration.returnImmediately=true,
+        then GetTask until terminal/interrupted or timeout. A2UI negotiation
+        is opt-in. Pass negotiate_extensions=True for Flow UI hosts.
+        """
         context_id = session_id or str(uuid.uuid4())
         final_metadata: JsonObject = dict(metadata) if metadata is not None else {}
         if branch_id and branch_id != "default":
@@ -282,7 +271,9 @@ class A2AClient:
                 accepted_modes.append(A2UI_MIME_TYPE)
 
         logger.debug(f"A2A send_task to {base_url}: {content[:100]}...")
-        return await self.send_message(
+        overall_timeout = self.timeout if timeout is None else timeout
+        enqueue_timeout = min(_SEND_TASK_ENQUEUE_HTTP_TIMEOUT_SECONDS, overall_timeout)
+        submitted = await self.send_message(
             base_url,
             parts=[{"text": content}],
             context_id=context_id,
@@ -290,8 +281,104 @@ class A2AClient:
             headers=headers,
             accepted_output_modes=accepted_modes,
             activated_extensions=activated,
-            timeout=timeout,
+            timeout=enqueue_timeout,
+            return_immediately=True,
         )
+        if submitted.status not in _SEND_TASK_OPEN_STATES:
+            return submitted
+        task_id = _task_id_from_result(submitted.task)
+        deadline = time.monotonic() + overall_timeout
+        while time.monotonic() < deadline:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            polled = await self.get_task(
+                base_url,
+                task_id,
+                headers=headers,
+                timeout=min(_SEND_TASK_ENQUEUE_HTTP_TIMEOUT_SECONDS, remaining),
+            )
+            if polled.status not in _SEND_TASK_OPEN_STATES:
+                return polled
+            await asyncio.sleep(min(_SEND_TASK_POLL_INTERVAL_SECONDS, max(remaining, 0.0)))
+        raise A2AClientError(
+            f"A2A task {task_id} did not complete within {overall_timeout}s"
+        )
+
+    async def get_task(
+        self,
+        base_url: str,
+        task_id: str,
+        headers: dict[str, str] | None = None,
+        *,
+        timeout: float | None = None,
+    ) -> A2ATaskResult:
+        stripped_task_id = task_id.strip()
+        if not stripped_task_id:
+            raise A2AClientError("GetTask task_id is required")
+        params: JsonObject = {"id": stripped_task_id, "historyLength": 0}
+        return await self._post_rpc(
+            base_url,
+            method=GET_TASK,
+            params=params,
+            headers=headers,
+            activated_extensions=(),
+            timeout=timeout,
+            rpc_label="GetTask",
+        )
+
+    async def _post_rpc(
+        self,
+        base_url: str,
+        *,
+        method: str,
+        params: JsonObject,
+        headers: dict[str, str] | None,
+        activated_extensions: Sequence[str],
+        timeout: float | None,
+        rpc_label: str,
+    ) -> A2ATaskResult:
+        url = base_url.rstrip("/")
+        payload: JsonObject = {
+            "jsonrpc": "2.0",
+            "id": str(uuid.uuid4()),
+            "method": method,
+            "params": params,
+        }
+        request_headers = self._build_request_headers(
+            headers,
+            activated_extensions=activated_extensions,
+        )
+        effective_timeout = self.timeout if timeout is None else timeout
+        try:
+            async with get_httpx_client(
+                timeout=effective_timeout,
+                follow_redirects=True,
+            ) as client:
+                response = await client.post(url, json=payload, headers=request_headers)
+                if response.status_code != 200:
+                    raise A2AClientError(
+                        f"Failed {rpc_label} to {url}: {response.status_code} - {response.text}"
+                    )
+                result = parse_json_object(response.content, f"A2A {rpc_label} response")
+                if "error" in result:
+                    raise A2AClientError(f"A2A error: {result['error']}")
+                extension_header = cast(
+                    str | None,
+                    response.headers.get(A2A_EXTENSIONS_HEADER),
+                )
+                header_extensions = parse_a2a_extensions_header(extension_header)
+                return self._parse_a2a_response(
+                    result,
+                    header_extensions=header_extensions,
+                )
+        except httpx.HTTPError as exc:
+            error_str = str(exc) or type(exc).__name__
+            raise A2AClientError(
+                f"HTTP error {rpc_label} to {url}: {error_str}"
+            ) from exc
+        except ValueError as exc:
+            raise A2AClientError(f"Invalid JSON response from {url}: {exc}") from exc
 
     def _build_request_headers(
         self,
@@ -304,6 +391,13 @@ class A2AClient:
         if context:
             if context.auth_token and "Authorization" not in request_headers:
                 request_headers["Authorization"] = f"Bearer {context.auth_token}"
+            if context.active_company is not None:
+                request_headers.update(
+                    build_internal_context_headers(
+                        company_id=context.active_company.company_id,
+                        user_id=context.user.user_id,
+                    )
+                )
             if context.active_company and "X-Company-Id" not in request_headers:
                 request_headers["X-Company-Id"] = context.active_company.company_id
             if context.user and "X-User-Id" not in request_headers:

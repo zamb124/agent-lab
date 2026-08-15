@@ -12,6 +12,7 @@ services:
       POSTGRES_HOST_AUTH_METHOD: trust
     ports:
       - "54322:5432"
+    shm_size: 1g
     volumes:
       - ./migrations/postgres/init.sql:/docker-entrypoint-initdb.d/01-init-databases.sql:ro
       - ./reports/postgres-test-logs:/var/log/postgresql
@@ -66,6 +67,54 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - test-net
+
+  openfga-migrate-test:
+    platform: "linux/amd64"
+    image: openfga/openfga:v1.18.1
+    container_name: agentlab_openfga_migrate_test
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+    command:
+      - migrate
+      - --datastore-engine
+      - postgres
+      - --datastore-uri
+      - postgres://platform_user:admin@postgres-test:5432/openfga?sslmode=disable
+    networks:
+      - test-net
+    restart: "no"
+
+  openfga-test:
+    platform: "linux/amd64"
+    image: openfga/openfga:v1.18.1
+    container_name: agentlab_openfga_test
+    depends_on:
+      openfga-migrate-test:
+        condition: service_completed_successfully
+    command:
+      - run
+      - --datastore-engine
+      - postgres
+      - --datastore-uri
+      - postgres://platform_user:admin@postgres-test:5432/openfga?sslmode=disable
+      - --http-addr
+      - 0.0.0.0:8080
+      - --grpc-addr
+      - 0.0.0.0:8081
+      - --playground-enabled=false
+      - --request-timeout
+      - 30s
+      - --max-concurrent-checks-per-batch-check
+      - "10"
+      - --max-concurrent-reads-for-check
+      - "16"
+    ports:
+      - "9093:8080"
+      - "9094:8081"
+    restart: unless-stopped
     networks:
       - test-net
 
@@ -208,7 +257,6 @@ services:
       - DATABASE__REDIS_URL=redis://redis-test:6379/0
       - TASKS__BROKER_URL=redis://redis-test:6379/1
       - TESTING=true
-      - AUTH__PERMISSIONS_ENABLED=false
       - AUTH__INTERNAL_SERVICE_KEY=test-internal-service-key
       - AUTH__ADMIN_API_KEY=test-admin-api-key
       - EXTERNAL_TEST_A2A_AGENT_URL=http://test-a2a-agent:8005
@@ -218,7 +266,7 @@ services:
       - S3__BUCKETS__TEST_BUCKET__ENDPOINT_URL=http://minio-test:9000
       - CALLS__LIVEKIT_URL=ws://livekit-test:7880
       - CALLS__LIVEKIT_API_KEY=devkey
-      - CALLS__LIVEKIT_API_SECRET=secret
+      - CALLS__LIVEKIT_API_SECRET=platform-test-livekit-secret-32b!
       - VOICE__STT__PROVIDER=mock
       - VOICE__STT__MOCK_TRANSCRIPT_TEXT=Тестовая транскрипция docker worker
       - OFFICE__JWT_SECRET=test-onlyoffice-jwt-secret
@@ -247,7 +295,7 @@ services:
       LIVEKIT_CONFIG: |
         port: 7880
         keys:
-          devkey: secret
+          devkey: platform-test-livekit-secret-32b!
         redis:
           address: redis-test:6379
           db: 2
@@ -278,7 +326,7 @@ services:
     environment:
       EGRESS_CONFIG_BODY: |
         api_key: devkey
-        api_secret: secret
+        api_secret: platform-test-livekit-secret-32b!
         ws_url: ws://livekit-test:7880
         redis:
           address: redis-test:6379
@@ -307,7 +355,7 @@ services:
         "--api-key",
         "devkey",
         "--api-secret",
-        "secret",
+        "platform-test-livekit-secret-32b!",
         "room",
         "join",
         "--identity",

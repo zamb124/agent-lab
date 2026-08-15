@@ -181,6 +181,7 @@ async def ensure_platform_search_worker_prerequisites(
         company_repository=frontend_container.company_repository,
         subdomain_repository=frontend_container.subdomain_repository,
         user_repository=frontend_container.user_repository,
+        authz=frontend_container.authz_service,
     )
     if admin_user is None:
         admin_user_id = "user_zambas124_yandex_ru_test"
@@ -196,6 +197,14 @@ async def ensure_platform_search_worker_prerequisites(
             member_roles.append(ADMIN_ROLE)
         company.members[admin_user_id] = member_roles
         await frontend_container.company_repository.set(company)
+        from core.authz.company_sync import sync_company_member_roles
+
+        await sync_company_member_roles(
+            frontend_container.authz_service,
+            company_id=SYSTEM_COMPANY_ID,
+            user_id=admin_user_id,
+            roles=member_roles,
+        )
 
     from tests.fixtures.search_runet import ensure_runet_platform_index_seeded
 

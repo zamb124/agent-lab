@@ -31,8 +31,15 @@ async def embed_test_auth(frontend_container, unique_id):
         active_company_id=company_id,
     )
     await frontend_container.user_repository.set(user)
-    company.members = {user_id: ["admin"]}
-    await frontend_container.company_repository.set(company)
+    from tests.fixtures.auth import set_test_company_member_roles
+
+    await set_test_company_member_roles(
+        frontend_container.company_repository,
+        frontend_container.authz_service,
+        company_id=company_id,
+        user_id=user_id,
+        roles=["admin"],
+    )
 
     set_context(
         Context(
@@ -62,6 +69,11 @@ async def embed_test_auth(frontend_container, unique_id):
         edges=[Edge(from_node="main", to_node=None)],
     )
     await flows_container.flow_repository.set(agent)
+    await flows_container.flow_access_service.sync_flow_saved(
+        agent,
+        company_id=company_id,
+        owner_user_id=user_id,
+    )
     clear_context()
 
     token = get_token_service().create_token(user_id, company_id=company_id)
@@ -75,5 +87,6 @@ async def embed_test_auth(frontend_container, unique_id):
             channel="test",
         )
     )
+    await flows_container.flow_access_service.sync_flow_deleted(flow_id, branch_ids=[])
     await flows_container.flow_repository.delete(flow_id)
     clear_context()

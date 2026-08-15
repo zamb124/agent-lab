@@ -11,10 +11,9 @@ from core.context import get_context
 from core.logging import get_logger
 
 if TYPE_CHECKING:
-    from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
     from apps.crm.db.repositories.entity_repository import EntityRepository
     from apps.crm.services.task_service import TaskService
-    from core.db.repositories.company_repository import CompanyRepository
+    from core.authz.service import AuthzService
 
 logger = get_logger(__name__)
 
@@ -23,8 +22,7 @@ async def enqueue_note_markdown_format_task(
     *,
     task_service: TaskService,
     entity_repository: EntityRepository,
-    company_repository: CompanyRepository,
-    access_grant_repository: AccessGrantRepository,
+    authz: AuthzService,
     note_id: str,
     company_id: str,
     namespace: str,
@@ -57,8 +55,7 @@ async def enqueue_note_markdown_format_task(
         note_date_iso=note_date_iso,
         action="updated",
         note=entity,
-        company_repository=company_repository,
-        access_grant_repository=access_grant_repository,
+                authz=authz,
         skip_notification_center=True,
         markdown_format={
             "phase": "started",
@@ -73,8 +70,7 @@ async def schedule_note_markdown_format(
     *,
     task_service: TaskService,
     entity_repository: EntityRepository,
-    company_repository: CompanyRepository,
-    access_grant_repository: AccessGrantRepository,
+    authz: AuthzService,
     note_id: str,
     company_id: str,
     namespace: str,
@@ -94,8 +90,7 @@ async def schedule_note_markdown_format(
         return await enqueue_note_markdown_format_task(
             task_service=task_service,
             entity_repository=entity_repository,
-            company_repository=company_repository,
-            access_grant_repository=access_grant_repository,
+                authz=authz,
             note_id=note_id,
             company_id=company_id,
             namespace=namespace,

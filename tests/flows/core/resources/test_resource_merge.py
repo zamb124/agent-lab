@@ -185,3 +185,12 @@ def test_merge_shared_rag_resource_deep_merges_filters_and_search_options() -> N
             "rerank": True,
         },
     }
+
+
+def test_merge_shared_data_table_is_shallow() -> None:
+    out = merge_shared_definition_config_with_patch(
+        ResourceType.DATA_TABLE,
+        {"file_id": "file-a"},
+        {"file_id": "file-b"},
+    )
+    assert out == {"file_id": "file-b"}

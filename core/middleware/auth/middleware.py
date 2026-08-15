@@ -26,7 +26,7 @@ from core.app_state import (
 )
 from core.config import get_settings
 from core.container import BaseContainer
-from core.context import clear_context, set_context
+from core.context import reset_context, set_context
 from core.identity.runtime_users import ensure_persisted_runtime_user
 from core.internal_context_headers import parse_internal_context_headers
 from core.logging import bind_log_context, get_logger
@@ -139,6 +139,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 auth_required=rule.auth_required,
             )
 
+        context_token = None
         try:
             context = await self._create_context(
                 request, rule, container, company_resolver, context_factory, trace_id
@@ -150,7 +151,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             if session_token_data is not None:
                 token_data = session_token_data
 
-            set_context(context)
+            context_token = set_context(context)
             request.state.context = context
             request.state.user = context.user
             request.state.company = context.active_company
@@ -204,7 +205,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 )
             return JSONResponse(status_code=e.status_code, content={"detail": e.detail})
         finally:
-            clear_context()
+            if context_token is not None:
+                reset_context(context_token)
 
     async def _create_context(
         self,
@@ -440,15 +442,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
         context_factory: ContextFactory,
         trace_id: str,
     ) -> Context | None:
-        path = request.url.path
-        internal_path_prefixes = (
-            "/search/api/v1/mcp",
-            "/browser/api/v1/mcp",
-            "/flows/api/v1/internal/",
-            "/secrets/api/v1/",
-        )
-        if not path.startswith(internal_path_prefixes):
-            return None
         try:
             internal = parse_internal_context_headers(request.headers)
         except ValueError as exc:

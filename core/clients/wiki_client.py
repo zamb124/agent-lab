@@ -9,6 +9,7 @@ from core.clients.service_client import NAMESPACE_HEADER, ServiceClient
 from core.clients.wiki_models import (
     WikiBacklinksArgs,
     WikiCommentIdArgs,
+    WikiCompanyVisibleArgs,
     WikiCreateCommentArgs,
     WikiCreatePageArgs,
     WikiImportMarkdownArgs,
@@ -60,7 +61,7 @@ class WikiClient:
             "title": page.get("title"),
             "icon": page.get("icon"),
             "cover_url": page.get("cover_url"),
-            "visibility": page.get("visibility"),
+            "company_visible": page.get("company_visible"),
             "is_published": page.get("is_published"),
             "is_template": page.get("is_template"),
             "is_full_width": page.get("is_full_width"),
@@ -77,7 +78,7 @@ class WikiClient:
             "icon": item.get("icon"),
             "depth": item.get("depth"),
             "position": item.get("position"),
-            "visibility": item.get("visibility"),
+            "company_visible": item.get("company_visible"),
             "is_published": item.get("is_published"),
             "has_children": item.get("has_children"),
             "updated_at": item.get("updated_at"),
@@ -87,7 +88,7 @@ class WikiClient:
     def _unwrap_page_response(raw: object) -> tuple[JsonObject, bool, bool]:
         body = require_json_object(raw, "wiki.page_response")
         page = require_json_object(body.get("page"), "wiki.page_response.page")
-        return page, body.get("can_edit") is True, body.get("can_administer") is True
+        return page, body.get("can_edit") is True, body.get("can_admin") is True
 
     @staticmethod
     def _access_brief(body: JsonObject) -> JsonObject:
@@ -99,12 +100,12 @@ class WikiClient:
                 members.append(
                     {
                         "user_id": member.get("user_id"),
-                        "permission": member.get("permission"),
+                        "relation": member.get("relation"),
                     }
                 )
         return {
             "wiki_page_id": body.get("wiki_page_id"),
-            "visibility": body.get("visibility"),
+            "company_visible": body.get("company_visible"),
             "inherited_from_page_id": body.get("inherited_from_page_id"),
             "members": members,
             "link_enabled": body.get("link_enabled"),
@@ -155,11 +156,11 @@ class WikiClient:
             f"{_API}/pages/{quote(page_id, safe='')}",
             headers=self._ns_headers(),
         )
-        page, can_edit, can_administer = self._unwrap_page_response(raw)
+        page, can_edit, can_admin = self._unwrap_page_response(raw)
         return {
             "page": self._page_brief(page),
             "can_edit": can_edit,
-            "can_administer": can_administer,
+            "can_admin": can_admin,
         }
 
     async def get_markdown(self, wiki_page_id: str | WikiPageIdArgs) -> JsonObject:
@@ -205,12 +206,12 @@ class WikiClient:
             headers=self._ns_headers(),
             json=payload,
         )
-        page, can_edit, can_administer = self._unwrap_page_response(raw)
+        page, can_edit, can_admin = self._unwrap_page_response(raw)
         return {
             "wiki_page_id": page.get("wiki_page_id"),
             "page": self._page_brief(page),
             "can_edit": can_edit,
-            "can_administer": can_administer,
+            "can_admin": can_admin,
         }
 
     async def update_markdown(
@@ -242,12 +243,12 @@ class WikiClient:
             headers=self._ns_headers(),
             json=payload,
         )
-        page, can_edit, can_administer = self._unwrap_page_response(raw)
+        page, can_edit, can_admin = self._unwrap_page_response(raw)
         return {
             "wiki_page_id": page.get("wiki_page_id"),
             "page": self._page_brief(page),
             "can_edit": can_edit,
-            "can_administer": can_administer,
+            "can_admin": can_admin,
         }
 
     async def update_properties(
@@ -294,12 +295,12 @@ class WikiClient:
             headers=self._ns_headers(),
             json=payload,
         )
-        page, can_edit, can_administer = self._unwrap_page_response(raw)
+        page, can_edit, can_admin = self._unwrap_page_response(raw)
         return {
             "wiki_page_id": page.get("wiki_page_id"),
             "page": self._page_brief(page),
             "can_edit": can_edit,
-            "can_administer": can_administer,
+            "can_admin": can_admin,
         }
 
     async def move_page(
@@ -326,12 +327,12 @@ class WikiClient:
             headers=self._ns_headers(),
             json=payload,
         )
-        page, can_edit, can_administer = self._unwrap_page_response(raw)
+        page, can_edit, can_admin = self._unwrap_page_response(raw)
         return {
             "wiki_page_id": page.get("wiki_page_id"),
             "page": self._page_brief(page),
             "can_edit": can_edit,
-            "can_administer": can_administer,
+            "can_admin": can_admin,
         }
 
     async def move_to_namespace(
@@ -358,12 +359,12 @@ class WikiClient:
             headers=self._ns_headers(),
             json=payload,
         )
-        page, can_edit, can_administer = self._unwrap_page_response(raw)
+        page, can_edit, can_admin = self._unwrap_page_response(raw)
         return {
             "wiki_page_id": page.get("wiki_page_id"),
             "page": self._page_brief(page),
             "can_edit": can_edit,
-            "can_administer": can_administer,
+            "can_admin": can_admin,
         }
 
     async def delete_page(self, wiki_page_id: str | WikiPageIdArgs) -> JsonObject:
@@ -395,12 +396,12 @@ class WikiClient:
             f"{_API}/pages/{quote(page_id, safe='')}/restore",
             headers=self._ns_headers(),
         )
-        page, can_edit, can_administer = self._unwrap_page_response(raw)
+        page, can_edit, can_admin = self._unwrap_page_response(raw)
         return {
             "wiki_page_id": page.get("wiki_page_id"),
             "page": self._page_brief(page),
             "can_edit": can_edit,
-            "can_administer": can_administer,
+            "can_admin": can_admin,
         }
 
     async def import_markdown(
@@ -518,13 +519,13 @@ class WikiClient:
             f"{_API}/revisions/{quote(revision_id, safe='')}/restore",
             headers=self._ns_headers(),
         )
-        page, can_edit, can_administer = self._unwrap_page_response(raw)
+        page, can_edit, can_admin = self._unwrap_page_response(raw)
         return {
             "wiki_revision_id": revision_id,
             "wiki_page_id": page.get("wiki_page_id"),
             "page": self._page_brief(page),
             "can_edit": can_edit,
-            "can_administer": can_administer,
+            "can_admin": can_admin,
         }
 
     async def list_comments(self, wiki_page_id: str | WikiPageIdArgs) -> JsonObject:
@@ -635,7 +636,7 @@ class WikiClient:
         self,
         wiki_page_id: str | WikiSetMemberArgs,
         user_id: str = "",
-        permission: Literal["read", "write", "admin"] = "read",
+        relation: Literal["viewer", "editor"] = "viewer",
     ) -> JsonObject:
         if isinstance(wiki_page_id, WikiSetMemberArgs):
             args = wiki_page_id
@@ -643,16 +644,38 @@ class WikiClient:
             args = WikiSetMemberArgs(
                 wiki_page_id=wiki_page_id,
                 user_id=user_id,
-                permission=permission,
+                relation=relation,
             )
         page_id = args.wiki_page_id.strip()
         raw = await self._http.post(
             "wiki",
             f"{_API}/pages/{quote(page_id, safe='')}/access/members",
             headers=self._ns_headers(),
-            json={"user_id": args.user_id.strip(), "permission": args.permission},
+            json={"user_id": args.user_id.strip(), "relation": args.relation},
         )
         body = require_json_object(raw, "wiki.set_member")
+        return self._access_brief(body)
+
+    async def set_company_visible(
+        self,
+        wiki_page_id: str | WikiCompanyVisibleArgs,
+        company_visible: bool = True,
+    ) -> JsonObject:
+        if isinstance(wiki_page_id, WikiCompanyVisibleArgs):
+            args = wiki_page_id
+        else:
+            args = WikiCompanyVisibleArgs(
+                wiki_page_id=wiki_page_id,
+                company_visible=company_visible,
+            )
+        page_id = args.wiki_page_id.strip()
+        raw = await self._http.patch(
+            "wiki",
+            f"{_API}/pages/{quote(page_id, safe='')}/access/company-visible",
+            headers=self._ns_headers(),
+            json={"company_visible": args.company_visible},
+        )
+        body = require_json_object(raw, "wiki.set_company_visible")
         return self._access_brief(body)
 
     async def remove_member(
@@ -678,7 +701,7 @@ class WikiClient:
         self,
         wiki_page_id: str | WikiRotatePublicLinkArgs,
         enabled: bool = False,
-        permission: Literal["view", "comment"] = "view",
+        permission: Literal["viewer", "editor"] = "viewer",
     ) -> JsonObject:
         if isinstance(wiki_page_id, WikiRotatePublicLinkArgs):
             args = wiki_page_id

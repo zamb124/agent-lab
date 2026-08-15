@@ -50,6 +50,7 @@ async def _reload_public_search_bundle(container, app) -> None:
             node_repository=container.node_repository,
             tool_repository=container.tool_repository,
             registry_path=_FLOWS_REGISTRY_PATH,
+            flow_access_service=container.flow_access_service,
         )
         loaded = await loader.reload_flow_bundle("public_search")
         if loaded != "public_search":

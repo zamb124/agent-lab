@@ -1,42 +1,34 @@
-"""
-API модели для AccessGrants.
-"""
+"""Wire-контракт CRM grants (OpenFGA tuples, без SQL AccessGrant)."""
 
-from datetime import datetime
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+GrantRole = Literal["viewer", "editor", "admin", "owner"]
+GrantSubjectKind = Literal["user", "public", "company"]
+GrantResourceType = Literal["entity", "namespace"]
+
 
 class GrantToUserRequest(BaseModel):
-    """Запрос на шаринг конкретному user"""
-
     user_id: str
-    role: str = Field(default="viewer", pattern="^(viewer|editor|admin)$")
-    expires_at: datetime | None = None
+    role: GrantRole = Field(default="viewer")
 
 
 class GrantToCompanyRequest(BaseModel):
-    """Запрос на шаринг целой компании"""
-
     company_id: str
-    role: str = Field(default="viewer", pattern="^(viewer|editor|admin)$")
-    expires_at: datetime | None = None
+    role: GrantRole = Field(default="viewer")
 
 
 class AccessGrantResponse(BaseModel):
-    """Ответ с информацией о гранте"""
+    """Один tuple OpenFGA как grant для API/UI."""
 
     grant_id: str
-    company_id: str
-    created_by: str
-    resource_type: str
+    resource_type: GrantResourceType
     resource_id: str
-    grant_type: str
+    resource_company_id: str | None = None
+    grant_type: GrantSubjectKind
     target_user_id: str | None = None
     target_company_id: str | None = None
-    role: str
-    expires_at: datetime | None = None
-    created_at: datetime
+    role: GrantRole
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")

@@ -63,6 +63,91 @@ services:
     networks:
       - dev-net
 
+  # init.sql не переигрывается на существующем postgres_dev_data — БД openfga
+  # могла появиться в каноне после первого init тома. Helm: openfga_bootstrap_cluster.sh.
+  openfga-db:
+    platform: "linux/amd64"
+    image: pgvector/pgvector:pg17
+    container_name: agentlab_openfga_db_dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGUSER: platform_user
+      PGPASSWORD: admin
+      PGHOST: postgres
+      PGDATABASE: postgres
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -euo pipefail
+        if ! psql -tc "SELECT 1 FROM pg_database WHERE datname = 'openfga'" | grep -q 1; then
+          psql -c "CREATE DATABASE openfga"
+        fi
+        psql -c "GRANT ALL PRIVILEGES ON DATABASE openfga TO platform_user"
+    networks:
+      - dev-net
+    restart: "no"
+
+  openfga-migrate:
+    platform: "linux/amd64"
+    image: openfga/openfga:v1.18.1
+    container_name: agentlab_openfga_migrate_dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      openfga-db:
+        condition: service_completed_successfully
+    command:
+      - migrate
+      - --datastore-engine
+      - postgres
+      - --datastore-uri
+      - postgres://platform_user:admin@postgres:5432/openfga?sslmode=disable
+    networks:
+      - dev-net
+    restart: "no"
+
+  openfga:
+    platform: "linux/amd64"
+    image: openfga/openfga:v1.18.1
+    container_name: agentlab_openfga_dev
+    depends_on:
+      openfga-migrate:
+        condition: service_completed_successfully
+    command:
+      - run
+      - --datastore-engine
+      - postgres
+      - --datastore-uri
+      - postgres://platform_user:admin@postgres:5432/openfga?sslmode=disable
+      - --http-addr
+      - 0.0.0.0:8080
+      - --grpc-addr
+      - 0.0.0.0:8081
+      - --request-timeout
+      - 30s
+      - --max-concurrent-checks-per-batch-check
+      - "10"
+      - --max-concurrent-reads-for-check
+      - "16"
+      - --playground-enabled
+      - --playground-port
+      - "3000"
+    ports:
+      - "9090:8080"
+      - "9091:8081"
+      - "9092:3000"
+    healthcheck:
+      test: ["CMD", "grpc_health_probe", "-addr=0.0.0.0:8081"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - dev-net
+
   # Chromium CDP для apps/browser (Playwright): хост http://127.0.0.1:9222 → BROWSER__CDP_URL.
   # Ручная проверка: в Chromium открыть chrome://inspect/#devices → Configure → localhost:9222.
   # Доп. флаги: снижают типичные сигналы автоматизации у процесса, поднятого до connect_over_cdp

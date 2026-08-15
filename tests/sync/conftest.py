@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from tests.fixtures.auth import set_test_company_member_roles
+
 import asyncio
 import os
 import subprocess
@@ -31,7 +33,7 @@ os.environ.setdefault("CALLS__SPEECH_TO_CHAT__POLL_INTERVAL_SECONDS", "1")
 os.environ.setdefault("CALLS__LIVEKIT_URL", "ws://localhost:7890")
 os.environ.setdefault("CALLS__LIVEKIT_PUBLIC_URL", "http://localhost:7890")
 os.environ.setdefault("CALLS__LIVEKIT_API_KEY", "devkey")
-os.environ.setdefault("CALLS__LIVEKIT_API_SECRET", "secret")
+os.environ.setdefault("CALLS__LIVEKIT_API_SECRET", "platform-test-livekit-secret-32b!")
 
 import core.config.base as _sync_test_config_base  # noqa: E402
 
@@ -178,6 +180,14 @@ async def sync_auth_token(
         balance=1000.0,
     )
     await container.company_repository.set(company)
+    for member_user_id, roles in company.members.items():
+        await set_test_company_member_roles(
+            container.company_repository,
+            container.authz_service,
+            company_id=company_id,
+            user_id=member_user_id,
+            roles=roles,
+        )
     user = User(
         user_id=sync_user_id,
         name="Sync test user",

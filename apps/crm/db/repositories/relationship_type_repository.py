@@ -42,7 +42,33 @@ class RelationshipTypeRepository(BaseCRMRepository[RelationshipType]):
             cond = [RelationshipType.company_id == effective_company_id]
             if not include_system:
                 cond.append(RelationshipType.is_system.is_(False))
-            stmt = select(RelationshipType).where(and_(*cond)).limit(limit).offset(offset)
+            stmt = (
+                select(RelationshipType)
+                .where(and_(*cond))
+                .order_by(RelationshipType.type_id)
+                .limit(limit)
+                .offset(offset)
+            )
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
+    async def list_all_by_company(
+        self,
+        include_system: bool = True,
+        *,
+        company_id: str | None = None,
+    ) -> list[RelationshipType]:
+        """Все типы связей компании без page-limit (граф, валидация create)."""
+        effective_company_id = company_id if company_id is not None else self._get_company_id()
+        async with self._db.session() as session:
+            cond = [RelationshipType.company_id == effective_company_id]
+            if not include_system:
+                cond.append(RelationshipType.is_system.is_(False))
+            stmt = (
+                select(RelationshipType)
+                .where(and_(*cond))
+                .order_by(RelationshipType.type_id)
+            )
             result = await session.execute(stmt)
             return list(result.scalars().all())
 

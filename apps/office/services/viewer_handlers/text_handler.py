@@ -45,7 +45,7 @@ class TextViewerHandler:
             content_type=normalized,
         )
         caps = self.capabilities(file_record=ctx.file_record, integration_configured=True)
-        can_edit = caps.edit and ctx.link_permission == "edit"
+        can_edit = caps.edit and ctx.link_permission == "editor"
         stream_url = viewer_stream_url(
             base_url=ctx.browser_public_base_url,
             handler="text",

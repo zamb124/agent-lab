@@ -26,8 +26,6 @@ from core.context.job_context import build_job_context
 from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.models.context_models import Context
-from core.models.i18n_models import Language
-from core.models.identity_models import Company, User
 from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 
@@ -76,61 +74,25 @@ def _tool_capability_definition(
     )
 
 
-async def _with_system_context_if_missing(container: ContainerDep) -> tuple[Context | None, bool]:
-    previous_context = get_context()
-    if previous_context is not None and previous_context.active_company is not None:
-        return previous_context, False
-    system_company = await container.company_repository.get("system")
-    if system_company is None:
-        system_company = Company(
-            company_id="system",
-            name="System",
-            subdomain="system",
-        )
-    set_context(
-        Context(
-            user=User(
-                user_id="system",
-                name="System",
-                groups=["admin"],
-                companies={"system": ["admin"]},
-                active_company_id="system",
-            ),
-            host="system",
-            session_id="tool-runtime-manifest",
-            channel="internal",
-            language=Language.RU,
-            active_company=system_company,
-            user_companies=[system_company],
-            trace_id="tool-runtime:manifest",
-        )
-    )
-    return previous_context, True
-
-
-@router.get("/manifest", response_model=CapabilityManifest)
-async def get_tool_runtime_manifest(
+async def collect_tool_runtime_capabilities(
     container: ContainerDep,
-    allowed_capabilities: str | None = None,
-) -> CapabilityManifest:
-    """Возвращает каждый platform tool как first-class capability ``tools.<tool_id>``."""
-    previous_context, installed_context = await _with_system_context_if_missing(container)
-    try:
-        registry = container.tool_registry
-        registry.register_builtin_tools()
-        capabilities: dict[str, CapabilityDefinition] = {}
-
-        for tool_id, tool in registry.list_all().items():
-            if not tool.listed_in_platform_tool_docs:
-                continue
-            capabilities[f"tools.{tool_id}"] = _tool_capability_definition(
-                tool_id=tool_id,
-                title=None,
-                description=tool.description,
-                input_schema=tool.parameters,
-                tags=tool.get_tags(),
-            )
-
+) -> dict[str, CapabilityDefinition]:
+    """Builtin docs tools + tool_repository текущей компании, если context есть."""
+    registry = container.tool_registry
+    registry.register_builtin_tools()
+    capabilities: dict[str, CapabilityDefinition] = {}
+    for tool_id, tool in registry.list_all().items():
+        if not tool.listed_in_platform_tool_docs:
+            continue
+        capabilities[f"tools.{tool_id}"] = _tool_capability_definition(
+            tool_id=tool_id,
+            title=None,
+            description=tool.description,
+            input_schema=tool.parameters,
+            tags=tool.get_tags(),
+        )
+    context = get_context()
+    if context is not None and context.active_company is not None:
         for tool in await container.tool_repository.list(limit=10000):
             capabilities[f"tools.{tool.tool_id}"] = _tool_capability_definition(
                 tool_id=tool.tool_id,
@@ -139,32 +101,32 @@ async def get_tool_runtime_manifest(
                 input_schema=tool.effective_parameters_schema(),
                 tags=tool.tags or ["misc"],
             )
+    return capabilities
 
-        capability_list = [capabilities[name] for name in sorted(capabilities)]
-        if allowed_capabilities:
-            allowed_names = {
-                item.strip()
-                for item in allowed_capabilities.split(",")
-                if item.strip()
-            }
-            capability_list = [
-                capability
-                for capability in capability_list
-                if capability.name in allowed_names
-            ]
 
-        return CapabilityManifest(
-            version="capabilities.v1",
-            capabilities=capability_list,
-        )
-    finally:
-        if installed_context:
-            if previous_context is None:
-                clear_context()
-            else:
-                set_context(previous_context)
-        elif previous_context is not None:
-            set_context(previous_context)
+@router.get("/manifest", response_model=CapabilityManifest)
+async def get_tool_runtime_manifest(
+    container: ContainerDep,
+    allowed_capabilities: str | None = None,
+) -> CapabilityManifest:
+    """Возвращает каждый platform tool как first-class capability ``tools.<tool_id>``."""
+    capabilities = await collect_tool_runtime_capabilities(container)
+    capability_list = [capabilities[name] for name in sorted(capabilities)]
+    if allowed_capabilities:
+        allowed_names = {
+            item.strip()
+            for item in allowed_capabilities.split(",")
+            if item.strip()
+        }
+        capability_list = [
+            capability
+            for capability in capability_list
+            if capability.name in allowed_names
+        ]
+    return CapabilityManifest(
+        version="capabilities.v1",
+        capabilities=capability_list,
+    )
 
 
 @router.post("/call", response_model=CapabilityCallResponse)

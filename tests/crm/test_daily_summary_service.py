@@ -12,6 +12,7 @@ from apps.crm.services.entity_service import EntityService
 from core.clients.a2a_client import A2ATaskResult
 from core.context import Context, set_context
 from core.models.identity_models import Company, User
+from core.test_scope import LOG_TEST_SCOPE
 
 pytestmark = pytest.mark.no_crm_http
 
@@ -89,11 +90,10 @@ def _build_service() -> EntityService:
         daily_summary_cache_service=AsyncMock(),
         daily_summary_artifact_service=artifact_service,
         user_person_service=AsyncMock(),
-        access_grant_repo=AsyncMock(),
+        authz=AsyncMock(),
         access_request_repo=AsyncMock(),
         company_mapping_repo=AsyncMock(),
-        company_repo=AsyncMock(),
-        access_control=AsyncMock(),
+        entity_access=AsyncMock(),
     )
 
 
@@ -115,6 +115,31 @@ async def test_enqueue_daily_summary_rebuild_deduplicates(monkeypatch):
     assert first is True
     assert second is False
     assert enqueue_mock.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_enqueue_daily_summary_rebuild_isolates_mock_llm_scope(
+    monkeypatch: pytest.MonkeyPatch,
+    platform_test_scope: str,
+) -> None:
+    _set_test_context()
+    service = _build_service()
+    service._collect_notes_and_source_version = AsyncMock(
+        return_value=([_analyzed_note()], {"notes_count": 1, "max_updated_at": None})
+    )
+    service._daily_summary_cache_service.set_revalidating = AsyncMock(return_value=True)
+
+    enqueue_mock = AsyncMock()
+    monkeypatch.setattr(entity_service_module, "enqueue", enqueue_mock)
+
+    first = await service.enqueue_daily_summary_rebuild(date_str="2026-03-28", namespace=None)
+
+    assert first is True
+    assert enqueue_mock.await_count == 1
+    awaited = enqueue_mock.await_args
+    assert awaited is not None
+    extra_labels = awaited.kwargs["extra_labels"]
+    assert extra_labels == {LOG_TEST_SCOPE: f"{platform_test_scope}:crm_summary"}
 
 
 @pytest.mark.asyncio
@@ -174,7 +199,7 @@ async def test_get_daily_summary_cached_empty_day_no_enqueue(monkeypatch):
     service.enqueue_daily_summary_rebuild = AsyncMock(return_value=True)
 
     # Материализация пустого дня публикует UI-событие через
-    # broadcast_crm_daily_summary_updated -> resolve_user_ids_for_namespace_broadcast,
+    # broadcast_crm_daily_summary_updated -> publish_event_to_company,
     # которому нужен живой Company. В юнит-тесте сам факт публикации не
     # проверяем — изолируем broadcast через AsyncMock.
     broadcast_mock = AsyncMock()

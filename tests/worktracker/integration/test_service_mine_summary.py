@@ -24,12 +24,7 @@ async def test_mine_summary_assigned_and_queue_inbox(
         company_id=company_id,
         name=f"Queue {unique_id}",
         slug=f"q-{unique_id}",
-    )
-    await worktracker_service.add_queue_member(
-        company_id=company_id,
-        work_queue_id=queue.work_queue_id,
-        member=UserActor(user_id=user_id),
-        role="member",
+        creator=UserActor(user_id=user_id),
     )
     assigned = await worktracker_service.create(
         company_id=company_id,

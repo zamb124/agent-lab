@@ -15,7 +15,7 @@ from apps.flows.src.models.enums import CodeMode
 from apps.flows.src.models.mcp import MCPDiscoveredTool, MCPServerConfig
 from apps.flows.src.models.tool_reference import ToolReference
 from apps.flows.src.services.mcp_defaults import build_default_mcp_servers
-from core.context import get_context
+from core.context import get_context, require_active_company
 from core.integrations.mcp import mcp_tool_reference_id
 from core.logging import get_logger
 
@@ -79,27 +79,33 @@ async def sync_mcp_server_tools(
         tool_id = mcp_tool_reference_id(server_id, t.tool_name)
         tool_ids.append(tool_id)
         description = t.description if t.description is not None else f"MCP tool: {t.tool_name}"
-        _ = await container.tool_repository.set(
-            ToolReference(
-                tool_id=tool_id,
-                title=t.title if t.title is not None else t.tool_name,
-                description=description,
-                parameters_schema=t.parameters_schema,
-                code_mode=CodeMode.MCP_TOOL,
-                mcp_server_id=server_id,
-                mcp_tool_name=t.tool_name,
-                mcp_schema_hash=t.schema_hash,
-                mcp_schema_version=t.schema_version,
-                mcp_output_schema=t.output_schema,
-                mcp_annotations=t.annotations,
-                mcp_execution=t.execution,
-                tags=["mcp", f"mcp:{server_id}"],
-            )
+        tool_ref = ToolReference(
+            tool_id=tool_id,
+            title=t.title if t.title is not None else t.tool_name,
+            description=description,
+            parameters_schema=t.parameters_schema,
+            code_mode=CodeMode.MCP_TOOL,
+            mcp_server_id=server_id,
+            mcp_tool_name=t.tool_name,
+            mcp_schema_hash=t.schema_hash,
+            mcp_schema_version=t.schema_version,
+            mcp_output_schema=t.output_schema,
+            mcp_annotations=t.annotations,
+            mcp_execution=t.execution,
+            tags=["mcp", f"mcp:{server_id}"],
+        )
+        _ = await container.tool_repository.set(tool_ref)
+        company = require_active_company()
+        await container.flow_access_service.sync_tool_saved(
+            tool_id,
+            company_id=company.company_id,
+            permission=tool_ref.permission,
         )
 
     for old_tool_id in previous_cached:
         if old_tool_id not in tool_ids:
             _ = await container.tool_repository.delete(old_tool_id)
+            await container.flow_access_service.sync_tool_deleted(old_tool_id)
 
     server_config.cached_tools = tool_ids
     server_config.last_sync_at = datetime.now(tz=timezone.utc)

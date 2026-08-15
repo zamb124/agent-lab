@@ -4,8 +4,10 @@ from typing import override
 from uuid import uuid4
 
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
+from apps.crm.db.integrity import is_unique_violation
 from apps.crm.db.models import NamespaceTemplate, NamespaceTemplateType
 from core.db.utils import get_rowcount
 from core.types import JsonObject
@@ -147,7 +149,35 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
             existing.is_context_anchor = is_context_anchor
             existing.is_voice_target = is_voice_target
             session.add(existing)
-            await session.commit()
+            try:
+                await session.commit()
+            except IntegrityError as exc:
+                await session.rollback()
+                if not is_unique_violation(exc):
+                    raise
+                raced = (await session.execute(stmt)).scalar_one_or_none()
+                if raced is None:
+                    raise RuntimeError(
+                        f"NamespaceTemplateType ({template_key!r}, {type_id!r}) missing after UniqueViolation"
+                    ) from exc
+                raced.parent_type_id = parent_type_id
+                raced.name = name
+                raced.description = description
+                raced.prompt = prompt
+                raced.required_fields = required_fields
+                raced.optional_fields = optional_fields
+                raced.icon = icon
+                raced.color = color
+                raced.is_event = is_event
+                raced.check_duplicates = check_duplicates
+                raced.weight_coefficient = weight_coefficient
+                raced.namespace_ids = namespace_ids
+                raced.is_context_anchor = is_context_anchor
+                raced.is_voice_target = is_voice_target
+                session.add(raced)
+                await session.commit()
+                await session.refresh(raced)
+                return raced
             await session.refresh(existing)
             return existing
 

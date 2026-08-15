@@ -12,7 +12,6 @@ from sqlalchemy.exc import IntegrityError
 from core.db.database import get_session_factory
 from core.db.models.platform import (
     CompanyMailConnectionRecord,
-    MailboxBindingMemberRecord,
     MailboxBindingRecord,
     MailboxFolderRecord,
     MailboxSyncCursorRecord,
@@ -24,8 +23,6 @@ from core.mail.models import (
     IspmanagerProvisionConfig,
     MailboxBinding,
     MailboxBindingKind,
-    MailboxBindingMember,
-    MailboxBindingMemberRole,
     MailboxSyncCursor,
     MailConnectionScope,
     MailConnectionStatus,
@@ -459,33 +456,11 @@ class MailboxBindingRepository:
         company_id: str,
         user_id: str,
     ) -> list[MailboxBinding]:
+        """SQL candidates for company; ACL filtering is OpenFGA (MailService)."""
         if not user_id.strip():
             raise ValueError("user_id is required")
-        own = await self.list_by_user(company_id, user_id)
-        session_factory = await get_session_factory(self._db_url)
-        async with session_factory() as session:
-            result = await session.execute(
-                select(MailboxBindingRecord)
-                .join(
-                    MailboxBindingMemberRecord,
-                    and_(
-                        MailboxBindingMemberRecord.mailbox_binding_id
-                        == MailboxBindingRecord.mailbox_binding_id,
-                        MailboxBindingMemberRecord.user_id == user_id,
-                    ),
-                )
-                .where(
-                    MailboxBindingRecord.company_id == company_id,
-                    MailboxBindingRecord.kind == str(MailboxBindingKind.ROLE),
-                )
-                .order_by(MailboxBindingRecord.email_address)
-            )
-            role_rows = list(result.scalars().all())
-        by_id = {binding.mailbox_binding_id: binding for binding in own}
-        for row in role_rows:
-            binding = _binding_from_record(row)
-            by_id[binding.mailbox_binding_id] = binding
-        return sorted(by_id.values(), key=lambda item: item.email_address)
+        _ = user_id
+        return await self.list_by_company(company_id)
 
     async def sync_lag_stats(
         self,
@@ -1085,107 +1060,6 @@ class MailMessageRepository:
             result = await session.execute(stmt)
             records = list(result.scalars().all())
         return [_stored_from_record(record) for record in records]
-
-
-def _member_from_record(record: MailboxBindingMemberRecord) -> MailboxBindingMember:
-    return MailboxBindingMember(
-        mailbox_binding_id=record.mailbox_binding_id,
-        user_id=record.user_id,
-        company_id=record.company_id,
-        role=MailboxBindingMemberRole(record.role),
-        created_at=record.created_at,
-    )
-
-
-@final
-class MailboxBindingMemberRepository:
-    def __init__(self, db_url: str) -> None:
-        self._db_url: Final[str] = db_url
-
-    async def list_for_binding(self, mailbox_binding_id: str) -> list[MailboxBindingMember]:
-        session_factory = await get_session_factory(self._db_url)
-        async with session_factory() as session:
-            result = await session.execute(
-                select(MailboxBindingMemberRecord)
-                .where(MailboxBindingMemberRecord.mailbox_binding_id == mailbox_binding_id)
-                .order_by(MailboxBindingMemberRecord.user_id.asc())
-            )
-            return [_member_from_record(row) for row in result.scalars().all()]
-
-    async def list_binding_ids_for_user(
-        self, company_id: str, user_id: str
-    ) -> list[str]:
-        session_factory = await get_session_factory(self._db_url)
-        async with session_factory() as session:
-            result = await session.execute(
-                select(MailboxBindingMemberRecord.mailbox_binding_id).where(
-                    MailboxBindingMemberRecord.company_id == company_id,
-                    MailboxBindingMemberRecord.user_id == user_id,
-                )
-            )
-            return list(result.scalars().all())
-
-    async def is_member(self, mailbox_binding_id: str, user_id: str) -> bool:
-        session_factory = await get_session_factory(self._db_url)
-        async with session_factory() as session:
-            result = await session.execute(
-                select(MailboxBindingMemberRecord.user_id).where(
-                    MailboxBindingMemberRecord.mailbox_binding_id == mailbox_binding_id,
-                    MailboxBindingMemberRecord.user_id == user_id,
-                )
-            )
-            return result.scalar_one_or_none() is not None
-
-    async def upsert(self, member: MailboxBindingMember) -> MailboxBindingMember:
-        session_factory = await get_session_factory(self._db_url)
-        values = {
-            "mailbox_binding_id": member.mailbox_binding_id,
-            "user_id": member.user_id,
-            "company_id": member.company_id,
-            "role": str(member.role),
-            "created_at": member.created_at,
-        }
-        stmt = insert(MailboxBindingMemberRecord).values(**values)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["mailbox_binding_id", "user_id"],
-            set_={
-                "company_id": stmt.excluded.company_id,
-                "role": stmt.excluded.role,
-            },
-        )
-        async with session_factory() as session:
-            _ = await session.execute(stmt)
-            await session.commit()
-        members = await self.list_for_binding(member.mailbox_binding_id)
-        for item in members:
-            if item.user_id == member.user_id:
-                return item
-        raise RuntimeError(
-            f"MailboxBindingMember upsert failed for {member.mailbox_binding_id}/{member.user_id}"
-        )
-
-    async def delete(self, mailbox_binding_id: str, user_id: str) -> bool:
-        session_factory = await get_session_factory(self._db_url)
-        async with session_factory() as session:
-            result = await session.execute(
-                delete(MailboxBindingMemberRecord).where(
-                    MailboxBindingMemberRecord.mailbox_binding_id == mailbox_binding_id,
-                    MailboxBindingMemberRecord.user_id == user_id,
-                )
-            )
-            await session.commit()
-            return get_rowcount(result) > 0
-
-    async def delete_all_for_binding(self, mailbox_binding_id: str) -> int:
-        session_factory = await get_session_factory(self._db_url)
-        async with session_factory() as session:
-            result = await session.execute(
-                delete(MailboxBindingMemberRecord).where(
-                    MailboxBindingMemberRecord.mailbox_binding_id == mailbox_binding_id
-                )
-            )
-            await session.commit()
-            return get_rowcount(result)
 
 
 def _folder_from_record(record: MailboxFolderRecord) -> StoredMailboxFolder:

@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 import core.tracing.attributes as trace_attributes
 from apps.crm.container import get_crm_container
-from apps.crm_worker.tasks.daily_summary_tasks import set_crm_context
+from apps.crm_worker.tasks.crm_context import set_crm_context
 from apps.crm_worker.tasks.knowledge_import_tasks import notify_task_user
 from apps.crm_worker.tasks.task_names import CRM_RUN_NAMESPACE_INTEGRATION_JOB
 from core.logging import get_logger

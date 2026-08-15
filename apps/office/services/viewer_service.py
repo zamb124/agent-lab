@@ -12,6 +12,7 @@ from apps.office.services.document_type import supports_onlyoffice_viewer
 from apps.office.services.office_access_service import PublicLinkTarget
 from apps.office.services.viewer_context import OfficeViewerLinkPermission, ViewerOpenContext
 from apps.office.services.viewer_handlers.binary_handler import BinaryViewerHandler
+from apps.office.services.viewer_handlers.data_table_handler import DataTableViewerHandler
 from apps.office.services.viewer_handlers.image_handler import ImageViewerHandler
 from apps.office.services.viewer_handlers.media_handler import MediaViewerHandler
 from apps.office.services.viewer_handlers.onlyoffice_handler import OnlyOfficeViewerHandler
@@ -38,6 +39,7 @@ _OfficeViewerHandler = (
     | TextViewerHandler
     | BinaryViewerHandler
     | VizViewerHandler
+    | DataTableViewerHandler
 )
 
 
@@ -99,6 +101,7 @@ class DocumentViewerService:
             "text": TextViewerHandler(),
             "binary": BinaryViewerHandler(),
             "viz": VizViewerHandler(),
+            "data_table": DataTableViewerHandler(),
         }
 
     def resolve_handler_id(
@@ -141,7 +144,7 @@ class DocumentViewerService:
         user_id: str,
         user_name: str,
         editor_lang: str,
-        link_permission: OfficeViewerLinkPermission = "edit",
+        link_permission: OfficeViewerLinkPermission = "editor",
         public_link_token_hash: str | None = None,
     ) -> ViewerOpenContext:
         settings = get_office_settings()
@@ -167,7 +170,7 @@ class DocumentViewerService:
                 integ.document_server_public_url,
                 request,
             ),
-            link_permission="edit" if link_permission == "edit" else "view",
+            link_permission=link_permission,
             public_link_token_hash=public_link_token_hash,
         )
 
@@ -230,9 +233,12 @@ class DocumentViewerService:
         )
         if handler_id == "onlyoffice" and not integration_ok:
             raise HTTPException(status_code=503, detail=detail)
-        resolved_link_permission: OfficeViewerLinkPermission = (
-            "edit" if binding.link_permission == "edit" else "view"
-        )
+        if binding.link_permission not in ("viewer", "editor"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid link_permission: {binding.link_permission}",
+            )
+        resolved_link_permission: OfficeViewerLinkPermission = binding.link_permission
         ctx = self.build_context(
             request=request,
             handler_id=handler_id,

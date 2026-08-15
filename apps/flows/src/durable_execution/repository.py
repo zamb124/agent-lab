@@ -879,10 +879,10 @@ class DurableWorkflowRepository:
                 self._state_json(state)
             )
             if state_hash != event.next_state_hash:
-                raise ValueError(
-                    "Workflow event hash mismatch: "
-                    + f"session_id={session_id!r}, sequence={event.sequence}, "
-                    + f"expected={event.next_state_hash}, got={state_hash}"
+                raise WorkflowProjectionMismatchError(
+                    session_id=session_id,
+                    expected_hash=event.next_state_hash,
+                    computed_hash=state_hash,
                 )
         return state
 

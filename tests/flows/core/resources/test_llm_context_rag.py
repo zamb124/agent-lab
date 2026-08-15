@@ -11,13 +11,45 @@ from apps.flows.src.runtime.llm_context_rag import (
     resolve_rag_context_source_registry_for_runtime,
     resolve_rag_resource_binds_for_runtime,
 )
+from core.authz.company_sync import sync_company_member_roles
+from core.authz.group_sync import sync_user_groups
+from core.context import clear_context, set_context
 from core.llm_context import (
     LLMContextBudget,
     LLMContextProfile,
     LLMContextRetrievalPolicy,
     LLMContextSourceRequest,
 )
+from core.models.context_models import Context
+from core.models.identity_models import Company, User
 from core.state import ExecutionState
+
+
+async def _company_visible_rag_state(container, unique_id: str) -> ExecutionState:
+    """Company member + context для RAG permission=[] (company-visible)."""
+    user_id = f"user-rag-{unique_id}"
+    company_id = f"co-rag-{unique_id}"
+    await sync_company_member_roles(
+        container.authz_service,
+        company_id=company_id,
+        user_id=user_id,
+        roles=["member"],
+    )
+    set_context(
+        Context(
+            user=User(user_id=user_id, name="U", groups=[]),
+            active_company=Company(company_id=company_id, name="Co"),
+            channel="api",
+        )
+    )
+    return ExecutionState.create(
+        task_id=f"task-rag-{unique_id}",
+        context_id=f"ctx-rag-{unique_id}",
+        user_id=user_id,
+        session_id=f"flow-rag-{unique_id}:ctx-rag-{unique_id}",
+        variables={},
+        user_groups=[],
+    )
 
 
 class InMemoryResourceRepository:
@@ -76,13 +108,18 @@ def _profile() -> LLMContextProfile:
 
 
 @pytest.mark.asyncio
-async def test_resolves_inline_rag_resource_with_state_templates() -> None:
+async def test_resolves_inline_rag_resource_with_state_templates(
+    container,
+    unique_id,
+) -> None:
+    base = await _company_visible_rag_state(container, unique_id)
     state = ExecutionState.create(
-        task_id="task-rag-inline",
-        context_id="ctx-rag-inline",
-        user_id="user-rag-inline",
-        session_id="flow-rag-inline:ctx-rag-inline",
+        task_id=base.task_id,
+        context_id=base.context_id,
+        user_id=base.user_id,
+        session_id=base.session_id,
         variables={},
+        user_groups=[],
         rag_namespace_id="session-kb",
         collection_id="support",
     )
@@ -132,7 +169,11 @@ async def test_non_rag_resources_are_ignored_and_empty_registry_is_none() -> Non
 
 
 @pytest.mark.asyncio
-async def test_resolves_shared_rag_resource_with_deep_reference_patch() -> None:
+async def test_resolves_shared_rag_resource_with_deep_reference_patch(
+    container,
+    unique_id,
+) -> None:
+    state = await _company_visible_rag_state(container, unique_id)
     repository = InMemoryResourceRepository(
         ResourceDefinition(
             resource_id="shared_kb",
@@ -162,6 +203,7 @@ async def test_resolves_shared_rag_resource_with_deep_reference_patch() -> None:
         skill_resources=None,
         node_resources_raw={},
         repository=repository,
+        state=state,
     )
 
     assert binds["kb"].namespace == "company-kb"
@@ -174,7 +216,11 @@ async def test_resolves_shared_rag_resource_with_deep_reference_patch() -> None:
 
 
 @pytest.mark.asyncio
-async def test_shared_rag_resource_without_patch_uses_definition_config() -> None:
+async def test_shared_rag_resource_without_patch_uses_definition_config(
+    container,
+    unique_id,
+) -> None:
+    state = await _company_visible_rag_state(container, unique_id)
     repository = InMemoryResourceRepository(
         ResourceDefinition(
             resource_id="shared_kb",
@@ -188,6 +234,7 @@ async def test_shared_rag_resource_without_patch_uses_definition_config() -> Non
         skill_resources=None,
         node_resources_raw={},
         repository=repository,
+        state=state,
     )
 
     assert binds["kb"].namespace == "company-kb"
@@ -285,7 +332,11 @@ def test_runtime_template_helpers_reject_non_object_result_and_empty_source_key(
 
 
 @pytest.mark.asyncio
-async def test_rag_context_registry_uses_all_merged_rag_resources() -> None:
+async def test_rag_context_registry_uses_all_merged_rag_resources(
+    container,
+    unique_id,
+) -> None:
+    state = await _company_visible_rag_state(container, unique_id)
     rag_repository = InMemoryRAGRepository()
 
     registry = await resolve_rag_context_source_registry_for_runtime(
@@ -300,6 +351,7 @@ async def test_rag_context_registry_uses_all_merged_rag_resources() -> None:
         },
         resource_repository=InMemoryResourceRepository(),
         rag_repository=rag_repository,
+        state=state,
     )
 
     assert registry is not None
@@ -335,7 +387,11 @@ class RecordingNamespaceService:
 
 
 @pytest.mark.asyncio
-async def test_resolve_ensures_namespace_via_namespace_service() -> None:
+async def test_resolve_ensures_namespace_via_namespace_service(
+    container,
+    unique_id,
+) -> None:
+    state = await _company_visible_rag_state(container, unique_id)
     ns = RecordingNamespaceService()
     binds = await resolve_rag_resource_binds_for_runtime(
         flow_resources={
@@ -351,6 +407,7 @@ async def test_resolve_ensures_namespace_via_namespace_service() -> None:
         node_resources_raw={},
         repository=InMemoryResourceRepository(),
         namespace_service=ns,
+        state=state,
     )
     assert binds["kb"].namespace == "kb-support"
     assert ns.calls == [("kb-support", "Support docs")]
@@ -358,38 +415,66 @@ async def test_resolve_ensures_namespace_via_namespace_service() -> None:
 
 @pytest.mark.asyncio
 async def test_inline_rag_permission_denied_when_groups_missing(
-    flows_permissions_enabled,
+    container,
+    unique_id,
 ) -> None:
-    _ = flows_permissions_enabled
+    user_id = f"user-rag-{unique_id}"
+    company_id = f"co-rag-{unique_id}"
+    await sync_user_groups(
+        container.authz_service,
+        user_id=user_id,
+        groups=["users"],
+        company_ids=[company_id],
+        previous_groups=[],
+    )
+    set_context(
+        Context(
+            user=User(user_id=user_id, name="U", groups=["users"]),
+            active_company=Company(company_id=company_id, name="Co"),
+            channel="api",
+        )
+    )
     state = ExecutionState.create(
         task_id="task-rag-perm",
         context_id="ctx-rag-perm",
-        user_id="user-rag-perm",
+        user_id=user_id,
         session_id="flow-rag-perm:ctx-rag-perm",
         variables={},
         user_groups=["users"],
     )
-    with pytest.raises(PermissionError, match="RAG-ресурс"):
-        await resolve_rag_resource_binds_for_runtime(
-            flow_resources={
-                "kb": {
-                    "type": "rag",
-                    "permission": ["managers"],
-                    "config": {"namespace": "kb-private"},
-                }
-            },
-            skill_resources=None,
-            node_resources_raw={},
-            repository=InMemoryResourceRepository(),
-            state=state,
-        )
+    try:
+        with pytest.raises(PermissionError, match="RAG-ресурс"):
+            await resolve_rag_resource_binds_for_runtime(
+                flow_resources={
+                    "kb": {
+                        "type": "rag",
+                        "permission": ["managers"],
+                        "config": {"namespace": "kb-private"},
+                    }
+                },
+                skill_resources=None,
+                node_resources_raw={},
+                repository=InMemoryResourceRepository(),
+                state=state,
+            )
+    finally:
+        clear_context()
 
 
 @pytest.mark.asyncio
 async def test_shared_rag_permission_allows_matching_group(
-    flows_permissions_enabled,
+    container,
+    unique_id,
 ) -> None:
-    _ = flows_permissions_enabled
+    user_id = f"user-rag-{unique_id}"
+    company_id = f"co-rag-{unique_id}"
+    await sync_user_groups(
+        container.authz_service,
+        user_id=user_id,
+        groups=["managers"],
+        company_ids=[company_id],
+        previous_groups=[],
+    )
     repository = InMemoryResourceRepository(
         ResourceDefinition(
             resource_id="shared_kb",
@@ -398,31 +483,58 @@ async def test_shared_rag_permission_allows_matching_group(
             config={"namespace": "company-kb"},
         )
     )
+    set_context(
+        Context(
+            user=User(user_id=user_id, name="U", groups=["managers"]),
+            active_company=Company(company_id=company_id, name="Co"),
+            channel="api",
+        )
+    )
     state = ExecutionState.create(
         task_id="task-rag-perm-ok",
         context_id="ctx-rag-perm-ok",
-        user_id="user-rag-perm",
+        user_id=user_id,
         session_id="flow-rag-perm:ctx-rag-perm-ok",
         variables={},
         user_groups=["managers"],
     )
-    binds = await resolve_rag_resource_binds_for_runtime(
-        flow_resources={"kb": {"resource_id": "shared_kb"}},
-        skill_resources=None,
-        node_resources_raw={},
-        repository=repository,
-        state=state,
-    )
+    try:
+        binds = await resolve_rag_resource_binds_for_runtime(
+            flow_resources={"kb": {"resource_id": "shared_kb"}},
+            skill_resources=None,
+            node_resources_raw={},
+            repository=repository,
+            state=state,
+        )
+    finally:
+        clear_context()
     assert binds["kb"].namespace == "company-kb"
 
 
 @pytest.mark.asyncio
-async def test_empty_permission_allows_any_user(flows_permissions_enabled) -> None:
-    _ = flows_permissions_enabled
+async def test_empty_permission_requires_company_member(
+    container,
+    unique_id,
+) -> None:
+    user_id = f"user-rag-{unique_id}"
+    company_id = f"co-rag-{unique_id}"
+    await sync_company_member_roles(
+        container.authz_service,
+        company_id=company_id,
+        user_id=user_id,
+        roles=["member"],
+    )
+    set_context(
+        Context(
+            user=User(user_id=user_id, name="U", groups=[]),
+            active_company=Company(company_id=company_id, name="Co"),
+            channel="api",
+        )
+    )
     state = ExecutionState.create(
         task_id="task-rag-perm-empty",
         context_id="ctx-rag-perm-empty",
-        user_id="user-rag-perm",
+        user_id=user_id,
         session_id="flow-rag-perm:ctx-rag-perm-empty",
         variables={},
         user_groups=[],

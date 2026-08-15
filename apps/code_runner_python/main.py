@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from apps.code_runner_python.api.v1.analyze import router as analyze_router
 from apps.code_runner_python.api.v1.execute import router as execute_router
+from apps.code_runner_python.api.v1.lsp import router as lsp_router
 from apps.code_runner_python.api.v1.validate import router as validate_router
 from apps.code_runner_python.config import (
     CodeRunnerPythonSettings,
@@ -19,13 +20,15 @@ from core.app import create_service_app
 async def on_shutdown(_app: FastAPI, container: CodeRunnerPythonContainer) -> None:
     if "_cached_executor" in container.__dict__:
         await container.executor.aclose()
+    if "_cached_lsp_manager" in container.__dict__:
+        await container.lsp_manager.aclose()
 
 
 app = create_service_app(
     service_name="code_runner_python",
     settings_class=CodeRunnerPythonSettings,
     get_container=get_code_runner_python_container,
-    routers=[execute_router, validate_router, analyze_router],
+    routers=[execute_router, validate_router, analyze_router, lsp_router],
     cors_origins=["*"],
     title="Platform Python Code Runner",
     description="Untrusted Python sandbox runner",

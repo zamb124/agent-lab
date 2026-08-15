@@ -144,29 +144,38 @@ async def _ensure_import_namespace(
     headers: dict[str, str],
     namespace: str,
 ) -> None:
+    """Минимальный шаблон: sales pack под -n10 материализует десятки типов + FGA >120s."""
+    template_id = f"ki_tmpl_{namespace}"
+    create_tpl = await crm_client.post(
+        "/crm/api/v1/namespaces/templates",
+        json={"template_id": template_id, "name": f"KI {namespace}"},
+        headers=headers,
+    )
+    if create_tpl.status_code not in (201, 409):
+        raise AssertionError(f"create template: {create_tpl.status_code} {create_tpl.text}")
+    for type_id, type_name in (("note", "Note"), ("meeting", "Meeting"), ("task", "Task")):
+        type_resp = await crm_client.post(
+            f"/crm/api/v1/namespaces/templates/{template_id}/types",
+            json={
+                "type_id": type_id,
+                "name": type_name,
+                "required_fields": {},
+                "optional_fields": {},
+                "namespace_ids": [],
+            },
+            headers=headers,
+        )
+        if type_resp.status_code not in (201, 409):
+            raise AssertionError(
+                f"create template type {type_id}: {type_resp.status_code} {type_resp.text}"
+            )
     create_ns = await crm_client.post(
         "/crm/api/v1/namespaces",
-        json={"name": namespace, "template_id": "sales"},
+        json={"name": namespace, "template_id": template_id},
         headers=headers,
     )
     if create_ns.status_code not in (201, 409):
         raise AssertionError(f"create namespace: {create_ns.status_code} {create_ns.text}")
-    editability = await crm_client.get(
-        f"/crm/api/v1/namespaces/{namespace}/editability",
-        headers=headers,
-    )
-    if editability.status_code != 200:
-        raise AssertionError(f"namespace editability: {editability.status_code} {editability.text}")
-    edit_payload = _http_json(editability)
-    allowed = _string_list(edit_payload.get("current_allowed_type_ids"))
-    target_allowed = sorted({*allowed, "note", "meeting", "task"})
-    update_ns = await crm_client.put(
-        f"/crm/api/v1/namespaces/{namespace}",
-        json={"allowed_type_ids": target_allowed},
-        headers=headers,
-    )
-    if update_ns.status_code != 200:
-        raise AssertionError(f"namespace update: {update_ns.status_code} {update_ns.text}")
     for system_type in ("note", "meeting", "task"):
         _ = await ensure_entity_type_in_namespace(
             crm_client,

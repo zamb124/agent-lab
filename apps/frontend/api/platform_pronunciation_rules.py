@@ -91,7 +91,7 @@ class PlatformPronunciationRulesListResponse(BaseModel):
 # Вспомогательные функции
 # ---------------------------------------------------------------------------
 
-def _require_superadmin() -> User:
+async def _require_superadmin(container: ContainerDep) -> User:
     context = require_frontend_context()
     user = context.user
     company = context.active_company
@@ -99,12 +99,10 @@ def _require_superadmin() -> User:
         raise HTTPException(
             status_code=403, detail="Управление платформенными правилами доступно только системным администраторам"
         )
-    roles = user.companies.get("system", [])
-    if "admin" not in roles and "owner" not in roles:
-        raise HTTPException(
-            status_code=403,
-            detail="Требуются права admin/owner в компании system",
-        )
+    await container.authz_service.require_company_admin(
+        company_id="system",
+        user_id=user.user_id,
+    )
     return user
 
 
@@ -139,7 +137,7 @@ async def list_platform_pronunciation_rules(
     container: ContainerDep,
 ) -> PlatformPronunciationRulesListResponse:
     """Список платформенных правил произношения TTS."""
-    _ = _require_superadmin()
+    _ = await _require_superadmin(container)
     rows = await container.platform_pronunciation_rule_repository.list_all()
     return PlatformPronunciationRulesListResponse(items=[_row_to_dto(r) for r in rows])
 
@@ -150,7 +148,7 @@ async def create_platform_pronunciation_rule(
     container: ContainerDep,
 ) -> PlatformPronunciationRuleDTO:
     """Создать платформенное правило произношения TTS."""
-    user = _require_superadmin()
+    user = await _require_superadmin(container)
     row = await container.platform_pronunciation_rule_repository.create(
         kind=payload.kind,
         pattern=payload.pattern,
@@ -180,7 +178,7 @@ async def update_platform_pronunciation_rule(
     container: ContainerDep,
 ) -> PlatformPronunciationRuleDTO:
     """Обновить платформенное правило произношения TTS."""
-    user = _require_superadmin()
+    user = await _require_superadmin(container)
     row = await container.platform_pronunciation_rule_repository.update(
         rule_id,
         kind=payload.kind,
@@ -211,7 +209,7 @@ async def delete_platform_pronunciation_rule(
     container: ContainerDep,
 ) -> dict[str, bool]:
     """Удалить платформенное правило произношения TTS."""
-    user = _require_superadmin()
+    user = await _require_superadmin(container)
     deleted = await container.platform_pronunciation_rule_repository.delete(rule_id)
     invalidate_voice_platform_pronunciation_cache()
     logger.info(

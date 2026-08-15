@@ -31,7 +31,7 @@ async def test_legacy_share_create_returns_documents_p_url(
     response = await office_client.post(
         f"/documents/api/v1/documents/{file_id}/shares",
         headers=auth_headers_system,
-        json={"permission": "view"},
+        json={"permission": "viewer"},
     )
     assert response.status_code == 200, response.text
     body = response.json()
@@ -56,7 +56,7 @@ async def test_legacy_share_second_create_rotates_token(
     first = await office_client.post(
         f"/documents/api/v1/documents/{file_id}/shares",
         headers=auth_headers_system,
-        json={"permission": "view"},
+        json={"permission": "viewer"},
     )
     assert first.status_code == 200
     old_token = extract_public_token(first.json()["share_url"])
@@ -64,7 +64,7 @@ async def test_legacy_share_second_create_rotates_token(
     second = await office_client.post(
         f"/documents/api/v1/documents/{file_id}/shares",
         headers=auth_headers_system,
-        json={"permission": "view"},
+        json={"permission": "viewer"},
     )
     assert second.status_code == 200
     new_token = extract_public_token(second.json()["share_url"])
@@ -91,14 +91,14 @@ async def test_legacy_share_edit_permission_reflected_in_resolve(
     response = await office_client.post(
         f"/documents/api/v1/documents/{file_id}/shares",
         headers=auth_headers_system,
-        json={"permission": "edit"},
+        json={"permission": "editor"},
     )
     assert response.status_code == 200
     token = extract_public_token(response.json()["share_url"])
 
     resolve = await office_client.get(f"/documents/api/v1/public/resolve/{token}")
     assert resolve.status_code == 200
-    assert resolve.json()["link_permission"] == "edit"
+    assert resolve.json()["link_permission"] == "editor"
 
 
 @pytest.mark.asyncio
@@ -119,7 +119,7 @@ async def test_legacy_share_create_without_access_forbidden(
     response = await office_client.post(
         f"/documents/api/v1/documents/{file_id}/shares",
         headers=auth_headers_system_user2,
-        json={"permission": "view"},
+        json={"permission": "viewer"},
     )
     assert response.status_code == 403
 
@@ -143,7 +143,7 @@ async def test_legacy_share_after_access_enable_still_works(
     response = await office_client.post(
         f"/documents/api/v1/documents/{file_id}/shares",
         headers=auth_headers_system,
-        json={"permission": "view"},
+        json={"permission": "viewer"},
     )
     assert response.status_code == 200
     token = extract_public_token(response.json()["share_url"])

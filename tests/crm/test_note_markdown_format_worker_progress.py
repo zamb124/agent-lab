@@ -52,7 +52,7 @@ async def test_note_markdown_format_single_text_transform_call_full_body(
     container = MagicMock()
     container.entity_repository = repo
     container.company_repository = MagicMock()
-    container.access_grant_repository = MagicMock()
+    container.authz_service = MagicMock()
     monkeypatch.setattr(nmt, "get_crm_container", lambda: container)
 
     class _TextTransformSettings:

@@ -15,6 +15,7 @@ from apps.crm.services.file_text_reader import load_text_from_bytes
 from apps.crm.services.note_attachment_description import (
     merge_attachment_extracted_into_description,
 )
+from core.authz.service import AuthzService
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
 from core.context import get_context
@@ -25,9 +26,7 @@ from core.logging import get_logger
 from core.types import JsonObject, require_json_object
 
 if TYPE_CHECKING:
-    from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
     from apps.crm.db.repositories.entity_repository import EntityRepository
-    from core.db.repositories import CompanyRepository
     from core.files.file_repository import FileRepository
 
 logger = get_logger(__name__)
@@ -54,15 +53,13 @@ class AttachmentService:
     def __init__(
         self,
         entity_repository: "EntityRepository",
-        access_grant_repository: "AccessGrantRepository",
-        company_repository: "CompanyRepository",
+        authz: AuthzService,
         file_repository: "FileRepository",
         files_service: FilesService,
         note_markdown_format_scheduler: NoteMarkdownFormatScheduler,
     ) -> None:
         self._entity_repo: EntityRepository = entity_repository
-        self._access_grant_repo: AccessGrantRepository = access_grant_repository
-        self._company_repo: CompanyRepository = company_repository
+        self._authz: AuthzService = authz
         self._file_repo: FileRepository = file_repository
         self._files_service: FilesService = files_service
         self._rag: RagClient = RagClient()
@@ -107,14 +104,15 @@ class AttachmentService:
         if context is None:
             raise ValueError("Нет контекста запроса")
         company_id = self._get_company_id()
-        namespace_name = context.active_namespace
 
         entity = await self._entity_repo.get(entity_id)
 
         if not entity:
             raise ValueError(f"Entity not found: {entity_id}")
 
-        namespace = namespace_name
+        namespace = entity.namespace.strip()
+        if namespace == "":
+            raise ValueError(f"Entity {entity_id} has empty namespace")
         record = await self._files_service.get(cleaned_file_id)
         if record.company_id != company_id:
             raise ValueError(f"file {cleaned_file_id} belongs to another company")
@@ -178,8 +176,7 @@ class AttachmentService:
                 note_date_iso=note_date_iso,
                 action="updated",
                 note=merged,
-                company_repository=self._company_repo,
-                access_grant_repository=self._access_grant_repo,
+                authz=self._authz,
             )
 
         markdown_format_queued = False
@@ -248,8 +245,7 @@ class AttachmentService:
                 note_date_iso=note_date_iso,
                 action="updated",
                 note=entity,
-                company_repository=self._company_repo,
-                access_grant_repository=self._access_grant_repo,
+                authz=self._authz,
             )
 
         logger.info(f"Attachment removed: {document_id} from {entity_id}")

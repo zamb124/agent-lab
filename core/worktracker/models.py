@@ -269,11 +269,11 @@ class WorkItemInteractionPolicy(WorktrackerModel):
 
 
 class WorkQueueMember(WorktrackerModel):
-    """Участник очереди — пользователь или агент (flow). Доступ + роль."""
+    """Участник очереди (user). Роль — relation из OpenFGA."""
 
     work_queue_id: str = Field(..., min_length=1)
     member: WorkActor
-    role: str = "member"
+    role: Literal["owner", "member"] = "member"
 
 
 class WorkQueue(WorktrackerModel):
@@ -282,6 +282,7 @@ class WorkQueue(WorktrackerModel):
     name: str = Field(..., min_length=1)
     work_queue_slug: str = Field(..., min_length=1)
     description: str | None = None
+    owner_user_id: str = Field(..., min_length=1)
     created_at: datetime
     updated_at: datetime
 

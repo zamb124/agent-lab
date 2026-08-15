@@ -171,8 +171,15 @@ async def _create_invitee_other_company(
 ) -> tuple[str, dict[str, str]]:
     """Пользователь только в другой компании."""
     uid = f"invitee_oc_{uuid.uuid4().hex[:10]}"
-    foreign_company.members[uid] = ["member"]
-    await frontend_container.company_repository.set(foreign_company)
+    from tests.fixtures.auth import set_test_company_member_roles
+
+    await set_test_company_member_roles(
+        frontend_container.company_repository,
+        frontend_container.authz_service,
+        company_id=foreign_company.company_id,
+        user_id=uid,
+        roles=["member"],
+    )
 
     user = User(
         user_id=uid,

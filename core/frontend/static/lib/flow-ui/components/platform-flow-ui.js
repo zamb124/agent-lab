@@ -389,7 +389,7 @@ export class PlatformFlowUI extends LitElement {
         this.parityReady = false;
         this.renderFingerprint = '';
         this.shareState = {
-            loading: false, url: '', grantId: '', permission: 'view', copied: false, error: '',
+            loading: false, url: '', grantId: '', permission: 'viewer', copied: false, error: '',
         };
         this.embedState = { copied: false };
         this.voiceSessionActive = false;
@@ -864,13 +864,13 @@ export class PlatformFlowUI extends LitElement {
                         type="button"
                         class="share-btn secondary"
                         ?disabled=${this.shareState.loading}
-                        @click=${() => this._createShare('view')}
+                        @click=${() => this._createShare('viewer')}
                     >${flowUIText(locale, 'share_view_only')}</button>
                     <button
                         type="button"
                         class="share-btn primary"
                         ?disabled=${this.shareState.loading}
-                        @click=${() => this._createShare('interact')}
+                        @click=${() => this._createShare('editor')}
                     >${flowUIText(locale, 'share_can_interact')}</button>
                 </div>
                 ${this.shareState.loading ? html`<div class="share-copy">${flowUIText(locale, 'share_creating')}</div>` : nothing}

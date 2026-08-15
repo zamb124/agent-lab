@@ -11,6 +11,7 @@ from urllib.parse import urlparse, urlunparse
 import httpx
 from fastapi import HTTPException
 
+from apps.agent.authz.tuples import agent_device_company_link, agent_device_owner_tuple
 from apps.agent.config import get_agent_settings
 from apps.agent.desktop.build_contract import (
     load_default_distro_config,
@@ -43,6 +44,9 @@ from apps.agent.tunnel_bus import publish_tunnel_disconnect
 from apps.agent.tunnel_registry import push_device_policy_to_tunnel
 from apps.frontend.config import get_frontend_public_base_url
 from apps.frontend.container import FrontendContainer
+from core.authz.errors import AuthzDenied
+from core.authz.models import AuthzObject, AuthzSubject
+from core.authz.types import AuthzObjectType, AuthzRelation
 from core.clients.redis_client import RedisClient
 from core.db.storage import Storage
 from core.logging import get_logger
@@ -700,6 +704,16 @@ async def register_device(
         device_record.model_dump_json(),
         force_global=True,
     )
+    try:
+        await container.authz_service.write(
+            [
+                agent_device_company_link(request.device_id, company_id),
+                agent_device_owner_tuple(request.device_id, user_id),
+            ]
+        )
+    except Exception:
+        _ = await container.shared_storage.delete(device_key, force_global=True)
+        raise
 
     token_service = TokenService()
     device_jti = str(uuid.uuid4())
@@ -794,6 +808,16 @@ async def register_device_with_auth(
         device_record.model_dump_json(),
         force_global=True,
     )
+    try:
+        await container.authz_service.write(
+            [
+                agent_device_company_link(request.device_id, company_id),
+                agent_device_owner_tuple(request.device_id, user_id),
+            ]
+        )
+    except Exception:
+        _ = await container.shared_storage.delete(device_key, force_global=True)
+        raise
 
     token_service = TokenService()
     device_jti = str(uuid.uuid4())
@@ -856,8 +880,15 @@ async def list_company_devices(
     container: FrontendContainer,
     *,
     company_id: str,
-    user_id: str | None = None,
+    viewer_user_id: str,
+    owner_user_id: str | None = None,
 ) -> list[AgentDeviceListItem]:
+    allowed = await container.authz_service.list_objects(
+        AuthzSubject.user(viewer_user_id),
+        AuthzRelation.CAN_VIEW,
+        AuthzObjectType.AGENT_DEVICE,
+    )
+    allowed_keys = {obj.object_key for obj in allowed}
     records = await container.shared_storage.get_all_by_prefix(
         DEVICE_KEY_PREFIX,
         limit=1000,
@@ -870,7 +901,9 @@ async def list_company_devices(
         device = AgentDeviceRecord.model_validate_json(raw_value)
         if device.company_id != company_id:
             continue
-        if user_id is not None and device.user_id != user_id:
+        if device.device_id not in allowed_keys:
+            continue
+        if owner_user_id is not None and device.user_id != owner_user_id:
             continue
         tunnel_online = await is_device_tunnel_online(container, device.device_id)
         items.append(
@@ -985,10 +1018,21 @@ async def revoke_device(
     *,
     device_id: str,
     company_id: str,
+    actor_user_id: str,
 ) -> None:
     device = await get_device_record(container, device_id)
     if device.company_id != company_id:
         raise HTTPException(status_code=404, detail="Устройство не найдено")
+    try:
+        await container.authz_service.require_can_admin(
+            AuthzObject.agent_device(device_id),
+            user_id=actor_user_id,
+        )
+    except AuthzDenied as exc:
+        raise HTTPException(status_code=403, detail="Недостаточно прав для отзыва устройства") from exc
+    deletes = await container.authz_service.list_tuples(AuthzObject.agent_device(device_id))
+    if deletes:
+        await container.authz_service.delete(deletes)
     device.is_active = False
     _ = await container.shared_storage.set(
         _device_storage_key(device_id),

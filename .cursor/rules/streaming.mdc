@@ -136,10 +136,14 @@ Wire SSE `result` — `StreamResponse`: `statusUpdate` | `artifactUpdate` | `tas
 ## Полный поток
 
 ```python
-# A2AChannel: SendStreamingMessage — запустить worker, подписаться
+# A2AChannel: SendMessage / SendStreamingMessage — подписка, kick, затем live или durable
+await ready_event.wait()
 await enqueue(TASK_PROCESS_FLOW, flow_id=..., task_id=..., ...)
-async for event in subscriber.subscribe(task_id):
-    yield event  # → StreamResponse на SSE
+# In-process enqueue (тесты `sync_tools`) паркует проекцию, пока event loop занят
+# (OpenFGA Check и т.п.): Redis Pub/Sub не очередь и дропает.
+# Если проекция уже terminal/interrupted — cancel live collect, вернуть
+# `_projected_task` (SendMessage) / `list_events_after_sequence` (stream).
+# Живой worker: live `EventSubscriber` до terminal/interrupted.
 
 # Worker: BaseChannel.process_task()
 emitter = Emitter(redis_client, state)

@@ -47,6 +47,7 @@ from apps.crm.services.crm_work_item_service import CrmWorkItemService
 from apps.crm.services.entity_response_enrichment import build_entity_responses_with_semantic_index
 from apps.crm.services.entity_service import DraftVersionConflictError, SchemaValidationError
 from apps.crm.services.task_service import ActiveTaskExistsError
+from core.authz.models import AuthzObject
 from core.context import get_context, resolve_namespace_or_raise
 from core.i18n.service import t
 from core.pagination import CursorPage
@@ -235,20 +236,15 @@ async def merge_entities(
         raise HTTPException(status_code=404, detail="Source entity not found")
 
     user_id, company_id = _auth_user_company_or_401()
-    if not await container.access_control_service.can_write_entity(survivor, user_id, company_id):
-        raise HTTPException(status_code=403, detail="Access denied")
-    if not await container.access_control_service.can_write_entity(source, user_id, company_id):
-        raise HTTPException(status_code=403, detail="Access denied")
+    await container.authz_service.require_can_edit(AuthzObject.crm_entity(survivor.entity_id), user_id=user_id)
+    await container.authz_service.require_can_edit(AuthzObject.crm_entity(source.entity_id), user_id=user_id)
 
     try:
         merged, merged_from_id = await container.entity_service.merge_entities(body)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    try:
-        filtered = await container.access_control_service.filter_fields(merged, user_id, company_id)
-    except PermissionError:
-        raise HTTPException(status_code=403, detail="Access denied")
+    filtered = await container.crm_entity_access_service.filter_fields(merged, user_id, company_id)
 
     status_by_id = await container.entity_repository.batch_semantic_text_index_status([merged])
     merge_entity_resp = EntityResponse.model_validate(filtered).model_copy(
@@ -533,9 +529,8 @@ async def patch_note_analysis_draft(
     note = await container.entity_service.get_entity(note_id)
     if not note:
         raise HTTPException(status_code=404, detail="Entity not found")
-    user_id, company_id = _auth_user_company_or_401()
-    if not await container.access_control_service.can_write_entity(note, user_id, company_id):
-        raise HTTPException(status_code=403, detail="Access denied")
+    user_id, _ = _auth_user_company_or_401()
+    await container.authz_service.require_can_edit(AuthzObject.crm_entity(note.entity_id), user_id=user_id)
     try:
         return await container.entity_service.patch_analysis_draft(note_id, body)
     except DraftVersionConflictError as exc:
@@ -553,11 +548,10 @@ async def delete_note_analysis_draft(
     note = await container.entity_service.get_entity(note_id)
     if not note:
         raise HTTPException(status_code=404, detail="Entity not found")
-    user_id, company_id = _auth_user_company_or_401()
-    if not user_id or not await container.access_control_service.can_write_entity(
-        note, user_id, company_id
-    ):
-        raise HTTPException(status_code=403, detail="Access denied")
+    user_id, _ = _auth_user_company_or_401()
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    await container.authz_service.require_can_edit(AuthzObject.crm_entity(note.entity_id), user_id=user_id)
     try:
         await container.entity_service.discard_note_analysis_draft(note_id)
     except ValueError as exc:
@@ -574,11 +568,10 @@ async def delete_note_analysis_error(
     note = await container.entity_service.get_entity(note_id)
     if not note:
         raise HTTPException(status_code=404, detail="Entity not found")
-    user_id, company_id = _auth_user_company_or_401()
-    if not user_id or not await container.access_control_service.can_write_entity(
-        note, user_id, company_id
-    ):
-        raise HTTPException(status_code=403, detail="Access denied")
+    user_id, _ = _auth_user_company_or_401()
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    await container.authz_service.require_can_edit(AuthzObject.crm_entity(note.entity_id), user_id=user_id)
     await container.entity_service.clear_note_analysis_error(note_id)
     return Response(status_code=204)
 
@@ -597,10 +590,9 @@ async def queue_note_analysis_draft_repair(
     if not note:
         raise HTTPException(status_code=404, detail="Entity not found")
     user_id, company_id = _auth_user_company_or_401()
-    if not user_id or not await container.access_control_service.can_write_entity(
-        note, user_id, company_id
-    ):
-        raise HTTPException(status_code=403, detail="Access denied")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    await container.authz_service.require_can_edit(AuthzObject.crm_entity(note.entity_id), user_id=user_id)
     raw_attrs = note.attributes or {}
     if not isinstance(raw_attrs.get("ai_analysis_draft"), dict):
         raise HTTPException(status_code=422, detail="У заметки нет черновика ai_analysis_draft")
@@ -628,8 +620,7 @@ async def queue_note_analysis_draft_repair(
         note_date_iso=note_date_iso,
         action="updated",
         note=note,
-        company_repository=container.company_repository,
-        access_grant_repository=container.access_grant_repository,
+                authz=container.authz_service,
         skip_notification_center=True,
         draft_repair={"phase": "started"},
     )
@@ -661,9 +652,8 @@ async def request_note_markdown_format(
     note = await container.entity_service.get_entity(note_id)
     if not note:
         raise HTTPException(status_code=404, detail="Entity not found")
-    user_id, company_id = _auth_user_company_or_401()
-    if not await container.access_control_service.can_write_entity(note, user_id, company_id):
-        raise HTTPException(status_code=403, detail="Access denied")
+    user_id, _ = _auth_user_company_or_401()
+    await container.authz_service.require_can_edit(AuthzObject.crm_entity(note.entity_id), user_id=user_id)
 
     try:
         row = await container.task_service.start_note_markdown_format(
@@ -693,20 +683,16 @@ async def get_entity(
 
     user_id, company_id = _auth_user_company_or_401()
 
-    if not await container.access_control_service.can_read_entity(entity, user_id, company_id):
-        raise HTTPException(status_code=403, detail="Access denied")
+    await container.authz_service.require_can_view(AuthzObject.crm_entity(entity.entity_id), user_id=user_id)
 
-    try:
-        filtered = await container.access_control_service.filter_fields(entity, user_id, company_id)
-        if isinstance(filtered, CRMEntity):
-            return await _single_entity_response(
-                repo=container.entity_repository,
-                entity=filtered,
-                crm_work_item_service=container.crm_work_item_service,
-            )
-        return filtered
-    except PermissionError:
-        raise HTTPException(status_code=403, detail="Access denied")
+    filtered = await container.crm_entity_access_service.filter_fields(entity, user_id, company_id)
+    if isinstance(filtered, CRMEntity):
+        return await _single_entity_response(
+            repo=container.entity_repository,
+            entity=filtered,
+            crm_work_item_service=container.crm_work_item_service,
+        )
+    return filtered
 
 
 @router.put("/{entity_id}", response_model=EntityResponse)
@@ -720,10 +706,9 @@ async def update_entity(
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
 
-    user_id, company_id = _auth_user_company_or_401()
+    user_id, _ = _auth_user_company_or_401()
 
-    if not await container.access_control_service.can_write_entity(entity, user_id, company_id):
-        raise HTTPException(status_code=403, detail="Access denied")
+    await container.authz_service.require_can_edit(AuthzObject.crm_entity(entity.entity_id), user_id=user_id)
 
     updates = data.model_dump(exclude_none=True)
     updates.pop("voice_entity_id", None)
@@ -760,10 +745,9 @@ async def delete_entity(
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
 
-    user_id, company_id = _auth_user_company_or_401()
+    user_id, _ = _auth_user_company_or_401()
 
-    if not await container.access_control_service.can_write_entity(entity, user_id, company_id):
-        raise HTTPException(status_code=403, detail="Access denied")
+    await container.authz_service.require_can_edit(AuthzObject.crm_entity(entity.entity_id), user_id=user_id)
 
     success = await container.entity_service.delete_entity(entity_id)
     if not success:
@@ -878,9 +862,7 @@ async def get_entity_card(
             raise HTTPException(status_code=404, detail="Entity not found")
         ctx = get_context()
         user_id = ctx.user.user_id if ctx and ctx.user else None
-        company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
-        if not await container.access_control_service.can_read_entity(entity, user_id, company_id):
-            raise HTTPException(status_code=403, detail="Access denied")
+        await container.authz_service.require_can_view(AuthzObject.crm_entity(entity.entity_id), user_id=user_id)
         card = await container.entity_service.get_entity_card(entity_id)
         return card
     except ValueError as e:
@@ -926,9 +908,8 @@ async def get_entity_relationships(
     entity = await container.entity_service.get_entity(entity_id)
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
-    user_id, company_id = _auth_user_company_or_401()
-    if not await container.access_control_service.can_read_entity(entity, user_id, company_id):
-        raise HTTPException(status_code=403, detail="Access denied")
+    user_id, _ = _auth_user_company_or_401()
+    await container.authz_service.require_can_view(AuthzObject.crm_entity(entity.entity_id), user_id=user_id)
 
     relationships = await repo.get_by_entity(entity_id)
     return {
@@ -964,9 +945,8 @@ async def get_exclusive_related_entities(
     if entity.entity_type != NOTE_ROOT_ENTITY_TYPE_ID:
         raise HTTPException(status_code=400, detail="Only notes have exclusive related entities")
 
-    user_id, company_id = _auth_user_company_or_401()
-    if not await container.access_control_service.can_write_entity(entity, user_id, company_id):
-        raise HTTPException(status_code=403, detail="Access denied")
+    user_id, _ = _auth_user_company_or_401()
+    await container.authz_service.require_can_edit(AuthzObject.crm_entity(entity.entity_id), user_id=user_id)
 
     exclusive_entities = await container.entity_service.get_exclusive_related_entities_for_note(
         entity_id

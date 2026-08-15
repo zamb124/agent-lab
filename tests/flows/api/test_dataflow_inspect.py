@@ -65,12 +65,12 @@ async def test_dataflow_inspect_flow_id_from_db(client, app, unique_id):
 
 
 @pytest.mark.asyncio
-async def test_dataflow_inspect_unknown_flow_id_404(client, app, unique_id):
+async def test_dataflow_inspect_unknown_flow_id_403(client, app, unique_id):
     response = await client.post(
         "/flows/api/v1/flows/dataflow/inspect",
         json={"flow_id": f"missing_{unique_id}", "branch_id": "default"},
     )
-    assert response.status_code == 404
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio

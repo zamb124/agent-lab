@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 
-from apps.wiki.api._scope import require_scope
+from apps.wiki.api._scope import require_scope, wiki_page_response
 from apps.wiki.dependencies import ContainerDep
 from apps.wiki.models.api import WikiPageResponse
 from apps.wiki.models.domain import WikiRevision, WikiRevisionSummary
@@ -63,4 +63,4 @@ async def restore_revision(
         raise HTTPException(status_code=404, detail="Ревизия не найдена") from exc
     except WikiAccessDeniedError as exc:
         raise HTTPException(status_code=403, detail="Нет прав на изменение страницы") from exc
-    return WikiPageResponse(page=page, can_edit=True, can_administer=False)
+    return await wiki_page_response(container, page, user_id=scope.user_id)

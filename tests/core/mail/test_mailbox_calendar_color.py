@@ -90,7 +90,10 @@ async def test_patch_calendar_color_by_owner(
         company_id=company_id,
     )
     monkeypatch.setattr(mail_service, "_active_user_id", lambda: user_id)
-    monkeypatch.setattr(mail_service, "_is_company_admin", lambda _cid: False)
+    async def _deny_admin(_cid: str) -> bool:
+        return False
+
+    monkeypatch.setattr(mail_service, "_is_company_admin", _deny_admin)
     patched = await mail_service.patch_binding(
         binding.mailbox_binding_id,
         MailboxBindingPatchPayload(calendar_color="mint"),

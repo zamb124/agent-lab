@@ -30,7 +30,8 @@ from apps.flows.src.services.mcp_catalog_store import (
 from apps.flows.src.services.mcp_server_display_order import sort_mcp_servers_for_display
 from apps.flows.src.services.mcp_server_search import filter_mcp_servers_by_search
 from apps.flows.src.services.mcp_sync import resolve_mcp_client_variables, sync_mcp_server_tools
-from core.context import get_context
+from core.authz.models import AuthzObject
+from core.context import get_context, require_context
 from core.logging import get_logger
 from core.pagination import OffsetPage
 from core.types import JsonObject
@@ -38,6 +39,16 @@ from core.types import JsonObject
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["mcp"])
+
+
+async def _require_company_member(container: ContainerDep) -> None:
+    ctx = require_context()
+    if ctx.active_company is None:
+        raise HTTPException(status_code=400, detail="Компания не выбрана")
+    await container.authz_service.require_can_view(
+        AuthzObject.company(ctx.active_company.company_id),
+        user_id=ctx.user.user_id,
+    )
 
 
 class MCPServerCreateRequest(BaseModel):
@@ -282,6 +293,7 @@ async def install_mcp_catalog_entry(
     catalog_id: str,
     container: ContainerDep,
 ) -> MCPServerResponse:
+    await _require_company_member(container)
     runtime = as_flow_runtime_container(container)
     try:
         server = await install_catalog_entry_for_company(
@@ -303,6 +315,7 @@ async def uninstall_mcp_catalog_entry(
     catalog_id: str,
     container: ContainerDep,
 ) -> dict[str, str]:
+    await _require_company_member(container)
     runtime = as_flow_runtime_container(container)
     try:
         await uninstall_catalog_entry_from_company(
@@ -321,6 +334,7 @@ async def create_server(
     container: ContainerDep,
 ) -> MCPServerResponse:
     """Создает MCP сервер."""
+    await _require_company_member(container)
     existing = await container.mcp_server_repository.get(request.server_id)
     if existing:
         raise HTTPException(
@@ -364,6 +378,7 @@ async def update_server(
     container: ContainerDep,
 ) -> MCPServerResponse:
     """Обновляет MCP сервер."""
+    await _require_company_member(container)
     server = await container.mcp_server_repository.get(server_id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
@@ -416,6 +431,7 @@ async def delete_server(
     container: ContainerDep,
 ) -> dict[str, str]:
     """Удаляет MCP сервер."""
+    await _require_company_member(container)
     server = await container.mcp_server_repository.get(server_id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
@@ -423,6 +439,7 @@ async def delete_server(
     # Удаляем связанные tools
     for tool_id in server.cached_tools:
         _ = await container.tool_repository.delete(tool_id)
+        await container.flow_access_service.sync_tool_deleted(tool_id)
 
     _ = await container.mcp_server_repository.delete(server_id)
     logger.info(f"MCP server deleted: {server_id}")
@@ -439,6 +456,7 @@ async def sync_server_tools(
 
     Та же логика, что и при авто-синхронизации (`apps.flows.src.services.mcp_sync`).
     """
+    await _require_company_member(container)
     server = await container.mcp_server_repository.get(server_id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
@@ -481,6 +499,7 @@ async def test_server_connection(
     container: ContainerDep,
 ) -> MCPTestResponse:
     """Тестирует подключение к MCP серверу."""
+    await _require_company_member(container)
     server = await container.mcp_server_repository.get(server_id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
@@ -516,6 +535,7 @@ async def reset_catalog_defaults(
     container: ContainerDep,
 ) -> MCPServerResponse:
     """Сбрасывает catalog-managed MCP сервер к snapshot из глобального catalog."""
+    await _require_company_member(container)
     server = await container.mcp_server_repository.get(server_id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")

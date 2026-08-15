@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from apps.code_runner_go.config import get_code_runner_go_settings
 from apps.code_runner_go.services.executor import GoSandboxExecutor
+from apps.code_runner_go.services.lsp import go_lsp_command, prepare_go_lsp_workspace
+from core.capabilities.lsp_session import LspSessionManager
 from core.container import BaseContainer, ContainerRegistry, lazy
 from core.logging import get_logger
 
@@ -16,6 +18,15 @@ class CodeRunnerGoContainer(BaseContainer):
     @lazy
     def executor(self) -> GoSandboxExecutor:
         return GoSandboxExecutor()
+
+    @lazy
+    def lsp_manager(self) -> LspSessionManager:
+        return LspSessionManager(
+            command_factory=go_lsp_command,
+            extra_prepare=prepare_go_lsp_workspace,
+            extra_env={"GOPROXY": "off", "GO111MODULE": "on"},
+            public_ws_prefix="/code-runner-go/api/v1/lsp/ws",
+        )
 
 
 def _create_code_runner_go_container() -> CodeRunnerGoContainer:

@@ -7,6 +7,7 @@
 - apps/rag_worker/broker.py - для RAG задач
 - apps/sync/realtime/broker.py - для sync realtime задач
 - apps/crm_worker/broker.py - для CRM задач
+- apps/crm_worker/summary_broker.py - для CRM daily/period summary
 """
 
 from collections.abc import Awaitable, Callable

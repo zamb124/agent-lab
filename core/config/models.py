@@ -82,7 +82,6 @@ class AuthConfig(BaseModel):
             "не создаёт пользователя; локальный dev auto-context включается отдельным флагом."
         ),
     )
-    permissions_enabled: bool = True
     dev_auto_context_enabled: bool = Field(
         default=False,
         description=(
@@ -1527,6 +1526,7 @@ def _default_stream_maxlen_by_queue() -> dict[str, int]:
         "search": 50_000,
         "idle": 20_000,
         "crm": 20_000,
+        "crm_summary": 20_000,
         "rag": 20_000,
         "flows_worker": 10_000,
     }
@@ -1554,6 +1554,39 @@ class TasksConfig(BaseModel):
     stream_maxlen_default: int | None = Field(
         default=None,
         description="maxlen для очередей вне stream_maxlen_by_queue; None — без trim.",
+    )
+
+
+class OpenFGAConfig(BaseModel):
+    """OpenFGA — единый PDP платформы (один store на всю платформу)."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Включает AuthzService checks/writes. После bootstrap store — true.",
+    )
+    api_url: str = Field(
+        default="http://127.0.0.1:9090",
+        description="HTTP API OpenFGA (не публиковать наружу).",
+    )
+    store_id: str = Field(
+        default="",
+        description="Id единственного store платформы (не company_id).",
+    )
+    authorization_model_id: str = Field(
+        default="",
+        description="Pinned authorization model id после bootstrap.",
+    )
+    api_token: str | None = Field(
+        default=None,
+        description="Preshared token OpenFGA (Authorization: Bearer).",
+    )
+    timeout_ms: int = Field(default=30_000, ge=100, description="Timeout OpenFGA client.")
+    default_consistency: str = Field(
+        default="MINIMIZE_LATENCY",
+        description=(
+            "AuthzConsistency default для Check/List/Expand/Read: "
+            "MINIMIZE_LATENCY | HIGHER_CONSISTENCY."
+        ),
     )
 
 

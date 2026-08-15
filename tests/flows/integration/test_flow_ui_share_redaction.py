@@ -78,7 +78,7 @@ async def test_a2a_share_bootstrap_redacts_forbidden_value_paths(
                 "context_id": context_id,
                 "document_id": f"flow-ui:{context_id}",
                 "minimum_revision": state.ui_document.revision,
-                "permission": "view",
+                "permission": "viewer",
                 "redacted_value_paths": ["/values/message"],
                 "expires_in_seconds": 300,
             },
@@ -158,7 +158,7 @@ async def test_share_interact_cannot_write_redacted_paths(
                 "context_id": context_id,
                 "document_id": f"flow-ui:{context_id}",
                 "minimum_revision": synced.state.ui_document.revision,
-                "permission": "interact",
+                "permission": "editor",
                 "redacted_value_paths": ["/values/message"],
                 "expires_in_seconds": 300,
             }

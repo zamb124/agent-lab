@@ -47,6 +47,7 @@ from core.worktracker.models import (
     WorkItemResolution,
     WorkItemState,
 )
+from apps.worktracker.services.work_queue_access_service import WorkQueueAccessService
 from core.worktracker.service import WorkItemService
 from tests.fixtures.flow_employee_test_helpers import (
     cleanup_flow_employee_for_tests,
@@ -767,7 +768,11 @@ async def test_hooks_metadata_persisted_without_http_dispatch(app, container, un
         curator_user_id=f"cur_{unique_id}",
     )
     try:
-        svc = WorkItemService(repository=container.worktracker_repository)
+        svc = WorkItemService(
+            repository=container.worktracker_repository,
+            queue_access=WorkQueueAccessService(container.authz_service),
+            authz=container.authz_service,
+        )
         hooks = [
             WorkItemHook(
                 event=WorkItemHookEvent.COMPLETED,

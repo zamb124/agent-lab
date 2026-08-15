@@ -160,8 +160,9 @@ def sync_worker(frontend_service):
 
 @pytest.fixture(scope="session")
 def crm_worker():
-    """crm_worker стека: analyze/daily_summary/knowledge import."""
+    """crm_worker (analyze/import) и crm_summary_worker (daily/period summary)."""
     require_taskiq_worker("crm_worker", "crm")
+    require_taskiq_worker("crm_summary_worker", "crm_summary")
 
 
 @pytest.fixture
@@ -230,7 +231,6 @@ def taskiq_scheduler():
             "TESTING": "true",
             "DATABASE__REDIS_URL": "redis://localhost:63792/0",
             "TASKS__BROKER_URL": "redis://localhost:63792/1",
-            "AUTH__PERMISSIONS_ENABLED": "false",
         },
         start_new_session=True,
     )

@@ -43,6 +43,7 @@ from core.mail.models import (
     MailboxBindingMemberPayload,
     MailboxBindingPatchPayload,
     MailboxBindingPublic,
+    MailboxBindingsMeResponse,
     MailDraftSavePayload,
     MailDraftSaveResult,
     MailFolderListResult,
@@ -131,7 +132,7 @@ async def put_mail_connection(
     mail_service: MailServiceDep,
 ) -> CompanyMailConnectionPublic:
     try:
-        mail_service.require_company_admin()
+        await mail_service.require_company_admin()
         connection = await mail_service.upsert_connection(payload)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
@@ -141,7 +142,7 @@ async def put_mail_connection(
 @router.get("/bindings", response_model=ListResponse[MailboxBindingPublic])
 async def list_mail_bindings(mail_service: MailServiceDep) -> ListResponse[MailboxBindingPublic]:
     try:
-        mail_service.require_company_admin()
+        await mail_service.require_company_admin()
         bindings = await mail_service.list_bindings()
         items = [await mail_service.public_binding(item) for item in bindings]
     except Exception as exc:
@@ -149,16 +150,17 @@ async def list_mail_bindings(mail_service: MailServiceDep) -> ListResponse[Mailb
     return ListResponse(items=items)
 
 
-@router.get("/bindings/me", response_model=ListResponse[MailboxBindingPublic])
+@router.get("/bindings/me", response_model=MailboxBindingsMeResponse)
 async def list_my_mail_bindings(
     mail_service: MailServiceDep,
-) -> ListResponse[MailboxBindingPublic]:
+) -> MailboxBindingsMeResponse:
     try:
         bindings = await mail_service.list_my_bindings()
         items = [await mail_service.public_binding(item) for item in bindings]
+        can_admin = await mail_service.check_company_admin()
     except Exception as exc:
         _raise_http_for_mail_error(exc)
-    return ListResponse(items=items)
+    return MailboxBindingsMeResponse(items=items, can_admin=can_admin)
 
 
 @router.post("/bindings", response_model=MailboxBindingPublic)
@@ -167,7 +169,7 @@ async def create_mail_binding(
     mail_service: MailServiceDep,
 ) -> MailboxBindingPublic:
     try:
-        mail_service.require_company_admin()
+        await mail_service.require_company_admin()
         binding = await mail_service.bind_mailbox(payload)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
@@ -636,7 +638,7 @@ async def remove_mail_binding_member(
 @router.post("/connection/healthcheck", response_model=MailServerHealth)
 async def mail_connection_healthcheck(mail_service: MailServiceDep) -> MailServerHealth:
     try:
-        mail_service.require_company_admin()
+        await mail_service.require_company_admin()
         return await mail_service.healthcheck()
     except Exception as exc:
         _raise_http_for_mail_error(exc)
@@ -649,10 +651,8 @@ async def mail_system_reconcile(mail_service: MailServiceDep) -> MailReconcileRe
         raise HTTPException(status_code=401, detail="Authentication required")
     if ctx.active_company.company_id != SYSTEM_COMPANY_ID:
         raise HTTPException(status_code=403, detail="system reconcile requires company_id=system")
-    user_roles = ctx.user.companies.get(SYSTEM_COMPANY_ID, [])
-    if "admin" not in user_roles:
-        raise HTTPException(status_code=403, detail="system reconcile requires admin role")
     try:
+        await mail_service.require_company_admin(SYSTEM_COMPANY_ID)
         return await mail_service.reconcile_system()
     except Exception as exc:
         _raise_http_for_mail_error(exc)

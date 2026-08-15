@@ -1286,8 +1286,8 @@ class TestEdgeCases:
             f"/crm/api/v1/entities/{fake_id}/influence-graph",
             headers=auth_headers_system
         )
-        # Должна быть ошибка 404 или 500
-        assert response.status_code in [404, 500]
+        # Нет tuples / нет объекта → 403 (Check до existence, без leak 404)
+        assert response.status_code == 403
 
     @pytest.mark.asyncio
     async def test_no_access_to_root(self, crm_client: AsyncClient, unique_id: str, auth_headers_system: dict[str, str], auth_headers_company2: dict[str, str]):

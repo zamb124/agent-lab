@@ -1,7 +1,9 @@
 """Контекст компании для op_* (membership и `resolve_company_id` через `get_context`)."""
 
+
 from __future__ import annotations
 
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 from collections.abc import Generator
 
 import pytest

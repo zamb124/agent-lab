@@ -29,11 +29,12 @@ def _require_settings_principal() -> tuple[User, Company]:
     return context.user, company
 
 
-def _require_settings_admin() -> tuple[User, Company]:
+async def _require_settings_admin(container: ContainerDep) -> tuple[User, Company]:
     user, company = _require_settings_principal()
-    roles = company.members.get(user.user_id, [])
-    if "owner" not in roles and "admin" not in roles:
-        raise HTTPException(status_code=403, detail="Недостаточно прав")
+    await container.authz_service.require_company_admin(
+        company_id=company.company_id,
+        user_id=user.user_id,
+    )
     return user, company
 
 
@@ -58,7 +59,7 @@ async def update_company_settings(
     update: CompanySettingsUpdate,
     container: ContainerDep,
 ) -> CompanySettingsUpdateResponse:
-    _, company = _require_settings_admin()
+    _, company = await _require_settings_admin(container)
     updated = False
 
     if update.name is not None:

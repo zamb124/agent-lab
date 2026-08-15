@@ -14,7 +14,6 @@
  *   3. Форма создания:
  *        - subject (radio): public | user | company.
  *        - role (chip): viewer | editor | admin.
- *        - expires_at (date, опциональный) — переводится в ISO для backend.
  *        - для subject=user — typeahead через `teamSearchFacets.users` (поиск
  *          по имени/email; выбранный пользователь хранится локально как
  *          { user_id, label }).
@@ -48,12 +47,6 @@ const ROLE_ADMIN = 'admin';
 
 const ROLES = [ROLE_VIEWER, ROLE_EDITOR, ROLE_ADMIN];
 
-function _toIsoOrNull(dateStr) {
-    if (typeof dateStr !== 'string' || dateStr.length === 0) return null;
-    const d = new Date(dateStr);
-    if (Number.isNaN(d.getTime())) return null;
-    return d.toISOString();
-}
 
 export class CRMShareModal extends PlatformModal {
     static modalKind = 'crm.share';
@@ -64,7 +57,6 @@ export class CRMShareModal extends PlatformModal {
         entityId: { type: String },
         _subject: { state: true },
         _role: { state: true },
-        _expiresAt: { state: true },
         _userQuery: { state: true },
         _selectedUser: { state: true },
         _companyId: { state: true },
@@ -382,7 +374,6 @@ export class CRMShareModal extends PlatformModal {
 
         this._subject = SUBJECT_USER;
         this._role = ROLE_VIEWER;
-        this._expiresAt = '';
         this._userQuery = '';
         this._selectedUser = null;
         this._companyId = '';
@@ -424,7 +415,6 @@ export class CRMShareModal extends PlatformModal {
     _resetForm() {
         this._subject = SUBJECT_USER;
         this._role = ROLE_VIEWER;
-        this._expiresAt = '';
         this._userQuery = '';
         this._selectedUser = null;
         this._companyId = '';
@@ -453,13 +443,6 @@ export class CRMShareModal extends PlatformModal {
 
     _onPickRole(role) {
         this._role = role;
-    }
-
-    _onExpiresAtInput(e) {
-        if (!e.detail || typeof e.detail.value !== 'string') {
-            throw new Error('share-modal: expires field expects change detail.value string');
-        }
-        this._expiresAt = e.detail.value;
     }
 
     _onUserQueryInput(e) {
@@ -512,8 +495,6 @@ export class CRMShareModal extends PlatformModal {
         }
         this._submitFailedMessage = '';
 
-        const expiresAtIso = _toIsoOrNull(this._expiresAt);
-
         if (this._subject === SUBJECT_PUBLIC) {
             this._grantCreateOp.run({
                 entity_id: this.entityId,
@@ -523,7 +504,6 @@ export class CRMShareModal extends PlatformModal {
         }
         if (this._subject === SUBJECT_USER) {
             const body = { user_id: this._selectedUser.user_id, role: this._role };
-            if (expiresAtIso !== null) body.expires_at = expiresAtIso;
             this._grantCreateOp.run({
                 entity_id: this.entityId,
                 subject: SUBJECT_USER,
@@ -532,7 +512,6 @@ export class CRMShareModal extends PlatformModal {
             return;
         }
         const body = { company_id: this._companyId.trim(), role: this._role };
-        if (expiresAtIso !== null) body.expires_at = expiresAtIso;
         this._grantCreateOp.run({
             entity_id: this.entityId,
             subject: SUBJECT_COMPANY,
@@ -608,9 +587,6 @@ export class CRMShareModal extends PlatformModal {
 
     _renderGrantItem(grant) {
         const target = this._formatGrantTarget(grant);
-        const expires = grant.expires_at
-            ? this.t('share_modal.expires_on', { date: new Date(grant.expires_at).toLocaleDateString() })
-            : this.t('share_modal.expires_never');
         return html`
             <div class="grant-item">
                 <div class="grant-icon">
@@ -618,7 +594,6 @@ export class CRMShareModal extends PlatformModal {
                 </div>
                 <div class="grant-content">
                     <div class="grant-target">${target}</div>
-                    <div class="grant-meta">${expires}</div>
                 </div>
                 <span class="grant-role">${this.t(`share_modal.role_${grant.role}`)}</span>
                 <button
@@ -662,7 +637,6 @@ export class CRMShareModal extends PlatformModal {
                 ${this._subject === SUBJECT_USER ? this._renderUserPicker() : nothing}
                 ${this._subject === SUBJECT_COMPANY ? this._renderCompanyInput() : nothing}
                 ${this._subject === SUBJECT_PUBLIC ? nothing : this._renderRolePicker()}
-                ${this._subject === SUBJECT_PUBLIC ? nothing : this._renderExpiresInput()}
             </div>
         `;
     }
@@ -765,18 +739,6 @@ export class CRMShareModal extends PlatformModal {
                 placeholder=${this.t('share_modal.company_id_placeholder')}
                 .value=${this._companyId}
                 @change=${this._onCompanyIdInput}
-            ></platform-field>
-        `;
-    }
-
-    _renderExpiresInput() {
-        return html`
-            <platform-field
-                type="date"
-                mode="edit"
-                label=${this.t('share_modal.expires_label')}
-                .value=${this._expiresAt}
-                @change=${this._onExpiresAtInput}
             ></platform-field>
         `;
     }

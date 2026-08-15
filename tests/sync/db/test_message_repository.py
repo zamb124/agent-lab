@@ -219,7 +219,7 @@ async def test_channel_lane_summaries_batch_unread_and_preview(
         created_by_user_id="u_viewer",
     )
     _ = await channel_repo.create(ch)
-    await channel_repo.upsert_member(ch_lane, "u_viewer", "owner", company_id=company_id)
+    await channel_repo.ensure_member_row(ch_lane, "u_viewer", company_id=company_id)
 
     t_msg = datetime(2026, 3, 1, 12, 0, 0, tzinfo=UTC)
     _ = await message_repo.create_message(
@@ -288,8 +288,8 @@ async def test_channel_lane_summaries_batch_mention_unread_count(
         created_by_user_id="u_viewer",
     )
     _ = await channel_repo.create(ch)
-    await channel_repo.upsert_member(ch_men, "u_viewer", "owner", company_id=company_id)
-    await channel_repo.upsert_member(ch_men, "u_other", "member", company_id=company_id)
+    await channel_repo.ensure_member_row(ch_men, "u_viewer", company_id=company_id)
+    await channel_repo.ensure_member_row(ch_men, "u_other", company_id=company_id)
     t_msg = datetime(2026, 3, 2, 12, 0, 0, tzinfo=UTC)
     _ = await message_repo.create_message(
         message_id=m_men,

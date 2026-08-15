@@ -18,7 +18,7 @@ from apps.crm.models.api import NoteProcessingConfig
 from apps.crm.services.crm_task_broadcast import publish_crm_task_snapshot_for_user
 from apps.crm.services.entity_service import ApplyAnalysisDraftEntityFailuresError
 from apps.crm.taskiq_analyze_errors import format_validation_for_taskiq
-from apps.crm_worker.tasks.daily_summary_tasks import set_crm_context
+from apps.crm_worker.tasks.crm_context import set_crm_context
 from apps.crm_worker.tasks.task_names import CRM_PROCESS_NOTE
 from core.logging import get_logger
 from core.tasks import platform_task

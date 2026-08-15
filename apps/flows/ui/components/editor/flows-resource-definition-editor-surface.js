@@ -11,6 +11,7 @@ import '../resources/flows-llm-context-resource-editor.js';
 import '../resources/flows-code-resource-editor.js';
 import '../resources/flows-files-resource-editor.js';
 import '../resources/flows-rag-resource-editor.js';
+import '../resources/flows-data-table-resource-editor.js';
 
 /**
  * @param {object} resource — view-model с resource_id, ?type, …
@@ -39,6 +40,11 @@ export function renderResourceDefinitionEditor(resource, onChange, options = {})
             return html`<flows-rag-resource-editor .resourceId=${id} .resource=${resource}
                 .compactHeader=${compactHeader}
                 @change=${onChange}></flows-rag-resource-editor>`;
+        case 'data_table':
+            return html`<flows-data-table-resource-editor .resourceId=${id} .resource=${resource}
+                .flowId=${typeof options.flowId === 'string' ? options.flowId : ''}
+                .compactHeader=${compactHeader}
+                @change=${onChange}></flows-data-table-resource-editor>`;
         case 'code':
             return html`<flows-code-resource-editor .resourceId=${id} .resource=${resource}
                 .compactHeader=${compactHeader}

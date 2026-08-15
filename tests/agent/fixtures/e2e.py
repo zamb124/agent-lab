@@ -17,6 +17,7 @@ from httpx import AsyncClient, Timeout
 from tests.agent._helpers import (
     AGENT_TEST_PUBLIC_ORIGIN,
     agent_base_url_from_token,
+    loopback_frontend_http_target,
     pair_and_register_device,
 )
 from tests.agent._realtime_helpers import connect_agent_tunnel_ws
@@ -50,8 +51,10 @@ async def agent_frontend_http_client(
     auth_token: str,
     agent_base_url: str,
 ) -> AsyncIterator[AsyncClient]:
+    base_url, host_headers = loopback_frontend_http_target(agent_base_url)
     async with AsyncClient(
-        base_url=agent_base_url,
+        base_url=base_url,
+        headers=host_headers,
         follow_redirects=False,
         cookies={"auth_token": auth_token},
         timeout=_AGENT_HTTP_TIMEOUT,
@@ -66,9 +69,11 @@ async def agent_frontend_http_client_system(
     test_company_subdomains_initialized,
 ) -> AsyncIterator[AsyncClient]:
     _ = test_company_subdomains_initialized
-    base_url = await agent_base_url_from_token(auth_token_system, frontend_container)
+    public_origin = await agent_base_url_from_token(auth_token_system, frontend_container)
+    base_url, host_headers = loopback_frontend_http_target(public_origin)
     async with AsyncClient(
         base_url=base_url,
+        headers=host_headers,
         follow_redirects=False,
         cookies={"auth_token": auth_token_system},
         timeout=_AGENT_HTTP_TIMEOUT,
@@ -78,8 +83,10 @@ async def agent_frontend_http_client_system(
 
 @pytest_asyncio.fixture
 async def agent_frontend_http_anon() -> AsyncIterator[AsyncClient]:
+    base_url, host_headers = loopback_frontend_http_target(AGENT_TEST_PUBLIC_ORIGIN)
     async with AsyncClient(
-        base_url=AGENT_TEST_PUBLIC_ORIGIN,
+        base_url=base_url,
+        headers=host_headers,
         follow_redirects=False,
         timeout=_AGENT_HTTP_TIMEOUT,
     ) as client:
@@ -91,8 +98,10 @@ async def agent_frontend_http_company2(
     auth_token_company2: str,
     agent_base_url_company2: str,
 ) -> AsyncIterator[AsyncClient]:
+    base_url, host_headers = loopback_frontend_http_target(agent_base_url_company2)
     async with AsyncClient(
-        base_url=agent_base_url_company2,
+        base_url=base_url,
+        headers=host_headers,
         follow_redirects=False,
         cookies={"auth_token": auth_token_company2},
     ) as client:

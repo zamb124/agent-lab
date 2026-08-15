@@ -35,7 +35,7 @@ def _make_state(
     return ExecutionState(
         task_id=f"task-gdocs-emu-llm-{unique_id}",
         context_id=context_id,
-        user_id=f"user-gdocs-emu-llm-{unique_id}",
+        user_id="u1",
         session_id=f"{flow_id}:{context_id}",
         content="Выполни",
         variables={"google_access_token": google_api_emulator.oauth_token},
@@ -112,18 +112,18 @@ async def _run_single_tool_flow(
                 "type": "llm_node",
                 "prompt": "Ты агент для Google Docs.",
                 "tools": [{"tool_id": tid} for tid in tool_ids],
+                "llm": {"provider": "mock", "model": "mock-gpt-4"},
             }
         },
         edges=[],
     )
-    await container.flow_repository.set(flow_config)
     mock_llm_with_queue(
         [
             {"type": "tool_call", "tool": tool_call_name, "args": tool_call_args},
             {"type": "text", "content": "Готово."},
         ]
     )
-    flow = await container.flow_factory.get_flow(flow_id)
+    flow = await container.flow_factory.create_flow(flow_config)
     state = _make_state(unique_id, flow_id, google_api_emulator)
     await ensure_workflow_started(
         container=container,
@@ -132,7 +132,7 @@ async def _run_single_tool_flow(
         branch_id=state.branch_id,
     )
     final_state = await flow.run(state)
-    await container.flow_repository.delete(flow_id)
+    _ = await container.flow_factory.delete_flow(flow_id)
     return final_state, final_state
 
 

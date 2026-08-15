@@ -134,7 +134,16 @@ class WikiSetMemberArgs(BaseModel):
 
     wiki_page_id: str = Field(..., min_length=1)
     user_id: str = Field(..., min_length=1, description="From team_resolve_user / team_list_members.")
-    permission: Literal["read", "write", "admin"] = Field("read")
+    relation: Literal["viewer", "editor"] = Field("viewer")
+
+
+class WikiCompanyVisibleArgs(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    wiki_page_id: str = Field(..., min_length=1)
+    company_visible: bool = Field(
+        ..., description="true — вся компания; false — только явные участники."
+    )
 
 
 class WikiRemoveMemberArgs(BaseModel):
@@ -149,7 +158,7 @@ class WikiRotatePublicLinkArgs(BaseModel):
 
     wiki_page_id: str = Field(..., min_length=1)
     enabled: bool = Field(..., description="true — enable/rotate; false — disable.")
-    permission: Literal["view", "comment"] = Field("view")
+    permission: Literal["viewer", "editor"] = Field("viewer")
 
 
 class WikiSearchArgs(BaseModel):
@@ -195,6 +204,7 @@ __all__ = [
     "WikiCommentIdArgs",
     "WikiResolveCommentArgs",
     "WikiSetMemberArgs",
+    "WikiCompanyVisibleArgs",
     "WikiRemoveMemberArgs",
     "WikiRotatePublicLinkArgs",
     "WikiSearchArgs",

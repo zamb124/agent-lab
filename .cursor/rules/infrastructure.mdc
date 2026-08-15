@@ -20,6 +20,8 @@ alwaysApply: false
 
 Связь между нодами — через Calico/Flannel CNI. Postgres и Redis доступны из любой ноды по ClusterIP `postgres.platform.svc.cluster.local:5432` / `redis.platform.svc.cluster.local:6379` — без проброса портов на хост и `ufw allow`.
 
+**OpenFGA:** deploy/config (store, model, API URL, credentials) — **`authorization.mdc`** + Helm/`conf.json` секция `openfga`. Не дублировать ACL-логику в приложении.
+
 Домены apex (multi-brand): **primary** `linnex.io`, **legacy** `humanitec.ru` (и другие из `platform_brands`). DNS `@` и `*` на оба apex → `84.38.184.105`. Smoke: [`deploy/docs/multi-brand-prod-smoke.md`](../../deploy/docs/multi-brand-prod-smoke.md).
 
 Одноразовая настройка нод — `deploy/cluster-setup.md` (установка MicroK8s, `microk8s add-node`/`join`, `microk8s enable gpu`, лейбл `accelerator=nvidia-gpu`).
@@ -101,6 +103,7 @@ Free-threaded build (cp314t) даёт shared interpreter без fork-копир�
 | rag-worker | — | 1 | `taskiq worker apps.rag_worker.worker:worker_app --workers 2` (ML GIL resurrection) |
 | sync-worker | — | 1 | `taskiq worker apps.sync_worker.worker:worker_app --workers 2` |
 | crm-worker | — | 1 | `taskiq worker apps.crm_worker.worker:worker_app --workers 2` |
+| crm-summary-worker | — | 1 | `taskiq worker apps.crm_worker.summary_worker:worker_app --workers 2` |
 | idle-worker | — | 1 | `taskiq worker apps.idle_worker.worker:worker_app --workers 2` |
 
 Один immutable образ `ghcr.io/zamb124/agent-lab:<image.tag>`, разные `command:` (полная строка granian с `--static-path-route`/`--static-path-mount`) через `values.yaml`.

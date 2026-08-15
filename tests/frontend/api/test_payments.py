@@ -10,6 +10,8 @@
 - Защиту: невалидная подпись, дубликаты, несуществующий провайдер, роли
 """
 
+
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import hashlib
 import uuid
 from datetime import datetime, timezone
@@ -705,6 +707,15 @@ class TestBillingTopupAPI:
             active_company_id=company_id,
         )
         await frontend_container.user_repository.set(user)
+        from tests.fixtures.auth import set_test_company_member_roles
+
+        await set_test_company_member_roles(
+            frontend_container.company_repository,
+            frontend_container.authz_service,
+            company_id=company_id,
+            user_id=admin_id,
+            roles=["admin"],
+        )
 
         token = get_token_service().create_token(admin_id, company_id=company_id)
 

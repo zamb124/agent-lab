@@ -20,7 +20,7 @@ from apps.crm.services.knowledge_import_text_redis import (
     delete_pending_import_text,
     get_pending_import_text,
 )
-from apps.crm_worker.tasks.daily_summary_tasks import set_crm_context
+from apps.crm_worker.tasks.crm_context import set_crm_context
 from apps.crm_worker.tasks.task_names import CRM_RUN_KNOWLEDGE_IMPORT
 from core.logging import get_logger
 from core.tasks import platform_task

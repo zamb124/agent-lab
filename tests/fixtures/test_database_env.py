@@ -9,17 +9,24 @@ URL PostgreSQL для pytest и дочерних процессов (uvicorn, Ta
   redis     → 63792 (dev: 63791)
   minio     → 19002 (dev: 19001)
   livekit   → 7890  (dev: 7880)
+  openfga   → 9093  (dev: 9090)
 """
 
+from pathlib import Path
+
 _POSTGRES_TEST = "postgresql+asyncpg://platform_user:admin@localhost:54322"
+_ROOT = Path(__file__).resolve().parents[2]
+_OPENFGA_TEST_ENV_PATH = _ROOT / "reports" / "openfga-test.env"
 
 # HS256 в PyJWT требует >=32 байт для platform auth / execution tokens.
 TEST_HS256_JWT_SECRET = "platform-test-hs256-jwt-secret-32b!"
-# LiveKit и OnlyOffice в docker-compose-test жёстко на "secret" / "test-onlyoffice-jwt-secret".
-TEST_LIVEKIT_API_SECRET = "secret"
+# LiveKit server (current image) rejects API secrets shorter than 32 characters.
+TEST_LIVEKIT_API_SECRET = "platform-test-livekit-secret-32b!"
 TEST_OFFICE_JWT_SECRET = "test-onlyoffice-jwt-secret"
 if len(TEST_HS256_JWT_SECRET) < 32:
     raise ValueError("TEST_HS256_JWT_SECRET must be at least 32 bytes for HS256 tests")
+if len(TEST_LIVEKIT_API_SECRET) < 32:
+    raise ValueError("TEST_LIVEKIT_API_SECRET must be at least 32 characters for LiveKit")
 
 # Subprocess (TaskIQ worker и т.д.) не наследует os.environ из conftest целиком: те же ключи,
 # что выставляются в tests/conftest.py через setdefault, должны быть в TEST_DATABASE_ENV.
@@ -72,6 +79,22 @@ _TEST_SERVICE_ENV: dict[str, str] = {
     "VOICE__STT__MOCK_TRANSCRIPT_TEXT": "Тестовая транскрипция sync worker",
 }
 
+
+def load_openfga_test_env_overlay() -> dict[str, str]:
+    """reports/openfga-test.env после `make test-up` (store/model ids). Без файла — OpenFGA off."""
+    if not _OPENFGA_TEST_ENV_PATH.is_file():
+        return {}
+    overlay: dict[str, str] = {}
+    for line in _OPENFGA_TEST_ENV_PATH.read_text(encoding="utf-8").splitlines():
+        raw = line.strip()
+        if not raw or raw.startswith("#") or "=" not in raw:
+            continue
+        key, value = raw.split("=", 1)
+        if key.startswith("OPENFGA__"):
+            overlay[key] = value
+    return overlay
+
+
 TEST_DATABASE_ENV: dict[str, str] = {
     "SERVER__PLATFORM_PUBLIC_BASE_URL": "http://system.lvh.me:9004",
     "DATABASE__SHARED_URL": f"{_POSTGRES_TEST}/platform_shared",
@@ -91,5 +114,9 @@ TEST_DATABASE_ENV: dict[str, str] = {
     "CALLS__LIVEKIT_URL": "ws://localhost:7890",
     "CALLS__LIVEKIT_API_KEY": "devkey",
     "CALLS__LIVEKIT_API_SECRET": TEST_LIVEKIT_API_SECRET,
+    # Без overlay store/model: enabled=false. После bootstrap — overlay включает OpenFGA.
+    "OPENFGA__API_URL": "http://127.0.0.1:9093",
+    "OPENFGA__ENABLED": "false",
     **_TEST_SERVICE_ENV,
+    **load_openfga_test_env_overlay(),
 }

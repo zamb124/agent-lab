@@ -8,26 +8,10 @@ from apps.flows.src.models import BranchConfig, Edge, FlowConfig
 
 
 @pytest.fixture
-def flows_permissions_enabled():
-    """
-    Включает permissions на время теста через явный try/finally на settings.
-    Не monkeypatch: один documented harness для channel-level тестов.
-    """
-    from apps.flows.config import get_settings
-
-    config = get_settings()
-    original = config.auth.permissions_enabled
-    config.auth.permissions_enabled = True
-    try:
-        yield
-    finally:
-        config.auth.permissions_enabled = original
-
-
-@pytest.fixture
 async def flow_with_permission(container, unique_id):
-    """Flow с permission=managers."""
+    """Flow с permission=managers + OpenFGA tuples."""
     flow_id = f"perm_flow_{unique_id}"
+    company_id = f"perm_co_{unique_id}"
 
     config = FlowConfig(
         flow_id=flow_id,
@@ -44,16 +28,23 @@ async def flow_with_permission(container, unique_id):
     )
 
     await container.flow_repository.set(config)
+    await container.flow_access_service.sync_flow_saved(
+        config,
+        company_id=company_id,
+        owner_user_id=f"owner_{unique_id}",
+    )
 
     yield flow_id
 
+    await container.flow_access_service.sync_flow_deleted(flow_id, branch_ids=[])
     await container.flow_repository.delete(flow_id)
 
 
 @pytest.fixture
 async def flow_with_skill_permission(container, unique_id):
-    """Flow с branch vip (permission=vip)."""
+    """Flow с branch vip (permission=vip) + OpenFGA tuples."""
     flow_id = f"skill_perm_flow_{unique_id}"
+    company_id = f"skill_co_{unique_id}"
 
     config = FlowConfig(
         flow_id=flow_id,
@@ -85,7 +76,15 @@ async def flow_with_skill_permission(container, unique_id):
     )
 
     await container.flow_repository.set(config)
+    await container.flow_access_service.sync_flow_saved(
+        config,
+        company_id=company_id,
+        owner_user_id=f"owner_{unique_id}",
+    )
 
     yield flow_id
 
+    await container.flow_access_service.sync_flow_deleted(
+        flow_id, branch_ids=list(config.branches.keys())
+    )
     await container.flow_repository.delete(flow_id)

@@ -1,0 +1,389 @@
+name: platform-authz-model
+model_file: ./model.fga
+
+tuples:
+  - user: user:anne
+    relation: owner
+    object: company:acme
+  - user: user:bob
+    relation: member
+    object: company:acme
+  - user: company:acme
+    relation: company
+    object: crm_namespace:acme/default
+  - user: user:anne
+    relation: owner
+    object: crm_entity:e1
+  - user: company:acme#member
+    relation: viewer
+    object: crm_namespace:acme/default
+  - user: company:acme#member
+    relation: editor
+    object: crm_namespace:acme/default
+  - user: crm_namespace:acme/default
+    relation: namespace
+    object: crm_entity:e1
+  - user: user:*
+    relation: viewer
+    object: crm_entity:public1
+  - user: user:anne
+    relation: owner
+    object: wiki_page:root
+  - user: company:acme
+    relation: company
+    object: wiki_page:root
+  - user: company:acme#member
+    relation: company_viewer
+    object: wiki_page:root
+  - user: user:anne
+    relation: owner
+    object: wiki_page:child
+  - user: wiki_page:root
+    relation: parent
+    object: wiki_page:child
+  - user: user:carol
+    relation: viewer
+    object: wiki_page:root
+  - user: user:anne
+    relation: owner
+    object: office_catalog:docs
+  - user: company:acme
+    relation: company
+    object: office_catalog:docs
+  - user: company:acme#member
+    relation: viewer
+    object: office_catalog:docs
+  - user: user:dave
+    relation: editor
+    object: office_catalog:docs
+  - user: company:acme
+    relation: company
+    object: sync_channel:ch1
+  - user: user:anne
+    relation: owner
+    object: sync_channel:ch1
+  - user: user:bob
+    relation: member
+    object: sync_channel:ch1
+  - user: company:acme
+    relation: company
+    object: work_queue:q1
+  - user: user:anne
+    relation: owner
+    object: work_queue:q1
+  - user: user:bob
+    relation: member
+    object: work_queue:q1
+  - user: company:acme
+    relation: company
+    object: mailbox_binding:mb1
+  - user: user:anne
+    relation: owner
+    object: mailbox_binding:mb1
+  - user: user:bob
+    relation: member
+    object: mailbox_binding:mb1
+  - user: user:eve
+    relation: member
+    object: group:acme/developers
+  - user: company:acme
+    relation: company
+    object: group:acme/developers
+  - user: user:eve-beta
+    relation: member
+    object: company:beta
+  - user: user:eve-beta
+    relation: member
+    object: group:beta/developers
+  - user: company:beta
+    relation: company
+    object: group:beta/developers
+  - user: user:root
+    relation: member
+    object: group:admin
+  - user: group:admin#member
+    relation: admin
+    object: platform:global
+  - user: user:ivan
+    relation: admin
+    object: company:acme
+  - user: company:acme
+    relation: company
+    object: flow:flow1
+  - user: user:anne
+    relation: owner
+    object: flow:flow1
+  - user: platform:global
+    relation: platform
+    object: flow:flow1
+  - user: group:acme/developers#member
+    relation: viewer
+    object: flow:flow1
+  - user: company:acme#member
+    relation: viewer
+    object: flow:flow-public
+  - user: company:acme
+    relation: company
+    object: flow:flow-public
+  - user: user:anne
+    relation: owner
+    object: flow:flow-public
+  - user: platform:global
+    relation: platform
+    object: flow:flow-public
+  - user: flow:flow1
+    relation: flow
+    object: flow_branch:flow1/main
+  - user: company:acme
+    relation: company
+    object: tool:tool1
+  - user: platform:global
+    relation: platform
+    object: tool:tool1
+  - user: group:acme/developers#member
+    relation: viewer
+    object: tool:tool1
+  - user: flow:flow1
+    relation: flow
+    object: flow_ui_share:share1
+  - user: user:anne
+    relation: owner
+    object: flow_ui_share:share1
+  - user: user:*
+    relation: viewer
+    object: flow_ui_share:share1
+  - user: company:acme
+    relation: company
+    object: agent_device:dev1
+  - user: user:anne
+    relation: owner
+    object: agent_device:dev1
+  - user: company:acme
+    relation: company
+    object: platform_namespace:acme/default
+  - user: company:acme#member
+    relation: viewer
+    object: platform_namespace:acme/default
+  - user: company:acme#member
+    relation: editor
+    object: platform_namespace:acme/default
+  - user: company:acme
+    relation: company
+    object: platform_namespace:acme/user-anne
+  - user: company:acme#member
+    relation: viewer
+    object: platform_namespace:acme/user-anne
+  - user: company:acme#member
+    relation: editor
+    object: platform_namespace:acme/user-anne
+  - user: user:anne
+    relation: owner
+    object: platform_namespace:acme/user-anne
+
+tests:
+  - name: company-membership
+    check:
+      - user: user:anne
+        object: company:acme
+        assertions:
+          owner: true
+          member: true
+          can_admin: true
+      - user: user:bob
+        object: company:acme
+        assertions:
+          member: true
+          can_admin: false
+          can_view: true
+
+  - name: crm-entity-namespace-and-public
+    check:
+      - user: user:bob
+        object: crm_entity:e1
+        assertions:
+          can_view: true
+      - user: user:stranger
+        object: crm_entity:public1
+        assertions:
+          can_view: true
+      - user: user:stranger
+        object: crm_entity:e1
+        assertions:
+          can_view: false
+
+  - name: wiki-company-view-not-edit-and-parent-ttu
+    check:
+      - user: user:bob
+        object: wiki_page:root
+        assertions:
+          can_view: true
+          can_edit: false
+      - user: user:carol
+        object: wiki_page:child
+        assertions:
+          can_view: true
+          can_edit: false
+      - user: user:bob
+        object: wiki_page:child
+        assertions:
+          can_view: false
+
+  - name: office-company-view-only
+    check:
+      - user: user:bob
+        object: office_catalog:docs
+        assertions:
+          can_view: true
+          can_edit: false
+      - user: user:dave
+        object: office_catalog:docs
+        assertions:
+          can_view: true
+          can_edit: true
+
+  - name: sync-work-mail-membership
+    check:
+      - user: user:bob
+        object: sync_channel:ch1
+        assertions:
+          can_view: true
+          can_admin: false
+      - user: user:bob
+        object: work_queue:q1
+        assertions:
+          can_view: true
+          can_admin: false
+      - user: user:bob
+        object: mailbox_binding:mb1
+        assertions:
+          can_view: true
+          can_edit: false
+      - user: user:anne
+        object: mailbox_binding:mb1
+        assertions:
+          can_admin: true
+
+    list_objects:
+      - user: user:bob
+        type: sync_channel
+        assertions:
+          can_view:
+            - sync_channel:ch1
+      - user: user:bob
+        type: work_queue
+        assertions:
+          can_view:
+            - work_queue:q1
+
+  - name: flow-group-and-company-visible
+    check:
+      - user: user:eve
+        object: flow:flow1
+        assertions:
+          can_view: true
+          can_edit: false
+      - user: user:bob
+        object: flow:flow-public
+        assertions:
+          can_view: true
+          can_edit: false
+      - user: user:stranger
+        object: flow:flow1
+        assertions:
+          can_view: false
+      - user: user:eve
+        object: flow_branch:flow1/main
+        assertions:
+          can_view: true
+      - user: user:eve
+        object: tool:tool1
+        assertions:
+          can_view: true
+      - user: user:ivan
+        object: flow:flow1
+        assertions:
+          can_view: false
+          can_admin: true
+
+  - name: platform-admin-views-restricted-flow
+    check:
+      - user: user:root
+        object: flow:flow1
+        assertions:
+          can_view: true
+          can_edit: true
+          can_admin: false
+      - user: user:root
+        object: flow_branch:flow1/main
+        assertions:
+          can_view: true
+      - user: user:root
+        object: tool:tool1
+        assertions:
+          can_view: true
+      - user: user:bob
+        object: flow:flow1
+        assertions:
+          can_view: false
+
+  - name: cross-company-group-isolation
+    check:
+      - user: user:eve
+        object: flow:flow1
+        assertions:
+          can_view: true
+      - user: user:eve-beta
+        object: flow:flow1
+        assertions:
+          can_view: false
+      - user: user:eve-beta
+        object: tool:tool1
+        assertions:
+          can_view: false
+
+  - name: flow-ui-share-public-viewer
+    check:
+      - user: user:stranger
+        object: flow_ui_share:share1
+        assertions:
+          can_view: true
+          can_edit: false
+      - user: user:anne
+        object: flow_ui_share:share1
+        assertions:
+          can_view: true
+          can_edit: true
+
+  - name: agent-device-owner-and-company-admin
+    check:
+      - user: user:anne
+        object: agent_device:dev1
+        assertions:
+          can_view: true
+          can_admin: true
+      - user: user:bob
+        object: agent_device:dev1
+        assertions:
+          can_view: false
+          can_admin: false
+
+  - name: platform-namespace-company-and-personal
+    check:
+      - user: user:bob
+        object: platform_namespace:acme/default
+        assertions:
+          can_view: true
+          can_edit: true
+      - user: user:bob
+        object: platform_namespace:acme/user-anne
+        assertions:
+          can_view: true
+      - user: user:stranger
+        object: platform_namespace:acme/user-anne
+        assertions:
+          can_view: false
+      - user: user:anne
+        object: platform_namespace:acme/user-anne
+        assertions:
+          can_view: true
+          can_admin: true

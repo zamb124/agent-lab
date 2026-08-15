@@ -3,6 +3,8 @@
 HTML для document/json для API; anonymous-страницы без 403.
 """
 
+
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import pytest
 
 from core.models.identity_models import Company

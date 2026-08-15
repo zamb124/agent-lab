@@ -52,9 +52,12 @@ export function createMailEffect({ baseUrl }) {
                     if (!data || !Array.isArray(data.items)) {
                         throw new Error('mail.bindings.me: items must be array');
                     }
+                    if (typeof data.can_admin !== 'boolean') {
+                        throw new Error('mail.bindings.me: can_admin must be boolean');
+                    }
                     ctx.dispatch(
                         MAIL_EVENTS.BINDINGS_LOADED,
-                        { items: data.items },
+                        { items: data.items, can_admin: data.can_admin },
                         { causation_id: event.id, source: 'http' },
                     );
                     const state = ctx.getState();

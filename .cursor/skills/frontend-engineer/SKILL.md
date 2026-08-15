@@ -28,6 +28,12 @@ description: Frontend инженер Платформы. ZERO-FALLBACK, ZERO-IMP
 3. Понять, к какой из шести фабрик сводится моя задача (или это slice-only через `createSlice`).
 4. Перед declaration «готово» прогнать чек-лист из последнего раздела и убедиться, что **`make check-events-canon`** зелёный.
 
+## Authorization / ACL (UI)
+
+- Запрещён JWT roster gate: `user.companies[...].includes('admin')` / `raw.roles.includes('admin'|'owner')` / `_isCompanyAdmin()` из roster. Mutate controls — только `state.auth.user.canAdmin` из `GET /auth/me` (server FGA) / ответ API.
+- Wire axes: link/share — `viewer`|`editor`; CRM grants могут `admin`/`owner`; mail — `owner`/`member`/`manager`; company roster roles — identity only.
+- Канон → **`authorization.mdc`**.
+
 ## Один поток данных (диаграмма)
 
 ```mermaid

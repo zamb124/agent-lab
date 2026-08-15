@@ -1,7 +1,9 @@
 """Интеграция: ``build_job_context`` / ``pick_company_billing_user`` на живом frontend_container."""
 
+
 from __future__ import annotations
 
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import pytest
 
 from core.context.job_context import build_job_context, pick_company_billing_user

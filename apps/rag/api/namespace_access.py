@@ -8,6 +8,8 @@ import json
 
 from fastapi import HTTPException
 
+from core.authz.errors import AuthzDenied, AuthzUnavailable
+from core.authz.models import AuthzObject
 from core.context import get_context
 from core.types import JsonObject, JsonValue
 
@@ -23,11 +25,17 @@ async def require_registered_rag_namespace(namespace_id: str, container: RAGCont
     if context is None or context.active_company is None:
         raise HTTPException(status_code=401, detail="Authentication required")
     company_id = context.active_company.company_id
+    try:
+        await container.authz_service.require_can_view(
+            AuthzObject.platform_namespace(company_id, namespace_id)
+        )
+    except AuthzDenied as exc:
+        raise HTTPException(status_code=403, detail="Forbidden") from exc
+    except AuthzUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     ns = await container.namespace_repository.get(namespace_id)
     if ns is None:
         raise HTTPException(status_code=404, detail=f"Namespace '{namespace_id}' not found")
-    if ns.company_id != company_id:
-        raise HTTPException(status_code=403, detail="Namespace does not belong to current company")
 
 
 def validate_rag_user_metadata(metadata: JsonObject) -> None:

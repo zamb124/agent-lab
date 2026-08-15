@@ -9,6 +9,10 @@ from apps.crm.db.models import AccessRequest, CRMEntity, Relationship
 from apps.crm.db.repositories.access_request_repository import AccessRequestRepository
 from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.db.repositories.relationship_repository import RelationshipRepository
+from apps.crm.services.crm_entity_access_service import CrmEntityAccessService
+from core.authz.models import AuthzObject
+from core.authz.service import AuthzService
+from core.authz.types import AuthzRelation, AuthzSubjectKind
 from core.logging import get_logger
 from core.types import JsonObject
 from core.websocket.publisher import Notification, NotificationType, notify_user
@@ -24,10 +28,62 @@ class AccessRequestService:
         access_request_repo: AccessRequestRepository,
         entity_repo: EntityRepository,
         relationship_repo: RelationshipRepository,
+        authz: AuthzService,
+        entity_access: CrmEntityAccessService,
     ) -> None:
         self._access_request_repo: AccessRequestRepository = access_request_repo
         self._entity_repo: EntityRepository = entity_repo
         self._relationship_repo: RelationshipRepository = relationship_repo
+        self._authz: AuthzService = authz
+        self._entity_access: CrmEntityAccessService = entity_access
+
+    async def _require_can_share_entity(self, entity_id: str, user_id: str) -> None:
+        await self._authz.require_can_share(
+            AuthzObject.crm_entity(entity_id), user_id=user_id
+        )
+
+    async def _notify_can_share_holders(
+        self,
+        *,
+        entity: CRMEntity,
+        access_request: AccessRequest,
+        requester_user_id: str,
+        requester_company_id: str,
+    ) -> None:
+        holders = await self._authz.list_users(
+            AuthzObject.crm_entity(entity.entity_id),
+            AuthzRelation.CAN_SHARE,
+        )
+        notified: set[str] = set()
+        for subject in holders:
+            if subject.kind is not AuthzSubjectKind.USER:
+                continue
+            if subject.value in notified:
+                continue
+            notified.add(subject.value)
+            await notify_user(
+                user_id=subject.value,
+                notification=Notification(
+                    type=NotificationType.ACCESS_REQUEST,
+                    title="Новый запрос доступа",
+                    message=(
+                        f"Запрос доступа к '{entity.name}' "
+                        f"от пользователя {requester_user_id}"
+                    ),
+                    service="crm",
+                    priority="high",
+                    action_url=(
+                        f"/crm/access-requests/{access_request.access_request_id}"
+                    ),
+                    data={
+                        "access_request_id": access_request.access_request_id,
+                        "entity_id": entity.entity_id,
+                        "entity_name": entity.name,
+                        "requester_id": requester_user_id,
+                        "requester_company_id": requester_company_id,
+                    },
+                ),
+            )
 
     async def create_access_request(
         self,
@@ -67,24 +123,11 @@ class AccessRequestService:
             f"Access request created: {access_request.access_request_id} for entity {entity_id}"
         )
 
-        # Отправить уведомление владельцу entity
-        await notify_user(
-            user_id=entity.user_id,
-            notification=Notification(
-                type=NotificationType.ACCESS_REQUEST,
-                title="Новый запрос доступа",
-                message=f"Запрос доступа к '{entity.name}' от пользователя {requester_user_id}",
-                service="crm",
-                priority="high",
-                action_url=f"/crm/access-requests/{access_request.access_request_id}",
-                data={
-                    "access_request_id": access_request.access_request_id,
-                    "entity_id": entity_id,
-                    "entity_name": entity.name,
-                    "requester_id": requester_user_id,
-                    "requester_company_id": requester_company_id,
-                },
-            ),
+        await self._notify_can_share_holders(
+            entity=entity,
+            access_request=access_request,
+            requester_user_id=requester_user_id,
+            requester_company_id=requester_company_id,
         )
 
         return access_request
@@ -100,9 +143,7 @@ class AccessRequestService:
         if not access_request:
             raise ValueError("Request not found")
 
-        # Проверка прав
-        if access_request.owner_id != owner_user_id:
-            raise PermissionError("Only owner can approve")
+        await self._require_can_share_entity(access_request.resource_id, owner_user_id)
 
         if access_request.status != "pending":
             raise ValueError(f"Request already {access_request.status}")
@@ -210,6 +251,11 @@ class AccessRequestService:
         )
 
         copy = await self._entity_repo.create(copy)
+        try:
+            await self._entity_access.sync_entity_created(copy)
+        except Exception:
+            _ = await self._entity_repo.delete(copy.entity_id)
+            raise
         logger.info(f"Shallow copy created: {copy.entity_id} from {original.entity_id}")
 
         return copy
@@ -252,6 +298,11 @@ class AccessRequestService:
         )
 
         copy = await self._entity_repo.create(copy)
+        try:
+            await self._entity_access.sync_entity_created(copy)
+        except Exception:
+            _ = await self._entity_repo.delete(copy.entity_id)
+            raise
         _copied_map[original.entity_id] = copy.entity_id
 
         # Получаем relationships
@@ -311,8 +362,7 @@ class AccessRequestService:
         if not access_request:
             raise ValueError("Request not found")
 
-        if access_request.owner_id != owner_user_id:
-            raise PermissionError("Only owner can reject")
+        await self._require_can_share_entity(access_request.resource_id, owner_user_id)
 
         access_request.status = "rejected"
         access_request.updated_at = datetime.now(UTC)

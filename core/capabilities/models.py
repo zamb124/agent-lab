@@ -439,3 +439,47 @@ class CodeValidationResponse(BaseModel):
     valid: bool
     error: CodeExecutionErrorEnvelope | None = None
     warnings: list[str] = Field(default_factory=list)
+
+
+class LspWorkspaceFile(BaseModel):
+    """Один файл virtual workspace для language server."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    path: str = Field(..., min_length=1)
+    content: str
+
+
+class LspWorkspace(BaseModel):
+    """Набор language-native файлов: SDK stubs + user source + конфиг LS."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    language: CapabilityLanguage
+    language_id: str = Field(..., min_length=1)
+    document_path: str = Field(..., min_length=1)
+    files: list[LspWorkspaceFile] = Field(..., min_length=1)
+
+
+class CodeLspSessionCreateRequest(BaseModel):
+    """Bootstrap LSP-сессии редактора code_node."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    language: CapabilityLanguage
+    source: str
+    parameters_schema: JsonObject = Field(default_factory=dict)
+    variable_keys: list[str] = Field(default_factory=list)
+
+
+class CodeLspSession(BaseModel):
+    """Живая LSP-сессия: URIs workspace и путь WS JSON-RPC."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    session_id: str = Field(..., min_length=1)
+    language: CapabilityLanguage
+    language_id: str = Field(..., min_length=1)
+    root_uri: str = Field(..., min_length=1)
+    document_uri: str = Field(..., min_length=1)
+    ws_path: str = Field(..., min_length=1)

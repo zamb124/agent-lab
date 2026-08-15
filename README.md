@@ -99,7 +99,7 @@ make doc-serve       # Локальный предпросмотр RU-сайта
 | worktracker | 8021 | WorkItem, канбан, очереди, HITL |
 | secrets | 8022 | Версионируемые переменные и секреты компании |
 
-TaskIQ (без HTTP-порта): `flows_worker`, `rag_worker`, `search_worker`, `sync_worker`, `crm_worker`, `idle_worker`, `scheduler`.
+TaskIQ (без HTTP-порта): `flows_worker`, `rag_worker`, `search_worker`, `sync_worker`, `crm_worker`, `crm_summary_worker`, `idle_worker`, `scheduler`.
 
 ## Структура репозитория
 

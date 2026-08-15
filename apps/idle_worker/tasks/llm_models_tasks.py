@@ -31,6 +31,7 @@ async def build_scheduler_auth_context(
         company_repository=container.company_repository,
         subdomain_repository=container.subdomain_repository,
         user_repository=container.user_repository,
+        authz=container.authz_service,
     )
     if user is None:
         raise ValueError(

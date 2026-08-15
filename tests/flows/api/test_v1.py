@@ -71,11 +71,11 @@ class _TestFlowsAPIDuplicate:
 
     @pytest.mark.asyncio
     async def test_get_nonexistent_agent(self, client, app, auth_headers_system):
-        """404 для несуществующего agent."""
+        """403 для несуществующего agent: Check до existence, без tuples."""
         response = await client.get(
             "/flows/api/v1/flows/nonexistent_agent_xyz", headers=auth_headers_system
         )
-        assert response.status_code == 404
+        assert response.status_code == 403
 
     @pytest.mark.asyncio
     async def test_update_agent(self, client, app, unique_id, auth_headers_system):
@@ -129,15 +129,15 @@ class _TestFlowsAPIDuplicate:
         assert response.status_code == 200
         assert response.json()["status"] == "deleted"
         response = await client.get(f"/flows/api/v1/{flow_id}", headers=auth_headers_system)
-        assert response.status_code == 404
+        assert response.status_code == 403
 
     @pytest.mark.asyncio
     async def test_delete_nonexistent_agent(self, client, app, auth_headers_system):
-        """404 при удалении несуществующего agent."""
+        """403 при удалении несуществующего agent: Check до existence."""
         response = await client.delete(
             "/flows/api/v1/flows/nonexistent_xxx", headers=auth_headers_system
         )
-        assert response.status_code == 404
+        assert response.status_code == 403
 
     @pytest.mark.asyncio
     async def test_create_agent_with_valid_tool(self, client, app, unique_id, auth_headers_system):
@@ -281,11 +281,11 @@ class TestFlowsAPI:
 
     @pytest.mark.asyncio
     async def test_get_nonexistent_flow(self, client, app, auth_headers_system):
-        """404 для несуществующего flow."""
+        """403 для несуществующего flow: Check до existence, без tuples."""
         response = await client.get(
             "/flows/api/v1/flows/nonexistent_flow_xyz", headers=auth_headers_system
         )
-        assert response.status_code == 404
+        assert response.status_code == 403
 
     @pytest.mark.asyncio
     async def test_create_flow_with_inline_node(self, client, app, unique_id, auth_headers_system):
@@ -464,11 +464,11 @@ class TestToolsAPI:
 
     @pytest.mark.asyncio
     async def test_get_nonexistent_tool(self, client, app, auth_headers_system):
-        """404 для несуществующего tool."""
+        """403 для несуществующего tool: Check до existence, без tuples."""
         response = await client.get(
             "/flows/api/v1/tools/nonexistent_tool", headers=auth_headers_system
         )
-        assert response.status_code == 404
+        assert response.status_code == 403
 
 
 class TestTasksAPI:
@@ -504,4 +504,4 @@ class TestTasksAPI:
                 "content": "Test",
             },
         )
-        assert response.status_code == 404
+        assert response.status_code == 403

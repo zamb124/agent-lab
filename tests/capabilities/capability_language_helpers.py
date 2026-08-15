@@ -9,6 +9,7 @@ from httpx import AsyncClient
 
 from core.capabilities import (
     CAPABILITY_LANGUAGES,
+    CapabilityDocumentation,
     CapabilityExecutionContext,
     CapabilityExecutionTokenClaims,
     CapabilityLanguage,
@@ -159,6 +160,10 @@ def sdk_stable_capability_names_from_manifest(manifest: Mapping[str, object]) ->
         or name.startswith("wiki.")
         or name.startswith("documents.")
         or name.startswith("crm.")
+        or name.startswith("sync.")
+        or name.startswith("rag.")
+        or name.startswith("worktracker.")
+        or name.startswith("tables.")
         or (name.startswith("tools.") and not is_ephemeral_tool_capability_name(name))
     }
 
@@ -271,7 +276,9 @@ def sdk_presence_code(language: str, pairs: list[tuple[str, str]]) -> str:
             )
             lines.append(f"    _ = methodRef{index};")
             lines.append("    checks++;")
-        lines.append('    return new Dictionary<string, object?> { ["sdk_method_count"] = checks };')
+        lines.append(
+            '    return new Dictionary<string, object?> { ["sdk_method_count"] = checks };'
+        )
         lines.append("}")
         return "\n".join(lines) + "\n"
 
@@ -1030,9 +1037,9 @@ def tool_payloads(tool_ids: Mapping[str, str]) -> list[dict[str, Any]]:
             "code": (
                 "package main\n\n"
                 "func GoTool(args map[string]any, state map[string]any) (any, error) {\n"
-                "    value := args[\"value\"].(string)\n"
-                "    state[\"tool_go_seen\"] = value\n"
-                "    return map[string]any{\"tool_language\": \"go\", \"value\": value}, nil\n"
+                '    value := args["value"].(string)\n'
+                '    state["tool_go_seen"] = value\n'
+                '    return map[string]any{"tool_language": "go", "value": value}, nil\n'
                 "}\n"
             ),
             "parameters_schema": schema,
@@ -1048,11 +1055,11 @@ def tool_payloads(tool_ids: Mapping[str, str]) -> list[dict[str, Any]]:
                 "using System.Threading.Tasks;\n\n"
                 "Task<object?> CsharpTool(Dictionary<string, object?> args, Dictionary<string, object?> state)\n"
                 "{\n"
-                "    var value = args[\"value\"]!.ToString()!;\n"
-                "    state[\"tool_csharp_seen\"] = value;\n"
+                '    var value = args["value"]!.ToString()!;\n'
+                '    state["tool_csharp_seen"] = value;\n'
                 "    return Task.FromResult<object?>(new Dictionary<string, object?> {\n"
-                "        [\"tool_language\"] = \"csharp\",\n"
-                "        [\"value\"] = value,\n"
+                '        ["tool_language"] = "csharp",\n'
+                '        ["value"] = value,\n'
                 "    });\n"
                 "}\n"
             ),
@@ -1066,10 +1073,30 @@ async def fetch_manifest(sandbox_services: Mapping[str, str]) -> dict[str, Any]:
     async with AsyncClient(timeout=30.0) as client:
         response = await client.get(
             f"{sandbox_services['capability_gateway']}/capability-gateway/api/v1/capabilities/manifest",
-            headers={"X-Request-Id": "capability-test-request", "X-Trace-Id": "capability-test-trace"},
+            headers={
+                "X-Request-Id": "capability-test-request",
+                "X-Trace-Id": "capability-test-trace",
+            },
         )
         response.raise_for_status()
         return response.json()
+
+
+async def fetch_capability_documentation(
+    sandbox_services: Mapping[str, str],
+    language: CapabilityLanguage,
+) -> CapabilityDocumentation:
+    async with AsyncClient(timeout=30.0) as client:
+        response = await client.get(
+            f"{sandbox_services['capability_gateway']}/capability-gateway/api/v1/capabilities/documentation",
+            params={"language": language},
+            headers={
+                "X-Request-Id": "capability-test-request",
+                "X-Trace-Id": "capability-test-trace",
+            },
+        )
+        response.raise_for_status()
+        return CapabilityDocumentation.model_validate(response.json())
 
 
 async def assert_language_documentation(language: str, sandbox_services: Mapping[str, str]) -> None:
@@ -1079,7 +1106,10 @@ async def assert_language_documentation(language: str, sandbox_services: Mapping
         response = await client.get(
             f"{sandbox_services['capability_gateway']}/capability-gateway/api/v1/capabilities/documentation",
             params={"language": language},
-            headers={"X-Request-Id": "capability-test-request", "X-Trace-Id": "capability-test-trace"},
+            headers={
+                "X-Request-Id": "capability-test-request",
+                "X-Trace-Id": "capability-test-trace",
+            },
         )
         response.raise_for_status()
         payload = response.json()
@@ -1087,6 +1117,7 @@ async def assert_language_documentation(language: str, sandbox_services: Mapping
 
     assert "Capability API" in markdown
     assert f"Language: `{language}`" in markdown
+    assert "## Imports" in markdown
     assert "### Parameters" in markdown
     assert "### Returns" in markdown
     assert "Input JSON Schema" in markdown
@@ -1118,7 +1149,10 @@ async def assert_language_documentation(language: str, sandbox_services: Mapping
         assert "tools.Calculator(" in markdown
         assert files_create["label"] == "files.Create"
     elif language == "csharp":
-        assert "async Task<object?> run(Dictionary<string, object?> args, Dictionary<string, object?> state)" in markdown
+        assert (
+            "async Task<object?> run(Dictionary<string, object?> args, Dictionary<string, object?> state)"
+            in markdown
+        )
         assert "await tools.Calculator(" in markdown
         assert files_create["label"] == "files.Create"
     else:
@@ -1185,21 +1219,36 @@ async def assert_language_runs_static_platform_capabilities(
     static_names = {
         item["name"]
         for item in manifest["capabilities"]
-        if isinstance(item, dict) and isinstance(item.get("name"), str) and not item["name"].startswith("tools.")
+        if isinstance(item, dict)
+        and isinstance(item.get("name"), str)
+        and not item["name"].startswith("tools.")
     }
     core_static = STATIC_PLATFORM_CAPABILITIES | INTERRUPT_PLATFORM_CAPABILITIES
     wiki_static = {name for name in static_names if name.startswith("wiki.")}
     documents_static = {name for name in static_names if name.startswith("documents.")}
     crm_static = {name for name in static_names if name.startswith("crm.")}
     sync_static = {name for name in static_names if name.startswith("sync.")}
+    rag_static = {name for name in static_names if name.startswith("rag.")}
+    worktracker_static = {name for name in static_names if name.startswith("worktracker.")}
+    tables_static = {name for name in static_names if name.startswith("tables.")}
     assert core_static <= static_names
     assert static_names == (
-        core_static | wiki_static | documents_static | crm_static | sync_static
+        core_static
+        | wiki_static
+        | documents_static
+        | crm_static
+        | sync_static
+        | rag_static
+        | worktracker_static
+        | tables_static
     )
     assert wiki_static  # wiki.* SDK namespace registered for eval/code_node
     assert documents_static  # documents.* SDK namespace registered for eval/code_node
     assert crm_static  # crm.* SDK namespace registered for eval/code_node
     assert sync_static  # sync.* SDK namespace registered for eval/code_node
+    assert rag_static  # rag.* SDK namespace registered for eval/code_node
+    assert worktracker_static  # worktracker.* SDK namespace registered for eval/code_node
+    assert tables_static  # tables.* SDK namespace registered for eval/code_node
 
     response = await flows_client_http.post(
         "/flows/api/v1/code/execute",
@@ -1274,9 +1323,16 @@ async def assert_language_runs_static_platform_capabilities(
     assert results["channel.send_with_buttons"] is True
     assert results["trace.event"] is True
     assert isinstance(results["text.summarize"], str) and results["text.summarize"].strip()
-    assert isinstance(results["text.format_markdown"], str) and results["text.format_markdown"].strip()
-    assert isinstance(results["voice.synthesize_speech"], str) and results["voice.synthesize_speech"]
-    assert isinstance(results["voice.transcribe_audio"], str) and results["voice.transcribe_audio"].strip()
+    assert (
+        isinstance(results["text.format_markdown"], str) and results["text.format_markdown"].strip()
+    )
+    assert (
+        isinstance(results["voice.synthesize_speech"], str) and results["voice.synthesize_speech"]
+    )
+    assert (
+        isinstance(results["voice.transcribe_audio"], str)
+        and results["voice.transcribe_audio"].strip()
+    )
 
 
 async def assert_language_runs_interrupt_platform_capabilities(

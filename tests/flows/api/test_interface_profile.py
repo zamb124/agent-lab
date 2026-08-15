@@ -177,14 +177,14 @@ async def test_flow_interface_profile_reflects_interface_policy(
 
 
 @pytest.mark.asyncio
-async def test_flow_interface_profile_unknown_flow_404(
+async def test_flow_interface_profile_unknown_flow_403(
     flows_client: AsyncClient, embed_test_auth, unique_id
 ):
     auth_headers, _, _, _ = embed_test_auth
     response = await flows_client.get(
         f"/flows/api/v1/missing_flow_{unique_id}/interface-profile", headers=auth_headers
     )
-    assert response.status_code == 404
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio

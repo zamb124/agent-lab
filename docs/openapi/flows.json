@@ -16094,11 +16094,11 @@
           "permission": {
             "type": "string",
             "enum": [
-              "view",
-              "interact"
+              "viewer",
+              "editor"
             ],
             "title": "Permission",
-            "default": "view"
+            "default": "viewer"
           },
           "expires_in_seconds": {
             "type": "integer",
@@ -16178,8 +16178,8 @@
           "permission": {
             "type": "string",
             "enum": [
-              "view",
-              "interact"
+              "viewer",
+              "editor"
             ],
             "title": "Permission"
           },
@@ -16243,8 +16243,8 @@
           "permission": {
             "type": "string",
             "enum": [
-              "view",
-              "interact"
+              "viewer",
+              "editor"
             ],
             "title": "Permission"
           },

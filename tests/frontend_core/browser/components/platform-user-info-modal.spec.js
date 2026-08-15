@@ -35,15 +35,22 @@ function seedPlatformTranslations() {
     );
 }
 
-function seedAuthUser({ userId = 'admin_1', roles = ['owner', 'admin'] } = {}) {
+function seedAuthUser({
+    userId = 'admin_1',
+    roles = ['owner', 'admin'],
+    canAdmin = true,
+} = {}) {
     getPlatformBus().dispatch(CoreEvents.AUTH_USER_LOADED, {
         user: {
             user_id: userId,
             name: 'Admin',
+            roles,
+            canAdmin,
             raw: {
                 user_id: userId,
                 roles,
                 emails: ['admin@example.com'],
+                can_admin: canAdmin,
             },
         },
     });
@@ -105,7 +112,7 @@ describe('platform-user-info-modal flow employee', () => {
     });
 
     it('_canActAs: admin видит кнопку act-as', async () => {
-        seedAuthUser({ userId: 'admin_1', roles: ['admin'] });
+        seedAuthUser({ userId: 'admin_1', roles: ['admin'], canAdmin: true });
         seedTeamMembers([EMPLOYEE]);
         const el = await mountOtherUserModal(EMPLOYEE.user_id);
 
@@ -114,7 +121,7 @@ describe('platform-user-info-modal flow employee', () => {
     });
 
     it('_canActAs: куратор видит act-as', async () => {
-        seedAuthUser({ userId: 'curator_1', roles: ['member'] });
+        seedAuthUser({ userId: 'curator_1', roles: ['member'], canAdmin: false });
         seedTeamMembers([EMPLOYEE]);
         const el = await mountOtherUserModal(EMPLOYEE.user_id);
 
@@ -123,7 +130,7 @@ describe('platform-user-info-modal flow employee', () => {
     });
 
     it('_canActAs: обычный member без кураторства не видит act-as', async () => {
-        seedAuthUser({ userId: 'member_2', roles: ['member'] });
+        seedAuthUser({ userId: 'member_2', roles: ['member'], canAdmin: false });
         seedTeamMembers([EMPLOYEE]);
         const el = await mountOtherUserModal(EMPLOYEE.user_id);
 

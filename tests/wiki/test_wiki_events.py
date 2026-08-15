@@ -116,13 +116,13 @@ async def test_delete_publishes_event_with_affected_subtree(
 
 
 async def test_access_change_publishes_visibility_event(
-    wiki_client, wiki_page, platform_events_listener, system_user_id
+    wiki_client, wiki_page, platform_events_listener
 ):
     page_id = wiki_page["wiki_page_id"]
 
-    response = await wiki_client.post(
-        f"{PAGES_URL}/{page_id}/access/members",
-        json={"user_id": system_user_id, "permission": "admin"},
+    response = await wiki_client.patch(
+        f"{PAGES_URL}/{page_id}/access/company-visible",
+        json={"company_visible": False},
     )
     assert response.status_code == 200, response.text
 

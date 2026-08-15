@@ -95,7 +95,7 @@ def _assert_session_access(
     user_id: str,
     *,
     share_grant: FlowUIShareGrant | None,
-    require_interact: bool,
+    require_editor: bool,
 ) -> None:
     allowed = {state.user_id}
     if state.initiator_user_id is not None:
@@ -110,7 +110,7 @@ def _assert_session_access(
         or share_grant.document_id != state.ui_document.document_id
     ):
         raise PermissionError("Flow UI share grant does not match the durable session")
-    if require_interact and share_grant.permission != "interact":
+    if require_editor and share_grant.permission != "editor":
         raise PermissionError("Flow UI share grant is read-only")
 
 
@@ -287,7 +287,7 @@ class FlowUISessionService:
             state,
             user_id,
             share_grant=share_grant,
-            require_interact=False,
+            require_editor=False,
         )
         if command.document_id is not None and command.document_id != state.ui_document.document_id:
             raise ValueError("Flow UI bootstrap document identity mismatch")
@@ -368,7 +368,7 @@ class FlowUISessionService:
                 state,
                 user_id,
                 share_grant=share_grant,
-                require_interact=True,
+                require_editor=True,
             )
             if state.context_id != context_id:
                 raise ValueError("Flow UI command context identity mismatch")

@@ -7,6 +7,7 @@ from apps.sync.db.models import SyncChannel
 from apps.sync.db.repositories.channel_repository import ChannelRepository
 from apps.sync.models.channels import ChannelRead, ChannelType
 from apps.sync.models.common import UserBrief
+from apps.sync.services.sync_channel_access_service import SyncChannelAccessService
 from core.db.repositories.user_repository import UserRepository
 
 
@@ -26,6 +27,7 @@ async def channel_read_from_entity(
     *,
     viewer_user_id: str,
     channel_repository: ChannelRepository,
+    channel_access: SyncChannelAccessService,
     user_repository: UserRepository | None,
     company_id: str,
     lane_summary: ChannelLaneSummary | None = None,
@@ -41,10 +43,7 @@ async def channel_read_from_entity(
     peer: UserBrief | None = None
     peer_last_read_at = None
     if entity.type == ChannelType.DIRECT.value:
-        member_ids = await channel_repository.list_member_user_ids(
-            entity.channel_id,
-            company_id=company_id,
-        )
+        member_ids = await channel_access.list_member_user_ids(entity.channel_id)
         others = [uid for uid in member_ids if uid != viewer_user_id]
         if len(others) >= 1:
             peer = await _user_brief(user_repository, others[0])

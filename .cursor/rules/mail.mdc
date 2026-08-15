@@ -27,6 +27,10 @@ alwaysApply: false
 
 Web `company.subdomain` ≠ `mail_domain`. Crypto (S/MIME/PGP) — вне scope. OAuth/XOAUTH2 — вне v1 (только password login).
 
+## Authorization
+
+Sole PDP — OpenFGA `mailbox_binding` (`owner` / `member` / `manager`) + `company#can_admin` через `MailService` / `AuthzService`. Owner reassign dual-write fail-closed. Wire ACL для binding не использует `view`/`edit`. `GET /bindings/me` возвращает `can_admin` (server-driven). Calendar invitees — identity roster (`company.members`), не PDP. Канон → **`authorization.mdc`**.
+
 ## Слои
 
 | Модуль | Роль |
@@ -53,10 +57,10 @@ Web `company.subdomain` ≠ `mail_domain`. Crypto (S/MIME/PGP) — вне scope.
 | `PATCH /bindings/{id}` password/hosts (personal) | owner personal **или** admin |
 | `PATCH /bindings/{id}` password/sync/user_id (company) | admin |
 | `DELETE /bindings/{id}` | admin; для personal — также owner |
-| `PUT /connection`, `GET /bindings`, `POST /bindings`, members ACL, company healthcheck | `admin` активной компании |
+| `PUT /connection`, `GET /bindings`, `POST /bindings`, members ACL, company healthcheck | FGA `company#can_admin` |
 | `POST /system/reconcile` | `company_id=system` + admin |
 
-`GET /bindings/me` = собственные user-bindings ∪ role-bindings из `mailbox_binding_members`.
+`GET /bindings/me` = bindings компании с FGA `can_view` на `mailbox_binding` (`batch_check`).
 
 ## Background sync (local-first)
 
@@ -64,7 +68,7 @@ Web `company.subdomain` ≠ `mail_domain`. Crypto (S/MIME/PGP) — вне scope.
 |---|---|
 | Task | `mail_sync_tick` + `mail_sync_binding` + `mail_rag_index` + `mail_idle_supervisor` (`apps/idle_worker/tasks/`) |
 | Schedule | cron `mail_sync` (default `*/1`); IDLE supervisor на том же cron при `idle_enabled` |
-| Context | перед sync/mutations/rag-index — `enter_mail_binding_context` + `build_job_context` (JWT): `MailService._active_user_id` и RAG/files/office; USER → owner mailbox, ROLE → member binding или любой member компании |
+| Context | перед sync/mutations/rag-index — `enter_mail_binding_context` + `build_job_context` (JWT): `MailService._active_user_id` и RAG/files/office; actor/ACL только FGA (`can_view`/`can_edit`/`can_admin` на `mailbox_binding` или `require_company_admin`); нет members → `raise` |
 | Fairness | `list_sync_candidates` JOIN по `company_mail_connection_id` + `status=active` — company и personal в одном tick |
 | Folders cache | `mailbox_folders` + `sort_index`; `GET /folders` DB-only `ORDER BY sort_index, folder_name`; **пустой кэш → `needs_sync=true`**; UI → `POST /sync` (IMAP LIST sync) → reload folders; IMAP refresh **сохраняет** известные `sort_index`, новые — в хвост; bootstrap — роль (inbox→sent→drafts→trash→archive→junk→other) затем имя |
 | Messages | `mail_messages` + flags; list/search/thread/get — local; `needs_sync` на list = пустая папка **без** `last_synced_at` (не «пустой inbox навсегда») |
@@ -72,7 +76,7 @@ Web `company.subdomain` ≠ `mail_domain`. Crypto (S/MIME/PGP) — вне scope.
 | Sync-now | `POST /sync` → `refresh_folders_from_imap` + enqueue `mail_sync_binding` |
 | RAG index | Persist **без** sync ingest: upsert → `rag_index_status=pending|skipped` → enqueue `mail_rag_index`; status ∈ `{ready,pending,failed,skipped}`; UI молния на `failed` → `POST /messages/rag-index` retry; push `mail/message/upserted` |
 | Mutations | trash/move/archive/delete/star/drafts/seen — optimistic local + TaskIQ + push |
-| Role ACL | `mailbox_binding_members`; RAG technical `mail-{mailbox_binding_id}` |
+| Role ACL | OpenFGA `mailbox_binding` (`member`=view, `manager`=edit/admin); RAG technical `mail-{mailbox_binding_id}` |
 | Notify + live UI | `mail/message/upserted\|moved\|removed\|send_*` |
 | Send | Message-Id domain из **binding → connection** (`allocate_outbound_message_id`); `prepare_send_local` → enqueue SMTP+APPEND → sync |
 | Personal connect | healthcheck → save connection/binding → **сразу** `refresh_folders_from_imap` → enqueue sync |
@@ -91,13 +95,13 @@ Wire folder = exact IMAP name; роли только SPECIAL-USE. Ensure: sent/d
 - `mailbox_folders`: `sort_index` (UI DnD order); wire `folder_name` = exact IMAP name
 - `mail_messages`: `flagged`, `answered`, `draft`; `user_id` nullable (role)
 - `mailbox_sync_cursors`: `backfill_completed`, `oldest_uid`, `last_reconcile_at`
-- `mailbox_binding_members`: PK `(mailbox_binding_id, user_id)`, `role ∈ {member, manager}`
+- `mailbox_binding` ACL: OpenFGA relations `owner` / `member` / `manager` (таблицы `mailbox_binding_members` нет)
 - `mailbox_bindings`: `calendar_autolink_status` (default `disabled`), `calendar_autolink_detail`
 - `integration_credentials`: `mailbox_binding_id` + два partial unique index (см. «Один календарь на ящик»)
 
 ## Provision
 
-- **System**: `reconcile_system` / `ensure_system_*` — company connection + role boxes; members через `ensure_system_user_bindings` (пропуск `flow_employee_*`: Mail для сотрудников — MISSING в `flow_employee.mdc`).
+- **System**: `reconcile_system` / `ensure_system_*` — company connection + role boxes; members через `ensure_system_user_bindings` (пропуск `flow_employee_*`: Mail для сотрудников — MISSING в `flow_employee.mdc`). Тест skip flow_employee сужает SQL `company.members`, не удаляет FGA tuples остальных членов `system`.
 - **Prod K8s**: `mail.system.enabled` + hosts/user в `deploy/helm/agent-lab/files/app-conf.k8s-overlay.json`; `authinfo_password` — GitHub Secret `MAIL__SYSTEM__ISPMANAGER__AUTHINFO_PASSWORD` → `platform-secrets` → ENV. Frontend lifespan вызывает `reconcile_system` при `enabled=true`.
 - **Lazy company**: `MailService.get_or_create_user_binding(user_id)`.
 - **Personal**: `MailService.connect_personal_mailbox` — personal connection + binding, `provision=false`, healthcheck login до save.

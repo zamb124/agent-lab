@@ -6,6 +6,7 @@ globs:
   - "core/documents/viewer/**"
   - "core/viz/**"
   - "core/frontend/static/lib/components/platform-document-viewer-host.js"
+  - "core/frontend/static/lib/components/platform-data-table-host.js"
   - "core/frontend/static/lib/components/platform-onlyoffice-host.js"
   - "core/frontend/static/lib/components/platform-viz-host.js"
   - "core/frontend/static/lib/components/platform-echarts-host.js"
@@ -31,17 +32,22 @@ globs:
 - **`OfficeContainer.file_repository`:** `FileRepository(storage=shared_storage)` напрямую, не `HTTPRepositoryProxy` на core, иначе анонимный `GET /documents/api/v1/office-download` без сессии не прочитает метаданные файла из БД.
 - **Auth routes:** префикс `/documents/*` в `route_config`. Эндпоинты `/documents/api/v1/office-download`, `/documents/api/v1/onlyoffice/callback`, `/documents/api/v1/public/*`, `/documents/api/v1/viewer-stream|viewer-frame|viewer-save` — **`anonymous`** (JWT в query / Bearer от Document Server). Остальной `/documents/api/v1/*` — session.
 
-## Unified access (company / members / public link)
+## Unified access (OpenFGA + public link AuthN)
 
-Три независимые оси доступа для **catalog** и **document** (`file_id`):
+Authenticated ACL — **только OpenFGA** (`AuthzService` через `OfficeAccessService`). SQL member tables / `is_public` удалены. `owner_user_id` на catalog — **structural materialization** (dual-write с FGA owner) для backfill/recovery, **не** Check. Anonymous public links — отдельный AuthN (`link_token_hash`), не FGA (`user:*` на office types запрещён). Invalid `link_permission` → **400** (fail-closed; soft-coerce в `viewer` запрещён).
 
 | Ось | Хранение | Смысл |
 |---|---|---|
-| Company | `office_document_catalogs.is_public` | Вся компания в namespace (не internet-public) |
-| Members | `office_catalog_members`, `office_binding_members` (FK `file_id`) | Конкретные `user_id` |
-| Public link | `link_enabled`, `link_token_hash`, `link_permission` на catalog/document | Анонимный preview без регистрации |
+| Company-visible | FGA `office_catalog#viewer@company:{id}#member` | Вся компания в namespace (не internet-public); API `company_visible`; `company` tuple = tenancy |
+| Owner | FGA `owner` на `office_catalog` / `office_document` | Admin/share; list/UI через `list_users(OWNER)` / `resolve_catalog_owner_user_id` |
+| Members | FGA `viewer`/`editor` user tuples | `members: [{user_id, relation}]` |
+| Parent TTU | FGA `parent` на catalog | Nested inherit viewer/editor |
+| Document↔catalog | FGA `catalog` на `office_document` | Document inherits catalog ACL |
+| Public link | `link_enabled`, `link_token_hash`, `link_permission ∈ {viewer, editor}` на catalog/document | Анонимный preview без регистрации |
 
-- **Effective access (authenticated):** `OfficeAccessService.user_can_view_document` — owner OR catalog walk-up OR document member OR company (`is_public`).
+- **Effective access (authenticated):** `OfficeAccessService` → `authz.can_view` / `require_can_*` на `AuthzObject.office_catalog` / `office_document`.
+- **Writes:** `apps/office/authz/tuples.py` + `sync_catalog_*` / `sync_document_*` на create/move/delete; backfill `python -m apps.office.authz.backfill`.
+- **Public link AuthN:** `link_token_hash` / `link_enabled` / `link_permission` на catalog/binding; таблица `office_document_shares` удалена.
 - **Public catalog browse (restrictive):** в `GET /public/catalog/{token}/items` только документы с собственным `link_enabled=true`; public catalog не «раздаёт» файлы без link.
 - **User-facing URL:** `{origin}/documents/p/{raw_token}` (SPA `documents_public_preview`), не JSON `/shares/{token}`.
 - **REST:** `GET/PATCH /catalogs/{id}/access`, `/documents/{file_id}/access`, `POST …/access/link/rotate`; anonymous `GET /public/resolve/{token}`, `/public/open/{token}`, `/public/catalog/{token}/items`, `/public/catalog/{token}/files/{file_id}/open`.
@@ -81,7 +87,7 @@ globs:
 
 ## Что используем из DS / что не интегрировано
 
-**Используем:** viewer handler registry (`core/documents/viewer/` + `apps/office/services/viewer_handlers/` + `DocumentViewerService`); единый контракт `GET …/editor-config` → `DocumentOpenConfigResponse` (`handler` + `capabilities` + typed payload); UI shell `<platform-document-viewer-host>` (OnlyOffice → `platform-onlyoffice-host`; image/media/text/binary/viz → native Lit hosts); OnlyOffice для office_doc/spreadsheet/presentation/pdf (`OnlyOfficeViewerHandler`); **viz** (`FileCategory.VIZ`, `.viz`, MIME `application/vnd.platform.viz+json`) → `VizViewerHandler` + `<platform-viz-host>` (ECharts/Mermaid); image/media/text/binary handlers + anonymous `viewer-stream`/`viewer-save`; upload любого файла с `file_category` из `core.files.types`; `onlyoffice_document_type` (`word|cell|slide`) только для OnlyOffice JWT; JWT на конфиг OnlyOffice (с `document.permissions`); callback (статусы 2 и 6); `office-download`; mutations gated by `capabilities.server_mutations`; sync/preview через capabilities matrix.
+**Используем:** viewer handler registry (`core/documents/viewer/` + `apps/office/services/viewer_handlers/` + `DocumentViewerService`); единый контракт `GET …/editor-config` → `DocumentOpenConfigResponse` (`handler` + `capabilities` + typed payload); UI shell `<platform-document-viewer-host>` (OnlyOffice → `platform-onlyoffice-host`; image/media/text/binary/viz/data_table → native Lit hosts); OnlyOffice для office_doc/spreadsheet/presentation/pdf (`OnlyOfficeViewerHandler`); **viz** (`FileCategory.VIZ`, `.viz`, MIME `application/vnd.platform.viz+json`) → `VizViewerHandler` + `<platform-viz-host>` (ECharts/Mermaid); **data_table** (`FileCategory.DATA_TABLE`, `.sqlite`, MIME `application/vnd.sqlite3`) → `DataTableViewerHandler` + `<platform-data-table-host>` (сетка + paging HTTP, SQLite не грузится в JS; `server_mutations=true`, `sync_on_close=false`); image/media/text/binary handlers + anonymous `viewer-stream`/`viewer-save`; upload любого файла с `file_category` из `core.files.types`; `onlyoffice_document_type` (`word|cell|slide`) только для OnlyOffice JWT; JWT на конфиг OnlyOffice (с `document.permissions`); callback (статусы 2 и 6); `office-download`; mutations gated by `capabilities.server_mutations`; sync/preview через capabilities matrix.
 
 **Намеренно вне BFF:** отдельный режим `mode: view` с разными `permissions` по ролям (кроме AI autostart/platformAi выше), forcesave как UX, Conversion API как сервис, embedded без нашего UI, мобильные SDK, co-editing вне выдачи нашего `editor-config` (co-edit идёт внутри DS при двух клиентах с одним `document.key`).
 
@@ -112,6 +118,17 @@ globs:
 - Type-actions Preview/Raw: в `platform.file_viewer` modal-header (группа `.header-type-actions`, визуально отделена от download/minimize/close) и в `document-editor-page` stage-bar.
 - Mode не персистится: каждый open → `default_view_mode`.
 
+### DataTable (`.sqlite`)
+
+Одна табличная база = один `FileRecord` (`file_id`). Handler `data_table`, не OnlyOffice `cell` и не `binary`.
+
+- Runtime: `core/data_tables/DataTableService` (S3 SQLite + Redis lock `data_table:{file_id}:mutation`). HTTP владельца UI: `GET/PATCH /documents/api/v1/data-tables/{file_id}/...` (`CursorPage`, `limit` ≤ 200). Query `q` — `LIKE %q%` по text-колонкам (AND с точным `filter_column=`). Повторный `column_q=column:query` — AND `CAST(col AS TEXT) LIKE %query%` по указанным колонкам (UI-фильтр в `<th>`).
+- Host: `<platform-data-table-host>` владеет тулбаром (segmented SQL-таблицы / Данные·Схема / размер страницы; icon-only: новая таблица, колонка, строка, CSV, Excel; в строке сетки — удалить) и Excel-редактированием ячеек (`data-canon="inline-edit"`: клик/F2/печатный символ, commit на Enter/blur, Tab — соседняя колонка). Строка из input приводится к `column_type` до PATCH (пустое → `null`); ошибка типа — баннер в host, не full-page. Documents `interaction=edit`; Flow UI `interaction=view` (фильтры колонок, CSV/Excel, «Дальше»; bootstrap по `file-id` без viewer `openConfig`). Пустое имя таблицы/колонки — ошибка формы в host, не uncaught throw. Overlay `platform.file_viewer`: floating header только имя файла + min/max/close; sqlite-download скрыт (экспорт таблицы — CSV/xlsx с host).
+- Экспорт активной таблицы: `GET /documents/api/v1/data-tables/{file_id}/tables/{table_name}/export?format=csv|xlsx` (пользовательские колонки, без `row_id`; лимит `MAX_EXPORT_ROWS`). Хранение по-прежнему `.sqlite` FileRecord.
+- `DocumentOpenConfigResponse.download_url` для браузера — `browser_public_base_url` (host запроса, например `lol.lvh.me:8008`). `callback_public_base_url` (`host.docker.internal`) — только Document Server → office, не кнопка «Скачать».
+- PDP: `authz.require_can_view|edit(AuthzObject.office_document(file_id))`.
+- SQL от UI/LLM: один SELECT/DML, whitelist пользовательских таблиц; DDL колонок — typed API; `ATTACH`/`PRAGMA` запрещены. `sqlite3` в code-runner sandbox нет.
+
 ## Иконки типов файлов
 
 - SVG: `core/frontend/static/assets/icons/files_icons/` (цветные иконки типов; не смешивать с UI-иконками в корне `assets/icons/`).
@@ -133,7 +150,7 @@ modals/                      # PlatformFormModal + registerModalKind: namespace/
 
 Главный список документов — **file explorer** (`office-documents-explorer-page`): full-bleed layout (`platform-island padding="none"`, `content-no-scroll`), breadcrumbs в toolbar, single-row toolbar, dropzone empty state, таблица/сетка через `platform-file-table` / `platform-file-row` / `platform-file-card`, details panel справа (настройки активного каталога без выбора файла). Nav-rail (All/Recent/Starred/Deleted) и **дерево `office-explorer-tree`** (бесконечно вложенные каталоги через `parent_catalog_id`) — в `<office-sidebar>` на маршрутах `documents_list` / `documents_recent`, не во втором столбце страницы. Shared presentational компоненты — `core/frontend/static/lib/components/platform-file-*.js`. Стили explorer — только `--documents-*` из `tokens.css` + `documents-explorer.styles.js`; hardcoded light hex в `apps/office/ui/**` запрещён.
 
-Slice `office/documents` хранит `items`, `loadedCatalogIds`, `activeCatalogId`, `filterCatalogIds`, `viewMode`, `searchQuery`, `sortKey`, `sortDir`, `selectedFileId`, `selectedFileIds`, `uploadJobs`, `explorerView`, `recentFileIds`, `starredFileIds`, `expandedCatalogIds` (persist `platformStorageKey('office', ...)`). Список документов в режиме catalog — `GET /documents?catalog_id=` (файлы только в этом каталоге, не рекурсивно). Trash — soft delete (`DELETE /documents/{id}`), restore/permanent delete, `GET /documents/deleted`. Nested catalogs — `parent_catalog_id` на `office_document_catalogs`, ACL walk-up в `CatalogRepository.user_can_access_catalog`; настройки (`title`, `is_public`, members) на каждом уровне. Move/copy/share/preview/revisions/activity — BFF `/documents/api/v1/*`.
+Slice `office/documents` хранит `items`, `loadedCatalogIds`, `activeCatalogId`, `filterCatalogIds`, `viewMode`, `searchQuery`, `sortKey`, `sortDir`, `selectedFileId`, `selectedFileIds`, `uploadJobs`, `explorerView`, `recentFileIds`, `starredFileIds`, `expandedCatalogIds` (persist `platformStorageKey('office', ...)`). Список документов в режиме catalog — `GET /documents?catalog_id=` (файлы только в этом каталоге, не рекурсивно). Trash — soft delete (`DELETE /documents/{id}`), restore/permanent delete, `GET /documents/deleted`. Nested catalogs — `parent_catalog_id` на `office_document_catalogs` (дерево explorer) + FGA `parent` TTU; настройки (`title`, `company_visible`, members) на каждом уровне через OpenFGA. Move/copy/share/preview/revisions/activity — BFF `/documents/api/v1/*`.
 
 ### Маршруты
 
@@ -206,7 +223,9 @@ Slice `office/documents` хранит `items`, `loadedCatalogIds`, `activeCatalo
 - `tests/office/test_office_access_authenticated.py` — catalog/document `GET/PATCH/rotate` access, ACL, cross-axis company/members/link.
 - `tests/office/test_office_access_viewer.py` — anonymous `viewer-stream|viewer-frame|viewer-save`, `office-download` через real S3.
 - `tests/office/test_office_access_legacy.py` — legacy `POST /documents/{id}/shares` → `/documents/p/…`.
-- `tests/office/test_office_documents_service_coverage.py` — `is_public`, список/деталь каталога, ACL приватного, публичный в списке у коллеги, запрет `PATCH is_public` не-владельцу, запрет `POST …/members` для публичного.
+- `tests/office/test_office_documents_service_coverage.py` — `company_visible`, список/деталь каталога, ACL приватного, company-visible в списке у коллеги, запрет `PATCH company_visible` не-владельцу, запрет members для company-visible.
+- `tests/office/unit/test_office_authz_model.py` — parent TTU / company / document inherits catalog.
+- OpenFGA обязателен: `tests/office/conftest.py` autouse `openfga_settings`.
 - `tests/office/test_office_bff_integration.py` — нескольких доступных каталогов в `POST /documents/empty` и upload через chunked Files API требуют явный `catalog_id` (`_first_accessible_catalog_id`).
 - `tests/office/test_catalog_rag_index.py` — enable/disable/rebuild/status, nested semantic search, PATCH settings, upload → index enqueue, skip `.sig` (`rag_service` + `rag_worker`).
 - `tests/office/test_office_document_type.py` — типы / MIME.

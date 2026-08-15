@@ -2,7 +2,6 @@
 Mock LLM для тестов.
 """
 
-import asyncio
 import json
 import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
@@ -67,6 +66,25 @@ def mock_llm_capture_key(test_scope: str) -> str:
     if not test_scope.strip():
         raise ValueError("mock_llm_capture_key: test_scope не должен быть пустым")
     return f"mock_llm:capture:{test_scope.strip()}"
+
+
+_MOCK_STREAM_CHUNK_MAX = 256
+
+
+def split_mock_stream_text(text: str) -> list[str]:
+    """Чанки заранее известного mock-текста.
+
+    Не 2–5 символов: каждый чанк — durable emit. Под ``-n10`` 3-символьные
+    чанки + ``asyncio.sleep(0.005)`` держат ``llm_node`` ~80 с на одном
+    CRM analyze (note-analyze остаётся ``running`` до poll 90 с).
+    Минимум 2 чанка если длина > 1 — контракт stream-тестов.
+    """
+    if not text:
+        return []
+    if len(text) == 1:
+        return [text]
+    chunk_size = min(_MOCK_STREAM_CHUNK_MAX, max(1, (len(text) + 1) // 2))
+    return [text[offset : offset + chunk_size] for offset in range(0, len(text), chunk_size)]
 
 
 _global_mock_registry: dict[str, "MockLLM"] = {}
@@ -468,9 +486,8 @@ class MockLLM:
         stream_cancel_poll: Callable[[], Awaitable[bool]] | None = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """
-        Stream метод - 100% реалистичная симуляция OpenAI streaming.
+        Stream метод — заранее известный mock-текст чанками (не 2–5 символов).
 
-        Стримит по токенам (2-5 символов) как настоящая LLM.
         Tool calls тоже стримятся по частям: сначала id, потом name, потом arguments кусками.
 
         Поддерживает Redis для межпроцессного обмена mock ответами.
@@ -526,55 +543,42 @@ class MockLLM:
             else []
         )
 
-        # Стримим reasoning по токенам (2-5 символов) как реальная LLM
+        # Стримим reasoning чанками заранее известного текста (не по 3 символа).
         reasoning_artifact_id = str(uuid.uuid4())
-        if reasoning:
-            reasoning_offset = 0
-            while reasoning_offset < len(reasoning):
-                chunk_size = min(3, len(reasoning) - reasoning_offset)
-                chunk = reasoning[reasoning_offset : reasoning_offset + chunk_size]
-                reasoning_offset += chunk_size
+        reasoning_chunks = split_mock_stream_text(reasoning)
+        for reasoning_index, chunk in enumerate(reasoning_chunks):
+            is_last_reasoning_chunk = reasoning_index == len(reasoning_chunks) - 1
+            is_last_reasoning_overall = is_last_reasoning_chunk and not content and not tool_calls
 
-                is_last_reasoning_chunk = reasoning_offset >= len(reasoning)
-                is_last_reasoning_overall = is_last_reasoning_chunk and not content and not tool_calls
+            yield TaskArtifactUpdateEvent(
+                context_id=context_id,
+                task_id=task_id,
+                artifact=Artifact(
+                    artifact_id=reasoning_artifact_id,
+                    name="reasoning",
+                    parts=[Part(text=chunk)],
+                ),
+                append=True,
+                last_chunk=is_last_reasoning_overall,
+            )
 
-                yield TaskArtifactUpdateEvent(
-                    context_id=context_id,
-                    task_id=task_id,
-                    artifact=Artifact(
-                        artifact_id=reasoning_artifact_id,
-                        name="reasoning",
-                        parts=[Part(text=chunk)],
-                    ),
-                    append=True,
-                    last_chunk=is_last_reasoning_overall,
-                )
-                await asyncio.sleep(0.005)
+        # Стримим контент чанками заранее известного текста (не по 3 символа).
+        content_chunks = split_mock_stream_text(content)
+        for content_index, chunk in enumerate(content_chunks):
+            is_last_content = content_index == len(content_chunks) - 1
+            is_last = is_last_content and not tool_calls
 
-        # Стримим контент по токенам (2-5 символов) как реальная LLM
-        if content:
-            content_offset = 0
-            while content_offset < len(content):
-                # Размер чанка 2-5 символов (имитация токенов)
-                chunk_size = min(3, len(content) - content_offset)
-                chunk = content[content_offset : content_offset + chunk_size]
-                content_offset += chunk_size
-
-                is_last_content = content_offset >= len(content)
-                is_last = is_last_content and not tool_calls
-
-                yield TaskArtifactUpdateEvent(
-                    context_id=context_id,
-                    task_id=task_id,
-                    artifact=Artifact(
-                        artifact_id=artifact_id,
-                        name="response",
-                        parts=[Part(text=chunk)],
-                    ),
-                    append=True,
-                    last_chunk=is_last,
-                )
-                await asyncio.sleep(0.005)
+            yield TaskArtifactUpdateEvent(
+                context_id=context_id,
+                task_id=task_id,
+                artifact=Artifact(
+                    artifact_id=artifact_id,
+                    name="response",
+                    parts=[Part(text=chunk)],
+                ),
+                append=True,
+                last_chunk=is_last,
+            )
 
         # Tool calls: как в LLMClient.stream — сначала статус с tool_calls+usage, затем
         # второй статус (часто только usage), иначе LlmNodeRunner затирал бы tool_calls.

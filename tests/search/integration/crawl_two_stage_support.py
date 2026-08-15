@@ -141,6 +141,7 @@ async def run_layer2_enrich(
             company_repository=search_container.company_repository,
             subdomain_repository=search_container.subdomain_repository,
             user_repository=search_container.user_repository,
+            authz=search_container.authz_service,
         )
     )
     try:

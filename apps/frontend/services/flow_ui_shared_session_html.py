@@ -219,7 +219,7 @@ def build_flow_ui_shared_session_html(*, grant_id: str) -> str:
       surface.profile = 'shared_session';
       surface.theme = 'auto';
       surface.credentials = 'omit';
-      surface.readonly = session.permission !== 'interact';
+      surface.readonly = session.permission !== 'editor';
       surface.getRequestHeaders = () => ({{ Authorization: `${{session.token_type}} ${{session.token}}` }});
       surface.addEventListener('flow-ui-error', (event) => {{
         const message = event.detail?.error?.message;

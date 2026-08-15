@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from core.authz.company_sync import sync_company_member_roles
 from core.models.identity_models import User
 from core.utils.tokens import get_token_service
 from tests.fixtures.ai_provider_defaults import (
@@ -54,6 +55,12 @@ async def _ensure_company_member(
         active_company_id=company_id,
     )
     await frontend_container.user_repository.set(user)
+    await sync_company_member_roles(
+        frontend_container.authz_service,
+        company_id=company_id,
+        user_id=user_id,
+        roles=roles,
+    )
 
     token_service = get_token_service()
     return token_service.create_token(user_id, company_id=company_id, roles=roles)

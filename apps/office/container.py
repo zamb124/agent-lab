@@ -12,7 +12,6 @@ from apps.office.db.repositories.document_binding_repository import DocumentBind
 from apps.office.db.repositories.document_extended_repository import (
     DocumentEventRepository,
     DocumentRevisionRepository,
-    DocumentShareRepository,
 )
 from apps.office.services.catalog_rag_index_service import OfficeCatalogRagIndexService
 from apps.office.services.docs_placement_service import DocsPlacementService
@@ -22,6 +21,7 @@ from core.clients.rag_client import RagClient
 from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.container import BaseContainer, ContainerRegistry, lazy
+from core.data_tables.service import DataTableService
 from core.files.file_repository import FileRepository
 from core.logging import get_logger
 
@@ -53,11 +53,8 @@ class OfficeContainer(BaseContainer):
             catalog_repository=self.catalog_repository,
             document_binding_repository=self.document_binding_repository,
             access_repository=self.access_repository,
+            authz=self.authz_service,
         )
-
-    @lazy
-    def document_share_repository(self) -> DocumentShareRepository:
-        return DocumentShareRepository(db=self.office_db)
 
     @lazy
     def document_revision_repository(self) -> DocumentRevisionRepository:
@@ -92,6 +89,13 @@ class OfficeContainer(BaseContainer):
         return FileRepository(storage=self.shared_storage)
 
     @lazy
+    def data_table_service(self) -> DataTableService:
+        return DataTableService(
+            files_service=self.files_service,
+            redis_client=self.redis_client,
+        )
+
+    @lazy
     def viewer_service(self) -> DocumentViewerService:
         return DocumentViewerService()
 
@@ -105,6 +109,7 @@ class OfficeContainer(BaseContainer):
             catalog_repository=self.catalog_repository,
             document_binding_repository=self.document_binding_repository,
             files_service=self.files_service,
+            office_access_service=self.office_access_service,
         )
 
     @lazy

@@ -346,6 +346,8 @@ key -> {session_id, execution_branch_id, head_sequence, head_state_hash, state_j
 
 Если Redis отсутствует или hash/sequence не совпадают с `workflow_instances`, state rehydrate'ится из snapshots + events.
 
+Rehydrate с расхождением `next_state_hash` поднимает `WorkflowProjectionMismatchError` (не голый `ValueError`). `GET /flows/api/v1/sessions/` пропускает такие сессии и отдаёт 200 по остальным; одиночный `get_state` / A2A на битой сессии — ошибка projection, не 500 всего списка.
+
 ## A2A Task/Artifact и Flow UI projections
 
 Ledger также является источником истины для A2A query projection и UI revisions. `a2a_task_projections`, `a2a_task_messages`, `a2a_artifact_projections`, event dedup и `flow_ui_share_grants` — materialized query state, который полностью rebuildable из ledger/authoritative config.

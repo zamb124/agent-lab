@@ -16,6 +16,7 @@ import asyncio
 import sys
 import uuid
 from collections.abc import Generator
+from pathlib import Path
 from typing import Any, List
 
 import pytest
@@ -37,6 +38,7 @@ pytest_plugins = [
     "tests.fixtures.flows_chat_e2e",
     "tests.fixtures.google_api_emulator.handle",
     "tests.fixtures.wiki",
+    "tests.fixtures.openfga",
     "tests.agent.fixtures.local_releases",
     "tests.agent.fixtures.e2e",
     "tests.profiling.plugin",
@@ -51,11 +53,14 @@ if sys.platform == "darwin":
     if _brew_path not in os.environ.get("PATH", ""):
         os.environ["PATH"] = f"{_brew_path}:{os.environ.get('PATH', '')}"
 for _db_key, _db_val in TEST_DATABASE_ENV.items():
-    os.environ.setdefault(_db_key, _db_val)
+    if _db_key.startswith("OPENFGA__"):
+        # Store/model из reports/openfga-test.env должны перекрывать conf defaults.
+        os.environ[_db_key] = _db_val
+    else:
+        os.environ.setdefault(_db_key, _db_val)
 os.environ.setdefault("DATABASE__REDIS_URL", "redis://localhost:63792/0")
 os.environ.setdefault("TASKS__BROKER_URL", "redis://localhost:63792/1")
 os.environ.setdefault("TRACING__TEMPO_ENABLED", "false")
-os.environ.setdefault("AUTH__PERMISSIONS_ENABLED", "false")
 os.environ.setdefault("SERVER__DEFAULT_TENANT_ID", "test_tenant")
 os.environ["SERVER__FLOWS_SERVICE_URL"] = "http://localhost:9001"
 os.environ["SERVER__RAG_SERVICE_URL"] = "http://localhost:9002"
@@ -299,6 +304,21 @@ def _is_crm_e2e_test(nodeid: str) -> bool:
     return nodeid.startswith("tests/crm/e2e/")
 
 
+def _marker_timeout_seconds(marker: pytest.Mark | None) -> float | None:
+    if marker is None or not marker.args:
+        return None
+    raw: object = marker.args[0]
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return None
+    return float(raw)
+
+
+def _ensure_item_timeout(item: pytest.Item, seconds: float, *, func_only: bool) -> None:
+    """Item-level timeout перекрывает module pytestmark (get_closest_marker)."""
+    item.own_markers = [marker for marker in item.own_markers if marker.name != "timeout"]
+    item.add_marker(pytest.mark.timeout(seconds, func_only=func_only))
+
+
 def _is_rag_global_maintenance_test(nodeid: str) -> bool:
     """Reembed/orphan maintenance на shared vector_documents: глобальные batch-операции."""
     if nodeid.startswith("tests/core/rag/test_execute_reembed_tick_integration.py"):
@@ -312,8 +332,9 @@ def _is_notification_ws_e2e_test(nodeid: str) -> bool:
     return nodeid.startswith("tests/core/websocket/test_notification_e2e.py")
 
 
-def _is_files_retention_purge_test(nodeid: str) -> bool:
-    if nodeid.startswith("tests/files/test_files_retention_purge.py"):
+def _is_files_s3_test(nodeid: str) -> bool:
+    """MinIO + Files API (chunked upload/download, retention purge): под -n10 >5s."""
+    if nodeid.startswith("tests/files/"):
         return True
     # Тот же purge_expired_batch через idle_worker tick: под -n10 >5s.
     if (
@@ -338,6 +359,18 @@ def _is_flows_variables_api_test(nodeid: str) -> bool:
 
 def _is_flows_sessions_api_test(nodeid: str) -> bool:
     return nodeid.startswith("tests/flows/api/test_sessions_api.py")
+
+
+def _is_flows_a2a_api_test(nodeid: str) -> bool:
+    """A2A JSON-RPC через in-process ASGI: 1–3 полных MockLLM-прогона >5 с."""
+    return nodeid.startswith("tests/flows/api/test_a2a.py")
+
+
+def _is_google_workspace_emulator_test(nodeid: str) -> bool:
+    """Google API emulator + ASGI credentials: изоляция ~7 с, глобальные 5 с — ложный timeout."""
+    return nodeid.startswith(
+        "tests/core/integrations/test_google_workspace_emulator_auth.py"
+    )
 
 
 def _is_frontend_team_act_as_test(nodeid: str) -> bool:
@@ -370,19 +403,32 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
             if item.get_closest_marker("timeout") is None:
                 item.add_marker(pytest.mark.timeout(120, func_only=False))
         elif _is_crm_e2e_test(item.nodeid):
-            if item.get_closest_marker("timeout") is None:
-                # func_only=False: setup crm_client под -n10 и shared Postgres >5s;
-                # signal-timeout на setup убивает gw целиком → каскад ERROR.
-                item.add_marker(pytest.mark.timeout(60, func_only=False))
+            existing_timeout = item.get_closest_marker("timeout")
+            existing_seconds = _marker_timeout_seconds(existing_timeout)
+            # pytest.ini timeout_func_only=true: маркер без func_only=False режет setup.
+            # pytestmark timeout(20) на файле перекрывал 120с → FAILED/ERROR под -n10.
+            already_ok = (
+                existing_seconds is not None
+                and existing_seconds >= 120
+                and existing_timeout is not None
+                and existing_timeout.kwargs.get("func_only") is False
+            )
+            if not already_ok:
+                applied = (
+                    120.0
+                    if existing_seconds is None or existing_seconds < 120
+                    else existing_seconds
+                )
+                _ensure_item_timeout(item, applied, func_only=False)
         elif _is_notification_ws_e2e_test(item.nodeid):
             if item.get_closest_marker("timeout") is None:
-                item.add_marker(pytest.mark.timeout(120, func_only=True))
+                item.add_marker(pytest.mark.timeout(120, func_only=False))
         elif _is_sandbox_runtime_test(item.nodeid):
             if item.get_closest_marker("timeout") is None:
                 item.add_marker(pytest.mark.timeout(180, func_only=True))
-        elif _is_files_retention_purge_test(item.nodeid):
+        elif _is_files_s3_test(item.nodeid):
             if item.get_closest_marker("timeout") is None:
-                # Глобальный purge_expired_batch под -n10: setup + batch-цикл >5s.
+                # Chunked upload = несколько HTTP + MinIO + FGA company Check; под -n10 >5s.
                 item.add_marker(pytest.mark.timeout(60, func_only=True))
         elif _is_flows_session_search_test(item.nodeid):
             if item.get_closest_marker("timeout") is None:
@@ -396,6 +442,12 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
         elif _is_flows_sessions_api_test(item.nodeid):
             if item.get_closest_marker("timeout") is None:
                 item.add_marker(pytest.mark.timeout(60, func_only=True))
+        elif _is_flows_a2a_api_test(item.nodeid):
+            if item.get_closest_marker("timeout") is None:
+                item.add_marker(pytest.mark.timeout(60, func_only=True))
+        elif _is_google_workspace_emulator_test(item.nodeid):
+            if item.get_closest_marker("timeout") is None:
+                item.add_marker(pytest.mark.timeout(30, func_only=True))
         elif _is_frontend_team_act_as_test(item.nodeid):
             if item.get_closest_marker("timeout") is None:
                 item.add_marker(pytest.mark.timeout(30, func_only=True))
@@ -431,8 +483,26 @@ def pytest_runtest_call(item) -> Generator[None, object, object]:
         faulthandler.cancel_dump_traceback_later()
 
 
+_FIRST_FAIL_DUMP = Path("/tmp/pytest-first-fail.txt")
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) -> Generator[None]:
+    """xdist -x печатает traceback только после drain. Первый fail — сразу на диск."""
+    _ = item
+    outcome = yield
+    report = outcome.get_result()
+    if report.when != "call" or not report.failed or _FIRST_FAIL_DUMP.exists():
+        return
+    _FIRST_FAIL_DUMP.write_text(f"{report.nodeid}\n{report.longrepr}\n", encoding="utf-8")
+
+
 def _skip_autouse_test_context(request: pytest.FixtureRequest) -> bool:
-    """ASGI-клиенты с Bearer auth: контекст выставляет AuthMiddleware, не test_user."""
+    """ASGI-клиенты с Bearer auth: контекст выставляет AuthMiddleware, не test_user.
+
+    In-process ``*_container`` + HTTP в одном тесте: test_context нужен после
+    ASGI (middleware restore внешнего Context). Не скипать.
+    """
     direct_container_fixtures = (
         "crm_container",
         "flows_container",
@@ -451,22 +521,28 @@ def _skip_autouse_test_context(request: pytest.FixtureRequest) -> bool:
         "rag_client",
         "voice_client",
         "wiki_client",
+        "wiki_client_member",
+        "wiki_client_company2",
     )
-    if not any(name in request.fixturenames for name in asgi_client_fixtures):
-        return False
-    if "api" in request.node.nodeid:
-        return True
-    return any(
-        name.startswith("auth_headers") or name.startswith("auth_token")
-        for name in request.fixturenames
-    )
+    if any(name in request.fixturenames for name in asgi_client_fixtures):
+        if "api" in request.node.nodeid:
+            return True
+        if any(
+            name.startswith("auth_headers") or name.startswith("auth_token")
+            for name in request.fixturenames
+        ):
+            return True
+    return False
 
 
-@pytest.fixture(autouse=True)
-def test_context(request):
+@pytest_asyncio.fixture(autouse=True)
+async def test_context(request: pytest.FixtureRequest):
     """
-    Автоматически устанавливает тестовый контекст для всех тестов.
-    Это необходимо для работы с репозиториями, которые требуют активную компанию.
+    Тестовый Context с company AI override (make_test_company).
+
+    Async autouse: contextvars должны жить в том же asyncio task, что и тест
+    (flow.run / llm_node читают get_context). Sync-фикстура теряет Context
+    при создании task для async-фикстур вроде google_api_emulator.
 
     Не применяется к API/ASGI тестам с Bearer auth (контекст — AuthMiddleware).
     """
@@ -1417,6 +1493,7 @@ async def auth_token(frontend_container):
     """
     import uuid
 
+    from core.authz.company_sync import sync_company_member_roles
     from core.models.identity_models import Company, User
     from core.utils.tokens import get_token_service
 
@@ -1459,6 +1536,19 @@ async def auth_token(frontend_container):
         if user_id not in system_company.members:
             system_company.members[user_id] = ["admin"]
             await frontend_container.company_repository.set(system_company)
+
+    await sync_company_member_roles(
+        frontend_container.authz_service,
+        company_id=company_id,
+        user_id=user_id,
+        roles=["owner", "admin"],
+    )
+    await sync_company_member_roles(
+        frontend_container.authz_service,
+        company_id="system",
+        user_id=user_id,
+        roles=["admin"],
+    )
 
     token_service = get_token_service()
     token = token_service.create_token(user_id, company_id=company_id)

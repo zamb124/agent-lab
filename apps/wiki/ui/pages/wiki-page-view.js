@@ -316,13 +316,34 @@ export class WikiPageView extends PlatformPage {
                 void this._loadPage();
             }
         });
+        this._routerSearchSel = this.select((s) => s.router.search);
+        this._accessModalOpened = false;
     }
 
     updated(changed) {
         super.updated?.(changed);
         if (changed.has('pageId') && this.pageId !== '') {
+            this._accessModalOpened = false;
             void this._loadPage();
         }
+        this._maybeOpenAccessModal();
+    }
+
+    _maybeOpenAccessModal() {
+        if (this._accessModalOpened) {
+            return;
+        }
+        if (this.pageId === '') {
+            return;
+        }
+        const search = this._routerSearchSel.value;
+        const raw = typeof search === 'string' ? search : '';
+        const query = raw.startsWith('?') ? raw.slice(1) : raw;
+        if (new URLSearchParams(query).get('access') !== '1') {
+            return;
+        }
+        this._accessModalOpened = true;
+        this.openModal('wiki.page_access', { pageId: this.pageId });
     }
 
     disconnectedCallback() {

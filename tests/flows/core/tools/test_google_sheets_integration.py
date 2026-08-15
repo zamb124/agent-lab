@@ -85,7 +85,7 @@ def _make_state(unique_id: str, flow_id: str) -> ExecutionState:
     return ExecutionState(
         task_id=f"task-sheets-{unique_id}",
         context_id=context_id,
-        user_id=f"user-sheets-{unique_id}",
+        user_id="u1",
         session_id=f"{flow_id}:{context_id}",
         content="Выполни",
         variables=sheets_execution_variables(),
@@ -163,6 +163,7 @@ async def _run_single_tool_flow(
                 "type": "llm_node",
                 "prompt": "Ты агент для Google Sheets.",
                 "tools": [{"tool_id": tid} for tid in tool_ids],
+                "llm": {"provider": "mock", "model": "mock-gpt-4"},
             }
         },
         edges=[],

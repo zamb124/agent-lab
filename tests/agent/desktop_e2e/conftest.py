@@ -264,6 +264,15 @@ async def goose_developer_auth(
     )
     await frontend_container.company_repository.set(company)
     await frontend_container.subdomain_repository.set_mapping(company_subdomain, company_id)
+    from tests.fixtures.auth import set_test_company_member_roles
+
+    await set_test_company_member_roles(
+        frontend_container.company_repository,
+        frontend_container.authz_service,
+        company_id=company_id,
+        user_id=user_id,
+        roles=["owner", "admin"],
+    )
     user = User(
         user_id=user_id,
         name="Goose Developer User",
@@ -276,8 +285,13 @@ async def goose_developer_auth(
     if system_company is None:
         raise RuntimeError("system company missing for goose developer auth")
     if user_id not in system_company.members:
-        system_company.members[user_id] = ["admin"]
-        await frontend_container.company_repository.set(system_company)
+        await set_test_company_member_roles(
+            frontend_container.company_repository,
+            frontend_container.authz_service,
+            company_id="system",
+            user_id=user_id,
+            roles=["admin"],
+        )
     await ensure_company_public_flows(company_id)
     token = get_token_service().create_token(user_id, company_id=company_id)
     return _GooseDeveloperAuth(

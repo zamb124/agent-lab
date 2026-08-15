@@ -20,6 +20,7 @@ from typing import Annotated, cast
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from apps.voice.container import get_voice_container
+from apps.voice.dependencies import ContainerDep
 from apps.voice.services.speak_worker import run_speak_worker
 from apps.voice.services.voice_barge_in import BargeInController
 from apps.voice.services.voice_client_channel import VoiceClientChannel
@@ -27,12 +28,15 @@ from apps.voice.services.voice_session import VoiceSession
 from apps.voice.workers.stt_worker import VadCallbackState, run_stt_worker
 from apps.voice.workers.ws_receiver import run_ws_receiver
 from core.ai.runtime import create_voice_tts_streamer
+from core.authz.errors import AuthzDenied
+from core.authz.models import AuthzObject
 from core.clients.speech_override import (
     SpeechOverride,
     SpeechOverrideProviderName,
     SpeechProviderName,
 )
 from core.clients.speech_provider_catalog import STT_TTS_PROVIDER_IDS, VAD_PROVIDER_IDS
+from core.context import get_context
 from core.logging import get_logger
 from core.utils.background import run_with_log_context
 
@@ -44,6 +48,17 @@ router = APIRouter(
 )
 
 _HEARTBEAT_INTERVAL_S = 30.0
+
+
+async def _require_company_view_when_user_context(
+    container: ContainerDep,
+    *,
+    company_id: str,
+) -> None:
+    context = get_context()
+    if context is None or context.active_company is None:
+        return
+    await container.authz_service.require_can_view(AuthzObject.company(company_id))
 
 
 def _speech_provider_name(value: str | None) -> SpeechProviderName | None:
@@ -126,6 +141,8 @@ async def voice_session(
         await websocket.close(code=1008)
         return
 
+    container = get_voice_container()
+
     tts_voice_q: str | None
     if isinstance(tts_voice, str):
         stripped = tts_voice.strip()
@@ -134,13 +151,18 @@ async def voice_session(
         tts_voice_q = None
 
     await websocket.accept()
+    try:
+        await _require_company_view_when_user_context(container, company_id=company_id)
+    except AuthzDenied:
+        await websocket.close(code=1008, reason="permission denied")
+        return
+
     logger.info(
         "voice.session.connected",
         session_id=session_id,
         company_id=company_id,
     )
 
-    container = get_voice_container()
     session = VoiceSession(session_id=session_id)
     channel = VoiceClientChannel(websocket, session_id=session_id)
 

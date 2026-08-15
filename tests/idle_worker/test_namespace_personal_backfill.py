@@ -1,7 +1,9 @@
 """E2E: namespace_personal_backfill создаёт missing personal ns."""
 
+
 from __future__ import annotations
 
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import pytest
 
 from apps.idle_worker.container import reset_container, set_container

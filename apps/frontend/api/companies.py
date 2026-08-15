@@ -12,6 +12,10 @@ from apps.frontend.dependencies import ContainerDep, require_frontend_user
 from apps.idle_worker.tasks.task_names import TASK_INIT_NEW_COMPANY
 from core.api.companies import CompanyMembershipResponse, build_my_companies_response
 from core.config import get_settings
+from core.identity.company_membership import (
+    remove_company_membership,
+    set_company_member_roles,
+)
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.logging import get_logger
 from core.models.identity_models import Company, User
@@ -148,7 +152,16 @@ async def create_company(
         metadata={"initialization_status": "pending"},
     )
 
-    _ = await company_repo.set(company)
+    user.companies[company.company_id] = ["owner"]
+    user.active_company_id = company.company_id
+    _ = await set_company_member_roles(
+        company_repository=company_repo,
+        user_repository=user_repo,
+        authz=container.authz_service,
+        company=company,
+        user=user,
+        roles=["owner"],
+    )
     logger.info(
         "frontend.company_created",
         company_id=company.company_id,
@@ -170,15 +183,11 @@ async def create_company(
         company_id=check_company_id,
     )
 
-    if company.company_id not in user.companies:
-        user.companies[company.company_id] = ["owner"]  # Список ролей, а не строка!
-        user.active_company_id = company.company_id
-        _ = await user_repo.set(user)
-        logger.info(
-            "frontend.company_owner_added",
-            user_id=user.user_id,
-            company_id=company.company_id,
-        )
+    logger.info(
+        "frontend.company_owner_added",
+        user_id=user.user_id,
+        company_id=company.company_id,
+    )
 
     await ensure_personal_namespace_for_user(
         container.namespace_service,
@@ -277,18 +286,15 @@ async def enter_company_as_system_member(
         raise HTTPException(status_code=404, detail="Компания не найдена")
 
     existing_roles = target_company.members.get(user.user_id, [])
-    if role not in existing_roles:
-        target_company.members[user.user_id] = [*existing_roles, role]
-        _ = await company_repo.set(target_company)
-    else:
-        target_company.members[user.user_id] = existing_roles
-
-    user_roles = user.companies.get(target_company_id, [])
-    if role not in user_roles:
-        user.companies[target_company_id] = [*user_roles, role]
-        _ = await user_repo.set(user)
-    else:
-        user.companies[target_company_id] = user_roles
+    merged_roles = list(dict.fromkeys([*existing_roles, role]))
+    _ = await set_company_member_roles(
+        company_repository=company_repo,
+        user_repository=user_repo,
+        authz=container.authz_service,
+        company=target_company,
+        user=user,
+        roles=merged_roles,
+    )
 
     await ensure_personal_namespace_for_user(
         container.namespace_service,
@@ -299,7 +305,7 @@ async def enter_company_as_system_member(
     return SystemAccessGrantedResponse(
         success=True,
         company_id=target_company_id,
-        roles=user.companies[target_company_id],
+        roles=merged_roles,
     )
 
 
@@ -328,16 +334,17 @@ async def leave_company_as_system_member(
     if user.user_id not in target_company.members or target_company_id not in user.companies:
         raise HTTPException(status_code=404, detail="Пользователь не состоит в выбранной компании")
 
-    del target_company.members[user.user_id]
-    del user.companies[target_company_id]
-
-    switched_to_system = False
-    if user.active_company_id == target_company_id:
+    switched_to_system = user.active_company_id == target_company_id
+    await remove_company_membership(
+        company_repository=company_repo,
+        user_repository=user_repo,
+        authz=container.authz_service,
+        company=target_company,
+        user=user,
+    )
+    if switched_to_system:
         user.active_company_id = SYSTEM_COMPANY_ID
-        switched_to_system = True
-
-    _ = await company_repo.set(target_company)
-    _ = await user_repo.set(user)
+        _ = await user_repo.set(user)
 
     response = JSONResponse(
         content={

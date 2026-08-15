@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from core.authz.service import AuthzService
 from core.context import Context
 from core.db.repositories.company_repository import CompanyRepository
 from core.db.repositories.subdomain_repository import SubdomainRepository
@@ -18,12 +19,14 @@ async def build_search_system_context(
     company_repository: CompanyRepository,
     subdomain_repository: SubdomainRepository,
     user_repository: UserRepository,
+    authz: AuthzService,
     channel: str = "search",
 ) -> Context:
     company, user = await ensure_system_admin_membership(
         company_repository=company_repository,
         subdomain_repository=subdomain_repository,
         user_repository=user_repository,
+        authz=authz,
     )
     if user is None:
         raise ValueError("system admin user is required for search system context")

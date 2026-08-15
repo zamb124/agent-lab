@@ -52,12 +52,9 @@ class QueueAwareTaskiqScheduler(TaskiqScheduler):
     @override
     async def on_ready(self, source: ScheduleSource, task: ScheduledTask) -> None:
         """
-        Kick через брокер целевой очереди (labels['queue_name'] или TaskSpec.queue).
+        Kick через брокер очереди из TaskSpec (не stale Redis label).
         """
-        raw_qn = task.labels.get("queue_name")
-        if raw_qn is None or (isinstance(raw_qn, str) and not raw_qn.strip()):
-            task.labels["queue_name"] = get_task_spec(task.task_name).queue
-        queue_name = str(task.labels["queue_name"]).strip()
+        queue_name = get_task_spec(task.task_name).queue
         task.labels["queue_name"] = queue_name
         brokers = registered_queue_brokers()
         target_broker = brokers.get(queue_name)

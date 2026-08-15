@@ -47,18 +47,12 @@ from core.capabilities import (
     CAPABILITY_LANGUAGE_SET,
     CapabilityDocumentation,
     CapabilityLanguage,
-    CapabilityNamespaceDocumentation,
-    CapabilitySdkMethodDocumentation,
     CodeExecutionKind,
 )
 from core.clients.capability_gateway_client import CapabilityGatewayClient
 from core.context import get_context
 from core.docs.models import (
     CodeTemplate,
-    GlobalVariable,
-    ModuleMethod,
-    PlatformToolDoc,
-    StateField,
 )
 from core.errors import CodeExecutionRuntimeError, ImanBaseError
 from core.files.file_ref import FileRef
@@ -115,93 +109,6 @@ async def _capability_documentation(language: CapabilityLanguage) -> CapabilityD
 async def _capability_markdown(language: CapabilityLanguage) -> str:
     docs = await _capability_documentation(language)
     return docs.markdown
-
-
-def _capability_global(language: CapabilityLanguage) -> GlobalVariable:
-    namespace_names = "tools/files/http/text/voice/flow_state/log/trace/platform/channel/flow"
-    if language == "go":
-        return GlobalVariable(
-            name=namespace_names,
-            type="сгенерированные Go SDK namespaces",
-            doc="Сгенерированные namespaces из CapabilityManifest: tools.Calculator(...), files.Create(...), http.Request(...), flow_state.GetNested(...), channel.Send(...).",
-            perspective=["editor", "flow", "tool", "node"],
-            tags=["capability", "sandbox"],
-        )
-    if language == "csharp":
-        return GlobalVariable(
-            name=namespace_names,
-            type="сгенерированные C# SDK namespace properties",
-            doc="Сгенерированные namespaces из CapabilityManifest: await tools.Calculator(...), await files.Create(...), await http.Request(...), await flow_state.GetNested(...), await channel.Send(...).",
-            perspective=["editor", "flow", "tool", "node"],
-            tags=["capability", "sandbox"],
-        )
-    if language == "python":
-        type_name = "сгенерированные async SDK namespaces"
-    else:
-        type_name = "сгенерированные async SDK namespace proxies"
-    return GlobalVariable(
-        name=namespace_names,
-        type=type_name,
-        doc="Сгенерированные namespaces из CapabilityManifest: tools.calculator(...), files.create(...), http.request(...), flow_state.get_nested(...), channel.send(...).",
-        perspective=["editor", "flow", "tool", "node"],
-        tags=["capability", "sandbox"],
-    )
-
-
-def _runtime_globals() -> list[GlobalVariable]:
-    return [
-        GlobalVariable(
-            name="args",
-            type="входные данные runtime entrypoint",
-            doc="Аргументы, переданные в точку входа кода.",
-            perspective=["editor", "flow", "tool", "node"],
-            tags=["runtime", "entrypoint"],
-        ),
-        GlobalVariable(
-            name="state",
-            type="изменяемый execution state",
-            doc=(
-                "Execution state flow, общий для нод. Пользовательский код может записывать сюда результаты нод. "
-                "Python и JS: атрибутный доступ — state.session_id, state.my_field = value "
-                "(state[\"key\"] и state.get(...) тоже работают); Go и C#: map-доступ state[\"key\"]. "
-                "Чтение отсутствующего поля в Python — AttributeError."
-            ),
-            perspective=["editor", "flow", "tool", "node"],
-            tags=["runtime", "state"],
-        ),
-        GlobalVariable(
-            name="variables",
-            type="резолвнутые переменные flow",
-            doc="Резолвнутые переменные flow, эквивалент state.variables.",
-            perspective=["editor", "flow", "tool", "node"],
-            tags=["runtime", "variables"],
-        ),
-    ]
-
-
-def _execution_state_fields() -> list[StateField]:
-    return [
-        StateField(name="content", type="string", description="Содержимое входного сообщения."),
-        StateField(name="response", type="string", description="Текст ответа агента."),
-        StateField(name="result", type="any", description="Результат последней ноды или tool."),
-        StateField(name="validation", type="object", description="Payload валидации ноды."),
-        StateField(name="messages", type="array", description="История сообщений диалога."),
-        StateField(name="variables", type="object", description="Резолвнутые переменные flow."),
-        StateField(name="files", type="array", description="Прикреплённые файлы, доступные flow."),
-        StateField(
-            name="triggers", type="object", description="Runtime payload триггеров по trigger id."
-        ),
-        StateField(name="tool_results", type="object", description="Результаты, произведённые tools."),
-        StateField(name="node_history", type="object", description="История вызовов runtime-нод."),
-        StateField(
-            name="current_nodes", type="array", description="Текущие ноды графа в исполнении."
-        ),
-        StateField(name="branch_id", type="string", description="Текущий branch_id flow."),
-        StateField(name="session_id", type="string", description="Runtime session_id."),
-        StateField(
-            name="flow_config_version", type="string", description="Снимок версии конфигурации flow."
-        ),
-    ]
 
 
 _RESERVED_SDK_METHODS = frozenset({"call", "then"})
@@ -367,44 +274,59 @@ def _platform_tool_templates(
 def _capability_templates(language: CapabilityLanguage) -> list[CodeTemplate]:
     snippets = {
         "python": (
+            "import csv\n"
+            "import json\n"
+            "\n"
             "async def run(args, state):\n"
-            '    calc = await tools.calculator(expression=args["expression"])\n'
-            "    state.calculation = calc\n"
-            '    return {"calculation": calc}\n'
+            '    rows = list(csv.DictReader(["name,namespace", args["row"]]))\n'
+            "    parsed = json.dumps(rows)\n"
+            "    state.parsed = parsed\n"
+            "    entity = await crm.create_entity(\n"
+            '        entity_type="person", name=rows[0]["name"], namespace=rows[0]["namespace"]\n'
+            "    )\n"
+            "    return entity\n"
         ),
         "javascript": (
             "async function run(args, state) {\n"
-            "  const calc = await tools.calculator({expression: args.expression});\n"
-            "  state.calculation = calc;\n"
-            "  return {calculation: calc};\n"
+            "  const rows = JSON.parse(args.csv_json);\n"
+            "  state.parsed = rows;\n"
+            "  const entity = await crm.create_entity({\n"
+            "    entity_type: 'person', name: rows[0].name, namespace: rows[0].namespace,\n"
+            "  });\n"
+            "  return entity;\n"
             "}\n"
         ),
         "typescript": (
-            "async function run(args: {expression: string}, state: Record<string, unknown>) {\n"
-            "  const calc = await tools.calculator({expression: args.expression});\n"
-            "  state.calculation = calc;\n"
-            "  return {calculation: calc};\n"
+            "async function run(args: {csv_json: string}, state: Record<string, unknown>) {\n"
+            "  const rows = JSON.parse(args.csv_json) as Array<{name: string, namespace: string}>;\n"
+            "  state.parsed = rows;\n"
+            "  const entity = await crm.create_entity({\n"
+            "    entity_type: 'person', name: rows[0].name, namespace: rows[0].namespace,\n"
+            "  });\n"
+            "  return entity;\n"
             "}\n"
         ),
         "go": (
             "package main\n\n"
+            'import "encoding/json"\n\n'
             "func run(args map[string]any, state map[string]any) (any, error) {\n"
-            '    calc, err := tools.Calculator(map[string]any{"expression": args["expression"]})\n'
-            "    if err != nil {\n"
+            "    var rows []map[string]any\n"
+            '    if err := json.Unmarshal([]byte(args["csv_json"].(string)), &rows); err != nil {\n'
             "        return nil, err\n"
             "    }\n"
-            '    state["calculation"] = calc\n'
-            '    return map[string]any{"calculation": calc}, nil\n'
+            '    state["parsed"] = rows\n'
+            '    return crm.CreateEntity(map[string]any{"entity_type": "person", "name": rows[0]["name"], "namespace": rows[0]["namespace"]})\n'
             "}\n"
         ),
         "csharp": (
             "using System.Collections.Generic;\n"
+            "using System.Text.Json;\n"
             "using System.Threading.Tasks;\n\n"
             "async Task<object?> run(Dictionary<string, object?> args, Dictionary<string, object?> state)\n"
             "{\n"
-            '    var calc = await tools.Calculator(new Dictionary<string, object?> { ["expression"] = args["expression"] });\n'
-            '    state["calculation"] = calc;\n'
-            '    return new Dictionary<string, object?> { ["calculation"] = calc };\n'
+            '    var rows = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(args["csv_json"]?.ToString() ?? "[]");\n'
+            '    state["parsed"] = rows;\n'
+            '    return await crm.CreateEntity(new Dictionary<string, object?> { ["entity_type"] = "person", ["name"] = rows[0]["name"], ["namespace"] = rows[0]["namespace"] });\n'
             "}\n"
         ),
     }
@@ -476,60 +398,6 @@ def _infer_entrypoint(language: CapabilityLanguage, code: str) -> str | None:
     return None
 
 
-class CodeCompletionsResponse(BaseModel):
-    """Данные для autocomplete в редакторе кода"""
-
-    modules: list[str]
-    globals: list[GlobalVariable]
-    builtins: list[str]
-    module_methods: dict[str, list[ModuleMethod]]
-    state_fields: list[StateField] = []
-    templates: list[CodeTemplate] = []
-    platform_tools: list[PlatformToolDoc] = []
-    capability_namespaces: list[CapabilityNamespaceDocumentation] = []
-    capabilities: list[CapabilitySdkMethodDocumentation] = []
-    runtime_namespace_extras: list[GlobalVariable] | None = None
-
-
-@router.get("/completions", response_model=CodeCompletionsResponse)
-async def get_code_completions(
-    container: ContainerDep,
-    language: str = "python",
-    perspective: str = "editor",
-    include_runtime_namespace_extras: bool = False,
-) -> CodeCompletionsResponse:
-    """
-    Возвращает данные для autocomplete в редакторе кода.
-
-    Аргументы:
-        language: Язык программирования (`python`, `javascript`, `typescript`, `go`, `csharp`)
-        perspective: Ракурс (editor, flow, tool, node)
-
-    Возвращает:
-        modules: доступные модули для import
-        globals: глобальные переменные SDK capability
-        builtins: встроенные функции
-        module_methods: методы модулей
-        state_fields: поля state
-        templates: шаблоны кода
-    """
-    capability_language = _require_capability_language(language)
-    capability_docs = await _capability_documentation(capability_language)
-    _ = container, perspective, include_runtime_namespace_extras
-    return CodeCompletionsResponse(
-        modules=[],
-        globals=[*_runtime_globals(), _capability_global(capability_language)],
-        builtins=[],
-        module_methods={},
-        state_fields=_execution_state_fields(),
-        templates=_capability_templates(capability_language),
-        platform_tools=[],
-        capability_namespaces=capability_docs.namespaces,
-        capabilities=capability_docs.capabilities,
-        runtime_namespace_extras=None,
-    )
-
-
 @router.get("/documentation")
 async def get_code_documentation(
     container: ContainerDep,
@@ -537,10 +405,7 @@ async def get_code_documentation(
     perspective: str = "editor",
     include_runtime_namespace_extras: bool = False,
 ) -> Response:
-    """
-    Полная документация для редактора inline-кода в формате Markdown
-    (тот же состав данных, что у /completions).
-    """
+    """Markdown-документация capability SDK для человека. Редактор читает language server, не этот текст."""
     capability_language = _require_capability_language(language)
     _ = container, perspective, include_runtime_namespace_extras
     body = await _capability_markdown(capability_language)
@@ -1048,6 +913,7 @@ class ExecuteRequest(BaseModel):
     node_config: JsonObject = Field(default_factory=dict)
     code: str | None = None
     state: JsonObject
+    args: JsonObject = Field(default_factory=dict)
     entrypoint: str | None = None
     flow_id: str | None = None
     branch_id: str | None = None
@@ -1425,6 +1291,34 @@ def _graph_node_config_for_execute(config: JsonObject) -> JsonObject:
     return cleaned
 
 
+def _merge_execute_args_into_parameters_schema(config: JsonObject, args: JsonObject) -> None:
+    """Playground args становятся defaults parameters_schema; рёбра графа перекрывают их в CodeNode._build_args."""
+    if not args:
+        return
+    raw_schema = config.get("parameters_schema")
+    if raw_schema is None:
+        schema: JsonObject = {"type": "object", "properties": {}}
+        config["parameters_schema"] = schema
+    else:
+        schema = require_json_object(raw_schema, "execute.parameters_schema")
+        config["parameters_schema"] = schema
+    raw_properties = schema.get("properties")
+    if raw_properties is None:
+        properties: JsonObject = {}
+        schema["properties"] = properties
+    else:
+        properties = require_json_object(raw_properties, "execute.parameters_schema.properties")
+        schema["properties"] = properties
+    for key, value in args.items():
+        raw_prop = properties.get(key)
+        if isinstance(raw_prop, dict):
+            prop = require_json_object(raw_prop, f"execute.parameters_schema.properties.{key}")
+        else:
+            prop = {}
+        prop["default"] = value
+        properties[key] = prop
+
+
 async def _build_node_config(request: ExecuteRequest) -> JsonObject:
     """Строит node_config из ExecuteRequest."""
     config = require_json_object(copy.deepcopy(request.node_config), "execute.node_config")
@@ -1433,6 +1327,7 @@ async def _build_node_config(request: ExecuteRequest) -> JsonObject:
     config["type"] = _require_execute_node_type(str(request.node_type))
     if request.entrypoint is not None:
         config["entrypoint"] = request.entrypoint
+    _merge_execute_args_into_parameters_schema(config, request.args)
 
     config = _graph_node_config_for_execute(config)
     _validate_node_config(config)

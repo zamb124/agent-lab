@@ -19,97 +19,27 @@ from apps.crm.services.crm_summary_broadcast import broadcast_crm_daily_summary_
 from apps.crm.services.crm_task_broadcast import publish_crm_task_snapshot_for_user
 from apps.crm.services.namespace_notification_recipients import (
     normalize_namespace_for_broadcast,
-    resolve_user_ids_for_namespace_broadcast,
 )
 from apps.crm.services.task_service import ALL_NAMESPACES_TASK_KEY
+from apps.crm_worker.tasks.crm_context import (
+    build_auth_token_for_company,
+    set_crm_context,
+)
 from apps.crm_worker.tasks.task_names import (
     CRM_REBUILD_DAILY_SUMMARY,
     CRM_REBUILD_PERIOD_SUMMARY,
     CRM_RECONCILE_DAILY_SUMMARY,
 )
-from core.context import Context, set_context
 from core.logging import get_logger
-from core.models.i18n_models import Language
-from core.models.identity_models import User
 from core.tasks import platform_task
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject
-from core.utils.tokens import TokenType, get_token_service
-from core.websocket.publisher import Notification, NotificationType, notify_user
+from core.websocket.publisher import Notification, NotificationType, notify_company
 
 if TYPE_CHECKING:
     from apps.crm.container import CRMContainer
 
 logger = get_logger(__name__)
-
-# user_id из set_crm_context без реального пользователя — не искать в user_repository
-_WORKER_PLACEHOLDER_USER_IDS = frozenset({"crm-worker"})
-
-
-async def set_crm_context(
-    company_id: str,
-    namespace: str | None = None,
-    auth_token: str | None = None,
-    user_id: str | None = None,
-    interface_language: str | None = None,
-) -> None:
-    if namespace is None:
-        normalized_namespace = ""
-    else:
-        s = str(namespace).strip()
-        if not s:
-            raise ValueError(
-                "namespace: пустая строка недопустима, передайте None если контекст без пространства"
-            )
-        normalized_namespace = s
-    resolved_user_id = user_id or "crm-worker"
-    lang = Language(interface_language) if interface_language is not None else Language.RU
-    container = get_crm_container()
-    company_row = await container.company_repository.get(company_id)
-    if company_row is None:
-        raise ValueError(f"Company not found for CRM worker context: {company_id}")
-    context = Context(
-        user=User(user_id=resolved_user_id, name="CRM Worker"),
-        active_company=company_row,
-        session_id=f"crm-worker:{company_id}",
-        channel="taskiq",
-        active_namespace=normalized_namespace,
-        auth_token=auth_token,
-        language=lang,
-    )
-    set_context(context)
-
-
-async def build_auth_token_for_company(company_id: str, user_id: str | None) -> str:
-    container = get_crm_container()
-    resolved_user_id = user_id
-    if resolved_user_id in _WORKER_PLACEHOLDER_USER_IDS:
-        resolved_user_id = None
-    if not resolved_user_id:
-        company = await container.company_repository.get(company_id)
-        if company is None:
-            raise ValueError(f"Company not found for daily summary rebuild: {company_id}")
-        if company.owner_user_id:
-            resolved_user_id = company.owner_user_id
-        elif company.members:
-            member_ids = list(company.members.keys())
-            if not member_ids:
-                raise ValueError(f"Company has empty members map: {company_id}")
-            resolved_user_id = member_ids[0]
-        else:
-            raise ValueError(f"No owner_user_id/members for company {company_id}")
-
-    user = await container.user_repository.get(resolved_user_id)
-    if user is None:
-        raise ValueError(f"User not found for daily summary auth token: {resolved_user_id}")
-
-    token_service = get_token_service()
-    return token_service.create_token(
-        user_id=resolved_user_id,
-        company_id=company_id,
-        roles=user.companies.get(company_id, []),
-        token_type=TokenType.SESSION,
-    )
 
 
 async def _notify_daily_summary_updated(
@@ -125,16 +55,9 @@ async def _notify_daily_summary_updated(
         namespace=namespace,
         date_str=date_str,
         state=summary_state,
-        company_repository=container.company_repository,
-        access_grant_repository=container.access_grant_repository,
+        authz=container.authz_service,
     )
     normalized_namespace = normalize_namespace_for_broadcast(namespace)
-    recipient_user_ids = await resolve_user_ids_for_namespace_broadcast(
-        company_id=company_id,
-        namespace=normalized_namespace,
-        company_repository=container.company_repository,
-        access_grant_repository=container.access_grant_repository,
-    )
 
     notification_data: JsonObject = {
         "event": "crm/daily_summary/updated",
@@ -143,22 +66,21 @@ async def _notify_daily_summary_updated(
         "date": date_str,
         "summary_state": summary_state,
     }
-    for user_id in recipient_user_ids:
-        await notify_user(
-            user_id=user_id,
-            notification=Notification(
-                type=NotificationType.CRM_DAILY_SUMMARY_UPDATED,
-                title="Daily Summary обновлён",
-                title_i18n_key="crm:notifications.daily_summary_updated_title",
-                message=f"Обновлена сводка за {date_str}",
-                message_i18n_key="crm:notifications.daily_summary_updated_message",
-                message_i18n_vars={"date": date_str},
-                service="crm",
-                action_url="/crm/notes",
-                action_label_i18n_key="crm:notifications.open_crm",
-                data=notification_data,
-            ),
-        )
+    await notify_company(
+        company_id=company_id,
+        notification=Notification(
+            type=NotificationType.CRM_DAILY_SUMMARY_UPDATED,
+            title="Daily Summary обновлён",
+            title_i18n_key="crm:notifications.daily_summary_updated_title",
+            message=f"Обновлена сводка за {date_str}",
+            message_i18n_key="crm:notifications.daily_summary_updated_message",
+            message_i18n_vars={"date": date_str},
+            service="crm",
+            action_url="/crm/notes",
+            action_label_i18n_key="crm:notifications.open_crm",
+            data=notification_data,
+        ),
+    )
 
 
 async def _snapshot_crm_task_if_present(

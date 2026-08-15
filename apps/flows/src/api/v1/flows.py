@@ -38,6 +38,7 @@ from apps.flows.src.models.flow_speech_settings import FlowSpeechSettings
 from apps.flows.src.services.agent_toolkit_service import (
     get_toolkit_ids_for_flow,
     set_flow_toolkit_membership,
+    toolkit_ids_by_flow_ids,
 )
 from apps.flows.src.services.flow_dataflow_inspector import (
     inspect_flow_dataflow,
@@ -54,8 +55,11 @@ from apps.flows.src.services.flow_speech_resolve import (
 from apps.flows.src.services.flow_validator import FlowValidator
 from apps.flows.src.services.flows_loader import FlowsLoader, load_tools_to_db
 from core.ai.runtime import resolve_voice_tts_ws_voice
+from core.authz.errors import AuthzDenied
+from core.authz.models import AuthzObject
+from core.authz.types import AuthzRelation
 from core.config import get_settings
-from core.context import get_context
+from core.context import get_context, require_context
 from core.events import publish_event_to_user
 from core.identity.embed_guest_turns import EMBED_SESSION_ID_METADATA_KEY
 from core.identity.flow_preview_handoff import store_flow_preview_handoff
@@ -119,6 +123,84 @@ _FLOW_PREVIEW_SHARE_TTL_SECONDS = 86400
 _GRAPH_NODE_MAP_ADAPTER: TypeAdapter[dict[str, GraphNodeConfig]] = TypeAdapter(
     dict[str, GraphNodeConfig]
 )
+
+
+async def _sync_flow_authz(container: FlowContainer, flow_config: FlowConfig) -> None:
+    ctx = require_context()
+    if ctx.active_company is None:
+        raise HTTPException(status_code=400, detail="Компания не выбрана")
+    await container.flow_access_service.sync_flow_saved(
+        flow_config,
+        company_id=ctx.active_company.company_id,
+        owner_user_id=ctx.user.user_id,
+    )
+
+
+async def _persist_flow_with_authz(
+    container: FlowContainer, flow_config: FlowConfig
+) -> None:
+    previous = await container.flow_repository.get(flow_config.flow_id)
+    _ = await container.flow_repository.set(flow_config)
+    try:
+        await _sync_flow_authz(container, flow_config)
+    except Exception:
+        if previous is None:
+            _ = await container.flow_repository.delete(flow_config.flow_id)
+        else:
+            _ = await container.flow_repository.set(previous)
+        raise
+
+
+def _actor_user_id() -> str:
+    return require_context().user.user_id
+
+
+async def _require_company_member(container: FlowContainer) -> None:
+    ctx = require_context()
+    if ctx.active_company is None:
+        raise HTTPException(status_code=400, detail="Компания не выбрана")
+    await container.authz_service.require_can_view(
+        AuthzObject.company(ctx.active_company.company_id),
+        user_id=ctx.user.user_id,
+    )
+
+
+async def _require_view_flow(container: FlowContainer, flow_id: str) -> None:
+    await container.authz_service.require_can_view(
+        AuthzObject.flow(flow_id), user_id=_actor_user_id()
+    )
+
+
+async def _require_edit_flow(container: FlowContainer, flow_id: str) -> None:
+    await container.authz_service.require_can_edit(
+        AuthzObject.flow(flow_id), user_id=_actor_user_id()
+    )
+
+
+async def _authorize_reload_from_bundle(container: FlowContainer, flow_id: str) -> bool:
+    """
+    Перезапись существующего flow — ``can_edit``.
+
+    Установка каталожного bundle без FGA tuples — член компании (как POST /flows).
+    Если tuples уже есть, а ``can_edit`` нет — 403, без overwrite чужого объекта.
+    """
+    actor = _actor_user_id()
+    flow_obj = AuthzObject.flow(flow_id)
+    if await container.authz_service.can_edit(flow_obj, user_id=actor):
+        return False
+    existing_tuples = await container.authz_service.list_tuples(flow_obj)
+    if existing_tuples:
+        await container.authz_service.require_can_edit(flow_obj, user_id=actor)
+    await _require_company_member(container)
+    return True
+
+
+async def _require_share_flow(container: FlowContainer, flow_id: str) -> None:
+    await container.authz_service.require_relation(
+        AuthzRelation.CAN_SHARE,
+        AuthzObject.flow(flow_id),
+        user_id=_actor_user_id(),
+    )
 
 
 def _preview_share_base_urls(request: Request) -> tuple[str, str]:
@@ -305,6 +387,7 @@ async def _get_bundle_update_flags(
         node_repository=container.node_repository,
         tool_repository=container.tool_repository,
         registry_path=flows_root / "registry.yaml",
+        flow_access_service=container.flow_access_service,
     )
     # Иначе _defaults пустой: _apply_defaults не мержит registry.yaml defaults.llm,
     # а после reload в БД llm уже с defaults — вечный has_bundle_update.
@@ -926,6 +1009,7 @@ async def inspect_dataflow(
     interface: FlowInterfaceConfig | None = request.interface
 
     if not nodes and request.flow_id:
+        await _require_view_flow(container, request.flow_id)
         flow_cfg = await container.flow_repository.get(request.flow_id)
         if flow_cfg is None:
             raise HTTPException(status_code=404, detail=f"Flow not found: {request.flow_id}")
@@ -976,8 +1060,10 @@ async def validate_flow(
     - Ссылки на агенты, tools, subflows
     - Переменные @var:
     - Парсит inline code на обращения к state
-    - Пробует собрать исполняемый flow
+    -     Пробует собрать исполняемый flow
     """
+    if request.flow_id:
+        await _require_view_flow(container, request.flow_id)
     validator = FlowValidator(
         flow_repository=container.flow_repository,
         tool_repository=container.tool_repository,
@@ -1019,17 +1105,30 @@ async def list_flows(
     limit: Annotated[int, Query(ge=1, le=2000, description="Максимум flows")] = 500,
     offset: Annotated[int, Query(ge=0, description="Смещение для пагинации")] = 0,
 ) -> OffsetPage[FlowResponse]:
-    """Список всех flows с опциональным фильтром по типу (local/external)"""
-    flows, total = await asyncio.gather(
-        container.flow_repository.list(limit=limit, offset=offset),
-        container.flow_repository.count_all(),
-    )
+    """Список flows компании: catalog index ∩ OpenFGA ``can_view`` на окно страницы.
 
+    ``total`` — размер каталога компании (как ``GET /tools``), items — только
+    viewable. Check идёт окнами ``offset+limit``, не по всему leftover-каталогу.
+    """
+    index = await container.flow_repository.list_index()
     if type is not None:
-        flows = [f for f in flows if f.type == type]
+        index = [row for row in index if row.type == type]
+    catalog_ids = [row.flow_id for row in index]
+    page_ids = await container.flow_access_service.page_viewable_flow_ids(
+        catalog_ids,
+        user_id=_actor_user_id(),
+        offset=offset,
+        limit=limit,
+    )
+    total = len(catalog_ids)
+    by_id = await container.flow_repository.get_many(page_ids)
+    flows = [by_id[flow_id] for flow_id in page_ids if flow_id in by_id]
 
     flows_root = Path(__file__).resolve().parents[3]
-    bundle_update_flags = await _get_bundle_update_flags(flows, container, flows_root)
+    bundle_update_flags, toolkit_ids_by_flow = await asyncio.gather(
+        _get_bundle_update_flags(flows, container, flows_root),
+        toolkit_ids_by_flow_ids(container.agent_toolkit_repository, page_ids),
+    )
 
     result: list[FlowResponse] = []
     for f in flows:
@@ -1052,7 +1151,7 @@ async def list_flows(
                     store_card_image_url=f.store_card_image_url,
                     interface=f.interface,
                     employee=f.employee,
-                    agent_toolkit_ids=await _flow_agent_toolkit_ids(container, f.flow_id),
+                    agent_toolkit_ids=toolkit_ids_by_flow[f.flow_id],
                     entry=f.entry,
                     nodes=f.nodes,
                     edges=f.edges,
@@ -1072,7 +1171,7 @@ async def list_flows(
                     hidden=f.hidden,
                     source=f.source,
                     employee=f.employee,
-                    agent_toolkit_ids=await _flow_agent_toolkit_ids(container, f.flow_id),
+                    agent_toolkit_ids=toolkit_ids_by_flow[f.flow_id],
                     has_bundle_update=bundle_update_flags.get(f.flow_id, False),
                     store_card_image_url=f.store_card_image_url,
                     interface=f.interface,
@@ -1095,6 +1194,7 @@ async def list_store_bundles(container: ContainerDep) -> ListResponse[FlowStoreB
 
     Возвращает только public=true из registry.yaml, исключая hidden=true в flow.json.
     """
+    await _require_company_member(container)
     flows_root = Path(__file__).resolve().parents[3]
     registry_path = flows_root / "registry.yaml"
     bundles_dir = flows_root / "bundles"
@@ -1224,6 +1324,7 @@ async def _validate_tool_nodes(nodes: dict[str, JsonObject], container: FlowCont
 @router.post("/", response_model=FlowResponse)
 async def create_flow(request: FlowCreateRequest, container: ContainerDep) -> FlowResponse:
     """Создаёт flow."""
+    await _require_company_member(container)
     variables = _flow_variable_models(request.variables, "variables")
     request_nodes = _graph_nodes_payload(request.nodes)
 
@@ -1281,7 +1382,7 @@ async def create_flow(request: FlowCreateRequest, container: ContainerDep) -> Fl
         employee=request.employee,
     )
 
-    _ = await container.flow_repository.set(flow_config)
+    _ = await _persist_flow_with_authz(container, flow_config)
     await sync_flow_employee(container, flow_config)
     await set_flow_toolkit_membership(
         container.agent_toolkit_repository,
@@ -1331,6 +1432,7 @@ async def get_flow_voice_session_query(
     профиле не заполняются — их на стороне ``apps/voice`` дозаполняет ``create_*_provider`` /
     ``core.ai.runtime`` из company и ``settings.voice``.
     """
+    await _require_view_flow(container, flow_id)
     cfg = await container.flow_repository.get(flow_id)
     if cfg is None:
         raise HTTPException(status_code=404, detail="Flow not found")
@@ -1361,6 +1463,7 @@ async def get_flow_voice_session_query(
 async def get_flow(flow_id: str, container: ContainerDep) -> FlowResponse:
     """Получает flow по ID."""
     try:
+        await _require_view_flow(container, flow_id)
         flow_cfg = await container.flow_repository.get(flow_id)
         if flow_cfg is None:
             raise HTTPException(status_code=404, detail="Flow not found")
@@ -1410,6 +1513,8 @@ async def get_flow(flow_id: str, container: ContainerDep) -> FlowResponse:
         )
     except HTTPException:
         raise
+    except AuthzDenied:
+        raise
     except Exception as e:
         logger.error(f"Ошибка получения flow '{flow_id}': {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Ошибка получения flow: {str(e)}")
@@ -1423,9 +1528,13 @@ async def reload_flow_from_bundle(
     """
     Загружает/перезаписывает flow в БД из каталога ``apps/flows/bundles/<flow_id>/``.
     """
+    catalog_install = await _authorize_reload_from_bundle(container, flow_id)
     # Для установки bundle в компанию требуются все code-tools из runtime-модулей.
     # Иначе инлайнинг упадёт на tool_id, которого нет в tool_repository текущей компании.
-    _ = await load_tools_to_db(container.tool_repository)
+    _ = await load_tools_to_db(
+        container.tool_repository,
+        flow_access_service=container.flow_access_service,
+    )
 
     flows_root = Path(__file__).resolve().parents[3]
     bundles_dir = flows_root / "bundles"
@@ -1437,6 +1546,7 @@ async def reload_flow_from_bundle(
         node_repository=container.node_repository,
         tool_repository=container.tool_repository,
         registry_path=registry_path,
+        flow_access_service=container.flow_access_service,
     )
 
     try:
@@ -1444,6 +1554,8 @@ async def reload_flow_from_bundle(
     except ValueError as e:
         msg = str(e).lower()
         if "не найден" in msg or "not found" in msg:
+            if catalog_install:
+                raise HTTPException(status_code=403, detail=str(e)) from e
             raise HTTPException(status_code=404, detail=str(e)) from e
         raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -1481,6 +1593,7 @@ async def preview_flow_interface_contract(
     The editor renders this instead of guessing: the same server projector runs
     on submit, so preview and runtime can never diverge.
     """
+    await _require_view_flow(container, flow_id)
     _ = container
     ctx = get_context()
     if ctx is None:
@@ -1543,6 +1656,7 @@ async def create_flow_preview_share(
     container: ContainerDep,
 ) -> FlowPreviewShareResponse:
     """Одноразовая короткая ссылка на гостевую страницу с embed-чатом по flow/ветке."""
+    await _require_share_flow(container, flow_id)
     ctx = get_context()
     if ctx is None:
         raise HTTPException(status_code=401, detail="Unauthorized")
@@ -1672,6 +1786,7 @@ async def update_flow(
     container: ContainerDep,
 ) -> FlowResponse:
     """Обновляет flow (новая версия)."""
+    await _require_edit_flow(container, flow_id)
     existing = await container.flow_repository.get(flow_id)
     if existing is None:
         raise HTTPException(status_code=404, detail="Flow not found")
@@ -1713,7 +1828,7 @@ async def update_flow(
         employee=request.employee,
     )
 
-    _ = await container.flow_repository.set(flow_config)
+    _ = await _persist_flow_with_authz(container, flow_config)
     await sync_flow_employee(container, flow_config)
     await set_flow_toolkit_membership(
         container.agent_toolkit_repository,
@@ -1781,6 +1896,7 @@ async def bulk_delete_nodes(
     container: ContainerDep,
 ) -> BulkDeleteNodesResponse:
     """Удаляет несколько нод из flow вместе со связанными рёбрами."""
+    await _require_edit_flow(container, flow_id)
     if not request.node_ids:
         raise HTTPException(status_code=400, detail="node_ids is required")
 
@@ -1826,7 +1942,7 @@ async def bulk_delete_nodes(
         speech=existing.speech,
         interface=existing.interface,
     )
-    _ = await container.flow_repository.set(flow_config)
+    _ = await _persist_flow_with_authz(container, flow_config)
 
     ctx = get_context()
     if ctx and ctx.user and ctx.user.user_id:
@@ -1861,6 +1977,7 @@ async def update_flow_metadata(
     container: ContainerDep,
 ) -> FlowMetadataResponse:
     """Обновляет метаданные flow (sticky_notes и пр.) без полной перезаписи."""
+    await _require_edit_flow(container, flow_id)
     existing = await container.flow_repository.get(flow_id)
     if existing is None:
         raise HTTPException(status_code=404, detail="Flow not found")
@@ -1888,7 +2005,7 @@ async def update_flow_metadata(
         speech=existing.speech,
         interface=existing.interface,
     )
-    _ = await container.flow_repository.set(flow_config)
+    _ = await _persist_flow_with_authz(container, flow_config)
 
     return FlowMetadataResponse(flow_id=flow_id, metadata=metadata)
 
@@ -1896,10 +2013,14 @@ async def update_flow_metadata(
 @router.delete("/{flow_id}")
 async def delete_flow(flow_id: str, container: ContainerDep) -> JsonObject:
     """Удаляет flow."""
+    await _require_edit_flow(container, flow_id)
+    existing = await container.flow_repository.get(flow_id)
     deleted = await container.flow_repository.delete(flow_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Flow not found")
 
+    branch_ids = list(existing.branches.keys()) if existing is not None else []
+    await container.flow_access_service.sync_flow_deleted(flow_id, branch_ids=branch_ids)
     await remove_flow_employee(container, flow_id)
 
     ctx = get_context()
@@ -1916,6 +2037,7 @@ async def delete_flow(flow_id: str, container: ContainerDep) -> JsonObject:
 @router.get("/{flow_id}/versions", response_model=ListResponse[str])
 async def list_versions(flow_id: str, container: ContainerDep) -> ListResponse[str]:
     """Список версий flow."""
+    await _require_view_flow(container, flow_id)
     versions = await container.flow_repository.list_versions(flow_id)
     return ListResponse[str](items=versions)
 
@@ -1927,6 +2049,7 @@ async def get_version(
     container: ContainerDep,
 ) -> FlowResponse:
     """Конкретная версия flow."""
+    await _require_view_flow(container, flow_id)
     version_cfg = await container.flow_repository.get_version(flow_id, version)
     if version_cfg is None:
         raise HTTPException(status_code=404, detail="Version not found")
@@ -1972,6 +2095,7 @@ async def rollback_version(
 
     Делает указанную версию latest (не удаляет новые версии).
     """
+    await _require_edit_flow(container, flow_id)
     success = await container.flow_repository.rollback_to_version(flow_id, version)
     if not success:
         raise HTTPException(status_code=404, detail="Version not found")

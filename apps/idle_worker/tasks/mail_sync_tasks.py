@@ -19,6 +19,7 @@ from apps.idle_worker.tasks.mail_job_context import (
     enter_mail_binding_context,
     leave_mail_binding_context,
 )
+from apps.idle_worker.tasks.mail_recipients import mailbox_recipient_user_ids
 from core.events import publish_event_to_users
 from core.logging import get_logger
 from core.mail.enqueue import enqueue_mail_sync_tick_continuation
@@ -80,16 +81,7 @@ def _classify_failure(error: BaseException) -> MailSyncErrorKind:
 async def _recipient_user_ids(
     container: IdleWorkerContainer, binding: MailboxBinding
 ) -> list[str]:
-    user_ids: list[str] = []
-    if binding.user_id is not None and binding.user_id.strip():
-        user_ids.append(binding.user_id)
-    members = await container.mailbox_binding_member_repository.list_for_binding(
-        binding.mailbox_binding_id
-    )
-    for member in members:
-        if member.user_id not in user_ids:
-            user_ids.append(member.user_id)
-    return user_ids
+    return await mailbox_recipient_user_ids(container, binding)
 
 
 async def _publish_message_upserted(

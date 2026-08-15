@@ -16,6 +16,7 @@ _SERVICE_TO_FILES_ROUTE_SEGMENT: dict[str, str] = {
     "code_runner_csharp": "code-runner-csharp",
     "flows_worker": "flows",
     "crm_worker": "crm",
+    "crm_summary_worker": "crm",
     "rag_worker": "rag",
     "sync_worker": "sync",
     "search_worker": "search",

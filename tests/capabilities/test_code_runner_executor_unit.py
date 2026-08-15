@@ -190,6 +190,18 @@ class TestGoStaticSourceGuard:
         )
         executor._validate_user_source(source)
 
+    def test_blocks_stdlib_outside_allowlist(self) -> None:
+        executor = GoSandboxExecutor()
+        source = (
+            "package main\n\n"
+            'import "net/http"\n\n'
+            "func Run(args map[string]any, state map[string]any) (any, error) {\n"
+            "    return nil, nil\n"
+            "}\n"
+        )
+        with pytest.raises(PermissionError, match="net/http"):
+            executor._validate_user_source(source)
+
     def test_go_imports_parses_single_and_multi_line(self) -> None:
         executor = GoSandboxExecutor()
         single = 'package main\nimport "fmt"\n'
@@ -231,6 +243,7 @@ class TestCsharpStaticSourceGuard:
             "using System;\n"
             "using System.Collections.Generic;\n"
             "using System.Linq;\n"
+            "using System.Text.RegularExpressions;\n"
             "using System.Threading.Tasks;\n\n"
             "object? Run(Dictionary<string, object?> args, Dictionary<string, object?> state)\n"
             "{\n"

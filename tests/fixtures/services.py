@@ -19,7 +19,9 @@ from urllib.request import urlopen
 
 import pytest
 
-_READINESS_RETRY_SEC = 5.0
+# Session-фикстура на каждом xdist gw: стек уже up, но health может
+# не ответить 5 с под stampede старта. test_stack сам ждёт до 90 с.
+_READINESS_RETRY_SEC = 30.0
 
 
 def require_http_service(service_name: str, port: int, readiness_path: str = "/health") -> None:
@@ -97,12 +99,12 @@ def sandbox_services(
         code_runner_csharp_service,
     )
     return {
-        "flows": "http://localhost:9001",
-        "capability_gateway": "http://localhost:9016",
-        "code_runner_python": "http://localhost:9017",
-        "code_runner_node": "http://localhost:9018",
-        "code_runner_go": "http://localhost:9019",
-        "code_runner_csharp": "http://localhost:9020",
+        "flows": "http://127.0.0.1:9001",
+        "capability_gateway": "http://127.0.0.1:9016",
+        "code_runner_python": "http://127.0.0.1:9017",
+        "code_runner_node": "http://127.0.0.1:9018",
+        "code_runner_go": "http://127.0.0.1:9019",
+        "code_runner_csharp": "http://127.0.0.1:9020",
     }
 
 
@@ -204,18 +206,18 @@ def all_services(
         provider_litserve_service,
     )
     return {
-        "flows": "http://localhost:9001",
-        "rag": "http://localhost:9002",
-        "crm": "http://localhost:9003",
-        "frontend": "http://localhost:9004",
-        "sync": "http://localhost:9005",
-        "office": "http://localhost:9008",
-        "search": "http://localhost:9010",
-        "provider_litserve": "http://localhost:9014",
-        "capability_gateway": "http://localhost:9016",
-        "code_runner_python": "http://localhost:9017",
-        "code_runner_node": "http://localhost:9018",
-        "code_runner_go": "http://localhost:9019",
-        "code_runner_csharp": "http://localhost:9020",
-        "s3_endpoint": "http://localhost:19002",
+        "flows": "http://127.0.0.1:9001",
+        "rag": "http://127.0.0.1:9002",
+        "crm": "http://127.0.0.1:9003",
+        "frontend": "http://127.0.0.1:9004",
+        "sync": "http://127.0.0.1:9005",
+        "office": "http://127.0.0.1:9008",
+        "search": "http://127.0.0.1:9010",
+        "provider_litserve": "http://127.0.0.1:9014",
+        "capability_gateway": "http://127.0.0.1:9016",
+        "code_runner_python": "http://127.0.0.1:9017",
+        "code_runner_node": "http://127.0.0.1:9018",
+        "code_runner_go": "http://127.0.0.1:9019",
+        "code_runner_csharp": "http://127.0.0.1:9020",
+        "s3_endpoint": "http://127.0.0.1:19002",
     }

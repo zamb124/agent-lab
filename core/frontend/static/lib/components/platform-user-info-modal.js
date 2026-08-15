@@ -494,20 +494,19 @@ export class PlatformUserInfoModal extends PlatformFormModal {
     _canEditRoles() {
         if (!hasFactory(TEAM_MEMBERS_RESOURCE_NAME)) return false;
         const auth = this._authSel.value;
-        const raw = auth.user && auth.user.raw;
-        if (!raw || !Array.isArray(raw.roles)) return false;
-        return raw.roles.includes('owner') || raw.roles.includes('admin');
+        const user = auth.user;
+        return Boolean(user && user.canAdmin === true);
     }
 
     _canActAs(user) {
         if (!user || user.is_flow_employee !== true) return false;
         const auth = this._authSel.value;
-        const raw = auth.user && auth.user.raw;
-        if (!raw) return false;
-        const currentId = raw.user_id || (auth.user && auth.user.id);
+        const current = auth.user;
+        if (!current) return false;
+        const currentId = current.user_id || current.id;
         const curators = Array.isArray(user.curator_user_ids) ? user.curator_user_ids : [];
         if (currentId && curators.includes(currentId)) return true;
-        return Array.isArray(raw.roles) && (raw.roles.includes('owner') || raw.roles.includes('admin'));
+        return current.canAdmin === true;
     }
 
     _isMemberOwner(memberRoles) {
@@ -867,6 +866,12 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         window.location.href = `/frontend/team?focus=${encodeURIComponent(this.userId)}`;
     }
 
+    _openAccess() {
+        if (typeof this.userId !== 'string' || this.userId.length === 0) return;
+        super.close();
+        window.location.href = `/access?user_id=${encodeURIComponent(this.userId)}`;
+    }
+
     _openSharedChannel(channel) {
         if (!channel || typeof channel.channel_id !== 'string' || channel.channel_id === '') return;
         super.close();
@@ -924,6 +929,11 @@ export class PlatformUserInfoModal extends PlatformFormModal {
                         ${this.t('user_info_modal.action_cancel')}
                     </platform-button>
                     <span class="spacer"></span>
+                    ${this._canEditRoles() ? html`
+                        <platform-button variant="ghost" @click=${() => this._openAccess()}>
+                            ${this.t('user_info_modal.action_open_access')}
+                        </platform-button>
+                    ` : null}
                     <platform-button variant="ghost" @click=${() => this._logout()}>
                         ${this.t('user_info_modal.action_logout')}
                     </platform-button>
@@ -960,6 +970,11 @@ export class PlatformUserInfoModal extends PlatformFormModal {
                 <platform-button variant="secondary" @click=${() => this._openTeamPage()}>
                     ${this.t('user_info_modal.action_open_team')}
                 </platform-button>
+                ${this._canEditRoles() ? html`
+                    <platform-button variant="secondary" @click=${() => this._openAccess()}>
+                        ${this.t('user_info_modal.action_open_access')}
+                    </platform-button>
+                ` : null}
                 ${showActAs ? html`
                     <platform-button variant="ghost" @click=${() => this._actAs(resolved.user)}>
                         ${this.t('user_info_modal.action_act_as')}

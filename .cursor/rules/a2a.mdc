@@ -78,6 +78,7 @@ Artifact stream имеет stable непустой `artifactId`: `append=false` 
 
 - HTTP API: `apps/flows/src/api/a2a.py` + `A2AChannel`.
 - Universal Flow UI: `core/frontend/static/lib/flow-ui/protocol/` + `<platform-flow-ui>`; host pages не имеют собственного transport/reducer.
+- Outbound: `core.clients.a2a_client.A2AClient`. `send_task` — convenience text Part **без** AgentCard (`negotiate_extensions=False`). A2UI — только `negotiate_extensions=True` или `send_message` с `activated_extensions`. CRM analyze/summarize/dedup — internal skills, не Flow UI; лишний `GET /.well-known/agent-card.json` на каждый `send_task` запрещён. `send_task` всегда `returnImmediately=true` и ждёт terminal через `GetTask` (не держит granian на весь граф). Как `ServiceClient`: при `active_company` всегда signed `X-Platform-Context-*` (TaskIQ crm_worker часто без JWT на hop к `:9001`).
 - Outbound: `core/clients/a2a_client.py` возвращает structured Task/Artifacts/Parts; text — derived convenience. `RemoteFlowNode` сохраняет/проецирует exact remote artifacts (direct URL; Skill ID = `branch_id` → `metadata.branch`; `metadata_template` → `params.metadata` с `@state:`/`@var:`).
 - Internal platform `ExecutionTaskState` остаётся kebab-case; маппинг на wire — `core.a2a.task_states`.
 
@@ -86,6 +87,7 @@ Artifact stream имеет stable непустой `artifactId`: `append=false` 
 - Conformance: `tests/flows/a2a_conformance/` — без monkeypatch/MockLLM; code_node + real stack (`make test-up`).
 - Push webhooks: `idle_worker` в `scripts/test_stack.py` (очередь `idle`); регистрация URL — в `SendMessage.configuration.taskPushNotificationConfig` до старта task (иначе race с terminal).
 - Shared builders: `tests/flows/_a2a_v1.py`.
+- HTTP e2e `SendMessage` для llm_node/tools: `configuration.returnImmediately=true` + `GetTask` poll (как `A2AClient.send_task`). Blocking `SendMessage` занимает flows granian на весь граф; `flows_client_http` без явного timeout = httpx 5 с → `ReadTimeout` под `-n10`.
 - CI: `make check-a2a-fixtures` в `test-static`.
 
 ## Запреты

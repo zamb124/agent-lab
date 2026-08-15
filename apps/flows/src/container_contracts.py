@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Protocol, TypeAlias, TypedDict, cast
 
+from core.authz.service import AuthzService
 from core.mail.service import MailService
 from core.types import JsonObject, JsonValue
 from core.worktracker.service import WorkItemService
@@ -44,6 +45,7 @@ if TYPE_CHECKING:
     from apps.flows.src.models.registry_contracts import RegistryFlowSchema
     from apps.flows.src.runners.remote import RemoteCodeRunner
     from apps.flows.src.services.agent_skill_service import AgentSkillService
+    from apps.flows.src.services.flow_access_service import FlowAccessService
     from apps.flows.src.services.flow_discovery import FlowDiscoveryService
     from apps.flows.src.services.flow_ui_session_service import FlowUISessionService
     from apps.flows.src.services.flow_ui_share_service import FlowUIShareService
@@ -64,6 +66,7 @@ if TYPE_CHECKING:
     from core.clients.redis_client import RedisClient
     from core.clients.tempo_client import TempoClient
     from core.compiler import GraphCompiler
+    from core.data_tables.service import DataTableService
     from core.db.repositories.company_repository import CompanyRepository
     from core.db.repositories.embed_config_repository import EmbedConfigRepository
     from core.db.repositories.embed_mapping_repository import EmbedMappingRepository
@@ -286,6 +289,9 @@ class FlowRuntimeContainer(Protocol):
     def redis_client(self) -> RedisClient: ...
 
     @property
+    def authz_service(self) -> AuthzService: ...
+
+    @property
     def a2a_task_repository(self) -> A2ATaskRepository: ...
 
     @property
@@ -299,6 +305,9 @@ class FlowRuntimeContainer(Protocol):
 
     @property
     def flow_ui_share_service(self) -> "FlowUIShareService": ...
+
+    @property
+    def flow_access_service(self) -> "FlowAccessService": ...
 
     @property
     def mail_service(self) -> MailService: ...
@@ -383,6 +392,9 @@ class FlowRuntimeContainer(Protocol):
 
     @property
     def files_service(self) -> FilesService: ...
+
+    @property
+    def data_table_service(self) -> DataTableService: ...
 
     @property
     def base_tool_class(self) -> type[BaseTool]: ...

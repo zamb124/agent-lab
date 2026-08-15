@@ -1,5 +1,6 @@
 """Фикстуры offline-тестов почты."""
 
+
 from __future__ import annotations
 
 import pytest
@@ -9,7 +10,6 @@ from core.config.models import MailConfig
 from core.context import clear_context, set_context
 from core.mail.repositories import (
     CompanyMailConnectionRepository,
-    MailboxBindingMemberRepository,
     MailboxBindingRepository,
     MailboxFolderRepository,
     MailboxSyncCursorRepository,
@@ -19,6 +19,7 @@ from core.mail.service import MailService
 from core.models.context_models import Context
 from core.models.identity_models import Company, User, UserStatus
 from tests.core.mail.fakes import RecordingMailServerPort
+from tests.fixtures.auth import set_test_company_member_roles
 
 
 @pytest.fixture()
@@ -58,15 +59,6 @@ def mailbox_folder_repository(app) -> MailboxFolderRepository:
 
 
 @pytest.fixture()
-def mailbox_binding_member_repository(app) -> MailboxBindingMemberRepository:
-    _ = app
-    shared_url = get_settings().database.shared_url
-    if shared_url is None:
-        raise RuntimeError("DATABASE__SHARED_URL обязателен для mail tests")
-    return MailboxBindingMemberRepository(db_url=shared_url)
-
-
-@pytest.fixture()
 def mail_message_repository(app) -> MailMessageRepository:
     _ = app
     shared_url = get_settings().database.shared_url
@@ -87,7 +79,6 @@ def mail_service(
     mailbox_sync_cursor_repository: MailboxSyncCursorRepository,
     mailbox_folder_repository: MailboxFolderRepository,
     mail_message_repository: MailMessageRepository,
-    mailbox_binding_member_repository: MailboxBindingMemberRepository,
     recording_mail_port: RecordingMailServerPort,
     container,
 ) -> MailService:
@@ -97,7 +88,7 @@ def mail_service(
         sync_cursor_repository=mailbox_sync_cursor_repository,
         folder_repository=mailbox_folder_repository,
         message_repository=mail_message_repository,
-        member_repository=mailbox_binding_member_repository,
+        authz=container.authz_service,
         namespace_service=container.namespace_service,
         company_repository=container.company_repository,
         user_repository=container.user_repository,
@@ -135,6 +126,13 @@ async def seed_mail_company_member(
     )
     await container.user_repository.set(user)
     await container.company_repository.set(company)
+    await set_test_company_member_roles(
+        container.company_repository,
+        container.authz_service,
+        company_id=company_id,
+        user_id=user_id,
+        roles=["owner", "admin"],
+    )
     set_context(
         Context(
             user=user,

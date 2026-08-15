@@ -30,6 +30,7 @@ async def test_context_layer_merges_branch_resources_and_recalls_memory(
     mock_llm_capture,
     mock_llm_with_queue,
     auth_headers_system: dict[str, str],
+    system_user_id: str,
 ) -> None:
     """Ветки изолируют RAG, сохраняют memory и применяют node/resource overrides."""
     _ = app, rag_app
@@ -142,7 +143,7 @@ async def test_context_layer_merges_branch_resources_and_recalls_memory(
                 flow_id=flow_id,
                 branch_id="default",
                 node_id="agent",
-                user_id=f"user-{base_context_id}",
+                user_id=system_user_id,
                 content=memory_marker,
             )
         )

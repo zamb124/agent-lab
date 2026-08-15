@@ -57,6 +57,12 @@ class CRMSettings(BaseSettings):
         ge=1.0,
         description="Таймаут ожидания TaskIQ (analyze/apply) при синхронном HTTP: kiq + wait_result",
     )
+    analysis_a2a_timeout_seconds: float = Field(
+        default=90.0,
+        ge=15.0,
+        le=600.0,
+        description="Бюджет ожидания A2A (SendMessage returnImmediately + GetTask poll) для CRM skills, сек.",
+    )
     analysis_draft_repair_a2a_timeout_seconds: float = Field(
         default=120.0,
         ge=15.0,

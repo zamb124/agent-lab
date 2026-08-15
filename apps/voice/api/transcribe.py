@@ -13,16 +13,29 @@ from typing import Annotated
 from fastapi import APIRouter, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
+from apps.voice.dependencies import ContainerDep
 from apps.voice.services.voice_usage import record_stt_usage
 from core.ai.runtime import transcribe_audio_bytes
+from core.authz.models import AuthzObject
 from core.clients.speech_override import SpeechOverride, SpeechProviderName
-from core.context import require_context
+from core.context import get_context, require_context
 from core.files.audio_probe import probe_audio_duration_seconds_from_upload
 from core.logging import get_logger
 
 logger = get_logger(__name__)
 
 transcribe_router = APIRouter(prefix="/api/v1", tags=["voice-transcribe"])
+
+
+async def _require_company_view_when_user_context(
+    container: ContainerDep,
+    *,
+    company_id: str,
+) -> None:
+    context = get_context()
+    if context is None or context.active_company is None:
+        return
+    await container.authz_service.require_can_view(AuthzObject.company(company_id))
 
 
 class TranscribeResponse(BaseModel):
@@ -42,6 +55,7 @@ class TranscribeResponse(BaseModel):
     ),
 )
 async def transcribe_audio(
+    container: ContainerDep,
     file: UploadFile,
     provider: Annotated[SpeechProviderName | None, Form()] = None,
     model: Annotated[str | None, Form()] = None,
@@ -66,6 +80,8 @@ async def transcribe_audio(
             detail="Активная компания не определена в контексте запроса.",
         )
     company_id = company.company_id
+
+    await _require_company_view_when_user_context(container, company_id=company_id)
 
     override = SpeechOverride(provider=provider, model=model, language=language)
 

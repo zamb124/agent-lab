@@ -27,6 +27,7 @@ describe('mailEffect', () => {
     it('BINDINGS_LOAD_REQUESTED → BINDINGS_LOADED + folders', async () => {
         fetchMock.respondJson('GET', '/svc/api/mail/bindings/me', {
             items: [{ mailbox_binding_id: 'b1', is_default: true }],
+            can_admin: true,
         });
         const dispatched = [];
         await createMailEffect({ baseUrl: '/svc' })(
@@ -36,7 +37,9 @@ describe('mailEffect', () => {
                 dispatched,
             ),
         );
-        expect(dispatched.find((d) => d.type === MAIL_EVENTS.BINDINGS_LOADED).payload.items).toHaveLength(1);
+        const loaded = dispatched.find((d) => d.type === MAIL_EVENTS.BINDINGS_LOADED);
+        expect(loaded.payload.items).toHaveLength(1);
+        expect(loaded.payload.can_admin).toBe(true);
         expect(dispatched.some((d) => d.type === MAIL_EVENTS.FOLDERS_LOAD_REQUESTED)).toBe(true);
     });
 

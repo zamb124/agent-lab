@@ -117,7 +117,7 @@ async def _wait_until_task_completes(
     headers: dict[str, str],
     task_id: str,
 ) -> dict[str, object]:
-    deadline = time.monotonic() + 60.0
+    deadline = time.monotonic() + 90.0
     last: dict[str, object] = {}
     while time.monotonic() < deadline:
         response = await crm_client.get(

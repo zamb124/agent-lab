@@ -1,5 +1,5 @@
 /**
- * Code — служебные операции для редактора (autocomplete, docs, validate, execute, source).
+ * Code — служебные операции для редактора (LSP session, docs, validate, execute, source).
  * REST: `apps/flows/src/api/v1/code.py`.
  *
  * Все операции — `silent: true` (внутренний инструментарий редактора, тосты не нужны).
@@ -19,14 +19,18 @@ export function buildCodeQueryUrl(path, payload) {
     return `${path}${qs ? `?${qs}` : ''}`;
 }
 
-export const codeCompletionsOp = createAsyncOp({
-    name: 'flows/code_completions',
+export const codeLspSessionOp = createAsyncOp({
+    name: 'flows/code_lsp_session',
     silent: true,
-    restMirror: { method: 'GET', path: '/flows/api/v1/code/completions' },
+    restMirror: { method: 'POST', path: '/flows/api/v1/code/lsp/session' },
     request: async ({ payload }) => {
+        if (!payload || typeof payload !== 'object') {
+            throw new Error('codeLspSessionOp: payload required');
+        }
         return httpRequest({
-            method: 'GET',
-            url: buildCodeQueryUrl('/flows/api/v1/code/completions', payload),
+            method: 'POST',
+            url: '/flows/api/v1/code/lsp/session',
+            body: payload,
         });
     },
 });

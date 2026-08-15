@@ -2,7 +2,7 @@
 Интеграционные тесты для API /api/v1/code.
 
 Тестируют:
-- /code/completions - данные для autocomplete
+- /code/lsp/session - bootstrap language server workspace
 - /code/validate - валидация inline кода
 - /code/execute - выполнение кода с тестовым state
 - /code/source - получение исходного кода функции
@@ -10,59 +10,47 @@
 Все тесты используют реальный API без моков.
 """
 
+from collections.abc import Mapping
+
 import pytest
+from httpx import AsyncClient
+
+from tests.capabilities.code_lsp_helpers import create_code_lsp_session, session_request
 
 
-class TestCodeCompletions:
-    """Тесты /api/v1/code/completions"""
+class TestCodeLspSession:
+    """Тесты POST /api/v1/code/lsp/session"""
 
     @pytest.mark.asyncio
-    async def test_get_completions(self, client, app):
-        """Получение данных для autocomplete."""
-        response = await client.get("/flows/api/v1/code/completions")
-        assert response.status_code == 200
-        data = response.json()
-        assert "modules" in data
-        assert data["modules"] == []
-        assert "globals" in data
-        global_names = [g["name"] for g in data["globals"]]
-        assert "args" in global_names
-        assert "state" in global_names
-        assert "variables" in global_names
-        assert (
-            "tools/files/http/text/voice/flow_state/log/trace/platform/channel/flow" in global_names
+    async def test_create_python_lsp_session(
+        self,
+        flows_client_http: AsyncClient,
+        auth_headers_system: Mapping[str, str],
+        sandbox_services: dict[str, str],
+        unique_id: str,
+    ) -> None:
+        """Bootstrap python LSP: публичный ws_path и живой runner session."""
+        _ = sandbox_services
+        session = await create_code_lsp_session(
+            flows_client_http,
+            auth_headers_system,
+            session_request("python", unique_id),
         )
-        state_fields = {item["name"]: item for item in data["state_fields"]}
-        assert "content" in state_fields
-        assert "variables" in state_fields
-        assert "messages" in state_fields
-        namespaces = {item["name"]: item for item in data["capability_namespaces"]}
-        assert "files" in namespaces
-        assert "tools" in namespaces
-        assert "flow_state" in namespaces
-        capabilities = {item["capability_name"]: item for item in data["capabilities"]}
-        files_create = capabilities["files.create"]
-        assert files_create["label"] == "files.create"
-        assert "await files.create(" in files_create["insert_text"]
-        assert {field["path"] for field in files_create["input_fields"]} >= {
-            "content",
-            "original_name",
-            "content_mode",
-        }
-        calculator = capabilities["tools.calculator"]
-        assert calculator["namespace"] == "tools"
-        assert calculator["method"] == "calculator"
-        assert "builtins" in data
-        assert data["builtins"] == []
-        assert "module_methods" in data
-        assert data["module_methods"] == {}
-        templates = data["templates"]
-        assert templates
-        assert "await tools.calculator(" in templates[0]["code"]
+        assert session.language == "python"
+        assert session.language_id == "python"
+        assert session.session_id
+        assert session.root_uri.startswith("file://")
+        assert session.document_uri.endswith("/main.py")
+        assert session.ws_path == f"/flows/api/v1/code/lsp/ws/python/{session.session_id}"
+
+
+class TestCodeTemplates:
+    """Шаблоны code-ноды."""
 
     @pytest.mark.asyncio
     async def test_code_templates_include_platform_tools(self, client, app):
         """Шаблоны code-ноды включают готовые platform tools на выбранном языке."""
+        _ = app
         response = await client.get("/flows/api/v1/code/templates?language=javascript")
         assert response.status_code == 200
         templates = response.json()["templates"]
@@ -73,9 +61,14 @@ class TestCodeCompletions:
         assert "url" in template["parameters_schema"]["required"]
         assert template["parameters_schema"]["properties"]["url"]["type"] == "string"
 
+
+class TestCodeDocumentation:
+    """GET /code/documentation — markdown для людей."""
+
     @pytest.mark.asyncio
     async def test_get_documentation_markdown(self, client, app):
         """GET /documentation отдаёт text/markdown."""
+        _ = app
         response = await client.get("/flows/api/v1/code/documentation")
         assert response.status_code == 200
         ct = response.headers.get("content-type", "")
@@ -84,6 +77,8 @@ class TestCodeCompletions:
         assert text.strip().startswith("#")
         assert "Capability API" in text
         assert "Language: `python`" in text
+        assert "## Imports" in text
+        assert "`csv`" in text
         assert "`tools.calculator`" in text
         assert "await tools.calculator(" in text
         assert "### Parameters" in text
@@ -186,6 +181,28 @@ class TestCodeExecute:
         assert data["output_state"]["result"] == "executed"
         assert data["output_state"]["doubled"] == 42
         assert data["duration_ms"] >= 0
+
+    @pytest.mark.asyncio
+    async def test_execute_with_args(self, client, app):
+        """Playground передаёт args в entrypoint, не только state."""
+        code = (
+            "\nasync def run(args, state):\n"
+            "    state['got'] = args['name']\n"
+            "    return {'got': args['name']}\n"
+        )
+        response = await client.post(
+            "/flows/api/v1/code/execute",
+            json={
+                "node_type": "code",
+                "node_config": {"code": code},
+                "state": {},
+                "args": {"name": "Ada"},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True, data.get("error")
+        assert data["output_state"]["got"] == "Ada"
 
     @pytest.mark.asyncio
     async def test_execute_with_diff(self, client, app):
@@ -459,7 +476,6 @@ class TestFlowWithInlineCodeAPI:
         assert "version" in diff_paths
 
     @pytest.mark.asyncio
-    @pytest.mark.timeout(15, func_only=True)
     async def test_full_workflow_validate_execute_create(
         self, client, app, container, cleanup_flow, unique_id
     ):

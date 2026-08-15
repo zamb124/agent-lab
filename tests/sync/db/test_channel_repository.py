@@ -80,13 +80,16 @@ async def test_channel_members(
     )
     await channel_repo.create(ch)
 
-    assert await channel_repo.is_member(ch_mbr, "user_10", company_id=company_id) is False
+    ids_before = await channel_repo.list_settings_user_ids(ch_mbr, company_id=company_id)
+    assert "user_10" not in ids_before
 
-    await channel_repo.upsert_member(ch_mbr, "user_10", "member", company_id)
-    assert await channel_repo.is_member(ch_mbr, "user_10", company_id=company_id) is True
+    await channel_repo.ensure_member_row(ch_mbr, "user_10", company_id)
+    ids_after = await channel_repo.list_settings_user_ids(ch_mbr, company_id=company_id)
+    assert "user_10" in ids_after
 
-    await channel_repo.add_member_if_missing(ch_mbr, "user_10", "admin", company_id)
-    assert await channel_repo.is_member(ch_mbr, "user_10", company_id=company_id) is True
+    await channel_repo.ensure_member_row(ch_mbr, "user_10", company_id)
+    ids_idempotent = await channel_repo.list_settings_user_ids(ch_mbr, company_id=company_id)
+    assert ids_idempotent.count("user_10") == 1
 
 
 @pytest.mark.asyncio
@@ -135,9 +138,9 @@ async def test_list_for_user_filters_by_membership(
     await channel_repo.create(ch_direct)
     await channel_repo.create(ch_other)
 
-    await channel_repo.upsert_member(ch_topic, "alice", "member", company_id)
-    await channel_repo.upsert_member(ch_dm, "alice", "owner", company_id)
-    await channel_repo.upsert_member(ch_secret, "bob", "member", company_id)
+    await channel_repo.ensure_member_row(ch_topic, "alice", company_id)
+    await channel_repo.ensure_member_row(ch_dm, "alice", company_id)
+    await channel_repo.ensure_member_row(ch_secret, "bob", company_id)
 
     alice_all = await channel_repo.list_for_user(
         "alice", company_id=company_id, namespace=None
@@ -149,5 +152,5 @@ async def test_list_for_user_filters_by_membership(
     )
     assert [c.channel_id for c in alice_in_ns] == [ch_topic]
 
-    ids = await channel_repo.list_member_user_ids(ch_dm, company_id=company_id)
+    ids = await channel_repo.list_settings_user_ids(ch_dm, company_id=company_id)
     assert "alice" in ids

@@ -68,6 +68,7 @@ ALL_WIKI_TOOL_IDS: frozenset[str] = frozenset(
         "wiki_resolve_comment",
         "wiki_delete_comment",
         "wiki_get_access",
+        "wiki_set_company_visible",
         "wiki_set_member",
         "wiki_remove_member",
         "wiki_rotate_public_link",
@@ -567,10 +568,15 @@ async def test_lara_wiki_every_tool_full_tour(
             *skills,
             _call("wiki_get_access", wiki_page_id=wiki_page_id),
             _call(
+                "wiki_set_company_visible",
+                wiki_page_id=wiki_page_id,
+                company_visible=False,
+            ),
+            _call(
                 "wiki_set_member",
                 wiki_page_id=wiki_page_id,
                 user_id=system_user2_id,
-                permission="read",
+                relation="viewer",
             ),
             _call(
                 "wiki_remove_member",
@@ -586,13 +592,14 @@ async def test_lara_wiki_every_tool_full_tour(
                 "wiki_rotate_public_link",
                 wiki_page_id=wiki_page_id,
                 enabled=True,
-                permission="view",
+                permission="viewer",
             ),
             _text("link on"),
         ],
     )
     access = _ok_tool(turn8, "wiki_get_access")
     assert access.get("wiki_page_id") == wiki_page_id
+    _ok_tool(turn8, "wiki_set_company_visible")
     _ok_tool(turn8, "wiki_set_member")
     _ok_tool(turn8, "wiki_remove_member")
     _ok_tool(turn8, "wiki_update_properties")
@@ -602,6 +609,7 @@ async def test_lara_wiki_every_tool_full_tour(
     assert isinstance(public_url, str) and "/wiki/s/" in public_url
     mark(
         "wiki_get_access",
+        "wiki_set_company_visible",
         "wiki_set_member",
         "wiki_remove_member",
         "wiki_update_properties",
@@ -870,7 +878,7 @@ async def test_lara_wiki_access_public_link(
                 "wiki_rotate_public_link",
                 wiki_page_id=wiki_page_id,
                 enabled=True,
-                permission="view",
+                permission="viewer",
             ),
             _text("link ready"),
         ],

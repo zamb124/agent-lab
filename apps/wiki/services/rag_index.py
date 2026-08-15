@@ -26,6 +26,8 @@ from apps.wiki.services.rag_metadata import build_wiki_chunk_metadata
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
 from core.logging import get_logger
+from core.models.identity_models import NamespaceKind
+from core.namespace.service import NamespaceService
 from core.rag.models import RAGMetadataFilter, RAGSearchResult
 from core.types import JsonValue, require_json_array, require_json_object
 
@@ -56,8 +58,13 @@ def _parse_search_results(raw: JsonValue) -> list[RAGSearchResult]:
 class WikiRagIndexService:
     """Запись и перенос страниц между слоями индекса."""
 
-    def __init__(self, rag_client: RagClient) -> None:
+    def __init__(
+        self,
+        rag_client: RagClient,
+        namespace_service: NamespaceService,
+    ) -> None:
         self._rag: RagClient = rag_client
+        self._namespace_service: NamespaceService = namespace_service
         self._ensured_restricted_namespaces: set[str] = set()
 
     async def index_page(self, page: WikiPage) -> None:
@@ -69,11 +76,11 @@ class WikiRagIndexService:
             await self.remove_page(page)
             return
 
-        if page.visibility == WikiVisibility.RESTRICTED:
+        if page.rag_visibility == WikiVisibility.RESTRICTED:
             await self.ensure_restricted_namespace(page.namespace)
 
         _ = await self._rag.ingest_text(
-            target_namespace_id(page.namespace, page.visibility),
+            target_namespace_id(page.namespace, page.rag_visibility),
             text,
             document_name=page.title if page.title else page.wiki_page_id,
             document_id=page.wiki_page_id,
@@ -135,6 +142,13 @@ class WikiRagIndexService:
         _ = await self._rag.create_namespace(
             restricted_id,
             description=f"Ограниченные страницы wiki пространства {namespace}",
+        )
+        # Dual-write platform_namespace FGA in-process (RAG HTTP create may
+        # already do this; fail-closed ensure here so ingest can_view works).
+        _ = await self._namespace_service.get_or_create(
+            restricted_id,
+            description=f"Ограниченные страницы wiki пространства {namespace}",
+            kind=NamespaceKind.TECHNICAL,
         )
         self._ensured_restricted_namespaces.add(restricted_id)
 

@@ -3,8 +3,10 @@
 Реальные репозитории, без моков BillingService.
 """
 
+
 from __future__ import annotations
 
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import copy
 import json
 import uuid

@@ -4,7 +4,7 @@ import { collectFactories, registerFactory } from '@platform/lib/events/index.js
 import { toolsAllOp, toolsResource } from '../../../../apps/flows/ui/events/resources/tools.resource.js';
 import { toolTagGroupsOp } from '../../../../apps/flows/ui/events/resources/tool-tag-groups.resource.js';
 import {
-    codeCompletionsOp,
+    codeLspSessionOp,
     codeTemplatesOp,
     codeParseSignatureOp,
 } from '../../../../apps/flows/ui/events/resources/code.resource.js';
@@ -15,7 +15,7 @@ const FACTORIES = [
     toolsAllOp,
     toolsResource,
     toolTagGroupsOp,
-    codeCompletionsOp,
+    codeLspSessionOp,
     codeTemplatesOp,
     codeParseSignatureOp,
     mcpServersResource,

@@ -243,6 +243,7 @@ class FileReadKind(StrEnum):
     AUDIO = "audio"
     VIDEO = "video"
     UNKNOWN = "unknown"
+    DATA_TABLE = "data_table"
 
 
 class ReadAssetKind(StrEnum):

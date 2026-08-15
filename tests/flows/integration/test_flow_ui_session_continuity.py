@@ -6,6 +6,7 @@ import pytest
 
 from apps.flows.src.container import get_container
 from apps.flows.src.services.flow_ui_session_service import FlowUIDuplicateMutationError
+from apps.flows.src.services.flow_ui_share_service import flow_ui_share_visitor_user_id
 from core.context import require_context
 from core.models.flow_interface import default_flow_interface_config
 from core.models.flow_ui_share import FlowUIShareCreateRequest, FlowUIShareCreateResponse
@@ -224,7 +225,7 @@ async def test_share_waits_for_acknowledged_revision_after_autosync(
                     "context_id": context_id,
                     "document_id": f"flow-ui:{context_id}",
                     "minimum_revision": 1,
-                    "permission": "view",
+                    "permission": "viewer",
                     "expires_in_seconds": 300,
                 }
             ),
@@ -239,7 +240,7 @@ async def test_share_waits_for_acknowledged_revision_after_autosync(
                 "context_id": context_id,
                 "document_id": f"flow-ui:{context_id}",
                 "minimum_revision": synced.state.ui_document.revision,
-                "permission": "view",
+                "permission": "viewer",
                 "expires_in_seconds": 300,
             }
         ),
@@ -294,9 +295,9 @@ async def test_view_share_cannot_sync_or_submit_interact_can_sync(
         flow_id=flow_id,
         context_id=context_id,
         revision=bootstrapped.state.ui_document.revision,
-        permission="view",
+        permission="viewer",
     )
-    viewer_user_id = f"flow-ui-share:{view_created.grant.grant_id}"
+    viewer_user_id = flow_ui_share_visitor_user_id(view_created.grant.grant_id)
     with pytest.raises(PermissionError, match="read-only"):
         _ = await sync_flow_ui_session(
             flow_id=flow_id,
@@ -323,9 +324,9 @@ async def test_view_share_cannot_sync_or_submit_interact_can_sync(
         flow_id=flow_id,
         context_id=context_id,
         revision=1,
-        permission="interact",
+        permission="editor",
     )
-    collaborator_user_id = f"flow-ui-share:{interact_created.grant.grant_id}"
+    collaborator_user_id = flow_ui_share_visitor_user_id(interact_created.grant.grant_id)
     synced = await sync_flow_ui_session(
         flow_id=flow_id,
         context_id=context_id,
@@ -356,9 +357,9 @@ async def test_owner_and_collaborator_conflict_is_deterministic_occ(
         flow_id=flow_id,
         context_id=context_id,
         revision=bootstrapped.state.ui_document.revision,
-        permission="interact",
+        permission="editor",
     )
-    collaborator_user_id = f"flow-ui-share:{created.grant.grant_id}"
+    collaborator_user_id = flow_ui_share_visitor_user_id(created.grant.grant_id)
     owner = await sync_flow_ui_session(
         flow_id=flow_id,
         context_id=context_id,

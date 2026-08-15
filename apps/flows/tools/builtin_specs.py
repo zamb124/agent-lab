@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import importlib
 from functools import lru_cache
+from typing import Protocol, cast
 
-from apps.flows.src.tools.base import BaseTool
+
+class _NamedTool(Protocol):
+    name: str
+
 
 BUILTIN_TOOL_SPECS: tuple[tuple[str, str], ...] = (
     ("apps.flows.tools.math_tools", "calculator"),
@@ -41,6 +45,13 @@ BUILTIN_TOOL_SPECS: tuple[tuple[str, str], ...] = (
     ("apps.flows.tools.viz", "update_viz"),
     ("apps.flows.tools.viz", "export_viz"),
     ("apps.flows.tools.viz", "viz_open_file"),
+    ("apps.flows.tools.tables", "tables_create"),
+    ("apps.flows.tools.tables", "tables_list"),
+    ("apps.flows.tools.tables", "tables_schema"),
+    ("apps.flows.tools.tables", "tables_query"),
+    ("apps.flows.tools.tables", "tables_insert"),
+    ("apps.flows.tools.tables", "tables_update"),
+    ("apps.flows.tools.tables", "tables_delete_rows"),
     ("apps.flows.tools.sandbox_codegen", "sandbox_codegen"),
     ("apps.flows.tools.google_docs", "gdocs_append_text"),
     ("apps.flows.tools.google_docs", "gdocs_create_document"),
@@ -184,6 +195,7 @@ BUILTIN_TOOL_SPECS: tuple[tuple[str, str], ...] = (
     ("apps.flows.tools.wiki_tools", "wiki_resolve_comment"),
     ("apps.flows.tools.wiki_tools", "wiki_delete_comment"),
     ("apps.flows.tools.wiki_tools", "wiki_get_access"),
+    ("apps.flows.tools.wiki_tools", "wiki_set_company_visible"),
     ("apps.flows.tools.wiki_tools", "wiki_set_member"),
     ("apps.flows.tools.wiki_tools", "wiki_remove_member"),
     ("apps.flows.tools.wiki_tools", "wiki_rotate_public_link"),
@@ -212,11 +224,17 @@ def builtin_tool_ids() -> frozenset[str]:
     for module_name, attr_name in BUILTIN_TOOL_SPECS:
         module = importlib.import_module(module_name)
         raw_tool = module.__dict__.get(attr_name)
-        if not isinstance(raw_tool, BaseTool):
+        if raw_tool is None:
             raise TypeError(
-                f"Builtin tool {module_name}.{attr_name} must be a BaseTool instance"
+                f"Builtin tool {module_name}.{attr_name} is missing"
             )
-        ids.append(raw_tool.name if raw_tool.name else attr_name)
+        named = cast(_NamedTool, raw_tool)
+        tool_name = named.name
+        if not tool_name.strip():
+            raise TypeError(
+                f"Builtin tool {module_name}.{attr_name} must expose non-empty str name"
+            )
+        ids.append(tool_name)
     return frozenset(ids)
 
 

@@ -34,7 +34,8 @@ async def list_queues(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[WorkQueue]:
     company_id = require_active_company().company_id
-    items = await container.work_item_service.list_queues(company_id)
+    user_id = require_context().user.user_id
+    items = await container.work_item_service.list_queues(company_id, user_id=user_id)
     total = len(items)
     page_items = items[offset : offset + limit]
     return OffsetPage[WorkQueue](items=page_items, total=total, limit=limit, offset=offset)

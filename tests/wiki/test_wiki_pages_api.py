@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 
+from core.authz.models import AuthzObject
 from tests.wiki.conftest import API_PREFIX, PAGES_URL
 
 pytestmark = pytest.mark.no_test_doubles
@@ -28,7 +29,7 @@ async def test_create_page_returns_document_and_persists_markdown(wiki_client, s
     assert page["parent_page_id"] is None
     assert page["root_page_id"] == page["wiki_page_id"]
     assert page["depth"] == 0
-    assert page["visibility"] == "company"
+    assert page["company_visible"] is True
     assert body["can_edit"] is True
 
     saved = await stored_page(page["wiki_page_id"])
@@ -118,7 +119,7 @@ async def test_get_page_returns_content_and_permissions(wiki_client, wiki_page):
     assert body["page"]["wiki_page_id"] == wiki_page["wiki_page_id"]
     assert body["page"]["content"]["type"] == "doc"
     assert body["can_edit"] is True
-    assert body["can_administer"] is True
+    assert body["can_admin"] is True
 
 
 async def test_get_missing_page_returns_404(wiki_client):
@@ -138,6 +139,9 @@ async def test_update_content_creates_revision_and_rewrites_markdown(
     )
 
     assert response.status_code == 200, response.text
+    put_body = response.json()
+    assert put_body["can_edit"] is True
+    assert put_body["can_admin"] is True
     saved = await stored_page(page_id)
     assert saved.title == "Обновлено"
     assert saved.text_markdown == "## Новый текст\n\nОбновление."
@@ -164,6 +168,9 @@ async def test_patch_properties_updates_icon_and_publication(wiki_client, wiki_p
     )
 
     assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["can_edit"] is True
+    assert body["can_admin"] is True
     saved = await stored_page(page_id)
     assert saved.icon == "book"
     assert saved.is_published is False
@@ -314,6 +321,17 @@ async def test_unknown_namespace_is_rejected(wiki_app, auth_headers_system):
         response = await client.get(PAGES_URL)
 
     assert response.status_code == 400
+
+
+async def test_require_scope_without_namespace_view_returns_403(
+    wiki_client, wiki_container, wiki_namespace: str
+) -> None:
+    obj = AuthzObject.platform_namespace("system", wiki_namespace)
+    tuples = await wiki_container.authz_service.list_tuples(obj)
+    if tuples:
+        await wiki_container.authz_service.delete(tuples)
+    response = await wiki_client.get(PAGES_URL)
+    assert response.status_code == 403
 
 
 async def test_health_endpoint_is_public(wiki_client_anonymous):

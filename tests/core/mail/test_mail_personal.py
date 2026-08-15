@@ -213,7 +213,10 @@ async def test_non_owner_cannot_unbind_personal(
         company_id=company_id,
     )
     monkeypatch.setattr(mail_service, "_active_user_id", lambda: other_id)
-    monkeypatch.setattr(mail_service, "_is_company_admin", lambda _company_id: False)
+    async def _deny_admin(_company_id: str) -> bool:
+        return False
+
+    monkeypatch.setattr(mail_service, "_is_company_admin", _deny_admin)
     with pytest.raises(MailPermissionError):
         await mail_service.unbind_mailbox(
             binding.mailbox_binding_id,
@@ -351,7 +354,10 @@ async def test_personal_healthcheck_binding_forbidden_for_non_owner(
         company_id=company_id,
     )
     monkeypatch.setattr(mail_service, "_active_user_id", lambda: other_id)
-    monkeypatch.setattr(mail_service, "_is_company_admin", lambda _company_id: False)
+    async def _deny_admin(_company_id: str) -> bool:
+        return False
+
+    monkeypatch.setattr(mail_service, "_is_company_admin", _deny_admin)
     with pytest.raises(MailPermissionError):
         await mail_service.healthcheck_binding(
             binding.mailbox_binding_id,

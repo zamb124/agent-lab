@@ -3,7 +3,7 @@
 
 Отдельные модели запроса и ответа нужны потому, что их форма действительно
 другая: клиент не присылает вычисляемые поля (`root_page_id`, `depth`,
-`visibility`, `text_markdown`) — они выводятся сервисом.
+`company_visible`, `text_markdown`) — они выводятся сервисом.
 """
 
 from __future__ import annotations
@@ -16,13 +16,12 @@ from apps.wiki.base_model import WikiBaseModel
 from apps.wiki.content.markdown_notices import WikiMarkdownNotice
 from apps.wiki.content.prosemirror import ProseMirrorNode
 from apps.wiki.models.domain import (
+    WikiAccessMemberRelation,
     WikiComment,
     WikiLinkPermission,
     WikiPage,
     WikiPageMember,
-    WikiPagePermission,
     WikiPageSummary,
-    WikiVisibility,
 )
 
 
@@ -62,11 +61,7 @@ class WikiPageMoveRequest(WikiBaseModel):
 
 
 class WikiPageMoveNamespaceRequest(WikiBaseModel):
-    """Перенос поддерева в другое пространство.
-
-    Отдельный запрос, а не поле в PATCH: операция меняет границу изоляции
-    и всегда затрагивает всё поддерево.
-    """
+    """Перенос поддерева в другое пространство."""
 
     target_namespace: str = Field(..., min_length=1)
     parent_page_id: str | None = None
@@ -77,7 +72,7 @@ class WikiPageResponse(WikiBaseModel):
 
     page: WikiPage
     can_edit: bool = False
-    can_administer: bool = False
+    can_admin: bool = False
 
 
 class WikiTreeResponse(WikiBaseModel):
@@ -87,12 +82,16 @@ class WikiTreeResponse(WikiBaseModel):
 
 class WikiMemberUpsertRequest(WikiBaseModel):
     user_id: str = Field(..., min_length=1)
-    permission: WikiPagePermission = WikiPagePermission.READ
+    relation: WikiAccessMemberRelation = "viewer"
+
+
+class WikiCompanyVisibleRequest(WikiBaseModel):
+    company_visible: bool
 
 
 class WikiPublicLinkRequest(WikiBaseModel):
     enabled: bool
-    permission: WikiLinkPermission = WikiLinkPermission.VIEW
+    permission: WikiLinkPermission = WikiLinkPermission.VIEWER
 
 
 class WikiPublicLinkResponse(WikiBaseModel):
@@ -109,11 +108,11 @@ class WikiPublicLinkResponse(WikiBaseModel):
 
 class WikiAccessResponse(WikiBaseModel):
     wiki_page_id: str
-    visibility: WikiVisibility
+    company_visible: bool
     inherited_from_page_id: str | None = None
     members: list[WikiPageMember] = Field(default_factory=list)
     link_enabled: bool = False
-    link_permission: WikiLinkPermission = WikiLinkPermission.VIEW
+    link_permission: WikiLinkPermission = WikiLinkPermission.VIEWER
 
 
 class WikiSearchRequest(WikiBaseModel):
@@ -173,12 +172,7 @@ class WikiBacklinksResponse(WikiBaseModel):
 
 
 class WikiPublicPageResponse(WikiBaseModel):
-    """Страница публичного сайта — без служебных полей и прав.
-
-    `parent_page_id` нужен посетителю для пути: крошки строятся по тому же
-    поддереву, что и навигация. Медиа в `content` уже переписано на роуты с
-    токеном, платформенных ссылок на файлы здесь не остаётся.
-    """
+    """Страница публичного сайта — без служебных полей и прав."""
 
     wiki_page_id: str
     parent_page_id: str | None = None
@@ -236,22 +230,14 @@ class WikiMarkdownParseRequest(WikiBaseModel):
 
 
 class WikiMarkdownParseResponse(WikiBaseModel):
-    """Документ из markdown плюс заметки о расхождениях.
-
-    Нужен вставке в редактор: диалект разбирает только сервер, а браузеру для
-    вставки достаточно готового документа.
-    """
+    """Документ из markdown плюс заметки о расхождениях."""
 
     document: ProseMirrorNode
     notices: list[WikiMarkdownNotice] = Field(default_factory=list)
 
 
 class WikiMarkdownImportResponse(WikiBaseModel):
-    """Страница после импорта плюс то, что не перенеслось из файла.
-
-    Отчёт возвращается всегда: пустой список значит перенос без потерь, и это
-    честнее, чем молчание.
-    """
+    """Страница после импорта плюс то, что не перенеслось из файла."""
 
     page: WikiPage
     notices: list[WikiMarkdownNotice] = Field(default_factory=list)

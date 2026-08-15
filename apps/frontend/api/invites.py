@@ -14,6 +14,10 @@ from pydantic import BaseModel
 
 from apps.frontend.dependencies import ContainerDep
 from core.context import get_context
+from core.identity.company_membership import (
+    set_company_member_roles,
+    sync_existing_company_member,
+)
 from core.logging import get_logger
 from core.models.identity_models import Company, User
 from core.namespace import ensure_personal_namespace_for_user
@@ -98,11 +102,10 @@ async def generate_invite(
     user = _require_invite_user()
     company = _require_invite_company()
 
-    member_roles = company.members.get(user.user_id, [])
-    is_owner_or_admin = "owner" in member_roles or "admin" in member_roles
-    is_owner_by_company_record = company.owner_user_id == user.user_id
-    if not is_owner_or_admin and not is_owner_by_company_record:
-        raise HTTPException(status_code=403, detail="Недостаточно прав")
+    await container.authz_service.require_company_admin(
+        company_id=company.company_id,
+        user_id=user.user_id,
+    )
 
     if body.role not in VALID_ROLES:
         raise HTTPException(
@@ -227,6 +230,12 @@ async def accept_invite(
             user.user_id,
             company.company_id,
         )
+        await sync_existing_company_member(
+            authz=container.authz_service,
+            company_id=company.company_id,
+            user_id=user.user_id,
+            roles=roles_list,
+        )
         new_session_token, _ = await rebind_session_to_company(
             container=container,
             user=user,
@@ -254,13 +263,16 @@ async def accept_invite(
 
     # Добавляем пользователя в компанию
     roles = [invite.role]
-    company.members[user.user_id] = roles
-    _ = await company_repo.set(company)
-
-    user_repo = container.user_repository
-    user.companies[company.company_id] = roles
+    roles = await set_company_member_roles(
+        company_repository=company_repo,
+        user_repository=container.user_repository,
+        authz=container.authz_service,
+        company=company,
+        user=user,
+        roles=roles,
+    )
     user.active_company_id = company.company_id
-    _ = await user_repo.set(user)
+    _ = await container.user_repository.set(user)
 
     await ensure_personal_namespace_for_user(
         container.namespace_service,

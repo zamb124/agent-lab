@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 import pytest
+import pytest_asyncio
 from pydantic import ValidationError
 
 from apps.flows.tools.agent_plan_tools import agent_plan_get, agent_plan_write
 from core.agent_plan.models import AgentPlanStepStatus
 from core.state import ExecutionState
+from tests.flows._tool_authz_context import bind_flow_tool_authz_context
 
 
 @pytest.fixture
@@ -18,6 +22,14 @@ def execution_state() -> ExecutionState:
         user_id="user-agent-plan",
         session_id="flow-agent-plan:ctx-agent-plan",
     )
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _agent_plan_tools_authz_context(
+    execution_state: ExecutionState,
+) -> AsyncIterator[None]:
+    async for _ in bind_flow_tool_authz_context(extra_user_ids=[execution_state.user_id]):
+        yield
 
 
 @pytest.mark.asyncio

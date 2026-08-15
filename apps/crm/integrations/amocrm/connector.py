@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from apps.crm.db.repositories.entity_repository import EntityRepository
     from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
     from apps.crm.db.repositories.relationship_repository import RelationshipRepository
+    from apps.crm.services.crm_entity_access_service import CrmEntityAccessService
     from apps.crm.services.entity_service import EntityService
     from apps.crm.services.namespace_template_service import NamespaceTemplateService
     from apps.crm.services.task_service import TaskService
@@ -59,6 +60,7 @@ class AmoCRMConnector:
         task_service: TaskService,
         integration_external_author: IntegrationExternalAuthorService,
         namespace_template_service: NamespaceTemplateService,
+        entity_access: CrmEntityAccessService,
     ) -> None:
         self._oauth_service: OAuthService = oauth_service
         self._entity_type_repository: EntityTypeRepository = entity_type_repository
@@ -73,6 +75,7 @@ class AmoCRMConnector:
             namespace_service=namespace_service,
             task_service=task_service,
             integration_external_author=integration_external_author,
+            entity_access=entity_access,
         )
 
     async def build_authorize_url(

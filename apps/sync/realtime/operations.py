@@ -66,6 +66,7 @@ from apps.sync.models.calls import (
 from apps.sync.models.channels import (
     ChannelCreate,
     ChannelMemberRead,
+    ChannelMemberRole,
     ChannelRead,
     ChannelUpdate,
 )
@@ -142,6 +143,8 @@ from apps.sync.realtime.task_names import (
     SYNC_TRANSCRIBE_VIDEO_MESSAGE,
 )
 from apps.sync.ws_presence import batch_peer_presence
+from core.authz.models import AuthzCheckItem, AuthzObject, AuthzSubject
+from core.authz.types import AuthzRelation
 from core.calls.livekit_client import LiveKitClient
 from core.calls.models import TurnCredentials
 from core.calls.turn import generate_turn_credentials
@@ -357,7 +360,7 @@ class ChannelsNotificationSettingsUpdatePayload(BaseModel):
 class ChannelsAddMemberPayload(BaseModel):
     channel_id: str = Field(min_length=1)
     user_id: str = Field(min_length=1)
-    role: str = Field(default="member", min_length=1)
+    role: ChannelMemberRole = "member"
 
 
 class ChannelsListMembersPayload(BaseModel):
@@ -384,10 +387,58 @@ async def _build_channel_read(
         channel,
         viewer_user_id=viewer_id,
         channel_repository=container.channel_repository,
+        channel_access=container.channel_access_service,
         user_repository=container.user_repository,
         company_id=company_id,
         lane_summary=summaries[channel.channel_id],
     )
+
+
+async def _filter_channels_by_can_view(
+    container: SyncContainer,
+    channels: list[SyncChannel],
+    *,
+    user_id: str,
+    peer_user_id: str | None = None,
+) -> list[SyncChannel]:
+    """SQL settings-rows — кандидаты; ACL — только FGA can_view."""
+    if not channels:
+        return []
+    checks: list[AuthzCheckItem] = [
+        AuthzCheckItem(
+            subject=AuthzSubject.user(user_id),
+            relation=AuthzRelation.CAN_VIEW,
+            obj=AuthzObject.sync_channel(channel.channel_id),
+            correlation_id=channel.channel_id,
+        )
+        for channel in channels
+    ]
+    if peer_user_id is not None:
+        checks.extend(
+            AuthzCheckItem(
+                subject=AuthzSubject.user(peer_user_id),
+                relation=AuthzRelation.CAN_VIEW,
+                obj=AuthzObject.sync_channel(channel.channel_id),
+                correlation_id=f"peer:{channel.channel_id}",
+            )
+            for channel in channels
+        )
+    allowed = await container.authz_service.batch_check(checks)
+    if peer_user_id is None:
+        return [
+            channel
+            for channel, ok in zip(channels, allowed, strict=True)
+            if ok
+        ]
+    viewer_flags = allowed[: len(channels)]
+    peer_flags = allowed[len(channels) :]
+    return [
+        channel
+        for channel, viewer_ok, peer_ok in zip(
+            channels, viewer_flags, peer_flags, strict=True
+        )
+        if viewer_ok and peer_ok
+    ]
 
 
 async def op_channels_list(
@@ -397,12 +448,15 @@ async def op_channels_list(
     container: SyncContainer,
 ) -> ChannelsListResult:
     company_id = resolve_company_id(user)
-    channels = await container.channel_repository.list_for_user(
+    candidates = await container.channel_repository.list_for_user(
         user.user_id,
         namespace=payload.namespace,
         limit=payload.limit,
         offset=payload.offset,
         company_id=company_id,
+    )
+    channels = await _filter_channels_by_can_view(
+        container, candidates, user_id=user.user_id
     )
     channel_ids = [c.channel_id for c in channels]
     summaries = await container.message_repository.channel_lane_summaries_batch(
@@ -417,6 +471,7 @@ async def op_channels_list(
                 c,
                 viewer_user_id=user.user_id,
                 channel_repository=container.channel_repository,
+                channel_access=container.channel_access_service,
                 user_repository=container.user_repository,
                 company_id=company_id,
                 lane_summary=summaries[c.channel_id],
@@ -439,12 +494,13 @@ async def op_channels_create(
         actor_user_id=user.user_id,
         company_id=company_id,
         channels=container.channel_repository,
+        channel_access=container.channel_access_service,
         namespaces=container.namespace_service,
         user_repository=container.user_repository,
     )
     if created_new:
         recipients = await channel_recipient_user_ids(
-            container.channel_repository, channel.channel_id, company_id
+            container.channel_access_service, channel.channel_id
         )
         await publish_realtime_events(
             [
@@ -469,6 +525,7 @@ async def op_channels_update(
         actor_user_id=user.user_id,
         company_id=company_id,
         channels=container.channel_repository,
+        authz=container.authz_service,
     )
 
 
@@ -479,8 +536,9 @@ async def op_channels_mark_read(
     container: SyncContainer,
 ) -> None:
     company_id = resolve_company_id(user)
-    role = await container.channel_repository.get_member_role(payload.channel_id, user.user_id)
-    if role is None:
+    if not await container.authz_service.can_view(
+        AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
+    ):
         raise WsCommandError(
             "forbidden", f"Пользователь не состоит в канале {payload.channel_id}."
         )
@@ -492,7 +550,7 @@ async def op_channels_mark_read(
         payload.channel_id, user.user_id, read_at, company_id=company_id
     )
     recipients = await channel_recipient_user_ids(
-        container.channel_repository, payload.channel_id, company_id
+        container.channel_access_service, payload.channel_id
     )
     await publish_realtime_events(
         [
@@ -515,8 +573,8 @@ async def op_channels_typing(
     container: SyncContainer,
 ) -> None:
     company_id = resolve_company_id(user)
-    if not await container.channel_repository.is_member(
-        payload.channel_id, user.user_id, company_id=company_id
+    if not await container.authz_service.can_view(
+        AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError(
             "forbidden", f"Пользователь не состоит в канале {payload.channel_id}."
@@ -536,7 +594,7 @@ async def op_channels_typing(
         user_id=user.user_id, display_name=user_obj.name, avatar_url=user_obj.avatar_url
     )
     recipients = await channel_recipient_user_ids(
-        container.channel_repository, payload.channel_id, company_id
+        container.channel_access_service, payload.channel_id
     )
     await publish_realtime_events(
         [
@@ -563,8 +621,8 @@ async def op_channels_notification_settings_update(
     ch = await container.channel_repository.get(payload.channel_id)
     if ch is None or ch.company_id != company_id:
         raise WsCommandError("not_found", "Канал не найден.")
-    if not await container.channel_repository.is_member(
-        payload.channel_id, user.user_id, company_id=company_id
+    if not await container.authz_service.can_view(
+        AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "Нет доступа к каналу.")
     await container.channel_repository.set_member_notifications_muted(
@@ -588,18 +646,30 @@ async def op_channels_add_member(
     ch = await container.channel_repository.get(payload.channel_id)
     if ch is None or ch.company_id != company_id:
         raise WsCommandError("not_found", "Канал не найден.")
-    if not await container.channel_repository.is_member(
-        payload.channel_id, user.user_id, company_id=company_id
+    if not await container.authz_service.can_admin(
+        AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
-        raise WsCommandError("forbidden", "Нет доступа к каналу.")
-    await container.channel_repository.upsert_member(
+        raise WsCommandError("forbidden", "Нет прав управлять участниками канала.")
+    await container.channel_repository.ensure_member_row(
         payload.channel_id,
         payload.user_id,
-        payload.role,
         company_id=company_id,
     )
-    recipients = await container.channel_repository.list_member_user_ids(
-        payload.channel_id, company_id=company_id
+    try:
+        await container.channel_access_service.set_member(
+            payload.channel_id,
+            user_id=payload.user_id,
+            relation=payload.role,
+        )
+    except Exception:
+        _ = await container.channel_repository.delete_member(
+            payload.channel_id,
+            payload.user_id,
+            company_id=company_id,
+        )
+        raise
+    recipients = await container.channel_access_service.list_member_user_ids(
+        payload.channel_id
     )
     await publish_realtime_events(
         [
@@ -624,13 +694,11 @@ async def op_channels_list_members(
     ch = await container.channel_repository.get(payload.channel_id)
     if ch is None or ch.company_id != company_id:
         raise WsCommandError("not_found", "Канал не найден.")
-    if not await container.channel_repository.is_member(
-        payload.channel_id, user.user_id, company_id=company_id
+    if not await container.authz_service.can_view(
+        AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "Нет доступа к каналу.")
-    rows = await container.channel_repository.list_member_rows(
-        payload.channel_id, company_id=company_id
-    )
+    rows = await container.channel_access_service.list_member_rows(payload.channel_id)
     return ChannelsListMembersResult(
         items=[ChannelMemberRead(user_id=uid, role=role) for uid, role in rows]
     )
@@ -726,7 +794,7 @@ async def op_threads_create(
         user_repository=container.user_repository,
     )
     recipients = await channel_recipient_user_ids(
-        container.channel_repository, thread.channel_id, company_id
+        container.channel_access_service, thread.channel_id
     )
     await publish_realtime_events(
         [
@@ -905,8 +973,8 @@ async def op_messages_list_thread(
     container: SyncContainer,
 ) -> MessagesListThreadResult:
     company_id = resolve_company_id(user)
-    if not await container.channel_repository.is_member(
-        payload.channel_id, user.user_id, company_id=company_id
+    if not await container.authz_service.can_view(
+        AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "Not a channel member")
     thread = await container.thread_repository.get(payload.thread_id)
@@ -977,7 +1045,7 @@ async def op_messages_mark_read(
 ) -> None:
     company_id = resolve_company_id(user)
     recipients = await channel_recipient_user_ids(
-        container.channel_repository, payload.channel_id, company_id
+        container.channel_access_service, payload.channel_id
     )
     await publish_realtime_events(
         [
@@ -1001,8 +1069,8 @@ async def op_messages_edit(
     container: SyncContainer,
 ) -> MessageRead:
     company_id = resolve_company_id(user)
-    if not await container.channel_repository.is_member(
-        payload.channel_id, user.user_id, company_id=company_id
+    if not await container.authz_service.can_view(
+        AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "Нет доступа к каналу.")
     m = await container.message_repository.get_by_id_for_company(payload.message_id, company_id)
@@ -1025,7 +1093,7 @@ async def op_messages_edit(
         m2, container.message_repository, container.user_repository
     )
     recipients = await channel_recipient_user_ids(
-        container.channel_repository, payload.channel_id, company_id
+        container.channel_access_service, payload.channel_id
     )
     await publish_realtime_events(
         [
@@ -1044,8 +1112,8 @@ async def op_messages_delete(
     container: SyncContainer,
 ) -> dict[str, str]:
     company_id = resolve_company_id(user)
-    if not await container.channel_repository.is_member(
-        payload.channel_id, user.user_id, company_id=company_id
+    if not await container.authz_service.can_view(
+        AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "Нет доступа к каналу.")
     m = await container.message_repository.get_by_id_for_company(payload.message_id, company_id)
@@ -1053,16 +1121,17 @@ async def op_messages_delete(
         raise WsCommandError("not_found", "Сообщение не найдено.")
     if m.channel_id != payload.channel_id:
         raise WsCommandError("forbidden", "Несовпадение канала.")
-    role = await container.channel_repository.get_member_role(payload.channel_id, user.user_id)
-    if role is None:
-        raise WsCommandError("forbidden", "Нет доступа к каналу.")
-    if m.sender_user_id != user.user_id and role != "owner":
+    if m.sender_user_id != user.user_id and not await container.authz_service.check(
+        AuthzSubject.user(user.user_id),
+        AuthzRelation.OWNER,
+        AuthzObject.sync_channel(payload.channel_id),
+    ):
         raise WsCommandError("forbidden", "Недостаточно прав на удаление.")
     now = datetime.now(tz=UTC)
     await container.message_repository.soft_delete_message(payload.message_id, now)
     ch = await container.channel_repository.get(payload.channel_id)
     recipients = await channel_recipient_user_ids(
-        container.channel_repository, payload.channel_id, company_id
+        container.channel_access_service, payload.channel_id
     )
     events: list[RealtimeEvent] = [
         event_message_deleted(
@@ -1099,12 +1168,12 @@ async def op_messages_forward(
     container: SyncContainer,
 ) -> MessageRead:
     company_id = resolve_company_id(user)
-    if not await container.channel_repository.is_member(
-        payload.from_channel_id, user.user_id, company_id=company_id
+    if not await container.authz_service.can_view(
+        AuthzObject.sync_channel(payload.from_channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "Нет доступа к исходному каналу.")
-    if not await container.channel_repository.is_member(
-        payload.to_channel_id, user.user_id, company_id=company_id
+    if not await container.authz_service.can_view(
+        AuthzObject.sync_channel(payload.to_channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "Нет доступа к целевому каналу.")
     m = await container.message_repository.get_by_id_for_company(payload.message_id, company_id)
@@ -1138,7 +1207,7 @@ async def op_messages_forward(
         forwarded_from_channel_name=fwd_label,
     )
     recipients = await channel_recipient_user_ids(
-        container.channel_repository, payload.to_channel_id, company_id
+        container.channel_access_service, payload.to_channel_id
     )
     dst_ch = await container.channel_repository.get(payload.to_channel_id)
     if dst_ch is None:
@@ -1182,8 +1251,8 @@ async def op_messages_react(
     container: SyncContainer,
 ) -> MessageRead:
     company_id = resolve_company_id(user)
-    if not await container.channel_repository.is_member(
-        payload.channel_id, user.user_id, company_id=company_id
+    if not await container.authz_service.can_view(
+        AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "Нет доступа к каналу.")
     m = await container.message_repository.get_by_id_for_company(payload.message_id, company_id)
@@ -1203,7 +1272,7 @@ async def op_messages_react(
         m2, container.message_repository, container.user_repository
     )
     recipients = await channel_recipient_user_ids(
-        container.channel_repository, payload.channel_id, company_id
+        container.channel_access_service, payload.channel_id
     )
     await publish_realtime_events(
         [
@@ -1229,12 +1298,15 @@ async def op_messages_pin(
     container: SyncContainer,
 ) -> ChannelRead:
     company_id = resolve_company_id(user)
-    if not await container.channel_repository.is_member(
-        payload.channel_id, user.user_id, company_id=company_id
+    if not await container.authz_service.can_view(
+        AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "Нет доступа к каналу.")
-    role = await container.channel_repository.get_member_role(payload.channel_id, user.user_id)
-    if role != "owner":
+    if not await container.authz_service.check(
+        AuthzSubject.user(user.user_id),
+        AuthzRelation.OWNER,
+        AuthzObject.sync_channel(payload.channel_id),
+    ):
         raise WsCommandError("forbidden", "Закреплять может только владелец канала.")
     m = await container.message_repository.get_by_id_for_company(payload.message_id, company_id)
     if m is None:
@@ -1260,7 +1332,7 @@ async def op_messages_pin(
         raise WsCommandError("internal", "Канал пропал после обновления.")
     cr = channel_read_entity(ch2)
     recipients = await channel_recipient_user_ids(
-        container.channel_repository, payload.channel_id, company_id
+        container.channel_access_service, payload.channel_id
     )
     await publish_realtime_events(
         [
@@ -1279,8 +1351,8 @@ async def op_messages_transcribe_audio(
     container: SyncContainer,
 ) -> MessageRead:
     company_id = resolve_company_id(user)
-    if not await container.channel_repository.is_member(
-        payload.channel_id, user.user_id, company_id=company_id
+    if not await container.authz_service.can_view(
+        AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "Нет доступа к каналу.")
     source = await container.message_repository.get_by_id_for_company(
@@ -1320,7 +1392,7 @@ async def op_messages_transcribe_audio(
         background_kind="sync_transcribe",
     )
     recipients = await channel_recipient_user_ids(
-        container.channel_repository, payload.channel_id, company_id
+        container.channel_access_service, payload.channel_id
     )
     await publish_realtime_events(
         [
@@ -1339,8 +1411,8 @@ async def op_messages_transcribe_video(
     container: SyncContainer,
 ) -> MessageRead:
     company_id = resolve_company_id(user)
-    if not await container.channel_repository.is_member(
-        payload.channel_id, user.user_id, company_id=company_id
+    if not await container.authz_service.can_view(
+        AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "Нет доступа к каналу.")
     source = await container.message_repository.get_by_id_for_company(
@@ -1380,7 +1452,7 @@ async def op_messages_transcribe_video(
         background_kind="sync_transcribe",
     )
     recipients = await channel_recipient_user_ids(
-        container.channel_repository, payload.channel_id, company_id
+        container.channel_access_service, payload.channel_id
     )
     await publish_realtime_events(
         [
@@ -1399,8 +1471,8 @@ async def op_messages_transcribe_call(
     container: SyncContainer,
 ) -> MessagesTranscribeCallResult:
     company_id = resolve_company_id(user)
-    if not await container.channel_repository.is_member(
-        payload.channel_id, user.user_id, company_id=company_id
+    if not await container.authz_service.can_view(
+        AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "Нет доступа к каналу.")
     call = await container.call_repository.get_call(payload.call_id, company_id)
@@ -1539,11 +1611,12 @@ async def op_calls_invite(
         company_id=company_id,
         calls=container.call_repository,
         channels=container.channel_repository,
+        channel_access=container.channel_access_service,
+        authz=container.authz_service,
         user_repository=container.user_repository,
     )
-    member_ids = await container.channel_repository.list_member_user_ids(
-        out.channel_id, company_id=company_id
-    )
+    member_rows = await container.channel_access_service.list_member_rows(out.channel_id)
+    member_ids = [uid for uid, _role in member_rows]
     started_read = await _post_call_boundary_message_op(
         channel_id=out.channel_id,
         call_id=out.call_id,
@@ -1590,7 +1663,7 @@ async def op_calls_accept(
         actor_user_id=user.user_id,
         company_id=company_id,
         calls=container.call_repository,
-        channels=container.channel_repository,
+        channel_access=container.channel_access_service,
     )
     if became_active:
         await maybe_start_speech_to_chat_poll(
@@ -1616,7 +1689,7 @@ async def op_calls_decline(
         actor_user_id=user.user_id,
         company_id=company_id,
         calls=container.call_repository,
-        channels=container.channel_repository,
+        channel_access=container.channel_access_service,
     )
     await publish_realtime_events(evs)
     return out
@@ -1644,7 +1717,7 @@ async def op_calls_hangup(
             call_recordings=container.call_recording_repository,
         )
         rec_stop_recipients = await channel_recipient_user_ids(
-            container.channel_repository, call.channel_id, company_id
+            container.channel_access_service, call.channel_id
         )
         auto_stopped_recording_event = event_call_recording_stopped(
             stopped_recording, company_id=company_id, recipient_user_ids=rec_stop_recipients
@@ -1655,7 +1728,7 @@ async def op_calls_hangup(
         actor_user_id=user.user_id,
         company_id=company_id,
         calls=container.call_repository,
-        channels=container.channel_repository,
+        channel_access=container.channel_access_service,
     )
     if auto_stopped_recording_event is not None:
         evs.append(auto_stopped_recording_event)
@@ -1669,7 +1742,7 @@ async def op_calls_hangup(
             container=container,
         )
         recipients = await channel_recipient_user_ids(
-            container.channel_repository, out.channel_id, company_id
+            container.channel_access_service, out.channel_id
         )
         hangup_channel = await container.channel_repository.get(out.channel_id)
         if hangup_channel is None:
@@ -1702,8 +1775,8 @@ async def op_calls_recording_start(
         raise WsCommandError(
             "forbidden", f"У звонка {call.call_id} отсутствует livekit_room_name."
         )
-    if not await container.channel_repository.is_member(
-        call.channel_id, user.user_id, company_id=company_id
+    if not await container.authz_service.can_view(
+        AuthzObject.sync_channel(call.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "Нет доступа к звонку.")
     active = await container.call_recording_repository.get_active_for_call(
@@ -1787,7 +1860,7 @@ async def op_calls_recording_start(
     _ = await container.call_recording_repository.create(recording)
     out = _call_recording_read_from_entity(recording)
     recipients = await channel_recipient_user_ids(
-        container.channel_repository, call.channel_id, company_id
+        container.channel_access_service, call.channel_id
     )
     await publish_realtime_events(
         [
@@ -1807,8 +1880,8 @@ async def op_calls_recording_stop(
 ) -> CallRecordingRead:
     company_id = resolve_company_id(user)
     call = await container.call_repository.get_call(payload.call_id, company_id)
-    if not await container.channel_repository.is_member(
-        call.channel_id, user.user_id, company_id=company_id
+    if not await container.authz_service.can_view(
+        AuthzObject.sync_channel(call.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "Нет доступа к звонку.")
     active = await container.call_recording_repository.get_active_for_call(
@@ -1831,7 +1904,7 @@ async def op_calls_recording_stop(
         call_recordings=container.call_recording_repository,
     )
     recipients = await channel_recipient_user_ids(
-        container.channel_repository, call.channel_id, company_id
+        container.channel_access_service, call.channel_id
     )
     await publish_realtime_events(
         [
@@ -1855,12 +1928,12 @@ async def op_calls_admin_transfer(
         raise WsCommandError(
             "forbidden", "Только текущий админ встречи может передавать админку."
         )
-    if not await container.channel_repository.is_member(
-        call.channel_id, user.user_id, company_id=company_id
+    if not await container.authz_service.can_view(
+        AuthzObject.sync_channel(call.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "Нет доступа к звонку.")
-    if not await container.channel_repository.is_member(
-        call.channel_id, payload.target_user_id, company_id=company_id
+    if not await container.authz_service.can_view(
+        AuthzObject.sync_channel(call.channel_id), user_id=payload.target_user_id
     ):
         raise WsCommandError("forbidden", "Новый админ не является участником канала.")
     if payload.target_user_id.startswith("guest:"):
@@ -1880,7 +1953,7 @@ async def op_calls_admin_transfer(
     updated_participants = await container.call_repository.list_participants(call.call_id)
     out = call_read_from_entities(updated_call, updated_participants)
     recipients = await channel_recipient_user_ids(
-        container.channel_repository, out.channel_id, company_id
+        container.channel_access_service, out.channel_id
     )
     await publish_realtime_events(
         [
@@ -2008,8 +2081,8 @@ async def _participant_names_for_call(
     container: SyncContainer, call: SyncCall
 ) -> dict[str, str]:
     out: dict[str, str] = {}
-    member_ids = await container.channel_repository.list_member_user_ids(
-        call.channel_id, company_id=call.company_id
+    member_ids = await container.channel_access_service.list_member_user_ids(
+        call.channel_id
     )
     for uid in member_ids:
         u = await container.user_repository.get(uid)
@@ -2045,16 +2118,19 @@ async def _reconcile_calendar_meeting_channel_members(
     calendar_member_user_ids: list[str],
 ) -> None:
     channels = container.channel_repository
+    access = container.channel_access_service
     desired_guests = {
         uid for uid in calendar_member_user_ids if uid and uid != link_creator_user_id
     }
     for uid in sorted(desired_guests):
-        await channels.add_member_if_missing(channel_id, uid, "member", company_id=company_id)
-    current = await channels.list_member_user_ids(channel_id, company_id=company_id)
+        await channels.ensure_member_row(channel_id, uid, company_id=company_id)
+        await access.set_member(channel_id, user_id=uid, relation="member")
+    current = await access.list_member_user_ids(channel_id)
     desired = {link_creator_user_id} | desired_guests
     for uid in current:
         if uid not in desired:
             _ = await channels.delete_member(channel_id, uid, company_id=company_id)
+            await access.remove_member(channel_id, user_id=uid)
 
 
 async def op_calls_get(
@@ -2080,8 +2156,8 @@ async def op_calls_recordings_list(
 ) -> CallsRecordingsListResult:
     company_id = resolve_company_id(user)
     call = await container.call_repository.get_call(payload.call_id, company_id)
-    if not await container.channel_repository.is_member(
-        call.channel_id, user.user_id, company_id=company_id
+    if not await container.authz_service.can_view(
+        AuthzObject.sync_channel(call.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "Нет доступа к звонку.")
     rows = await container.call_recording_repository.list_for_call(payload.call_id, company_id)
@@ -2109,8 +2185,8 @@ async def op_calls_token(
         raise WsCommandError(
             "forbidden", f"У звонка {payload.call_id} нет LiveKit комнаты."
         )
-    if not await container.channel_repository.is_member(
-        call.channel_id, user.user_id, company_id=company_id
+    if not await container.authz_service.can_view(
+        AuthzObject.sync_channel(call.channel_id), user_id=user.user_id
     ):
         raise WsCommandError(
             "forbidden", f"Нет доступа к каналу звонка {payload.call_id}."
@@ -2237,15 +2313,24 @@ async def op_calls_links_create(
             pinned_message_ids=[],
         )
         _ = await container.channel_repository.create(ch)
-        await container.channel_repository.add_member_if_missing(
-            channel_id, actor_id, "owner", company_id=company_id
+        member_ids = [uid for uid in calendar_member_user_ids if uid and uid != actor_id]
+        await container.channel_repository.ensure_member_row(
+            channel_id, actor_id, company_id=company_id
         )
-        for uid in calendar_member_user_ids:
-            if uid == actor_id:
-                continue
-            await container.channel_repository.add_member_if_missing(
-                channel_id, uid, "member", company_id=company_id
+        for uid in member_ids:
+            await container.channel_repository.ensure_member_row(
+                channel_id, uid, company_id=company_id
             )
+        try:
+            await container.channel_access_service.sync_channel_created(
+                channel_id,
+                company_id=company_id,
+                owner_user_id=actor_id,
+                member_user_ids=member_ids,
+            )
+        except Exception:
+            _ = await container.channel_repository.delete(channel_id)
+            raise
         now = datetime.now(UTC)
         ttl_hours = _ttl_hours_from_schedule(scheduled_end_at, now)
         expires_at = now + timedelta(hours=ttl_hours)
@@ -2260,8 +2345,8 @@ async def op_calls_links_create(
                 "channel_id обязателен для ссылки без calendar_event_id.",
             )
         channel_id = body.channel_id
-        if not await container.channel_repository.is_member(
-            channel_id, actor_id, company_id=company_id
+        if not await container.authz_service.can_view(
+            AuthzObject.sync_channel(channel_id), user_id=actor_id
         ):
             raise WsCommandError("forbidden", "Нет доступа к каналу.")
         expires_at = datetime.now(UTC) + timedelta(hours=ttl_hours)
@@ -2373,8 +2458,8 @@ async def op_calls_links_update(
         raise WsCommandError(
             "forbidden", "Патч поддерживается только для календарных ссылок."
         )
-    if not await container.channel_repository.is_member(
-        link.channel_id, user.user_id, company_id=company_id
+    if not await container.authz_service.can_view(
+        AuthzObject.sync_channel(link.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "Нет доступа к ссылке.")
 
@@ -2443,8 +2528,10 @@ async def op_calls_links_remove(
         raise WsCommandError(
             "forbidden", "Удаление через этот контракт только для календарных ссылок."
         )
-    role = await container.channel_repository.get_member_role(link.channel_id, user.user_id)
-    if link.created_by_user_id != user.user_id and role not in ("owner", "admin"):
+    can_admin = await container.authz_service.can_admin(
+        AuthzObject.sync_channel(link.channel_id), user_id=user.user_id
+    )
+    if link.created_by_user_id != user.user_id and not can_admin:
         raise WsCommandError("forbidden", "Нет прав удалить эту ссылку.")
     channel_id = link.channel_id
     deleted = await container.call_repository.delete_link(payload.link_token, company_id)
@@ -2453,6 +2540,7 @@ async def op_calls_links_remove(
     _ = await container.short_link_service.delete_sync_by_link_token(payload.link_token)
     ch = await container.channel_repository.get(channel_id)
     if ch is not None and ch.company_id == company_id and ch.type == CHANNEL_TYPE_CALENDAR_MEETING:
+        await container.channel_access_service.sync_channel_deleted(channel_id)
         _ = await container.channel_repository.delete(channel_id)
     return None
 
@@ -2684,20 +2772,29 @@ async def op_company_shared_channels_list(
         raise WsCommandError("not_found", "Пользователь не в компании.")
 
     if payload.peer_user_id == user.user_id:
-        channels = await container.channel_repository.list_for_user(
+        candidates = await container.channel_repository.list_for_user(
             user.user_id,
             namespace=None,
             limit=payload.limit,
             offset=payload.offset,
             company_id=company_id,
         )
+        channels = await _filter_channels_by_can_view(
+            container, candidates, user_id=user.user_id
+        )
     else:
-        channels = await container.channel_repository.list_channels_where_both_members(
+        candidates = await container.channel_repository.list_channels_where_both_members(
             user.user_id,
             payload.peer_user_id,
             limit=payload.limit,
             offset=payload.offset,
             company_id=company_id,
+        )
+        channels = await _filter_channels_by_can_view(
+            container,
+            candidates,
+            user_id=user.user_id,
+            peer_user_id=payload.peer_user_id,
         )
 
     channel_ids = [c.channel_id for c in channels]
@@ -2713,6 +2810,7 @@ async def op_company_shared_channels_list(
                 c,
                 viewer_user_id=user.user_id,
                 channel_repository=container.channel_repository,
+                channel_access=container.channel_access_service,
                 user_repository=container.user_repository,
                 company_id=company_id,
                 lane_summary=summaries[c.channel_id],

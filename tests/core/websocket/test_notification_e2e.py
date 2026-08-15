@@ -349,8 +349,10 @@ async def test_ws_stats_endpoint(crm_client, auth_headers_system, ws_cookie_syst
     ws_url = "ws://localhost:9003/crm/api/ws/notifications"
 
     connections = []
-    for i in range(3):
+    for _ in range(3):
         ws = await websockets.connect(ws_url, additional_headers=ws_cookie_system)
+        await ws.send("ping")
+        await _recv_pong(ws, timeout=10.0)
         connections.append(ws)
 
     try:

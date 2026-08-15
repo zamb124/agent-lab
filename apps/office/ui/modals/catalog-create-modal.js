@@ -3,7 +3,7 @@
  *
  * `useForm('office/catalog_create_form')` → submit диспатчит
  * `catalogsResource.events.CREATE_REQUESTED`. После CREATED — closeAfterSave.
- * По умолчанию `is_public: true` (разделяемый каталог в текущем namespace).
+ * По умолчанию `company_visible: true` (каталог виден всей компании в текущем namespace).
  */
 
 import { html, css } from 'lit';
@@ -59,7 +59,7 @@ export class OfficeCatalogCreateModal extends PlatformFormModal {
         super.connectedCallback();
         this._form.openForm({
             title: '',
-            is_public: true,
+            company_visible: true,
             parent_catalog_id: typeof this.parentCatalogId === 'string' ? this.parentCatalogId : '',
         });
         this.useEvent(this._catalogs.resource.events.CREATED, () => this.closeAfterSave());
@@ -80,7 +80,7 @@ export class OfficeCatalogCreateModal extends PlatformFormModal {
         const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
         this._form.setField('title', v);
     }
-    _onPublicChange(e) { this._form.setField('is_public', Boolean(e.detail.value)); }
+    _onCompanyVisibleChange(e) { this._form.setField('company_visible', Boolean(e.detail.value)); }
 
     async _performSave() { this._form.submit(); }
 
@@ -124,13 +124,13 @@ export class OfficeCatalogCreateModal extends PlatformFormModal {
                 ${this._renderFieldError('title')}
                 <div class="form-group">
                     <div class="switch-row">
-                        <span class="switch-label">${this.t('catalog_create_modal.switch_public')}</span>
+                        <span class="switch-label">${this.t('catalog_create_modal.switch_company_visible')}</span>
                         <platform-switch
-                            ?checked=${Boolean(draft.is_public)}
-                            @change=${this._onPublicChange}
+                            ?checked=${Boolean(draft.company_visible)}
+                            @change=${this._onCompanyVisibleChange}
                         ></platform-switch>
                     </div>
-                    <div class="hint">${this.t('catalog_create_modal.create_public_hint')}</div>
+                    <div class="hint">${this.t('catalog_create_modal.create_company_visible_hint')}</div>
                 </div>
             </form>
         `;

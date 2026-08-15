@@ -63,6 +63,14 @@ async def _seed_branch_interface(
         )
     }
     await container.flow_repository.set(config)
+    ctx = require_context()
+    if ctx.active_company is None:
+        raise AssertionError("active company required for flow authz sync")
+    await container.flow_access_service.sync_flow_saved(
+        config,
+        company_id=ctx.active_company.company_id,
+        owner_user_id=ctx.user.user_id,
+    )
 
 
 async def _document_greeting(session_id: str) -> str:

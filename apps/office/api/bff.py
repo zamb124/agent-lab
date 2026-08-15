@@ -22,10 +22,11 @@ from fastapi.responses import Response
 from httpx import HTTPError, HTTPStatusError
 from sqlalchemy.exc import IntegrityError
 
+from apps.office.api.data_tables import router as office_data_tables_router
 from apps.office.api.viewer_routes import router as office_viewer_router
 from apps.office.config import OfficeSettings, get_office_settings
 from apps.office.container import OfficeContainer
-from apps.office.db.models import OfficeDocumentBinding
+from apps.office.db.models import OfficeDocumentBinding, OfficeDocumentCatalog
 from apps.office.dependencies import ContainerDep
 from apps.office.events import OFFICE_DOCUMENT_SAVED
 from apps.office.models.api import (
@@ -112,6 +113,8 @@ from apps.office.services.onlyoffice_jwt import (
     decode_download_token,
 )
 from apps.office.services.viewer_service import integration_configured
+from core.authz.models import AuthzObject
+from core.authz.types import AuthzRelation
 from core.clients.onlyoffice import OnlyOfficeJwtError, sign_onlyoffice_jwt_hs256
 from core.clients.service_client import ServiceClientError
 from core.config import get_settings
@@ -134,6 +137,7 @@ from core.websocket.publisher import Notification, NotificationType, notify_user
 logger = get_logger(__name__)
 router = APIRouter(tags=["office-bff"])
 router.include_router(office_viewer_router)
+router.include_router(office_data_tables_router)
 
 _EMPTY_DOCX = Path(__file__).resolve().parent.parent / "templates" / "empty.docx"
 
@@ -284,14 +288,14 @@ async def _resolve_catalog_for_create(
     user_id: str,
     catalog_id: str | None,
 ) -> str:
-    cat_repo = c.catalog_repository
+    access = c.office_access_service
     if catalog_id is not None and catalog_id.strip() != "":
         cid = catalog_id.strip()
-        allowed = await cat_repo.user_can_access_catalog(cid, company_id, namespace, user_id)
+        allowed = await c.authz_service.can_view(AuthzObject.office_catalog(cid), user_id=user_id)
         if not allowed:
             raise HTTPException(status_code=403, detail="Нет доступа к каталогу")
         return cid
-    accessible = await cat_repo.list_accessible_with_file_counts(
+    accessible = await access.list_accessible_catalogs_with_file_counts(
         company_id=company_id,
         namespace=namespace,
         user_id=user_id,
@@ -299,16 +303,66 @@ async def _resolve_catalog_for_create(
     if len(accessible) == 1:
         return accessible[0][0].catalog_id
     if len(accessible) == 0:
-        row = await cat_repo.get_or_create_default(
+        row, created = await c.catalog_repository.get_or_create_default(
             company_id=company_id,
             namespace=namespace,
             owner_user_id=user_id,
         )
+        if created:
+            try:
+                await access.sync_catalog_created(
+                    row,
+                    owner_user_id=user_id,
+                    company_visible=True,
+                )
+            except Exception:
+                _ = await c.catalog_repository.delete_catalog(row.catalog_id, company_id, namespace)
+                raise
         return row.catalog_id
     raise HTTPException(
         status_code=400,
         detail="Укажите catalog_id: доступно несколько каталогов",
     )
+
+
+async def _sync_catalog_created_or_rollback(
+    container: OfficeContainer,
+    catalog: OfficeDocumentCatalog,
+    *,
+    owner_user_id: str,
+    company_visible: bool,
+    company_id: str,
+    namespace: str,
+) -> None:
+    try:
+        await container.office_access_service.sync_catalog_created(
+            catalog,
+            owner_user_id=owner_user_id,
+            company_visible=company_visible,
+        )
+    except Exception:
+        _ = await container.catalog_repository.delete_catalog(
+            catalog.catalog_id, company_id, namespace
+        )
+        raise
+
+
+async def _sync_document_created_or_rollback(
+    container: OfficeContainer,
+    row: OfficeDocumentBinding,
+    *,
+    owner_user_id: str,
+) -> None:
+    try:
+        await container.office_access_service.sync_document_created(
+            row,
+            owner_user_id=owner_user_id,
+        )
+    except Exception:
+        _ = await container.document_binding_repository.delete_binding(
+            row.file_id, row.company_id, row.namespace
+        )
+        raise
 
 
 async def _require_binding_catalog_access(
@@ -348,6 +402,98 @@ async def _user_display(c: OfficeContainer, user_id: str) -> tuple[str, str | No
     return user_id, None
 
 
+async def _build_catalog_detail_response(
+    container: OfficeContainer,
+    *,
+    catalog: OfficeDocumentCatalog,
+    current_user_id: str,
+) -> OfficeCatalogDetailResponse:
+    access = container.office_access_service
+    owner_user_id = await access.resolve_catalog_owner_user_id(catalog.catalog_id)
+    company_visible = await access.catalog_is_company_visible(
+        catalog.catalog_id,
+        catalog.company_id,
+    )
+    display_name, avatar_url = await _user_display(container, owner_user_id)
+    return OfficeCatalogDetailResponse(
+        catalog_id=catalog.catalog_id,
+        parent_catalog_id=catalog.parent_catalog_id,
+        title=catalog.title,
+        owner_user_id=owner_user_id,
+        owner_display_name=display_name,
+        owner_avatar_url=avatar_url,
+        is_owner=owner_user_id == current_user_id,
+        company_visible=company_visible,
+    )
+
+
+async def _build_catalog_list_item(
+    container: OfficeContainer,
+    *,
+    catalog: OfficeDocumentCatalog,
+    file_count: int,
+    current_user_id: str,
+) -> OfficeCatalogListItem:
+    access = container.office_access_service
+    owner_user_id = await access.resolve_catalog_owner_user_id(catalog.catalog_id)
+    company_visible = await access.catalog_is_company_visible(
+        catalog.catalog_id,
+        catalog.company_id,
+    )
+    display_name, avatar_url = await _user_display(container, owner_user_id)
+    rag_service = container.catalog_rag_index_service
+    return OfficeCatalogListItem(
+        catalog_id=catalog.catalog_id,
+        parent_catalog_id=catalog.parent_catalog_id,
+        title=catalog.title,
+        file_count=file_count,
+        owner_user_id=owner_user_id,
+        owner_display_name=display_name,
+        owner_avatar_url=avatar_url,
+        is_owner=owner_user_id == current_user_id,
+        company_visible=company_visible,
+        rag_index_enabled=catalog.rag_index_enabled,
+        rag_index_include_subcatalogs=catalog.rag_index_include_subcatalogs,
+        rag_index_search_options=rag_service.catalog_search_options_model(catalog),
+    )
+
+
+async def _list_catalog_member_items(
+    container: OfficeContainer,
+    *,
+    catalog_id: str,
+    company_id: str,
+    namespace: str,
+    request: Request,
+) -> list[OfficeCatalogMemberItem]:
+    access_response = await container.office_access_service.get_catalog_access(
+        catalog_id,
+        company_id,
+        namespace,
+        request,
+    )
+    items: list[OfficeCatalogMemberItem] = []
+    for member in access_response.members:
+        display_name, avatar_url = await _user_display(container, member.user_id)
+        items.append(
+            OfficeCatalogMemberItem(
+                user_id=member.user_id,
+                display_name=display_name,
+                avatar_url=avatar_url,
+                relation=member.relation,
+            )
+        )
+    return items
+
+
+def _catalog_member_relation_to_authz(relation: str) -> AuthzRelation:
+    if relation == "editor":
+        return AuthzRelation.EDITOR
+    if relation == "viewer":
+        return AuthzRelation.VIEWER
+    raise ValueError(f"unsupported member relation: {relation}")
+
+
 def _safe_filename_stem(title: str) -> str:
     s = title.strip()
     s = re.sub(r"[^\w\-. ]+", "_", s, flags=re.UNICODE)
@@ -366,9 +512,7 @@ def _office_inline_content_disposition(original_name: str) -> str:
 
 
 def _editor_embed_url(file_id: str, namespace: str) -> str:
-    return (
-        f"/documents/embed/edit/{quote(file_id, safe='')}?namespace={quote(namespace, safe='')}"
-    )
+    return f"/documents/embed/edit/{quote(file_id, safe='')}?namespace={quote(namespace, safe='')}"
 
 
 def _onlyoffice_document_key(file_id: str, checksum: str | None) -> str:
@@ -932,29 +1076,19 @@ async def list_company_members_for_catalogs(
 async def list_catalogs(container: ContainerDep) -> OfficeCatalogListResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    rows = await container.catalog_repository.list_accessible_with_file_counts(
+    rows = await container.office_access_service.list_accessible_catalogs_with_file_counts(
         company_id=ctx.active_company.company_id,
         namespace=namespace,
         user_id=ctx.user.user_id,
     )
     out: list[OfficeCatalogListItem] = []
-    rag_service = container.catalog_rag_index_service
     for cat, file_count in rows:
-        display_name, avatar_url = await _user_display(container, cat.owner_user_id)
         out.append(
-            OfficeCatalogListItem(
-                catalog_id=cat.catalog_id,
-                parent_catalog_id=cat.parent_catalog_id,
-                title=cat.title,
+            await _build_catalog_list_item(
+                container,
+                catalog=cat,
                 file_count=file_count,
-                owner_user_id=cat.owner_user_id,
-                owner_display_name=display_name,
-                owner_avatar_url=avatar_url,
-                is_owner=cat.owner_user_id == ctx.user.user_id,
-                is_public=cat.is_public,
-                rag_index_enabled=cat.rag_index_enabled,
-                rag_index_include_subcatalogs=cat.rag_index_include_subcatalogs,
-                rag_index_search_options=rag_service.catalog_search_options_model(cat),
+                current_user_id=ctx.user.user_id,
             )
         )
     return OfficeCatalogListResponse(items=out)
@@ -968,46 +1102,32 @@ async def create_catalog(
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
     if body.parent_catalog_id is not None:
-        parent_allowed = await container.catalog_repository.user_can_access_catalog(
-            body.parent_catalog_id,
-            ctx.active_company.company_id,
-            namespace,
-            ctx.user.user_id,
+        await container.authz_service.require_can_admin(
+            AuthzObject.office_catalog(body.parent_catalog_id),
+            user_id=ctx.user.user_id,
         )
-        if not parent_allowed:
-            raise HTTPException(status_code=403, detail="Нет доступа к родительскому каталогу")
-        is_parent_owner = await container.catalog_repository.user_is_owner(
-            body.parent_catalog_id,
-            ctx.active_company.company_id,
-            namespace,
-            ctx.user.user_id,
-        )
-        if not is_parent_owner:
-            raise HTTPException(
-                status_code=403,
-                detail="Подкаталог может создать только владелец родительского каталога",
-            )
     try:
         cat = await container.catalog_repository.create(
             company_id=ctx.active_company.company_id,
             namespace=namespace,
             title=body.title,
             owner_user_id=ctx.user.user_id,
-            is_public=body.is_public,
             parent_catalog_id=body.parent_catalog_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    display_name, avatar_url = await _user_display(container, cat.owner_user_id)
-    return OfficeCatalogDetailResponse(
-        catalog_id=cat.catalog_id,
-        parent_catalog_id=cat.parent_catalog_id,
-        title=cat.title,
-        owner_user_id=cat.owner_user_id,
-        owner_display_name=display_name,
-        owner_avatar_url=avatar_url,
-        is_owner=True,
-        is_public=cat.is_public,
+    await _sync_catalog_created_or_rollback(
+        container,
+        cat,
+        owner_user_id=ctx.user.user_id,
+        company_visible=body.company_visible,
+        company_id=ctx.active_company.company_id,
+        namespace=namespace,
+    )
+    return await _build_catalog_detail_response(
+        container,
+        catalog=cat,
+        current_user_id=ctx.user.user_id,
     )
 
 
@@ -1018,11 +1138,9 @@ async def get_catalog(
 ) -> OfficeCatalogDetailResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    allowed = await container.catalog_repository.user_can_access_catalog(
-        catalog_id,
-        ctx.active_company.company_id,
-        namespace,
-        ctx.user.user_id,
+    allowed = await container.authz_service.can_view(
+        AuthzObject.office_catalog(catalog_id),
+        user_id=ctx.user.user_id,
     )
     if not allowed:
         raise HTTPException(status_code=404, detail="Каталог не найден")
@@ -1033,16 +1151,10 @@ async def get_catalog(
     )
     if cat is None:
         raise HTTPException(status_code=404, detail="Каталог не найден")
-    display_name, avatar_url = await _user_display(container, cat.owner_user_id)
-    return OfficeCatalogDetailResponse(
-        catalog_id=cat.catalog_id,
-        parent_catalog_id=cat.parent_catalog_id,
-        title=cat.title,
-        owner_user_id=cat.owner_user_id,
-        owner_display_name=display_name,
-        owner_avatar_url=avatar_url,
-        is_owner=cat.owner_user_id == ctx.user.user_id,
-        is_public=cat.is_public,
+    return await _build_catalog_detail_response(
+        container,
+        catalog=cat,
+        current_user_id=ctx.user.user_id,
     )
 
 
@@ -1054,36 +1166,27 @@ async def patch_catalog(
 ) -> OfficeCatalogDetailResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    is_owner = await container.catalog_repository.user_is_owner(
-        catalog_id,
-        ctx.active_company.company_id,
-        namespace,
-        ctx.user.user_id,
+    await container.authz_service.require_can_admin(
+        AuthzObject.office_catalog(catalog_id),
+        user_id=ctx.user.user_id,
     )
-    if not is_owner:
-        raise HTTPException(
-            status_code=403,
-            detail="Только владелец может изменять каталог",
-        )
     updated = await container.catalog_repository.update_catalog(
         catalog_id,
         ctx.active_company.company_id,
         namespace,
         title=body.title,
-        is_public=body.is_public,
     )
     if updated is None:
         raise HTTPException(status_code=404, detail="Каталог не найден")
-    display_name, avatar_url = await _user_display(container, updated.owner_user_id)
-    return OfficeCatalogDetailResponse(
-        catalog_id=updated.catalog_id,
-        parent_catalog_id=updated.parent_catalog_id,
-        title=updated.title,
-        owner_user_id=updated.owner_user_id,
-        owner_display_name=display_name,
-        owner_avatar_url=avatar_url,
-        is_owner=True,
-        is_public=updated.is_public,
+    if body.company_visible is not None:
+        await container.office_access_service.set_catalog_company_visible(
+            updated,
+            company_visible=body.company_visible,
+        )
+    return await _build_catalog_detail_response(
+        container,
+        catalog=updated,
+        current_user_id=ctx.user.user_id,
     )
 
 
@@ -1094,14 +1197,10 @@ async def delete_catalog_endpoint(
 ) -> Response:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    is_owner = await container.catalog_repository.user_is_owner(
-        catalog_id,
-        ctx.active_company.company_id,
-        namespace,
-        ctx.user.user_id,
+    await container.authz_service.require_can_admin(
+        AuthzObject.office_catalog(catalog_id),
+        user_id=ctx.user.user_id,
     )
-    if not is_owner:
-        raise HTTPException(status_code=403, detail="Только владелец может удалить каталог")
     catalog = await container.catalog_repository.get(
         catalog_id,
         ctx.active_company.company_id,
@@ -1126,6 +1225,7 @@ async def delete_catalog_endpoint(
         raise HTTPException(status_code=409, detail=str(e)) from e
     if not ok:
         raise HTTPException(status_code=404, detail="Каталог не найден")
+    await container.office_access_service.sync_catalog_deleted(catalog_id)
     return Response(status_code=204)
 
 
@@ -1137,18 +1237,12 @@ async def enable_catalog_rag_index(
     catalog_id: str,
     container: ContainerDep,
 ) -> OfficeCatalogRagIndexEnableResponse:
-    namespace = await _require_explicit_namespace(container)
+    _ = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    is_owner = await container.catalog_repository.user_is_owner(
-        catalog_id,
-        ctx.active_company.company_id,
-        namespace,
-        ctx.user.user_id,
+    await container.authz_service.require_can_admin(
+        AuthzObject.office_catalog(catalog_id),
+        user_id=ctx.user.user_id,
     )
-    if not is_owner:
-        raise HTTPException(
-            status_code=403, detail="Только владелец может управлять RAG-индексом каталога"
-        )
     try:
         return await container.catalog_rag_index_service.enable(catalog_id)
     except ServiceClientError as exc:
@@ -1165,18 +1259,12 @@ async def disable_catalog_rag_index(
     catalog_id: str,
     container: ContainerDep,
 ) -> OfficeCatalogRagIndexDisableResponse:
-    namespace = await _require_explicit_namespace(container)
+    _ = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    is_owner = await container.catalog_repository.user_is_owner(
-        catalog_id,
-        ctx.active_company.company_id,
-        namespace,
-        ctx.user.user_id,
+    await container.authz_service.require_can_admin(
+        AuthzObject.office_catalog(catalog_id),
+        user_id=ctx.user.user_id,
     )
-    if not is_owner:
-        raise HTTPException(
-            status_code=403, detail="Только владелец может управлять RAG-индексом каталога"
-        )
     try:
         await container.catalog_rag_index_service.disable(catalog_id)
     except ServiceClientError as exc:
@@ -1195,18 +1283,12 @@ async def rebuild_catalog_rag_index(
     catalog_id: str,
     container: ContainerDep,
 ) -> OfficeCatalogRagIndexRebuildResponse:
-    namespace = await _require_explicit_namespace(container)
+    _ = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    is_owner = await container.catalog_repository.user_is_owner(
-        catalog_id,
-        ctx.active_company.company_id,
-        namespace,
-        ctx.user.user_id,
+    await container.authz_service.require_can_admin(
+        AuthzObject.office_catalog(catalog_id),
+        user_id=ctx.user.user_id,
     )
-    if not is_owner:
-        raise HTTPException(
-            status_code=403, detail="Только владелец может управлять RAG-индексом каталога"
-        )
     try:
         return await container.catalog_rag_index_service.rebuild_catalog(catalog_id)
     except ValueError as exc:
@@ -1221,13 +1303,11 @@ async def catalog_rag_index_status(
     catalog_id: str,
     container: ContainerDep,
 ) -> OfficeCatalogRagIndexStatusResponse:
-    namespace = await _require_explicit_namespace(container)
+    _ = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    allowed = await container.catalog_repository.user_can_access_catalog(
-        catalog_id,
-        ctx.active_company.company_id,
-        namespace,
-        ctx.user.user_id,
+    allowed = await container.authz_service.can_view(
+        AuthzObject.office_catalog(catalog_id),
+        user_id=ctx.user.user_id,
     )
     if not allowed:
         raise HTTPException(status_code=403, detail="Нет доступа к каталогу")
@@ -1248,18 +1328,12 @@ async def patch_catalog_rag_index_settings(
     body: OfficeCatalogRagIndexSettingsPatchRequest,
     container: ContainerDep,
 ) -> OfficeCatalogRagIndexSettingsResponse:
-    namespace = await _require_explicit_namespace(container)
+    _ = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    is_owner = await container.catalog_repository.user_is_owner(
-        catalog_id,
-        ctx.active_company.company_id,
-        namespace,
-        ctx.user.user_id,
+    await container.authz_service.require_can_admin(
+        AuthzObject.office_catalog(catalog_id),
+        user_id=ctx.user.user_id,
     )
-    if not is_owner:
-        raise HTTPException(
-            status_code=403, detail="Только владелец может управлять RAG-индексом каталога"
-        )
     try:
         return await container.catalog_rag_index_service.patch_rag_index_settings(
             catalog_id,
@@ -1278,13 +1352,11 @@ async def search_catalog_rag_index(
     body: OfficeCatalogSemanticSearchRequest,
     container: ContainerDep,
 ) -> OfficeCatalogSemanticSearchResponse:
-    namespace = await _require_explicit_namespace(container)
+    _ = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    allowed = await container.catalog_repository.user_can_access_catalog(
-        catalog_id,
-        ctx.active_company.company_id,
-        namespace,
-        ctx.user.user_id,
+    allowed = await container.authz_service.can_view(
+        AuthzObject.office_catalog(catalog_id),
+        user_id=ctx.user.user_id,
     )
     if not allowed:
         raise HTTPException(status_code=403, detail="Нет доступа к каталогу")
@@ -1303,14 +1375,13 @@ async def search_catalog_rag_index(
 async def list_catalog_members(
     catalog_id: str,
     container: ContainerDep,
+    request: Request,
 ) -> OfficeCatalogMembersResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    allowed = await container.catalog_repository.user_can_access_catalog(
-        catalog_id,
-        ctx.active_company.company_id,
-        namespace,
-        ctx.user.user_id,
+    allowed = await container.authz_service.can_view(
+        AuthzObject.office_catalog(catalog_id),
+        user_id=ctx.user.user_id,
     )
     if not allowed:
         raise HTTPException(status_code=404, detail="Каталог не найден")
@@ -1321,19 +1392,13 @@ async def list_catalog_members(
     )
     if cat is None:
         raise HTTPException(status_code=404, detail="Каталог не найден")
-    member_rows = await container.catalog_repository.list_members(catalog_id)
-    member_ids = {m.user_id for m in member_rows}
-    member_ids.add(cat.owner_user_id)
-    items: list[OfficeCatalogMemberItem] = []
-    for uid in sorted(member_ids):
-        display_name, avatar_url = await _user_display(container, uid)
-        items.append(
-            OfficeCatalogMemberItem(
-                user_id=uid,
-                display_name=display_name,
-                avatar_url=avatar_url,
-            )
-        )
+    items = await _list_catalog_member_items(
+        container,
+        catalog_id=catalog_id,
+        company_id=ctx.active_company.company_id,
+        namespace=namespace,
+        request=request,
+    )
     return OfficeCatalogMembersResponse(members=items)
 
 
@@ -1342,27 +1407,32 @@ async def add_catalog_member(
     catalog_id: str,
     body: OfficeCatalogMemberAddRequest,
     container: ContainerDep,
+    request: Request,
 ) -> OfficeCatalogMembersResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    is_owner = await container.catalog_repository.user_is_owner(
-        catalog_id,
-        ctx.active_company.company_id,
-        namespace,
-        ctx.user.user_id,
+    await container.authz_service.require_can_admin(
+        AuthzObject.office_catalog(catalog_id),
+        user_id=ctx.user.user_id,
     )
-    if not is_owner:
-        raise HTTPException(status_code=403, detail="Только владелец может добавлять участников")
     try:
-        _ = await container.catalog_repository.add_member(
+        await container.office_access_service.add_catalog_member(
             catalog_id,
-            body.user_id.strip(),
-            company_id=ctx.active_company.company_id,
-            namespace=namespace,
+            ctx.active_company.company_id,
+            namespace,
+            user_id=body.user_id.strip(),
+            relation=_catalog_member_relation_to_authz(body.relation),
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    return await list_catalog_members(catalog_id, container)
+    items = await _list_catalog_member_items(
+        container,
+        catalog_id=catalog_id,
+        company_id=ctx.active_company.company_id,
+        namespace=namespace,
+        request=request,
+    )
+    return OfficeCatalogMembersResponse(members=items)
 
 
 @router.delete("/catalogs/{catalog_id}/members/{member_user_id}", status_code=204)
@@ -1373,14 +1443,10 @@ async def remove_catalog_member(
 ) -> Response:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    is_owner = await container.catalog_repository.user_is_owner(
-        catalog_id,
-        ctx.active_company.company_id,
-        namespace,
-        ctx.user.user_id,
+    await container.authz_service.require_can_admin(
+        AuthzObject.office_catalog(catalog_id),
+        user_id=ctx.user.user_id,
     )
-    if not is_owner:
-        raise HTTPException(status_code=403, detail="Только владелец может удалять участников")
     cat = await container.catalog_repository.get(
         catalog_id,
         ctx.active_company.company_id,
@@ -1388,11 +1454,13 @@ async def remove_catalog_member(
     )
     if cat is None:
         raise HTTPException(status_code=404, detail="Каталог не найден")
-    if member_user_id == cat.owner_user_id:
-        raise HTTPException(status_code=400, detail="Нельзя удалить владельца каталога")
-    ok = await container.catalog_repository.remove_member(catalog_id, member_user_id)
-    if not ok:
-        raise HTTPException(status_code=404, detail="Участник не найден")
+    try:
+        await container.office_access_service.remove_catalog_member(
+            catalog_id,
+            member_user_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     return Response(status_code=204)
 
 
@@ -1404,14 +1472,11 @@ async def get_catalog_access(
 ) -> OfficeResourceAccessResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    is_owner = await container.catalog_repository.user_is_owner(
-        catalog_id,
-        ctx.active_company.company_id,
-        namespace,
-        ctx.user.user_id,
+    await container.authz_service.require_relation(
+        AuthzRelation.CAN_SHARE,
+        AuthzObject.office_catalog(catalog_id),
+        user_id=ctx.user.user_id,
     )
-    if not is_owner:
-        raise HTTPException(status_code=403, detail="Только владелец может управлять доступом")
     try:
         return await container.office_access_service.get_catalog_access(
             catalog_id,
@@ -1432,14 +1497,11 @@ async def patch_catalog_access(
 ) -> OfficeResourceAccessResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    is_owner = await container.catalog_repository.user_is_owner(
-        catalog_id,
-        ctx.active_company.company_id,
-        namespace,
-        ctx.user.user_id,
+    await container.authz_service.require_relation(
+        AuthzRelation.CAN_SHARE,
+        AuthzObject.office_catalog(catalog_id),
+        user_id=ctx.user.user_id,
     )
-    if not is_owner:
-        raise HTTPException(status_code=403, detail="Только владелец может управлять доступом")
     try:
         response, _raw_token = await container.office_access_service.patch_catalog_access(
             catalog_id,
@@ -1464,14 +1526,11 @@ async def rotate_catalog_access_link(
 ) -> OfficeResourceAccessRotateLinkResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    is_owner = await container.catalog_repository.user_is_owner(
-        catalog_id,
-        ctx.active_company.company_id,
-        namespace,
-        ctx.user.user_id,
+    await container.authz_service.require_relation(
+        AuthzRelation.CAN_SHARE,
+        AuthzObject.office_catalog(catalog_id),
+        user_id=ctx.user.user_id,
     )
-    if not is_owner:
-        raise HTTPException(status_code=403, detail="Только владелец может управлять доступом")
     try:
         return await container.office_access_service.rotate_catalog_link(
             catalog_id,
@@ -1608,11 +1667,9 @@ async def list_documents(
             detail="Укажите catalog_id или хотя бы одно значение catalog_ids",
         )
     for cid in resolved_ids:
-        allowed = await container.catalog_repository.user_can_access_catalog(
-            cid,
-            ctx.active_company.company_id,
-            namespace,
-            ctx.user.user_id,
+        allowed = await container.authz_service.can_view(
+            AuthzObject.office_catalog(cid),
+            user_id=ctx.user.user_id,
         )
         if not allowed:
             raise HTTPException(status_code=403, detail="Нет доступа к каталогу")
@@ -1704,6 +1761,11 @@ async def create_document_from_uploaded_file(
         raise _http_exception_from_service_client("rag", exc) from exc
     except ValueError as exc:
         raise _http_exception_from_catalog_rag_value_error(exc) from exc
+    await _sync_document_created_or_rollback(
+        container,
+        row,
+        owner_user_id=ctx.user.user_id,
+    )
     return OfficeDocumentCreateResponse(
         file_id=row.file_id,
         catalog_id=row.catalog_id,
@@ -1743,7 +1805,9 @@ async def documents_rag_index_statuses(
     for raw_id in body.file_ids:
         file_id = raw_id.strip()
         if file_id == "":
-            raise HTTPException(status_code=422, detail="file_ids не должен содержать пустые значения")
+            raise HTTPException(
+                status_code=422, detail="file_ids не должен содержать пустые значения"
+            )
         if file_id in seen:
             continue
         seen.add(file_id)
@@ -1830,6 +1894,11 @@ async def create_empty_document(
         raise _http_exception_from_service_client("rag", exc) from exc
     except ValueError as exc:
         raise _http_exception_from_catalog_rag_value_error(exc) from exc
+    await _sync_document_created_or_rollback(
+        container,
+        row,
+        owner_user_id=ctx.user.user_id,
+    )
     return OfficeDocumentCreateResponse(
         file_id=row.file_id,
         catalog_id=row.catalog_id,
@@ -2262,6 +2331,7 @@ async def permanent_delete_document(file_id: str, container: ContainerDep) -> Re
     )
     if not ok:
         raise HTTPException(status_code=404, detail="Привязка не найдена")
+    await container.office_access_service.sync_document_deleted(file_id)
     return Response(status_code=204)
 
 
@@ -2281,11 +2351,9 @@ async def move_document(
     if row is None or row.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Привязка не найдена")
     await _require_binding_catalog_access(container, row, ctx.user.user_id)
-    allowed = await container.catalog_repository.user_can_access_catalog(
-        body.catalog_id,
-        ctx.active_company.company_id,
-        namespace,
-        ctx.user.user_id,
+    allowed = await container.authz_service.can_view(
+        AuthzObject.office_catalog(body.catalog_id),
+        user_id=ctx.user.user_id,
     )
     if not allowed:
         raise HTTPException(status_code=403, detail="Нет доступа к каталогу")
@@ -2298,6 +2366,10 @@ async def move_document(
     )
     if moved is None:
         raise HTTPException(status_code=404, detail="Привязка не найдена")
+    await container.office_access_service.sync_document_moved(
+        moved,
+        old_catalog_id=source_catalog_id,
+    )
     await record_document_event(
         container,
         file_id=file_id,
@@ -2332,11 +2404,9 @@ async def copy_document(
     if row is None or row.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Привязка не найдена")
     await _require_binding_catalog_access(container, row, ctx.user.user_id)
-    allowed = await container.catalog_repository.user_can_access_catalog(
-        body.catalog_id,
-        ctx.active_company.company_id,
-        namespace,
-        ctx.user.user_id,
+    allowed = await container.authz_service.can_view(
+        AuthzObject.office_catalog(body.catalog_id),
+        user_id=ctx.user.user_id,
     )
     if not allowed:
         raise HTTPException(status_code=403, detail="Нет доступа к каталогу")
@@ -2386,6 +2456,11 @@ async def copy_document(
         raise _http_exception_from_service_client("rag", exc) from exc
     except ValueError as exc:
         raise _http_exception_from_catalog_rag_value_error(exc) from exc
+    await _sync_document_created_or_rollback(
+        container,
+        created,
+        owner_user_id=ctx.user.user_id,
+    )
     return OfficeDocumentCreateResponse(
         file_id=created.file_id,
         catalog_id=created.catalog_id,
@@ -2412,9 +2487,7 @@ async def search_documents(
 
 
 @router.get("/documents/{file_id}/preview", response_model=OfficeDocumentPreviewResponse)
-async def document_preview(
-    file_id: str, container: ContainerDep
-) -> OfficeDocumentPreviewResponse:
+async def document_preview(file_id: str, container: ContainerDep) -> OfficeDocumentPreviewResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
     row = await container.document_binding_repository.get(
@@ -2449,7 +2522,7 @@ async def create_document_share(
     if row is None or row.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Привязка не найдена")
     await _require_binding_catalog_access(container, row, ctx.user.user_id)
-    permission = body.permission if body.permission in ("view", "edit") else "view"
+    permission = body.permission
     patch_body = OfficeResourceAccessPatchRequest(
         link_enabled=True,
         link_permission=permission,
@@ -2506,19 +2579,25 @@ async def list_document_shares(
     if row is None or row.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Привязка не найдена")
     await _require_binding_catalog_access(container, row, ctx.user.user_id)
-    shares = await container.document_share_repository.list_for_file(file_id)
-    base = str(request.base_url).rstrip("/")
-    items = [
-        OfficeDocumentShareItem(
-            share_id=share.share_id,
-            file_id=share.file_id,
-            permission=share.permission,
-            share_url=f"{base}/documents/api/v1/shares/<token>",
-            expires_at=share.expires_at,
-            created_at=share.created_at,
+    _ = request
+    items: list[OfficeDocumentShareItem] = []
+    if row.link_enabled and row.link_token_hash is not None:
+        if row.link_permission not in ("viewer", "editor"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid link_permission: {row.link_permission}",
+            )
+        permission = row.link_permission
+        items.append(
+            OfficeDocumentShareItem(
+                share_id=file_id,
+                file_id=file_id,
+                permission=permission,
+                share_url=None,
+                expires_at=None,
+                created_at=row.created_at,
+            )
         )
-        for share in shares
-    ]
     return OfficeDocumentShareListResponse(items=items)
 
 
@@ -2526,22 +2605,24 @@ async def list_document_shares(
 async def resolve_document_share(
     token: str, container: ContainerDep
 ) -> OfficeDocumentShareResolveResponse:
-    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
-    share = await container.document_share_repository.get_by_token_hash(token_hash)
-    if share is None:
+    try:
+        target = await container.office_access_service.resolve_public_token(token)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if target.kind != "binding" or target.binding is None:
         raise HTTPException(status_code=404, detail="Ссылка не найдена")
-    if share.expires_at is not None and share.expires_at < datetime.now(timezone.utc):
-        raise HTTPException(status_code=410, detail="Ссылка истекла")
-    row = await container.document_binding_repository.get_by_file_and_company(
-        share.file_id,
-        share.company_id,
-    )
-    if row is None or row.deleted_at is not None:
+    row = target.binding
+    if row.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Документ не найден")
+    if row.link_permission not in ("viewer", "editor"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid link_permission: {row.link_permission}",
+        )
     return OfficeDocumentShareResolveResponse(
         file_id=row.file_id,
         title=row.title,
-        permission=share.permission,
+        permission=row.link_permission,
         file_category=row.file_category,
         onlyoffice_document_type=row.onlyoffice_document_type,
     )

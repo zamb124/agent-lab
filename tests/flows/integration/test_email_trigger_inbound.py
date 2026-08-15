@@ -57,7 +57,7 @@ def _mail_service_with_port(container, port: RecordingMailServerPort) -> MailSer
         sync_cursor_repository=container.mailbox_sync_cursor_repository,
         folder_repository=container.mailbox_folder_repository,
         message_repository=container.mail_message_repository,
-        member_repository=container.mailbox_binding_member_repository,
+        authz=container.authz_service,
         namespace_service=container.namespace_service,
         company_repository=container.company_repository,
         user_repository=container.user_repository,

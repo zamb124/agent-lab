@@ -6,13 +6,13 @@ import { fixture, fixtureCleanup, html, expect, waitUntil, elementUpdated } from
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { collectFactories, registerFactory, getPlatformBus, CoreEvents } from '@platform/lib/events/index.js';
 import '@platform/lib/components/platform-modal-stack.js';
-import { codeCompletionsOp } from '../../../../apps/flows/ui/events/resources/code.resource.js';
+import { codeLspSessionOp } from '../../../../apps/flows/ui/events/resources/code.resource.js';
 import '../../../../apps/flows/ui/components/editors/flows-code-editor.js';
 import '../../../../apps/flows/ui/modals/flows-raw-json-modal.js';
 
 function bootstrap() {
-    registerFactory(codeCompletionsOp);
-    const collected = collectFactories([codeCompletionsOp]);
+    registerFactory(codeLspSessionOp);
+    const collected = collectFactories([codeLspSessionOp]);
     bootstrapTestBus({ slices: collected.slices });
 }
 
@@ -35,6 +35,9 @@ describe('flows-code-editor scroll sizing', () => {
         expect(cm.go).to.be.a('function');
         expect(cm.csharp).to.be.a('function');
         expect(cm.json).to.be.a('function');
+        expect(cm.LSPClient).to.be.a('function');
+        expect(cm.languageServerExtensions).to.be.a('function');
+        expect(cm.startCompletion).to.be.a('function');
     });
 
     it('не раздувает ширину контейнера на длинной JSON-строке и даёт вертикальный скролл', async () => {

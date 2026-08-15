@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import re
 import tempfile
 import textwrap
@@ -24,6 +25,7 @@ from core.capabilities.runtime_executables import (
     resolve_runtime_executable,
     runtime_executable_required_message,
 )
+from core.capabilities.sandbox_libraries import GO_FORBIDDEN_IMPORTS, is_allowed_go_import
 from core.config import get_settings
 from core.tracing.operation_span import traced_operation
 
@@ -31,22 +33,8 @@ CAPABILITY_CALL_PATH = "/capability-gateway/api/v1/capabilities/call"
 RESPONSE_PREFIX = "__CODE_RUNNER_RESPONSE__"
 SERVICE_NAME = "code_runner_go"
 GO_BIN_ENV = "CODE_RUNNER_GO_BIN"
-FORBIDDEN_GO_IMPORTS: frozenset[str] = frozenset(
-    {
-        "C",
-        "net",
-        "net/http",
-        "net/url",
-        "os",
-        "os/exec",
-        "path/filepath",
-        "plugin",
-        "reflect",
-        "runtime",
-        "syscall",
-        "unsafe",
-    }
-)
+WORKER_POOL_ENV = "CODE_RUNNER_GO_WORKERS"
+FORBIDDEN_GO_IMPORTS: frozenset[str] = GO_FORBIDDEN_IMPORTS
 
 
 class GoSandboxExecutor:
@@ -56,6 +44,8 @@ class GoSandboxExecutor:
         self._artifact_root: Path = Path(tempfile.mkdtemp(prefix="code-runner-go-artifacts-"))
         self._build_locks: dict[str, asyncio.Lock] = {}
         self._build_locks_guard: asyncio.Lock = asyncio.Lock()
+        self._compile_slots: asyncio.Semaphore | None = None
+        self._compile_slots_guard: asyncio.Lock = asyncio.Lock()
 
     async def execute(self, request: CodeExecutionRequest) -> CodeExecutionResponse:
         security_error = self._verify_execution_request(request)
@@ -230,7 +220,7 @@ class GoSandboxExecutor:
 
     def _validate_user_source(self, code: str) -> None:
         for package in self._go_imports(code):
-            if package in FORBIDDEN_GO_IMPORTS or package.split("/", 1)[0] in FORBIDDEN_GO_IMPORTS:
+            if not is_allowed_go_import(package):
                 raise PermissionError(f"go import is not allowed in code runner: {package}")
 
     def _go_imports(self, code: str) -> list[str]:
@@ -275,6 +265,18 @@ class GoSandboxExecutor:
             )
         return None
 
+    async def _compile_slots_semaphore(self) -> asyncio.Semaphore:
+        async with self._compile_slots_guard:
+            if self._compile_slots is None:
+                self._compile_slots = asyncio.Semaphore(self._compile_slot_count())
+            return self._compile_slots
+
+    def _compile_slot_count(self) -> int:
+        raw = os.environ.get(WORKER_POOL_ENV)
+        if raw is None:
+            return max(2, min(8, (os.cpu_count() or 2)))
+        return max(2, int(raw))
+
     async def _build_lock(self, artifact_key: str) -> asyncio.Lock:
         async with self._build_locks_guard:
             lock = self._build_locks.get(artifact_key)
@@ -298,36 +300,38 @@ class GoSandboxExecutor:
         async with lock:
             if binary_path.exists():
                 return
-            artifact_path.mkdir(parents=True, exist_ok=True)
-            runner_path = artifact_path / "runner.go"
-            user_path = artifact_path / "user.go"
-            entrypoint_path = artifact_path / "entrypoint.go"
-            sdk_path = artifact_path / "sdk.go"
-            _ = runner_path.write_text(self._runner_source(), encoding="utf-8")
-            _ = user_path.write_text(request.code, encoding="utf-8")
-            _ = entrypoint_path.write_text(self._entrypoint_source(entrypoint), encoding="utf-8")
-            _ = sdk_path.write_text(self._sdk_source(request), encoding="utf-8")
-            process = await asyncio.create_subprocess_exec(
-                go_bin,
-                "build",
-                "-o",
-                str(binary_path),
-                str(runner_path),
-                str(user_path),
-                str(entrypoint_path),
-                str(sdk_path),
-                stdin=asyncio.subprocess.DEVNULL,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=str(artifact_path),
-            )
-            stdout, stderr = await process.communicate()
-            if process.returncode != 0:
-                raise RuntimeError(
-                    "go artifact build failed: "
-                    + stdout.decode("utf-8", errors="replace")
-                    + stderr.decode("utf-8", errors="replace")
+            slots = await self._compile_slots_semaphore()
+            async with slots:
+                artifact_path.mkdir(parents=True, exist_ok=True)
+                runner_path = artifact_path / "runner.go"
+                user_path = artifact_path / "user.go"
+                entrypoint_path = artifact_path / "entrypoint.go"
+                sdk_path = artifact_path / "sdk.go"
+                _ = runner_path.write_text(self._runner_source(), encoding="utf-8")
+                _ = user_path.write_text(request.code, encoding="utf-8")
+                _ = entrypoint_path.write_text(self._entrypoint_source(entrypoint), encoding="utf-8")
+                _ = sdk_path.write_text(self._sdk_source(request), encoding="utf-8")
+                process = await asyncio.create_subprocess_exec(
+                    go_bin,
+                    "build",
+                    "-o",
+                    str(binary_path),
+                    str(runner_path),
+                    str(user_path),
+                    str(entrypoint_path),
+                    str(sdk_path),
+                    stdin=asyncio.subprocess.DEVNULL,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=str(artifact_path),
                 )
+                stdout, stderr = await process.communicate()
+                if process.returncode != 0:
+                    raise RuntimeError(
+                        "go artifact build failed: "
+                        + stdout.decode("utf-8", errors="replace")
+                        + stderr.decode("utf-8", errors="replace")
+                    )
 
     async def _run_go(
         self,

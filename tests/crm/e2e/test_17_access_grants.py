@@ -1,11 +1,9 @@
 """
-E2E тесты для системы AccessGrants.
+E2E для OpenFGA grants (CRM sole authz).
 
 Проверяем:
-1. Создание grants (entity/namespace, public/user/company)
-2. Проверку доступа через grants
-3. Фильтрацию публичных полей
-4. Отзыв grants
+1. Public grant на entity (user:*) + public field projection
+2. User grant cross-company + deny без гранта
 """
 
 from typing import cast
@@ -28,12 +26,19 @@ async def test_01_entity_public_grant(
     auth_headers_company2: dict[str, str],
 ) -> None:
     """
-    Тест 1: Сделать entity публичной
-
-    1. System user создает entity
-    2. Делаем ее публичной через grant
-    3. User из другой компании получает доступ с фильтрацией полей
+    1. System user создает note
+    2. Задаёт public_fields типа note
+    3. Public grant через OpenFGA (user:* viewer)
+    4. User из company2 видит только public projection
     """
+
+    public_fields_response = await crm_client.put(
+        "/crm/api/v1/entity-types/note/public-fields",
+        params={"namespace": "default"},
+        json={"public_fields": ["name", "tags"]},
+        headers=auth_headers_system,
+    )
+    assert public_fields_response.status_code == 200, public_fields_response.text
 
     entity_data = {
         "entity_type": "note",
@@ -51,31 +56,28 @@ async def test_01_entity_public_grant(
         json=entity_data,
         headers=auth_headers_system,
     )
-    assert create_response.status_code == 200
+    assert create_response.status_code == 200, create_response.text
     entity = _http_json(create_response)
     entity_id = object_str(entity.get("entity_id"), field="entity_id")
-
-    print(f"✅ Entity created by system user: {entity_id}")
 
     grant_response = await crm_client.post(
         f"/crm/api/v1/entities/{entity_id}/grants/public",
         headers=auth_headers_system,
     )
-    assert grant_response.status_code == 200
+    assert grant_response.status_code == 200, grant_response.text
     grant = _http_json(grant_response)
 
     assert object_str(grant.get("grant_type"), field="grant_type") == "public"
     assert object_str(grant.get("resource_type"), field="resource_type") == "entity"
     assert object_str(grant.get("resource_id"), field="resource_id") == entity_id
     assert object_str(grant.get("role"), field="role") == "viewer"
-
-    print(f"✅ Public grant created: {object_str(grant.get('grant_id'), field='grant_id')}")
+    assert object_str(grant.get("grant_id"), field="grant_id")
 
     get_response = await crm_client.get(
         f"/crm/api/v1/entities/{entity_id}",
         headers=auth_headers_company2,
     )
-    assert get_response.status_code == 200
+    assert get_response.status_code == 200, get_response.text
     public_entity = _http_json(get_response)
 
     assert "entity_id" in public_entity
@@ -85,9 +87,10 @@ async def test_01_entity_public_grant(
 
     description = public_entity.get("description")
     assert "description" not in public_entity or description is None
-
-    print("✅ Company2 user access works with filtered fields")
-    print(f"   Public fields: {list(public_entity.keys())}")
+    assert "attributes" not in public_entity or public_entity.get("attributes") in (
+        None,
+        {},
+    )
 
 
 @pytest.mark.asyncio
@@ -98,12 +101,10 @@ async def test_02_entity_user_grant(
     auth_headers_company2_user2: dict[str, str],
 ) -> None:
     """
-    Тест 2: Пошерить entity конкретному user
-
-    1. System user создает entity
-    2. System user шарит entity company2 user (другая компания) с правами editor
-    3. Company2 user получает полный доступ
-    4. Company2 user2 НЕ получает доступ (не шарили ему)
+    1. System user создает task
+    2. Шарит company2 user (editor) через OpenFGA user grant
+    3. Company2 user — полный доступ
+    4. Company2 user2 без гранта — 403
     """
 
     token_service = get_token_service()
@@ -126,13 +127,11 @@ async def test_02_entity_user_grant(
         json=entity_data,
         headers=auth_headers_system,
     )
-    assert create_response.status_code == 200
+    assert create_response.status_code == 200, create_response.text
     entity_id = object_str(
         _http_json(create_response).get("entity_id"),
         field="entity_id",
     )
-
-    print(f"✅ Entity created by system user: {entity_id}")
 
     grant_request = {
         "user_id": user_b_id,
@@ -144,31 +143,26 @@ async def test_02_entity_user_grant(
         json=grant_request,
         headers=auth_headers_system,
     )
-    assert grant_response.status_code == 200
+    assert grant_response.status_code == 200, grant_response.text
     grant = _http_json(grant_response)
 
     assert object_str(grant.get("grant_type"), field="grant_type") == "user"
     assert object_str(grant.get("target_user_id"), field="target_user_id") == user_b_id
     assert object_str(grant.get("role"), field="role") == "editor"
-
-    print(f"✅ Grant created for company2 user: {object_str(grant.get('grant_id'), field='grant_id')}")
+    assert object_str(grant.get("grant_id"), field="grant_id")
 
     get_b_response = await crm_client.get(
         f"/crm/api/v1/entities/{entity_id}",
         headers=auth_headers_company2,
     )
-    assert get_b_response.status_code == 200
+    assert get_b_response.status_code == 200, get_b_response.text
     entity_b = _http_json(get_b_response)
 
     assert object_str(entity_b.get("name"), field="name") == "Project Alpha"
     assert object_str(entity_b.get("description"), field="description") == "Top secret project"
-
-    print("✅ Company2 user has full access")
 
     get_c_response = await crm_client.get(
         f"/crm/api/v1/entities/{entity_id}",
         headers=auth_headers_company2_user2,
     )
     assert get_c_response.status_code == 403
-
-    print("✅ Company2 user2 denied access (as expected)")

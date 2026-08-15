@@ -41,7 +41,10 @@ async def on_startup(_app: FastAPI, container: CRMContainer, _settings: CRMSetti
         )
     )
     try:
-        init_result = await container.company_init_service.initialize_company("system")
+        init_result = await container.company_init_service.initialize_company(
+            "system",
+            reseed=True,
+        )
         logger.info(
             "Системные типы entities инициализированы для компании 'system'",
             result=init_result,

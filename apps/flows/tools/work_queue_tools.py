@@ -107,7 +107,10 @@ def _queue_brief(queue_id: str, name: str, slug: str, description: str | None) -
 )
 async def work_queue_list(*, state: "ExecutionState") -> JsonObject:
     _ = state
-    queues = await WorktrackerClient().list_queues(require_active_company().company_id)
+    queues = await WorktrackerClient().list_queues(
+        require_active_company().company_id,
+        user_id=require_context().user.user_id,
+    )
     return {
         "items": [
             _queue_brief(q.work_queue_id, q.name, q.work_queue_slug, q.description)
@@ -203,6 +206,7 @@ async def work_queue_update(
         work_queue_id=args.work_queue_id,
         name=args.name,
         description=args.description,
+        actor_user_id=require_context().user.user_id,
     )
     return _queue_brief(
         queue.work_queue_id, queue.name, queue.work_queue_slug, queue.description
@@ -270,6 +274,7 @@ async def work_queue_add_member(
         work_queue_id=args.work_queue_id,
         member=UserActor(user_id=args.user_id),
         role=args.role,
+        actor_user_id=require_context().user.user_id,
     )
     actor = member.member
     if not isinstance(actor, UserActor):
@@ -301,6 +306,7 @@ async def work_queue_remove_member(
     removed = await WorktrackerClient().remove_queue_member(
         work_queue_id=args.work_queue_id,
         member=UserActor(user_id=args.user_id),
+        actor_user_id=require_context().user.user_id,
     )
     return {
         "work_queue_id": args.work_queue_id,

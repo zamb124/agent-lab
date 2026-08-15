@@ -28,6 +28,7 @@ from apps.frontend.api.voice_providers_catalog_helpers import (
 )
 from apps.frontend.dependencies import ContainerDep, require_frontend_user
 from core.ai.runtime import invalidate_voice_company_overrides_cache
+from core.authz.models import AuthzObject
 from core.clients.speech_provider_catalog import (
     STT_TTS_PROVIDER_IDS,
     cloud_ru_stt_model_ids,
@@ -110,20 +111,22 @@ class CompanyVoiceProviderUpsertRequest(BaseModel):
         ),
     )
 
-def _ensure_user_can_read_company(user: "User", company_id: str) -> None:
-    if company_id not in user.companies:
-        raise HTTPException(
-            status_code=403, detail="Доступ только участникам этой компании"
-        )
+async def _ensure_user_can_read_company(
+    container: ContainerDep, user: "User", company_id: str
+) -> None:
+    await container.authz_service.require_can_view(
+        AuthzObject.company(company_id),
+        user_id=user.user_id,
+    )
 
 
-def _ensure_user_can_manage_company(user: "User", company_id: str) -> None:
-    roles = user.companies.get(company_id, [])
-    if not any(role in ("owner", "admin") for role in roles):
-        raise HTTPException(
-            status_code=403,
-            detail="Изменять провайдеров речи могут только owner/admin компании",
-        )
+async def _ensure_user_can_manage_company(
+    container: ContainerDep, user: "User", company_id: str
+) -> None:
+    await container.authz_service.require_company_admin(
+        company_id=company_id,
+        user_id=user.user_id,
+    )
 
 
 def _reject_vad_path_kind(kind: str) -> None:
@@ -284,7 +287,7 @@ async def list_company_voice_providers(
 ) -> CompanyVoiceProvidersResponse:
     """Список per-company override-ов провайдеров речи (stt/tts)."""
     user = require_frontend_user()
-    _ensure_user_can_read_company(user, company_id)
+    await _ensure_user_can_read_company(container, user, company_id)
     rows = await container.company_voice_provider_repository.list_by_company(
         company_id=company_id
     )
@@ -305,7 +308,7 @@ async def upsert_company_voice_provider(
 ) -> CompanyVoiceProviderItem:
     """Создать/обновить override для конкретного kind-а."""
     user = require_frontend_user()
-    _ensure_user_can_manage_company(user, company_id)
+    await _ensure_user_can_manage_company(container, user, company_id)
     _reject_vad_path_kind(kind)
     voice_kind = _validate_kind(kind)
     _validate_provider(voice_kind, payload.provider)
@@ -397,7 +400,7 @@ async def delete_company_voice_provider(
 ) -> dict[str, bool]:
     """Снять per-company override (вернуть kind на deployment-default)."""
     user = require_frontend_user()
-    _ensure_user_can_manage_company(user, company_id)
+    await _ensure_user_can_manage_company(container, user, company_id)
     _reject_vad_path_kind(kind)
     voice_kind = _validate_kind(kind)
     deleted = await container.company_voice_provider_repository.delete(

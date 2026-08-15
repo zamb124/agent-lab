@@ -19,7 +19,6 @@ from apps.wiki.db.base import WikiDatabase
 from apps.wiki.db.models import (
     WikiCommentRow,
     WikiPageLinkRow,
-    WikiPageMemberRow,
     WikiPageRow,
     WikiRevisionRow,
 )
@@ -30,13 +29,10 @@ from apps.wiki.models.domain import (
     WikiLinkTargetKind,
     WikiPage,
     WikiPageLink,
-    WikiPageMember,
-    WikiPagePermission,
     WikiPageSummary,
     WikiRevision,
     WikiRevisionSummary,
     WikiSearchHit,
-    WikiVisibility,
 )
 from core.types import JsonObject, require_json_object
 
@@ -67,7 +63,7 @@ def _row_to_page(row: WikiPageRow) -> WikiPage:
         cover_url=row.cover_url,
         content=_content_from_json(row.content),
         text_markdown=row.text_markdown,
-        visibility=WikiVisibility(row.visibility),
+        company_visible=row.company_visible,
         is_published=row.is_published,
         published_at=row.published_at,
         is_template=row.is_template,
@@ -93,7 +89,7 @@ def _row_to_summary(row: WikiPageRow, has_children: bool) -> WikiPageSummary:
         position=row.position,
         title=row.title,
         icon=row.icon,
-        visibility=WikiVisibility(row.visibility),
+        company_visible=row.company_visible,
         is_published=row.is_published,
         is_template=row.is_template,
         has_children=has_children,
@@ -112,15 +108,6 @@ def _row_to_revision(row: WikiRevisionRow) -> WikiRevision:
         content=_content_from_json(row.content),
         text_markdown=row.text_markdown,
         author_user_id=row.author_user_id,
-        created_at=row.created_at,
-    )
-
-
-def _row_to_member(row: WikiPageMemberRow) -> WikiPageMember:
-    return WikiPageMember(
-        wiki_page_id=row.wiki_page_id,
-        user_id=row.user_id,
-        permission=WikiPagePermission(row.permission),
         created_at=row.created_at,
     )
 
@@ -185,7 +172,7 @@ class WikiRepository:
                 cover_url=page.cover_url,
                 content=_content_to_json(page.content),
                 text_markdown=page.text_markdown,
-                visibility=page.visibility.value,
+                company_visible=page.company_visible,
                 is_published=page.is_published,
                 published_at=page.published_at,
                 is_template=page.is_template,
@@ -202,6 +189,25 @@ class WikiRepository:
             await session.commit()
             await session.refresh(row)
             return _row_to_page(row)
+
+    async def hard_delete_page(
+        self, company_id: str, namespace: str, wiki_page_id: str
+    ) -> None:
+        """Компенсация dual-write: удаляет строку страницы без soft-delete."""
+        async with self._db.session() as session:
+            row = (
+                await session.execute(
+                    select(WikiPageRow).where(
+                        WikiPageRow.company_id == company_id,
+                        WikiPageRow.namespace == namespace,
+                        WikiPageRow.wiki_page_id == wiki_page_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                return
+            await session.delete(row)
+            await session.commit()
 
     async def get_page(
         self, company_id: str, namespace: str, wiki_page_id: str
@@ -387,7 +393,7 @@ class WikiRepository:
             row.cover_url = page.cover_url
             row.content = _content_to_json(page.content)
             row.text_markdown = page.text_markdown
-            row.visibility = page.visibility.value
+            row.company_visible = page.company_visible
             row.is_published = page.is_published
             row.published_at = page.published_at
             row.is_template = page.is_template
@@ -428,8 +434,8 @@ class WikiRepository:
             _ = await session.execute(stmt)
             await session.commit()
 
-    async def set_visibility(
-        self, company_id: str, namespace: str, page_ids: list[str], visibility: WikiVisibility
+    async def set_company_visible(
+        self, company_id: str, namespace: str, page_ids: list[str], company_visible: bool
     ) -> None:
         if not page_ids:
             return
@@ -441,7 +447,7 @@ class WikiRepository:
                     WikiPageRow.namespace == namespace,
                     WikiPageRow.wiki_page_id.in_(page_ids),
                 )
-                .values(visibility=visibility.value)
+                .values(company_visible=company_visible)
             )
             _ = await session.execute(stmt)
             await session.commit()
@@ -496,15 +502,6 @@ class WikiRepository:
                     WikiRevisionRow.company_id == company_id,
                     WikiRevisionRow.namespace == source_namespace,
                     WikiRevisionRow.wiki_page_id.in_(page_ids),
-                )
-                .values(namespace=target_namespace)
-            )
-            _ = await session.execute(
-                update(WikiPageMemberRow)
-                .where(
-                    WikiPageMemberRow.company_id == company_id,
-                    WikiPageMemberRow.namespace == source_namespace,
-                    WikiPageMemberRow.wiki_page_id.in_(page_ids),
                 )
                 .values(namespace=target_namespace)
             )
@@ -757,99 +754,6 @@ class WikiRepository:
             )
             row = (await session.execute(stmt)).scalar_one_or_none()
             return _row_to_revision(row) if row is not None else None
-
-    # --- участники ---
-
-    async def list_members(
-        self, company_id: str, namespace: str, wiki_page_id: str
-    ) -> list[WikiPageMember]:
-        async with self._db.session() as session:
-            stmt = select(WikiPageMemberRow).where(
-                WikiPageMemberRow.company_id == company_id,
-                WikiPageMemberRow.namespace == namespace,
-                WikiPageMemberRow.wiki_page_id == wiki_page_id,
-            )
-            rows = list((await session.execute(stmt)).scalars().all())
-            return [_row_to_member(row) for row in rows]
-
-    async def list_members_for_pages(
-        self, company_id: str, namespace: str, page_ids: list[str]
-    ) -> dict[str, list[WikiPageMember]]:
-        if not page_ids:
-            return {}
-        async with self._db.session() as session:
-            stmt = select(WikiPageMemberRow).where(
-                WikiPageMemberRow.company_id == company_id,
-                WikiPageMemberRow.namespace == namespace,
-                WikiPageMemberRow.wiki_page_id.in_(page_ids),
-            )
-            rows = list((await session.execute(stmt)).scalars().all())
-
-        grouped: dict[str, list[WikiPageMember]] = {}
-        for row in rows:
-            grouped.setdefault(row.wiki_page_id, []).append(_row_to_member(row))
-        return grouped
-
-    async def upsert_member(
-        self,
-        company_id: str,
-        namespace: str,
-        wiki_page_id: str,
-        user_id: str,
-        permission: WikiPagePermission,
-    ) -> None:
-        async with self._db.session() as session:
-            stmt = select(WikiPageMemberRow).where(
-                WikiPageMemberRow.wiki_page_id == wiki_page_id,
-                WikiPageMemberRow.user_id == user_id,
-            )
-            row = (await session.execute(stmt)).scalar_one_or_none()
-            if row is None:
-                session.add(
-                    WikiPageMemberRow(
-                        wiki_page_id=wiki_page_id,
-                        user_id=user_id,
-                        company_id=company_id,
-                        namespace=namespace,
-                        permission=permission.value,
-                    )
-                )
-            else:
-                row.permission = permission.value
-            await session.commit()
-
-    async def delete_member(
-        self, company_id: str, namespace: str, wiki_page_id: str, user_id: str
-    ) -> None:
-        async with self._db.session() as session:
-            stmt = delete(WikiPageMemberRow).where(
-                WikiPageMemberRow.company_id == company_id,
-                WikiPageMemberRow.namespace == namespace,
-                WikiPageMemberRow.wiki_page_id == wiki_page_id,
-                WikiPageMemberRow.user_id == user_id,
-            )
-            _ = await session.execute(stmt)
-            await session.commit()
-
-    async def list_restricted_page_ids(self, company_id: str, namespace: str) -> set[str]:
-        """Страницы, на которых стоит явное ограничение доступа."""
-        async with self._db.session() as session:
-            stmt = select(WikiPageMemberRow.wiki_page_id).where(
-                WikiPageMemberRow.company_id == company_id,
-                WikiPageMemberRow.namespace == namespace,
-            )
-            return set((await session.execute(stmt)).scalars().all())
-
-    async def list_member_page_ids(
-        self, company_id: str, namespace: str, user_id: str
-    ) -> set[str]:
-        async with self._db.session() as session:
-            stmt = select(WikiPageMemberRow.wiki_page_id).where(
-                WikiPageMemberRow.company_id == company_id,
-                WikiPageMemberRow.namespace == namespace,
-                WikiPageMemberRow.user_id == user_id,
-            )
-            return set((await session.execute(stmt)).scalars().all())
 
     # --- ссылки и backlinks ---
 

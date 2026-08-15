@@ -61,7 +61,7 @@ alwaysApply: false
 - `WorkItemResolution`: `text`, `files: list[FileRef]`, `resolved_by: WorkActor | None`
 
 Очереди и доски:
-- `WorkQueue` / `work_queue_id`, `work_queue_slug` (unique per company); `WorkQueueMember(work_queue_id, member: WorkActor, role)` — участник полиморфен (пользователь **или** агент-flow), `member_kind`/`member_ref` в БД.
+- `WorkQueue` / `work_queue_id`, `work_queue_slug` (unique per company); `WorkQueueMember(work_queue_id, member: UserActor, role ∈ {owner,member})` — ACL в OpenFGA (`work_queue`); таблицы `work_queue_members` нет.
 - `Board` / `board_id`, `BoardColumn` / `board_column_id` (`label`, `state: WorkItemState`, `position`); `board_key` (`generic|operator|task|task:<subtype>`) для резолва доски per `(company, namespace, board_key)`.
 - `WorkItemComment` (`comment_id`, `work_item_id`, `author: WorkActor`, `role: operator|user|system|agent`, `text`, `files: list[FileRef]`, `created_at`) — takeover-диалог (`agent` — метка авторства реплики flow-сотрудника, автор всё равно `UserActor`).
 
@@ -73,7 +73,7 @@ alwaysApply: false
 |---|---|---|
 | Единица работы | `WorkItem` | `work_item_id` |
 | Очередь | `WorkQueue` | `work_queue_id`, `work_queue_slug` |
-| Член очереди | `WorkQueueMember` | (`work_queue_id`, `member_kind`, `member_ref`) |
+| Член очереди | `WorkQueueMember` (wire) / FGA `work_queue` | `owner` или `member` relation |
 | Доска | `Board` | `board_id`, `board_key` |
 | Колонка | `BoardColumn` | `board_column_id` |
 | Комментарий | `WorkItemComment` | `comment_id` |
@@ -86,7 +86,7 @@ REST API (`apps/worktracker/api/**`):
 
 - `POST /worktracker/api/v1/work-items` (create), `PATCH .../{id}` (update)
 - `POST .../{id}/assign` (reassign), `.../{id}/move`, `.../{id}/claim`, `.../{id}/comments`, `.../{id}/complete`, `.../{id}/cancel`
-- `/worktracker/api/v1/work-queues` — CRUD очередей + участники (user|agent), `PATCH`, `i_am_member`
+- `/worktracker/api/v1/work-queues` — CRUD очередей + участники (user), `PATCH`/`members` — `can_admin` (owner)
 - `/worktracker/api/v1/boards` — list/get/create + `PATCH` (колонки)
 
 Push (зеркал не имеют): `worktracker/work_item/created|updated|moved|completed|comment_created` через `publish_event_*` → шина `platform:events`. Транспорт — HTTP + push (как CRM tasks / office namespaces), без WS command-router.
@@ -95,13 +95,17 @@ Push (зеркал не имеют): `worktracker/work_item/created|updated|move
 
 AuthMiddleware: правила в `core/middleware/auth/route_config.py` — API `/worktracker/api/v1/*` (`context_type=api`, auth), SPA `/worktracker/*` (anonymous, как sync), health `/worktracker/health` в `SKIP_PATHS`.
 
+## AccessService / OpenFGA
+
+Sole PDP — `AuthzService`. `WorkItemService` Check — `authz.require_can_admin` / `can_view` + `AuthzObject.work_queue`. `WorkQueueAccessService` — orchestration only: `sync_queue_created` / `sync_queue_deleted` / members dual-write fail-closed (включая compensate при rollback create). SQL `owner_user_id` на queue — structural materialization с FGA owner (не Check). `DELETE /work-queues/{id}` → `require_can_admin` → `sync_queue_deleted` → SQL. Backfill: `python -m apps.worktracker.authz` (company link + SQL `owner_user_id`). Канон → **`authorization.mdc`**.
+
 ## Возобновление flow (HITL)
 
 `handoff_mode` на hitl_node — режим HITL (`single_reply`/`takeover`), **не** agent handoff между flows (→ **`handoff.mdc`**).
 
 1. `hitl_node` / tool `hitl_operator_task` бросает `OperatorTaskInterrupt` (поле `work_item_id`; контракт в `core/state/interrupt.py`) и через `HitlWorkItemService` (flows) создаёт `WorkItem(kind=operator_handoff, blocking=true)` с `hooks.completed` (binding + path=`platform:events`) + `flow_session` link. Resume — consumer `flows` на `worktracker/work_item/completed`. Диалог HITL пишется durable-append'ом в `ExecutionState.messages` (`HitlConversationService`), **не** в `WorkItemComment`.
 2. Оператор:
-   - **Доступ:** claim/complete требуют членства в `WorkQueue` задачи. Демо-очередь `example_hitl` при `ensure_example_hitl_queue` получает owner/admin компании как members (иначе UI скрывает «Ответить и завершить», claim → «Нет доступа к очереди»).
+   - **Доступ:** claim/complete требуют FGA `can_view` на `work_queue` задачи. Демо-очередь `example_hitl` при `ensure_example_hitl_queue` пишет owner/admin компании как FGA members (иначе UI скрывает «Ответить и завершить», claim → «Нет доступа к очереди»).
    - **`single_reply`:** ответ через embedded `<platform-flow-ui surface="page">` с operator render context (default template содержит полный input/file/Submit); Submit = `complete` + closing reply durable-append + ordinary A2A Artifact в `stream:{a2a_task_id}`.
    - **`takeover`:** ask через тот же embedded chat → REST `/flows/api/v1/hitl/{work_item_id}/conversation/messages` (+ `file_ids`); live — `SubscribeToTask`. Close — отдельная кнопка Complete.
    - Блок **«Активность»** (`WorkItemComment`) — только внутренние заметки команды; покупатель их не видит.

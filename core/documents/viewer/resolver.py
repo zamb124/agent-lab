@@ -51,4 +51,6 @@ def resolve_viewer_handler_id(
         return "text"
     if category == FileCategory.VIZ:
         return "viz"
+    if category == FileCategory.DATA_TABLE:
+        return "data_table"
     return "binary"

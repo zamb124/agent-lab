@@ -27,6 +27,8 @@ from datetime import date, datetime, time, timezone
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from apps.worktracker.services.work_queue_access_service import WorkQueueAccessService
+from core.authz.factory import build_authz_service
 from core.config import get_settings
 from core.files.file_attachments import minimal_file_refs_from_file_ids
 from core.logging import get_logger
@@ -103,6 +105,7 @@ def _session_factory(url: str) -> async_sessionmaker[AsyncSession]:
 async def migrate_operator_queues(
     flows_sf: async_sessionmaker[AsyncSession],
     repo: WorktrackerRepository,
+    queue_access: WorkQueueAccessService,
 ) -> dict[str, str]:
     """Переносит очереди. Возвращает map старый queue_id → новый work_queue_id."""
     queue_id_map: dict[str, str] = {}
@@ -144,13 +147,13 @@ async def migrate_operator_queues(
         company_id = queue_company.get(member["queue_id"])
         if new_queue_id is None or company_id is None:
             continue
-        await repo.add_queue_member(
-            WorkQueueMember(
-                work_queue_id=new_queue_id,
-                member=UserActor(user_id=member["user_id"]),
-                role=member["role"],
-            ),
-            company_id,
+        role = str(member["role"])
+        if role not in ("owner", "member"):
+            raise ValueError(f"unsupported work_queue member role: {role!r}")
+        await queue_access.set_member(
+            new_queue_id,
+            user_id=str(member["user_id"]),
+            relation="owner" if role == "owner" else "member",
         )
     logger.info("worktracker.migrate.queues", count=len(queue_id_map))
     return queue_id_map
@@ -360,7 +363,9 @@ async def main() -> None:
     flows_sf = _session_factory(settings.database.flows_url)
     crm_sf = _session_factory(settings.database.crm_url)
 
-    queue_id_map = await migrate_operator_queues(flows_sf, repo)
+    queue_id_map = await migrate_operator_queues(
+        flows_sf, repo, WorkQueueAccessService(build_authz_service())
+    )
     _ = await migrate_operator_tasks(flows_sf, repo, queue_id_map)
     _ = await migrate_crm_tasks(crm_sf, repo)
     logger.info("worktracker.migrate.done")

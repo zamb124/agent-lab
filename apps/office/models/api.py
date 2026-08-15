@@ -144,7 +144,7 @@ class OfficeDocumentCopyRequest(BaseModel):
 
 
 class OfficeDocumentShareCreateRequest(BaseModel):
-    permission: Literal["view", "edit"] = "view"
+    permission: Literal["viewer", "editor"] = "viewer"
     expires_in_hours: int | None = Field(default=None, ge=1, le=8760)
 
 
@@ -152,7 +152,7 @@ class OfficeDocumentShareItem(BaseModel):
     share_id: str
     file_id: str
     permission: str
-    share_url: str
+    share_url: str | None = None
     expires_at: datetime | None = None
     created_at: datetime
 
@@ -288,18 +288,18 @@ class OfficeNamespaceCreateResponse(BaseModel):
 
 class OfficeCatalogCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=500)
-    is_public: bool = True
+    company_visible: bool = True
     parent_catalog_id: str | None = Field(default=None, max_length=64)
 
 
 class OfficeCatalogPatchRequest(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=500)
-    is_public: bool | None = None
+    company_visible: bool | None = None
 
     @model_validator(mode="after")
     def at_least_one_field(self) -> Self:
-        if self.title is None and self.is_public is None:
-            raise ValueError("Укажите title и/или is_public")
+        if self.title is None and self.company_visible is None:
+            raise ValueError("Укажите title и/или company_visible")
         return self
 
 
@@ -312,7 +312,7 @@ class OfficeCatalogListItem(BaseModel):
     owner_display_name: str
     owner_avatar_url: str | None = None
     is_owner: bool
-    is_public: bool
+    company_visible: bool
     rag_index_enabled: bool
     rag_index_include_subcatalogs: bool
     rag_index_search_options: RAGSearchOptions | None = None
@@ -329,17 +329,22 @@ class OfficeCatalogDetailResponse(BaseModel):
     owner_display_name: str
     owner_avatar_url: str | None = None
     is_owner: bool
-    is_public: bool
+    company_visible: bool
+
+
+OfficeAccessMemberRelation = Literal["viewer", "editor"]
 
 
 class OfficeCatalogMemberAddRequest(BaseModel):
     user_id: str = Field(min_length=1, max_length=100)
+    relation: OfficeAccessMemberRelation = "viewer"
 
 
 class OfficeCatalogMemberItem(BaseModel):
     user_id: str
     display_name: str
     avatar_url: str | None = None
+    relation: OfficeAccessMemberRelation = "viewer"
 
 
 class OfficeCatalogRagIndexBindingItem(BaseModel):
@@ -427,12 +432,13 @@ class OfficeCatalogMembersResponse(BaseModel):
     members: list[OfficeCatalogMemberItem]
 
 
-OfficeLinkPermission = Literal["view", "edit"]
+OfficeLinkPermission = Literal["viewer", "editor"]
 OfficeAccessResourceKind = Literal["catalog", "binding"]
 
 
 class OfficeResourceAccessMemberItem(BaseModel):
     user_id: str
+    relation: OfficeAccessMemberRelation = "viewer"
 
 
 class OfficeResourceAccessResponse(BaseModel):
@@ -449,7 +455,7 @@ class OfficeResourceAccessPatchRequest(BaseModel):
     company_visible: bool | None = None
     link_enabled: bool | None = None
     link_permission: OfficeLinkPermission | None = None
-    member_user_ids: list[str] | None = None
+    members: list[OfficeResourceAccessMemberItem] | None = None
 
 
 class OfficeResourceAccessRotateLinkResponse(BaseModel):

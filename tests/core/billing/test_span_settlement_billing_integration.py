@@ -2,8 +2,10 @@
 Интеграция: составной ключ settlement, правила, per-company прайс (реальные репозитории и storage).
 """
 
+
 from __future__ import annotations
 
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import json
 
 import pytest

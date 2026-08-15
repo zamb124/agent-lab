@@ -22,7 +22,7 @@ def _share_request(
     flow_id: str,
     context_id: str,
     revision: int,
-    permission: str = "view",
+    permission: str = "viewer",
 ) -> FlowUIShareCreateRequest:
     return FlowUIShareCreateRequest.model_validate(
         {
@@ -67,7 +67,7 @@ async def test_live_share_is_exact_scoped_revocable_and_read_only_by_default(
     assert "/l/" in created.share_url
     assert grant.branch_id == "default"
     assert grant.minimum_revision == bootstrapped.state.ui_document.revision == 1
-    assert grant.permission == "view"
+    assert grant.permission == "viewer"
     assert grant.document_id == f"flow-ui:{context_id}"
 
     listed = await service.list_for_owner(
@@ -84,7 +84,7 @@ async def test_live_share_is_exact_scoped_revocable_and_read_only_by_default(
             company_id=company_id,
             flow_id=flow_id,
             context_id=context_id,
-            require_interact=True,
+            require_editor=True,
         )
     with pytest.raises(PermissionError, match="scope mismatch"):
         _ = await service.authorize(
@@ -112,7 +112,7 @@ async def test_live_share_is_exact_scoped_revocable_and_read_only_by_default(
     assert token_data.metadata["flow_ui_share_context_id"] == context_id
     assert token_data.metadata["flow_ui_share_branch_id"] == "default"
     assert token_data.metadata["flow_ui_share_origin"] == "https://linnex.io"
-    assert exchanged.permission == "view"
+    assert exchanged.permission == "viewer"
     assert exchanged.flow_id == flow_id
     assert exchanged.context_id == context_id
     assert exchanged.document_id == f"flow-ui:{context_id}"
@@ -206,7 +206,7 @@ async def test_share_rejects_unacknowledged_revision_and_durable_scope_drift(
             flow_id=flow_id,
             context_id=context_id,
             revision=2,
-            permission="interact",
+            permission="editor",
         ),
         company_id=company_id,
         user_id=context.user.user_id,
@@ -217,7 +217,7 @@ async def test_share_rejects_unacknowledged_revision_and_durable_scope_drift(
         company_id=company_id,
         flow_id=flow_id,
         context_id=context_id,
-        require_interact=True,
+        require_editor=True,
     )
 
     state = await load_flow_ui_state(session_id)
@@ -256,7 +256,7 @@ async def test_expired_grant_is_inactive_via_repository(
         context_id=context_id,
         document_id=f"flow-ui:{context_id}",
         minimum_revision=bootstrapped.state.ui_document.revision,
-        permission="view",
+        permission="viewer",
         created_by_user_id=context.user.user_id,
         expires_at=datetime.now(UTC) - timedelta(seconds=1),
         created_at=datetime.now(UTC) - timedelta(minutes=10),

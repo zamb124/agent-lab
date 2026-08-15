@@ -258,11 +258,38 @@ class RedisClient:
         """
         self.redis_url: str = redis_url
         self._client: _RedisSdkConnection | None = None
+        self._client_loop: asyncio.AbstractEventLoop | None = None
         self._max_retries: int = max_retries
         self._connection_lock: asyncio.Lock = asyncio.Lock()
+        self._connection_lock_loop: asyncio.AbstractEventLoop | None = None
+
+    def _rebind_if_event_loop_changed(self) -> None:
+        """Starlette TestClient / ASGI lifespan поднимает новый loop на каждый ``with``.
+
+        Клиент и ``asyncio.Lock``, созданные на прошлом loop, дают
+        ``Future attached to a different loop`` на PING/DELETE. Как
+        ``events_redis_client``: дропаем соединение без await на чужом loop.
+        """
+        running = asyncio.get_running_loop()
+        if (
+            self._connection_lock_loop is not None
+            and self._connection_lock_loop is not running
+        ):
+            self._connection_lock = asyncio.Lock()
+            self._connection_lock_loop = running
+        if self._connection_lock_loop is None:
+            self._connection_lock_loop = running
+        if self._client is None:
+            return
+        if self._client_loop is running:
+            return
+        logger.warning("RedisClient: event loop changed, dropping connection")
+        self._client = None
+        self._client_loop = None
 
     async def connect(self) -> None:
         """Подключается к Redis"""
+        self._rebind_if_event_loop_changed()
         try:
             parsed = urlparse(self.redis_url)
             db = int(parsed.path.lstrip("/")) if parsed.path else 0
@@ -279,20 +306,25 @@ class RedisClient:
                 )
             )
             _ = await self._client.ping()
+            self._client_loop = asyncio.get_running_loop()
             logger.info("RedisClient: подключение к Redis установлено")
         except (RedisError, OSError, asyncio.TimeoutError) as e:
             logger.warning(f"RedisClient: не удалось подключиться к Redis: {e}")
             self._client = None
+            self._client_loop = None
 
     async def close(self) -> None:
         """Закрывает соединение с Redis"""
+        self._rebind_if_event_loop_changed()
         if self._client:
             await self._client.aclose()
             self._client = None
+            self._client_loop = None
             logger.info("RedisClient: соединение закрыто")
 
     async def _ensure_connected(self) -> bool:
         """Автоматическое переподключение с retry и экспоненциальной задержкой"""
+        self._rebind_if_event_loop_changed()
         async with self._connection_lock:
             if self._client:
                 try:
@@ -482,15 +514,11 @@ class RedisClient:
                 raise RedisOperationError(f"srem({key}): {retry_error}") from retry_error
 
     async def smembers(self, key: str) -> set[str]:
-        """Читает members Redis SET. Пустой set при отсутствии ключа / недоступности."""
-        if not await self._ensure_connected():
-            return set()
-        try:
-            client = self._require_client()
-            return await client.smembers(key)
-        except (RedisError, OSError, asyncio.TimeoutError) as e:
-            logger.error(f"RedisClient: ошибка SMEMBERS {key}: {e}")
-            return set()
+        """Читает members Redis SET. Пустой set только если ключа нет."""
+        return await self._read_command(
+            f"smembers({key})",
+            lambda client: client.smembers(key),
+        )
 
     async def delete(self, *keys: str) -> int:
         """
@@ -522,14 +550,10 @@ class RedisClient:
 
     async def scan_keys(self, match: str, *, count: int = 500) -> list[str]:
         """SCAN по шаблону; возвращает все совпавшие ключи."""
-        if not await self._ensure_connected():
-            return []
-        try:
-            client = self._require_client()
-            return await client.scan_keys(match, count=count)
-        except (RedisError, OSError, asyncio.TimeoutError) as e:
-            logger.error(f"RedisClient: ошибка SCAN match={match}: {e}")
-            return []
+        return await self._read_command(
+            f"scan_keys({match})",
+            lambda client: client.scan_keys(match, count=count),
+        )
 
     async def _read_command[T](
         self,
@@ -668,6 +692,7 @@ class RedisClient:
 
     async def ping(self) -> bool:
         """Проверяет соединение с Redis."""
+        self._rebind_if_event_loop_changed()
         if not self._client:
             return False
         try:

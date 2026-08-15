@@ -10,6 +10,8 @@ Live CalDAV Mail.ru: реальный ящик из mail.live_test.personal.
 
 from __future__ import annotations
 
+from core.authz.factory import build_authz_service
+
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -22,7 +24,6 @@ from core.context import set_context
 from core.mail.models import MailboxSecret, PersonalMailboxConnectPayload
 from core.mail.repositories import (
     CompanyMailConnectionRepository,
-    MailboxBindingMemberRepository,
     MailboxBindingRepository,
     MailboxFolderRepository,
     MailboxSyncCursorRepository,
@@ -55,7 +56,7 @@ def mail_personal_service_with_calendar(
         sync_cursor_repository=MailboxSyncCursorRepository(db_url=shared_url),
         folder_repository=MailboxFolderRepository(db_url=shared_url),
         message_repository=MailMessageRepository(db_url=shared_url),
-        member_repository=MailboxBindingMemberRepository(db_url=shared_url),
+        authz=build_authz_service(),
         namespace_service=container.namespace_service,
         company_repository=container.company_repository,
         user_repository=container.user_repository,

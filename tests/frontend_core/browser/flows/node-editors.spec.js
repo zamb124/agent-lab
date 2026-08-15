@@ -19,7 +19,7 @@ import { flowValidateOp, flowsResource } from '../../../../apps/flows/ui/events/
 import { modelsListOp } from '../../../../apps/flows/ui/events/resources/models.resource.js';
 import { providersListOp } from '../../../../apps/flows/ui/events/resources/providers.resource.js';
 import {
-    codeCompletionsOp, codeDocumentationOp, codeTemplatesOp,
+    codeLspSessionOp, codeDocumentationOp, codeTemplatesOp,
     codeEditorStateOp, codeSourceOp, codeFlowFunctionsOp,
     codeToolSourceOp, codeParseSignatureOp, codeValidateOp, codeExecuteOp,
 } from '../../../../apps/flows/ui/events/resources/code.resource.js';
@@ -52,7 +52,7 @@ const FACTORIES = [
     flowValidateOp, flowsResource,
     modelsListOp,
     providersListOp,
-    codeCompletionsOp, codeDocumentationOp, codeTemplatesOp, codeEditorStateOp,
+    codeLspSessionOp, codeDocumentationOp, codeTemplatesOp, codeEditorStateOp,
     codeSourceOp, codeFlowFunctionsOp, codeToolSourceOp, codeParseSignatureOp,
     codeValidateOp, codeExecuteOp,
     mcpServersResource, mcpServerSyncOp, mcpServerUpdateOp, mcpServerTestOp,
@@ -510,17 +510,14 @@ describe('node editors — top-level NodeConfig contract', () => {
         expect(editor).to.not.be.null;
         expect(editor.completionContext).to.deep.include({
             language: 'go',
-            perspective: 'node',
-            include_runtime_namespace_extras: true,
         });
+        expect(editor.completionContext.parameters_schema).to.be.an('object');
 
         workbench.language = 'csharp';
         await elementUpdated(workbench);
         editor = workbench.shadowRoot.querySelector('flows-code-editor');
         expect(editor.completionContext).to.deep.include({
             language: 'csharp',
-            perspective: 'node',
-            include_runtime_namespace_extras: true,
         });
     });
 

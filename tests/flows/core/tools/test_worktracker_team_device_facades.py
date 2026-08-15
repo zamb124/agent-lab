@@ -54,7 +54,8 @@ async def test_worktracker_client_delegates_queue_and_board() -> None:
     service.list_boards = AsyncMock(return_value=[])
     service.create_manual_task = AsyncMock(return_value=MagicMock(work_item_id="wi_3"))
     client = WorktrackerClient(service)
-    assert await client.list_queues("c1") == []
+    assert await client.list_queues("c1", user_id="u1") == []
+    service.list_queues.assert_awaited_once_with("c1", user_id="u1")
     assert await client.list_boards("c1", namespace=None) == []
     created = await client.create_manual_task(
         company_id="c1",

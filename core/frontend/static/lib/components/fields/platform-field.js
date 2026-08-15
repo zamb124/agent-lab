@@ -5,7 +5,7 @@
  * Делегирует рендеринг типовому подкомпоненту (platform-field-string,
  * platform-field-number и т.д.) на основании свойства `type`.
  */
-import { html, css, nothing } from 'lit';
+import { html, css, nothing } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 import '../platform-help-hint.js';
 

@@ -26,7 +26,7 @@ def _grant(*, paths: list[str]) -> FlowUIShareGrant:
             "context_id": "ctx",
             "document_id": "flow-ui:ctx",
             "minimum_revision": 1,
-            "permission": "view",
+            "permission": "viewer",
             "redacted_value_paths": paths,
             "created_by_user_id": "owner",
             "expires_at": now,

@@ -10,7 +10,9 @@ from pydantic import BaseModel
 import core.tracing.attributes as trace_attributes
 from apps.rag.config import get_rag_settings
 from core.ai.rerank_client import AIRerankerClientError
+from core.authz.models import AuthzObject
 from core.billing.exceptions import BillingBalanceBlockedError
+from core.context import require_active_company
 from core.logging import get_logger
 from core.rag.base_provider import validate_metadata_filters
 from core.rag.factory import get_rag_provider
@@ -47,7 +49,8 @@ class SearchResponse(BaseModel):
 @router.get("/search-defaults", response_model=RAGSearchOptions)
 async def get_search_defaults(container: ContainerDep) -> RAGSearchOptions:
     """Platform retrieval defaults из ``rag.document_indexing.search_defaults``."""
-    _ = container
+    company_id = require_active_company().company_id
+    await container.authz_service.require_can_view(AuthzObject.company(company_id))
     return resolve_platform_search_options(settings=get_rag_settings())
 
 

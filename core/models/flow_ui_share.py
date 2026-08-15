@@ -9,7 +9,7 @@ from pydantic import Field
 
 from core.models.base import StrictBaseModel
 
-FlowUISharePermission = Literal["view", "interact"]
+FlowUISharePermission = Literal["viewer", "editor"]
 
 
 class FlowUIShareGrant(StrictBaseModel):
@@ -33,7 +33,7 @@ class FlowUIShareCreateRequest(StrictBaseModel):
     context_id: str = Field(min_length=1)
     document_id: str = Field(min_length=1)
     minimum_revision: int = Field(ge=1)
-    permission: FlowUISharePermission = "view"
+    permission: FlowUISharePermission = "viewer"
     redacted_value_paths: list[str] = Field(default_factory=list)
     expires_in_seconds: int = Field(default=86_400, ge=300, le=2_592_000)
 

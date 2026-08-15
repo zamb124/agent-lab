@@ -188,6 +188,7 @@ class TestFlowsLoader:
             node_repository=container.node_repository,
             tool_repository=container.tool_repository,
             registry_path=registry_path,
+            flow_access_service=container.flow_access_service,
         )
         loaded_flows, loaded_nodes = await loader.load_all()
 
@@ -221,7 +222,10 @@ class TestFlowsLoader:
         container = get_container()
 
         # Загружаем tools
-        loaded = await load_tools_to_db(container.tool_repository)
+        loaded = await load_tools_to_db(
+            container.tool_repository,
+            flow_access_service=container.flow_access_service,
+        )
 
         assert len(loaded) > 0
 

@@ -443,7 +443,7 @@ async def test_office_nested_catalog_documents_list(office_client, auth_headers_
     pr = await office_client.post(
         "/documents/api/v1/catalogs",
         headers=auth_headers_system,
-        json={"title": parent_title, "is_public": True},
+        json={"title": parent_title, "company_visible": True},
     )
     assert pr.status_code == 200
     parent_id = pr.json()["catalog_id"]
@@ -452,7 +452,7 @@ async def test_office_nested_catalog_documents_list(office_client, auth_headers_
     cr = await office_client.post(
         "/documents/api/v1/catalogs",
         headers=auth_headers_system,
-        json={"title": child_title, "is_public": True, "parent_catalog_id": parent_id},
+        json={"title": child_title, "company_visible": True, "parent_catalog_id": parent_id},
     )
     assert cr.status_code == 200
     child_id = cr.json()["catalog_id"]
@@ -515,7 +515,7 @@ async def test_office_nested_catalog_create(office_client, auth_headers_system, 
     pr = await office_client.post(
         "/documents/api/v1/catalogs",
         headers=auth_headers_system,
-        json={"title": parent_title, "is_public": True},
+        json={"title": parent_title, "company_visible": True},
     )
     assert pr.status_code == 200
     parent_id = pr.json()["catalog_id"]
@@ -524,7 +524,7 @@ async def test_office_nested_catalog_create(office_client, auth_headers_system, 
     cr = await office_client.post(
         "/documents/api/v1/catalogs",
         headers=auth_headers_system,
-        json={"title": child_title, "is_public": True, "parent_catalog_id": parent_id},
+        json={"title": child_title, "company_visible": True, "parent_catalog_id": parent_id},
     )
     assert cr.status_code == 200
     child = cr.json()
@@ -549,7 +549,7 @@ async def test_office_catalog_list_includes_rag_index_enabled(
     create_response = await office_client.post(
         "/documents/api/v1/catalogs",
         headers=auth_headers_system,
-        json={"title": title, "is_public": True},
+        json={"title": title, "company_visible": True},
     )
     assert create_response.status_code == 200
     catalog_id = create_response.json()["catalog_id"]

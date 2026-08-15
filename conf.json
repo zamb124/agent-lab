@@ -36,6 +36,15 @@
     "wiki_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_wiki",
     "redis_url": "redis://localhost:63791/0"
   },
+  "openfga": {
+    "enabled": true,
+    "api_url": "http://127.0.0.1:9090",
+    "store_id": "",
+    "authorization_model_id": "",
+    "api_token": null,
+    "timeout_ms": 30000,
+    "default_consistency": "MINIMIZE_LATENCY"
+  },
   "tasks": {
     "broker_url": "redis://localhost:63791/0"
   },
@@ -903,9 +912,6 @@
           "base_url": "https://humanitec.ru/litserve/v1"
         }
       },
-      "auth": {
-        "permissions_enabled": false
-      },
       "llm": {
         "provider": "humanitec_llm",
         "default_model": "auto",
@@ -1030,9 +1036,6 @@
           "base_url": "https://humanitec.ru/litserve/v1"
         }
       },
-      "auth": {
-        "permissions_enabled": true
-      },
       "rag": {
         "providers": {
           "agentset": {
@@ -1058,9 +1061,6 @@
         "port": 8008,
         "debug": true
       },
-      "auth": {
-        "permissions_enabled": true
-      },
       "office": {
         "document_server_public_url": "http://localhost:8002",
         "jwt_secret": "dev-onlyoffice-jwt-secret",
@@ -1083,9 +1083,6 @@
         "host": "0.0.0.0",
         "port": 8021,
         "debug": true
-      },
-      "auth": {
-        "permissions_enabled": true
       }
     },
     "frontend": {
@@ -1095,9 +1092,6 @@
         "host": "0.0.0.0",
         "port": 8002,
         "debug": true
-      },
-      "auth": {
-        "permissions_enabled": false
       }
     },
     "scheduler": {
@@ -1107,9 +1101,6 @@
         "host": "0.0.0.0",
         "port": 8006,
         "debug": true
-      },
-      "auth": {
-        "permissions_enabled": false
       }
     },
     "secrets": {
@@ -1119,9 +1110,6 @@
         "host": "0.0.0.0",
         "port": 8022,
         "debug": true
-      },
-      "auth": {
-        "permissions_enabled": true
       }
     },
     "browser": {
@@ -1131,9 +1119,6 @@
         "host": "0.0.0.0",
         "port": 8009,
         "debug": true
-      },
-      "auth": {
-        "permissions_enabled": false
       },
       "browser": {
         "default_endpoint_key": "chromium",
@@ -1158,9 +1143,6 @@
         "host": "0.0.0.0",
         "port": 8010,
         "debug": true
-      },
-      "auth": {
-        "permissions_enabled": false
       },
       "search": {
         "provider_order": [
@@ -1243,9 +1225,6 @@
         "host": "0.0.0.0",
         "port": 8016,
         "debug": true
-      },
-      "auth": {
-        "permissions_enabled": false
       }
     },
     "code_runner_python": {
@@ -1255,9 +1234,6 @@
         "host": "0.0.0.0",
         "port": 8017,
         "debug": true
-      },
-      "auth": {
-        "permissions_enabled": false
       }
     },
     "code_runner_node": {
@@ -1267,9 +1243,6 @@
         "host": "0.0.0.0",
         "port": 8018,
         "debug": true
-      },
-      "auth": {
-        "permissions_enabled": false
       }
     },
     "code_runner_go": {
@@ -1279,9 +1252,6 @@
         "host": "0.0.0.0",
         "port": 8019,
         "debug": true
-      },
-      "auth": {
-        "permissions_enabled": false
       }
     },
     "code_runner_csharp": {
@@ -1291,9 +1261,6 @@
         "host": "0.0.0.0",
         "port": 8020,
         "debug": true
-      },
-      "auth": {
-        "permissions_enabled": false
       }
     }
   },

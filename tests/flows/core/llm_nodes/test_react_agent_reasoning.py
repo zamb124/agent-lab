@@ -53,7 +53,7 @@ class TestReasonToolInTools:
             name="Reasoning Agent",
             description="Agent with reason tool",
             prompt="You are a helpful assistant.",
-            llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
+            llm=NodeLLMConfig(provider="mock", model="mock-gpt-4", temperature=0.0),
         )
 
     @pytest.fixture
@@ -65,7 +65,7 @@ class TestReasonToolInTools:
             name="Simple Agent",
             description="Agent without reasoning",
             prompt="You are a helpful assistant.",
-            llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
+            llm=NodeLLMConfig(provider="mock", model="mock-gpt-4", temperature=0.0),
         )
 
     def test_reason_tool_available_when_added(self, agent_config_with_reason):
@@ -119,7 +119,7 @@ class TestReasonToolExecution:
             type=NodeType.LLM_NODE,
             name="Reasoning Emitter",
             prompt="You are a helpful assistant.",
-            llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
+            llm=NodeLLMConfig(provider="mock", model="mock-gpt-4", temperature=0.0),
         )
 
     @pytest.fixture
@@ -186,7 +186,7 @@ class TestAgentWithoutReasonWorks:
             type=NodeType.LLM_NODE,
             name="Normal Agent",
             prompt="You are a helpful assistant.",
-            llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
+            llm=NodeLLMConfig(provider="mock", model="mock-gpt-4", temperature=0.0),
         )
 
     @pytest.fixture

@@ -13,11 +13,16 @@ from core.utils.tokens import get_token_service
 
 
 async def _viewer_headers(frontend_container, *, unique_id: str, company_id: str) -> dict[str, str]:
+    from tests.fixtures.auth import set_test_company_member_roles
+
     viewer_id = f"ns_viewer_{unique_id}"
-    company = await frontend_container.company_repository.get(company_id)
-    assert company is not None
-    company.members[viewer_id] = ["viewer"]
-    await frontend_container.company_repository.set(company)
+    await set_test_company_member_roles(
+        frontend_container.company_repository,
+        frontend_container.authz_service,
+        company_id=company_id,
+        user_id=viewer_id,
+        roles=["viewer"],
+    )
     user = User(
         user_id=viewer_id,
         name=f"Viewer {unique_id}",

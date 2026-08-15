@@ -1,0 +1,114 @@
+{{- if .Values.openfga.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openfga
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: openfga
+spec:
+  replicas: {{ .Values.openfga.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: openfga
+  template:
+    metadata:
+      labels:
+        app: openfga
+    spec:
+      {{- if .Values.openfga.nodeName }}
+      nodeName: {{ .Values.openfga.nodeName }}
+      {{- end }}
+      initContainers:
+        - name: openfga-migrate
+          image: {{ .Values.openfga.image | quote }}
+          imagePullPolicy: IfNotPresent
+          args:
+            - migrate
+            - --datastore-engine
+            - postgres
+            - --datastore-uri
+            - postgres://platform_user:$(POSTGRES_PASSWORD)@{{ .Values.appCommonEnv.postgresService }}:{{ .Values.appCommonEnv.postgresPort }}/openfga?sslmode=disable
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.platformSecretName }}
+                  key: postgres-password
+      containers:
+        - name: openfga
+          image: {{ .Values.openfga.image | quote }}
+          imagePullPolicy: IfNotPresent
+          args:
+            - run
+            - --datastore-engine
+            - postgres
+            - --datastore-uri
+            - postgres://platform_user:$(POSTGRES_PASSWORD)@{{ .Values.appCommonEnv.postgresService }}:{{ .Values.appCommonEnv.postgresPort }}/openfga?sslmode=disable
+            - --http-addr
+            - 0.0.0.0:8080
+            - --grpc-addr
+            - 0.0.0.0:8081
+            - --playground-enabled=false
+            - --request-timeout
+            - {{ .Values.openfga.requestTimeout | default "30s" | quote }}
+            - --authn-method
+            - preshared
+            - --authn-preshared-keys
+            - $(OPENFGA_API_TOKEN)
+            - --check-query-cache-enabled={{ .Values.openfga.checkQueryCacheEnabled | default false }}
+            - --cache-controller-enabled={{ .Values.openfga.cacheControllerEnabled | default false }}
+            - --max-concurrent-checks-per-batch-check
+            - {{ .Values.openfga.maxConcurrentChecksPerBatchCheck | default "10" | quote }}
+            - --max-concurrent-reads-for-check
+            - {{ .Values.openfga.maxConcurrentReadsForCheck | default "16" | quote }}
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.platformSecretName }}
+                  key: postgres-password
+            - name: OPENFGA_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.platformSecretName }}
+                  key: openfga-api-token
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: grpc
+              containerPort: 8081
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.openfga.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openfga
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: openfga
+spec:
+  type: ClusterIP
+  selector:
+    app: openfga
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+    - name: grpc
+      port: 8081
+      targetPort: 8081
+{{- end }}

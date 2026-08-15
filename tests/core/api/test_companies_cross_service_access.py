@@ -2,8 +2,10 @@
 Интеграционные тесты доступности companies API во всех сервисах.
 """
 
+
 from __future__ import annotations
 
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import pytest
 
 from core.api.companies import CompanyMembershipResponse, build_my_companies_response

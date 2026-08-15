@@ -1,20 +1,32 @@
 """FastAPI entrypoint code-runner-csharp."""
 
+from fastapi import FastAPI
+
 from apps.code_runner_csharp.api.v1.analyze import router as analyze_router
 from apps.code_runner_csharp.api.v1.execute import router as execute_router
+from apps.code_runner_csharp.api.v1.lsp import router as lsp_router
 from apps.code_runner_csharp.api.v1.validate import router as validate_router
 from apps.code_runner_csharp.config import (
     CodeRunnerCsharpSettings,
     get_code_runner_csharp_settings,
 )
-from apps.code_runner_csharp.container import get_code_runner_csharp_container
+from apps.code_runner_csharp.container import (
+    CodeRunnerCsharpContainer,
+    get_code_runner_csharp_container,
+)
 from core.app import create_service_app
+
+
+async def on_shutdown(_app: FastAPI, container: CodeRunnerCsharpContainer) -> None:
+    if "_cached_lsp_manager" in container.__dict__:
+        await container.lsp_manager.aclose()
+
 
 app = create_service_app(
     service_name="code_runner_csharp",
     settings_class=CodeRunnerCsharpSettings,
     get_container=get_code_runner_csharp_container,
-    routers=[execute_router, validate_router, analyze_router],
+    routers=[execute_router, validate_router, analyze_router, lsp_router],
     cors_origins=["*"],
     title="Platform C# Code Runner",
     description="Untrusted C# sandbox runner",
@@ -28,6 +40,7 @@ app = create_service_app(
     mount_repo_documentation=False,
     include_platform_pwa=False,
     documentation_gateway_prefix="code-runner-csharp",
+    on_shutdown=on_shutdown,
 )
 
 

@@ -63,13 +63,6 @@ const ROLE_EDITOR = 'editor';
 const ROLE_ADMIN = 'admin';
 const ROLES = [ROLE_VIEWER, ROLE_EDITOR, ROLE_ADMIN];
 
-function _toIsoOrNull(dateStr) {
-    if (typeof dateStr !== 'string' || dateStr.length === 0) return null;
-    const d = new Date(dateStr);
-    if (Number.isNaN(d.getTime())) return null;
-    return d.toISOString();
-}
-
 export class CRMNamespaceModal extends PlatformFormModal {
     static modalKind = 'crm.namespace';
     static i18nNamespace = 'crm';
@@ -81,7 +74,6 @@ export class CRMNamespaceModal extends PlatformFormModal {
         _activeTab: { state: true },
         _grantSubject: { state: true },
         _grantRole: { state: true },
-        _grantExpiresAt: { state: true },
         _grantUserQuery: { state: true },
         _grantSelectedUser: { state: true },
         _grantCompanyId: { state: true },
@@ -505,7 +497,6 @@ export class CRMNamespaceModal extends PlatformFormModal {
         this._activeTab = TAB_INFO;
         this._grantSubject = SUBJECT_USER;
         this._grantRole = ROLE_VIEWER;
-        this._grantExpiresAt = '';
         this._grantUserQuery = '';
         this._grantSelectedUser = null;
         this._grantCompanyId = '';
@@ -613,7 +604,6 @@ export class CRMNamespaceModal extends PlatformFormModal {
     _resetGrantForm() {
         this._grantSubject = SUBJECT_USER;
         this._grantRole = ROLE_VIEWER;
-        this._grantExpiresAt = '';
         this._grantUserQuery = '';
         this._grantSelectedUser = null;
         this._grantCompanyId = '';
@@ -637,13 +627,6 @@ export class CRMNamespaceModal extends PlatformFormModal {
 
     _onPickRole(role) {
         this._grantRole = role;
-    }
-
-    _onExpiresAtInput(e) {
-        if (!e.detail || typeof e.detail.value !== 'string') {
-            throw new Error('namespace-modal: expires field expects change detail.value string');
-        }
-        this._grantExpiresAt = e.detail.value;
     }
 
     _onUserQueryInput(e) {
@@ -682,9 +665,6 @@ export class CRMNamespaceModal extends PlatformFormModal {
                 return this.t('namespace_modal.grants_err_company_id_required');
             }
         }
-        if (this._grantSubject === SUBJECT_PUBLIC && this._hasPublicGrant()) {
-            return this.t('namespace_modal.grants_err_public_exists');
-        }
         return null;
     }
 
@@ -696,18 +676,8 @@ export class CRMNamespaceModal extends PlatformFormModal {
         }
         this._grantSubmitError = '';
 
-        const expiresAtIso = _toIsoOrNull(this._grantExpiresAt);
-
-        if (this._grantSubject === SUBJECT_PUBLIC) {
-            this._grantCreateOp.run({
-                namespace: this.name,
-                subject: SUBJECT_PUBLIC,
-            });
-            return;
-        }
         if (this._grantSubject === SUBJECT_USER) {
             const body = { user_id: this._grantSelectedUser.user_id, role: this._grantRole };
-            if (expiresAtIso !== null) body.expires_at = expiresAtIso;
             this._grantCreateOp.run({
                 namespace: this.name,
                 subject: SUBJECT_USER,
@@ -716,7 +686,6 @@ export class CRMNamespaceModal extends PlatformFormModal {
             return;
         }
         const body = { company_id: this._grantCompanyId.trim(), role: this._grantRole };
-        if (expiresAtIso !== null) body.expires_at = expiresAtIso;
         this._grantCreateOp.run({
             namespace: this.name,
             subject: SUBJECT_COMPANY,
@@ -1159,9 +1128,6 @@ export class CRMNamespaceModal extends PlatformFormModal {
 
     _renderGrantItem(grant) {
         const target = this._formatGrantTarget(grant);
-        const expires = grant.expires_at
-            ? this.t('namespace_modal.grants_expires_on', { date: new Date(grant.expires_at).toLocaleDateString() })
-            : this.t('namespace_modal.grants_expires_never');
         return html`
             <div class="grant-item">
                 <div class="grant-icon">
@@ -1169,7 +1135,6 @@ export class CRMNamespaceModal extends PlatformFormModal {
                 </div>
                 <div class="grant-content">
                     <div class="grant-target">${target}</div>
-                    <div class="grant-meta">${expires}</div>
                 </div>
                 <span class="grant-role">${this.t(`namespace_modal.grants_role_${grant.role}`)}</span>
                 <button
@@ -1192,15 +1157,13 @@ export class CRMNamespaceModal extends PlatformFormModal {
                 <div>
                     <div class="field-label">${this.t('namespace_modal.grants_subject_label')}</div>
                     <div class="subject-chips">
-                        ${this._renderSubjectChip(SUBJECT_PUBLIC, 'globe', this._hasPublicGrant())}
                         ${this._renderSubjectChip(SUBJECT_USER, 'user', false)}
                         ${this._renderSubjectChip(SUBJECT_COMPANY, 'building', false)}
                     </div>
                 </div>
                 ${this._grantSubject === SUBJECT_USER ? this._renderUserPicker() : nothing}
                 ${this._grantSubject === SUBJECT_COMPANY ? this._renderCompanyInput() : nothing}
-                ${this._grantSubject === SUBJECT_PUBLIC ? nothing : this._renderRolePicker()}
-                ${this._grantSubject === SUBJECT_PUBLIC ? nothing : this._renderExpiresInput()}
+                ${this._renderRolePicker()}
                 ${this._grantSubmitError.length > 0
                     ? html`<div class="submit-error">${this._grantSubmitError}</div>`
                     : nothing}
@@ -1318,18 +1281,6 @@ export class CRMNamespaceModal extends PlatformFormModal {
                 placeholder=${this.t('namespace_modal.grants_company_id_placeholder')}
                 .value=${this._grantCompanyId}
                 @change=${this._onCompanyIdInput}
-            ></platform-field>
-        `;
-    }
-
-    _renderExpiresInput() {
-        return html`
-            <platform-field
-                type="date"
-                mode="edit"
-                label=${this.t('namespace_modal.grants_expires_label')}
-                .value=${this._grantExpiresAt}
-                @change=${this._onExpiresAtInput}
             ></platform-field>
         `;
     }

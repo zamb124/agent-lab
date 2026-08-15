@@ -108,7 +108,7 @@ class ServiceClient:
                 trace_id = context.trace_id
             if context.auth_token:
                 headers["Authorization"] = f"Bearer {context.auth_token}"
-            elif context.active_company is not None:
+            if context.active_company is not None:
                 headers.update(
                     build_internal_context_headers(
                         company_id=context.active_company.company_id,

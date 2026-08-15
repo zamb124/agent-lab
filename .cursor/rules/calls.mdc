@@ -73,7 +73,7 @@ REST-зеркала (`apps/sync/api/calls.py`): `POST /sync/api/v1/calls/{call_i
 
 ## WS Push-события
 
-Сервер публикует через `publish_event_to_user`/`_to_company`; адресация в `recipient_user_ids` = участники канала (для `signal` — один `target_user_id`). UI диспатчит в bus, slice `sync/call_ui` (`createSlice`) реагирует через `extraReducer`.
+Сервер публикует через `publish_event_to_user`/`_to_company`; адресация в `recipient_user_ids` = FGA channel members (`SyncChannelAccessService.list_member_user_ids`), не SQL settings rows (для `signal` — один `target_user_id`). UI диспатчит в bus, slice `sync/call_ui` (`createSlice`) реагирует через `extraReducer`.
 
 Типы: `sync/call/incoming|accepted|declined|ended|signal|participant_joined|participant_left|recording_started|recording_stopped|recording_failed|admin_changed|transcribe_*`.
 
@@ -180,7 +180,7 @@ POST  /sync/api/v1/calls/join/{token}               → JoinResponse (`participa
 
 ### Headless publisher в тестах
 
-- `livekit-cli-test` (`livekit/livekit-cli`) как headless участник комнаты для egress E2E без браузера. Команда: `lk room join --url ws://livekit-test:7880 --api-key devkey --api-secret secret --identity <id> --publish-demo <room>`.
+- `livekit-cli-test` (`livekit/livekit-cli`) как headless участник комнаты для egress E2E без браузера. Команда: `lk room join --url ws://livekit-test:7880 --api-key devkey --api-secret platform-test-livekit-secret-32b! --identity <id> --publish-demo <room>`. LiveKit server требует API secret ≥32 символов.
 - Контейнерный egress: endpoint `localhost`/`127.0.0.1` в S3-конфиге нормализуется в `host.docker.internal`, иначе egress не достучится до host MinIO.
 - Custom S3 endpoint (`S3Upload.endpoint`): включать `S3Upload.force_path_style = true`, иначе egress строит virtual-host URL `<bucket>.<endpoint>` и падает на DNS.
 - В `docker-compose-{dev,test,prod}.yaml` для `livekit-egress` обязателен `session_limits.file_output_max_duration: 1h`.

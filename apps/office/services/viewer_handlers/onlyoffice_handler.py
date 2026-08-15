@@ -81,7 +81,7 @@ class OnlyOfficeViewerHandler:
             ctx.file_record.original_name,
         )
         file_type = onlyoffice_file_type_for_binding(editor_document_type, ctx.file_record.original_name)
-        can_edit = ctx.link_permission == "edit"
+        can_edit = ctx.link_permission == "editor"
         editor_mode = "edit" if can_edit else "view"
         document_permissions: JsonObject = {
             "comment": can_edit,

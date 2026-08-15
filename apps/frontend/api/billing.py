@@ -12,6 +12,8 @@ from apps.frontend.models import (
     ChangePlanRequest,
     PaymentHistoryResponse,
 )
+from core.authz.models import AuthzObject
+from core.authz.types import AuthzRelation
 from core.clients.payment import PaymentProviderFactory
 from core.context import require_context
 from core.logging import get_logger
@@ -61,8 +63,11 @@ async def change_plan(
 ) -> BillingPlanChangeResponse:
     user, company = _require_billing_principal()
 
-    if "owner" not in company.members.get(user.user_id, []):
-        raise HTTPException(status_code=403, detail="Только владелец компании может менять тариф")
+    await container.authz_service.require_relation(
+        AuthzRelation.OWNER,
+        AuthzObject.company(company.company_id),
+        user_id=user.user_id,
+    )
 
     try:
         tariff = TariffPlan(plan_request.plan)
@@ -94,12 +99,10 @@ async def create_topup_payment(
 ) -> CreatePaymentResponse:
     user, company = _require_billing_principal()
 
-    user_roles = company.members.get(user.user_id, [])
-    if "owner" not in user_roles and "admin" not in user_roles:
-        raise HTTPException(
-            status_code=403,
-            detail="Только владелец или администратор может пополнять баланс",
-        )
+    await container.authz_service.require_company_admin(
+        company_id=company.company_id,
+        user_id=user.user_id,
+    )
 
     provider = PaymentProviderFactory.get_default_provider()
     if provider is None:

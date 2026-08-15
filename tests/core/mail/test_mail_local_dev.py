@@ -8,6 +8,7 @@ from typing import cast
 import pytest
 
 from core.ai.company_settings import encrypt_secret
+from core.authz.factory import build_authz_service
 from core.config import get_settings
 from core.config.models import (
     MailConfig,
@@ -52,6 +53,7 @@ def _make_service(
         connection_repository=mail_connection_repository,
         binding_repository=mailbox_binding_repository,
         sync_cursor_repository=MailboxSyncCursorRepository(db_url=shared_url),
+        authz=build_authz_service(),
         company_repository=company_repository,
         user_repository=user_repository,
         mail_config=MailConfig(

@@ -1269,7 +1269,7 @@
     "tags": "Теги",
     "permission": "Группы доступа",
     "permission_placeholder": "admin, managers…",
-    "permission_hint": "Пустой список — доступ всем участникам flow. Иначе нужна одна из указанных групп (JWT grps)."
+    "permission_hint": "Пустой список — доступ всем участникам flow. Иначе нужна membership в одной из указанных OpenFGA-групп."
   },
   "rag_resource_editor": {
     "what_is_hint": "База знаний flow: документы лежат в Namespace, llm_node сам подтягивает фрагменты в контекст. Явный поиск/запись — тулы rag_search / rag_add_text.",
@@ -1303,6 +1303,24 @@
     "field_default_ttl": "TTL документов (сек)",
     "hint_default_ttl": "Через сколько секунд фоновая очистка удалит документы этого ресурса. 0 — хранить всегда. Пусто — дефолт платформы.",
     "ttl_placeholder": "пусто = platform default; 0 = навсегда"
+  },
+  "data_table_resource_editor": {
+    "field_file_id": "Привязать файл",
+    "file_id_placeholder": "file_…",
+    "field_name": "Имя файла",
+    "create": "Создать",
+    "open": "Открыть",
+    "empty_title": "Нет файла таблицы",
+    "stat_tables": "{count} табл.",
+    "stat_rows": "{count} строк",
+    "schema_table_rows": "{count} стр.",
+    "schema_loading": "Загружаем таблицы…",
+    "schema_empty": "Таблиц пока нет. Откройте файл, чтобы добавить.",
+    "flow_id_required": "Откройте редактор flow, чтобы создать файл таблицы",
+    "name_required": "Нужно имя файла",
+    "file_id_required": "Сначала создайте или привяжите файл",
+    "toast_created": "Файл таблицы создан",
+    "toast_create_failed": "Не удалось создать файл таблицы"
   },
   "code_resource_editor": {
     "field_code": "Код (Python)",
@@ -1702,7 +1720,8 @@
   "code_editor": {
     "fullscreen": "Полноэкранный режим",
     "exit_fullscreen": "Выйти из полноэкранного режима",
-    "save": "Сохранить (Ctrl+S / Cmd+S)"
+    "save": "Сохранить (Ctrl+S / Cmd+S)",
+    "lsp_failed": "Не удалось подключить language server редактора кода"
   },
   "state_mapping_editor": {
     "empty": "Нет маппингов",
@@ -1973,6 +1992,10 @@
     "inspector_image_pick": "Выбрать изображение",
     "inspector_image_replace": "Заменить",
     "inspector_image_clear": "Очистить",
+    "inspector_file_id_empty": "file_id не выбран",
+    "inspector_file_id_pick": "Выбрать таблицу",
+    "inspector_file_id_replace": "Заменить",
+    "inspector_file_id_clear": "Очистить",
     "history_validation": "Валидация поля",
     "inspector_layout": "Раскладка",
     "inspector_delete": "Удалить компонент",

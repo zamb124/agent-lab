@@ -812,7 +812,10 @@ class TestStaleTasksAndWorkerGuards:
         )
         await _insert_task(crm_container, task, "system", ns, system_user_id)
 
-        _ = await crm_container.task_service.reconcile_stale_worker_tasks()
+        first = await crm_container.task_service.reconcile_stale_worker_tasks()
+        second = await crm_container.task_service.reconcile_stale_worker_tasks()
+        assert first >= 1
+        assert second == 0
         row = await crm_container.task_repository.get_for_worker(tid, "system")
         assert row is not None
         assert row.status == "failed"

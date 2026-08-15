@@ -2,7 +2,7 @@
  * PlatformButton — унифицированная кнопка платформы
  * Варианты: primary (violet), accent (orange), secondary, danger, ghost
  */
-import { html, css, nothing } from 'lit';
+import { html, css, nothing } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-spinner.js';
 

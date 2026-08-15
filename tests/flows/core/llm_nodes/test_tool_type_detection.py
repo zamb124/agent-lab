@@ -157,7 +157,7 @@ class TestGetReasonToolName:
             type=NodeType.LLM_NODE,
             name="Test Agent",
             prompt="Test prompt",
-            llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
+            llm=NodeLLMConfig(provider="mock", model="mock-gpt-4", temperature=0.0),
         )
 
     def test_returns_reason_name_for_standard_tool(self, base_config):
@@ -225,7 +225,7 @@ class TestGetExitToolName:
             type=NodeType.LLM_NODE,
             name="Test Agent",
             prompt="Test prompt",
-            llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
+            llm=NodeLLMConfig(provider="mock", model="mock-gpt-4", temperature=0.0),
         )
 
     def test_returns_finish_name_for_standard_tool(self, base_config):
@@ -306,7 +306,7 @@ class TestReactRoleCombinations:
             type=NodeType.LLM_NODE,
             name="Test Agent",
             prompt="Test prompt",
-            llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
+            llm=NodeLLMConfig(provider="mock", model="mock-gpt-4", temperature=0.0),
         )
 
     def test_both_standard_tools(self, base_config):
@@ -392,7 +392,7 @@ class TestExitToolInjection:
             type=NodeType.LLM_NODE,
             name="Explicit loop",
             prompt="Test prompt",
-            llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
+            llm=NodeLLMConfig(provider="mock", model="mock-gpt-4", temperature=0.0),
             react=ReactConfig(
                 loop_mode=ReactLoopMode.EXPLICIT,
                 exit_tool="finish",
@@ -450,7 +450,7 @@ class TestReminderWithToolNames:
             type=NodeType.LLM_NODE,
             name="Strict Agent",
             prompt="You are a helpful assistant.",
-            llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
+            llm=NodeLLMConfig(provider="mock", model="mock-gpt-4", temperature=0.0),
             react=ReactConfig(
                 loop_mode=ReactLoopMode.EXPLICIT,
                 exit_tool="finish",
@@ -554,7 +554,7 @@ class TestReminderWithToolNames:
             type=NodeType.LLM_NODE,
             name="Custom Agent",
             prompt="You are a helpful assistant.",
-            llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
+            llm=NodeLLMConfig(provider="mock", model="mock-gpt-4", temperature=0.0),
             react=ReactConfig(
                 loop_mode=ReactLoopMode.EXPLICIT,
                 exit_tool="complete",
@@ -607,7 +607,7 @@ class TestReminderWithToolNames:
             type=NodeType.LLM_NODE,
             name="Custom Reason Agent",
             prompt="You are a helpful assistant.",
-            llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
+            llm=NodeLLMConfig(provider="mock", model="mock-gpt-4", temperature=0.0),
             react=ReactConfig(
                 loop_mode=ReactLoopMode.EXPLICIT,
                 exit_tool="finish",

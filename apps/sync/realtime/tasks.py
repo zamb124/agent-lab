@@ -623,9 +623,8 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
             failed_row = await container.call_recording_repository.get(recording_id)
             if failed_row is not None:
                 failed_read = _recording_read_from_entity(failed_row)
-                fail_recipients = await container.channel_repository.list_member_user_ids(
-                    failed_read.channel_id,
-                    company_id=company_id,
+                fail_recipients = await container.channel_access_service.list_member_user_ids(
+                    failed_read.channel_id
                 )
                 await publish_realtime_events(
                     [
@@ -737,9 +736,8 @@ async def transcribe_audio_message_core(
                     message_id=message_id,
                     company_id=company_id,
                 )
-                done_recipients = await container.channel_repository.list_member_user_ids(
-                    channel_id,
-                    company_id=company_id,
+                done_recipients = await container.channel_access_service.list_member_user_ids(
+                    channel_id
                 )
                 await publish_realtime_events(
                     [
@@ -767,10 +765,9 @@ async def transcribe_audio_message_core(
                 message_id=message_id,
                 company_id=company_id,
             )
-            fail_audio_recipients = await container.channel_repository.list_member_user_ids(
-                channel_id,
-                company_id=company_id,
-            )
+            fail_audio_recipients = await container.channel_access_service.list_member_user_ids(
+                    channel_id
+                )
             await publish_realtime_events(
                 [
                     event_message_updated(
@@ -882,10 +879,9 @@ async def transcribe_video_message_core(
                 message_id=message_id,
                 company_id=company_id,
             )
-            done_video_recipients = await container.channel_repository.list_member_user_ids(
-                channel_id,
-                company_id=company_id,
-            )
+            done_video_recipients = await container.channel_access_service.list_member_user_ids(
+                    channel_id
+                )
             await publish_realtime_events(
                 [
                     event_message_updated(
@@ -912,10 +908,9 @@ async def transcribe_video_message_core(
             message_id=message_id,
             company_id=company_id,
         )
-        fail_video_recipients = await container.channel_repository.list_member_user_ids(
-            channel_id,
-            company_id=company_id,
-        )
+        fail_video_recipients = await container.channel_access_service.list_member_user_ids(
+                    channel_id
+                )
         await publish_realtime_events(
             [
                 event_message_updated(

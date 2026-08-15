@@ -25,6 +25,19 @@ export const wikiAccessReadOp = createAsyncOp({
     }),
 });
 
+export const wikiCompanyVisibleOp = createAsyncOp({
+    name: 'wiki/company_visible',
+    successToastKey: 'wiki:toast.access.company_visible_updated',
+    errorToastKey: 'wiki:toast.access.company_visible_failed',
+    restMirror: { method: 'PATCH', path: '/wiki/api/v1/pages/:wiki_page_id/access/company-visible' },
+    request: ({ payload, ctx }) => httpRequest({
+        method: 'PATCH',
+        url: `${PAGES_URL}/${payload.wiki_page_id}/access/company-visible`,
+        headers: platformNamespaceHeader(ctx),
+        body: { company_visible: payload.company_visible },
+    }),
+});
+
 export const wikiMemberAddOp = createAsyncOp({
     name: 'wiki/member_add',
     successToastKey: 'wiki:toast.access.member_added',
@@ -34,7 +47,7 @@ export const wikiMemberAddOp = createAsyncOp({
         method: 'POST',
         url: `${PAGES_URL}/${payload.wiki_page_id}/access/members`,
         headers: platformNamespaceHeader(ctx),
-        body: { user_id: payload.user_id, permission: payload.permission },
+        body: { user_id: payload.user_id, relation: payload.relation },
     }),
 });
 

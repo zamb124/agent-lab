@@ -20,11 +20,13 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import uuid
 from collections.abc import Awaitable, Callable
 
 from fastapi import WebSocket
 
+from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.events.consumer import PlatformEventTailReader
 from core.events.contract import PlatformEvent
@@ -46,12 +48,15 @@ class NotificationManager:
 
     def __init__(self) -> None:
         self._connections: dict[str, set[WebSocket]] = {}
-        self._socket_meta: dict[WebSocket, tuple[str, str | None]] = {}
+        self._socket_meta: dict[WebSocket, tuple[str, str | None, str]] = {}
         self._connection_lock: asyncio.Lock | None = None
         self._connection_lock_loop: asyncio.AbstractEventLoop | None = None
         self._tail_task: asyncio.Task[None] | None = None
         self._connect_hooks: list[ConnectionHook] = []
         self._disconnect_hooks: list[ConnectionHook] = []
+        self._stats_redis: RedisClient | None = None
+        self._stats_key: str | None = None
+        self._stats_key_pattern: str | None = None
 
     def _get_connection_lock(self) -> asyncio.Lock:
         """Lock на текущий running loop (TestClient каждый раз поднимает свой)."""
@@ -76,17 +81,19 @@ class NotificationManager:
         user_id: str,
         company_id: str | None = None,
     ) -> None:
+        conn_id = uuid.uuid4().hex
         async with self._get_connection_lock():
             existing = self._connections.get(user_id)
             was_first_connection = not existing
             self._connections.setdefault(user_id, set()).add(websocket)
-            self._socket_meta[websocket] = (user_id, company_id)
+            self._socket_meta[websocket] = (user_id, company_id, conn_id)
             logger.info(
                 "WS connected: user=%s company=%s total_for_user=%d",
                 user_id,
                 company_id,
                 len(self._connections[user_id]),
             )
+        await self._register_stats_connection(conn_id)
         for hook in self._connect_hooks:
             try:
                 await hook(user_id, company_id, was_first_connection)
@@ -96,10 +103,11 @@ class NotificationManager:
     async def disconnect(self, websocket: WebSocket, user_id: str) -> None:
         was_last_connection = False
         company_id: str | None = None
+        conn_id: str | None = None
         async with self._get_connection_lock():
             meta = self._socket_meta.pop(websocket, None)
             if meta is not None:
-                _, company_id = meta
+                _, company_id, conn_id = meta
             sockets = self._connections.get(user_id)
             if sockets is not None:
                 sockets.discard(websocket)
@@ -107,6 +115,8 @@ class NotificationManager:
                     _ = self._connections.pop(user_id, None)
                     was_last_connection = True
             logger.info("WS disconnected: user=%s last=%s", user_id, was_last_connection)
+        if conn_id is not None:
+            await self._unregister_stats_connection(conn_id)
         for hook in self._disconnect_hooks:
             try:
                 await hook(user_id, company_id, was_last_connection)
@@ -131,16 +141,20 @@ class NotificationManager:
                 logger.warning("WS send failed (%s): %s", label, exc)
                 dead.add(ws)
         if dead:
+            dead_conn_ids: list[str] = []
             async with self._get_connection_lock():
                 for ws in dead:
                     meta = self._socket_meta.pop(ws, None)
                     if meta:
-                        uid, _ = meta
+                        uid, _, dead_conn_id = meta
                         bucket = self._connections.get(uid)
                         if bucket is not None:
                             bucket.discard(ws)
                             if not bucket:
                                 _ = self._connections.pop(uid, None)
+                        dead_conn_ids.append(dead_conn_id)
+            for dead_conn_id in dead_conn_ids:
+                await self._unregister_stats_connection(dead_conn_id)
 
     async def deliver_platform_event(self, event: PlatformEvent) -> None:
         """Доставить событие шины в сокеты адресата (`event.delivery`)."""
@@ -184,7 +198,7 @@ class NotificationManager:
 
             if company_id is not None:
                 matched: set[WebSocket] = set()
-                for ws, (_uid, cid) in self._socket_meta.items():
+                for ws, (_uid, cid, _conn_id) in self._socket_meta.items():
                     if cid == company_id:
                         matched.add(ws)
                 await self._send_event_to_sockets(matched, event_text, f"company={company_id}")
@@ -220,6 +234,7 @@ class NotificationManager:
             self._socket_meta.clear()
             self._connection_lock = None
             self._connection_lock_loop = None
+        await self._bind_stats_redis(redis_url)
         reader = PlatformEventTailReader(redis_url, self.deliver_platform_event)
         self._tail_task = asyncio.create_task(reader.run())
         logger.info("Platform events tail listener started")
@@ -240,11 +255,59 @@ class NotificationManager:
             logger.warning("notification_manager.tail_task_join_timed_out")
         except Exception as exc:
             logger.warning("notification_manager.tail_task_failed: %s", exc)
+        await self._unbind_stats_redis()
 
-    def get_stats(self) -> dict[str, int | bool]:
+    async def _bind_stats_redis(self, redis_url: str) -> None:
+        await self._unbind_stats_redis()
+        service_name = get_settings().server.name
+        stats_key = f"platform:ws:conns:{service_name}:{os.getpid()}"
+        stats_redis = RedisClient(redis_url)
+        _ = await stats_redis.delete(stats_key)
+        self._stats_redis = stats_redis
+        self._stats_key = stats_key
+        self._stats_key_pattern = f"platform:ws:conns:{service_name}:*"
+
+    async def _unbind_stats_redis(self) -> None:
+        stats_redis = self._stats_redis
+        stats_key = self._stats_key
+        self._stats_redis = None
+        self._stats_key = None
+        self._stats_key_pattern = None
+        if stats_redis is None:
+            return
+        try:
+            if stats_key is not None:
+                _ = await stats_redis.delete(stats_key)
+        finally:
+            await stats_redis.close()
+
+    async def _register_stats_connection(self, conn_id: str) -> None:
+        stats_redis = self._stats_redis
+        stats_key = self._stats_key
+        if stats_redis is None or stats_key is None:
+            return
+        _ = await stats_redis.sadd(stats_key, conn_id)
+
+    async def _unregister_stats_connection(self, conn_id: str) -> None:
+        stats_redis = self._stats_redis
+        stats_key = self._stats_key
+        if stats_redis is None or stats_key is None:
+            return
+        _ = await stats_redis.srem(stats_key, conn_id)
+
+    async def get_stats(self) -> dict[str, int | bool]:
+        local_users = len(self._connections)
+        local_conns = sum(len(sockets) for sockets in self._connections.values())
+        total_connections = local_conns
+        stats_redis = self._stats_redis
+        pattern = self._stats_key_pattern
+        if stats_redis is not None and pattern is not None:
+            total_connections = 0
+            for key in await stats_redis.scan_keys(pattern):
+                total_connections += len(await stats_redis.smembers(key))
         return {
-            "active_users": len(self._connections),
-            "total_connections": sum(len(s) for s in self._connections.values()),
+            "active_users": local_users,
+            "total_connections": total_connections,
             "tail_task_running": self._tail_task is not None and not self._tail_task.done(),
         }
 

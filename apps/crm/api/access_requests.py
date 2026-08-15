@@ -85,9 +85,7 @@ async def update_access_request(
 
         return AccessRequestResponse.model_validate(access_request)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.get("", response_model=OffsetPage[AccessRequestResponse])

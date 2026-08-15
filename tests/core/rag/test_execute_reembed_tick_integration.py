@@ -3,8 +3,10 @@
 (Postgres+pgvector+AIEmbeddingClient через ``rag_provider_pgvector``).
 """
 
+
 from __future__ import annotations
 
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import pytest
 from sqlalchemy import select
 

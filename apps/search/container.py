@@ -89,6 +89,7 @@ class SearchContainer(BaseContainer):
             company_repository=self.company_repository,
             subdomain_repository=self.subdomain_repository,
             user_repository=self.user_repository,
+            authz=self.authz_service,
         )
 
     @lazy

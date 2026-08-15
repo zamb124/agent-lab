@@ -24,7 +24,8 @@ export {
     indentMore,
     indentWithTab,
 } from '@codemirror/commands';
-export { autocompletion } from '@codemirror/autocomplete';
+export { autocompletion, startCompletion } from '@codemirror/autocomplete';
+export { LSPClient, languageServerExtensions } from '@codemirror/lsp-client';
 export {
     StreamLanguage,
     bracketMatching,

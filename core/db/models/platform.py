@@ -747,26 +747,6 @@ class MailboxSyncCursorRecord(Base):
     )
 
 
-class MailboxBindingMemberRecord(Base):
-    """ACL участников role-ящика (kind=role)."""
-
-    __tablename__: str = "mailbox_binding_members"
-
-    mailbox_binding_id: Mapped[str] = mapped_column(String(255), primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(255), primary_key=True)
-    company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    role: Mapped[str] = mapped_column(String(32), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-
-    __table_args__: _TableArgs = (
-        CheckConstraint(
-            "role IN ('member','manager')",
-            name="mailbox_binding_members_role_check",
-        ),
-        Index("ix_mailbox_binding_members_user_id", "user_id"),
-    )
-
-
 class MailboxFolderRecord(Base):
     """Кэш IMAP-папок ящика (UI list_folders без hot-path IMAP)."""
 

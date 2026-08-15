@@ -37,6 +37,14 @@ import {
 } from '../events/resources/company-pronunciation-rules.resource.js';
 import { teamMembersResource, inviteGenerateOp } from '../events/resources/team.resource.js';
 import {
+    authzExplorerByUserOp,
+    authzExplorerByObjectOp,
+    authzExplorerWhyOp,
+    authzExplorerObjectsOp,
+    authzExplorerRevokeOp,
+    authzExplorerUiSlice,
+} from '../events/resources/authz-explorer.resource.js';
+import {
     consoleNamespacesResource,
     consoleNamespaceCreateForm,
 } from '../events/resources/namespaces.resource.js';
@@ -169,6 +177,8 @@ import '../pages/join-page.js';
 import '../pages/select-company-page.js';
 import '../pages/dashboard-page.js';
 import '../pages/team/team-page.js';
+import '../pages/access/access-page.js';
+import '../sheets/access-why-sheet.js';
 import '../pages/namespaces/namespaces-page.js';
 import '../pages/api-keys/api-keys-page.js';
 import '../pages/company-variables/company-variables-page.js';
@@ -205,6 +215,7 @@ const FRONTEND_ROUTES = [
     { key: 'dashboard',               path: 'dashboard',                                       titleKey: 'routes.dashboard' },
     { key: 'platform_services',       path: 'services',                 parent: 'dashboard',   titleKey: 'routes.platform_services' },
     { key: 'team',                    path: 'team',                     parent: 'dashboard',   titleKey: 'routes.team' },
+    { key: 'access',                  path: 'access',                   parent: 'dashboard',   titleKey: 'routes.access' },
     { key: 'namespaces',              path: 'namespaces',               parent: 'dashboard',   titleKey: 'routes.namespaces' },
     { key: 'api-keys',                path: 'api-keys',                 parent: 'dashboard',   titleKey: 'routes.api-keys' },
     { key: 'company-variables',       path: 'company-variables',        parent: 'dashboard',   titleKey: 'routes.company-variables' },
@@ -259,6 +270,7 @@ const DOCUMENT_META_SKIP = new Set([
 const FRONTEND_BOTTOM_NAV_ITEMS = [
     { key: 'dashboard',  routeKey: 'dashboard',  icon: 'apps',     labelKey: 'bottom_nav.dashboard' },
     { key: 'team',       routeKey: 'team',       icon: 'users',    labelKey: 'bottom_nav.team' },
+    { key: 'access',     routeKey: 'access',     icon: 'shield',   labelKey: 'bottom_nav.access' },
     { key: 'billing',    routeKey: 'billing',    icon: 'chart',    labelKey: 'bottom_nav.billing' },
     { key: 'profile',    sheet: 'platform.service_switcher', icon: 'user', labelKey: 'bottom_nav.profile' },
 ];
@@ -300,6 +312,12 @@ export class FrontendApp extends PlatformApp {
         companyPronunciationRuleTestOp,
         teamMembersResource,
         inviteGenerateOp,
+        authzExplorerByUserOp,
+        authzExplorerByObjectOp,
+        authzExplorerWhyOp,
+        authzExplorerObjectsOp,
+        authzExplorerRevokeOp,
+        authzExplorerUiSlice,
         consoleNamespacesResource,
         consoleNamespaceCreateForm,
         embedConfigsResource,
@@ -787,6 +805,7 @@ export class FrontendApp extends PlatformApp {
             case 'dashboard':         content = html`<dashboard-page></dashboard-page>`; break;
             case 'platform_services': content = html`<platform-services-page></platform-services-page>`; break;
             case 'team':              content = html`<frontend-team-page></frontend-team-page>`; break;
+            case 'access':            content = html`<frontend-access-page></frontend-access-page>`; break;
             case 'namespaces':        content = html`<frontend-namespaces-page></frontend-namespaces-page>`; break;
             case 'api-keys':          content = html`<frontend-api-keys-page></frontend-api-keys-page>`; break;
             case 'company-variables': content = html`<frontend-company-variables-page></frontend-company-variables-page>`; break;

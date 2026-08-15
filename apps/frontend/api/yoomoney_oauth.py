@@ -53,7 +53,7 @@ def _build_callback_url(request: Request) -> str:
     return f"{base}/frontend/api/billing/yoomoney/callback"
 
 @router.get("/authorize")
-async def yoomoney_authorize(request: Request) -> JSONResponse:
+async def yoomoney_authorize(request: Request, container: ContainerDep) -> JSONResponse:
     """
     Формирует URL авторизации YooMoney и возвращает его.
     Только owner/admin.
@@ -61,9 +61,10 @@ async def yoomoney_authorize(request: Request) -> JSONResponse:
     user = require_frontend_user()
     company = require_frontend_active_company()
 
-    user_roles = company.members.get(user.user_id, [])
-    if "owner" not in user_roles and "admin" not in user_roles:
-        raise HTTPException(status_code=403, detail="Только owner или admin может авторизовать YooMoney")
+    await container.authz_service.require_company_admin(
+        company_id=company.company_id,
+        user_id=user.user_id,
+    )
 
     provider = _get_yoomoney_provider()
 

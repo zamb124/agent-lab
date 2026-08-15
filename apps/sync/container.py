@@ -15,6 +15,7 @@ from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRef
 from apps.sync.db.repositories.meeting_repository import CallRecordingRepository
 from apps.sync.db.repositories.message_repository import MessageRepository
 from apps.sync.db.repositories.thread_repository import ThreadRepository
+from apps.sync.services.sync_channel_access_service import SyncChannelAccessService
 from core.config import get_settings
 from core.container import BaseContainer, ContainerRegistry, lazy
 from core.logging import get_logger
@@ -76,6 +77,10 @@ class SyncContainer(BaseContainer):
     @lazy
     def call_speech_egress_track_repository(self) -> CallSpeechEgressTrackRepository:
         return CallSpeechEgressTrackRepository(db=self.sync_db)
+
+    @lazy
+    def channel_access_service(self) -> SyncChannelAccessService:
+        return SyncChannelAccessService(authz=self.authz_service)
 
 def _create_sync_container() -> SyncContainer:
     settings = get_settings()

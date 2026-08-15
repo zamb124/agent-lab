@@ -42,6 +42,7 @@ from core.app.file_types_route import register_platform_file_types_route
 from core.app.health_payload import build_health_payload
 from core.app.i18n_routes import register_platform_i18n_routes
 from core.app.pwa_routes import register_platform_pwa_routes
+from core.authz.errors import AuthzConfigError, AuthzDenied, AuthzUnavailable
 from core.billing import set_billing_service
 from core.billing.cbr_rate_provider import refresh_loop_coro as _cbr_loop_coro
 from core.billing.cbr_rate_provider import refresh_rate_once as _cbr_refresh_once
@@ -337,6 +338,36 @@ def create_service_app(
             content={"detail": str(exc), "code": "billing_balance_blocked"},
         )
     _ = _billing_balance_blocked_handler
+
+    @app.exception_handler(AuthzDenied)
+    async def _authz_denied_handler(
+        _request: Request, exc: AuthzDenied
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=403,
+            content={"detail": str(exc), "code": "authz_denied"},
+        )
+    _ = _authz_denied_handler
+
+    @app.exception_handler(AuthzUnavailable)
+    async def _authz_unavailable_handler(
+        _request: Request, exc: AuthzUnavailable
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=503,
+            content={"detail": str(exc), "code": "authz_unavailable"},
+        )
+    _ = _authz_unavailable_handler
+
+    @app.exception_handler(AuthzConfigError)
+    async def _authz_config_error_handler(
+        _request: Request, exc: AuthzConfigError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=503,
+            content={"detail": str(exc), "code": "authz_unavailable"},
+        )
+    _ = _authz_config_error_handler
 
     @app.exception_handler(Exception)
     async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:

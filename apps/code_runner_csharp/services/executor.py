@@ -25,6 +25,7 @@ from core.capabilities.runtime_executables import (
     resolve_runtime_executable,
     runtime_executable_required_message,
 )
+from core.capabilities.sandbox_libraries import CSHARP_ALLOWED_USINGS
 from core.config import get_settings
 from core.tracing.operation_span import traced_operation
 
@@ -32,20 +33,14 @@ CAPABILITY_CALL_PATH = "/capability-gateway/api/v1/capabilities/call"
 RESPONSE_PREFIX = "__CODE_RUNNER_RESPONSE__"
 SERVICE_NAME = "code_runner_csharp"
 DOTNET_BIN_ENV = "CODE_RUNNER_DOTNET_BIN"
+WORKER_POOL_ENV = "CODE_RUNNER_CSHARP_WORKERS"
 CSHARP_METHOD_RE = re.compile(
     r"(?m)^\s*"
     + r"(?:(?:public|private|protected|internal|static|async|virtual|override|sealed|new|partial)\s+)*"
     + r"(?:[A-Za-z_][A-Za-z0-9_<>,\[\]\.?]*\s+)+"
     + r"([A-Za-z_][A-Za-z0-9_]*)\s*\("
 )
-ALLOWED_CSHARP_USINGS: frozenset[str] = frozenset(
-    {
-        "System",
-        "System.Collections.Generic",
-        "System.Linq",
-        "System.Threading.Tasks",
-    }
-)
+ALLOWED_CSHARP_USINGS: frozenset[str] = CSHARP_ALLOWED_USINGS
 FORBIDDEN_CSHARP_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bSystem\.IO\b"),
     re.compile(r"\bSystem\.Net\b"),
@@ -54,7 +49,6 @@ FORBIDDEN_CSHARP_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bSystem\.Runtime\.InteropServices\b"),
     re.compile(r"\bDllImport\b"),
     re.compile(r"\bProcess\b"),
-    re.compile(r"\bFile\b"),
     re.compile(r"\bDirectory\b"),
     re.compile(r"\bEnvironment\b"),
     re.compile(r"\bAssembly\b"),
@@ -72,6 +66,8 @@ class CsharpSandboxExecutor:
         self._artifact_root: Path = Path(tempfile.mkdtemp(prefix="code-runner-csharp-artifacts-"))
         self._build_locks: dict[str, asyncio.Lock] = {}
         self._build_locks_guard: asyncio.Lock = asyncio.Lock()
+        self._compile_slots: asyncio.Semaphore | None = None
+        self._compile_slots_guard: asyncio.Lock = asyncio.Lock()
 
     async def execute(self, request: CodeExecutionRequest) -> CodeExecutionResponse:
         security_error = self._verify_execution_request(request)
@@ -105,6 +101,17 @@ class CsharpSandboxExecutor:
             )
 
         gateway_url = get_settings().server.get_service_url("capability_gateway")
+        return await self._execute_with_slot(
+            request, dotnet_bin=dotnet_bin, gateway_url=gateway_url
+        )
+
+    async def _execute_with_slot(
+        self,
+        request: CodeExecutionRequest,
+        *,
+        dotnet_bin: str,
+        gateway_url: str,
+    ) -> CodeExecutionResponse:
         async with traced_operation(
             "code_runner_csharp.execute",
             event_type="code_runner.execute",
@@ -263,6 +270,18 @@ class CsharpSandboxExecutor:
         encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
+    async def _compile_slots_semaphore(self) -> asyncio.Semaphore:
+        async with self._compile_slots_guard:
+            if self._compile_slots is None:
+                self._compile_slots = asyncio.Semaphore(self._compile_slot_count())
+            return self._compile_slots
+
+    def _compile_slot_count(self) -> int:
+        raw = os.environ.get(WORKER_POOL_ENV)
+        if raw is None:
+            return max(2, min(8, (os.cpu_count() or 2)))
+        return max(2, int(raw))
+
     async def _build_lock(self, artifact_key: str) -> asyncio.Lock:
         async with self._build_locks_guard:
             lock = self._build_locks.get(artifact_key)
@@ -286,46 +305,48 @@ class CsharpSandboxExecutor:
         async with lock:
             if dll_path.exists():
                 return
-            artifact_path.mkdir(parents=True, exist_ok=True)
-            output_path.mkdir(parents=True, exist_ok=True)
-            project_path = artifact_path / "Sandbox.csproj"
-            runner_path = artifact_path / "Runner.cs"
-            user_path = artifact_path / "UserCode.cs"
-            sdk_path = artifact_path / "Sdk.cs"
-            entrypoint_check_path = artifact_path / "EntrypointCheck.cs"
-            _ = project_path.write_text(self._project_source(), encoding="utf-8")
-            _ = runner_path.write_text(self._runner_source(), encoding="utf-8")
-            _ = user_path.write_text(self._user_source(request.code), encoding="utf-8")
-            _ = sdk_path.write_text(self._sdk_source(request), encoding="utf-8")
-            entrypoint = request.entrypoint.strip() if isinstance(request.entrypoint, str) and request.entrypoint.strip() else ""
-            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", entrypoint) is not None:
-                _ = entrypoint_check_path.write_text(
-                    self._entrypoint_check_source(entrypoint), encoding="utf-8"
+            slots = await self._compile_slots_semaphore()
+            async with slots:
+                artifact_path.mkdir(parents=True, exist_ok=True)
+                output_path.mkdir(parents=True, exist_ok=True)
+                project_path = artifact_path / "Sandbox.csproj"
+                runner_path = artifact_path / "Runner.cs"
+                user_path = artifact_path / "UserCode.cs"
+                sdk_path = artifact_path / "Sdk.cs"
+                entrypoint_check_path = artifact_path / "EntrypointCheck.cs"
+                _ = project_path.write_text(self._project_source(), encoding="utf-8")
+                _ = runner_path.write_text(self._runner_source(), encoding="utf-8")
+                _ = user_path.write_text(self._user_source(request.code), encoding="utf-8")
+                _ = sdk_path.write_text(self._sdk_source(request), encoding="utf-8")
+                entrypoint = request.entrypoint.strip() if isinstance(request.entrypoint, str) and request.entrypoint.strip() else ""
+                if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", entrypoint) is not None:
+                    _ = entrypoint_check_path.write_text(
+                        self._entrypoint_check_source(entrypoint), encoding="utf-8"
+                    )
+                env = self._dotnet_env()
+                process = await asyncio.create_subprocess_exec(
+                    dotnet_bin,
+                    "build",
+                    str(project_path),
+                    "-c",
+                    "Release",
+                    "-o",
+                    str(output_path),
+                    "--nologo",
+                    stdin=asyncio.subprocess.DEVNULL,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    env=env,
                 )
-            env = self._dotnet_env()
-            process = await asyncio.create_subprocess_exec(
-                dotnet_bin,
-                "build",
-                str(project_path),
-                "-c",
-                "Release",
-                "-o",
-                str(output_path),
-                "--nologo",
-                stdin=asyncio.subprocess.DEVNULL,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=env,
-            )
-            stdout, stderr = await process.communicate()
-            if process.returncode != 0:
-                raise RuntimeError(
-                    "csharp artifact build failed: "
-                    + stdout.decode("utf-8", errors="replace")
-                    + stderr.decode("utf-8", errors="replace")
-                )
-            if not dll_path.exists():
-                raise RuntimeError(f"csharp artifact build did not produce {dll_path}")
+                stdout, stderr = await process.communicate()
+                if process.returncode != 0:
+                    raise RuntimeError(
+                        "csharp artifact build failed: "
+                        + stdout.decode("utf-8", errors="replace")
+                        + stderr.decode("utf-8", errors="replace")
+                    )
+                if not dll_path.exists():
+                    raise RuntimeError(f"csharp artifact build did not produce {dll_path}")
 
     async def _run_dotnet(
         self,

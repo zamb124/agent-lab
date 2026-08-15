@@ -42,6 +42,7 @@ from core.ai.runtime import create_vision_llm_client, resolve_vision_ai_model
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_VISION
 from core.context import get_context
+from core.data_tables.sqlite_format import summarize_sqlite_bytes
 from core.files.checksum import compute_content_checksum_sha256
 from core.files.default_storage import get_default_storage
 from core.files.file_ref import FileRef, FileRefSource, file_id_from_download_url
@@ -307,6 +308,7 @@ async def read_stored_file_by_id(file_id: str) -> tuple[bytes, str]:
 
 
 _TEXT_EXTENSIONS = extensions_for(FileCategory.TEXT, FileCategory.VIZ)
+_DATA_TABLE_EXTENSIONS = extensions_for(FileCategory.DATA_TABLE)
 _SPREADSHEET_EXTENSIONS = extensions_for(FileCategory.SPREADSHEET)
 _OFFICE_EXTENSIONS = extensions_for(
     FileCategory.OFFICE_DOC,
@@ -434,6 +436,8 @@ def _kind_from_extension(ext: str) -> FileReadKind:
         return FileReadKind.HTML
     if ext in _TEXT_EXTENSIONS:
         return FileReadKind.TEXT
+    if ext in _DATA_TABLE_EXTENSIONS:
+        return FileReadKind.DATA_TABLE
     if ext in _SPREADSHEET_EXTENSIONS:
         return FileReadKind.SPREADSHEET
     if ext in _OFFICE_EXTENSIONS:
@@ -801,6 +805,25 @@ def _read_plain_text_sync(
         file_name=file_name,
         content_type=mime or "text/plain",
         detected_kind=FileReadKind.TEXT,
+        page_count=1,
+        pages=[page],
+        warnings=[],
+    )
+
+
+def _read_data_table_sync(
+    raw: bytes,
+    file_name: str,
+    mime: str | None,
+    opts: ReadOptions,
+) -> FileReadResult:
+    del opts
+    text = summarize_sqlite_bytes(raw)
+    page = ReadPage(index=0, text=text, assets=[], label="schema")
+    return FileReadResult(
+        file_name=file_name,
+        content_type=mime or "application/vnd.sqlite3",
+        detected_kind=FileReadKind.DATA_TABLE,
         page_count=1,
         pages=[page],
         warnings=[],
@@ -1487,6 +1510,8 @@ def _read_primary_sync(
         return _read_html_sync(raw, name, mime, opts)
     if info.detected_kind == FileReadKind.TEXT:
         return _read_plain_text_sync(raw, name, mime, opts)
+    if info.detected_kind == FileReadKind.DATA_TABLE:
+        return _read_data_table_sync(raw, name, mime, opts)
     if info.detected_kind == FileReadKind.SPREADSHEET and info.extension == ".xls":
         return _read_xls_sync(raw, name, mime, opts)
     if info.detected_kind == FileReadKind.OFFICE and info.extension == ".doc":

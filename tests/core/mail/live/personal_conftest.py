@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from core.authz.factory import build_authz_service
+
 from collections.abc import AsyncIterator
 from contextlib import suppress
 from datetime import datetime, timezone
@@ -26,7 +28,6 @@ from core.mail.models import (
 from core.mail.ports import MailServerPort
 from core.mail.repositories import (
     CompanyMailConnectionRepository,
-    MailboxBindingMemberRepository,
     MailboxBindingRepository,
     MailboxFolderRepository,
     MailboxSyncCursorRepository,
@@ -135,7 +136,7 @@ def mail_personal_service(
         sync_cursor_repository=MailboxSyncCursorRepository(db_url=shared_url),
         folder_repository=MailboxFolderRepository(db_url=shared_url),
         message_repository=MailMessageRepository(db_url=shared_url),
-        member_repository=MailboxBindingMemberRepository(db_url=shared_url),
+        authz=build_authz_service(),
         namespace_service=container.namespace_service,
         company_repository=container.company_repository,
         user_repository=container.user_repository,

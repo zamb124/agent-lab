@@ -38,6 +38,31 @@ postgres:
       memory: 8Gi
   maxConnections: 300
 
+openfga:
+  enabled: true
+  nodeName: master
+  image: openfga/openfga:v1.18.1
+  replicas: 1
+  # Pin ids: CI/`make k8s-deploy` → openfga_bootstrap_cluster.sh → Secret openfga-ids + --set.
+  # Пока storeId/authorizationModelId пусты, OPENFGA__ENABLED у apps = false (server всё равно поднимается).
+  storeId: ""
+  authorizationModelId: ""
+  # Cache off по умолчанию → сильная консистентность Check без HIGHER_CONSISTENCY.
+  checkQueryCacheEnabled: false
+  cacheControllerEnabled: false
+  # Default OpenFGA request deadline is 3s — мало под parallel pytest dual-write.
+  requestTimeout: 30s
+  # Без лимита 50 параллельных Check × unbounded datastore reads валят Postgres/healthz.
+  maxConcurrentChecksPerBatchCheck: "10"
+  maxConcurrentReadsForCheck: "16"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
 redis:
   nodeName: master
   image: redis:7-alpine
@@ -708,6 +733,25 @@ workers:
       limits:
         cpu: "2"
         memory: 4Gi
+  crm-summary-worker:
+    nodeName: master
+    enabled: true
+    replicas: 1
+    command:
+      [
+        "taskiq",
+        "worker",
+        "apps.crm_worker.summary_worker:worker_app",
+        "--workers",
+        "2",
+      ]
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 4Gi
   idle-worker:
     nodeName: master
     enabled: true
@@ -894,6 +938,7 @@ ingress:
 platformSecrets:
   create: false
   postgresPassword: ""
+  openfgaApiToken: ""
   authJwtSecret: ""
   secretsEncryptionKey: ""
   hfToken: ""

@@ -38,6 +38,11 @@ async def provision_flow_employee_for_tests(
         ),
     )
     _ = await container.flow_repository.set(flow_config)
+    await container.flow_access_service.sync_flow_saved(
+        flow_config,
+        company_id=company_id,
+        owner_user_id=curator_user_id,
+    )
     _ = await ensure_flow_employee(
         container,
         flow_id=flow_id,
@@ -60,6 +65,8 @@ async def cleanup_flow_employee_for_tests(
     await deactivate_flow_employee(container, flow_id=flow_id, company_id=company_id)
     emp_id = flow_employee_user_id(flow_id)
     _ = await container.user_repository.delete(emp_id)
+    await container.flow_access_service.sync_flow_deleted(flow_id, branch_ids=[])
+    _ = await container.flow_repository.delete(flow_id)
 
 
 __all__ = [

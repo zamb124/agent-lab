@@ -130,16 +130,16 @@ async def test_backlinks_span_namespaces_of_same_company(
 
 
 async def test_restricted_page_is_hidden_from_colleague_backlinks(
-    wiki_client, wiki_client_member, create_page, system_user_id, unique_id
+    wiki_client, wiki_client_member, create_page, unique_id
 ):
     entity_id = f"ent-secret-{unique_id}"
     page = await create_page(f"Закрытая {unique_id}", markdown=f"@[К](entity:{entity_id})")
 
     assert await _backlinks(wiki_client_member, "crm_entity", entity_id)
 
-    _ = await wiki_client.post(
-        f"{PAGES_URL}/{page['wiki_page_id']}/access/members",
-        json={"user_id": system_user_id, "permission": "admin"},
+    _ = await wiki_client.patch(
+        f"{PAGES_URL}/{page['wiki_page_id']}/access/company-visible",
+        json={"company_visible": False},
     )
 
     assert await _backlinks(wiki_client_member, "crm_entity", entity_id) == []

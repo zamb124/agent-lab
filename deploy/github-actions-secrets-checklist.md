@@ -67,6 +67,7 @@ Reg.ru API принимает запросы **только с whitelist IP**. �
 | Имя в GitHub |
 |---|
 | `POSTGRES_PASSWORD` |
+| `OPENFGA_API_TOKEN` |
 | `AUTH_JWT_SECRET` |
 | `SECRETS_ENCRYPTION_KEY` |
 | `SELECTEL_ACCESS_KEY` |
@@ -78,6 +79,27 @@ Reg.ru API принимает запросы **только с whitelist IP**. �
 | `GRAFANA_ADMIN_PASSWORD` |
 
 **Значения:** для OnlyOffice и Grafana задайте достаточно длинные случайные строки (например `openssl rand -hex 32`), один раз сохраните в GitHub Secrets; дальше они попадают в Kubernetes Secret `platform-secrets` как `onlyoffice-jwt-secret` и `grafana-admin-password`.
+
+`OPENFGA_API_TOKEN` → `platform-secrets.openfga-api-token` (`openssl rand -hex 32`).
+
+### 2b. OpenFGA pin (автоматически, не GitHub Secrets)
+
+После `helm upgrade` CI / `make k8s-deploy` сам запускает `deploy/scripts/openfga_bootstrap_cluster.sh`:
+
+1. создаёт store (или reuse) + пишет authorization model;
+2. пишет канон в Kubernetes Secret `openfga-ids` (`store-id`, `authorization-model-id`);
+3. `helm upgrade --reuse-values --set openfga.storeId/authorizationModelId`.
+
+Следующие деплои подхватывают ids из `openfga-ids` (`openfga_load_pinned_ids.sh`) до helm.
+
+Опциональный override в GitHub (редко нужно):
+
+| Имя в GitHub | Назначение |
+|---|---|
+| `OPENFGA_STORE_ID` | форс Helm `openfga.storeId` (поверх Secret) |
+| `OPENFGA_AUTHORIZATION_MODEL_ID` | форс Helm `openfga.authorizationModelId` |
+
+Ручной повтор: `make k8s-openfga-bootstrap` (APPLY=1 по умолчанию).
 
 ## 3. Опциональные (workflow допускает пустые)
 

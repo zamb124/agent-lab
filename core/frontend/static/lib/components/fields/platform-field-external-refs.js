@@ -1,4 +1,4 @@
-import { html, css, nothing } from 'lit';
+import { html, css, nothing } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 
 /**

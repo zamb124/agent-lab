@@ -318,9 +318,10 @@ async def crm_companies_initialized(app, auth_token_system, auth_token_company2)
     """
     Инициализирует компании system и company2 один раз за сессию.
 
-    initialize_company идемпотентна — при повторном вызове проверяет существование
-    и пропускает уже созданные типы. Session scope убирает ~240 лишних вызовов
-    initialize_company при 60 CRM тестах * 4 xdist workers.
+    initialize_company идемпотентна и insert-only: существующие типы/шаблоны
+    не переписываются. Session scope убирает повторные вызовы на одном gw;
+    под xdist каждый gw всё равно зовёт init — без insert-only это reseed
+    ``system`` + personal namespace всех members → ERROR setup crm_client.
 
     Зависит от auth_token_system и auth_token_company2 чтобы гарантировать, что
     записи company:system и company:company2 уже существуют в storage до инициализации.
@@ -481,10 +482,15 @@ def voice_app(monkeypatch: pytest.MonkeyPatch):
     reset_voice_settings()
     reset_voice_container()
 
+    from core.context import clear_context
+
+    clear_context()
+
     from apps.voice.main import app
 
     yield app
 
+    clear_context()
     reset_voice_runtime_for_tests()
     reset_voice_container()
     reset_voice_settings()

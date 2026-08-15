@@ -149,6 +149,7 @@ export const initialMailState = Object.freeze({
     messageLoading: false,
     sending: false,
     adminMode: false,
+    canAdmin: false,
     health: null,
     compose: EMPTY_COMPOSE,
     draftUid: null,
@@ -254,11 +255,15 @@ export function mailReducer(state = initialMailState, event) {
             };
         case MAIL_EVENTS.BINDINGS_LOADED: {
             const items = requireItems(event.payload, event.type);
+            if (typeof event.payload.can_admin !== 'boolean') {
+                throw new Error(`${event.type}: payload.can_admin must be a boolean`);
+            }
             const activeMailboxBindingId = pickActiveId(items, state.activeMailboxBindingId);
             return {
                 ...state,
                 loading: false,
                 bindings: items,
+                canAdmin: event.payload.can_admin,
                 activeMailboxBindingId,
             };
         }

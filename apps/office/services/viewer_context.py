@@ -8,7 +8,7 @@ from typing import Literal
 from core.documents.viewer.models import DocumentViewerHandlerId, OfficeViewerScope
 from core.files.models import FileRecord
 
-OfficeViewerLinkPermission = Literal["view", "edit"]
+OfficeViewerLinkPermission = Literal["viewer", "editor"]
 
 
 @dataclass(frozen=True)
@@ -30,5 +30,5 @@ class ViewerOpenContext:
     download_token_ttl_seconds: int
     browser_public_base_url: str
     browser_document_server_url: str
-    link_permission: OfficeViewerLinkPermission = "edit"
+    link_permission: OfficeViewerLinkPermission = "editor"
     public_link_token_hash: str | None = None

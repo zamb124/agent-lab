@@ -434,7 +434,7 @@ async def test_lara_documents_catalog_access_and_rag_status(
                 resource_kind="catalog",
                 resource_id=catalog_id,
                 link_enabled=True,
-                link_permission="view",
+                link_permission="viewer",
             ),
             _call(
                 "documents_rotate_public_link",

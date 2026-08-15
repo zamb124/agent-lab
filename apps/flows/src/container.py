@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, cast
 
 from apps.flows.config import get_settings
@@ -38,7 +39,9 @@ from apps.flows.src.models import TriggerType
 from apps.flows.src.registry.nodes import NodeRegistry, create_default_node_registry
 from apps.flows.src.runners.remote import RemoteCodeRunner
 from apps.flows.src.services.agent_skill_service import AgentSkillService
+from apps.flows.src.services.code_lsp_service import CodeLspService
 from apps.flows.src.services.employee_inbox_service import EmployeeInboxService
+from apps.flows.src.services.flow_access_service import FlowAccessService
 from apps.flows.src.services.flow_discovery import FlowDiscoveryService
 from apps.flows.src.services.flow_factory import FlowFactory
 from apps.flows.src.services.flow_ui_session_service import FlowUISessionService
@@ -58,6 +61,10 @@ from apps.flows.src.services.resource_loader import ResourceLoader
 from apps.flows.src.services.schedule_service import ScheduleService
 from apps.flows.src.services.tool_approval import ToolApprovalStore
 from apps.flows.src.services.tool_tag_group_service import ToolTagGroupService
+from apps.flows.src.tools.authz_gate import (
+    bind_tool_authz_gate,
+    reset_tool_authz_gate,
+)
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
 from apps.flows.src.tools.registry import ToolRegistry
@@ -66,6 +73,11 @@ from apps.flows.src.triggers.handlers.platform_event import PlatformEventTrigger
 from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
 from apps.flows.src.triggers.handlers.webhook import WebhookTriggerHandler
 from apps.flows.src.triggers.registry import TriggerRegistry
+from apps.worktracker.services.work_queue_access_service import WorkQueueAccessService
+from core.authz.errors import AuthzDenied
+from core.authz.ids import PLATFORM_ADMIN_GROUP
+from core.authz.models import AuthzObject, AuthzSubject
+from core.authz.types import AuthzRelation
 from core.capabilities import CAPABILITY_LANGUAGE_SET
 from core.clients.a2a_client import A2AClient
 from core.clients.loki_client import LokiClient
@@ -74,6 +86,8 @@ from core.clients.tempo_client import TempoClient
 from core.compiler import GraphCompiler
 from core.config.testing import is_testing
 from core.container import BaseContainer, lazy
+from core.context import require_active_company
+from core.data_tables.service import DataTableService
 from core.db.repositories.embed_config_repository import EmbedConfigRepository
 from core.db.repositories.embed_mapping_repository import EmbedMappingRepository
 from core.logging import get_logger
@@ -175,7 +189,13 @@ class FlowContainer(BaseContainer):
             workflow_runtime=self.workflow_runtime,
             short_link_service=self.short_link_service,
             token_service=get_token_service(),
+            flow_access_service=self.flow_access_service,
+            authz=self.authz_service,
         )
+
+    @lazy
+    def flow_access_service(self) -> FlowAccessService:
+        return FlowAccessService(authz=self.authz_service)
 
     @lazy
     def redis_client(self) -> RedisClient:
@@ -183,6 +203,13 @@ class FlowContainer(BaseContainer):
         redis_url = settings.database.redis_url
         client = RedisClient(redis_url)
         return client
+
+    @lazy
+    def data_table_service(self) -> DataTableService:
+        return DataTableService(
+            files_service=self.files_service,
+            redis_client=self.redis_client,
+        )
 
     @lazy
     def evaluation_lab_repository(self) -> EvaluationLabRepository:
@@ -237,7 +264,11 @@ class FlowContainer(BaseContainer):
 
     @lazy
     def work_item_service(self) -> WorkItemService:
-        return WorkItemService(repository=self.worktracker_repository)
+        return WorkItemService(
+            repository=self.worktracker_repository,
+            queue_access=WorkQueueAccessService(self.authz_service),
+            authz=self.authz_service,
+        )
 
     @lazy
     def employee_inbox_service(self) -> EmployeeInboxService:
@@ -354,6 +385,10 @@ class FlowContainer(BaseContainer):
         """Stateless remote Python runner для валидации кода."""
         return RemoteCodeRunner("python")
 
+    @lazy
+    def code_lsp_service(self) -> CodeLspService:
+        return CodeLspService(service_client=self.service_client)
+
     def get_code_runner(
         self,
         language: str = "python",
@@ -436,6 +471,51 @@ class FlowContainer(BaseContainer):
         return build_channel(name, flow_id, container=self._runtime_contract())
 
 
+def _bind_tool_authz_gate(container: FlowContainer) -> None:
+    authz = container.authz_service
+
+    async def _check(
+        permission: Sequence[str] | None,
+        user_id: str,
+        tool_name: str,
+    ) -> str | None:
+        required = [item for item in list(permission or []) if item.strip()]
+        try:
+            if not required:
+                company = require_active_company()
+                await authz.require_can_view(
+                    AuthzObject.company(company.company_id),
+                    user_id=user_id,
+                )
+                return None
+            subject = AuthzSubject.user(user_id)
+            company = require_active_company()
+            for group_name in required:
+                group_obj = (
+                    AuthzObject.group(PLATFORM_ADMIN_GROUP)
+                    if group_name == PLATFORM_ADMIN_GROUP
+                    else AuthzObject.group(group_name, company_id=company.company_id)
+                )
+                if await authz.check(
+                    subject,
+                    AuthzRelation.MEMBER,
+                    group_obj,
+                ):
+                    return None
+            raise AuthzDenied(
+                f"denied user:{user_id} group member for tool:{tool_name}"
+            )
+        except AuthzDenied:
+            if required:
+                return (
+                    f"У пользователя нет прав на использование инструмента '{tool_name}'. "
+                    f"Требуется одна из групп: {', '.join(required)}"
+                )
+            return f"У пользователя нет прав на использование инструмента '{tool_name}'."
+
+    bind_tool_authz_gate(_check)
+
+
 def get_container() -> FlowContainer:
     """Получает контейнер (создает при первом вызове)."""
     current = get_current_container()
@@ -449,6 +529,7 @@ def get_container() -> FlowContainer:
         if is_testing():
             container.use_worker = False
         set_current_container(as_flow_runtime_container(container))
+        _bind_tool_authz_gate(container)
         logger.info("FlowContainer создан")
         return container
     return cast(FlowContainer, cast(object, current))
@@ -457,8 +538,10 @@ def get_container() -> FlowContainer:
 def set_container(container: FlowContainer) -> None:
     """Устанавливает контейнер (для тестов)."""
     set_current_container(as_flow_runtime_container(container))
+    _bind_tool_authz_gate(container)
 
 
 def reset_container() -> None:
     """Сбрасывает контейнер."""
     reset_current_container()
+    reset_tool_authz_gate()

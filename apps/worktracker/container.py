@@ -1,5 +1,6 @@
 """WorktrackerContainer — DI контейнер сервиса ядра задач."""
 
+from apps.worktracker.services.work_queue_access_service import WorkQueueAccessService
 from core.config import get_settings
 from core.container import BaseContainer, ContainerRegistry, lazy
 from core.logging import get_logger
@@ -26,8 +27,16 @@ class WorktrackerContainer(BaseContainer):
         return WorktrackerRepository(db=self.worktracker_db)
 
     @lazy
+    def work_queue_access_service(self) -> WorkQueueAccessService:
+        return WorkQueueAccessService(self.authz_service)
+
+    @lazy
     def work_item_service(self) -> WorkItemService:
-        return WorkItemService(repository=self.worktracker_repository)
+        return WorkItemService(
+            repository=self.worktracker_repository,
+            queue_access=self.work_queue_access_service,
+            authz=self.authz_service,
+        )
 
 
 def _create_worktracker_container() -> WorktrackerContainer:
@@ -43,8 +52,6 @@ def _create_worktracker_container() -> WorktrackerContainer:
 _worktracker_registry: ContainerRegistry[WorktrackerContainer] = ContainerRegistry(
     _create_worktracker_container, name="WorktrackerContainer"
 )
-
 get_worktracker_container = _worktracker_registry.get
 set_worktracker_container = _worktracker_registry.set
 reset_worktracker_container = _worktracker_registry.reset
-get_container = _worktracker_registry.get

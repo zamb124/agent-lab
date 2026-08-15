@@ -103,6 +103,18 @@ Mail inbound: `FileSourceKind.MAIL_MESSAGE` (`mailbox_binding_id` + `mail_uid` +
 
 Wiki page media: `FileSourceKind.WIKI_PAGE` (`wiki_page_id` + `namespace_id`); retention permanent (`FileRetentionKind.WIKI_PAGE`); path `Wiki/{namespace_id}/{wiki_page_id}`; JS `buildWikiPageFileCreateSpecJson`. UI выбора — `platform.file_picker` (не `prompt`, не `platform_auxiliary` для cover/image/file страницы).
 
+## DataTable (SQLite file)
+
+Табличная база — обычный платформенный файл (`FileCategory.DATA_TABLE`, `.sqlite`, MIME `application/vnd.sqlite3`). Публичный id = `file_id`. Создание — `FilesService.create` (как любой durable file) через `DataTableService.create`.
+
+| Scope | `FileSourceKind` | Documents path | Retention |
+|---|---|---|---|
+| Таблица агента (между сессиями) | `FLOW_ASSET` | `Flows/{flow}/…sqlite` | permanent |
+| Таблица сессии | `FLOW_SESSION` | `Flows/{flow}/{session_id}/…sqlite` | `flow_session_ttl_seconds` |
+| Файл в Documents UI | `OFFICE_DOCUMENT` | каталог namespace | как office document |
+
+Promote session → asset: новый `FLOW_ASSET` file (copy), не тихий rewrite `source_kind`. Writer: office HTTP + Redis lock; code-нода — capability `tables.*` (in-process `DataTableService`, тот же lock). `sqlite3` / `open()` в sandbox нет.
+
 ## Внутренности (private, не импортировать из apps)
 
 - `core/files/storage.py` — S3 + FileRecord persistence

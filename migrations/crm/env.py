@@ -2,7 +2,7 @@
 Alembic env для crm БД.
 
 Управляет таблицами: crm_entities, crm_tasks, entity_types, relationship_types,
-relationships, company_mapping, access_grants, access_requests.
+relationships, company_mapping, access_requests.
 """
 
 import asyncio
@@ -18,7 +18,6 @@ from sqlalchemy.ext.asyncio import create_async_engine
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from apps.crm.db.models import (  # noqa: F401
-    AccessGrant,
     AccessRequest,
     Base,
     CompanyMapping,
@@ -45,7 +44,6 @@ MANAGED_TABLES = {
     "relationship_types",
     "relationships",
     "company_mapping",
-    "access_grants",
     "access_requests",
     "crm_suggests",
 }

@@ -1,0 +1,333 @@
+# Authorization — OpenFGA sole source of truth
+
+## Zero Translation (канон)
+
+См. **`main.mdc`**. Один AuthzService, один словарь relations, без mapper-слоёв между сервисами.
+
+## Absolute uniformity (Phase 12 DoD)
+
+| Тема | Канон |
+|---|---|
+| Sole PDP | Только `AuthzService` / OpenFGA Check / `list_*` / `expand` |
+| Domain `*AccessService` | Оркестрация `sync_*` tuples + domain extras (filter/projection/members list); **не** второй словарь Check |
+| HTTP / service Check | `container.authz_service.require_can_view\|edit\|admin` / `can_*` + `AuthzObject.<type>(id)` |
+| List «что видит user» | SQL candidates ∩ `batch_check` **или** `list_objects`. SQL membership **запрещён** как ACL-фильтр |
+| Roster `Company.members` / JWT roles / `user.companies` | Только identity + dual-write + UI directory / calendar invitees; **запрещены** как Check / admin discovery / recipients / job actor / grant list. `GET /api/team/members` — `require_can_view(company)` затем roster как directory (`get_many`), не PDP |
+| AuthN (не PDP) | JWT, Host rebind, share/link tokens, capability `execution_token`, Sync guest call — после AuthN любой ACL → FGA |
+| Dual-write | Persist → `authz.write`/`delete` fail-closed в том же path; FGA fail на create → compensate (rollback domain row) и `raise`. Нет «SQL ok, FGA потом» |
+| Soft-fail / soft-coerce | Запрещены `except AuthzDenied: pass`, silent skip, invalid link permission → viewer, `enabled_object_types` |
+| UI admin gate | Только server `can_admin` из `GET /auth/me` (FGA `check_company_admin`); JWT `roles` / `companies[].includes` **запрещены** как mutate gate |
+| Recipients / «кто в ресурсе» | Только `authz.list_users` / `list_tuples` / AccessService façade (Sync channel push — FGA, не SQL settings rows) |
+| SQL materialization | `owner_user_id` / `company_visible` / dual-write member prefs — recovery mirror, **никогда** Check |
+| FGA-only grants recovery | SoT = OpenFGA store (+ backup); members/grants/`flow_owner` без SQL-источника не восстанавливаются backfill'ом. Backfill не даунгрейдит роли молча |
+| CI | `check_authz_canon.py`, `check_authz_dual_write.py`, `check_authz_backfill_completeness.py`, `check_authz_model.py` |
+
+### Wire axes (не смешивать)
+
+| Ось | Разрешённые значения | Где |
+|---|---|---|
+| **Link / share permission** | только `viewer` \| `editor` | wiki/office public link, Flow UI share grant wire; `view`/`edit`/`interact`/`comment` запрещены |
+| **CRM grant relations** | `viewer` \| `editor` \| `admin` \| `owner` | FGA relations на `crm_entity` / `crm_namespace` (share UI chips) |
+| **Mail binding relations** | `owner` / `member` / `manager` | FGA; не `view`/`edit` |
+| **Company membership roles** | `owner` / `admin` / `developer` / `viewer` | identity roster + dual-write; **никогда** Check |
+
+Паттерн во всех сервисах (один, без альтернатив):
+
+```text
+check access     → AuthzService.require_can_view|edit|admin / can_* + AuthzObject.<type>
+company tenancy  → require_can_view(AuthzObject.company(company_id))  # secrets/scheduler/voice/browser/rag/files
+admin            → require_company_admin
+owner-only       → require_relation(OWNER, company|resource)
+list grants      → authz.list_users / list_tuples
+list for user    → SQL candidates ∩ batch_check  OR  list_objects
+mutate ACL       → persist domain → AccessService.sync_*_created|deleted|moved
+                   FGA fail on create → rollback domain row → raise
+```
+
+| Вопрос | Вызов |
+|---|---|
+| Можно ли этот объект? | `authz.require_can_view\|edit\|admin(AuthzObject.T(id))` |
+| Компания как tenancy | `require_can_view(AuthzObject.company(id))` / `require_company_admin` |
+| Список для UI | SQL/KV candidates ∩ `batch_check` **или** `list_objects` |
+| Мутация ACL | persist → `*AccessService.sync_*` fail-closed |
+| Who is in resource | `authz.list_users` / `list_tuples` |
+
+Новый tenant-owned type копирует скелет (не изобретает `can_read`):
+
+```text
+platform:global
+  admin ← group:admin#member          # только platform superadmin
+
+company:{company_id}
+  owner / admin / member              # identity roster + tenancy
+  can_view = member                   # TTU: owner → admin → member
+  # Dual-write (`company_role_tuples`) всегда пишет прямой `member`, иначе
+  # tenancy Check (secrets/files/rag) — 3-hop и под xdist даёт ложный deny.
+  # Тесты не делают remove_company_member по чужим user_id shared `system`.
+
+group:{company_id}/{name}             # НЕ group:developers на всю платформу
+  company → company:{company_id}
+  member  ← user
+
+resource
+  company → company:{id}              # tenancy; сам по себе доступ НЕ даёт
+  parent  → parent resource           # опционально
+  owner / viewer / editor
+  can_view  = viewer ∨ editor ∨ owner [∨ admin from platform, если type opted-in]
+  can_edit  = editor ∨ owner [∨ admin from platform]
+  can_admin = owner ∨ admin from company
+```
+
+Company-visible — не другая формула `can_view`, а запись `company:{id}#member` → `resource#viewer` (wiki: `company_viewer`, чтобы не каскадировать через `parent`). Restricted/private — этой записи нет. Named group — `group:{company}/{name}#member` → viewer.
+
+Имена lifecycle tuples: `sync_<resource>_created|deleted|moved`.
+
+## Store ≠ company
+
+Один OpenFGA **store** на всю платформу. `company` — type в authorization model (`company:{company_id}`), не отдельный store.
+
+## Единый фасад
+
+- Пакет: `core/authz/`
+- Публичный API: `AuthzService` (`check` / `require` / `can_*` / `require_can_*` / `require_relation` / `require_company_admin` / `batch_check` / `list_*` / `write` / `delete` / `expand`)
+- HTTP: `container.authz_service.require_*` + `AuthzObject.*` (не Depends-обёртка, не `*AccessService.require_*`). `require_authz` FastAPI Depends удалён. Check **до** existence: нет tuples / нет объекта → **403**, не 404 (existence leak). 404 — только после успешного Check (ветка/версия внутри уже видимого flow). `GET /tools/{id}` — Check `tool` ∨ `flow` (flow-as-tool) до existence.
+- Flows HTTP get/mutate / A2A / channels — `authz.require_can_view|edit(AuthzObject.flow|tool|flow_branch)`; list = company index ∩ `page_viewable_flow_ids` (`batch_check` окна `offset+limit`, hydrate page; `total` = размер каталога). Не `batch_check` всего каталога на каждый list (OpenFGA HOL). `list_objects` не заменяет Check: ListObjects не перечисляет TTU `admin from platform`
+- DI: `container.authz_service` (`BaseContainer`)
+- Прямой `openfga_sdk` / `OpenFgaClient` в `apps/**` — **запрещён** (CI `scripts/check_authz_canon.py`)
+
+## Абсолютный принцип: только OpenFGA
+
+**Любой вопрос «можно ли / кому видно / кто имеет relation / список грантов / recipients» — только `AuthzService`.**
+
+| Запрещено читать для ACL | Разрешено |
+|---|---|
+| SQL `AccessGrant` / `office_document_shares` | `authz.check` / `batch_check` / `list_users` / `expand` / `write` / `delete` |
+| `entity.user_id` как share/approve gate | `require_relation(CAN_SHARE, …)` / `require_can_admin` |
+| `Company.members` как Check / recipients / grant list | members = **identity roster** + dual-write tuples; Check только FGA |
+| `expires_at` грантов | нет в продукте (FGA conditions — отдельная фаза) |
+| `namespace` + `public` как ACL | public только `crm_entity` + `user:*` viewer |
+
+`AccessRequest` — copy-workflow document; approve/reject gates — FGA `CAN_SHARE` / `CAN_ADMIN`.
+
+Silent SQL fallback запрещён. OpenFGA down → `AuthzUnavailable` (fail-closed).
+
+## Developer DX
+
+Subject почти всегда из request context (`user_id=` только для явного override).
+
+### 1. Gate в service-методе
+
+```python
+await self._authz.require_can_view(AuthzObject.crm_entity(entity_id))
+await self._authz.require_can_edit(AuthzObject.wiki_page(wiki_page_id))
+await self._authz.require_relation(AuthzRelation.CAN_SHARE, AuthzObject.crm_entity(entity_id))
+```
+
+### 2. Gate в HTTP-ручке (one-liner)
+
+```python
+await container.authz_service.require_can_view(AuthzObject.crm_entity(entity_id))
+# AuthzDenied → 403, AuthzUnavailable → 503 (create_service_app)
+```
+
+### 3. Company admin
+
+```python
+await container.authz_service.require_company_admin()
+```
+
+### 4. Grants (CRM)
+
+Write/list/revoke — только tuples через `AuthzService`. List = `list_users` по relations. Wire: `subject_kind`, `subject_id`, `relation`, `object_type`, `object_key`.
+
+### 5. Write tuples
+
+Helpers в `apps/<svc>/authz/`:
+
+```python
+await authz.write([crm_entity_owner_tuple(entity_id, owner_user_id)])
+```
+
+`OpenFgaAuthzClient.write_and_delete`: `ConflictOptions` IGNORE (duplicate write / missing delete) + bounded retry на `HTTP 409` / 429/5xx (гонки xdist; не silent skip). `deadline_exceeded` **не** ретраится — повтор 30s write усиливает перегруз store. `batch_check` режет чанки по 10; ошибка item → `AuthzUnavailable`, не silent deny. Server: `--request-timeout 30s`, `--max-concurrent-checks-per-batch-check 10`, `--max-concurrent-reads-for-check 16` (compose/helm). Client `openfga.timeout_ms` = 30000.
+
+## Relations (канон)
+
+`owner`, `admin`, `editor`, `viewer`, `member`, `manager`, `parent`, `company`, `namespace`, `catalog`, `can_share`, computed `can_view` / `can_edit` / `can_admin`.
+
+## Где живут tuple-helpers
+
+| Зона | Путь |
+|---|---|
+| Shared company membership | `core/authz/company_sync.py` |
+| Platform namespace | `core/namespace/authz/` |
+| CRM entity/namespace grants | `apps/crm/authz/` |
+| Wiki / Office / Sync / Worktracker | `apps/<svc>/authz/` |
+| Mail | `core/mail/authz/` |
+
+## Model / Config / Tests
+
+- DSL: `core/authz/model.fga` (источник); JSON: `core/authz/model.json` (bootstrap/Helm, генерируется `fga model transform`); declarative tests: `core/authz/model.fga.yaml`. CI `check_authz_model.py` падает при drift JSON↔DSL.
+- Bootstrap env: `scripts/openfga_env_bootstrap.py` (local → `reports/openfga-dev.env`, test → `reports/openfga-test.env`); ядро — `python -m core.authz.bootstrap`
+- **Local:** `conf.json` `openfga.enabled=true`; `make dev-up` поднимает OpenFGA :9090 + bootstrap store/model + `make openfga-backfill`; `make app` / `scripts/run.py` загружает `openfga-dev.env` (fail-fast без файла). После wipe store — снова `make openfga-backfill` (SQL roster есть, tuples нет → 403 `can_view company`).
+- **Test:** `make test-up` → openfga-test :9093 + bootstrap → `reports/openfga-test.env`. Pytest (`tests/fixtures/openfga.py`, `tests/conftest.py`) и `scripts.test_stack` spawn читают overlay **из файла** (модель/store), не stale `OPENFGA__*` родителя. После смены `model.fga` — bootstrap **и** `python -m scripts.test_stack up` (без TRUNCATE БД), иначе granian Check идёт в старый `authorization_model_id`.
+- **Prod:** GitHub `OPENFGA_API_TOKEN` (обязателен). Store/model pin — автоматически в CI/`make k8s-deploy` через `openfga_bootstrap_cluster.sh` → Secret `openfga-ids` + Helm `--set`. `OPENFGA_STORE_ID` / `OPENFGA_AUTHORIZATION_MODEL_ID` в GitHub — только optional override. Ручной повтор: `make k8s-openfga-bootstrap`
+- Config: `openfga.enabled`, `api_url`, `store_id`, `authorization_model_id`, `api_token`, `timeout_ms`, `default_consistency` (см. **`configuration.mdc`**)
+- `enabled=true` без `store_id`/`authorization_model_id` → `AuthzConfigError` в `build_authz_service` (старт, не тихий 503)
+- Deploy: Helm `openfga.storeId` / `authorizationModelId` → `OPENFGA__STORE_ID` / `OPENFGA__AUTHORIZATION_MODEL_ID`; `OPENFGA__ENABLED=true` только если оба ids заданы (иначе false, чтобы первый deploy не CrashLoop до bootstrap). Cache flags `checkQueryCacheEnabled` / `cacheControllerEnabled` (default off)
+- CI: `scripts/check_authz_canon.py` (forbid `openfga_sdk` вне `core/authz`, legacy symbols, `enabled_object_types` / env hatch, `except AuthzDenied: pass`, roster-admin PDP, UI JWT admin gate, test membership without sync, wire `viewer|editor`, non-canonical `AuthzRelation`), `scripts/check_authz_dual_write.py`, `scripts/check_authz_model.py` (`fga model test` via Docker)
+- Живые types: `company`, `group`, `platform`, `platform_namespace`, `crm_*`, `wiki_page`, `office_*`, `sync_channel`, `work_queue`, `mailbox_binding`, `flow`, `flow_branch`, `tool`, `flow_ui_share`, `agent_device`
+
+### Company
+
+- Мутации: `core/identity/company_membership.py` + FGA sync
+- Roster → FGA: `owner`→`owner`, `admin`→`admin`, `developer`/`viewer`/`member`→`member` (`core/authz/company_sync.py`). `can_view` = `member` (TTU от owner/admin).
+- Admin: `AuthzService.require_company_admin`
+- Backfill: `make openfga-backfill` (после `make dev-up` / нового store) или `uv run python -m core.authz.backfill_company`
+
+### Groups (`User.groups` directory, FGA object company-scoped)
+
+- Dual-write: `core/authz/group_sync.py` (`AuthService.save_user`, runtime users). Tenant-группы — `group:{company_id}/{name}` (`format_namespace_key`) на каждый `company_id` из `user.companies`. `group:admin` **глобальный** (platform superadmin → `platform:global#admin`). Запись viewer-tuples на ресурс (`flow_group_viewer_tuple` и аналоги) — через `group_member_company_id`: `admin` → `group:admin#member`, иначе `group:{company}/{name}#member`.
+- JWT `grps` — список имён, directory; PDP не читает JWT. Object key квалифицируется company.
+- Backfill: `uv run python -m core.authz.backfill_groups` (пишет scoped tuples и удаляет голые `group:{name}` кроме `admin`)
+- MockLLM `permission_groups` / RAG bind / tool `permission: [group]` — FGA Check на `group:{company}/{name}` (company из context); `admin` — на `group:admin`
+- CI: `AuthzObject.group` / `group_member` без `company_id` запрещены, кроме `admin` / `PLATFORM_ADMIN_GROUP`
+
+### Platform namespace
+
+- Type: `platform_namespace` (`company` = tenancy; `can_view`/`can_edit` = owner ∨ явный `company#member` viewer/editor)
+- Object key: `format_namespace_key(company_id, namespace)` = `{company}/{namespace}` с percent-encode сегментов (`:`/`#`/whitespace → OpenFGA-safe); разбор — `parse_namespace_key`. Простые object keys (`tool`, `crm_entity`, …) тоже percent-encode через `to_fga_object_id` (MCP `mcp:…` и т.п.)
+- Dual-write: `NamespaceService.create` / `ensure_default` / `ensure_exists` / `get_or_create` / `ensure_personal_namespace` / `delete` → `core/namespace/authz/tuples.py` (tenancy link + `company#member` viewer и editor). SQL без tuples — `ensure_*` дописывает FGA (fail-closed), не второй PDP.
+- Check: RAG / `X-Platform-Namespace` → `require_can_view(AuthzObject.platform_namespace(...))`
+- Console list/create: `require_company_admin`
+- Backfill: `uv run python -m core.namespace.authz.backfill`
+
+### Secrets / Scheduler / Voice / Browser / RAG / Files
+
+- Secrets & Scheduler: read → `require_can_view(company)`; mutate → `require_company_admin`
+- Voice / Browser (user context): `require_can_view(company)`
+- Files HTTP (`core/files/api.py`): `require_can_view(company)` на upload/download (tenancy). Resource ACL файла — через parent (`office_document` / CRM attachment), не отдельный FGA type
+- RAG: namespace CRUD — company admin/view; document/search paths — `platform_namespace` Check
+- Calendar invitees — identity roster (`company.members`), не PDP
+- capability_gateway `execution_token` — AuthN only, без FGA
+
+### `company` tuple = tenancy (доступ — отдельные viewer/editor writes)
+
+На каждом tenant-owned type `company` — принадлежность компании, **сам по себе доступ не даёт**. Company-visible = явная запись `company#member` → viewer (и editor, если продуктовая ось это требует).
+
+| Type | Tenancy `company` | Доступ всей компании |
+|---|---|---|
+| `wiki_page` | всегда при create | `company_visible` → `company#member` как `company_viewer` (не каскадирует через `parent`; user `viewer`/`editor` каскадируют) |
+| `office_catalog` | всегда при create | `company_visible` → `company#member` как `viewer` (каскад через parent TTU) |
+| `office_document` | нет `company` | видимость с каталога |
+| `platform_namespace` | всегда | `company#member` viewer **и** editor |
+| `crm_namespace` | всегда | `company#member` viewer **и** editor |
+| `flow` / `tool` | всегда | `permission: []` → `company#member` viewer; named groups → `group:{company}/{name}#member` |
+| `sync_channel` / `work_queue` | всегда | viewer на `company#member` **не** пишется |
+| `mailbox_binding` | всегда | `admin from company` → can_* (ось «company admin управляет ящиками») |
+| `agent_device` | всегда | `admin from company` на can_* |
+
+Не вешать `admin from platform` на `company`. Files/secrets — без своего FGA type: parent / `company` Check.
+
+### Flows
+
+- Checks: HTTP get/mutate / A2A / channels — `container.authz_service.require_can_view|edit` + `AuthzObject.flow|tool|flow_branch`. List — company index ∩ `filter_viewable_*` (`batch_check`) **до** offset, hydrate page; не `list_objects` (TTU `admin from platform` не перечисляется) и не N+1 `list_agent_toolkits`. Picker `GET /tools/all`: candidates ∩ `list_viewable_flow_ids` / `list_viewable_tool_ids` (`list_objects`, не `batch_check` каталога на страницу). `FlowAccessService` — только `sync_*` + list extras. `ensure_platform_global_admin` — bootstrap / `sync_user_groups(admin)` / backfill, **не** каждый `sync_flow_saved` / `sync_tool_saved`.
+- Platform admin (`User.groups` ⊇ `admin` → `group:admin#member`) получает view/edit через TTU `admin from platform` на `flow`/`tool` (объект `platform:global`, seed `group:admin#member` → `platform:global#admin`). **Не** вешать `admin from platform` на `company` (иначе secrets/RAG чужих компаний). `company#admin` даёт `can_admin`/`can_share`, **не** view restricted flow.
+- Ветка: `can_view` = viewer ∨ editor ∨ `can_view from flow` (иначе platform admin не видит branch).
+- `permission: []` = company-visible (`company#member` → viewer)
+- Named groups → `group:{company_id}/{name}#member` as viewer (`AuthzObject.group(name, company_id=...)`). `group:admin` глобальный.
+- Share: SQL expiry/token AuthN; visitor `user_id` = `flow-ui-share-{grant_id}` (без `:` — OpenFGA `user:<id>`); AuthZ = FGA на `flow_ui_share` (`user:*` viewer/editor); grant `permission` ∈ `{viewer, editor}`. Dual-write company/group **не** пишется для `kind=flow_ui_share_viewer` и для id с `:` (`sync_company_member_roles` / `sync_user_groups` skip). Backfill не коэрсит legacy `view`/`interact` в `viewer`/`editor` — такие SQL-ряды логируются и пропускаются (share без tuples = deny).
+- Loader/tools/MCP: dual-write `FlowAccessService.sync_flow_saved` / `sync_tool_*` fail-closed + KV compensate на create/save; каждый flow/tool получает `platform:global` link
+- `reload-from-bundle`: существующий flow (есть FGA tuples) — `can_edit`; каталожная установка (tuples нет) — `require_can_view(company)` как POST /flows, затем loader dual-write. Чужой объект с tuples без `can_edit` — 403. Нет tuples и нет bundle — 403 (не 404)
+- HITL demo operators: `authz.list_users(company, CAN_ADMIN)` — не roster
+- Backfill: `uv run python -m apps.flows.authz`. `flow_owner` — FGA-only (нет SQL owner); recovery = OpenFGA store backup. Seed `platform:global#admin` — `core.authz.platform_sync.ensure_platform_global_admin` (также при `sync_user_groups` если в groups есть `admin`)
+- Запрещены: `PermissionChecker`, `core/auth/permissions.py`, флаг `permissions_enabled`, JWT/group intersection как PDP, Python bypass `is_platform_admin`
+
+### Agent devices
+
+- Register: `company` + `owner` tuples
+- List: `list_objects(can_view, agent_device)` ∩ Redis records
+- Revoke: `require_can_admin` (owner ∪ company admin) + delete tuples
+- Backfill: `uv run python -m apps.agent.authz`
+
+### CRM
+
+- Checks: `AuthzService` напрямую (`require_can_view` / `can_view` + `AuthzObject.crm_entity`). `CrmEntityAccessService` — `sync_entity_*` + `filter_fields` / `batch_filter_readable` / public projection
+- Create: SQL insert → `sync_entity_created`; FGA fail → hard-delete entity. Delete: FGA wipe в том же path, что SQL
+- Grants: FGA-only (`AccessGrantService`)
+- Public projection: после allow — прямой tuple `user:*` через `list_tuples(VIEWER)`, не `list_users` (`crm_entity.viewer` включает `company#member` и разворачивает roster)
+- Recipients broadcast / access-request notify: точечные holders — `list_users` (`CAN_SHARE` / admin); company-visible CRM note/summary — `publish_event_to_company` / `notify_company` (не `list_users` по `crm_namespace.can_view` — раскрывает весь roster через `company#member`)
+- Backfill: `uv run python -m apps.crm.authz.backfill`
+
+### Office
+
+- Checks: HTTP/BFF → `AuthzService` + `AuthzObject.office_catalog|office_document`. `OfficeAccessService` — `sync_catalog_*` / `sync_document_*` + members/company_visible extras (no SQL PDP / walk-up)
+- Types: `office_catalog`, `office_document` (`owner`, `parent`/`catalog`, `company`, `viewer`/`editor`, `can_*`; **no `user:*`**)
+- API: `company_visible` + `members[{user_id, relation: viewer|editor}]`; owner via FGA
+- Public links: token AuthN на binding/catalog (`link_*`), не FGA; таблица `office_document_shares` удалена; `link_permission` ∈ `{viewer, editor}`
+- Tuple helpers / backfill: `apps/office/authz/`; `uv run python -m apps.office.authz.backfill`
+
+### Wiki
+
+- Checks: HTTP → `AuthzService` + `AuthzObject.wiki_page`. Domain error-map — `WikiService.require_viewable_page` (`AuthzDenied` → `WikiAccessDeniedError`). `WikiAccessService` — `sync_page_*` + members/`build_access` (без Check-методов)
+- `require_scope` — `require_can_view(AuthzObject.platform_namespace(company_id, namespace))` (как RAG); корзина остаётся namespace-gate, не per-page
+- `WikiPageResponse.can_edit` / `can_admin` — всегда из `AuthzService.can_edit` / `can_admin` (включая mutating POST/PUT/PATCH)
+- Type: `wiki_page` (`owner`, `parent` TTU, `company` tenancy, `viewer`/`editor`, `company_viewer`, `can_*`; **no `user:*`**)
+- `company` — tenancy, всегда при create; **не** выдаёт view
+- `company_visible=true` → `company#member` как `company_viewer` (can_view, не can_edit); **не** наследуется через `parent` (в отличие от user `viewer`/`editor`)
+- API: `company_visible: bool` (материализация FGA `company_viewer`) + `members[{user_id, relation: viewer|editor}]`; owner via FGA сразу при создании
+- Dual-write create: SQL insert → FGA write; при `AuthzUnavailable` — hard-delete страницы
+- `PATCH /pages/{id}/access/company-visible` — единственная мутация видимости; members допустимы только при `company_visible=false`, включение обратно чистит их (`replace_members`/`clear_members`)
+- Member listing — `AuthzService.list_tuples(obj, relation=viewer|editor)` (прямые tuples), **не** `list_users` (тот раскрывает `owner or viewer from parent` через computed userset и подмешивает владельца/предков в список участников)
+- Удаление страницы зачищает все FGA-tuples (`sync_pages_deleted`); списки `deleted`/trash не фильтруются по FGA per-item (доступа там ни у кого не осталось) — гейт `require_scope` = `require_can_view(platform_namespace)`, как RAG
+- Public links: token AuthN (`link_*`), не FGA; `link_permission` ∈ `{viewer, editor}`
+- Tuple helpers / backfill: `apps/wiki/authz/`; `uv run python -m apps.wiki.authz.backfill`
+
+### Sync
+
+- Checks: realtime ops / HTTP → `AuthzService` + `AuthzObject.sync_channel` (`can_view` / `require_can_admin`). `SyncChannelAccessService` — `sync_channel_created|deleted` + `list_member_user_ids` (`list_users`), без `user_can_*` / `require_can_*`
+- Type: `sync_channel` (`company`, `owner` / `admin` / `member`; `can_view`=`can_edit`=member∨admin∨owner; `can_admin`=admin∨owner)
+- `company` — tenancy edge (не выдаёт доступ сам по себе); пишется при create
+- `sync_channel_members` — **non-ACL settings** (`last_read_at`, `notifications_muted`); колонки `role` нет. List каналов = settings-rows ∩ `batch_check(can_view)` (или `list_objects`). SQL JOIN membership **не** PDP
+- Mutate membership / list members — FGA; add/remove/role change — только `can_admin`; add_member: settings row → FGA, FGA fail → delete settings row
+- Channel delete — `sync_channel_deleted` **до** SQL
+- Guest `guest:*` + active call — AuthN/call session, **не** FGA
+- Backfill: `uv run python -m apps.sync.authz.backfill` пишет `company` + `owner` (creator) + `member` для settings-rows. Admin/owner роли кроме creator — FGA-only; backfill **не** даунгрейдит существующие admin tuples
+
+### Worktracker
+
+- Checks: `AuthzService` + `AuthzObject.work_queue` из `WorkItemService` (`require_can_admin` / `can_view`)
+- `WorkQueueAccessService` / Port — только `sync_queue_*`, `set_member`/`remove_member`, `list_member_rows`, `list_viewable_queue_ids`
+- Type: `work_queue` (`company`, `owner` / `member`; `can_view`=`can_edit`=owner∨member; `can_admin`=owner)
+- `company` — tenancy edge; пишется при create
+- Таблицы `work_queue_members` нет; `WorkQueueMember.role` ∈ `{owner,member}` из FGA list
+- API mutate members — `authz.require_can_admin`; list queues — SQL candidates ∩ `list_objects(CAN_VIEW)`
+- Backfill: `uv run python -m apps.worktracker.authz.backfill`
+
+### Mail
+
+- Checks: `MailService` + `AuthzService` (`require_can_view|edit|admin`, `require_company_admin`)
+- Type: `mailbox_binding` (`company`, `owner` / `member` / `manager`; `can_view`=owner∨member∨manager; `can_edit`/`can_admin`=owner∨manager)
+- `company` — tenancy edge; пишется при create вместе с owner
+- `member` = только чтение; `manager` = mutate/admin members; company admin — FGA `company#can_admin`
+- Owner reassign (`patch_binding` user_id) — delete old owner tuples + write new
+- Таблицы `mailbox_binding_members` нет; helpers — `core/mail/authz/`
+- Domain invariants (kind=user vs role, personal unbind, RAG ns, secrets, `is_default`) остаются в mail
+- Backfill: `uv run python -m core.mail.authz.backfill`
+
+### Access Explorer (console)
+
+Продуктовая админка явных грантов в `apps/frontend` (`/access`). Аудитория — **company admin** (`require_company_admin` / `state.auth.user.canAdmin` из `/auth/me`). Не OpenFGA Playground и не community Studio: в prod UI запрещены сырые tuples / DSL / Check-debugger и прямой `openfga_sdk`.
+
+| Вопрос | Вызов | Запрет |
+|---|---|---|
+| Что **явно** выдано пользователю | `list_tuples(object_type=T, subject=user)` + отдельно `group:{company}/{name}#member` | `list_objects(can_view)` по wiki/CRM (enumerating company-visible) |
+| Кто имеет **явный** грант на объект | `list_tuples(obj)` по `owner/editor/viewer/member/…` | `list_users(can_view)` на company-visible типах (разворачивает roster через `company#member`) |
+| Почему доступ есть | `list_tuples(obj)` (прямой / группа / `company#member`) + inherit-рёбра `parent`/`catalog`/`namespace`/`flow` + `expand(can_view)` только для leaf `user:id` | сырой UsersetTree / DSL в UI; `expand` model-level `#parent` ≠ фактическое наследование |
+| Отозвать отображаемый грант | `require_company_admin` + `authz.delete` **ровно этого** tuple | generic tuple CRUD / `authz.write` из explorer |
+
+- Модели: `core/authz/explorer.py` (`AuthzGrantRow`). Сервис: `apps/frontend/services/authz_explorer_service.py`. OpenFGA только через `AuthzService`.
+- `list_tuples` принимает `obj` **или** `object_type` (Read `type:` без конкретного id) — «что выдано Ивану» без `list_objects(can_view)`.
+- Гидрация title/href — репозитории / PK-select. Нет URL БД → `title_status=unavailable`, не молча `title=id`. Чужая компания отфильтровывается (`company_id` гидрации или tuple `company`).
+- Company-visible на user-axis — один chip «видит открытое компании», не список тысяч страниц.
+- «Управлять доступом» — `manage_href` с `?access=1` (wiki/CRM/office share-модалки). Типы без модалки: `manage_href=""`. Нет URL — пустая строка, не `/`. Revoke в explorer — точечный delete отображаемого user/group tuple после admin gate; это не вторая PDP и не tuple console. Structural relations (`company`/`parent`/…) не отзываются.
+- Playground остаётся локальным DX (`make dev-up`), не встраивается в console.

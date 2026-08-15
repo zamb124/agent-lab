@@ -1,4 +1,4 @@
-"""Репозиторий public link и members на уровне binding."""
+"""Репозиторий public link (AuthN). ACL members — только OpenFGA."""
 
 from __future__ import annotations
 
@@ -7,11 +7,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 
 from apps.office.db.base import OfficeDatabase
-from apps.office.db.models import (
-    OfficeBindingMember,
-    OfficeDocumentBinding,
-    OfficeDocumentCatalog,
-)
+from apps.office.db.models import OfficeDocumentBinding, OfficeDocumentCatalog
 
 
 class OfficeAccessRepository:
@@ -99,70 +95,3 @@ class OfficeAccessRepository:
             await session.commit()
             await session.refresh(row)
             return row
-
-    async def list_document_members(self, file_id: str) -> list[OfficeBindingMember]:
-        async with self._db.session() as session:
-            result = await session.execute(
-                select(OfficeBindingMember).where(
-                    OfficeBindingMember.file_id == file_id,
-                )
-            )
-            return list(result.scalars().all())
-
-    async def add_document_member(self, file_id: str, user_id: str) -> OfficeBindingMember:
-        async with self._db.session() as session:
-            existing = await session.execute(
-                select(OfficeBindingMember).where(
-                    OfficeBindingMember.file_id == file_id,
-                    OfficeBindingMember.user_id == user_id,
-                )
-            )
-            found = existing.scalar_one_or_none()
-            if found is not None:
-                return found
-            row = OfficeBindingMember(
-                file_id=file_id,
-                user_id=user_id,
-                created_at=datetime.now(timezone.utc),
-            )
-            session.add(row)
-            await session.commit()
-            await session.refresh(row)
-            return row
-
-    async def remove_document_member(self, file_id: str, user_id: str) -> bool:
-        async with self._db.session() as session:
-            result = await session.execute(
-                select(OfficeBindingMember).where(
-                    OfficeBindingMember.file_id == file_id,
-                    OfficeBindingMember.user_id == user_id,
-                )
-            )
-            row = result.scalar_one_or_none()
-            if row is None:
-                return False
-            await session.delete(row)
-            await session.commit()
-            return True
-
-    async def user_is_document_member(self, file_id: str, user_id: str) -> bool:
-        async with self._db.session() as session:
-            result = await session.execute(
-                select(OfficeBindingMember).where(
-                    OfficeBindingMember.file_id == file_id,
-                    OfficeBindingMember.user_id == user_id,
-                )
-            )
-            return result.scalar_one_or_none() is not None
-
-    async def clear_document_members(self, file_id: str) -> None:
-        async with self._db.session() as session:
-            result = await session.execute(
-                select(OfficeBindingMember).where(
-                    OfficeBindingMember.file_id == file_id,
-                )
-            )
-            rows = list(result.scalars().all())
-            for row in rows:
-                await session.delete(row)
-            await session.commit()

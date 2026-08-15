@@ -9,7 +9,7 @@
 APP_MAK_EX_FLAGS := ex x --ex --exclude -e --kill
 APP_MAK_SVC := flows frontend crm rag sync worktracker office scheduler-api secrets browser search \
 	provider_litserve voice capability_gateway code_runner_python code_runner_node code_runner_go \
-	code_runner_csharp flows_worker rag_worker search_worker sync_worker crm_worker idle_worker scheduler
+	code_runner_csharp flows_worker rag_worker search_worker sync_worker crm_worker crm_summary_worker idle_worker scheduler
 ifneq (,$(findstring app,$(MAKECMDGOALS)))
 APP_MAK_EXTRAS := $(filter-out app,$(MAKECMDGOALS))
 APP_MAK_NOOP := $(filter $(APP_MAK_EX_FLAGS) $(APP_MAK_SVC),$(APP_MAK_EXTRAS))

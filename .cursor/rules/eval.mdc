@@ -23,8 +23,8 @@ flows runtime / code API
 
 - `flows` оркестрирует graph/state/tasks и подписывает execution context.
 - `code-runner-*` исполняют код в отдельном процессе своего языка.
-- `code-runner-python` и `code-runner-node` держат persistent worker pool с cached compiled artifact/script.
-- `code-runner-go` и `code-runner-csharp` кэшируют build artifact по hash(source+entrypoint+manifest) и не компилируют каждый вызов заново.
+- `code-runner-python` и `code-runner-node` держат persistent worker pool с cached compiled artifact/script (`CODE_RUNNER_PYTHON_WORKERS` / `CODE_RUNNER_NODE_WORKERS`).
+- `code-runner-go` и `code-runner-csharp` кэшируют build artifact по hash(source+entrypoint+manifest) и не компилируют каждый вызов заново. Параллельный `go build` / `dotnet build` ограничен semaphore `CODE_RUNNER_GO_WORKERS` / `CODE_RUNNER_CSHARP_WORKERS` (минимум 2); слот только на compile, не на `tools.call` вложенного same-language runner.
 - `capability-gateway` — единственный trusted API к платформенным возможностям.
 - Python, JavaScript, TypeScript, Go и C# получают один `CapabilityManifest`.
 
@@ -41,13 +41,17 @@ flows runtime / code API
 | Что | Файл |
 |---|---|
 | Контракты capability/code execution | `core/capabilities/models.py` |
-| Execution token | `core/capabilities/tokens.py` |
+| Execution token | `core/capabilities/tokens.py` — **AuthN only** (binds runner to signed execution context); не OpenFGA PDP |
 | Capability registry + docs | `apps/capability_gateway/services/registry.py` |
 | Python runner | `apps/code_runner_python/` |
 | JS/TS runner | `apps/code_runner_node/` |
 | Go runner | `apps/code_runner_go/` |
 | C# runner | `apps/code_runner_csharp/` |
 | Flows adapter | `apps/flows/src/runners/remote.py` |
+| LSP workspace stubs | `core/capabilities/lsp_workspace.py` |
+| LSP session manager | `core/capabilities/lsp_session.py` |
+| LSP stdio bridge | `core/capabilities/lsp_bridge.py` (`python -m core.capabilities.lsp_bridge`) |
+| Code node LSP bootstrap | `POST /flows/api/v1/code/lsp/session` + `WS /flows/api/v1/code/lsp/ws/{language}/{session_id}` |
 | CodeNode | `apps/flows/src/runtime/nodes.py::CodeNode` |
 | Source sanitizer | `core/capabilities/source_sanitize.py` |
 
@@ -73,7 +77,35 @@ async def run(args, state):
 - Вложенные структуры — обычные dict (`state.variables` — dict, дальше `["key"]`).
 - Реализация — `ExecutionStateView(dict)` в worker bootstrap `apps/code_runner_python/services/executor.py`: одна обёртка при разборе запроса, без копий и преобразований; JSON-сериализация ответа и identity `result is state` не меняются.
 
-`args` — обычный dict во всех языках.
+`args` — обычный dict во всех языках. В графе его заполняют входы ноды (`input_mapping` / рёбра). Playground `POST /flows/api/v1/code/execute` принимает поле `args`; без него entrypoint получает `{}`.
+
+Python sandbox — привычный `import`, не DSL:
+
+- `import wiki` / `from files import read` / `import crm` / `import rag` / `import worktracker` / `import tables` работают на тех же SDK-объектах, что и globals.
+- Stdlib ETL: `csv`, `json`, `pathlib`, `io`, `copy`, `dataclasses`, `enum`, `urllib.parse`, `zoneinfo`, `hmac`, `secrets`, `contextlib`, `tomllib`, `struct`, `zipfile` (поверх `BytesIO`), `xml.etree.ElementTree`, `email.message`, …
+- Builtins: `frozenset`, `hash`, `slice` (нет `getattr`/`hasattr`/`open`).
+- Third-party в отдельном sandbox site-packages: `pandas`, `numpy`, `dateutil`, `yaml`, `openpyxl`, `bs4`, `defusedxml`. Не в корневом `pyproject.toml`. `sqlite3` в sandbox **нет** — табличные файлы платформы только через `tables.*` / `DataTableService`.
+- HTTP только `await http.get(url=...)`. `requests` / `httpx` / `urllib.request` запрещены.
+- `pathlib.Path` — path math; `Path.read_text()` / `open()` запрещены, файлы платформы — `files.*`.
+- `raise FlowInterrupt(question="...")` — sandbox builtin без `from apps.flows...`.
+
+JS/TS: в vm есть `JSON` / `Date` / `Map` / `Object` / `Array` / `ArrayBuffer` / `Uint8Array` / `Intl` / `crypto` / `BigInt` / `structuredClone`; allowlisted `import lodash from 'lodash'`, `uuid`, `date-fns`. `fetch` / `process` / произвольный `require` запрещены.
+
+C#: `System.Text.Json`, `System.Text.RegularExpressions`, `System.Xml.Linq`, `System.Buffers`, `System.Collections.Immutable` разрешены; `System.IO` / `HttpClient` / `Process` / `DllImport` запрещены.
+
+Go: runtime = LSP = `GO_ALLOWED_STDLIB_MODULES` (`encoding/json`, `encoding/csv`, `encoding/xml`, `encoding/binary`, `strings`, `time`, …). `net/http` нельзя — `http.Get`. Импорт вне allowlist — `PermissionError`.
+
+Allowlist канон: `core/capabilities/sandbox_libraries.py`. Language server видит те же пакеты через vfs runners; JSON-каталог `/code/completions` удалён.
+
+### Code node LSP
+
+Редактор `flows-code-editor` — vendored CodeMirror + `@codemirror/lsp-client`. Бандл (`scripts/build_codemirror_bundle.mjs`) экспортирует `LSPClient`, `languageServerExtensions` и `startCompletion`. Источник правды — `CapabilityManifest` + allowlist → language-native stubs (`.pyi` / `.d.ts` / Go / C#) → language servers в `code-runner-*` (basedpyright / tsserver / gopls / csharp-ls) только на isolated vfs.
+
+- Bootstrap: `POST /flows/api/v1/code/lsp/session` (фабрика `flows/code_lsp_session`, REST-зеркало есть).
+- JSON-RPC: `WS /flows/api/v1/code/lsp/ws/{language}/{session_id}` — не `command_router`, REST-зеркало кадров не требуется. Language server живёт в отдельном bridge-процессе (`core.capabilities.lsp_bridge`), не в памяти granian worker.
+- Unknown `session_id` / без cookie → WS close `1008` (flows проверяет `GET {runner}/lsp/session/{id}` до proxy).
+- C# LSP vfs: `Sdk.cs` (static class на каждый SDK namespace) + `UserCode.cs` (user source). didOpen редактора не затирает SDK.
+- Markdown `/code/documentation` остаётся для человека и не кормит editor.
 
 ### JavaScript / TypeScript
 
@@ -119,7 +151,7 @@ async Task<object?> run(Dictionary<string, object?> args, Dictionary<string, obj
 4. Не добавлять language-specific SDK вручную: SDK namespace строится из manifest в каждом runner.
 5. Обновить tests для manifest/docs и выполнения через каждый runner (или dedicated smoke, если namespace не входит в multi-language static suite).
 
-SDK namespaces (as-is): `tools`, `files`, `http`, `text`, `voice`, `flow_state`, `log`, `trace`, `platform`, `channel`, `flow`, `wiki`.
+SDK namespaces (as-is): `tools`, `files`, `http`, `text`, `voice`, `flow_state`, `log`, `trace`, `platform`, `channel`, `flow`, `wiki`, `documents`, `crm`, `sync`, `worktracker`, `rag`, `tables`, `ui`.
 
 ## Трассировка и ошибки
 

@@ -103,14 +103,10 @@ class TestAgentVersionsList:
         await client.delete(f"/flows/api/v1/flows/{flow_id}")
 
     @pytest.mark.asyncio
-    async def test_list_versions_empty_for_nonexistent_agent(self, client, unique_id):
-        """GET /api/v1/flows/{id}/versions для несуществующего агента возвращает пустой список."""
+    async def test_list_versions_forbidden_without_flow_view(self, client, unique_id):
+        """GET /versions без FGA can_view (нет flow / нет tuples) — 403, не пустой список."""
         resp = await client.get(f"/flows/api/v1/flows/nonexistent_{unique_id}/versions")
-        assert resp.status_code == 200
-        versions_data = resp.json()
-        versions = versions_data["items"]
-        assert isinstance(versions, list)
-        assert len(versions) == 0, "Nonexistent agent MUST return empty versions list"
+        assert resp.status_code == 403
 
 
 class TestAgentGetVersion:

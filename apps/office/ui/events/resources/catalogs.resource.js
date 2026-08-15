@@ -5,7 +5,7 @@
  *   GET    /                       → OfficeCatalogListResponse { items }
  *   GET    /{catalog_id}           → OfficeCatalogDetailResponse
  *   POST   /                       → OfficeCatalogDetailResponse
- *   PATCH  /{catalog_id}           → OfficeCatalogDetailResponse (title? / is_public?)
+ *   PATCH  /{catalog_id}           → OfficeCatalogDetailResponse (title? / company_visible?)
  *   DELETE /{catalog_id}           → 204
  *
  * idField — `catalog_id`. Все запросы несут заголовок `X-Platform-Namespace`.
@@ -54,13 +54,13 @@ export const catalogCreateForm = createForm({
             maxLength: 128,
             errorKey: 'form.catalog_title_required',
         },
-        is_public: {},
+        company_visible: {},
     },
-    initial: { title: '', is_public: true, parent_catalog_id: '' },
+    initial: { title: '', company_visible: true, parent_catalog_id: '' },
     submitEvent: catalogsResource.events.CREATE_REQUESTED,
     buildPayload: (draft) => ({
         title: typeof draft.title === 'string' ? draft.title.trim() : '',
-        is_public: Boolean(draft.is_public),
+        company_visible: Boolean(draft.company_visible),
         parent_catalog_id: typeof draft.parent_catalog_id === 'string' && draft.parent_catalog_id.length > 0
             ? draft.parent_catalog_id
             : null,
@@ -77,13 +77,13 @@ export const catalogEditForm = createForm({
             maxLength: 128,
             errorKey: 'form.catalog_title_required',
         },
-        is_public: {},
+        company_visible: {},
     },
-    initial: { catalog_id: '', title: '', is_public: false },
+    initial: { catalog_id: '', title: '', company_visible: false },
     submitEvent: catalogsResource.events.UPDATE_REQUESTED,
     buildPayload: (draft) => ({
         catalog_id: draft.catalog_id,
         title: typeof draft.title === 'string' ? draft.title.trim() : '',
-        is_public: Boolean(draft.is_public),
+        company_visible: Boolean(draft.company_visible),
     }),
 });

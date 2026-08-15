@@ -21,6 +21,7 @@ description: DevOps инженер Платформы. Знает SSH-досту
 - [`.cursor/rules/infrastructure.mdc`](mdc:.cursor/rules/infrastructure.mdc) — канон инфраструктуры.
 - [`deploy/README.md`](mdc:deploy/README.md) — деплой, GitHub Secrets, структура чарта.
 - [`deploy/cluster-setup.md`](mdc:deploy/cluster-setup.md) — одноразовая настройка нод.
+- OpenFGA — sole PDP (один store на платформу); wipe без backup = потеря grants. Backfill: `python -m apps.<svc>.authz` / `core.namespace.authz.backfill`. Канон → **`authorization.mdc`**.
 
 ## Кластер и SSH-доступ
 

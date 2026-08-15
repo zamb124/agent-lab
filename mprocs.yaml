@@ -53,6 +53,8 @@ procs:
     shell: "uv run python scripts/run.py sync_worker"
   crm_worker:
     shell: "uv run python scripts/run.py crm_worker"
+  crm_summary_worker:
+    shell: "uv run python scripts/run.py crm_summary_worker"
   idle_worker:
     shell: "uv run python scripts/run.py idle_worker"
   scheduler:

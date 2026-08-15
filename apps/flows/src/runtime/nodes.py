@@ -51,6 +51,7 @@ from apps.flows.src.models import (
     ResourceReference,
     ResourceReferenceInput,
 )
+from apps.flows.src.models.resource import ResourceType
 from apps.flows.src.models.enums import ChannelType, NodeToolCallType, NodeType
 from apps.flows.src.models.exception_absorb_allow import ExceptionAbsorbAllowName
 from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod
@@ -76,6 +77,7 @@ from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.registry import ToolMaterializeInput
 from apps.flows.src.variables import VariableResolver, VarResolver
 from apps.flows.tools.agent_skill_tools import load_agent_skill, read_agent_skill_reference
+from apps.flows.tools.tables import TABLES_TOOLS
 from core.a2a import artifact_from_json_dict, mapping_from_struct, struct_from_mapping
 from core.ai.runtime import create_llm_client_from_call_config
 from core.clients.llm.mock_control import (
@@ -1095,6 +1097,7 @@ class LlmNode(BaseNode):
         """Возвращает список tools."""
         if self._loaded_tools is not None:
             tools = await self._ensure_agent_skill_meta_tools(self._loaded_tools)
+            tools = await self._ensure_data_table_tools(tools, state)
             self._loaded_tools = tools
             return tools
 
@@ -1105,6 +1108,7 @@ class LlmNode(BaseNode):
             tools = list(self.tools)
 
         tools = await self._ensure_agent_skill_meta_tools(tools)
+        tools = await self._ensure_data_table_tools(tools, state)
         self._loaded_tools = tools
         return tools
 
@@ -1130,6 +1134,52 @@ class LlmNode(BaseNode):
                 continue
             known.add(meta_tool.name)
             merged.append(meta_tool)
+        return merged
+
+    def _is_data_table_resource_ref(self, ref: ResourceReferenceInput) -> bool:
+        if isinstance(ref, ResourceReference):
+            return ref.type == ResourceType.DATA_TABLE
+        raw_type = ref.get("type")
+        return raw_type == ResourceType.DATA_TABLE.value
+
+    async def _has_data_table_resource(self, state: ExecutionState | None) -> bool:
+        node_resources = _config_resource_refs(self.config)
+        for ref in node_resources.values():
+            if self._is_data_table_resource_ref(ref):
+                return True
+        if self._node_config is not None:
+            for ref in (self._node_config.resources or {}).values():
+                if self._is_data_table_resource_ref(ref):
+                    return True
+        if state is None:
+            return False
+        flow_resources, skill_resources = await self.container.flow_factory.get_resource_maps(
+            state.session_flow_id,
+            state.branch_id,
+            state.flow_config_version,
+        )
+        for mapping in (flow_resources, skill_resources):
+            if mapping is None:
+                continue
+            for ref in mapping.values():
+                if self._is_data_table_resource_ref(ref):
+                    return True
+        return False
+
+    async def _ensure_data_table_tools(
+        self,
+        tools: list[BaseTool],
+        state: ExecutionState | None,
+    ) -> list[BaseTool]:
+        if not await self._has_data_table_resource(state):
+            return tools
+        known = {tool.name for tool in tools}
+        merged = list(tools)
+        for table_tool in TABLES_TOOLS:
+            if table_tool.name in known:
+                continue
+            known.add(table_tool.name)
+            merged.append(table_tool)
         return merged
 
     async def set_tools(self, tools: list[BaseTool]) -> None:
@@ -1410,7 +1460,7 @@ class CodeNode(BaseNode):
     """
     Универсальная нода для выполнения кода.
 
-    Поддерживает разные языки (python, javascript, go).
+    Поддерживает языки python, javascript, typescript, go, csharp.
     Только function-entrypoint через runner.execute_tool(code, args, state) по строке ``code`` из конфига;
     ``tool_id`` — идентификатор для UI/ссылок, не путь к FunctionTool в процессе.
     """

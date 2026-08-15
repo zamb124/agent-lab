@@ -11,7 +11,7 @@
 1. Загрузи `wiki-platform`, затем нужный child: `wiki-pages` / `wiki-access` / `wiki-discovery`.
 2. Не путай `wiki_page_id` с `file_id` (Documents) и `document_id` (RAG).
 3. Тело страницы — только через markdown-тулы; не собирай ProseMirror JSON.
-4. Visibility — через участников (`wiki_set_member` / `wiki_remove_member`), не отдельным полем.
+4. Visibility — `company_visible` (`wiki_set_company_visible`) + участники (`wiki_set_member` / `wiki_remove_member`) при `company_visible=false`.
 
 Страницы жёстко привязаны к `namespace` (`X-Platform-Namespace`). Без пространства операции с wiki невозможны.
 

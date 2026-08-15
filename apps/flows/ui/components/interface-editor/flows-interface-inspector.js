@@ -108,6 +108,12 @@ export class FlowsInterfaceInspector extends PlatformElement {
             flex-wrap: wrap;
             gap: 8px;
         }
+        .image-field .file-id-value {
+            font: 650 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+            color: var(--text-secondary);
+            word-break: break-all;
+            padding: 8px;
+        }
         .contract {
             display: grid; gap: 6px; padding: 10px;
             border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border-subtle));
@@ -183,6 +189,61 @@ export class FlowsInterfaceInspector extends PlatformElement {
         this.emit('property-change', { name: fieldName, value: '' });
     }
 
+    _openFileIdPicker(fieldName) {
+        if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
+            throw new Error('flows-interface-inspector: flowId required for file_id picker');
+        }
+        this.openModal('platform.file_picker', {
+            acceptMimePrefix: 'application/vnd.sqlite3',
+            uploadOpName: 'platform/file_create',
+            uploadSpec: buildFlowAssetFileCreateSpecJson({ flowId: this.flowId }),
+            catalogsOpName: 'flows/catalogs',
+            documentsOpName: 'flows/documents',
+            searchOpName: 'flows/documents_search',
+            onSelect: (file) => {
+                if (!file || typeof file.file_id !== 'string' || file.file_id.length === 0) {
+                    throw new Error('flows-interface-inspector: file_id required');
+                }
+                this.emit('property-change', {
+                    name: fieldName,
+                    value: file.file_id,
+                });
+            },
+        });
+    }
+
+    _clearFileId(fieldName) {
+        this.emit('property-change', { name: fieldName, value: '' });
+    }
+
+    _fileIdField(field) {
+        const locale = this._locale();
+        const label = field.label[locale];
+        const raw = this.component?.properties?.[field.name];
+        const fileId = typeof raw === 'string' ? raw.trim() : '';
+        const hasFileId = fileId.length > 0;
+        return html`<div class="image-field">
+            <div class="label">${label}</div>
+            <div class="preview">
+                ${hasFileId
+                    ? html`<div class="file-id-value">${fileId}</div>`
+                    : html`<div class="preview-empty">${this.t('interface_editor.inspector_file_id_empty')}</div>`}
+            </div>
+            <div class="actions">
+                <platform-button
+                    variant="secondary"
+                    density="compact"
+                    @click=${() => this._openFileIdPicker(field.name)}
+                >${this.t(hasFileId ? 'interface_editor.inspector_file_id_replace' : 'interface_editor.inspector_file_id_pick')}</platform-button>
+                ${hasFileId ? html`<platform-button
+                    variant="ghost"
+                    density="compact"
+                    @click=${() => this._clearFileId(field.name)}
+                >${this.t('interface_editor.inspector_file_id_clear')}</platform-button>` : nothing}
+            </div>
+        </div>`;
+    }
+
     _imageField(field) {
         const locale = this._locale();
         const label = field.label[locale];
@@ -218,6 +279,9 @@ export class FlowsInterfaceInspector extends PlatformElement {
         const emitChange = (value) => this.emit('property-change', { name: field.name, value });
         if (field.kind === 'image') {
             return this._imageField(field);
+        }
+        if (field.kind === 'file_id') {
+            return this._fileIdField(field);
         }
         if (field.kind === 'boolean') {
             return html`<platform-field

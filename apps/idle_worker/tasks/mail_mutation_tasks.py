@@ -10,6 +10,7 @@ from apps.idle_worker.tasks.mail_job_context import (
     enter_mail_binding_context,
     leave_mail_binding_context,
 )
+from apps.idle_worker.tasks.mail_recipients import mailbox_recipient_user_ids
 from core.events import publish_event_to_users
 from core.logging import get_logger
 from core.mail.events import MAIL_MESSAGE_UPSERTED
@@ -88,15 +89,7 @@ async def _notify_users_for_binding(
     )
     if binding is None:
         return
-    user_ids: list[str] = []
-    if binding.user_id is not None:
-        user_ids.append(binding.user_id)
-    members = await container.mailbox_binding_member_repository.list_for_binding(
-        mailbox_binding_id
-    )
-    for member in members:
-        if member.user_id not in user_ids:
-            user_ids.append(member.user_id)
+    user_ids = await mailbox_recipient_user_ids(container, binding)
     if not user_ids:
         return
     await publish_event_to_users(

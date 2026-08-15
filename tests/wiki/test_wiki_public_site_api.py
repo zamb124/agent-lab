@@ -27,7 +27,7 @@ pytestmark = pytest.mark.no_test_doubles
 
 async def _issue_link(wiki_client: AsyncClient, wiki_page_id: str) -> str:
     response = await wiki_client.post(
-        f"{PAGES_URL}/{wiki_page_id}/access/link", json={"enabled": True, "permission": "view"}
+        f"{PAGES_URL}/{wiki_page_id}/access/link", json={"enabled": True, "permission": "viewer"}
     )
     assert response.status_code == 200, response.text
     return response.json()["url"].rsplit("/", 1)[-1]

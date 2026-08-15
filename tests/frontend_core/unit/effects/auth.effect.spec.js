@@ -12,12 +12,24 @@ const ev = (type, payload = null) => ({ id: `id_${type}`, type, payload, meta: {
 
 describe('authEffect: USER_LOAD_REQUESTED', () => {
     it('200 → AUTH_USER_LOADED с user объектом', async () => {
-        fetchMock.respondJson('GET', '/svc/api/auth/me', { user_id: 'u1', name: 'Alice', company_id: 'c1', roles: ['owner'] });
+        fetchMock.respondJson('GET', '/svc/api/auth/me', {
+            user_id: 'u1',
+            name: 'Alice',
+            company_id: 'c1',
+            roles: ['owner'],
+            can_admin: true,
+        });
         const dispatched = [];
         const effect = createAuthEffect({ baseUrl: '/svc' });
         await effect(ev(CoreAuthEvents.USER_LOAD_REQUESTED), buildCtx(() => ({}), dispatched));
         const loaded = dispatched.find((d) => d.type === CoreEvents.AUTH_USER_LOADED);
-        expect(loaded.payload.user).toMatchObject({ id: 'u1', name: 'Alice', company_id: 'c1', roles: ['owner'] });
+        expect(loaded.payload.user).toMatchObject({
+            id: 'u1',
+            name: 'Alice',
+            company_id: 'c1',
+            roles: ['owner'],
+            canAdmin: true,
+        });
     });
 
     it('401 → AUTH_UNAUTHORIZED', async () => {
@@ -35,17 +47,42 @@ describe('authEffect: USER_LOAD_REQUESTED', () => {
         const failed = dispatched.find((d) => d.type === CoreEvents.AUTH_USER_FAILED);
         expect(failed.payload.message).toBe('HTTP 500');
     });
+
+    it('без can_admin → AUTH_USER_FAILED (fail-closed)', async () => {
+        fetchMock.respondJson('GET', '/svc/api/auth/me', {
+            user_id: 'u1',
+            name: 'Alice',
+            company_id: 'c1',
+            roles: ['owner'],
+        });
+        const dispatched = [];
+        await createAuthEffect({ baseUrl: '/svc' })(ev(CoreAuthEvents.USER_LOAD_REQUESTED), buildCtx(() => ({}), dispatched));
+        const failed = dispatched.find((d) => d.type === CoreEvents.AUTH_USER_FAILED);
+        expect(failed.payload.message).toContain('can_admin');
+    });
 });
 
 describe('authEffect: USER_SILENT_PROBE_REQUESTED', () => {
     it('200 → AUTH_USER_LOADED (апгрейд до authenticated на публичной странице)', async () => {
-        fetchMock.respondJson('GET', '/svc/api/auth/me', { user_id: 'u1', name: 'Alice', company_id: 'c1', roles: ['owner'] });
+        fetchMock.respondJson('GET', '/svc/api/auth/me', {
+            user_id: 'u1',
+            name: 'Alice',
+            company_id: 'c1',
+            roles: ['owner'],
+            can_admin: true,
+        });
         const dispatched = [];
         const effect = createAuthEffect({ baseUrl: '/svc' });
         await effect(ev(CoreAuthEvents.USER_SILENT_PROBE_REQUESTED), buildCtx(() => ({}), dispatched));
         const loaded = dispatched.find((d) => d.type === CoreEvents.AUTH_USER_LOADED);
         expect(loaded).toBeTruthy();
-        expect(loaded.payload.user).toMatchObject({ id: 'u1', name: 'Alice', company_id: 'c1', roles: ['owner'] });
+        expect(loaded.payload.user).toMatchObject({
+            id: 'u1',
+            name: 'Alice',
+            company_id: 'c1',
+            roles: ['owner'],
+            canAdmin: true,
+        });
     });
 
     it('401 → AUTH_ASSUMED_ANONYMOUS (не AUTH_UNAUTHORIZED — аноним остаётся анонимом)', async () => {

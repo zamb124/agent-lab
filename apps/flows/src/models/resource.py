@@ -30,6 +30,7 @@ class ResourceType(str, Enum):
     HANDOFF_CONTEXT = "handoff_context"
     RAG = "rag"
     FILES = "files"
+    DATA_TABLE = "data_table"
 
 
 class LLMResourceConfig(LLMCallConfig):
@@ -123,7 +124,15 @@ class LLMResourcePatch(StrictBaseModel):
 
 
 
-ResourceConfigUnion: TypeAlias = LLMResourceConfig | LLMContextPatch | RagResourceBindParams | JsonObject
+class DataTableResourceConfig(StrictBaseModel):
+    """SQLite DataTable file bound to a flow (public id = file_id)."""
+
+    file_id: str = Field(default="", description="Platform FileRecord.file_id")
+
+
+ResourceConfigUnion: TypeAlias = (
+    LLMResourceConfig | LLMContextPatch | RagResourceBindParams | DataTableResourceConfig | JsonObject
+)
 
 
 class ResourceDefinition(StrictBaseModel):
@@ -143,7 +152,7 @@ class ResourceDefinition(StrictBaseModel):
     tags: list[str] = Field(default_factory=list, description="Теги для группировки")
     permission: list[str] = Field(
         default_factory=list,
-        description="Группы с доступом. Пустой список = доступ для всех",
+        description="Группы с доступом. Пустой список = company-visible (member компании)",
     )
     created_at: datetime | None = Field(default=None)
     updated_at: datetime | None = Field(default=None)
@@ -174,6 +183,8 @@ def parse_typed_resource_config(
         return LLMContextPatch.model_validate(config)
     if resource_type == ResourceType.RAG:
         return RagResourceBindParams.model_validate(config)
+    if resource_type == ResourceType.DATA_TABLE:
+        return DataTableResourceConfig.model_validate(config)
     if resource_type == ResourceType.FILES:
         return dict(config)
     if resource_type == ResourceType.HANDOFF_CONTEXT:
@@ -202,7 +213,7 @@ class ResourceReference(BaseModel):
     description: str | None = Field(default=None)
     permission: list[str] = Field(
         default_factory=list,
-        description="Группы с доступом для inline-ресурса. Пустой список = доступ для всех",
+        description="Группы с доступом для inline-ресурса. Пустой список = company-visible",
     )
 
     @field_validator("permission", mode="before")
@@ -244,6 +255,7 @@ __all__ = [
     "ResourceType",
     "LLMResourceConfig",
     "LLMResourcePatch",
+    "DataTableResourceConfig",
     "RagResourceBindParams",
     "ResourceConfigUnion",
     "parse_typed_resource_config",

@@ -42,8 +42,8 @@ async def test_list_by_namespace_and_list_for_user_with_namespace_filter(
     )
     await channel_repo.create(ch1_obj)
     await channel_repo.create(ch2_obj)
-    await channel_repo.upsert_member(ch1, "alice", "member", company_id=company_id)
-    await channel_repo.upsert_member(ch2, "alice", "member", company_id=company_id)
+    await channel_repo.ensure_member_row(ch1, "alice", company_id=company_id)
+    await channel_repo.ensure_member_row(ch2, "alice", company_id=company_id)
 
     by_ns = await channel_repo.list_by_namespace(namespace, company_id=company_id)
     assert {c.channel_id for c in by_ns} == {ch1, ch2}
@@ -53,7 +53,7 @@ async def test_list_by_namespace_and_list_for_user_with_namespace_filter(
 
 
 @pytest.mark.asyncio
-async def test_is_member_and_get_member_role_explicit_company(
+async def test_ensure_member_row_and_list_user_ids_explicit_company(
     channel_repo: ChannelRepository,
     sync_db_clean: None,
     company_id: str,
@@ -71,10 +71,9 @@ async def test_is_member_and_get_member_role_explicit_company(
         created_by_user_id="u1",
     )
     await channel_repo.create(ch)
-    await channel_repo.upsert_member(ch_m, "bob", "admin", company_id=company_id)
-    assert await channel_repo.is_member(ch_m, "bob", company_id=company_id) is True
-    assert await channel_repo.is_member(ch_m, "nobody", company_id=company_id) is False
-    assert await channel_repo.get_member_role(ch_m, "bob") == "admin"
+    await channel_repo.ensure_member_row(ch_m, "bob", company_id=company_id)
+    ids = await channel_repo.list_settings_user_ids(ch_m, company_id=company_id)
+    assert ids == ["bob"]
 
 
 @pytest.mark.asyncio
@@ -129,7 +128,7 @@ async def test_set_pinned_message_ids(
 
 
 @pytest.mark.asyncio
-async def test_list_member_user_ids(
+async def test_list_settings_user_ids(
     channel_repo: ChannelRepository,
     sync_db_clean: None,
     company_id: str,
@@ -147,7 +146,7 @@ async def test_list_member_user_ids(
         created_by_user_id="u1",
     )
     await channel_repo.create(ch)
-    await channel_repo.upsert_member(ch_mem, "a", "owner", company_id=company_id)
-    await channel_repo.upsert_member(ch_mem, "b", "member", company_id=company_id)
-    ids = await channel_repo.list_member_user_ids(ch_mem, company_id=company_id)
+    await channel_repo.ensure_member_row(ch_mem, "a", company_id=company_id)
+    await channel_repo.ensure_member_row(ch_mem, "b", company_id=company_id)
+    ids = await channel_repo.list_settings_user_ids(ch_mem, company_id=company_id)
     assert set(ids) == {"a", "b"}

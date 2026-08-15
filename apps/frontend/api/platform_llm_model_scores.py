@@ -97,18 +97,16 @@ class LLMModelScoreDeleteResponse(BaseModel):
     cache_rescore: JsonObject
 
 
-def _require_system_admin() -> User:
+async def _require_system_admin(container: ContainerDep) -> User:
     context = require_frontend_context()
     company = context.active_company
     if company is None or company.company_id != SYSTEM_COMPANY_ID:
         raise HTTPException(status_code=403, detail="Доступно только для компании system")
     user = context.user
-    roles = set(company.members.get(user.user_id, []) or [])
-    roles.update(user.companies.get(SYSTEM_COMPANY_ID, []) or [])
-    if "admin" in user.groups:
-        roles.add("admin")
-    if "admin" not in roles and "owner" not in roles:
-        raise HTTPException(status_code=403, detail="Требуются права admin/owner в компании system")
+    await container.authz_service.require_company_admin(
+        company_id=SYSTEM_COMPANY_ID,
+        user_id=user.user_id,
+    )
     return user
 
 
@@ -322,7 +320,7 @@ async def _compute_score_for_hint(
 
 @router.get("", response_model=LLMModelScoreListResponse)
 async def list_llm_model_scores(container: ContainerDep) -> LLMModelScoreListResponse:
-    _ = _require_system_admin()
+    _ = await _require_system_admin(container)
     return LLMModelScoreListResponse(items=await _build_merged_score_items(container))
 
 
@@ -331,7 +329,7 @@ async def upsert_llm_model_score(
     payload: LLMModelScoreUpsertRequest,
     container: ContainerDep,
 ) -> LLMModelScoreMutationResponse:
-    user = _require_system_admin()
+    user = await _require_system_admin(container)
     computed_score, breakdown = await _compute_score_for_hint(
         container,
         provider=payload.provider,
@@ -389,7 +387,7 @@ async def delete_llm_model_score(
     model_id: str,
     container: ContainerDep,
 ) -> LLMModelScoreDeleteResponse:
-    user = _require_system_admin()
+    user = await _require_system_admin(container)
     deleted = await container.llm_model_score_repository.delete(
         provider=provider,
         model_id=model_id,
@@ -409,7 +407,7 @@ async def delete_llm_model_score(
 
 @router.post("/refresh-cache")
 async def refresh_llm_model_scores_cache(container: ContainerDep) -> JsonObject:
-    user = _require_system_admin()
+    user = await _require_system_admin(container)
     result = await refresh_platform_free_models_cache(
         container.redis_client,
         get_settings(),

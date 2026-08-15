@@ -11,6 +11,7 @@ from httpx import AsyncClient
 
 from apps.flows.src.a2a.interaction_parser import parse_flow_ui_command
 from apps.flows.src.container import get_container
+from apps.flows.src.models.flow_config import Edge, FlowConfig
 from apps.flows.src.services.flow_ui_session_service import (
     FlowUISessionCommandResult,
     FlowUISessionService,
@@ -200,7 +201,30 @@ async def bootstrap_flow_ui_session(
         context_id if context_id is not None else f"context-{uuid.uuid4().hex}"
     )
     session_id = f"{resolved_flow_id}:{resolved_context_id}"
-    service = FlowUISessionService(get_container().workflow_runtime)
+    container = get_container()
+    config = await container.flow_repository.get(resolved_flow_id)
+    if config is None:
+        config = FlowConfig(
+            flow_id=resolved_flow_id,
+            name=resolved_flow_id,
+            entry="main",
+            nodes={
+                "main": {
+                    "type": "code",
+                    "code": "async def run(args, state): return state",
+                }
+            },
+            edges=[Edge(from_node="main", to_node=None)],
+        )
+        _ = await container.flow_repository.set(config)
+    if context.active_company is None:
+        raise AssertionError("active company required for flow authz sync")
+    await container.flow_access_service.sync_flow_saved(
+        config,
+        company_id=context.active_company.company_id,
+        owner_user_id=owner_user_id,
+    )
+    service = FlowUISessionService(container.workflow_runtime)
     if initial_document is None:
         document = default_flow_interface_config().template.materialize(
             document_id=f"flow-ui:{resolved_context_id}"

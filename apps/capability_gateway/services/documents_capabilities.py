@@ -172,7 +172,7 @@ DOCUMENTS_CAPABILITY_SPECS: tuple[tuple[str, str, str, DocumentsArgsModel], ...]
     (
         "update_catalog",
         "Update catalog",
-        "Updates catalog title and/or is_public.",
+        "Updates catalog title and/or company_visible.",
         DocumentsUpdateCatalogArgs,
     ),
     (

@@ -65,7 +65,7 @@ class SyncChannel(Base):
 
 
 class SyncChannelMember(Base):
-    """Участники каналов (роль: owner/admin/member/viewer)."""
+    """Настройки участника канала; право доступа живёт в OpenFGA."""
 
     __tablename__: str = "sync_channel_members"
 
@@ -75,7 +75,6 @@ class SyncChannelMember(Base):
     )
     user_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(100), nullable=False)
-    role: Mapped[str] = mapped_column(String(32), nullable=False)
     last_read_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
@@ -93,7 +92,7 @@ class SyncChannelMember(Base):
 
     @override
     def __repr__(self) -> str:
-        return f"<SyncChannelMember(channel='{self.channel_id}', user='{self.user_id}', role='{self.role}')>"
+        return f"<SyncChannelMember(channel='{self.channel_id}', user='{self.user_id}')>"
 
 
 class SyncThread(Base):

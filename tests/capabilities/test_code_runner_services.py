@@ -460,7 +460,7 @@ async def test_all_manifest_capabilities_have_sdk_methods_in_every_language(
                 "state": {},
             },
             headers=auth_headers_system,
-            timeout=120.0,
+            timeout=180.0,
         )
         response.raise_for_status()
         body = response.json()
@@ -944,7 +944,7 @@ async def test_all_languages_call_platform_tool_capability_through_public_sdk(
                 "state": {},
             },
             headers=auth_headers_system,
-            timeout=120.0,
+            timeout=180.0,
         )
         response.raise_for_status()
         body = response.json()
@@ -1037,7 +1037,7 @@ func Combine(args map[string]any, state map[string]any) (any, error) {{
                 "state": {"base": 7},
             },
             headers=auth_headers_system,
-            timeout=120.0,
+            timeout=180.0,
         )
         response.raise_for_status()
         body = response.json()

@@ -14,6 +14,7 @@ from core.clients.wiki_client import WikiClient
 from core.clients.wiki_models import (
     WikiBacklinksArgs,
     WikiCommentIdArgs,
+    WikiCompanyVisibleArgs,
     WikiCreateCommentArgs,
     WikiCreatePageArgs,
     WikiEmptyArgs,
@@ -75,7 +76,7 @@ async def wiki_list_namespaces(*, state: ExecutionState) -> JsonObject:
     name="wiki_get_page",
     description=(
         "Gets wiki page metadata and permissions (no body). "
-        "For content use wiki_get_markdown. Returns page brief + can_edit/can_administer."
+        "For content use wiki_get_markdown. Returns page brief + can_edit/can_admin."
     ),
     tags=_TAGS,
     permission=_PERM,
@@ -165,7 +166,7 @@ async def wiki_update_markdown(
     name="wiki_update_properties",
     description=(
         "Patches wiki page properties: title, icon, cover_url, is_published, "
-        "is_template, is_full_width. Does not set visibility — use access members."
+        "is_template, is_full_width. Does not set company_visible — use wiki_set_company_visible."
     ),
     tags=_TAGS,
     permission=_PERM,
@@ -438,7 +439,7 @@ async def wiki_delete_comment(wiki_comment_id: str, *, state: ExecutionState) ->
 @tool(
     name="wiki_get_access",
     description=(
-        "Gets page access: visibility, members, inherited_from_page_id, public link flags "
+        "Gets page access: company_visible, members, inherited_from_page_id, public link flags "
         "(no raw public URL)."
     ),
     tags=_TAGS,
@@ -451,10 +452,31 @@ async def wiki_get_access(wiki_page_id: str, *, state: ExecutionState) -> JsonOb
 
 
 @tool(
+    name="wiki_set_company_visible",
+    description=(
+        "Switches a page between company-wide and members-only access (admin). "
+        "Members can only be added while company_visible=false; setting it back to "
+        "true clears all explicit members."
+    ),
+    tags=_TAGS,
+    permission=_PERM,
+    parameters_model=WikiCompanyVisibleArgs,
+)
+async def wiki_set_company_visible(
+    wiki_page_id: str,
+    company_visible: bool,
+    *,
+    state: ExecutionState,
+) -> JsonObject:
+    _ = state
+    return await WikiClient().set_company_visible(wiki_page_id, company_visible=company_visible)
+
+
+@tool(
     name="wiki_set_member",
     description=(
-        "Adds or updates a page member (admin). First member switches page to restricted. "
-        "Resolve user_id via team-directory first."
+        "Adds or updates a page member's relation (admin). Requires company_visible=false "
+        "(see wiki_set_company_visible). Resolve user_id via team-directory first."
     ),
     tags=_TAGS,
     permission=_PERM,
@@ -463,19 +485,17 @@ async def wiki_get_access(wiki_page_id: str, *, state: ExecutionState) -> JsonOb
 async def wiki_set_member(
     wiki_page_id: str,
     user_id: str,
-    permission: Literal["read", "write", "admin"] = "read",
+    relation: Literal["viewer", "editor"] = "viewer",
     *,
     state: ExecutionState,
 ) -> JsonObject:
     _ = state
-    return await WikiClient().set_member(wiki_page_id, user_id=user_id, permission=permission)
+    return await WikiClient().set_member(wiki_page_id, user_id=user_id, relation=relation)
 
 
 @tool(
     name="wiki_remove_member",
-    description=(
-        "Removes a page member (admin). Removing the last member returns visibility to company."
-    ),
+    description="Removes a page member (admin). The page stays members-only until you call wiki_set_company_visible.",
     tags=_TAGS,
     permission=_PERM,
     parameters_model=WikiRemoveMemberArgs,
@@ -503,7 +523,7 @@ async def wiki_remove_member(
 async def wiki_rotate_public_link(
     wiki_page_id: str,
     enabled: bool,
-    permission: Literal["view", "comment"] = "view",
+    permission: Literal["viewer", "editor"] = "viewer",
     *,
     state: ExecutionState,
 ) -> JsonObject:

@@ -30,6 +30,19 @@ description: Backend инженер Платформы. Использовать
 - `Any` только на JSON/внешней границе и сразу валидируется. Публичные методы сервисов, repositories, runtime и API имеют полные аннотации.
 - `try/except` только вокруг IO/внешних сервисов; бизнес-ошибки не глушатся.
 
+## Authorization / ACL
+
+Перед любой правкой access control читать **`authorization.mdc`**.
+
+- Sole PDP — `container.authz_service` (`AuthzService`). Domain `*AccessService` — `sync_*` tuple orchestration + extras, не второй Check.
+- Запрещены: `openfga_sdk` вне `core/authz`, roster/`Company.members`/JWT groups как Check, SQL ACL readers, `except AuthzDenied: pass`, `enabled_object_types`.
+- Dual-write fail-closed: create/delete ACL-ресурса → `authz.write`/`delete` в том же call path (включая compensate).
+- Wire axes: link/share permission — только `viewer` | `editor`; CRM grants могут `admin`/`owner`; mail binding — `owner`/`member`/`manager`.
+- Tests: любая мутация membership → `sync_company_member_roles` / `set_test_company_member_roles`.
+- CI: `scripts/check_authz_canon.py`, `scripts/check_authz_dual_write.py`, `scripts/check_authz_backfill_completeness.py`, `scripts/check_authz_model.py`.
+- Phase 12: HTTP Check = `container.authz_service.require_*`; `*AccessService` = `sync_*` tuples + extras, без Check; list = SQL ∩ FGA; `require_authz` Depends удалён. Flows platform admin — TTU `admin from platform`, не Python bypass.
+- Tenant groups — `AuthzObject.group(name, company_id=...)`; `group:admin` единственная глобальная. Company tuple = tenancy; company-visible = write `company#member` viewer. Новый type копирует скелет из `authorization.mdc`.
+
 ## Flows / LLM
 
 AI-layer — только `core.ai`: provider specs, shared model catalog, resolver, runtime. Provider-specific discovery — только `core.ai.adapters`; сервисы не импортируют provider clients и не вызывают старый `get_llm(...)`.
@@ -46,6 +59,7 @@ uv run basedpyright --level warning --warnings apps core   # минимум; war
 make lint <path>                            # точечно: ruff + basedpyright на файл
 make lint                                   # всё перед PR
 make lint-ts                                # только frontend
+uv run python scripts/check_authz_canon.py  # при любой ACL/authz правке
 ```
 
 После узкой правки — целевой `pytest`. После архитектурного рефакторинга — `make test`. Если менялись gate/coverage/тест-инфра или пользователь просил coverage — `make test-cov`.

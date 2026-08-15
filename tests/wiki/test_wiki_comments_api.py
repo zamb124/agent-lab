@@ -122,12 +122,12 @@ async def test_colleague_can_comment_open_page(wiki_client_member, wiki_page):
 
 
 async def test_comments_of_restricted_page_are_closed_for_colleague(
-    wiki_client, wiki_client_member, wiki_page, system_user_id
+    wiki_client, wiki_client_member, wiki_page
 ):
     page_id = wiki_page["wiki_page_id"]
-    _ = await wiki_client.post(
-        f"{PAGES_URL}/{page_id}/access/members",
-        json={"user_id": system_user_id, "permission": "admin"},
+    _ = await wiki_client.patch(
+        f"{PAGES_URL}/{page_id}/access/company-visible",
+        json={"company_visible": False},
     )
 
     listing = await wiki_client_member.get(f"{PAGES_URL}/{page_id}/comments")

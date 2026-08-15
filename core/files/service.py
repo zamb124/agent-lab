@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 
 from core.clients.service_client import ServiceClientError
 from core.config import get_settings
 from core.context import require_active_company, require_context
+from core.data_tables.models import DATA_TABLE_CONTENT_TYPE, normalize_data_table_filename
 from core.documents.placement import DocsBindResult, DocsPlacement
 from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind
 from core.files.file_repository import FileRepository
@@ -15,6 +17,7 @@ from core.files.registry import default_docs_placement
 from core.files.retention import FileRetentionKind
 from core.files.retention_promote import promote_file_retention_record
 from core.files.storage import FileStorage, retention_fields_from_spec
+from core.files.types import FileCategory, ext_to_category
 from core.files.urls import normalize_files_route_segment
 from core.logging import get_logger
 from core.types import JsonObject
@@ -69,6 +72,13 @@ class FilesService:
             raise ValueError("active company is required for file create")
         user_id = context.user.user_id
 
+        effective_name = original_name
+        effective_type = content_type
+        category = ext_to_category(Path(original_name).suffix.lower())
+        if category is FileCategory.DATA_TABLE:
+            effective_name = normalize_data_table_filename(original_name)
+            effective_type = DATA_TABLE_CONTENT_TYPE
+
         retention_kind, ttl_seconds = retention_fields_from_spec(spec.retention)
         post_create = spec.post_create if spec.post_create is not None else FilePostCreate()
         is_public = post_create.is_public
@@ -78,8 +88,8 @@ class FilesService:
 
         file_record = await self._storage.upload_bytes(
             data=data,
-            original_name=original_name,
-            content_type=content_type,
+            original_name=effective_name,
+            content_type=effective_type,
             uploaded_by=user_id,
             company_id=company_id,
             is_public=is_public,
@@ -92,7 +102,7 @@ class FilesService:
         )
 
         await self._run_post_create(file_record, spec, post_create)
-        await self._bind_after_create(file_record, spec, title=original_name)
+        await self._bind_after_create(file_record, spec, title=effective_name)
         return file_record
 
     async def register_s3(

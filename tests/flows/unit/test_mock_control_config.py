@@ -5,6 +5,8 @@ Unit-тесты контракта Mock Control System.
 — список ответов. Скаляр и пустой список запрещены.
 """
 
+from unittest.mock import AsyncMock
+
 import pytest
 from pydantic import ValidationError
 
@@ -74,16 +76,30 @@ def test_parse_metadata_parses_mock_key() -> None:
     assert config.llm == ["hi"]
 
 
-def test_permission_requires_membership() -> None:
-    assert_mock_permission(["admin", "user"], ["admin", "developers"])
+@pytest.mark.asyncio
+async def test_permission_requires_membership() -> None:
+    authz = AsyncMock()
+    authz.check = AsyncMock(side_effect=[True])
+    await assert_mock_permission(
+        authz,
+        user_id="u1",
+        permission_groups=["admin", "developers"],
+    )
+    authz.check = AsyncMock(return_value=False)
     with pytest.raises(Exception):
-        assert_mock_permission(["user"], ["admin"])
+        await assert_mock_permission(
+            authz,
+            user_id="u1",
+            permission_groups=["admin"],
+        )
 
 
-def test_permission_requires_explicit_groups() -> None:
+@pytest.mark.asyncio
+async def test_permission_requires_explicit_groups() -> None:
     """Пустой permission_groups запрещает mock (привилегированная фича)."""
+    authz = AsyncMock()
     with pytest.raises(Exception):
-        assert_mock_permission(["admin"], [])
+        await assert_mock_permission(authz, user_id="u1", permission_groups=[])
 
 
 def test_mock_item_to_text_variants() -> None:

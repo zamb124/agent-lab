@@ -223,11 +223,9 @@ export class FlowsCodeWorkbench extends PlatformElement {
     }
 
     _completionContextPayload() {
-        const lang = this._normalizedLanguage();
         return {
-            language: lang,
-            perspective: this._documentationPerspectiveResolved(),
-            include_runtime_namespace_extras: true,
+            language: this._normalizedLanguage(),
+            parameters_schema: this._parametersSchemaObject(),
         };
     }
 

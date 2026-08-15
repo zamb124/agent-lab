@@ -7,7 +7,7 @@ import { resourcesBundleResource } from '../../../../apps/flows/ui/events/resour
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
 import { platformVoiceDictationOp } from '@platform/lib/events/factories/platform-voice-dictation.js';
 import {
-    codeCompletionsOp,
+    codeLspSessionOp,
     codeDocumentationOp,
     codeTemplatesOp,
     codeEditorStateOp,
@@ -26,7 +26,7 @@ const FACTORIES = [
     resourcesBundleResource,
     platformFileCreateOp,
     platformVoiceDictationOp,
-    codeCompletionsOp,
+    codeLspSessionOp,
     codeDocumentationOp,
     codeTemplatesOp,
     codeEditorStateOp,

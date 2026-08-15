@@ -3,6 +3,7 @@
 from apps.wiki.db.base import WikiDatabase
 from apps.wiki.db.repositories.wiki_repository import WikiRepository
 from apps.wiki.services.rag_index import WikiRagIndexService
+from apps.wiki.services.wiki_access_service import WikiAccessService
 from apps.wiki.services.wiki_service import WikiService
 from core.clients.rag_client import RagClient
 from core.config import get_settings
@@ -33,13 +34,22 @@ class WikiContainer(BaseContainer):
 
     @lazy
     def wiki_rag_index_service(self) -> WikiRagIndexService:
-        return WikiRagIndexService(rag_client=self.rag_client)
+        return WikiRagIndexService(
+            rag_client=self.rag_client,
+            namespace_service=self.namespace_service,
+        )
+
+    @lazy
+    def wiki_access_service(self) -> WikiAccessService:
+        return WikiAccessService(authz=self.authz_service)
 
     @lazy
     def wiki_service(self) -> WikiService:
         return WikiService(
             repository=self.wiki_repository,
             rag_index=self.wiki_rag_index_service,
+            access=self.wiki_access_service,
+            authz=self.authz_service,
         )
 
 

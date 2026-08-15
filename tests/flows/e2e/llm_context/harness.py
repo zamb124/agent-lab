@@ -9,6 +9,7 @@ from typing import Any
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.models import Edge, FlowConfig, ResourceDefinition, ResourceType
 from apps.flows.src.runtime.a2a_messages import build_assistant_message, build_user_message
+from core.context import get_context
 from core.rag.llm_context_memory_store import llm_context_memory_namespace_id
 from core.rag.rag_resource import RAGResource
 from core.state import ExecutionState
@@ -199,18 +200,23 @@ async def run_context_flow(
     queued_responses: list[Any] | None = None,
 ) -> tuple[dict[str, Any], ExecutionState]:
     task_id = f"task-{context_id}"
-    state = ExecutionState(
-        task_id=task_id,
-        context_id=context_id,
-        user_id=f"user-{context_id}",
-        session_id=f"{flow_id}:{context_id}",
-        branch_id=branch_id,
-        content=query,
-        messages=initial_messages or [],
-    )
     before_count = len(await capture())
     mock_llm_with_queue(queued_responses or [{"type": "text", "content": response}])
     with service_client_asgi_auth_context(auth_headers_system):
+        ctx = get_context()
+        if ctx is None or ctx.user is None or ctx.active_company is None:
+            raise ValueError("run_context_flow requires authenticated user and active_company")
+        # RAG Check uses ExecutionState.user_id as OpenFGA subject. Actor must already
+        # have company tuples from auth_token_system — do not invent a synthetic user.
+        state = ExecutionState(
+            task_id=task_id,
+            context_id=context_id,
+            user_id=ctx.user.user_id,
+            session_id=f"{flow_id}:{context_id}",
+            branch_id=branch_id,
+            content=query,
+            messages=initial_messages or [],
+        )
         flow = await container.flow_factory.get_flow(flow_id, branch_id=branch_id)
         result = await run_flow(container=container, flow=flow, state=state)
     assert result["response"] == response

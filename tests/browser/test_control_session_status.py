@@ -9,6 +9,12 @@ from fastapi import HTTPException
 
 from apps.browser.api import control
 from apps.browser.contracts.control_types import ControlSessionStatusResponse
+from core.authz.models import AuthzObject
+
+
+class _StubAuthz:
+    async def require_can_view(self, obj: AuthzObject) -> None:
+        _ = obj
 
 
 class _ClosedSessionLeaseManager:
@@ -30,9 +36,10 @@ class _UnknownSessionLeaseManager:
 @pytest.mark.asyncio
 async def test_control_session_status_returns_closed_for_recently_closed_session() -> None:
     container = SimpleNamespace(
+        authz_service=_StubAuthz(),
         browser_runtime=SimpleNamespace(
             lease_manager=_ClosedSessionLeaseManager(),
-        )
+        ),
     )
     status = await control.control_session_status("sess-closed", container)  # pyright: ignore[reportArgumentType]
     assert isinstance(status, ControlSessionStatusResponse)
@@ -46,9 +53,10 @@ async def test_control_session_status_returns_closed_for_recently_closed_session
 @pytest.mark.asyncio
 async def test_control_session_status_unknown_session_returns_404() -> None:
     container = SimpleNamespace(
+        authz_service=_StubAuthz(),
         browser_runtime=SimpleNamespace(
             lease_manager=_UnknownSessionLeaseManager(),
-        )
+        ),
     )
     with pytest.raises(HTTPException) as exc_info:
         _ = await control.control_session_status("sess-unknown", container)  # pyright: ignore[reportArgumentType]

@@ -1,4 +1,4 @@
-"""FunctionTool contract metadata and permission inheritance."""
+"""FunctionTool contract metadata and OpenFGA permission inheritance."""
 
 from __future__ import annotations
 
@@ -7,8 +7,11 @@ from typing import ClassVar
 import pytest
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.flows.config import get_settings
 from apps.flows.src.tools.decorator import FunctionTool, tool
+from core.authz.group_sync import sync_user_groups
+from core.context import clear_context, set_context
+from core.models.context_models import Context
+from core.models.identity_models import Company, User
 from core.state import ExecutionState
 
 
@@ -48,24 +51,54 @@ async def test_function_tool_inherits_contract_metadata() -> None:
 
 
 @pytest.mark.asyncio
-async def test_function_tool_inherits_permission_check() -> None:
-    config = get_settings()
-    original_permissions = config.auth.permissions_enabled
-    config.auth.permissions_enabled = True
-    try:
-        state = ExecutionState(
-            task_id="task-1",
-            context_id="ctx-1",
-            user_id="user-1",
-            session_id="flow:ctx-1",
-            user_groups=["users"],
+async def test_function_tool_inherits_permission_check(container, unique_id) -> None:
+    denied_user = f"echo-denied-{unique_id}"
+    allowed_user = f"echo-allowed-{unique_id}"
+    company_id = f"echo-co-{unique_id}"
+    await sync_user_groups(
+        container.authz_service,
+        user_id=denied_user,
+        groups=["users"],
+        company_ids=[company_id],
+        previous_groups=[],
+    )
+    await sync_user_groups(
+        container.authz_service,
+        user_id=allowed_user,
+        groups=["managers"],
+        company_ids=[company_id],
+        previous_groups=[],
+    )
+    company = Company(company_id=company_id, name="Echo Co")
+    set_context(
+        Context(
+            user=User(user_id=allowed_user, name="Allowed", groups=["managers"]),
+            active_company=company,
+            channel="api",
         )
-        denied = await contract_echo_tool.run({"value": "hello"}, state)
+    )
+    try:
+        denied = await contract_echo_tool.run(
+            {"value": "hello"},
+            ExecutionState(
+                task_id="task-1",
+                context_id="ctx-1",
+                user_id=denied_user,
+                session_id="flow:ctx-1",
+            ),
+        )
         assert isinstance(denied, str)
         assert "нет прав" in denied
 
-        state_allowed = state.model_copy(update={"user_groups": ["managers"]})
-        allowed = await contract_echo_tool.run({"value": "hello"}, state_allowed)
+        allowed = await contract_echo_tool.run(
+            {"value": "hello"},
+            ExecutionState(
+                task_id="task-2",
+                context_id="ctx-2",
+                user_id=allowed_user,
+                session_id="flow:ctx-2",
+            ),
+        )
         assert allowed == {"value": "hello"}
     finally:
-        config.auth.permissions_enabled = original_permissions
+        clear_context()

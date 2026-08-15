@@ -27,6 +27,7 @@ _QUEUE_BROKER_MODULE: dict[str, str] = {
     "idle": "apps.idle_worker.broker",
     "rag": "apps.rag_worker.broker",
     "crm": "apps.crm_worker.broker",
+    "crm_summary": "apps.crm_worker.summary_broker",
     "sync": "apps.sync.realtime.broker",
     "search": "apps.search_worker.broker",
 }
@@ -35,7 +36,17 @@ _QUEUE_TASK_MODULES: dict[str, tuple[str, ...]] = {
     "flows_worker": ("apps.flows.src.tasks", "apps.flows_worker.evaluation_tasks"),
     "idle": ("apps.idle_worker.tasks",),
     "rag": ("apps.rag_worker.tasks",),
-    "crm": ("apps.crm_worker.tasks",),
+    "crm": (
+        "apps.crm_worker.tasks.analysis_tasks",
+        "apps.crm_worker.tasks.draft_repair_tasks",
+        "apps.crm_worker.tasks.knowledge_import_tasks",
+        "apps.crm_worker.tasks.namespace_integration_tasks",
+        "apps.crm_worker.tasks.note_markdown_tasks",
+        "apps.crm_worker.tasks.reembed_tasks",
+        "apps.crm_worker.tasks.scheduled_integration_sync_tasks",
+        "apps.crm_worker.tasks.suggest_tasks",
+    ),
+    "crm_summary": ("apps.crm_worker.tasks.daily_summary_tasks",),
     "sync": ("apps.sync.realtime.tasks", "apps.sync.realtime.notification_tasks"),
     "search": ("apps.search_worker.tasks",),
 }

@@ -19,10 +19,12 @@ describe('mailReducer', () => {
                     { mailbox_binding_id: 'b1', is_default: false, email_address: 'a@x' },
                     { mailbox_binding_id: 'b2', is_default: true, email_address: 'b@x' },
                 ],
+                can_admin: false,
             }),
         );
         expect(next.activeMailboxBindingId).toBe('b2');
         expect(next.bindings).toHaveLength(2);
+        expect(next.canAdmin).toBe(false);
     });
 
     it('MAILBOX_SELECT clears messages', () => {

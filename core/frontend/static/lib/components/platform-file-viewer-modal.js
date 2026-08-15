@@ -102,7 +102,10 @@ export class PlatformFileViewerModal extends PlatformModal {
                 right: var(--file-viewer-header-right, max(12px, env(safe-area-inset-right, 0px)));
                 left: var(--file-viewer-header-left, auto);
                 align-self: auto;
-                width: min(460px, calc(100vw - 24px));
+                box-sizing: border-box;
+                width: fit-content;
+                max-width: calc(100vw - 24px);
+                min-width: 0;
                 min-height: 42px;
                 padding: 6px;
                 border: 1px solid rgba(255, 255, 255, 0.16);
@@ -114,6 +117,8 @@ export class PlatformFileViewerModal extends PlatformModal {
                 -webkit-backdrop-filter: blur(22px) saturate(140%);
                 pointer-events: auto;
                 z-index: 5;
+                flex-wrap: wrap;
+                overflow: hidden;
             }
 
             :host([data-header-dragging]) .modal-header {
@@ -121,7 +126,9 @@ export class PlatformFileViewerModal extends PlatformModal {
             }
 
             .modal-title {
+                flex: 0 1 auto;
                 min-width: 0;
+                max-width: 14rem;
                 font-size: 13px;
                 font-weight: 600;
                 letter-spacing: 0;
@@ -159,13 +166,20 @@ export class PlatformFileViewerModal extends PlatformModal {
             }
 
             .header-buttons {
+                flex: 1 1 auto;
+                min-width: 0;
+                flex-wrap: wrap;
+                justify-content: flex-end;
                 gap: 4px;
             }
 
             .header-type-actions {
                 display: inline-flex;
+                flex-wrap: wrap;
                 align-items: center;
                 gap: 4px;
+                min-width: 0;
+                max-width: 100%;
                 margin-right: 2px;
                 padding-right: 8px;
                 border-right: 1px solid rgba(255, 255, 255, 0.18);
@@ -227,6 +241,10 @@ export class PlatformFileViewerModal extends PlatformModal {
                 z-index: 1;
                 padding: 0.5rem;
                 box-sizing: border-box;
+            }
+
+            .viewer-shell-data-table {
+                padding-top: 3.25rem;
             }
 
             platform-onlyoffice-host,
@@ -361,13 +379,14 @@ export class PlatformFileViewerModal extends PlatformModal {
 
             @media (max-width: 640px) {
                 .modal-header {
-                    width: min(360px, calc(100vw - 16px));
+                    width: calc(100vw - 16px);
+                    max-width: calc(100vw - 16px);
                     top: max(8px, env(safe-area-inset-top, 0px));
                     right: max(8px, env(safe-area-inset-right, 0px));
                 }
 
                 .file-name {
-                    max-width: 190px;
+                    max-width: 12rem;
                 }
             }
         `,
@@ -397,6 +416,11 @@ export class PlatformFileViewerModal extends PlatformModal {
         if (changed.has('config') || changed.has('fileId') || changed.has('file')) {
             this._syncViewModeFromConfig();
         }
+    }
+
+    _isDataTable() {
+        const config = this.config;
+        return Boolean(config && config.handler === 'data_table' && config.data_table);
     }
 
     _textPresentation() {
@@ -713,6 +737,9 @@ export class PlatformFileViewerModal extends PlatformModal {
     }
 
     _renderTypeHeaderActions() {
+        if (this._isDataTable()) {
+            return nothing;
+        }
         const presentation = this._textPresentation();
         if (!presentation) {
             return nothing;
@@ -749,7 +776,7 @@ export class PlatformFileViewerModal extends PlatformModal {
         const downloadUrl = this._resolveDownloadUrl();
         return html`
             ${this._renderTypeHeaderActions()}
-            ${downloadUrl.length > 0 ? html`
+            ${downloadUrl.length > 0 && !this._isDataTable() ? html`
                 <button
                     type="button"
                     class="header-btn"
@@ -781,7 +808,7 @@ export class PlatformFileViewerModal extends PlatformModal {
             ? (this._viewMode.length > 0 ? this._viewMode : this._defaultViewModeFromConfig())
             : '';
         return html`
-            <div class="viewer-shell">
+            <div class="viewer-shell ${this._isDataTable() ? 'viewer-shell-data-table' : ''}">
                 ${this.config
                     ? html`
                         <platform-document-viewer-host

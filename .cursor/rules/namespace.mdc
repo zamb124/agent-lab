@@ -37,7 +37,14 @@ Mail / личная семантика пишут **только** в personal n
 
 Personal ≠ CRM `member` entity (entity живёт в `default` company_workspace).
 
-Админ видит personal в console list (реестр). Контент RAG/mail — owner или AccessGrant; видимость записи ≠ ACL контента.
+Админ видит personal в console list (реестр). Контент RAG/mail — owner или FGA `platform_namespace` / binding ACL; видимость записи ≠ ACL контента.
+
+## OpenFGA
+
+- Type `platform_namespace:{company_id}/{name}`
+- Dual-write после SQL в `NamespaceService` (`company` link; personal + `owner`). `ensure_default` / `ensure_exists` / `get_or_create` дописывают tuples, если SQL-запись уже есть, а FGA пустой.
+- Check **до** existence: `AuthzService.require_can_view(AuthzObject.platform_namespace(...))` (RAG, middleware namespace header). Нет tuples / нет объекта → **403**; 404 только после успешного Check.
+- Helpers/backfill: `core/namespace/authz/`; `uv run python -m core.namespace.authz.backfill`
 
 ## RAG `namespace_id`
 
@@ -48,7 +55,7 @@ Personal ≠ CRM `member` entity (entity живёт в `default` company_workspa
 
 ## Lifecycle
 
-Единственная точка конструкции: `core/namespace/service.py::NamespaceService`. Прямой `Namespace(...)` + `repository.set` вне сервиса запрещён.
+Единственная точка конструкции: `core/namespace/service.py::NamespaceService`. Прямой `Namespace(...)` + `repository.set` вне сервиса запрещён. Create/delete → dual-write FGA в том же path (fail-closed).
 
 - `ensure_default` → `kind=company_workspace`, `is_default=True`
 - CRM `POST /namespaces` + template → `company_workspace`
@@ -59,7 +66,7 @@ Personal ≠ CRM `member` entity (entity живёт в `default` company_workspa
 
 ## Sync
 
-`channel.namespace` — только `company_workspace` slug. Реальный ACL каналов = membership. `sync_settings` — тонкие STT defaults на workspace. UI Sync **без** namespace switcher: список = membership; create → `default`; STT modal на `default`. Shared platform selection (`setPlatformNamespaceSelection`) — CRM/Office.
+`channel.namespace` — только `company_workspace` slug. Реальный ACL каналов = OpenFGA (`SyncChannelAccessService`). `sync_settings` — тонкие STT defaults на workspace. UI Sync **без** namespace switcher: список = membership settings-rows ∩ FGA `can_view`; create → `default`; STT modal на `default`. Shared platform selection (`setPlatformNamespaceSelection`) — CRM/Office.
 
 ## Связанные rules
 

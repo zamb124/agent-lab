@@ -3,6 +3,8 @@ Dependency Injection контейнер для Frontend
 """
 
 from apps.flows.src.db.flow_repository import FlowRepository
+from apps.frontend.services.authz_explorer_hydrate import AuthzExplorerHydrator
+from apps.frontend.services.authz_explorer_service import AuthzExplorerService
 from apps.search.db.base import SearchDatabase
 from apps.search.db.crawl_repositories import (
     CrawlDomainRepository,
@@ -70,6 +72,20 @@ class FrontendContainer(BaseContainer):
     def flows_flow_repository(self) -> FlowRepository:
         """Репозиторий flows из сервисной БД flows (read-only сценарии без HTTP к peers)."""
         return FlowRepository(storage=self.flows_storage)
+
+    @lazy
+    def authz_explorer_hydrator(self) -> AuthzExplorerHydrator:
+        return AuthzExplorerHydrator(
+            flow_repository=self.flows_flow_repository,
+            mailbox_binding_repository=self.mailbox_binding_repository,
+        )
+
+    @lazy
+    def authz_explorer_service(self) -> AuthzExplorerService:
+        return AuthzExplorerService(
+            authz=self.authz_service,
+            hydrator=self.authz_explorer_hydrator,
+        )
 
     @lazy
     def redis_client(self) -> RedisClient:

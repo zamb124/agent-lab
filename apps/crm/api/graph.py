@@ -15,9 +15,6 @@ from pydantic import BaseModel, Field
 from apps.crm.dependencies import ContainerDep
 from apps.crm.models.graph import InfluenceGraphResponse, RelatedEntitiesResponse
 from apps.crm.services.graph_service import GraphEntityLimitExceededError
-from core.logging import get_logger
-
-logger = get_logger(__name__)
 
 router = APIRouter(prefix="/entities", tags=["Graph"])
 
@@ -74,9 +71,6 @@ async def get_overview_graph(
         raise HTTPException(status_code=404, detail=str(e))
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error building overview graph: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
 
 @router.get("/{entity_id}/influence-graph", response_model=InfluenceGraphResponse)
@@ -130,8 +124,8 @@ async def get_influence_graph(
         Граф с nodes и edges
 
     Исключения:
-        404: Entity не найдена
-        403: Нет доступа к корневой entity
+        403: Нет tuples / нет доступа (existence leak запрещён)
+        404: После успешного Check строка сущности отсутствует
     """
     rel_types_list = None
     if relationship_types:
@@ -154,9 +148,6 @@ async def get_influence_graph(
         raise HTTPException(status_code=404, detail=str(e))
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error building influence graph: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
 
 @router.get("/{entity_id}/related", response_model=RelatedEntitiesResponse)
@@ -201,7 +192,8 @@ async def get_related_entities(
         Связанные entities разделенные по направлению
 
     Исключения:
-        404: Entity не найдена
+        403: Нет tuples / нет доступа
+        404: После успешного Check строка сущности отсутствует
     """
     try:
         related = await container.graph_service.get_related_entities(
@@ -218,6 +210,5 @@ async def get_related_entities(
         raise HTTPException(status_code=400, detail=e.message)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error getting related entities: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))

@@ -1,0 +1,13 @@
+component: platform-data-table-host
+doc_slug: platform-data-table-host
+tier: T0
+title_ru: Data Table Host
+title_en: Data Table Host
+import: "@platform/lib/components/platform-data-table-host.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

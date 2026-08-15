@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from starlette.requests import Request
 
 from apps.office.services.viewer_context import ViewerOpenContext
+from apps.office.services.viewer_handlers._urls import download_url_for_context
 from apps.office.services.viewer_handlers.binary_handler import BinaryViewerHandler
 from apps.office.services.viewer_handlers.image_handler import ImageViewerHandler
 from apps.office.services.viewer_handlers.text_handler import TextViewerHandler
@@ -69,6 +70,34 @@ def _sample_file_record(**overrides: object) -> FileRecord:
 def test_browser_public_base_url_uses_request_host() -> None:
     request = _request()
     assert browser_public_base_url(request) == "http://system.lvh.me:8008"
+
+
+def test_download_url_for_context_uses_browser_host_not_callback() -> None:
+    request = _request()
+    file_record = _sample_file_record()
+    ctx = ViewerOpenContext(
+        handler_id="data_table",
+        viewer_scope="file",
+        file_record=file_record,
+        title="leads",
+        file_category=FileCategory.DATA_TABLE.value,
+        onlyoffice_document_type=None,
+        namespace=None,
+        company_id="c1",
+        user_id="u1",
+        user_name="User",
+        editor_lang="ru",
+        callback_public_base_url="http://host.docker.internal:8008",
+        document_server_public_url="http://localhost:8002",
+        jwt_secret="test-onlyoffice-jwt-secret",
+        download_token_ttl_seconds=3600,
+        browser_public_base_url=browser_public_base_url(request),
+        browser_document_server_url="http://system.lvh.me:8008",
+    )
+    download_url = download_url_for_context(ctx)
+    assert download_url is not None
+    assert "system.lvh.me:8008" in download_url
+    assert "host.docker.internal" not in download_url
 
 
 @pytest.mark.asyncio
@@ -237,6 +266,25 @@ def test_resolve_viewer_handler_viz() -> None:
         integration_configured=True,
     )
     assert handler_id == "viz"
+
+
+def test_resolve_viewer_handler_data_table() -> None:
+    handler_id = resolve_viewer_handler_id(
+        file_category=FileCategory.DATA_TABLE.value,
+        onlyoffice_eligible=False,
+        integration_configured=True,
+    )
+    assert handler_id == "data_table"
+
+
+def test_resolve_file_category_data_table() -> None:
+    category = resolve_file_category_for_upload(
+        "leads.sqlite",
+        "application/vnd.sqlite3",
+    )
+    assert category == FileCategory.DATA_TABLE.value
+    db_category = resolve_file_category_for_upload("scratch.db", None)
+    assert db_category == FileCategory.DATA_TABLE.value
 
 
 def test_resolve_file_category_viz() -> None:

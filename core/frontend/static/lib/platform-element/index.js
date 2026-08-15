@@ -43,7 +43,7 @@ import { glassStyles } from '../styles/shared/glass.styles.js';
 import { formStyles } from '../styles/shared/form.styles.js';
 import { buttonStyles, iconButtonStyles } from '../styles/shared/button.styles.js';
 import { motionStyles } from '../styles/shared/motion.styles.js';
-import { getPlatformBus } from '../events/bus-singleton.js';
+import { getPlatformBus, hasPlatformBus } from '../events/bus-singleton.js';
 import { SelectController } from '../events/select-controller.js';
 // Не использовать ../events/index.js: barrel подтягивает модули с bare import `lit` (ложится на автономный embed).
 import { CoreEvents, assertEventType } from '../events/contract.js';
@@ -457,7 +457,9 @@ export class PlatformElement extends LitElement {
         // locale сразу проставлен initialState'ом, не меняется при первой загрузке.
         // Меняется только translations[locale] (с undefined на объект) — этого триггера
         // достаточно, чтобы перерендерить любой компонент, использующий this.t(...).
-        if (!this._i18nSelectController) {
+        // Production Flow UI iframe не бутстрапит PlatformApp — catalog может
+        // монтировать PlatformElement (DataTable host); без bus подписка запрещена.
+        if (hasPlatformBus() && !this._i18nSelectController) {
             this._i18nSelectController = this.select((s) => s.i18n.translations[s.i18n.locale]);
         }
         PlatformElement._registerStandaloneNoZoomGuard();

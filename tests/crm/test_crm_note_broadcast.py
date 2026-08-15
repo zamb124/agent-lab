@@ -1,9 +1,8 @@
-"""CRM note domain push: один факт = одна запись `publish_event_to_users`."""
+"""CRM note domain push: один факт = company delivery на шине."""
 
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
-from typing import cast
 
 import pytest
 from pytest import MonkeyPatch
@@ -40,21 +39,11 @@ def _sample_note() -> CRMEntity:
 async def test_broadcast_crm_note_event_one_stream_entry(
     monkeypatch: MonkeyPatch,
 ) -> None:
-    publish_calls: list[tuple[list[str], str, JsonObject]] = []
+    publish_calls: list[tuple[str, str, JsonObject]] = []
     notify_calls: list[str] = []
 
-    async def _resolve(
-        *,
-        company_id: str,
-        namespace: str,
-        company_repository: object,
-        access_grant_repository: object,
-    ) -> list[str]:
-        _ = (company_id, namespace, company_repository, access_grant_repository)
-        return ["user_a", "user_b", "user_c"]
-
     async def _publish(
-        user_ids: list[str],
+        company_id: str,
         event_type: str,
         payload: JsonValue,
         **kwargs: object,
@@ -62,15 +51,14 @@ async def test_broadcast_crm_note_event_one_stream_entry(
         _ = kwargs
         if not isinstance(payload, dict):
             raise AssertionError("payload must be object")
-        publish_calls.append((list(user_ids), event_type, cast(JsonObject, payload)))
+        publish_calls.append((company_id, event_type, payload))
 
-    async def _notify(*, user_id: str, notification: object) -> None:
+    async def _notify(*, company_id: str, notification: object) -> None:
         _ = notification
-        notify_calls.append(user_id)
+        notify_calls.append(company_id)
 
-    monkeypatch.setattr(broadcast_mod, "resolve_user_ids_for_namespace_broadcast", _resolve)
-    monkeypatch.setattr(broadcast_mod, "publish_event_to_users", _publish)
-    monkeypatch.setattr(broadcast_mod, "notify_user", _notify)
+    monkeypatch.setattr(broadcast_mod, "publish_event_to_company", _publish)
+    monkeypatch.setattr(broadcast_mod, "notify_company", _notify)
 
     await broadcast_mod.broadcast_crm_note_event(
         company_id="company_1",
@@ -79,19 +67,18 @@ async def test_broadcast_crm_note_event_one_stream_entry(
         note_date_iso="2026-07-23",
         action="updated",
         note=_sample_note(),
-        company_repository=object(),
-        access_grant_repository=object(),
+        authz=object(),  # pyright: ignore[reportArgumentType]
     )
 
     assert len(publish_calls) == 1
-    recipients, event_type, payload = publish_calls[0]
+    company_id, event_type, payload = publish_calls[0]
+    assert company_id == "company_1"
     assert event_type == "crm/note/updated"
-    assert recipients == ["user_a", "user_b", "user_c"]
     assert payload["note_id"] == "note_1"
     note_payload = payload.get("note")
     assert isinstance(note_payload, dict)
     assert note_payload["entity_id"] == "note_1"
-    assert notify_calls == ["user_a", "user_b", "user_c"]
+    assert notify_calls == ["company_1"]
 
 
 @pytest.mark.asyncio
@@ -100,33 +87,22 @@ async def test_broadcast_crm_note_event_deleted_without_note(
 ) -> None:
     publish_calls: list[JsonObject] = []
 
-    async def _resolve(
-        *,
-        company_id: str,
-        namespace: str,
-        company_repository: object,
-        access_grant_repository: object,
-    ) -> list[str]:
-        _ = (company_id, namespace, company_repository, access_grant_repository)
-        return ["user_a"]
-
     async def _publish(
-        user_ids: list[str],
+        company_id: str,
         event_type: str,
         payload: JsonValue,
         **kwargs: object,
     ) -> None:
-        _ = (user_ids, event_type, kwargs)
+        _ = (company_id, event_type, kwargs)
         if not isinstance(payload, dict):
             raise AssertionError("payload must be object")
-        publish_calls.append(cast(JsonObject, payload))
+        publish_calls.append(payload)
 
-    async def _notify(*, user_id: str, notification: object) -> None:
-        _ = (user_id, notification)
+    async def _notify(*, company_id: str, notification: object) -> None:
+        _ = (company_id, notification)
 
-    monkeypatch.setattr(broadcast_mod, "resolve_user_ids_for_namespace_broadcast", _resolve)
-    monkeypatch.setattr(broadcast_mod, "publish_event_to_users", _publish)
-    monkeypatch.setattr(broadcast_mod, "notify_user", _notify)
+    monkeypatch.setattr(broadcast_mod, "publish_event_to_company", _publish)
+    monkeypatch.setattr(broadcast_mod, "notify_company", _notify)
 
     await broadcast_mod.broadcast_crm_note_event(
         company_id="company_1",
@@ -134,8 +110,7 @@ async def test_broadcast_crm_note_event_deleted_without_note(
         note_id="note_1",
         note_date_iso="2026-07-23",
         action="deleted",
-        company_repository=object(),
-        access_grant_repository=object(),
+        authz=object(),  # pyright: ignore[reportArgumentType]
     )
 
     assert len(publish_calls) == 1

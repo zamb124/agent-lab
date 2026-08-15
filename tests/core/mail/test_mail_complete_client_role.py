@@ -44,13 +44,23 @@ async def _switch_context(
         active_company_id=company.company_id,
     )
     await container.user_repository.set(user)
-    company.members[user_id] = roles
-    await container.company_repository.set(company)
+    from tests.fixtures.auth import set_test_company_member_roles
+
+    await set_test_company_member_roles(
+        container.company_repository,
+        container.authz_service,
+        company_id=company.company_id,
+        user_id=user_id,
+        roles=roles,
+    )
+    refreshed = await container.company_repository.get(company.company_id)
+    if refreshed is None:
+        raise RuntimeError(f"company missing after membership sync: {company.company_id}")
     set_context(
         Context(
             user=user,
-            active_company=company,
-            user_companies=[company],
+            active_company=refreshed,
+            user_companies=[refreshed],
             channel="test",
         )
     )

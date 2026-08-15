@@ -312,7 +312,7 @@ async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -
     assert (
         by_name[RAG_CLEANUP_EXPIRED_DOCUMENTS_TICK.name].schedule_type == PlatformScheduleType.CRON
     )
-    assert by_name[CRM_RECONCILE_DAILY_SUMMARY.name].queue_name == "crm"
+    assert by_name[CRM_RECONCILE_DAILY_SUMMARY.name].queue_name == "crm_summary"
     assert by_name[CRM_RECONCILE_DAILY_SUMMARY.name].cron == CRM_RECONCILE_DAILY_SUMMARY_CRON
 
 

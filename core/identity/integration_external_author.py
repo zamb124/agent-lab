@@ -11,6 +11,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from core.authz.company_sync import sync_company_member_roles
+from core.authz.service import AuthzService
 from core.models import StrictBaseModel
 from core.models.identity_models import User
 
@@ -48,10 +50,12 @@ class IntegrationExternalAuthorService:
         storage: Storage,
         user_repository: UserRepository,
         company_repository: CompanyRepository,
+        authz: AuthzService,
     ) -> None:
         self._storage: Storage = storage
         self._user_repository: UserRepository = user_repository
         self._company_repository: CompanyRepository = company_repository
+        self._authz: AuthzService = authz
 
     async def resolve_platform_user_id(
         self,
@@ -107,6 +111,12 @@ class IntegrationExternalAuthorService:
             user.updated_at = datetime.now(timezone.utc)
             _ = await self._user_repository.set(user)
             _ = await self._company_repository.set(company)
+            await sync_company_member_roles(
+                self._authz,
+                company_id=company_id,
+                user_id=user.user_id,
+                roles=company.members[user.user_id],
+            )
         else:
             user_id = f"user_{uuid.uuid4().hex[:12]}"
             nm = (display_name or "").strip() or email_norm
@@ -121,6 +131,12 @@ class IntegrationExternalAuthorService:
             company.members[user.user_id] = _merge_roles(mr, PREPROVISION_ROLE)
             _ = await self._user_repository.set(user)
             _ = await self._company_repository.set(company)
+            await sync_company_member_roles(
+                self._authz,
+                company_id=company_id,
+                user_id=user.user_id,
+                roles=company.members[user.user_id],
+            )
 
         mapping = IntegrationExternalAuthorMapping(user_id=user.user_id)
         _ = await self._storage.set(
@@ -135,7 +151,7 @@ class IntegrationExternalAuthorService:
         *,
         user: User,
         company_id: str,
-        company: "Company",
+        company: Company,
     ) -> None:
         cr = user.companies.get(company_id, [])
         user.companies[company_id] = _merge_roles(cr, PREPROVISION_ROLE)

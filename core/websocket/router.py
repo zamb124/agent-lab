@@ -312,4 +312,4 @@ async def notifications_endpoint(websocket: WebSocket) -> None:
 
 @router.get("/ws/stats")
 async def websocket_stats() -> dict[str, int | bool]:
-    return notification_manager.get_stats()
+    return await notification_manager.get_stats()

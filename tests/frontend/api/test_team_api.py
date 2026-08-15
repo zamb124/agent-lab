@@ -40,17 +40,20 @@ class TestTeamAPI:
         """Обновление ролей участника"""
         # Получаем текущего пользователя
         from core.utils.tokens import get_token_service
+        from tests.fixtures.auth import set_test_company_member_roles
+
         token_service = get_token_service()
         token_data = token_service.validate_token(auth_headers["Authorization"].replace("Bearer ", ""))
         company_id = token_data.company_id
 
-        # Получаем компанию
-        company = await frontend_container.company_repository.get(company_id)
-
-        # Добавляем тестового участника
         test_user_id = "test_member_to_update"
-        company.members[test_user_id] = ["developer"]
-        await frontend_container.company_repository.set(company)
+        await set_test_company_member_roles(
+            frontend_container.company_repository,
+            frontend_container.authz_service,
+            company_id=company_id,
+            user_id=test_user_id,
+            roles=["developer"],
+        )
 
         # Создаем пользователя
         from core.models.identity_models import User
@@ -113,12 +116,11 @@ class TestTeamAPI:
 
         from core.models.identity_models import Company, User
         from core.utils.tokens import get_token_service
+        from tests.fixtures.auth import set_test_company_member_roles
 
         token_service = get_token_service()
         token_data = token_service.validate_token(auth_headers["Authorization"].replace("Bearer ", ""))
         company_id = token_data.company_id
-
-        company = await frontend_container.company_repository.get(company_id)
 
         test_user_id = f"member_rm_{uuid.uuid4().hex[:8]}"
 
@@ -130,9 +132,20 @@ class TestTeamAPI:
             members={test_user_id: ["owner"]},
         )
         await frontend_container.company_repository.set(fallback_company)
-
-        company.members[test_user_id] = ["developer"]
-        await frontend_container.company_repository.set(company)
+        await set_test_company_member_roles(
+            frontend_container.company_repository,
+            frontend_container.authz_service,
+            company_id=fallback_company_id,
+            user_id=test_user_id,
+            roles=["owner"],
+        )
+        await set_test_company_member_roles(
+            frontend_container.company_repository,
+            frontend_container.authz_service,
+            company_id=company_id,
+            user_id=test_user_id,
+            roles=["developer"],
+        )
 
         test_user = User(
             user_id=test_user_id,
@@ -194,6 +207,7 @@ class TestTeamAPI:
 
         from core.models.identity_models import Company, User
         from core.utils.tokens import get_token_service
+        from tests.fixtures.auth import set_test_company_member_roles
 
         # Создаем две компании
         company1_id = f"company1_{uuid.uuid4().hex[:8]}"
@@ -202,18 +216,39 @@ class TestTeamAPI:
         company1 = Company(
             company_id=company1_id,
             name="Company 1",
-            owner_id="user1",
+            owner_user_id="user1",
             members={"user1": ["owner"], "shared_member": ["developer"]}
         )
         company2 = Company(
             company_id=company2_id,
             name="Company 2",
-            owner_id="user2",
+            owner_user_id="user2",
             members={"user2": ["owner"]}
         )
 
         await frontend_container.company_repository.set(company1)
         await frontend_container.company_repository.set(company2)
+        await set_test_company_member_roles(
+            frontend_container.company_repository,
+            frontend_container.authz_service,
+            company_id=company1_id,
+            user_id="user1",
+            roles=["owner"],
+        )
+        await set_test_company_member_roles(
+            frontend_container.company_repository,
+            frontend_container.authz_service,
+            company_id=company1_id,
+            user_id="shared_member",
+            roles=["developer"],
+        )
+        await set_test_company_member_roles(
+            frontend_container.company_repository,
+            frontend_container.authz_service,
+            company_id=company2_id,
+            user_id="user2",
+            roles=["owner"],
+        )
 
         # Создаем пользователя company2
         user2 = User(
@@ -251,6 +286,7 @@ class TestSystemAccessAPI:
 
         from core.models.identity_models import Company, User
         from core.utils.tokens import get_token_service
+        from tests.fixtures.auth import set_test_company_member_roles
 
         user_id = f"system_actor_{uuid.uuid4().hex[:8]}"
         system_company = await frontend_container.company_repository.get("system")
@@ -261,8 +297,14 @@ class TestSystemAccessAPI:
                 owner_user_id=user_id,
                 members={},
             )
-        system_company.members[user_id] = ["admin"]
-        await frontend_container.company_repository.set(system_company)
+            await frontend_container.company_repository.set(system_company)
+        await set_test_company_member_roles(
+            frontend_container.company_repository,
+            frontend_container.authz_service,
+            company_id="system",
+            user_id=user_id,
+            roles=["admin"],
+        )
 
         user = User(
             user_id=user_id,
@@ -374,6 +416,7 @@ class TestSystemAccessAPI:
 
         from core.models.identity_models import Company
         from core.utils.tokens import get_token_service
+        from tests.fixtures.auth import set_test_company_member_roles
 
         system_user_id, _ = await self._create_system_actor(frontend_container)
         company_id = f"target_company_{uuid.uuid4().hex[:8]}"
@@ -385,6 +428,20 @@ class TestSystemAccessAPI:
             subdomain=f"target-{uuid.uuid4().hex[:6]}",
         )
         await frontend_container.company_repository.set(target_company)
+        await set_test_company_member_roles(
+            frontend_container.company_repository,
+            frontend_container.authz_service,
+            company_id=company_id,
+            user_id="target_owner",
+            roles=["owner"],
+        )
+        await set_test_company_member_roles(
+            frontend_container.company_repository,
+            frontend_container.authz_service,
+            company_id=company_id,
+            user_id=system_user_id,
+            roles=["admin"],
+        )
 
         user = await frontend_container.user_repository.get(system_user_id)
         user.companies[company_id] = ["admin"]

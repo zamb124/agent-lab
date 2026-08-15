@@ -54,7 +54,7 @@ def flow_config():
         name="Test Agent",
         description="Agent for testing hooks",
         prompt="Ты помощник. Переменная: {test_var}",
-        llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
+        llm=NodeLLMConfig(provider="mock", model="mock-gpt-4", temperature=0.0),
     )
 
 

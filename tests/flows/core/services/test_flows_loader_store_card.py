@@ -19,7 +19,10 @@ async def test_landing_demo_bundles_store_card_image_in_storage(app) -> None:
     """Демо-лендинг bundles: JPEG рядом с flow.json → store_card_image_url и запись файла в БД/S3."""
     _ = app
     container = get_container()
-    await load_tools_to_db(container.tool_repository)
+    await load_tools_to_db(
+        container.tool_repository,
+        flow_access_service=container.flow_access_service,
+    )
 
     bundles_dir = _repo_root() / "apps" / "flows" / "bundles"
     registry_path = _repo_root() / "apps" / "flows" / "registry.yaml"
@@ -30,6 +33,7 @@ async def test_landing_demo_bundles_store_card_image_in_storage(app) -> None:
         node_repository=container.node_repository,
         tool_repository=container.tool_repository,
         registry_path=registry_path,
+        flow_access_service=container.flow_access_service,
     )
     loader._target_company_id = "system"
 
@@ -69,6 +73,7 @@ async def test_resolve_store_card_image_https_passthrough(app) -> None:
         node_repository=container.node_repository,
         tool_repository=container.tool_repository,
         registry_path=registry_path,
+        flow_access_service=container.flow_access_service,
     )
     loader._target_company_id = "system"
 

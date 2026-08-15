@@ -8,11 +8,24 @@ from fastapi import HTTPException
 
 from apps.browser.api import control
 from apps.browser.contracts.control_types import ControlPointerClickBody, ControlPointerTextBody
+from core.authz.models import AuthzObject
 
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_database_before_tests() -> Iterator[None]:
     yield
+
+
+class _StubAuthz:
+    async def require_can_view(self, obj: AuthzObject) -> None:
+        _ = obj
+
+
+def _container_with_runtime(lease_manager: object) -> SimpleNamespace:
+    return SimpleNamespace(
+        authz_service=_StubAuthz(),
+        browser_runtime=SimpleNamespace(lease_manager=lease_manager),
+    )
 
 
 class _FakeMouse:
@@ -73,11 +86,7 @@ class _HumanTakeoverLeaseManager:
 @pytest.mark.asyncio
 async def test_control_pointer_click_bypasses_navigate_lock() -> None:
     page = _FakePage()
-    container = SimpleNamespace(
-        browser_runtime=SimpleNamespace(
-            lease_manager=_FakeLeaseManager(page),
-        )
-    )
+    container = _container_with_runtime(_FakeLeaseManager(page))
 
     result = await control.control_pointer_click(
         "sess-1",
@@ -113,11 +122,7 @@ async def test_control_pointer_click_bypasses_navigate_lock() -> None:
 @pytest.mark.asyncio
 async def test_control_pointer_text_bypasses_navigate_lock() -> None:
     page = _FakePage()
-    container = SimpleNamespace(
-        browser_runtime=SimpleNamespace(
-            lease_manager=_FakeLeaseManager(page),
-        )
-    )
+    container = _container_with_runtime(_FakeLeaseManager(page))
 
     result = await control.control_pointer_text(
         "sess-1",
@@ -131,11 +136,7 @@ async def test_control_pointer_text_bypasses_navigate_lock() -> None:
 
 @pytest.mark.asyncio
 async def test_control_click_times_out_during_human_takeover(monkeypatch: pytest.MonkeyPatch) -> None:
-    container = SimpleNamespace(
-        browser_runtime=SimpleNamespace(
-            lease_manager=_HumanTakeoverLeaseManager(),
-        )
-    )
+    container = _container_with_runtime(_HumanTakeoverLeaseManager())
     monkeypatch.setattr(control, "AGENT_CONTROL_TAKEOVER_WAIT_SEC", 0.0)
 
     with pytest.raises(HTTPException) as exc_info:

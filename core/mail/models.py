@@ -233,6 +233,13 @@ class MailboxBindingPublic(StrictBaseModel):
     updated_at: datetime
 
 
+class MailboxBindingsMeResponse(StrictBaseModel):
+    """Мои mailbox bindings + server-driven company admin capability."""
+
+    items: list[MailboxBindingPublic]
+    can_admin: bool
+
+
 class MailMessageListPayload(StrictBaseModel):
     mailbox_binding_id: str
     folder: str = "INBOX"

@@ -55,7 +55,7 @@ fi
 EXPECTED_DEPLOYMENTS=(
   flows frontend crm rag sync worktracker office wiki scheduler-api voice browser search capability-gateway code-runner-python code-runner-node code-runner-go code-runner-csharp
   flows-worker scheduler rag-worker sync-worker crm-worker idle-worker
-  livekit livekit-egress onlyoffice grafana provider-litserve
+  livekit livekit-egress onlyoffice grafana provider-litserve openfga
 )
 EXPECTED_STATEFULSETS=(postgres redis loki tempo)
 EXPECTED_DAEMONSETS=(coturn alloy)

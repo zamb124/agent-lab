@@ -17,6 +17,7 @@ fi
 
 jq -n \
   --arg postgresPassword "${POSTGRES_PASSWORD:-}" \
+  --arg openfgaApiToken "${OPENFGA_API_TOKEN:-}" \
   --arg authJwtSecret "${AUTH_JWT_SECRET:-}" \
   --arg secretsEncryptionKey "${SECRETS_ENCRYPTION_KEY:-}" \
   --arg hfToken "${HF_TOKEN:-}" \
@@ -88,6 +89,7 @@ jq -n \
   '{
     create: true,
     postgresPassword: $postgresPassword,
+    openfgaApiToken: $openfgaApiToken,
     authJwtSecret: $authJwtSecret,
     secretsEncryptionKey: $secretsEncryptionKey,
     hfToken: $hfToken,

@@ -12,6 +12,14 @@ from a2a.types.a2a_pb2 import ROLE_USER, Role
 
 from core.a2a import get_part_text, mapping_from_struct
 from core.clients.llm import MockLLM, setup_mock_responses
+from core.clients.llm.mock import split_mock_stream_text
+
+
+def test_split_mock_stream_text_keeps_multiple_chunks_without_tiny_tokens() -> None:
+    chunks = split_mock_stream_text("Hello world!")
+    assert len(chunks) > 1
+    assert "".join(chunks) == "Hello world!"
+    assert all(len(chunk) >= 2 for chunk in chunks)
 
 
 def _msg(text: str, role: Role = ROLE_USER) -> Message:
@@ -45,7 +53,7 @@ class TestMockLLMStreaming:
 
         artifact_events = [e for e in events if isinstance(e, TaskArtifactUpdateEvent)]
 
-        # Стримит по токенам (2-5 символов) - несколько чанков
+        # Стримит заранее известный текст несколькими чанками
         assert len(artifact_events) > 1
 
         # Собираем полный текст из чанков

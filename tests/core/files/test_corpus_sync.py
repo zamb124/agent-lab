@@ -29,6 +29,7 @@ def test_corpus_manifest_covers_all_reader_files() -> None:
     assert ALL_PATHS == READER_REMOTE_PATHS
 
 
+@pytest.mark.network
 @pytest.mark.timeout(120)
 def test_corpus_local_matches_github_tree() -> None:
     headers = {
@@ -75,6 +76,7 @@ def test_corpus_local_matches_github_tree() -> None:
         assert local_path.stat().st_size == expected_size
 
 
+@pytest.mark.network
 @pytest.mark.timeout(120)
 def test_example_docs_github_tree_reachable() -> None:
     headers = {

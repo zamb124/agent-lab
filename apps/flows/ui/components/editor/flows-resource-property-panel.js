@@ -308,7 +308,7 @@ export class FlowsResourcePropertyPanel extends PlatformElement {
         if (resolved === null) {
             return html`<div style="padding: var(--space-3); color: var(--text-tertiary)">${this.t('property_panel.select_resource')}</div>`;
         }
-        return html`${renderResourceDefinitionEditor(resolved.resource, (e) => this._onChange(e))}`;
+        return html`${renderResourceDefinitionEditor(resolved.resource, (e) => this._onChange(e), { flowId: this.flowId })}`;
     }
 }
 

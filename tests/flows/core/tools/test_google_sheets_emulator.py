@@ -53,7 +53,7 @@ def _make_state(
     return ExecutionState(
         task_id=f"task-sheets-emu-{unique_id}",
         context_id=f"ctx-sheets-emu-{unique_id}",
-        user_id=f"user-sheets-emu-{unique_id}",
+        user_id="u1",
         session_id=f"flow-sheets-emu:{unique_id}",
         variables={"google_access_token": google_api_emulator.oauth_token},
     )

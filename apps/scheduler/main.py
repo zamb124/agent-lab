@@ -47,6 +47,7 @@ from core.scheduler.models import (
     PlatformScheduleType,
     ScheduledTaskStatus,
 )
+from core.tasks import get_task_spec
 from core.types import JsonObject
 
 logger = get_logger(__name__)
@@ -458,7 +459,7 @@ async def _ensure_crm_cron_schedule(
     request = PlatformScheduleCreateRequest(
         target_service="crm",
         task_name=task_name,
-        queue_name="crm",
+        queue_name=get_task_spec(task_name).queue,
         schedule_type=PlatformScheduleType.CRON,
         cron=cron,
         timezone="UTC",

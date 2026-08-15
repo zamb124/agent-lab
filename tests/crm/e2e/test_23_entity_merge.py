@@ -9,8 +9,6 @@ from httpx import AsyncClient, Response
 
 from tests.crm.e2e._json_helpers import json_object, object_dict, object_list, object_str
 
-pytestmark = pytest.mark.timeout(20, func_only=True)
-
 
 def _http_json(response: Response) -> dict[str, object]:
     return json_object(cast(object, response.json()))

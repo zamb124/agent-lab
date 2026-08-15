@@ -19,6 +19,7 @@ from apps.crm.db.models import CRMEntity, Relationship
 from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
 from apps.crm.db.repositories.relationship_repository import RelationshipRepository
+from apps.crm.services.crm_entity_access_service import CrmEntityAccessService
 from core.db.repositories.user_repository import UserRepository
 from core.logging import get_logger
 from core.models.identity_models import User
@@ -38,11 +39,13 @@ class UserPersonService:
         entity_type_repo: EntityTypeRepository,
         user_repository: UserRepository,
         relationship_repo: RelationshipRepository,
+        entity_access: CrmEntityAccessService,
     ) -> None:
         self._entity_repo: EntityRepository = entity_repo
         self._entity_type_repo: EntityTypeRepository = entity_type_repo
         self._user_repository: UserRepository = user_repository
         self._relationship_repo: RelationshipRepository = relationship_repo
+        self._entity_access: CrmEntityAccessService = entity_access
 
     @staticmethod
     def _crm_attrs(user: User) -> JsonObject:
@@ -119,6 +122,11 @@ class UserPersonService:
             namespace=USER_PERSON_NAMESPACE,
         )
         _ = await self._entity_repo.create(entity)
+        try:
+            await self._entity_access.sync_entity_created(entity)
+        except Exception:
+            _ = await self._entity_repo.delete(entity.entity_id)
+            raise
         await self._ensure_member_belongs_to_company(entity.entity_id, company_id)
 
         by_company[company_id] = entity.entity_id

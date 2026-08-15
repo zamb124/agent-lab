@@ -140,8 +140,15 @@ async def test_company_members_lists_company_from_shared_storage(
         if company is None:
             raise AssertionError("system company must exist")
         if system_user_id not in company.members:
-            company.members[system_user_id] = ["owner", "admin"]
-            await frontend_container.company_repository.set(company)
+            from tests.fixtures.auth import set_test_company_member_roles
+
+            await set_test_company_member_roles(
+                frontend_container.company_repository,
+                frontend_container.authz_service,
+                company_id=company_id,
+                user_id=system_user_id,
+                roles=["owner", "admin"],
+            )
 
         user = await frontend_container.user_repository.get(system_user_id)
         if user is None:
@@ -180,7 +187,7 @@ async def test_catalogs_crud_and_list_contains_file_count(
     catalog_id = body["catalog_id"]
     assert body["title"] == title
     assert body["is_owner"] is True
-    assert body["is_public"] is True
+    assert body["company_visible"] is True
 
     lr = await office_client.get(
         "/documents/api/v1/catalogs",
@@ -192,7 +199,7 @@ async def test_catalogs_crud_and_list_contains_file_count(
     assert found is not None
     assert found["file_count"] == 0
     assert found["owner_user_id"]
-    assert found["is_public"] is True
+    assert found["company_visible"] is True
 
     gr = await office_client.get(
         f"/documents/api/v1/catalogs/{catalog_id}",
@@ -213,18 +220,18 @@ async def test_catalogs_crud_and_list_contains_file_count(
     pr_vis = await office_client.patch(
         f"/documents/api/v1/catalogs/{catalog_id}",
         headers=auth_headers_system,
-        json={"is_public": False},
+        json={"company_visible": False},
     )
     assert pr_vis.status_code == 200
-    assert pr_vis.json()["is_public"] is False
+    assert pr_vis.json()["company_visible"] is False
 
     pr_back = await office_client.patch(
         f"/documents/api/v1/catalogs/{catalog_id}",
         headers=auth_headers_system,
-        json={"is_public": True, "title": new_title},
+        json={"company_visible": True, "title": new_title},
     )
     assert pr_back.status_code == 200
-    assert pr_back.json()["is_public"] is True
+    assert pr_back.json()["company_visible"] is True
 
     dr = await office_client.delete(
         f"/documents/api/v1/catalogs/{catalog_id}",
@@ -292,7 +299,7 @@ async def test_empty_document_requires_catalog_id_when_multiple_catalogs(
 
 
 @pytest.mark.asyncio
-async def test_catalog_acl_member_access_after_invite(
+async def test_catalog_access_member_can_view_after_patch(
     office_client,
     auth_headers_system,
     auth_headers_system_user2,
@@ -302,7 +309,7 @@ async def test_catalog_acl_member_access_after_invite(
     cr_cat = await office_client.post(
         "/documents/api/v1/catalogs",
         headers=auth_headers_system,
-        json={"title": f"Shared {unique_id}", "is_public": False},
+        json={"title": f"Shared {unique_id}", "company_visible": False},
     )
     assert cr_cat.status_code == 200
     catalog_id = cr_cat.json()["catalog_id"]
@@ -314,10 +321,10 @@ async def test_catalog_acl_member_access_after_invite(
     )
     assert blocked.status_code == 403
 
-    add = await office_client.post(
-        f"/documents/api/v1/catalogs/{catalog_id}/members",
+    add = await office_client.patch(
+        f"/documents/api/v1/catalogs/{catalog_id}/access",
         headers=auth_headers_system,
-        json={"user_id": system_user2_id},
+        json={"members": [{"user_id": system_user2_id, "relation": "viewer"}]},
     )
     assert add.status_code == 200
     members = add.json()["members"]
@@ -338,16 +345,16 @@ async def test_catalog_acl_member_access_after_invite(
     )
     assert patch_denied.status_code == 403
 
-    add_denied = await office_client.post(
-        f"/documents/api/v1/catalogs/{catalog_id}/members",
+    add_denied = await office_client.patch(
+        f"/documents/api/v1/catalogs/{catalog_id}/access",
         headers=auth_headers_system_user2,
-        json={"user_id": system_user2_id},
+        json={"members": [{"user_id": system_user2_id, "relation": "viewer"}]},
     )
     assert add_denied.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_catalog_public_default_allows_company_peer_documents(
+async def test_catalog_company_visible_default_allows_company_peer_documents(
     office_client,
     auth_headers_system,
     auth_headers_system_user2,
@@ -359,7 +366,7 @@ async def test_catalog_public_default_allows_company_peer_documents(
         json={"title": f"Pub {unique_id}"},
     )
     assert cr_cat.status_code == 200
-    assert cr_cat.json()["is_public"] is True
+    assert cr_cat.json()["company_visible"] is True
     catalog_id = cr_cat.json()["catalog_id"]
     ok = await office_client.get(
         "/documents/api/v1/documents",
@@ -370,7 +377,7 @@ async def test_catalog_public_default_allows_company_peer_documents(
 
 
 @pytest.mark.asyncio
-async def test_catalog_add_member_forbidden_when_public(
+async def test_catalog_access_members_forbidden_when_company_visible(
     office_client,
     auth_headers_system,
     system_user2_id,
@@ -379,30 +386,30 @@ async def test_catalog_add_member_forbidden_when_public(
     cr_cat = await office_client.post(
         "/documents/api/v1/catalogs",
         headers=auth_headers_system,
-        json={"title": f"PubMem {unique_id}", "is_public": True},
+        json={"title": f"PubMem {unique_id}", "company_visible": True},
     )
     assert cr_cat.status_code == 200
     catalog_id = cr_cat.json()["catalog_id"]
-    add = await office_client.post(
-        f"/documents/api/v1/catalogs/{catalog_id}/members",
+    add = await office_client.patch(
+        f"/documents/api/v1/catalogs/{catalog_id}/access",
         headers=auth_headers_system,
-        json={"user_id": system_user2_id},
+        json={"members": [{"user_id": system_user2_id, "relation": "viewer"}]},
     )
     assert add.status_code == 400
 
 
 @pytest.mark.asyncio
-async def test_get_catalog_detail_includes_is_public(
+async def test_get_catalog_detail_includes_company_visible(
     office_client, auth_headers_system, unique_id
 ):
     cr = await office_client.post(
         "/documents/api/v1/catalogs",
         headers=auth_headers_system,
-        json={"title": f"Detail {unique_id}", "is_public": False},
+        json={"title": f"Detail {unique_id}", "company_visible": False},
     )
     assert cr.status_code == 200
     catalog_id = cr.json()["catalog_id"]
-    assert cr.json()["is_public"] is False
+    assert cr.json()["company_visible"] is False
     gr = await office_client.get(
         f"/documents/api/v1/catalogs/{catalog_id}",
         headers=auth_headers_system,
@@ -410,11 +417,11 @@ async def test_get_catalog_detail_includes_is_public(
     assert gr.status_code == 200
     body = gr.json()
     assert body["catalog_id"] == catalog_id
-    assert body["is_public"] is False
+    assert body["company_visible"] is False
 
 
 @pytest.mark.asyncio
-async def test_peer_sees_public_catalog_in_list(
+async def test_peer_sees_company_visible_catalog_in_list(
     office_client,
     auth_headers_system,
     auth_headers_system_user2,
@@ -424,7 +431,7 @@ async def test_peer_sees_public_catalog_in_list(
     cr1 = await office_client.post(
         "/documents/api/v1/catalogs",
         headers=auth_headers_system,
-        json={"title": title, "is_public": True},
+        json={"title": title, "company_visible": True},
     )
     assert cr1.status_code == 200
     catalog_id = cr1.json()["catalog_id"]
@@ -437,7 +444,7 @@ async def test_peer_sees_public_catalog_in_list(
     ids = {x["catalog_id"] for x in items}
     assert catalog_id in ids
     found = next(x for x in items if x["catalog_id"] == catalog_id)
-    assert found["is_public"] is True
+    assert found["company_visible"] is True
     assert found["title"] == title
 
 
@@ -451,7 +458,7 @@ async def test_private_catalog_not_listed_for_peer(
     cr1 = await office_client.post(
         "/documents/api/v1/catalogs",
         headers=auth_headers_system,
-        json={"title": f"PrivPeer {unique_id}", "is_public": False},
+        json={"title": f"PrivPeer {unique_id}", "company_visible": False},
     )
     assert cr1.status_code == 200
     catalog_id = cr1.json()["catalog_id"]
@@ -465,7 +472,7 @@ async def test_private_catalog_not_listed_for_peer(
 
 
 @pytest.mark.asyncio
-async def test_patch_is_public_forbidden_for_non_owner(
+async def test_patch_company_visible_forbidden_for_non_owner(
     office_client,
     auth_headers_system,
     auth_headers_system_user2,
@@ -474,20 +481,20 @@ async def test_patch_is_public_forbidden_for_non_owner(
     cr = await office_client.post(
         "/documents/api/v1/catalogs",
         headers=auth_headers_system,
-        json={"title": f"OwnPatch {unique_id}", "is_public": True},
+        json={"title": f"OwnPatch {unique_id}", "company_visible": True},
     )
     assert cr.status_code == 200
     catalog_id = cr.json()["catalog_id"]
     pr = await office_client.patch(
         f"/documents/api/v1/catalogs/{catalog_id}",
         headers=auth_headers_system_user2,
-        json={"is_public": False},
+        json={"company_visible": False},
     )
     assert pr.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_catalog_list_members_get_and_remove_member(
+async def test_catalog_access_patch_replaces_members(
     office_client,
     auth_headers_system,
     system_user2_id,
@@ -496,40 +503,44 @@ async def test_catalog_list_members_get_and_remove_member(
     cr_cat = await office_client.post(
         "/documents/api/v1/catalogs",
         headers=auth_headers_system,
-        json={"title": f"Members {unique_id}", "is_public": False},
+        json={"title": f"Members {unique_id}", "company_visible": False},
     )
     assert cr_cat.status_code == 200
     catalog_id = cr_cat.json()["catalog_id"]
 
     gr0 = await office_client.get(
-        f"/documents/api/v1/catalogs/{catalog_id}/members",
+        f"/documents/api/v1/catalogs/{catalog_id}/access",
         headers=auth_headers_system,
     )
     assert gr0.status_code == 200
-    assert len(gr0.json()["members"]) >= 1
+    assert gr0.json()["company_visible"] is False
+    assert gr0.json()["members"] == []
 
-    add = await office_client.post(
-        f"/documents/api/v1/catalogs/{catalog_id}/members",
+    add = await office_client.patch(
+        f"/documents/api/v1/catalogs/{catalog_id}/access",
         headers=auth_headers_system,
-        json={"user_id": system_user2_id},
+        json={"members": [{"user_id": system_user2_id, "relation": "viewer"}]},
     )
     assert add.status_code == 200
     gr1 = await office_client.get(
-        f"/documents/api/v1/catalogs/{catalog_id}/members",
+        f"/documents/api/v1/catalogs/{catalog_id}/access",
         headers=auth_headers_system,
     )
     assert gr1.status_code == 200
-    ids = {m["user_id"] for m in gr1.json()["members"]}
+    members = gr1.json()["members"]
+    ids = {m["user_id"] for m in members}
     assert system_user2_id in ids
+    assert any(m["user_id"] == system_user2_id and m["relation"] == "viewer" for m in members)
 
-    rm = await office_client.delete(
-        f"/documents/api/v1/catalogs/{catalog_id}/members/{system_user2_id}",
+    rm = await office_client.patch(
+        f"/documents/api/v1/catalogs/{catalog_id}/access",
         headers=auth_headers_system,
+        json={"members": []},
     )
-    assert rm.status_code == 204
+    assert rm.status_code == 200
 
     gr2 = await office_client.get(
-        f"/documents/api/v1/catalogs/{catalog_id}/members",
+        f"/documents/api/v1/catalogs/{catalog_id}/access",
         headers=auth_headers_system,
     )
     assert gr2.status_code == 200
@@ -556,7 +567,7 @@ async def test_delete_catalog_forbidden_for_non_owner(
 
 
 @pytest.mark.asyncio
-async def test_catalog_member_remove_owner_forbidden(
+async def test_catalog_access_patch_does_not_remove_owner(
     office_client, auth_headers_system, unique_id
 ):
     cr_cat = await office_client.post(
@@ -565,12 +576,21 @@ async def test_catalog_member_remove_owner_forbidden(
         json={"title": f"Own {unique_id}"},
     )
     catalog_id = cr_cat.json()["catalog_id"]
-    owner_id = cr_cat.json()["owner_user_id"]
-    rm = await office_client.delete(
-        f"/documents/api/v1/catalogs/{catalog_id}/members/{owner_id}",
+    owner_user_id = cr_cat.json()["owner_user_id"]
+    rm = await office_client.patch(
+        f"/documents/api/v1/catalogs/{catalog_id}/access",
+        headers=auth_headers_system,
+        json={"members": []},
+    )
+    assert rm.status_code == 200
+    detail = await office_client.get(
+        f"/documents/api/v1/catalogs/{catalog_id}",
         headers=auth_headers_system,
     )
-    assert rm.status_code == 400
+    assert detail.status_code == 200
+    assert detail.json()["owner_user_id"] == owner_user_id
+    assert detail.json()["is_owner"] is True
+    assert all(m["user_id"] != owner_user_id for m in rm.json()["members"])
 
 
 @pytest.mark.asyncio

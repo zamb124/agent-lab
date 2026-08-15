@@ -13,6 +13,8 @@ import pytest
 from docx import Document
 from openpyxl import Workbook, load_workbook
 
+from tests.flows._a2a_v1 import GET_TASK, SEND_MESSAGE, a2a_rpc
+
 pytestmark = [
     pytest.mark.real_taskiq,
     pytest.mark.timeout(180, func_only=True),
@@ -83,6 +85,26 @@ async def _create_flow(flows_client_http, headers: dict[str, str], flow_id: str)
     assert response.status_code == 200, response.text
 
 
+_A2A_OPEN_STATES = frozenset({"TASK_STATE_SUBMITTED", "TASK_STATE_WORKING"})
+_A2A_GET_TASK_POLL_SECONDS = 60.0
+_A2A_GET_TASK_POLL_INTERVAL_SECONDS = 0.3
+
+
+def _a2a_task(data: dict[str, Any]) -> dict[str, Any]:
+    assert "error" not in data, data.get("error")
+    task = data.get("result")
+    assert isinstance(task, dict), data
+    return task
+
+
+def _a2a_task_state(task: dict[str, Any]) -> str:
+    status = task.get("status")
+    assert isinstance(status, dict), task
+    state = status.get("state")
+    assert isinstance(state, str) and state, task
+    return state
+
+
 async def _send_file_message(
     flows_client_http,
     headers: dict[str, str],
@@ -93,14 +115,13 @@ async def _send_file_message(
     mime_type: str,
     file_bytes: bytes,
 ) -> dict[str, Any]:
+    """Enqueue SendMessage without holding a flows granian worker for the graph."""
     response = await flows_client_http.post(
         f"/flows/api/v1/{flow_id}",
         headers=headers,
-        json={
-            "jsonrpc": "2.0",
-            "id": f"test-{uuid.uuid4().hex}",
-            "method": "SendMessage",
-            "params": {
+        json=a2a_rpc(
+            SEND_MESSAGE,
+            {
                 "message": {
                     "messageId": str(uuid.uuid4()),
                     "role": "ROLE_USER",
@@ -113,15 +134,37 @@ async def _send_file_message(
                             "mediaType": mime_type,
                         },
                     ],
-                }
+                },
+                "configuration": {"returnImmediately": True},
             },
-        },
+        ),
     )
     assert response.status_code == 200, response.text
     data = response.json()
-    task = data.get("result", {})
-    assert task.get("status", {}).get("state") == "TASK_STATE_COMPLETED", data
-    return data
+    task = _a2a_task(data)
+    if _a2a_task_state(task) not in _A2A_OPEN_STATES:
+        assert _a2a_task_state(task) == "TASK_STATE_COMPLETED", data
+        return data
+    task_id = task.get("id")
+    assert isinstance(task_id, str) and task_id, data
+    deadline = time.monotonic() + _A2A_GET_TASK_POLL_SECONDS
+    last = data
+    while time.monotonic() < deadline:
+        poll = await flows_client_http.post(
+            f"/flows/api/v1/{flow_id}",
+            headers=headers,
+            json=a2a_rpc(GET_TASK, {"id": task_id}),
+        )
+        assert poll.status_code == 200, poll.text
+        last = poll.json()
+        polled = _a2a_task(last)
+        if _a2a_task_state(polled) not in _A2A_OPEN_STATES:
+            assert _a2a_task_state(polled) == "TASK_STATE_COMPLETED", last
+            return last
+        await asyncio.sleep(_A2A_GET_TASK_POLL_INTERVAL_SECONDS)
+    raise AssertionError(
+        f"A2A task {task_id} did not complete within {_A2A_GET_TASK_POLL_SECONDS}s: {last}"
+    )
 
 
 def _file_item_dict(item: object) -> dict[str, Any] | None:

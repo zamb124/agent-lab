@@ -13,19 +13,18 @@ from __future__ import annotations
 import hashlib
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Awaitable, Mapping
+from collections.abc import Awaitable
 from typing import TYPE_CHECKING, ClassVar, Protocol, TypeAlias, override
 
 from pydantic import BaseModel
 
-from apps.flows.config import get_settings
 from apps.flows.src.clients.external_api_client import ExternalAPIClient
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.tools.authz_gate import check_tool_permission
 from apps.flows.src.tools.json_schema_parameters import pydantic_model_to_parameters_schema
 from apps.flows.src.tools.provider_schema import compile_openai_strict_parameters
-from core.auth import permission_checker
 from core.logging import get_logger
 from core.state import parse_interrupt_body_from_external_dict
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
@@ -77,8 +76,8 @@ class BaseTool(ABC):
         - permission: группы с доступом к tool
         - При отсутствии прав возвращается строка агенту
 
-    listed_in_platform_tool_docs:
-        Участвует ли класс в разделе platform tools у /code/completions и /code/documentation
+        listed_in_platform_tool_docs:
+        Участвует ли класс в разделе platform tools у /code/documentation
         (процессный ToolRegistry после register_builtin_tools).
     """
 
@@ -109,32 +108,9 @@ class BaseTool(ABC):
             return pydantic_model_to_parameters_schema(self.parameters_model)
         return {"type": "object", "properties": {}, "required": []}
 
-    def _get_user_groups_from_state(self, state: "ExecutionState") -> list[str]:
+    async def _check_permission(self, state: "ExecutionState") -> str | None:
         """
-        Извлекает группы пользователя из state.
-
-        Аргументы:
-            state: ExecutionState агента
-
-        Возвращает:
-            Список групп пользователя
-        """
-        if state.user_groups:
-            return state.user_groups
-
-        extra = state.json_extra()
-        raw_user = extra.get("user")
-        if isinstance(raw_user, Mapping):
-            user = require_json_object(raw_user, "state.user")
-            raw_groups = user.get("grps")
-            if isinstance(raw_groups, list) and all(isinstance(group, str) for group in raw_groups):
-                return [group for group in raw_groups if isinstance(group, str)]
-
-        return []
-
-    def _check_permission(self, state: "ExecutionState") -> str | None:
-        """
-        Проверяет permission на tool.
+        Проверяет permission на tool через OpenFGA (group membership / company).
 
         Аргументы:
             state: ExecutionState агента с информацией о пользователе
@@ -142,23 +118,11 @@ class BaseTool(ABC):
         Возвращает:
             None если есть доступ, иначе сообщение об ошибке для агента
         """
-        config = get_settings()
-
-        if not config.auth.permissions_enabled:
-            return None
-        if self.permission == []:
-            return None
-
-        user_groups = self._get_user_groups_from_state(state)
-
-        if not permission_checker.check_tool_permission(user_groups, self.permission):
-            required = permission_checker.normalize(self.permission)
-            return (
-                f"У пользователя нет прав на использование инструмента '{self.name}'. "
-                f"Требуется одна из групп: {', '.join(required)}"
-            )
-
-        return None
+        return await check_tool_permission(
+            self.permission,
+            state.user_id,
+            self.name,
+        )
 
     async def run(self, args: ToolArguments, state: "ExecutionState") -> ToolResult:
         """
@@ -193,7 +157,7 @@ class BaseTool(ABC):
             Результат если нужно вернуть permission error, None если продолжить
         """
         _ = args
-        permission_error = self._check_permission(state)
+        permission_error = await self._check_permission(state)
         if permission_error:
             logger.warning(f"Tool {self.name}: permission denied")
             return permission_error

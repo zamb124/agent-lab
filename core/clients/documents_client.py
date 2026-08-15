@@ -7,6 +7,7 @@ from urllib.parse import quote
 
 from core.clients.documents_models import (
     DocumentsAccessArgs,
+    DocumentsAccessMemberItem,
     DocumentsAddCatalogMemberArgs,
     DocumentsAppendTextMutationArgs,
     DocumentsCatalogIdArgs,
@@ -635,7 +636,7 @@ class DocumentsClient:
     async def create_catalog(
         self,
         title: str | DocumentsCreateCatalogArgs,
-        is_public: bool = True,
+        company_visible: bool = True,
         parent_catalog_id: str | None = None,
     ) -> JsonObject:
         if isinstance(title, DocumentsCreateCatalogArgs):
@@ -643,10 +644,10 @@ class DocumentsClient:
         else:
             args = DocumentsCreateCatalogArgs(
                 title=title,
-                is_public=is_public,
+                company_visible=company_visible,
                 parent_catalog_id=parent_catalog_id,
             )
-        body: JsonObject = {"title": args.title, "is_public": args.is_public}
+        body: JsonObject = {"title": args.title, "company_visible": args.company_visible}
         if args.parent_catalog_id is not None:
             body["parent_catalog_id"] = args.parent_catalog_id
         raw = await self._http.post(
@@ -660,7 +661,7 @@ class DocumentsClient:
             "catalog_id": result.get("catalog_id"),
             "title": result.get("title"),
             "parent_catalog_id": result.get("parent_catalog_id"),
-            "is_public": result.get("is_public"),
+            "company_visible": result.get("company_visible"),
             "is_owner": result.get("is_owner"),
         }
 
@@ -668,7 +669,7 @@ class DocumentsClient:
         self,
         catalog_id: str | DocumentsUpdateCatalogArgs,
         title: str | None = None,
-        is_public: bool | None = None,
+        company_visible: bool | None = None,
     ) -> JsonObject:
         if isinstance(catalog_id, DocumentsUpdateCatalogArgs):
             args = catalog_id
@@ -676,15 +677,15 @@ class DocumentsClient:
             args = DocumentsUpdateCatalogArgs(
                 catalog_id=catalog_id,
                 title=title,
-                is_public=is_public,
+                company_visible=company_visible,
             )
         body: JsonObject = {}
         if args.title is not None:
             body["title"] = args.title
-        if args.is_public is not None:
-            body["is_public"] = args.is_public
+        if args.company_visible is not None:
+            body["company_visible"] = args.company_visible
         if not body:
-            raise ValueError("Provide title and/or is_public")
+            raise ValueError("Provide title and/or company_visible")
         raw = await self._http.patch(
             "office",
             f"{_API}/catalogs/{quote(args.catalog_id, safe='')}",
@@ -695,7 +696,7 @@ class DocumentsClient:
         return {
             "catalog_id": result.get("catalog_id"),
             "title": result.get("title"),
-            "is_public": result.get("is_public"),
+            "company_visible": result.get("company_visible"),
             "is_owner": result.get("is_owner"),
         }
 
@@ -773,8 +774,8 @@ class DocumentsClient:
         resource_id: str = "",
         company_visible: bool | None = None,
         link_enabled: bool | None = None,
-        link_permission: Literal["view", "edit"] | None = None,
-        member_user_ids: list[str] | None = None,
+        link_permission: Literal["viewer", "editor"] | None = None,
+        members: list[DocumentsAccessMemberItem] | None = None,
     ) -> JsonObject:
         if isinstance(resource_kind, DocumentsPatchAccessArgs):
             args = resource_kind
@@ -785,7 +786,7 @@ class DocumentsClient:
                 company_visible=company_visible,
                 link_enabled=link_enabled,
                 link_permission=link_permission,
-                member_user_ids=member_user_ids,
+                members=members,
             )
         body: JsonObject = {}
         if args.company_visible is not None:
@@ -794,8 +795,11 @@ class DocumentsClient:
             body["link_enabled"] = args.link_enabled
         if args.link_permission is not None:
             body["link_permission"] = args.link_permission
-        if args.member_user_ids is not None:
-            body["member_user_ids"] = args.member_user_ids
+        if args.members is not None:
+            body["members"] = [
+                {"user_id": member.user_id, "relation": member.relation}
+                for member in args.members
+            ]
         if not body:
             raise ValueError("Provide at least one access field to patch")
         raw = await self._http.patch(

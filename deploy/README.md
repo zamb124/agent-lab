@@ -137,6 +137,7 @@ kubectl delete secret platform-secrets -n platform
 | Секрет | Назначение |
 |---|---|
 | `POSTGRES_PASSWORD` | пароль БД, общий для всех сервисных схем |
+| `OPENFGA_API_TOKEN` | preshared key OpenFGA (`platform-secrets.openfga-api-token`); `openssl rand -hex 32` |
 | `AUTH_JWT_SECRET` | подпись session JWT |
 | `HF_TOKEN` | (опционально) Hugging Face token для litserve |
 | `AUTH_YANDEX_CLIENT_ID` / `AUTH_YANDEX_CLIENT_SECRET` | OAuth Yandex |
@@ -164,6 +165,15 @@ kubectl delete secret platform-secrets -n platform
 | `PROXY__ENABLED` / `PROXY__PROXIES` | (опционально) исходящий HTTP(S) прокси (`settings.proxy`): `PROXY__PROXIES` — JSON-массив строк URL, одной строкой в секрете, например `["http://user:pass@host:3128"]` |
 
 Эти переменные задаются в GitHub Actions как env и передаются в Helm одним `--set-json platformSecrets=...` через `deploy/scripts/helm_platform_secrets_json.sh` (jq экранирует многострочные секреты).
+
+### OpenFGA pin (Helm `--set`, не platform-secrets)
+
+| Секрет | Назначение |
+|---|---|
+| `OPENFGA_STORE_ID` | опциональный override Helm `openfga.storeId` |
+| `OPENFGA_AUTHORIZATION_MODEL_ID` | опциональный override `openfga.authorizationModelId` |
+
+Pin store/model **автоматический** после helm: `openfga_bootstrap_cluster.sh` → Secret `openfga-ids` + `--set`. GitHub Secrets для ids не обязательны. Ручной повтор: `make k8s-openfga-bootstrap`.
 
 ## Ручной деплой (без CI)
 

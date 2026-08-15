@@ -10,7 +10,7 @@ from apps.crm.container import CRMContainer, get_crm_container
 from apps.crm.db.repositories.task_repository import CRM_TASK_TERMINAL_STATUSES
 from apps.crm.services.crm_note_broadcast import broadcast_crm_note_event
 from apps.crm.services.crm_task_broadcast import publish_crm_task_snapshot_for_user
-from apps.crm_worker.tasks.daily_summary_tasks import set_crm_context
+from apps.crm_worker.tasks.crm_context import set_crm_context
 from apps.crm_worker.tasks.task_names import CRM_REPAIR_NOTE_ANALYSIS_DRAFT
 from core.logging import get_logger
 from core.tasks import platform_task
@@ -43,8 +43,7 @@ async def _broadcast_draft_repair_phase(
         note_date_iso=note_date_iso,
         action="updated",
         note=entity,
-        company_repository=container.company_repository,
-        access_grant_repository=container.access_grant_repository,
+                authz=container.authz_service,
         skip_notification_center=True,
         draft_repair={"phase": phase},
     )

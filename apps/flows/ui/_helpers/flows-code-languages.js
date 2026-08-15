@@ -10,7 +10,11 @@ export const FLOW_CODE_LANGUAGES = Object.freeze([
         icon: 'python',
         cmLanguage: 'python',
         entrypoint: 'run',
-        starter: `async def run(args, state):
+        starter: `import json
+
+# HTTP: await http.get(url=...). Files: files.*. No requests/open().
+# args — входы ноды; в playground передай ExecuteRequest.args, иначе {}.
+async def run(args, state):
     return {}
 `,
         edgeStarter: `async def check(args, state):
@@ -24,7 +28,9 @@ export const FLOW_CODE_LANGUAGES = Object.freeze([
         icon: 'javascript',
         cmLanguage: 'javascript',
         entrypoint: 'run',
-        starter: `async function run(args, state) {
+        starter: `// JSON, Date, Map, ArrayBuffer, Intl are available. HTTP: await http.get({url}). import lodash from 'lodash'
+// args come from node inputs; playground POST /code/execute args, otherwise {}.
+async function run(args, state) {
   return {};
 }
 `,
@@ -40,7 +46,9 @@ export const FLOW_CODE_LANGUAGES = Object.freeze([
         icon: 'typescript',
         cmLanguage: 'typescript',
         entrypoint: 'run',
-        starter: `async function run(args: Record<string, unknown>, state: Record<string, unknown>) {
+        starter: `// JSON, Date, Map, ArrayBuffer, Intl are available. HTTP: await http.get({url}). import lodash from 'lodash'
+// Types are stripped at runtime. args come from node inputs or playground ExecuteRequest.args.
+async function run(args: Record<string, unknown>, state: Record<string, unknown>) {
   return {};
 }
 `,
@@ -58,6 +66,8 @@ export const FLOW_CODE_LANGUAGES = Object.freeze([
         entrypoint: 'run',
         starter: `package main
 
+// encoding/json and encoding/csv are allowed. net/http is not — use http.Get.
+// args come from node inputs or playground ExecuteRequest.args.
 func run(args map[string]any, state map[string]any) (any, error) {
     return map[string]any{}, nil
 }
@@ -77,8 +87,11 @@ func check(args map[string]any, state map[string]any) (any, error) {
         cmLanguage: 'csharp',
         entrypoint: 'run',
         starter: `using System.Collections.Generic;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
+// args come from node inputs or playground ExecuteRequest.args.
 async Task<object?> run(Dictionary<string, object?> args, Dictionary<string, object?> state)
 {
     return new Dictionary<string, object?>();

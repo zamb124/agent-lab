@@ -1,7 +1,8 @@
 """
 Тесты запросов доступа к entities.
 
-User Story: Запросы доступа к чужим/скрытым entities.
+AccessRequest — copy-workflow document; approve/reject gate — OpenFGA CAN_SHARE
+(не SQL AccessGrant и не сравнение owner_id).
 """
 
 import asyncio
@@ -43,6 +44,7 @@ class TestAccessRequests:
             "entity_type": "note",
             "name": f"Private note {unique_id}",
         }, headers=auth_headers_system)
+        assert entity_resp.status_code == 200, entity_resp.text
         entity_id = _entity_id(entity_resp)
 
         request_resp = await crm_client.post("/crm/api/v1/access-requests", json={
@@ -70,6 +72,7 @@ class TestAccessRequests:
             "entity_type": "note",
             "name": f"Note {unique_id}",
         }, headers=auth_headers_system)
+        assert entity_resp.status_code == 200, entity_resp.text
         entity_id = _entity_id(entity_resp)
 
         request_resp = await crm_client.post("/crm/api/v1/access-requests", json={
@@ -77,6 +80,7 @@ class TestAccessRequests:
             "resource_id": entity_id,
             "message": "Прошу доступ",
         }, headers=auth_headers_system)
+        assert request_resp.status_code == 200, request_resp.text
         access_request_id = _access_request_id(request_resp)
 
         approve_resp = await crm_client.put(
@@ -105,6 +109,7 @@ class TestAccessRequests:
             "entity_type": "note",
             "name": f"Note {unique_id}",
         }, headers=auth_headers_system)
+        assert entity_resp.status_code == 200, entity_resp.text
         entity_id = _entity_id(entity_resp)
 
         request_resp = await crm_client.post("/crm/api/v1/access-requests", json={
@@ -112,6 +117,7 @@ class TestAccessRequests:
             "resource_id": entity_id,
             "message": "Запрос",
         }, headers=auth_headers_system)
+        assert request_resp.status_code == 200, request_resp.text
         access_request_id = _access_request_id(request_resp)
 
         reject_resp = await crm_client.put(
@@ -133,7 +139,7 @@ class TestAccessRequests:
             "entity_type": "note",
             "name": f"Note {unique_id}",
         }, headers=auth_headers_system)
-        assert entity_resp.status_code == 200
+        assert entity_resp.status_code == 200, entity_resp.text
         entity_id = _entity_id(entity_resp)
 
         request_resp = await crm_client.post("/crm/api/v1/access-requests", json={

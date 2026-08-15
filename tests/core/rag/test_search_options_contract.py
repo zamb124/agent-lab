@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import inspect
 
-from apps.flows.tools.rag import RagSearchArgs
 from core.clients.rag_client import RagClient
+from core.clients.rag_models import RagSearchArgs
 from core.rag.models import RAGSearchOptions
 from core.rag.rag_http_namespace_search import (
     SEARCH_REQUEST_OPTION_KEYS,

@@ -316,13 +316,9 @@ async def reconcile_google_workspace_system(
             status_code=403,
             detail="system reconcile requires company_id=system",
         )
-    user_roles = ctx.user.companies.get(SYSTEM_COMPANY_ID, [])
-    if "admin" not in user_roles:
-        raise HTTPException(
-            status_code=403,
-            detail="system reconcile requires admin role",
-        )
-    service = _integration_container(request).company_integration_credential_service
+    container = _integration_container(request)
+    await container.authz_service.require_company_admin(company_id=SYSTEM_COMPANY_ID)
+    service = container.company_integration_credential_service
     try:
         return await service.reconcile_system_google_workspace()
     except Exception as exc:

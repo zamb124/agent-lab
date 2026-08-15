@@ -21,6 +21,8 @@ from apps.flows.src.services.mcp_sync import (
 )
 from apps.flows.src.services.platform_assistant_skills import seed_platform_assistant_skills
 from apps.flows.src.tasks.task_names import TASK_INIT_COMPANY_RESOURCES
+from core.authz.company_sync import sync_company_member_roles
+from core.authz.group_sync import sync_user_groups
 from core.context import Context, clear_context, set_context
 from core.logging import get_logger
 from core.models.i18n_models import Language
@@ -84,13 +86,29 @@ async def init_company_resources(
 
     try:
         container = get_container()
+        await sync_company_member_roles(
+            container.authz_service,
+            company_id=company_id,
+            user_id="system",
+            roles=["owner", "admin"],
+        )
+        await sync_user_groups(
+            container.authz_service,
+            user_id="system",
+            groups=["admin", "developers"],
+            company_ids=[company_id],
+            previous_groups=[],
+        )
 
         # Путь к единому registry
         registry_path = Path(__file__).parent.parent.parent / "registry.yaml"
         bundles_dir = Path(__file__).parent.parent.parent / "bundles"
 
         # Загружаем tools (для ВСЕХ компаний, включая system)
-        loaded_tools = await load_tools_to_db(container.tool_repository)
+        loaded_tools = await load_tools_to_db(
+        container.tool_repository,
+        flow_access_service=container.flow_access_service,
+    )
         logger.info(f"Загружено {len(loaded_tools)} tools для {company_id}")
 
         try:
@@ -129,6 +147,7 @@ async def init_company_resources(
             node_repository=container.node_repository,
             tool_repository=container.tool_repository,
             registry_path=registry_path,
+            flow_access_service=container.flow_access_service,
         )
 
         # Универсальный метод - работает и для system и для company
@@ -159,11 +178,32 @@ async def init_company_resources(
         stats["platform_assistant_skills"] = seeded_skills
 
         stored_company = await container.company_repository.get(company_id)
-        member_user_ids = (
-            hitl_demo_operator_user_ids(stored_company)
-            if stored_company is not None
-            else []
-        )
+        member_user_ids: list[str] = []
+        if stored_company is not None:
+            member_user_ids = await hitl_demo_operator_user_ids(
+                container.authz_service, company_id
+            )
+            owner_user_id = stored_company.owner_user_id
+            if (
+                not member_user_ids
+                and owner_user_id is not None
+                and owner_user_id.strip() != ""
+            ):
+                raw_owner_roles = stored_company.members.get(owner_user_id)
+                owner_roles: list[str] = (
+                    list(raw_owner_roles)
+                    if raw_owner_roles is not None and len(raw_owner_roles) > 0
+                    else ["owner", "admin"]
+                )
+                await sync_company_member_roles(
+                    container.authz_service,
+                    company_id=company_id,
+                    user_id=owner_user_id,
+                    roles=owner_roles,
+                )
+                member_user_ids = await hitl_demo_operator_user_ids(
+                    container.authz_service, company_id
+                )
         await ensure_example_hitl_queue(
             container.work_item_service,
             company_id,

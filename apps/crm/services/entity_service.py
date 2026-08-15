@@ -18,6 +18,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING, ClassVar, Literal, NotRequired, Protocol, TypedDict, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from sqlalchemy.exc import IntegrityError
 
 from apps.crm.constants_graph import (
     COMPANY_ENTITY_TYPE,
@@ -27,8 +28,8 @@ from apps.crm.constants_graph import (
     PLATFORM_COMPANY_ID_ATTR,
     PLATFORM_USER_ID_ATTR,
 )
+from apps.crm.db.integrity import is_unique_violation
 from apps.crm.db.models import CRMEntity, CRMTask, EntityType, Relationship, RelationshipType
-from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
 from apps.crm.db.repositories.access_request_repository import AccessRequestRepository
 from apps.crm.db.repositories.company_mapping_repository import CompanyMappingRepository
 from apps.crm.db.repositories.entity_repository import EntityRepository
@@ -80,6 +81,7 @@ from apps.crm_worker.tasks.task_names import (
     CRM_REBUILD_PERIOD_SUMMARY,
 )
 from core.a2a import iter_json_parts, part_json_has_data, part_json_has_text
+from core.authz.service import AuthzService
 from core.clients.a2a_client import A2AClient, A2ATaskResult
 from core.context import get_context, resolve_namespace_or_raise
 from core.llm_context import (
@@ -94,6 +96,7 @@ from core.models.i18n_models import Language
 from core.models.identity_models import NamespaceCRMSettings
 from core.namespace import NamespaceService
 from core.tasks import enqueue
+from core.test_scope import MOCK_LLM_SIDE_EFFECT_CRM_SUMMARY, mock_llm_side_effect_enqueue_labels
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 
 logger = get_logger(__name__)
@@ -107,8 +110,7 @@ from core.utils.chunked_async import map_reduce_tree, run_chunked_map  # noqa: E
 from core.worktracker.models import UserActor  # noqa: E402
 
 if TYPE_CHECKING:
-    from apps.crm.services.access_control_service import AccessControlService
-    from core.db.repositories.company_repository import CompanyRepository
+    from apps.crm.services.crm_entity_access_service import CrmEntityAccessService
 
 
 class NoteMarkdownFormatScheduler(Protocol):
@@ -365,11 +367,10 @@ class EntityService:
         daily_summary_cache_service: DailySummaryCacheService,
         daily_summary_artifact_service: DailySummaryArtifactService,
         user_person_service: UserPersonService,
-        access_grant_repo: AccessGrantRepository,
+        authz: AuthzService,
         access_request_repo: AccessRequestRepository,
         company_mapping_repo: CompanyMappingRepository,
-        company_repo: "CompanyRepository",
-        access_control: "AccessControlService",
+        entity_access: "CrmEntityAccessService",
         task_repository: TaskRepository | None = None,
         crm_work_item_service: CrmWorkItemService | None = None,
         note_markdown_format_scheduler: NoteMarkdownFormatScheduler | None = None,
@@ -386,11 +387,10 @@ class EntityService:
             daily_summary_artifact_service
         )
         self._user_person_service: UserPersonService = user_person_service
-        self._access_grant_repo: AccessGrantRepository = access_grant_repo
+        self._authz: AuthzService = authz
         self._access_request_repo: AccessRequestRepository = access_request_repo
         self._company_mapping_repo: CompanyMappingRepository = company_mapping_repo
-        self._company_repo: CompanyRepository = company_repo
-        self._access_control: AccessControlService = access_control
+        self._entity_access: CrmEntityAccessService = entity_access
         self._task_repository: TaskRepository | None = task_repository
         self._crm_work_item_service: CrmWorkItemService | None = crm_work_item_service
         self._note_markdown_format_scheduler: NoteMarkdownFormatScheduler | None = (
@@ -937,7 +937,7 @@ class EntityService:
                 created_at=now,
                 updated_at=now,
             )
-            _ = await self._relationship_repo.create(voice_row)
+            await self._create_system_relationship(voice_row)
             await self._user_person_service.record_last_voice_entity(
                 user_id, namespace, resolved_voice_id
             )
@@ -955,7 +955,15 @@ class EntityService:
                 created_at=now,
                 updated_at=now,
             )
-            _ = await self._relationship_repo.create(ctx_row)
+            await self._create_system_relationship(ctx_row)
+
+    async def _create_system_relationship(self, row: Relationship) -> None:
+        """Idempotent create: concurrent note_voice/in_context writers share the unique edge."""
+        try:
+            _ = await self._relationship_repo.create(row)
+        except IntegrityError as exc:
+            if not is_unique_violation(exc):
+                raise
 
     async def apply_imported_note_graph_links(
         self,
@@ -1226,6 +1234,11 @@ class EntityService:
 
         _ = await self._entity_repo.create(entity)
         logger.info(f"Created entity: {entity.entity_id}, type={entity.full_type}")
+        try:
+            await self._entity_access.sync_entity_created(entity)
+        except Exception:
+            _ = await self._entity_repo.delete(entity.entity_id)
+            raise
 
         if entity.entity_type == "task":
             create_seed_fields: dict[str, object] = {}
@@ -1294,8 +1307,7 @@ class EntityService:
                 note_date_iso=note_date_iso,
                 action="created",
                 note=entity,
-                company_repository=self._company_repo,
-                access_grant_repository=self._access_grant_repo,
+                authz=self._authz,
             )
 
         await publish_crm_entity_event(CRM_ENTITY_CREATED, entity)
@@ -1481,15 +1493,18 @@ class EntityService:
             company_id, source_id, survivor_id
         )
 
-        _ = await self._access_grant_repo.remap_entity_resource_id(
-            company_id, source_id, survivor_id
-        )
-        _ = await self._access_grant_repo.deduplicate_entity_grants(company_id, survivor_id)
-
         _ = await self._access_request_repo.remap_entity_resource_id(
             company_id, source_id, survivor_id
         )
         _ = await self._access_request_repo.deduplicate_pending_entity_requests(survivor_id)
+
+        survivor_for_authz = await self._entity_repo.get(survivor_id)
+        if survivor_for_authz is None:
+            raise ValueError("Сущность survivor не найдена после merge")
+        await self._entity_access.sync_entity_merged(
+            source=source,
+            survivor=survivor_for_authz,
+        )
 
         source_fresh = await self._entity_repo.get(source_id)
         if source_fresh is None:
@@ -1704,8 +1719,7 @@ class EntityService:
                 note_date_iso=note_date_iso,
                 action="updated",
                 note=entity,
-                company_repository=self._company_repo,
-                access_grant_repository=self._access_grant_repo,
+                authz=self._authz,
             )
 
             company_id = self._get_company_id()
@@ -1796,7 +1810,7 @@ class EntityService:
                 limit=limit * oversample_factor,
                 cursor=current_cursor,
             )
-            filtered = await self._access_control.batch_filter_readable(
+            filtered = await self._entity_access.batch_filter_readable(
                 entities,
                 user_id,
                 company_id,
@@ -2002,10 +2016,12 @@ class EntityService:
             pass
 
         async def delete_entity_from_db() -> None:
+            await self._entity_access.sync_entity_deleted(entity)
             _ = await self._entity_repo.delete(entity_id)
 
         async def restore_entity_to_db() -> None:
             _ = await self._entity_repo.create(entity)
+            await self._entity_access.sync_entity_created(entity)
 
         saga.add_step(
             SagaStep(
@@ -2106,8 +2122,7 @@ class EntityService:
                 note_id=entity_id,
                 note_date_iso=note_date_iso,
                 action="deleted",
-                company_repository=self._company_repo,
-                access_grant_repository=self._access_grant_repo,
+                authz=self._authz,
             )
 
         await publish_crm_entity_event(CRM_ENTITY_DELETED, entity)
@@ -2137,7 +2152,7 @@ class EntityService:
         entities = [entity for entity, _ in results]
         user_id = self._get_user_id()
         company_id = self._get_company_id()
-        readable = await self._access_control.batch_filter_readable(
+        readable = await self._entity_access.batch_filter_readable(
             entities, user_id, company_id, query_namespace=namespace
         )
         readable_ids = {e.entity_id for e in readable}
@@ -2166,7 +2181,7 @@ class EntityService:
         entities = [entity for entity, _, _ in results]
         user_id = self._get_user_id()
         company_id = self._get_company_id()
-        readable = await self._access_control.batch_filter_readable(
+        readable = await self._entity_access.batch_filter_readable(
             entities, user_id, company_id, query_namespace=namespace
         )
         readable_ids = {e.entity_id for e in readable}
@@ -2195,7 +2210,7 @@ class EntityService:
         entities = [entity for entity, _ in results]
         user_id = self._get_user_id()
         company_id = self._get_company_id()
-        readable = await self._access_control.batch_filter_readable(
+        readable = await self._entity_access.batch_filter_readable(
             entities, user_id, company_id, query_namespace=namespace
         )
         readable_ids = {e.entity_id for e in readable}
@@ -2242,7 +2257,7 @@ class EntityService:
 
         user_id = self._get_user_id()
         company_id = self._get_company_id()
-        entities = await self._access_control.batch_filter_readable(
+        entities = await self._entity_access.batch_filter_readable(
             entities, user_id, company_id, query_namespace=namespace
         )
 
@@ -2438,7 +2453,7 @@ class EntityService:
             attrs["ai_analysis_apply_failures"] = cleaned
         else:
             _ = attrs.pop("ai_analysis_apply_failures", None)
-        _ = await self.update_entity(note_id, {"attributes": attrs})
+        await self._persist_note_analysis_attributes(note, attrs)
 
     async def clear_note_analysis_error(self, note_id: str) -> None:
         note = await self._entity_repo.get(note_id)
@@ -2454,25 +2469,16 @@ class EntityService:
             return
         for k in error_keys:
             _ = attrs.pop(k, None)
-        _ = await self.update_entity(note_id, {"attributes": attrs})
+        await self._persist_note_analysis_attributes(note, attrs)
 
-    async def _load_all_relationship_types_for_company(self) -> list[RelationshipType]:
-        out: list[RelationshipType] = []
-        offset = 0
-        limit = 200
-        while True:
-            page = await self._relationship_type_repo.list_by_company(
-                include_system=True,
-                limit=limit,
-                offset=offset,
-            )
-            if not page:
-                break
-            out.extend(page)
-            if len(page) < limit:
-                break
-            offset += limit
-        return out
+    async def _persist_note_analysis_attributes(
+        self, note: CRMEntity, attrs: JsonObject
+    ) -> None:
+        """Пишет только attributes. update_entity resync note_voice/in_context и при
+        параллельном reconcile падает UniqueViolation (uq_relationships_unique_edge)."""
+        note.attributes = require_json_object(attrs, "note.attributes")
+        note.updated_at = datetime.now(UTC)
+        _ = await self._entity_repo.update(note)
 
     async def _validate_draft_repair_patch_list(
         self,
@@ -2541,7 +2547,7 @@ class EntityService:
         entity_rows = await self._entity_type_repo.load_all_entity_types_for_company(
             namespace=ns_for_types
         )
-        rel_rows = await self._load_all_relationship_types_for_company()
+        rel_rows = await self._relationship_type_repo.list_all_by_company(include_system=True)
         parent_map = await self._entity_type_repo.get_parent_type_id_map_for_namespace(ns_for_types)
 
         cleaned_failures: list[dict[str, str]] = []
@@ -2865,7 +2871,7 @@ class EntityService:
 
         valid_rel_type_ids = {
             t.type_id
-            for t in await self._relationship_type_repo.list_by_company(include_system=True)
+            for t in await self._relationship_type_repo.list_all_by_company(include_system=True)
         }
 
         seen_new_rel: set[str] = set()
@@ -3057,7 +3063,7 @@ class EntityService:
         note, draft = await self._load_analysis_draft_from_note(note_id)
         namespace = self._resolve_namespace_for_write(note.namespace)
 
-        all_types = await self._relationship_type_repo.list_by_company(include_system=True)
+        all_types = await self._relationship_type_repo.list_all_by_company(include_system=True)
         valid_type_ids = {t.type_id for t in all_types}
 
         draft_entity_ids = {e.draft_entity_id for e in draft.entities if e.draft_entity_id}
@@ -3799,12 +3805,14 @@ class EntityService:
             variables["known_entities"] = known_entities
 
         flows_base_url = settings.server.get_flows_service_url().rstrip("/")
+        analyze_timeout_sec = get_crm_settings().analysis_a2a_timeout_seconds
 
         response = await self._a2a_client.send_task(
             base_url=f"{flows_base_url}/flows/api/v1/crm",
             content=text,
             branch_id="analyze",
             metadata={"variables": variables},
+            timeout=analyze_timeout_sec,
         )
 
         result_data = self._extract_data_from_a2a_response(response)
@@ -4754,8 +4762,7 @@ class EntityService:
             namespace=namespace,
             date_str=date_str,
             state=state,
-            company_repository=self._company_repo,
-            access_grant_repository=self._access_grant_repo,
+                authz=self._authz,
         )
 
     async def _materialize_empty_daily_summary(
@@ -5049,6 +5056,9 @@ class EntityService:
             user_id=user_id,
             task_id=task_id,
             background_kind="crm_summary",
+            extra_labels=mock_llm_side_effect_enqueue_labels(
+                MOCK_LLM_SIDE_EFFECT_CRM_SUMMARY
+            ),
         )
         return True
 
@@ -5385,8 +5395,7 @@ class EntityService:
                 date_from=date_from,
                 date_to=date_to,
                 state=state,
-                company_repository=self._company_repo,
-                access_grant_repository=self._access_grant_repo,
+                authz=self._authz,
             )
             return state
         except Exception:
@@ -5460,6 +5469,9 @@ class EntityService:
             user_id=user_id,
             task_id=task_id,
             background_kind="crm_summary",
+            extra_labels=mock_llm_side_effect_enqueue_labels(
+                MOCK_LLM_SIDE_EFFECT_CRM_SUMMARY
+            ),
         )
         return True
 

@@ -211,7 +211,8 @@ export function layoutCapabilitiesForType(type) {
  * Schema field kinds map to inspector controls:
  * string | text | number | boolean | enum (options: [{value,label}] | string[] | number[];
  * inspector stringifies option.value for platform-field-enum) | image
- * (preview + platform.file_picker; stores download URL in the property).
+ * (preview + platform.file_picker; stores download URL in the property) | file_id
+ * (platform.file_picker; stores platform file_id, not a download URL).
  * Field labels are pinned RU/EN pairs because the manifest is standalone
  * flow-ui infrastructure (same contract as flow-ui/utils/text.js).
  */
@@ -522,7 +523,18 @@ const EDITOR_BY_TYPE = Object.freeze({
     DataTable: {
         group: 'data',
         icon: 'table',
-        defaults: { properties: { columns: Object.freeze([]), rows: Object.freeze([]) } },
+        schema: [
+            field('file_id', 'file_id', 'file_id таблицы', 'DataTable file_id'),
+            field('table_name', 'string', 'Имя таблицы в SQLite', 'SQLite table name'),
+        ],
+        defaults: {
+            properties: {
+                file_id: '',
+                table_name: '',
+                columns: Object.freeze([]),
+                rows: Object.freeze([]),
+            },
+        },
         maturity: 'partial',
     },
     Chart: {

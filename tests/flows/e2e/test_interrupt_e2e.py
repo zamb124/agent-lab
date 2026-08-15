@@ -10,12 +10,31 @@ E2E тесты для FlowInterrupt с реальным TaskIQ worker.
 БЕЗ МОКОВ - используют реальный LLM и TaskIQ worker.
 """
 
+from collections.abc import AsyncIterator
+
 import pytest
 import pytest_asyncio
 
 from apps.flows.src.container import get_container
+from core.authz.company_sync import sync_company_member_roles
 from core.state import ExecutionState
 from tests.flows.durable_runtime_harness import run_flow
+
+_INTERRUPT_E2E_USER_ID = "test-user"
+_MOCK_LLM = {"provider": "mock", "model": "mock-gpt-4"}
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _interrupt_e2e_tool_authz(app, container) -> AsyncIterator[None]:
+    """OpenFGA company membership for in-process BaseTool.run. Does not replace Context."""
+    _ = app
+    await sync_company_member_roles(
+        container.authz_service,
+        company_id="system",
+        user_id=_INTERRUPT_E2E_USER_ID,
+        roles=["owner", "admin"],
+    )
+    yield
 
 
 @pytest.mark.real_taskiq
@@ -50,7 +69,7 @@ class TestInterruptE2E:
         state = ExecutionState(
             task_id=f"e2e-test-1-{unique_id}",
             context_id=context_id,
-            user_id="test-user",
+            user_id=_INTERRUPT_E2E_USER_ID,
             session_id=f"{agent_flow.flow_id}:{context_id}",
             content="Привет",
         )
@@ -93,7 +112,7 @@ class TestInterruptE2E:
         state = ExecutionState(
             task_id=f"e2e-test-2-{unique_id}",
             context_id=context_id,
-            user_id="test-user",
+            user_id=_INTERRUPT_E2E_USER_ID,
             session_id=f"{agent_flow.flow_id}:{context_id}",
             content="где купить цветы",
         )
@@ -145,7 +164,7 @@ class TestInterruptE2E:
         state = ExecutionState(
             task_id=f"e2e-test-3-{unique_id}",
             context_id=context_id,
-            user_id="test-user",
+            user_id=_INTERRUPT_E2E_USER_ID,
             session_id=f"{agent_flow.flow_id}:{context_id}",
             content="найти цветочный магазин",
         )
@@ -190,7 +209,7 @@ class TestInterruptE2E:
         state = ExecutionState(
             task_id=f"e2e-test-4-{unique_id}",
             context_id=context_id,
-            user_id="test-user",
+            user_id=_INTERRUPT_E2E_USER_ID,
             session_id=f"{agent_flow.flow_id}:{context_id}",
             content="test",
         )
@@ -227,7 +246,7 @@ class TestInterruptE2E:
         state = ExecutionState(
             task_id=f"e2e-test-5-{unique_id}",
             context_id=context_id,
-            user_id="test-user",
+            user_id=_INTERRUPT_E2E_USER_ID,
             session_id=f"{agent_flow.flow_id}:{context_id}",
             content="тест",
         )
@@ -301,7 +320,9 @@ class TestSubflowInterruptE2E:
         await container.flow_repository.delete(flow_id)
 
     @pytest.mark.asyncio
-    async def test_subflow_code_node_interrupt(self, app, container, parent_agent_with_subflow):
+    async def test_subflow_code_node_interrupt(
+        self, app, container, parent_agent_with_subflow, unique_id
+    ):
         """
         Interrupt в CodeNode внутри subflow (FlowNode).
 
@@ -311,11 +332,12 @@ class TestSubflowInterruptE2E:
         3. current_nodes указывает на subflow ноду для resume
         """
         flow = await container.flow_factory.get_flow(parent_agent_with_subflow)
+        context_id = f"subflow-context-{unique_id}"
         state = ExecutionState(
-            task_id="subflow-code-test-1",
-            context_id="subflow-context",
-            user_id="test-user",
-            session_id=f"{parent_agent_with_subflow}:subflow-context",
+            task_id=f"subflow-code-test-1-{unique_id}",
+            context_id=context_id,
+            user_id=_INTERRUPT_E2E_USER_ID,
+            session_id=f"{parent_agent_with_subflow}:{context_id}",
             content="start",
         )
         result = await run_flow(container=container, flow=flow, state=state)
@@ -329,7 +351,7 @@ class TestSubflowInterruptE2E:
 
     @pytest.mark.asyncio
     async def test_subflow_code_node_resume_answer_reaches_node(
-        self, app, container, parent_agent_with_subflow
+        self, app, container, parent_agent_with_subflow, unique_id
     ):
         """
         ГЛАВНЫЙ ТЕСТ: Ответ пользователя попадает именно в CodeNode.
@@ -342,11 +364,12 @@ class TestSubflowInterruptE2E:
         5. Response содержит имя, доказывая что ответ достиг CodeNode
         """
         flow = await container.flow_factory.get_flow(parent_agent_with_subflow)
+        context_id = f"subflow-context-2-{unique_id}"
         state = ExecutionState(
-            task_id="subflow-code-test-2",
-            context_id="subflow-context-2",
-            user_id="test-user",
-            session_id=f"{parent_agent_with_subflow}:subflow-context-2",
+            task_id=f"subflow-code-test-2-{unique_id}",
+            context_id=context_id,
+            user_id=_INTERRUPT_E2E_USER_ID,
+            session_id=f"{parent_agent_with_subflow}:{context_id}",
             content="start",
         )
         result = await run_flow(container=container, flow=flow, state=state)
@@ -398,7 +421,7 @@ class TestSubflowInterruptE2E:
                             },
                         }
                     ],
-                    "llm": {"model": "mock-gpt-4"},
+                    "llm": _MOCK_LLM,
                 }
             },
             edges=[{"from_node": "react_main", "to_node": None}],
@@ -456,10 +479,10 @@ class TestSubflowInterruptE2E:
                                     },
                                 }
                             ],
-                            "llm": {"model": "mock-gpt-4"},
+                            "llm": _MOCK_LLM,
                         }
                     ],
-                    "llm": {"model": "mock-gpt-4"},
+                    "llm": _MOCK_LLM,
                 }
             },
             edges=[{"from_node": "main", "to_node": None}],
@@ -470,7 +493,7 @@ class TestSubflowInterruptE2E:
 
     @pytest.mark.asyncio
     async def test_subflow_llm_node_ask_user_interrupt(
-        self, app, container, parent_agent_with_react_subflow, mock_llm_with_queue
+        self, app, container, parent_agent_with_react_subflow, mock_llm_with_queue, unique_id
     ):
         """
         Interrupt от ask_user в LlmNode внутри subflow.
@@ -486,11 +509,12 @@ class TestSubflowInterruptE2E:
             ]
         )
         flow = await container.flow_factory.get_flow(parent_agent_with_react_subflow)
+        context_id = f"subflow-react-context-{unique_id}"
         state = ExecutionState(
-            task_id="subflow-react-test-1",
-            context_id="subflow-react-context",
-            user_id="test-user",
-            session_id=f"{parent_agent_with_react_subflow}:subflow-react-context",
+            task_id=f"subflow-react-test-1-{unique_id}",
+            context_id=context_id,
+            user_id=_INTERRUPT_E2E_USER_ID,
+            session_id=f"{parent_agent_with_react_subflow}:{context_id}",
             content="Привет",
         )
         result = await run_flow(container=container, flow=flow, state=state)
@@ -509,7 +533,7 @@ class TestSubflowInterruptE2E:
 
     @pytest.mark.asyncio
     async def test_subflow_llm_node_resume_answer_in_messages(
-        self, app, container, parent_agent_with_react_subflow, mock_llm_with_queue
+        self, app, container, parent_agent_with_react_subflow, mock_llm_with_queue, unique_id
     ):
         """
         ГЛАВНЫЙ ТЕСТ: Ответ пользователя появляется в messages child агента.
@@ -530,11 +554,12 @@ class TestSubflowInterruptE2E:
             ]
         )
         flow = await container.flow_factory.get_flow(parent_agent_with_react_subflow)
+        context_id = f"subflow-react-context-2-{unique_id}"
         state = ExecutionState(
-            task_id="subflow-react-test-2",
-            context_id="subflow-react-context-2",
-            user_id="test-user",
-            session_id=f"{parent_agent_with_react_subflow}:subflow-react-context-2",
+            task_id=f"subflow-react-test-2-{unique_id}",
+            context_id=context_id,
+            user_id=_INTERRUPT_E2E_USER_ID,
+            session_id=f"{parent_agent_with_react_subflow}:{context_id}",
             content="Привет",
         )
         result = await run_flow(container=container, flow=flow, state=state)
@@ -562,7 +587,7 @@ class TestSubflowInterruptE2E:
 
     @pytest.mark.asyncio
     async def test_subflow_multiple_interrupts_answers_accumulate(
-        self, app, container, parent_agent_with_react_subflow, mock_llm_with_queue
+        self, app, container, parent_agent_with_react_subflow, mock_llm_with_queue, unique_id
     ):
         """
         Несколько interrupt: каждый ответ появляется в истории child агента.
@@ -584,11 +609,12 @@ class TestSubflowInterruptE2E:
             ]
         )
         flow = await container.flow_factory.get_flow(parent_agent_with_react_subflow)
+        context_id = f"subflow-multi-context-{unique_id}"
         state = ExecutionState(
-            task_id="subflow-multi-interrupt",
-            context_id="subflow-multi-context",
-            user_id="test-user",
-            session_id=f"{parent_agent_with_react_subflow}:subflow-multi-context",
+            task_id=f"subflow-multi-interrupt-{unique_id}",
+            context_id=context_id,
+            user_id=_INTERRUPT_E2E_USER_ID,
+            session_id=f"{parent_agent_with_react_subflow}:{context_id}",
             content="Регистрация",
         )
         result1 = await run_flow(container=container, flow=flow, state=state)

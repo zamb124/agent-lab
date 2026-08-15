@@ -22,7 +22,6 @@ from core.mail.models import (
 )
 from core.mail.repositories import (
     INBOX_FOLDER,
-    MailboxBindingMemberRepository,
     MailboxBindingRepository,
     MailMessageRepository,
 )
@@ -42,15 +41,15 @@ def _worker_container(
     *,
     mail_service: MailService,
     mailbox_binding_repository: MailboxBindingRepository,
-    mailbox_binding_member_repository: MailboxBindingMemberRepository,
     company_repository: CompanyRepository,
     user_repository: UserRepository,
+    authz_service,
 ) -> SimpleNamespace:
     """Минимальный DI-срез IdleWorkerContainer для enter_mail_binding_context + mutations."""
     return SimpleNamespace(
         mail_service=mail_service,
         mailbox_binding_repository=mailbox_binding_repository,
-        mailbox_binding_member_repository=mailbox_binding_member_repository,
+        authz_service=authz_service,
         company_repository=company_repository,
         user_repository=user_repository,
     )
@@ -61,9 +60,8 @@ async def test_mail_trash_task_moves_on_imap(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
     mailbox_binding_repository: MailboxBindingRepository,
-    mailbox_binding_member_repository: MailboxBindingMemberRepository,
-    mail_member_context: MailMemberSeed,
     container: FlowContainer,
+    mail_member_context: MailMemberSeed,
     unique_id: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -107,9 +105,9 @@ async def test_mail_trash_task_moves_on_imap(
         lambda: _worker_container(
             mail_service=mail_service,
             mailbox_binding_repository=mailbox_binding_repository,
-            mailbox_binding_member_repository=mailbox_binding_member_repository,
             company_repository=container.company_repository,
             user_repository=container.user_repository,
+            authz_service=container.authz_service,
         ),
     )
     monkeypatch.setattr(
@@ -135,9 +133,8 @@ async def test_mail_star_task_stores_flags(
     recording_mail_port: RecordingMailServerPort,
     mail_message_repository: MailMessageRepository,
     mailbox_binding_repository: MailboxBindingRepository,
-    mailbox_binding_member_repository: MailboxBindingMemberRepository,
-    mail_member_context: MailMemberSeed,
     container: FlowContainer,
+    mail_member_context: MailMemberSeed,
     unique_id: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -158,9 +155,9 @@ async def test_mail_star_task_stores_flags(
         lambda: _worker_container(
             mail_service=mail_service,
             mailbox_binding_repository=mailbox_binding_repository,
-            mailbox_binding_member_repository=mailbox_binding_member_repository,
             company_repository=container.company_repository,
             user_repository=container.user_repository,
+            authz_service=container.authz_service,
         ),
     )
     async def _noop_publish(*_a: object, **_k: object) -> None:
@@ -196,9 +193,8 @@ async def test_mail_send_task_failure_publishes_send_failed(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
     mailbox_binding_repository: MailboxBindingRepository,
-    mailbox_binding_member_repository: MailboxBindingMemberRepository,
-    mail_member_context: MailMemberSeed,
     container: FlowContainer,
+    mail_member_context: MailMemberSeed,
     unique_id: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -230,9 +226,9 @@ async def test_mail_send_task_failure_publishes_send_failed(
         lambda: _worker_container(
             mail_service=mail_service,
             mailbox_binding_repository=mailbox_binding_repository,
-            mailbox_binding_member_repository=mailbox_binding_member_repository,
             company_repository=container.company_repository,
             user_repository=container.user_repository,
+            authz_service=container.authz_service,
         ),
     )
     monkeypatch.setattr(

@@ -133,5 +133,6 @@ async def uninstall_catalog_entry_from_company(
 
     for tool_id in server.cached_tools:
         _ = await container.tool_repository.delete(tool_id)
+        await container.flow_access_service.sync_tool_deleted(tool_id)
     _ = await container.mcp_server_repository.delete(server_id)
     logger.info("MCP Store uninstall: catalog_id=%s server_id=%s", catalog_id, server_id)

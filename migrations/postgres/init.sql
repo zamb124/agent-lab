@@ -12,6 +12,7 @@ CREATE DATABASE platform_tracing;
 CREATE DATABASE platform_search;
 CREATE DATABASE platform_secrets;
 CREATE DATABASE platform_wiki;
+CREATE DATABASE openfga;
 
 GRANT ALL PRIVILEGES ON DATABASE platform_shared TO platform_user;
 GRANT ALL PRIVILEGES ON DATABASE platform_agents TO platform_user;
@@ -24,6 +25,7 @@ GRANT ALL PRIVILEGES ON DATABASE platform_tracing TO platform_user;
 GRANT ALL PRIVILEGES ON DATABASE platform_search TO platform_user;
 GRANT ALL PRIVILEGES ON DATABASE platform_secrets TO platform_user;
 GRANT ALL PRIVILEGES ON DATABASE platform_wiki TO platform_user;
+GRANT ALL PRIVILEGES ON DATABASE openfga TO platform_user;
 
 \connect platform_shared
 CREATE EXTENSION IF NOT EXISTS pg_stat_statements;

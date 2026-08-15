@@ -8,7 +8,14 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from core.types import JsonObject
 
-DocumentViewerHandlerId = Literal["onlyoffice", "media", "image", "text", "binary", "viz"]
+DocumentViewerHandlerId = Literal[
+    "onlyoffice", "media", "image", "text", "binary", "viz", "data_table"
+]
+DataTableViewerScope = Literal["flow_asset", "flow_session", "office_document"]
+DataTableColumnType = Literal[
+    "text", "integer", "real", "boolean", "datetime", "json", "file_ref"
+]
+DataTableViewMode = Literal["data", "schema"]
 MediaViewerKind = Literal["audio", "video"]
 OfficeViewerScope = Literal["catalog", "file"]
 TextPresentation = Literal["code", "html", "markdown"]
@@ -84,6 +91,36 @@ class VizOpenPayload(BaseModel):
     document: JsonObject
 
 
+class DataTableColumnSnapshot(BaseModel):
+    name: str
+    column_type: DataTableColumnType
+    not_null: bool = False
+
+
+class DataTableTableSnapshot(BaseModel):
+    name: str
+    row_count: int = Field(ge=0)
+    columns: list[DataTableColumnSnapshot]
+
+
+class DataTableSchemaSnapshot(BaseModel):
+    schema_version: int = Field(ge=1)
+    scope: DataTableViewerScope
+    flow_id: str | None = None
+    session_id: str | None = None
+    tables: list[DataTableTableSnapshot]
+
+
+class DataTableOpenPayload(BaseModel):
+    file_id: str
+    schema_snapshot: DataTableSchemaSnapshot
+    rows_url: str
+    mutate_url: str
+    scope: DataTableViewerScope
+    flow_id: str | None = None
+    session_id: str | None = None
+
+
 class DocumentOpenConfigResponse(BaseModel):
     handler: DocumentViewerHandlerId
     file_id: str
@@ -100,6 +137,7 @@ class DocumentOpenConfigResponse(BaseModel):
     text: TextOpenPayload | None = None
     binary: BinaryOpenPayload | None = None
     viz: VizOpenPayload | None = None
+    data_table: DataTableOpenPayload | None = None
 
     @model_validator(mode="after")
     def payload_matches_handler(self) -> Self:
@@ -110,6 +148,7 @@ class DocumentOpenConfigResponse(BaseModel):
             "text": self.text,
             "binary": self.binary,
             "viz": self.viz,
+            "data_table": self.data_table,
         }
         active = payload_fields[self.handler]
         if active is None:

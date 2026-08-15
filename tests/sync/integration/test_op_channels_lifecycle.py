@@ -24,6 +24,7 @@ from apps.sync.realtime.operations import (
     op_channels_typing,
     op_channels_update,
 )
+from core.authz.models import AuthzObject
 from core.models.identity_models import User
 from core.websocket import WsCommandError
 from tests.sync.integration._helpers import seed_test_namespace
@@ -67,6 +68,37 @@ async def test_op_channels_create_topic_and_list(
         container=op_container,
     )
     assert any(c.channel_id == channel_id for c in listing.items)
+
+
+@pytest.mark.asyncio
+async def test_op_channels_list_excludes_settings_row_without_fga(
+    op_user: User,
+    op_container: SyncContainer,
+    op_context: None,
+    unique_id: str,
+) -> None:
+    channel_id, namespace = await _create_topic(
+        op_user, op_container, unique_id, suffix="nofga", name=f"NoFGA {unique_id}"
+    )
+    listing = await op_channels_list(
+        ChannelsListPayload(namespace=namespace, limit=10, offset=0),
+        user=op_user,
+        container=op_container,
+    )
+    assert any(c.channel_id == channel_id for c in listing.items)
+
+    tuples = await op_container.authz_service.list_tuples(
+        AuthzObject.sync_channel(channel_id)
+    )
+    if tuples:
+        await op_container.authz_service.delete(tuples)
+
+    listing_after = await op_channels_list(
+        ChannelsListPayload(namespace=namespace, limit=10, offset=0),
+        user=op_user,
+        container=op_container,
+    )
+    assert not any(c.channel_id == channel_id for c in listing_after.items)
 
 
 @pytest.mark.asyncio

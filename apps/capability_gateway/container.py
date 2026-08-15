@@ -11,6 +11,7 @@ from apps.capability_gateway.services.registry import CapabilityRegistry
 from core.clients.redis_client import RedisClient
 from core.clients.service_client import ServiceClient
 from core.container import BaseContainer, ContainerRegistry, lazy
+from core.data_tables.service import DataTableService
 from core.logging import get_logger
 from core.text_transforms import TextTransformService
 
@@ -38,6 +39,13 @@ class CapabilityGatewayContainer(BaseContainer):
     def redis_client(self) -> RedisClient:
         settings = get_capability_gateway_settings()
         return RedisClient(settings.database.redis_url)
+
+    @lazy
+    def data_table_service(self) -> DataTableService:
+        return DataTableService(
+            files_service=self.files_service,
+            redis_client=self.redis_client,
+        )
 
     @lazy
     def capability_registry(self) -> CapabilityRegistry:

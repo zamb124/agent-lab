@@ -23,7 +23,50 @@ export function defaultResourceConfigForType(resourceType, resourceKey) {
             default_top_k: 5,
         };
     }
+    if (resourceType === 'data_table') {
+        return { file_id: '' };
+    }
     return {};
+}
+
+/**
+ * @param {string} stem
+ * @returns {string}
+ */
+export function dataTableIdentFromStem(stem) {
+    if (typeof stem !== 'string' || stem.trim().length === 0) {
+        throw new Error('dataTableIdentFromStem: stem required');
+    }
+    let tableName = stem.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    if (tableName.length === 0 || tableName[0] < 'a' || tableName[0] > 'z') {
+        return 'data';
+    }
+    return tableName;
+}
+
+/**
+ * @param {string} flowId
+ * @param {string} stem
+ */
+export function dataTableCreateRequest(flowId, stem) {
+    if (typeof flowId !== 'string' || flowId.trim().length === 0) {
+        throw new Error('dataTableCreateRequest: flowId required');
+    }
+    if (typeof stem !== 'string' || stem.trim().length === 0) {
+        throw new Error('dataTableCreateRequest: stem required');
+    }
+    const trimmed = stem.trim();
+    return {
+        original_name: `${trimmed}.sqlite`,
+        scope: 'flow_asset',
+        flow_id: flowId.trim(),
+        tables: [
+            {
+                name: dataTableIdentFromStem(trimmed),
+                columns: [{ name: 'value', column_type: 'text', not_null: false }],
+            },
+        ],
+    };
 }
 
 /**
@@ -39,6 +82,9 @@ export function defaultResourceDisplayName(resourceType) {
     }
     if (resourceType === 'llm_context') {
         return 'LLM Context';
+    }
+    if (resourceType === 'data_table') {
+        return 'Data table';
     }
     return resourceType;
 }

@@ -26,6 +26,7 @@ import {
 } from '../../runtime/turn-activity.js';
 import { flowUIText } from '../../utils/text.js';
 import { openFlowUISessionFile } from '../../utils/open-session-file.js';
+import '../../../components/platform-data-table-host.js';
 
 export {
     conversationTasks,
@@ -352,6 +353,42 @@ export function renderMetric(host, component) {
 }
 
 export function renderDataTable(host, component) {
+    const fileId = resolveDataTableFileId(host, component);
+    if (fileId.length > 0) {
+        const tableNameRaw = resolveBound(host.surface, component, 'table_name', host.tasks)
+            ?? optionalComponentProperty(component, 'table_name');
+        let tableName = '';
+        if (tableNameRaw != null && tableNameRaw !== '') {
+            if (typeof tableNameRaw !== 'string') {
+                throw new Error(
+                    `flow-ui: DataTable ${component.component_id} table_name must be a string`,
+                );
+            }
+            tableName = tableNameRaw.trim();
+        }
+        const chrome = Object.freeze({
+            loading: flowUIText(host.locale, 'loading_interface'),
+            data_table_empty: flowUIText(host.locale, 'data_table_no_tables'),
+            data_table_group: flowUIText(host.locale, 'data_table_group'),
+            data_table_column_filter_placeholder: flowUIText(host.locale, 'data_table_column_filter_placeholder'),
+            data_table_next: flowUIText(host.locale, 'data_table_next'),
+            data_table_row_count: flowUIText(host.locale, 'data_table_row_count'),
+            data_table_export_csv: flowUIText(host.locale, 'data_table_export_csv'),
+            data_table_export_xlsx: flowUIText(host.locale, 'data_table_export_xlsx'),
+        });
+        return wrapFlowNode(
+            host,
+            component,
+            html`<div class="table-wrap table-live">
+                <platform-data-table-host
+                    file-id=${fileId}
+                    table-name=${tableName}
+                    interaction="view"
+                    .chrome=${chrome}
+                ></platform-data-table-host>
+            </div>`,
+        );
+    }
     const rows = resolveBound(host.surface, component, 'rows', host.tasks)
         ?? optionalComponentProperty(component, 'rows');
     const columns = optionalComponentProperty(component, 'columns');
@@ -363,6 +400,13 @@ export function renderDataTable(host, component) {
     }
     const rowList = Array.isArray(rows) ? rows : [];
     const columnList = Array.isArray(columns) ? columns : [];
+    if (rowList.length === 0 && columnList.length === 0) {
+        return wrapFlowNode(
+            host,
+            component,
+            html`<div class="table-wrap table-empty">${flowUIText(host.locale, 'data_table_empty')}</div>`,
+        );
+    }
     return wrapFlowNode(
         host,
         component,
@@ -371,6 +415,22 @@ export function renderDataTable(host, component) {
             <tbody>${rowList.map((row) => html`<tr>${columnList.map((column) => html`<td>${String(row[column.key] ?? '')}</td>`)}</tr>`)}</tbody>
         </table></div>`,
     );
+}
+
+function resolveDataTableFileId(host, component) {
+    const bound = resolveBound(host.surface, component, 'file_id', host.tasks);
+    const prop = optionalComponentProperty(component, 'file_id');
+    const raw = bound !== undefined && bound !== null ? bound : prop;
+    if (raw == null || raw === '') {
+        return '';
+    }
+    if (typeof raw === 'string') {
+        return raw.trim();
+    }
+    if (typeof raw === 'object' && typeof raw.file_id === 'string') {
+        return raw.file_id.trim();
+    }
+    throw new Error(`flow-ui: DataTable ${component.component_id} file_id must be a string or FileRef`);
 }
 
 export function registerPlatformFeed(register) {

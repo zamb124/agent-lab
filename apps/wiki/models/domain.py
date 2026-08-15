@@ -11,38 +11,31 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import Field
 
 from apps.wiki.base_model import WikiBaseModel
 from apps.wiki.content.prosemirror import ProseMirrorNode
 
+WikiAccessMemberRelation = Literal["viewer", "editor"]
+
 
 class WikiVisibility(StrEnum):
-    """Эффективная видимость страницы.
+    """RAG-слой видимости, производный от `company_visible`.
 
-    Не пользовательская настройка, а материализованный результат ACL: она
-    определяет, в какой RAG-namespace попадает контент. Пересчитывается только
-    в `WikiAccessService` и переносится в индекс `WikiRagIndexService`.
+    Определяет, в какой RAG-namespace попадает контент. Не PDP.
     """
 
     COMPANY = "company"
     RESTRICTED = "restricted"
 
 
-class WikiPagePermission(StrEnum):
-    """Уровень доступа участника к странице."""
-
-    READ = "read"
-    WRITE = "write"
-    ADMIN = "admin"
-
-
 class WikiLinkPermission(StrEnum):
-    """Что позволяет публичная ссылка."""
+    """Что позволяет публичная ссылка (token AuthN, не FGA)."""
 
-    VIEW = "view"
-    COMMENT = "comment"
+    VIEWER = "viewer"
+    EDITOR = "editor"
 
 
 class WikiLinkTargetKind(StrEnum):
@@ -57,15 +50,11 @@ class WikiLinkTargetKind(StrEnum):
 
 
 class WikiPageMember(WikiBaseModel):
-    """Явный участник страницы.
-
-    Наличие хотя бы одной записи на странице или её предке делает всё
-    поддерево `restricted`.
-    """
+    """Участник страницы (FGA viewer|editor)."""
 
     wiki_page_id: str = Field(..., min_length=1)
     user_id: str = Field(..., min_length=1)
-    permission: WikiPagePermission = WikiPagePermission.READ
+    relation: WikiAccessMemberRelation = "viewer"
     created_at: datetime
 
 
@@ -89,6 +78,7 @@ class WikiPage(WikiBaseModel):
     `WikiService` через сериализатор, снаружи он доступен на чтение.
     `root_page_id` и `depth` денормализованы ради дешёвых запросов по разделу
     и фильтров RAG; пересчитываются при перемещении.
+    `company_visible` — материализация FGA `company_viewer` (`company#member`).
     """
 
     wiki_page_id: str = Field(..., min_length=1)
@@ -103,13 +93,13 @@ class WikiPage(WikiBaseModel):
     cover_url: str = ""
     content: ProseMirrorNode
     text_markdown: str = ""
-    visibility: WikiVisibility = WikiVisibility.COMPANY
+    company_visible: bool = True
     is_published: bool = True
     published_at: datetime | None = None
     is_template: bool = False
     is_full_width: bool = False
     link_enabled: bool = False
-    link_permission: WikiLinkPermission = WikiLinkPermission.VIEW
+    link_permission: WikiLinkPermission = WikiLinkPermission.VIEWER
     created_by_user_id: str = Field(..., min_length=1)
     last_edited_by_user_id: str = Field(..., min_length=1)
     revision_count: int = Field(default=0, ge=0)
@@ -117,13 +107,15 @@ class WikiPage(WikiBaseModel):
     updated_at: datetime
     deleted_at: datetime | None = None
 
+    @property
+    def rag_visibility(self) -> WikiVisibility:
+        if self.company_visible:
+            return WikiVisibility.COMPANY
+        return WikiVisibility.RESTRICTED
+
 
 class WikiPageSummary(WikiBaseModel):
-    """Узел дерева и строка списка — без содержимого страницы.
-
-    Дерево namespace может быть большим, поэтому контент в него не попадает
-    ни при каких обстоятельствах.
-    """
+    """Узел дерева и строка списка — без содержимого страницы."""
 
     wiki_page_id: str = Field(..., min_length=1)
     namespace: str = Field(..., min_length=1)
@@ -133,12 +125,18 @@ class WikiPageSummary(WikiBaseModel):
     position: int = 0
     title: str = ""
     icon: str = ""
-    visibility: WikiVisibility = WikiVisibility.COMPANY
+    company_visible: bool = True
     is_published: bool = True
     is_template: bool = False
     has_children: bool = False
     updated_at: datetime
     last_edited_by_user_id: str = Field(..., min_length=1)
+
+    @property
+    def rag_visibility(self) -> WikiVisibility:
+        if self.company_visible:
+            return WikiVisibility.COMPANY
+        return WikiVisibility.RESTRICTED
 
 
 class WikiRevision(WikiBaseModel):
@@ -166,12 +164,7 @@ class WikiRevisionSummary(WikiBaseModel):
 
 
 class WikiComment(WikiBaseModel):
-    """Комментарий к странице.
-
-    `anchor_text` хранит процитированный фрагмент: позиции ProseMirror
-    смещаются при правках, поэтому текст — единственный надёжный якорь до
-    появления CRDT-относительных позиций.
-    """
+    """Комментарий к странице."""
 
     wiki_comment_id: str = Field(..., min_length=1)
     wiki_page_id: str = Field(..., min_length=1)
@@ -191,11 +184,11 @@ class WikiPageAccess(WikiBaseModel):
     """Полная картина доступа к странице для UI настроек."""
 
     wiki_page_id: str = Field(..., min_length=1)
-    visibility: WikiVisibility
+    company_visible: bool
     inherited_from_page_id: str | None = None
     members: list[WikiPageMember] = Field(default_factory=list)
     link_enabled: bool = False
-    link_permission: WikiLinkPermission = WikiLinkPermission.VIEW
+    link_permission: WikiLinkPermission = WikiLinkPermission.VIEWER
     link_url: str | None = None
 
 
@@ -225,6 +218,7 @@ class WikiBacklink(WikiBaseModel):
 
 
 __all__ = [
+    "WikiAccessMemberRelation",
     "WikiBacklink",
     "WikiComment",
     "WikiLinkPermission",
@@ -233,7 +227,6 @@ __all__ = [
     "WikiPageAccess",
     "WikiPageLink",
     "WikiPageMember",
-    "WikiPagePermission",
     "WikiPageSummary",
     "WikiRevision",
     "WikiRevisionSummary",

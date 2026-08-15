@@ -67,7 +67,7 @@ export class OfficeCatalogContextMenu extends PlatformElement {
             { id: 'edit', label: this.t('catalog_context_menu.edit'), icon: 'edit' },
             { id: 'access', label: this.t('catalog_context_menu.access'), icon: 'link' },
         ];
-        if (catalog.is_public !== true) {
+        if (catalog.company_visible !== true) {
             items.push({ id: 'members', label: this.t('catalog_context_menu.members'), icon: 'users' });
         }
         items.push(

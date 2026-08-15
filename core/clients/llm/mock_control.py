@@ -19,12 +19,17 @@ from typing import Final, final
 
 from pydantic import Field, field_validator
 
+from core.authz.ids import PLATFORM_ADMIN_GROUP
+from core.authz.models import AuthzObject, AuthzSubject
+from core.authz.service import AuthzService
+from core.authz.types import AuthzRelation
 from core.clients.llm.mock import (
     MockLLM,
     MockLLMQueuedResponse,
     pop_mock_array_response,
 )
 from core.clients.redis_client import RedisClient
+from core.context import require_active_company
 from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.types import JsonObject, JsonValue
@@ -108,17 +113,35 @@ def parse_mock_control_metadata(metadata: JsonObject) -> MockControlConfig | Non
     return MockControlConfig.model_validate(raw)
 
 
-def assert_mock_permission(user_groups: list[str], permission_groups: list[str]) -> None:
-    """Проверяет право на mock. Без явных permission_groups mock запрещён."""
+async def assert_mock_permission(
+    authz: AuthzService,
+    *,
+    user_id: str,
+    permission_groups: list[str],
+) -> None:
+    """Проверяет право на mock через OpenFGA group membership. Без permission_groups mock запрещён."""
     if not permission_groups:
         raise MockControlPermissionError(
             "mock.permission_groups обязателен: mock доступен только привилегированным группам"
         )
-    if not set(user_groups) & set(permission_groups):
-        raise MockControlPermissionError(
-            "Пользователь не входит ни в одну из mock.permission_groups: "
-            + ", ".join(sorted(permission_groups))
+    subject = AuthzSubject.user(user_id)
+    for group_name in permission_groups:
+        if group_name == PLATFORM_ADMIN_GROUP:
+            group_obj = AuthzObject.group(PLATFORM_ADMIN_GROUP)
+        else:
+            company = require_active_company()
+            group_obj = AuthzObject.group(group_name, company_id=company.company_id)
+        allowed = await authz.check(
+            subject,
+            AuthzRelation.MEMBER,
+            group_obj,
         )
+        if allowed:
+            return
+    raise MockControlPermissionError(
+        "Пользователь не входит ни в одну из mock.permission_groups: "
+        + ", ".join(sorted(permission_groups))
+    )
 
 
 def _manifest_key(session_id: str) -> str:
@@ -134,7 +157,8 @@ async def setup_mock_control(
     session_id: str,
     config: MockControlConfig,
     *,
-    user_groups: list[str],
+    authz: AuthzService,
+    user_id: str,
 ) -> None:
     """
     Записывает манифест и очереди ответов в Redis для текущего session_id.
@@ -146,7 +170,11 @@ async def setup_mock_control(
         _ = await redis_client.delete(_manifest_key(session_id))
         return
 
-    assert_mock_permission(user_groups, config.permission_groups)
+    await assert_mock_permission(
+        authz,
+        user_id=user_id,
+        permission_groups=config.permission_groups,
+    )
 
     for kind, entity_map in (
         ("tool", config.tools),

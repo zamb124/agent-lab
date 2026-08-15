@@ -128,6 +128,13 @@ _RESOURCE_TYPES: list[JsonObject] = [
         "description": "База знаний (Namespace) для context layer и тулов rag_*",
         "color": "#14b8a6",
     },
+    {
+        "type": "data_table",
+        "name": "Data table",
+        "icon": "table",
+        "description": "SQLite-таблица в Documents (file_id), тулы tables_*",
+        "color": "#f59e0b",
+    },
 ]
 
 

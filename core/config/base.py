@@ -28,6 +28,7 @@ from core.config.models import (
     MCPCatalogConfig,
     MediaTranscriberConfig,
     NanoBananaConfig,
+    OpenFGAConfig,
     PaymentProvidersConfig,
     PlatformBrandConfig,
     ProviderLitserveConfig,
@@ -123,6 +124,7 @@ class BaseSettings(PydanticBaseSettings):
     billing: BillingConfig = Field(default_factory=BillingConfig)
     tasks: TasksConfig = Field(default_factory=TasksConfig)
     events: EventsConfig = Field(default_factory=EventsConfig)
+    openfga: OpenFGAConfig = Field(default_factory=OpenFGAConfig)
     calendar_sync: CalendarSyncConfig = Field(default_factory=CalendarSyncConfig)
     mail_sync: MailSyncConfig = Field(default_factory=MailSyncConfig)
     mail: MailConfig = Field(default_factory=MailConfig)
@@ -311,6 +313,10 @@ class _SettingsProxy:
     @property
     def events(self) -> EventsConfig:
         return get_settings().events
+
+    @property
+    def openfga(self) -> OpenFGAConfig:
+        return get_settings().openfga
 
     @property
     def calendar_sync(self) -> CalendarSyncConfig:

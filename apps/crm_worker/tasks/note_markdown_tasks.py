@@ -8,7 +8,7 @@ from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
 from apps.crm.container import CRMContainer, get_crm_container
 from apps.crm.services.crm_note_broadcast import broadcast_crm_note_event
 from apps.crm.services.crm_task_broadcast import publish_crm_task_snapshot_for_user
-from apps.crm_worker.tasks.daily_summary_tasks import set_crm_context
+from apps.crm_worker.tasks.crm_context import set_crm_context
 from apps.crm_worker.tasks.task_names import CRM_FORMAT_NOTE_DESCRIPTION_MARKDOWN
 from core.config import get_settings
 from core.logging import get_logger
@@ -254,8 +254,7 @@ async def format_note_description_markdown_task(
         note_date_iso=note_date_iso,
         action="updated",
         note=merged,
-        company_repository=container.company_repository,
-        access_grant_repository=container.access_grant_repository,
+                authz=container.authz_service,
         skip_notification_center=False,
         markdown_format={
             "phase": "complete",

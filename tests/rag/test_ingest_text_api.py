@@ -73,10 +73,10 @@ async def test_ingest_text_then_search(rag_client, unique_namespace_name, auth_h
 
 
 @pytest.mark.asyncio
-async def test_ingest_text_unknown_namespace_returns_404(rag_client, auth_headers_system):
+async def test_ingest_text_unknown_namespace_returns_403(rag_client, auth_headers_system):
     response = await rag_client.post(
         "/rag/api/v1/namespaces/absolutely_missing_namespace_xyz_ingest/ingest-text",
         json={"text": "x"},
         headers=auth_headers_system,
     )
-    assert response.status_code == 404
+    assert response.status_code == 403

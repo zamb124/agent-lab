@@ -7,6 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query
 
 from apps.secrets.dependencies import ContainerDep
+from core.authz.models import AuthzObject
 from core.context import require_active_company, require_context
 from core.pagination import OffsetPage
 from core.secrets.models import (
@@ -27,13 +28,25 @@ def _current_user_id() -> str | None:
     return require_context().user.user_id
 
 
+async def _require_company_view(container: ContainerDep) -> str:
+    company_id = _current_company_id()
+    await container.authz_service.require_can_view(AuthzObject.company(company_id))
+    return company_id
+
+
+async def _require_company_admin(container: ContainerDep) -> str:
+    company_id = _current_company_id()
+    await container.authz_service.require_company_admin(company_id=company_id)
+    return company_id
+
+
 @router.get("", response_model=OffsetPage[PlatformVariable])
 async def list_variables(
     container: ContainerDep,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[PlatformVariable]:
-    company_id = _current_company_id()
+    company_id = await _require_company_view(container)
     service = container.secrets_service
     items = await service.list(company_id, limit=limit, offset=offset)
     total = await service.count(company_id)
@@ -44,8 +57,9 @@ async def list_variables(
 async def upsert_variable(
     container: ContainerDep, body: VariableWriteRequest
 ) -> PlatformVariable:
+    company_id = await _require_company_admin(container)
     return await container.secrets_service.upsert(
-        company_id=_current_company_id(),
+        company_id=company_id,
         request=body,
         created_by=_current_user_id(),
     )
@@ -55,8 +69,9 @@ async def upsert_variable(
 async def resolve_variables(
     container: ContainerDep, body: VariableResolveRequest
 ) -> VariableResolveResponse:
+    company_id = await _require_company_view(container)
     context = ResolutionContext(
-        company_id=_current_company_id(),
+        company_id=company_id,
         user_id=body.user_id,
         namespace=body.namespace,
         channel=body.channel,
@@ -72,7 +87,7 @@ async def list_variable_versions(
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[PlatformVariable]:
-    company_id = _current_company_id()
+    company_id = await _require_company_view(container)
     service = container.secrets_service
     current = await service.get(company_id, variable_key)
     if current is None:
@@ -84,7 +99,8 @@ async def list_variable_versions(
 
 @router.get("/{variable_key}", response_model=PlatformVariable)
 async def get_variable(container: ContainerDep, variable_key: str) -> PlatformVariable:
-    variable = await container.secrets_service.get(_current_company_id(), variable_key)
+    company_id = await _require_company_view(container)
+    variable = await container.secrets_service.get(company_id, variable_key)
     if variable is None:
         raise HTTPException(status_code=404, detail="Variable not found")
     return variable
@@ -92,7 +108,8 @@ async def get_variable(container: ContainerDep, variable_key: str) -> PlatformVa
 
 @router.delete("/{variable_key}")
 async def delete_variable(container: ContainerDep, variable_key: str) -> dict[str, str]:
-    deleted = await container.secrets_service.delete(_current_company_id(), variable_key)
+    company_id = await _require_company_admin(container)
+    deleted = await container.secrets_service.delete(company_id, variable_key)
     if not deleted:
         raise HTTPException(status_code=404, detail="Variable not found")
     return {"status": "deleted", "variable_key": variable_key}

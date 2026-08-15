@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from starlette.responses import JSONResponse, Response
 
 from core.app_state import require_platform_app_state
+from core.authz.models import AuthzObject
 from core.context import get_context
 from core.identity.flow_employee import (
     flow_employee_curator_user_ids,
@@ -25,8 +26,6 @@ from core.utils.auth_session_rebind import attach_session_auth_cookie
 from core.utils.tokens import TokenService, get_token_service
 
 router = APIRouter(tags=["team"])
-
-_COMPANY_ADMIN_ROLES: frozenset[str] = frozenset({"admin", "owner"})
 
 
 class TeamMemberResponse(BaseModel):
@@ -49,16 +48,20 @@ async def get_team_members(request: Request) -> ListResponse[TeamMemberResponse]
 
     company = ctx.active_company
     app_state = require_platform_app_state(request)
+    await app_state.container.authz_service.require_can_view(
+        AuthzObject.company(company.company_id)
+    )
     company_repo = app_state.container.company_repository
     user_repo = app_state.container.user_repository
     stored_company = await company_repo.get(company.company_id)
     if stored_company is None:
         raise HTTPException(status_code=404, detail=f"Company {company.company_id} not found")
 
+    users_by_id = await user_repo.get_many(list(stored_company.members.keys()))
     members: list[TeamMemberResponse] = []
     for user_id, roles in stored_company.members.items():
-        member_user = await user_repo.get(user_id)
-        if not member_user:
+        member_user = users_by_id.get(user_id)
+        if member_user is None:
             continue
         member_email = member_user.emails[0] if member_user.emails else None
         member_is_employee = is_flow_employee(member_user)
@@ -144,9 +147,11 @@ async def act_as_employee(request: Request, user_id: str) -> Response:
     if stored_company is None:
         raise HTTPException(status_code=404, detail=f"Company {company_id} not found")
 
-    caller_roles = stored_company.members.get(caller_id, [])
     curators = flow_employee_curator_user_ids(target)
-    is_admin = bool(_COMPANY_ADMIN_ROLES.intersection(caller_roles))
+    is_admin = await app_state.container.authz_service.check_company_admin(
+        company_id=company_id,
+        user_id=caller_id,
+    )
     if caller_id not in curators and not is_admin:
         raise HTTPException(status_code=403, detail="Только куратор или админ компании может войти как сотрудник")
 

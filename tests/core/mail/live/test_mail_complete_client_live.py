@@ -1,7 +1,9 @@
 """Live complete mail client: sync / triage / drafts / search / role / sync-now."""
 
+
 from __future__ import annotations
 
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import secrets
 from contextlib import suppress
 

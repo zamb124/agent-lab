@@ -32,12 +32,12 @@ async def test_patch_binding_access_enables_public_link(
     patch = await office_client.patch(
         f"/documents/api/v1/documents/{file_id}/access",
         headers=auth_headers_system,
-        json={"link_enabled": True, "link_permission": "view"},
+        json={"link_enabled": True, "link_permission": "viewer"},
     )
     assert patch.status_code == 200, patch.text
     body = patch.json()
     assert body["link_enabled"] is True
-    assert body["link_permission"] == "view"
+    assert body["link_permission"] == "viewer"
     assert isinstance(body["public_url"], str)
     assert "/documents/p/" in body["public_url"]
 

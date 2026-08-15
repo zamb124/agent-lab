@@ -371,7 +371,7 @@ def _scan_routers_in_dir(root: Path, mount_prefix: str, routes: set[tuple[str, s
                  api_v1_router.include_router(code_router, prefix="/code")
              apps/flows/src/api/v1/code.py:
                  router = APIRouter()
-                 @router.get("/completions") -> /flows/api/v1/code/completions
+                 @router.post("/lsp/session") -> /flows/api/v1/code/lsp/session
          Здесь `code.py` получает external_prefix `/code`.
 
       2. После этого пройти каждый файл через `_scan_router_file` с

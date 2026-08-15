@@ -5,6 +5,8 @@ from __future__ import annotations
 import uuid
 
 from core.auth.utils import hash_password
+from core.authz.company_sync import sync_company_member_roles
+from core.authz.service import AuthzService
 from core.clients.service_client import ServiceClient, ServiceClientError
 from core.config import get_settings
 from core.context import clear_context, set_context
@@ -27,6 +29,7 @@ async def ensure_demo_company_and_user(
     company_repository: CompanyRepository,
     user_repository: UserRepository,
     subdomain_repository: SubdomainRepository,
+    authz: AuthzService,
 ) -> None:
     """
     Создаёт или обновляет компанию и пользователя из settings.auth.demo.
@@ -114,6 +117,12 @@ async def ensure_demo_company_and_user(
     _ = await company_repository.set(company)
     _ = await subdomain_repository.set_mapping(subdomain, company_id)
     _ = await user_repository.set(user)
+    await sync_company_member_roles(
+        authz,
+        company_id=company_id,
+        user_id=user.user_id,
+        roles=merged_member,
+    )
 
     roles = user.companies.get(company_id, [])
     auth_token = get_token_service().create_token(

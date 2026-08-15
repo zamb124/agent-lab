@@ -58,6 +58,7 @@ export class OfficeDocumentEditorPage extends PlatformPage {
             }
             .stage-bar {
                 display: flex;
+                flex-wrap: wrap;
                 align-items: center;
                 gap: var(--space-3);
                 padding: 0.5rem 0.875rem;
@@ -117,12 +118,15 @@ export class OfficeDocumentEditorPage extends PlatformPage {
             }
             .stage-type-actions {
                 display: inline-flex;
+                flex-wrap: wrap;
                 align-items: center;
                 gap: 4px;
                 margin-right: 4px;
                 padding-right: 10px;
                 border-right: 1px solid var(--documents-stage-bar-border);
-                flex-shrink: 0;
+                flex: 1 1 auto;
+                min-width: 0;
+                max-width: 100%;
             }
             .stage-view-btn {
                 display: inline-flex;
@@ -231,6 +235,8 @@ export class OfficeDocumentEditorPage extends PlatformPage {
         this._viewMode = '';
         this._viewModeFileId = '';
         this._editor = this.useOp('office/document_editor_config');
+        this._routerSearchSel = this.select((s) => s.router.search);
+        this._accessModalOpened = false;
     }
 
     disconnectedCallback() {
@@ -244,6 +250,7 @@ export class OfficeDocumentEditorPage extends PlatformPage {
     updated(changed) {
         super.updated && super.updated(changed);
         if (changed.has('fileId')) {
+            this._accessModalOpened = false;
             this._editorError = '';
             this._dirty = false;
             this._viewMode = '';
@@ -256,6 +263,29 @@ export class OfficeDocumentEditorPage extends PlatformPage {
             this._editor.run({ fileId: id, namespace: this._namespaceFromLocation() });
         }
         this._syncViewModeFromOpenConfig();
+        this._maybeOpenAccessModal();
+    }
+
+    _maybeOpenAccessModal() {
+        if (this._accessModalOpened || this.embedded) {
+            return;
+        }
+        const fileId = (this.fileId || '').trim();
+        if (!_isPlausibleFileId(fileId)) {
+            return;
+        }
+        const search = this._routerSearchSel.value;
+        const raw = typeof search === 'string' ? search : '';
+        const query = raw.startsWith('?') ? raw.slice(1) : raw;
+        if (new URLSearchParams(query).get('access') !== '1') {
+            return;
+        }
+        this._accessModalOpened = true;
+        this.openModal('office.access', {
+            resourceKind: 'binding',
+            resourceId: fileId,
+            resourceTitle: this._docTitle(),
+        });
     }
 
     _textPresentation(openConfig) {

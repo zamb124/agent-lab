@@ -234,6 +234,10 @@ Stop action в Flow UI при active Task вызывает `stopStreamTtsPlaybac
 
 Отладка: `?voice_debug=1` в URL, `sessionStorage.voice_debug=1`, `voice_debug=true` (логи `[voice-media]`, событие `diagnostic` на медиасессии).
 
+## Authorization
+
+Sole PDP — `AuthzService`. Session/gateway ACL: `company#can_view` для чтения overrides; mutate providers — `require_company_admin`. Нет roster JWT gate. Канон → **`authorization.mdc`**.
+
 ## REST/UI per-company override
 
 REST: `apps/frontend/api/company_voice_providers.py`:
@@ -241,9 +245,9 @@ REST: `apps/frontend/api/company_voice_providers.py`:
 | Метод | Путь | Доступ |
 |---|---|---|
 | `GET` | `/frontend/api/voice-providers/catalog` | любой авторизованный |
-| `GET` | `/frontend/api/companies/{company_id}/voice-providers` | member компании |
-| `PUT` | `/frontend/api/companies/{company_id}/voice-providers/{kind}` | owner/admin; `kind` только `stt` или `tts` |
-| `DELETE` | `/frontend/api/companies/{company_id}/voice-providers/{kind}` | owner/admin; то же |
+| `GET` | `/frontend/api/companies/{company_id}/voice-providers` | FGA `company#can_view` |
+| `PUT` | `/frontend/api/companies/{company_id}/voice-providers/{kind}` | FGA `require_company_admin`; `kind` только `stt` или `tts` |
+| `DELETE` | `/frontend/api/companies/{company_id}/voice-providers/{kind}` | FGA `require_company_admin`; то же |
 
 После `PUT`/`DELETE` сервер **обязан** вызвать `invalidate_company_overrides_cache(company_id)` — иначе in-process кэш других подов держит старое до TTL.
 

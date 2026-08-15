@@ -1,15 +1,15 @@
 """Доменные модели wiki."""
 
 from apps.wiki.models.domain import (
+    WikiAccessMemberRelation,
     WikiBacklink,
     WikiComment,
     WikiLinkPermission,
     WikiLinkTargetKind,
-        WikiPage,
+    WikiPage,
     WikiPageAccess,
     WikiPageLink,
     WikiPageMember,
-    WikiPagePermission,
     WikiPageSummary,
     WikiRevision,
     WikiRevisionSummary,
@@ -18,6 +18,7 @@ from apps.wiki.models.domain import (
 )
 
 __all__ = [
+    "WikiAccessMemberRelation",
     "WikiBacklink",
     "WikiComment",
     "WikiLinkPermission",
@@ -26,7 +27,6 @@ __all__ = [
     "WikiPageAccess",
     "WikiPageLink",
     "WikiPageMember",
-    "WikiPagePermission",
     "WikiPageSummary",
     "WikiRevision",
     "WikiRevisionSummary",

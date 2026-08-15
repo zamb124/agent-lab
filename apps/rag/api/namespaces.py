@@ -8,6 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query
 
 from apps.rag.config import get_rag_settings
+from core.authz.models import AuthzObject
 from core.billing.exceptions import BillingBalanceBlockedError
 from core.context import require_active_company
 from core.logging import get_logger
@@ -37,6 +38,18 @@ class NamespaceDeleteResponse(StrictBaseModel):
     name: str
 
 
+async def _require_company_view(container: ContainerDep) -> str:
+    company_id = require_active_company().company_id
+    await container.authz_service.require_can_view(AuthzObject.company(company_id))
+    return company_id
+
+
+async def _require_company_admin(container: ContainerDep) -> str:
+    company_id = require_active_company().company_id
+    await container.authz_service.require_company_admin(company_id=company_id)
+    return company_id
+
+
 @router.get("/namespaces", response_model=OffsetPage[Namespace])
 async def list_namespaces(
     container: ContainerDep,
@@ -44,7 +57,7 @@ async def list_namespaces(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[Namespace]:
     try:
-        company_id = require_active_company().company_id
+        company_id = await _require_company_view(container)
 
         namespace_service = container.namespace_service
         namespaces, total = await asyncio.gather(
@@ -81,12 +94,11 @@ async def create_namespace(
         Созданный namespace
     """
     try:
-        company_id = require_active_company().company_id
+        company_id = await _require_company_admin(container)
 
         settings = get_rag_settings()
         rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
 
-        # Провайдер сам добавит company_id через контекст
         _ = await rag_provider.create_namespace(
             name=request.name,
             description=request.description
@@ -126,7 +138,7 @@ async def delete_namespace(
         Результат операции
     """
     try:
-        company_id = require_active_company().company_id
+        company_id = await _require_company_admin(container)
 
         settings = get_rag_settings()
         rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)

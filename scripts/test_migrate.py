@@ -7,7 +7,7 @@ pytest миграции не применяет: фикстура `setup_databas
 выполнить `make test-up`.
 
 Логика:
-  - CREATE DATABASE для баз, которых нет в init.sql (tracing/worktracker/secrets);
+  - CREATE DATABASE для баз, которых нет в init.sql (tracing/worktracker/secrets/wiki/openfga);
   - если shared-БД пуста (нет alembic_version) — полный прогон всех деревьев;
   - иначе — инкрементальный upgrade только отставших сервисов;
   - сид system-компании: db_test_reset делает TRUNCATE, а crm при старте требует
@@ -39,6 +39,7 @@ _EXTRA_DATABASES = (
     "platform_worktracker",
     "platform_secrets",
     "platform_wiki",
+    "openfga",
 )
 
 

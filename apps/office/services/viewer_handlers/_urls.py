@@ -31,7 +31,7 @@ def office_signed_download_url(
 
 def download_url_for_context(ctx: ViewerOpenContext) -> str | None:
     return office_signed_download_url(
-        base_url=ctx.callback_public_base_url,
+        base_url=ctx.browser_public_base_url,
         file_id=ctx.file_record.file_id,
         company_id=ctx.company_id,
         viewer_scope=ctx.viewer_scope,

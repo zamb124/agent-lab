@@ -263,10 +263,6 @@ async def test_claim_queue_item(
     unique_id: str,
 ) -> None:
     queue_id = worktracker_queue.work_queue_id
-    await worktracker_client.post(
-        f"{API_PREFIX}/work-queues/{queue_id}/members",
-        json={"member": {"actor_kind": "user", "user_id": system_user_id}, "role": "member"},
-    )
     create_resp = await worktracker_client.post(
         WORK_ITEMS,
         json={

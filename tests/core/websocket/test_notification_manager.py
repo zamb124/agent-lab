@@ -184,7 +184,7 @@ async def test_get_stats():
     await manager.connect(ws2, "user_1")
     await manager.connect(ws3, "user_2")
 
-    stats = manager.get_stats()
+    stats = await manager.get_stats()
 
     assert stats["active_users"] == 2
     assert stats["total_connections"] == 3
@@ -277,6 +277,6 @@ async def test_concurrent_connections():
     assert len(manager._connections["user_2"]) == 3
     assert len(manager._connections["user_3"]) == 7
 
-    stats = manager.get_stats()
+    stats = await manager.get_stats()
     assert stats["active_users"] == 3
     assert stats["total_connections"] == 15

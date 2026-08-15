@@ -24,6 +24,7 @@ class FileCategory(StrEnum):
     EMAIL = "email"
     EBOOK = "ebook"
     VIZ = "viz"
+    DATA_TABLE = "data_table"
     SIGNATURE = "signature"
 
 
@@ -181,6 +182,17 @@ FILE_TYPE_REGISTRY: tuple[FileTypeEntry, ...] = (
         ".viz",
         ("application/vnd.platform.viz+json",),
         FileCategory.VIZ,
+    ),
+    # --- DATA_TABLE (platform SQLite table file) ---
+    FileTypeEntry(
+        ".sqlite",
+        ("application/vnd.sqlite3", "application/x-sqlite3"),
+        FileCategory.DATA_TABLE,
+    ),
+    FileTypeEntry(
+        ".db",
+        ("application/vnd.sqlite3", "application/x-sqlite3"),
+        FileCategory.DATA_TABLE,
     ),
     # --- SIGNATURE (detached CryptoPro / PKCS#7 sidecars; не для RAG) ---
     FileTypeEntry(

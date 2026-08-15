@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from typing import cast
 
 import pytest
@@ -35,10 +36,31 @@ from apps.crm.system_templates import (
     NamespaceTemplateSeed,
     NamespaceTemplateTypeSpec,
 )
+from core.context import clear_context, set_context
+from core.models.context_models import Context
+from core.models.identity_models import User
 from core.types import JsonObject
 from tests.crm.e2e._json_helpers import json_object, object_list, object_str
+from tests.fixtures.ai_provider_defaults import make_test_company
 
 _PROBE_SEED_IDS = ("sales", "marketing", "support", "hr", "education")
+
+
+@contextmanager
+def _system_company_context():
+    """Контекст для in-process CRM service после ASGI (middleware clear_context)."""
+    set_context(
+        Context(
+            user=User(user_id="test_user", name="Test"),
+            active_company=make_test_company(company_id="system", name="System"),
+            session_id="crm-template-prompt",
+            channel="test",
+        )
+    )
+    try:
+        yield
+    finally:
+        clear_context()
 
 
 def _http_json(response: Response) -> dict[str, object]:
@@ -261,9 +283,10 @@ class TestUserEditsPropagateToAnalyzePipeline:
         )
         assert update_resp.status_code == 200, update_resp.text
 
-        loaded = await crm_container.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
-            ns_name
-        )
+        with _system_company_context():
+            loaded = await crm_container.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
+                ns_name
+            )
         loaded_by_id = {entity_type.type_id: entity_type for entity_type in loaded}
         assert type_id in loaded_by_id, sorted(loaded_by_id)
         loaded_prompt = loaded_by_id[type_id].prompt
@@ -297,16 +320,17 @@ class TestUserEditsPropagateToAnalyzePipeline:
         )
         assert update_resp.status_code == 200, update_resp.text
 
-        entity_types = await crm_container.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
-            ns_name
-        )
-        relationship_types = (
-            await crm_container.relationship_type_repository.get_with_prompts()
-        )
+        with _system_company_context():
+            entity_types = await crm_container.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
+                ns_name
+            )
+            relationship_types = (
+                await crm_container.relationship_type_repository.get_with_prompts()
+            )
 
-        composite = crm_container.entity_service._build_composite_prompt(  # pyright: ignore[reportPrivateUsage]
-            entity_types, relationship_types, None, None,
-        )
+            composite = crm_container.entity_service._build_composite_prompt(  # pyright: ignore[reportPrivateUsage]
+                entity_types, relationship_types, None, None,
+            )
         assert marker in composite, "Перетёртый prompt должен попасть в analyze prompt"
         assert new_prompt.split("\n", 1)[1] in composite, (
             "Тело пользовательского prompt также должно быть в analyze prompt"
@@ -346,15 +370,16 @@ class TestUserEditsPropagateToAnalyzePipeline:
         )
         assert update_resp.status_code == 200, update_resp.text
 
-        entity_types = await crm_container.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
-            ns_name
-        )
-        relationship_types = (
-            await crm_container.relationship_type_repository.get_with_prompts()
-        )
-        composite = crm_container.entity_service._build_composite_prompt(  # pyright: ignore[reportPrivateUsage]
-            entity_types, relationship_types, None, None,
-        )
+        with _system_company_context():
+            entity_types = await crm_container.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
+                ns_name
+            )
+            relationship_types = (
+                await crm_container.relationship_type_repository.get_with_prompts()
+            )
+            composite = crm_container.entity_service._build_composite_prompt(  # pyright: ignore[reportPrivateUsage]
+                entity_types, relationship_types, None, None,
+            )
 
         assert unique_label in composite, "label поля должен попадать в analyze prompt"
         assert unique_description in composite, (
@@ -376,26 +401,27 @@ class TestUserEditsPropagateToAnalyzePipeline:
             crm_client, auth_headers_system, "sales", unique_id
         )
 
-        entity_types = await crm_container.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
-            ns_name
-        )
-        relationship_types = (
-            await crm_container.relationship_type_repository.get_with_prompts()
-        )
+        with _system_company_context():
+            entity_types = await crm_container.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
+                ns_name
+            )
+            relationship_types = (
+                await crm_container.relationship_type_repository.get_with_prompts()
+            )
 
-        sales_seed = _seed_by_id("sales")
-        seed_lead = _type_spec_by_id(sales_seed, "lead")
-        seed_deal = _type_spec_by_id(sales_seed, "deal")
-        lead_prompt = seed_lead.get("prompt")
-        deal_prompt = seed_deal.get("prompt")
-        assert lead_prompt and deal_prompt
+            sales_seed = _seed_by_id("sales")
+            seed_lead = _type_spec_by_id(sales_seed, "lead")
+            seed_deal = _type_spec_by_id(sales_seed, "deal")
+            lead_prompt = seed_lead.get("prompt")
+            deal_prompt = seed_deal.get("prompt")
+            assert lead_prompt and deal_prompt
 
-        only_lead = crm_container.entity_service._build_composite_prompt(  # pyright: ignore[reportPrivateUsage]
-            entity_types,
-            relationship_types,
-            extract_entity_types=["lead"],
-            extract_relationship_types=None,
-        )
+            only_lead = crm_container.entity_service._build_composite_prompt(  # pyright: ignore[reportPrivateUsage]
+                entity_types,
+                relationship_types,
+                extract_entity_types=["lead"],
+                extract_relationship_types=None,
+            )
         assert lead_prompt in only_lead, "выбранный тип должен попасть в prompt"
         assert deal_prompt not in only_lead, (
             "невыбранный тип не должен попадать в prompt при extract_entity_types"
@@ -429,31 +455,32 @@ class TestUserEditsPropagateToAnalyzePipeline:
         )
 
         repo = crm_container.relationship_type_repository
-        all_types = await repo.list_by_company(include_system=True, limit=1000)
-        mentions_row = next(
-            (relationship_type for relationship_type in all_types if relationship_type.type_id == "mentions"),
-            None,
-        )
-        assert mentions_row is not None, "у компании system должен быть тип mentions"
-        original_prompt = mentions_row.prompt
-        try:
-            mentions_row.prompt = new_prompt
-            _ = await repo.update(mentions_row)
+        with _system_company_context():
+            all_types = await repo.list_by_company(include_system=True, limit=1000)
+            mentions_row = next(
+                (relationship_type for relationship_type in all_types if relationship_type.type_id == "mentions"),
+                None,
+            )
+            assert mentions_row is not None, "у компании system должен быть тип mentions"
+            original_prompt = mentions_row.prompt
+            try:
+                mentions_row.prompt = new_prompt
+                _ = await repo.update(mentions_row)
 
-            entity_types = await crm_container.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
-                ns_name
-            )
-            relationship_types = (
-                await crm_container.relationship_type_repository.get_with_prompts()
-            )
-            composite = crm_container.entity_service._build_composite_prompt(  # pyright: ignore[reportPrivateUsage]
-                entity_types, relationship_types, None, None,
-            )
+                entity_types = await crm_container.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
+                    ns_name
+                )
+                relationship_types = (
+                    await crm_container.relationship_type_repository.get_with_prompts()
+                )
+                composite = crm_container.entity_service._build_composite_prompt(  # pyright: ignore[reportPrivateUsage]
+                    entity_types, relationship_types, None, None,
+                )
 
-            assert marker in composite, "правка relationship prompt должна попадать в analyze"
-        finally:
-            mentions_row.prompt = original_prompt
-            _ = await repo.update(mentions_row)
+                assert marker in composite, "правка relationship prompt должна попадать в analyze"
+            finally:
+                mentions_row.prompt = original_prompt
+                _ = await repo.update(mentions_row)
 
 
 @pytest.mark.timeout(60)

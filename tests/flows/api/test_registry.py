@@ -320,10 +320,10 @@ class TestFlowSchema:
         assert "order" in html
 
     @pytest.mark.asyncio
-    async def test_schema_404_for_unknown_flow(self, client):
-        """404 для несуществующего flow."""
+    async def test_schema_403_for_unknown_flow(self, client):
+        """403 для несуществующего flow: Check до existence."""
         response = await client.get("/flows/api/v1/registry/flows/nonexistent_flow/schema")
-        assert response.status_code == 404
+        assert response.status_code == 403
 
     @pytest.mark.asyncio
     async def test_schema_contains_legend(self, client):

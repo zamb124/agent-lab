@@ -62,18 +62,16 @@ class SearchProviderOrderRequest(BaseModel):
     provider_order: list[SearchProviderId]
 
 
-def _require_admin() -> tuple[User, Company]:
+async def _require_admin(container: ContainerDep) -> tuple[User, Company]:
     context = require_context()
     company = context.active_company
     if company is None:
         raise HTTPException(status_code=400, detail="Компания не выбрана")
     user = context.user
-    roles: set[str] = set(company.members.get(user.user_id, []) or [])
-    roles.update(user.companies.get(company.company_id, []) or [])
-    if company.company_id == "system" and "admin" in user.groups:
-        roles.add("admin")
-    if "owner" not in roles and "admin" not in roles and user.user_id != company.owner_user_id:
-        raise HTTPException(status_code=403, detail="Недостаточно прав")
+    await container.authz_service.require_company_admin(
+        company_id=company.company_id,
+        user_id=user.user_id,
+    )
     return user, company
 
 
@@ -270,8 +268,8 @@ def _catalog(platform_name: str) -> list[JsonObject]:
 
 
 @router.get("")
-async def get_search_providers(request: Request) -> JsonObject:
-    _, company = _require_admin()
+async def get_search_providers(request: Request, container: ContainerDep) -> JsonObject:
+    _, company = await _require_admin(container)
     settings = _load_settings(company)
     brand = _resolve_brand_for_search_providers(request.headers.get("host"))
     return {
@@ -286,7 +284,7 @@ async def put_search_provider_order(
     payload: SearchProviderOrderRequest,
     container: ContainerDep,
 ) -> JsonObject:
-    _, company = _require_admin()
+    _, company = await _require_admin(container)
     settings = _load_settings(company)
     try:
         updated = settings.model_copy(update={"provider_order": payload.provider_order})
@@ -303,7 +301,7 @@ async def put_search_provider(
     payload: SearchProviderUpdateRequest,
     container: ContainerDep,
 ) -> JsonObject:
-    _, company = _require_admin()
+    _, company = await _require_admin(container)
     pid = _provider_id(provider_id)
     settings = _load_settings(company)
     try:
@@ -321,7 +319,7 @@ async def delete_search_provider(
     provider_id: str,
     container: ContainerDep,
 ) -> JsonObject:
-    _, company = _require_admin()
+    _, company = await _require_admin(container)
     pid = _provider_id(provider_id)
     settings = _load_settings(company)
     defaults = CompanySearchProviders()

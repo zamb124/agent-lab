@@ -20,6 +20,8 @@ from apps.flows.src.services.agent_skill_service import (
 )
 from apps.flows.src.services.platform_assistant_skills import PLATFORM_ASSISTANT_SEED_SKILL_IDS
 from apps.flows.tools.agent_skill_tools import load_agent_skill, read_agent_skill_reference
+from apps.flows.src.container import get_container
+from core.authz.company_sync import sync_company_member_roles
 from core.context import Context, clear_context, get_context, set_context
 from core.files.create_spec import FileCreateSpec
 from core.files.file_ref import FileRef
@@ -46,7 +48,16 @@ def _company_context(company_id: str, unique_id: str) -> Context:
 @asynccontextmanager
 async def _company_scope(unique_id: str) -> AsyncIterator[None]:
     previous = get_context()
-    set_context(_company_context(f"company_{unique_id}", unique_id))
+    company_id = f"company_{unique_id}"
+    ctx = _company_context(company_id, unique_id)
+    set_context(ctx)
+    container = get_container()
+    await sync_company_member_roles(
+        container.authz_service,
+        company_id=company_id,
+        user_id=ctx.user.user_id,
+        roles=["owner", "admin"],
+    )
     try:
         yield
     finally:

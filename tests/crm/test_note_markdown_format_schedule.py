@@ -11,8 +11,7 @@ def _schedule_dependencies() -> dict[str, MagicMock]:
     return {
         "task_service": MagicMock(),
         "entity_repository": MagicMock(),
-        "company_repository": MagicMock(),
-        "access_grant_repository": MagicMock(),
+        "authz": MagicMock(),
     }
 
 
@@ -69,8 +68,7 @@ async def test_enqueue_note_markdown_format_task_requires_context() -> None:
         await enqueue_note_markdown_format_task(
             task_service=task_service,
             entity_repository=MagicMock(),
-            company_repository=MagicMock(),
-            access_grant_repository=MagicMock(),
+            authz=MagicMock(),
             note_id="note-1",
             company_id="company-1",
             namespace="default",

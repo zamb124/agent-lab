@@ -484,6 +484,12 @@ async def get_current_user(request: Request, auth_service: AuthServiceDep):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # Sole PDP for UI admin mutate gates (not JWT roster roles).
+    can_admin = await _auth_container(request).authz_service.check_company_admin(
+        company_id=token_data.company_id,
+        user_id=token_data.user_id,
+    )
+
     return {
         "user_id": user.user_id,
         "name": user.name,
@@ -495,6 +501,7 @@ async def get_current_user(request: Request, auth_service: AuthServiceDep):
         "active_company_id": user.active_company_id,
         "company_id": token_data.company_id,
         "roles": token_data.roles,
+        "can_admin": can_admin,
         "emails": user.emails,
         "phones": user.phones,
         "messengers": user.messengers,

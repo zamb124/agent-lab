@@ -246,6 +246,7 @@ class TestBillingAPI:
     ):
         """Смена тарифного плана"""
         from core.utils.tokens import get_token_service
+        from tests.fixtures.auth import set_test_company_member_roles
 
         token_service = get_token_service()
         token_data = token_service.validate_token(auth_headers["Authorization"].replace("Bearer ", ""))
@@ -255,9 +256,15 @@ class TestBillingAPI:
         # Убеждаемся что пользователь owner
         company = await frontend_container.company_repository.get(company_id)
         if user_id not in company.members or "owner" not in company.members[user_id]:
-            company.members[user_id] = ["owner"]
             company.owner_user_id = user_id
             await frontend_container.company_repository.set(company)
+            await set_test_company_member_roles(
+                frontend_container.company_repository,
+                frontend_container.authz_service,
+                company_id=company_id,
+                user_id=user_id,
+                roles=["owner"],
+            )
 
         response = await frontend_client.patch(
             "/frontend/api/billing/plan",
@@ -283,6 +290,7 @@ class TestBillingAPI:
     ):
         """Попытка сменить на недопустимый тариф"""
         from core.utils.tokens import get_token_service
+        from tests.fixtures.auth import set_test_company_member_roles
 
         token_service = get_token_service()
         token_data = token_service.validate_token(auth_headers["Authorization"].replace("Bearer ", ""))
@@ -291,9 +299,15 @@ class TestBillingAPI:
 
         # Убеждаемся что owner
         company = await frontend_container.company_repository.get(company_id)
-        company.members[user_id] = ["owner"]
         company.owner_user_id = user_id
         await frontend_container.company_repository.set(company)
+        await set_test_company_member_roles(
+            frontend_container.company_repository,
+            frontend_container.authz_service,
+            company_id=company_id,
+            user_id=user_id,
+            roles=["owner"],
+        )
 
         response = await frontend_client.patch(
             "/frontend/api/billing/plan",
@@ -314,15 +328,30 @@ class TestBillingAPI:
 
         from core.models.identity_models import Company, User
         from core.utils.tokens import get_token_service
+        from tests.fixtures.auth import set_test_company_member_roles
 
         company_id = f"test_company_{uuid.uuid4().hex[:8]}"
         company = Company(
             company_id=company_id,
             name="Test Company",
-            owner_id="owner_user",
-            members={"admin_user": ["admin"]}
+            owner_user_id="owner_user",
+            members={"admin_user": ["admin"]},
         )
         await frontend_container.company_repository.set(company)
+        await set_test_company_member_roles(
+            frontend_container.company_repository,
+            frontend_container.authz_service,
+            company_id=company_id,
+            user_id="owner_user",
+            roles=["owner"],
+        )
+        await set_test_company_member_roles(
+            frontend_container.company_repository,
+            frontend_container.authz_service,
+            company_id=company_id,
+            user_id="admin_user",
+            roles=["admin"],
+        )
 
         user = User(
             user_id="admin_user",
@@ -342,7 +371,8 @@ class TestBillingAPI:
         )
 
         assert response.status_code == 403
-        assert "владелец" in response.json()["detail"].lower()
+        detail = response.json()["detail"].lower()
+        assert "owner" in detail or "владелец" in detail
 
     async def test_change_plan_same_plan(
         self,
@@ -353,6 +383,7 @@ class TestBillingAPI:
         """Попытка сменить на текущий тариф"""
         from core.models.billing_models import TariffPlan
         from core.utils.tokens import get_token_service
+        from tests.fixtures.auth import set_test_company_member_roles
 
         token_service = get_token_service()
         token_data = token_service.validate_token(auth_headers["Authorization"].replace("Bearer ", ""))
@@ -360,10 +391,16 @@ class TestBillingAPI:
         user_id = token_data.user_id
 
         company = await frontend_container.company_repository.get(company_id)
-        company.members[user_id] = ["owner"]
         company.owner_user_id = user_id
         company.tariff_plan = TariffPlan.FREE
         await frontend_container.company_repository.set(company)
+        await set_test_company_member_roles(
+            frontend_container.company_repository,
+            frontend_container.authz_service,
+            company_id=company_id,
+            user_id=user_id,
+            roles=["owner"],
+        )
 
         response = await frontend_client.patch(
             "/frontend/api/billing/plan",

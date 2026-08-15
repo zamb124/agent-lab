@@ -29,6 +29,7 @@ def loader(bundles_dir: Path, container) -> FlowsLoader:
         node_repository=container.node_repository,
         tool_repository=container.tool_repository,
         registry_path=bundles_dir.parent / "registry.yaml",
+        flow_access_service=container.flow_access_service,
     )
 
 

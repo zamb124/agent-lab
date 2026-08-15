@@ -70,6 +70,7 @@ CI: `scripts/check_taskiq_canon.py` (все Spec на брокере, Spec≠str
 | `rag` | `apps/rag_worker/broker.py` |
 | `sync` | `apps/sync/realtime/broker.py` |
 | `crm` | `apps/crm_worker/broker.py` |
+| `crm_summary` | `apps/crm_worker/summary_broker.py` |
 | `search` | `apps/search_worker/broker.py` |
 
 Middleware на каждом брокере (порядок важен):
@@ -111,7 +112,7 @@ Production — Helm `deploy/helm/agent-lab/values.yaml::workers.<name>.{replicas
 - Точка входа процесса: `apps/scheduler/scheduler.py` → `wire_all()` → `require_scheduled_tasks_registered()` → `apps.scheduler.dispatch.create_scheduler(settings.tasks.broker_url)`.
 - Redis schedules (`platform_schedules`) и TaskIQ streams — один URL: `settings.tasks.broker_url` (не `database.redis_url`).
 - Канон создания scheduler — только `apps/scheduler/dispatch.py::create_scheduler` (не `core.tasks.broker`).
-- Dispatch — `apps/scheduler/dispatch.py::QueueAwareTaskiqScheduler`: kick на брокере целевой очереди (`labels['queue_name']` / `TaskSpec.queue`).
+- Dispatch — `apps/scheduler/dispatch.py::QueueAwareTaskiqScheduler`: kick на брокере `TaskSpec.queue` (Redis `labels['queue_name']` перезаписывается спекой, не наоборот).
 - Required scheduled-имена = все `TaskSpec.scheduled=True` из реестра (ручные whitelists удалены). `scheduled=True` — только ticks и реально schedulable задачи fire-and-forget (push/send/tool/llm/process_flow) — без флага.
 - Recurring в сервисах — через scheduler API, не локальный `while True`.
 - Declaration CRM: `apps/crm_worker/tasks/task_names.py`.
@@ -169,7 +170,7 @@ await enqueue(
 
 ## Stream retention
 
-1. **`maxlen`** в `RedisStreamBroker` (`TasksConfig.stream_maxlen_by_queue`): search 50k; idle/crm/rag 20k; flows_worker 10k; sync без trim.
+1. **`maxlen`** в `RedisStreamBroker` (`TasksConfig.stream_maxlen_by_queue`): search 50k; idle/crm/crm_summary/rag 20k; flows_worker 10k; sync без trim.
 2. Мониторинг XLEN — Grafana Redis (`redis_inventory_tick`).
 3. GC `platform_schedules:*` — `platform_schedules_gc_tick`.
 4. Result backend TTL 3600 с.

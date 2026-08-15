@@ -5,15 +5,16 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import update
+from sqlalchemy import delete, update
 
 from apps.flows.src.container import get_container
-from apps.flows.src.db.models import WorkflowInstances
+from apps.flows.src.db.models import WorkflowEvents, WorkflowInstances, WorkflowSnapshots
 from apps.flows.src.durable_execution import (
     UserInputAppliedPayload,
     WorkflowEventType,
     create_initial_state,
 )
+from core.context import require_active_company
 from core.state import ExecutionState
 
 
@@ -262,6 +263,49 @@ class TestSessionsAPI:
         assert {s["session_id"] for s in data1["items"]}.isdisjoint(
             {s["session_id"] for s in data2["items"]}
         )
+
+    @pytest.mark.asyncio
+    async def test_list_sessions_skips_projection_hash_mismatch(
+        self, client, app, unique_id
+    ):
+        _ = app
+        user_id = f"user_{unique_id}"
+        flow_id = f"flow_{unique_id}"
+        good_id = f"{flow_id}:good_{unique_id}"
+        bad_id = f"{flow_id}:bad_{unique_id}"
+        await save_test_state(
+            create_test_state(good_id, user_id, first_message="ok", message_count=2)
+        )
+        await save_test_state(
+            create_test_state(bad_id, user_id, first_message="bad", message_count=2)
+        )
+
+        container = get_container()
+        company_id = require_active_company().company_id
+        async with container.storage.get_session() as session:
+            _ = await session.execute(
+                delete(WorkflowSnapshots).where(WorkflowSnapshots.session_id == bad_id)
+            )
+            _ = await session.execute(
+                update(WorkflowEvents)
+                .where(WorkflowEvents.session_id == bad_id)
+                .values(next_state_hash="0" * 64)
+            )
+            await session.commit()
+        _ = await container.redis_client.delete(
+            f"flows:workflow_projection:{company_id}:{bad_id}"
+        )
+
+        response = await client.get(
+            "/flows/api/v1/sessions/",
+            params={"user_id": user_id, "limit": 200},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        session_ids = [item["session_id"] for item in data["items"]]
+        assert good_id in session_ids
+        assert bad_id not in session_ids
 
     @pytest.mark.asyncio
     async def test_list_sessions_empty_result(self, client, app, unique_id):

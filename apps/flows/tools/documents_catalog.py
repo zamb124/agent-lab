@@ -13,6 +13,7 @@ from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.clients.documents_client import DocumentsClient
 from core.clients.documents_models import (
     DocumentsAccessArgs,
+    DocumentsAccessMemberItem,
     DocumentsAddCatalogMemberArgs,
     DocumentsCatalogIdArgs,
     DocumentsCreateCatalogArgs,
@@ -132,7 +133,7 @@ async def documents_get_link(
     name="documents_create_catalog",
     description=(
         "Creates a Documents catalog (folder). Optional parent_catalog_id for nesting. "
-        "Returns catalog_id, title, is_public."
+        "Returns catalog_id, title, company_visible."
     ),
     tags=_TAGS,
     parameters_model=DocumentsCreateCatalogArgs,
@@ -140,7 +141,7 @@ async def documents_get_link(
 )
 async def documents_create_catalog(
     title: str,
-    is_public: bool = True,
+    company_visible: bool = True,
     parent_catalog_id: str | None = None,
     *,
     state: ExecutionState,
@@ -148,7 +149,7 @@ async def documents_create_catalog(
     _ = state
     return await DocumentsClient().create_catalog(
         title=title,
-        is_public=is_public,
+        company_visible=company_visible,
         parent_catalog_id=parent_catalog_id,
     )
 
@@ -156,8 +157,8 @@ async def documents_create_catalog(
 @tool(
     name="documents_update_catalog",
     description=(
-        "Updates catalog title and/or is_public. Owner only. "
-        "Provide at least one of title/is_public."
+        "Updates catalog title and/or company_visible. Owner only. "
+        "Provide at least one of title/company_visible."
     ),
     tags=_TAGS,
     parameters_model=DocumentsUpdateCatalogArgs,
@@ -166,7 +167,7 @@ async def documents_create_catalog(
 async def documents_update_catalog(
     catalog_id: str,
     title: str | None = None,
-    is_public: bool | None = None,
+    company_visible: bool | None = None,
     *,
     state: ExecutionState,
 ) -> JsonObject:
@@ -174,7 +175,7 @@ async def documents_update_catalog(
     return await DocumentsClient().update_catalog(
         catalog_id=catalog_id,
         title=title,
-        is_public=is_public,
+        company_visible=company_visible,
     )
 
 
@@ -247,7 +248,7 @@ async def documents_get_access(
     name="documents_patch_access",
     description=(
         "Patches catalog/document access: company_visible, link_enabled, "
-        "link_permission, member_user_ids (full replace when set). "
+        "link_permission, members (full replace when set). "
         "After enabling link, call documents_rotate_public_link for a fresh public_url."
     ),
     tags=_TAGS,
@@ -259,8 +260,8 @@ async def documents_patch_access(
     resource_id: str,
     company_visible: bool | None = None,
     link_enabled: bool | None = None,
-    link_permission: Literal["view", "edit"] | None = None,
-    member_user_ids: list[str] | None = None,
+    link_permission: Literal["viewer", "editor"] | None = None,
+    members: list[DocumentsAccessMemberItem] | None = None,
     *,
     state: ExecutionState,
 ) -> JsonObject:
@@ -271,7 +272,7 @@ async def documents_patch_access(
         company_visible=company_visible,
         link_enabled=link_enabled,
         link_permission=link_permission,
-        member_user_ids=member_user_ids,
+        members=members,
     )
 
 

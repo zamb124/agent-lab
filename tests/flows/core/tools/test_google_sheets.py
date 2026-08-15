@@ -22,7 +22,7 @@ def _make_state() -> ExecutionState:
     return ExecutionState(
         task_id=f"test-task-{uid}",
         context_id=f"test-context-{uid}",
-        user_id="test-user",
+        user_id="test_user",
         session_id=f"test-sheets:test-context-{uid}",
     )
 

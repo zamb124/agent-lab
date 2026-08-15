@@ -72,8 +72,9 @@ Database-first (`apps/flows/src/models/agent_toolkit.py`). Bootstrap: `registry.
 ## Pairing и device JWT
 
 1. `POST /frontend/api/agent/pairing` → Redis code  
-2. `POST /frontend/api/agent/register` → device JWT + URLs  
-3. Revoke → denylist + tunnel disconnect  
+2. `POST /frontend/api/agent/register` → device JWT + URLs; OpenFGA `agent_device` (`company` + `owner`)  
+   Phase 1 HTTP-клиенты (`agent_frontend_http_client*`) бьют в `127.0.0.1:9004` с `Host: {subdomain}.lvh.me:9004` — без публичного DNS `lvh.me`. Desktop E2E по-прежнему открывает `*.lvh.me`.  
+3. List → `list_objects(can_view)` ∩ Redis; revoke → `require_can_admin` (owner ∪ company admin) + delete tuples + denylist + tunnel disconnect  
 
 Desktop onboarding после pair (`HumanitecOnboardingGuard`):
 

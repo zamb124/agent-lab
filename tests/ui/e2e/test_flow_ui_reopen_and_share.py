@@ -92,7 +92,7 @@ async def test_flow_ui_share_viewer_opens_same_context_read_only(
         else session_id
     )
 
-    share = await flows_chat_create_share(page, permission="view")
+    share = await flows_chat_create_share(page, permission="viewer")
     code = share.share_url.rstrip("/").split("/l/")[-1]
 
     viewer = await page.context.new_page()
@@ -230,7 +230,7 @@ async def test_flow_ui_share_interact_can_edit_same_context(
         else session_id
     )
 
-    share = await flows_chat_create_share(page, permission="interact")
+    share = await flows_chat_create_share(page, permission="editor")
     code = share.share_url.rstrip("/").split("/l/")[-1]
 
     collaborator = await page.context.new_page()
@@ -320,7 +320,7 @@ async def test_flow_ui_share_revoke_blocks_viewer_bootstrap(
     await flows_chat_wait_ready(page)
     await flows_chat_fill_draft(page, draft)
     await flows_chat_wait_saved(page)
-    share = await flows_chat_create_share(page, permission="view")
+    share = await flows_chat_create_share(page, permission="viewer")
     code = share.share_url.rstrip("/").split("/l/")[-1]
 
     viewer = await page.context.new_page()
@@ -371,7 +371,7 @@ async def test_flow_ui_share_revoke_from_owner_ui_blocks_viewer(
     await flows_chat_wait_ready(page)
     await flows_chat_fill_draft(page, draft)
     await flows_chat_wait_saved(page)
-    share = await flows_chat_create_share(page, permission="view")
+    share = await flows_chat_create_share(page, permission="viewer")
     code = share.share_url.rstrip("/").split("/l/")[-1]
 
     viewer = await page.context.new_page()
@@ -427,7 +427,7 @@ async def test_flow_ui_share_expiry_blocks_viewer_bootstrap(
     await flows_chat_wait_ready(page)
     await flows_chat_fill_draft(page, draft)
     await flows_chat_wait_saved(page)
-    share = await flows_chat_create_share(page, permission="view")
+    share = await flows_chat_create_share(page, permission="viewer")
     code = share.share_url.rstrip("/").split("/l/")[-1]
 
     viewer = await page.context.new_page()
@@ -478,7 +478,7 @@ async def test_flow_ui_share_redacts_message_value_for_viewer(
 
     share = await flows_chat_create_share(
         page,
-        permission="view",
+        permission="viewer",
         redacted_value_paths=["/values/message"],
     )
     code = share.share_url.rstrip("/").split("/l/")[-1]

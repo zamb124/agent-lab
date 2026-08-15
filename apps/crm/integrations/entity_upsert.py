@@ -12,12 +12,14 @@ from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
 from apps.crm.db.models import CRMEntity
 from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.integrations.external_ref import external_ref_now, merge_external_refs
+from apps.crm.services.crm_entity_access_service import CrmEntityAccessService
 from core.types import JsonObject
 
 
 async def upsert_canonical_by_external_ref(
     *,
     entity_repo: EntityRepository,
+    entity_access: CrmEntityAccessService,
     namespace: str,
     company_id: str,
     user_id: str,
@@ -89,4 +91,9 @@ async def upsert_canonical_by_external_ref(
         note_date=effective_note_date,
     )
     created = await entity_repo.create(ent)
+    try:
+        await entity_access.sync_entity_created(created)
+    except Exception:
+        _ = await entity_repo.delete(created.entity_id)
+        raise
     return created, True

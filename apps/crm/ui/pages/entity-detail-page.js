@@ -48,6 +48,12 @@ function _isEditSearch(searchRaw) {
     return new URLSearchParams(q).get('edit') === '1';
 }
 
+function _isAccessSearch(searchRaw) {
+    const raw = typeof searchRaw === 'string' ? searchRaw : '';
+    const q = raw.startsWith('?') ? raw.slice(1) : raw;
+    return new URLSearchParams(q).get('access') === '1';
+}
+
 export class CRMEntityDetailPage extends PlatformPage {
     static i18nNamespace = 'crm';
 
@@ -575,6 +581,7 @@ export class CRMEntityDetailPage extends PlatformPage {
         this._routerSearchSel = this.select((s) => s.router.search);
         this._mql = null;
         this._mqlListener = null;
+        this._accessModalOpened = false;
     }
 
     connectedCallback() {
@@ -666,6 +673,7 @@ export class CRMEntityDetailPage extends PlatformPage {
             this._activeTab = TAB_CARD;
         }
         if (changed.has('itemId')) {
+            this._accessModalOpened = false;
             if (typeof this.itemId !== 'string' || this.itemId.length === 0) {
                 this._card = null;
                 this._cardError = '';
@@ -694,6 +702,28 @@ export class CRMEntityDetailPage extends PlatformPage {
             this._entityTypesQueryNs = entity.namespace;
             this._entityTypes.load({ namespace: entity.namespace });
         }
+    }
+
+    updated(changed) {
+        super.updated?.(changed);
+        this._maybeOpenAccessModal();
+    }
+
+    _maybeOpenAccessModal() {
+        if (this.embedded) {
+            return;
+        }
+        if (this._accessModalOpened) {
+            return;
+        }
+        if (typeof this.itemId !== 'string' || this.itemId.length === 0) {
+            return;
+        }
+        if (!_isAccessSearch(this._routerSearchSel.value)) {
+            return;
+        }
+        this._accessModalOpened = true;
+        this.openModal('crm.share', { entityId: this.itemId });
     }
 
     _reload() {

@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 
 from apps.flows.src.models.flow_config import FlowConfig
+from core.context import require_context
 from tests.flows.api.test_a2a import _msg, _parse_sse, _validate_jsonrpc_response
 
 pytestmark = [pytest.mark.timeout(120, func_only=True)]
@@ -25,7 +26,17 @@ def _interrupt_kind_value(body) -> str:
 
 
 async def _save_flow(container, flow_config: dict[str, Any]) -> bool:
-    return await container.flow_repository.set(FlowConfig.model_validate(flow_config))
+    config = FlowConfig.model_validate(flow_config)
+    saved = await container.flow_repository.set(config)
+    ctx = require_context()
+    if ctx.active_company is None:
+        raise AssertionError("active company required for flow authz sync")
+    await container.flow_access_service.sync_flow_saved(
+        config,
+        company_id=ctx.active_company.company_id,
+        owner_user_id=ctx.user.user_id,
+    )
+    return saved
 
 
 def _handoff_parent_child_configs(unique_id: str) -> tuple[dict[str, Any], dict[str, Any]]:

@@ -214,8 +214,8 @@ export class OfficeFileDetailsPanel extends PlatformElement {
                 </div>
             `;
         }
-        const visibilityLabel = catalog.is_public
-            ? this.t('details.catalogPublic')
+        const visibilityLabel = catalog.company_visible
+            ? this.t('details.catalogCompanyVisible')
             : this.t('details.catalogPrivate');
         return html`
             <div class="catalog-summary">

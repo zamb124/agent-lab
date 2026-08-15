@@ -5,6 +5,7 @@ from __future__ import annotations
 from apps.office.db.repositories.catalog_repository import CatalogRepository
 from apps.office.db.repositories.document_binding_repository import DocumentBindingRepository
 from apps.office.services.file_binding_metadata import resolve_binding_metadata
+from apps.office.services.office_access_service import OfficeAccessService
 from core.documents.placement import DocsBindResult, DocsPlacement
 from core.documents.placement_paths import build_path_segments
 from core.files.create_spec import FileSourceKind
@@ -19,10 +20,12 @@ class DocsPlacementService:
         catalog_repository: CatalogRepository,
         document_binding_repository: DocumentBindingRepository,
         files_service: FilesService,
+        office_access_service: OfficeAccessService,
     ) -> None:
         self._catalog_repository: CatalogRepository = catalog_repository
         self._document_binding_repository: DocumentBindingRepository = document_binding_repository
         self._files_service: FilesService = files_service
+        self._office_access_service: OfficeAccessService = office_access_service
 
     async def bind(self, placement: DocsPlacement, *, company_id: str, user_id: str) -> DocsBindResult:
         record = await self._files_service.get(placement.file_id)
@@ -75,6 +78,16 @@ class DocsPlacementService:
             title=title,
             created_by_user_id=user_id,
         )
+        try:
+            await self._office_access_service.sync_document_created(
+                row,
+                owner_user_id=user_id,
+            ) 
+        except Exception:
+            _ = await self._document_binding_repository.delete_binding(
+                row.file_id, company_id, placement.namespace
+            )
+            raise
         _ = await self._files_service.promote_retention(
             placement.file_id,
             retention_kind=FileRetentionKind.OFFICE_DOCUMENT,
@@ -97,13 +110,25 @@ class DocsPlacementService:
     ) -> str:
         parent_id: str | None = None
         for segment in segments:
-            catalog = await self._catalog_repository.get_or_create_child_by_title(
+            catalog, created = await self._catalog_repository.get_or_create_child_by_title(
                 company_id=company_id,
                 namespace=namespace,
                 parent_catalog_id=parent_id,
                 title=segment,
                 owner_user_id=user_id,
             )
+            if created:
+                try:
+                    await self._office_access_service.sync_catalog_created(
+                        catalog,
+                        owner_user_id=user_id,
+                        company_visible=True,
+                    )
+                except Exception:
+                    _ = await self._catalog_repository.delete_catalog(
+                        catalog.catalog_id, company_id, namespace
+                    )
+                    raise
             parent_id = catalog.catalog_id
         if parent_id is None:
             raise ValueError("empty path segments")

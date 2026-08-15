@@ -181,7 +181,7 @@ async def _authorize_viewer_claims(
             raise HTTPException(status_code=403, detail="Доступ запрещён")
         if binding_row.company_id != claims.company_id:
             raise HTTPException(status_code=403, detail="Доступ запрещён")
-        if binding_row.link_permission == "view" and isinstance(claims, OfficeViewerSaveTokenClaims):
+        if binding_row.link_permission == "viewer" and isinstance(claims, OfficeViewerSaveTokenClaims):
             raise HTTPException(status_code=403, detail="Сохранение запрещено")
         return
 

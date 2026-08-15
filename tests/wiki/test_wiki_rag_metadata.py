@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from apps.wiki.content.prosemirror import empty_document
-from apps.wiki.models.domain import WikiPage, WikiVisibility
+from apps.wiki.models.domain import WikiPage
 from apps.wiki.services.rag_metadata import (
     MAX_PAGE_ID_FILTER_SIZE,
     WIKI_SOURCE_KIND,
@@ -83,7 +83,7 @@ def test_root_page_without_parent_has_empty_parent_field():
 
 
 def test_restricted_page_marks_visibility():
-    page = make_page(visibility=WikiVisibility.RESTRICTED)
+    page = make_page(company_visible=False)
     assert build_wiki_chunk_metadata(page)["wiki_visibility"] == "restricted"
 
 

@@ -42,6 +42,15 @@ async def test_inventory_db_domain(unique_id: str) -> None:
 
     assert inventory.redis_url_label == "DATABASE__REDIS_URL"
     assert inventory.dbsize >= 1
-    # Параллельные тесты могут добавить/удалить ключи между DBSIZE и SCAN.
-    assert abs(inventory.keys_scanned - inventory.dbsize) <= 5
+    assert inventory.keys_scanned >= 1
     assert inventory.used_memory_bytes > 0
+    # DBSIZE и SCAN — два снимка: при параллельной записи они расходятся,
+    # это штатный сигнал inventory.scan_dbsize_mismatch, не ошибка SCAN.
+    assert inventory.scan_dbsize_mismatch is (inventory.keys_scanned != inventory.dbsize)
+    tick_prefix = prefix_for_key(probe_key)
+    tick_stats = next(
+        (stats for stats in inventory.prefix_stats if stats.prefix == tick_prefix),
+        None,
+    )
+    assert tick_stats is not None
+    assert tick_stats.key_count >= 1

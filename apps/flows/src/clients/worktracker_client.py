@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from apps.flows.src.container_state import require_current_container
 from core.files.file_ref import FileRef
@@ -229,8 +230,8 @@ class WorktrackerClient:
     async def get_queue_by_slug(self, company_id: str, slug: str) -> WorkQueue:
         return await self._service.get_queue_by_slug(company_id, slug)
 
-    async def list_queues(self, company_id: str) -> list[WorkQueue]:
-        return await self._service.list_queues(company_id)
+    async def list_queues(self, company_id: str, *, user_id: str) -> list[WorkQueue]:
+        return await self._service.list_queues(company_id, user_id=user_id)
 
     async def create_queue(
         self,
@@ -256,12 +257,14 @@ class WorktrackerClient:
         work_queue_id: str,
         name: str | None = None,
         description: str | None = None,
+        actor_user_id: str,
     ) -> WorkQueue:
         return await self._service.update_queue(
             company_id=company_id,
             work_queue_id=work_queue_id,
             name=name,
             description=description,
+            actor_user_id=actor_user_id,
         )
 
     async def list_queue_members(self, work_queue_id: str) -> list[WorkQueueMember]:
@@ -273,19 +276,28 @@ class WorktrackerClient:
         company_id: str,
         work_queue_id: str,
         member: WorkActor,
-        role: str = "member",
+        role: Literal["owner", "member"] = "member",
+        actor_user_id: str | None = None,
     ) -> WorkQueueMember:
         return await self._service.add_queue_member(
             company_id=company_id,
             work_queue_id=work_queue_id,
             member=member,
             role=role,
+            actor_user_id=actor_user_id,
         )
 
-    async def remove_queue_member(self, *, work_queue_id: str, member: WorkActor) -> bool:
+    async def remove_queue_member(
+        self,
+        *,
+        work_queue_id: str,
+        member: WorkActor,
+        actor_user_id: str,
+    ) -> bool:
         return await self._service.remove_queue_member(
             work_queue_id=work_queue_id,
             member=member,
+            actor_user_id=actor_user_id,
         )
 
     async def list_boards(

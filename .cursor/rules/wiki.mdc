@@ -63,14 +63,25 @@ Enum-поля моделей наследуют `WikiBaseModel` (`use_enum_value
 
 ## Доступ
 
-- `visibility`: `company` (вся компания) или `restricted` (только участники). Значение **выводится из участников**, а не задаётся полем: непустой `WikiPageMember` = `restricted`. Поэтому `PATCH /pages/{id}` (свойства) `visibility` не принимает, а UI включает ограничение, добавляя текущего пользователя как `admin`, и снимает его, удаляя всех участников.
-- Права участника — `read | write | admin` (`WikiPagePermission`). Права публичной ссылки — отдельная ось `WikiLinkPermission` (`view | comment`).
-- Ограничение наследуется вниз по дереву — резолвер `apps/wiki/services/access.py` поднимается по родителям; `GET /pages/{id}/access` отдаёт `inherited_from_page_id`, и UI обязан показывать унаследованное ограничение.
+Единственный PDP — **OpenFGA** (`AuthzService` через `WikiAccessService`, `apps/wiki/services/wiki_access_service.py`; тип `wiki_page` в `core/authz/model.fga`). SQL-поля `visibility`/`permission` удалены; wire-контракт — `company_visible: bool` + members `{user_id, relation}`.
+
+| Relation | Как хранится | Смысл |
+|---|---|---|
+| `owner` | `[user]`, ставится при создании (`sync_page_created`) | `can_admin`; отдельно admin-участника добавлять не нужно |
+| `company` | `[company]`, tenancy, всегда при create | сам доступ не даёт |
+| `company_viewer` | `[company#member]`, **прямой (не каскадирующий)** | `company_visible=true` даёт всей компании `can_view` (не `can_edit`); НЕ наследуется через `parent` |
+| `parent` | `[wiki_page]` TTU | `viewer`/`editor` каскадируют вниз по поддереву через `viewer from parent` / `editor from parent` |
+| `viewer` / `editor` | `[user]` явные tuples на странице | Участники, видны в `GET /pages/{id}/access.members` как `{user_id, relation}` |
+
+- `company_visible` — прямой флаг страницы, не производное поле и не наследуется в FGA. Новая дочерняя страница **снимает снимок** `company_visible` родителя на момент создания (`create_page`), но дальше живёт независимо: изменение родителя не переписывает существующих потомков.
+- `PATCH /pages/{id}/access/company-visible` `{company_visible}` — единственный способ переключить видимость. Участников (`POST/DELETE …/access/members`, `relation: viewer|editor`) можно добавлять только при `company_visible=false` (400 иначе); включение `company_visible=true` обратно **удаляет всех участников** (`replace_members`/`clear_members`).
+- Права публичной ссылки — отдельная ось `WikiLinkPermission` (`viewer | editor`), не связана с FGA member relations. Обе роли на публичном API сейчас read-only (`/public/*` без write); `editor` зарезервирован для будущих публичных мутаций, не legacy `comment`/`view`.
+- `inherited_from_page_id` в `GET /pages/{id}/access` — ближайший предок (включая себя), у которого `company_visible=false`; поле только для UI дерева (не PDP-решение): `company_viewer` не каскадирует, поэтому страница может формально остаться видимой (свой `company_visible=true`), даже если предок выше по дереву ограничен позже.
+- Владелец получает `can_admin`/`can_edit`/`can_view` через `owner` сразу при создании. `WikiPageResponse.can_edit` / `can_admin` всегда из `AuthzService` (GET и mutating POST/PUT/PATCH). Удаление страницы (`delete_page`) зачищает **все** FGA-tuples страницы (`sync_pages_deleted`), поэтому корзина (`GET /pages/deleted`) не фильтруется по FGA-видимости — доступ к ней даёт только проверка членства в namespace (`require_scope`), как в Documents. Восстановление (`restore_page`) пересобирает `owner`/`parent`/`company` tenancy и `company_viewer` по флагу `company_visible`.
 - Публичная ссылка (`link_token`) живёт на корне сайта: анонимное чтение всего опубликованного поддерева через `/wiki/api/v1/public/pages/{link_token}` и SPA `/wiki/s/:token` (+ `/wiki/s/:token/p/:pageId` для потомка). User-facing URL — `{origin}/wiki/s/{raw_token}`, где `origin` = `build_service_base_url(request)` (Host / `X-Forwarded-*` браузера). `get_service_url("frontend")` / `SERVER__FRONTEND_SERVICE_URL` — только межсервисный internal URL, в публичную ссылку не подставлять. В БД лежит только SHA-256 хеш, поэтому сырой URL известен ровно один раз — сразу после выпуска. Позже ссылку можно только перевыпустить, и прежняя перестаёт работать; это свойство модели, а не пробел в UI. В модалке `wiki.page_access` действия Copy link / Open site — `platform-button icon-only` (`copy`, `external-link`) рядом с URL, не крупные текстовые кнопки.
 - Публичный корень отдаётся только при `link_enabled` **и** `is_published`: включённая ссылка на черновик → 404. Условие собрано одним запросом в `WikiRepository.get_public_page_by_link_token`, сервисная точка входа — `WikiService.get_public_page`.
 - Поддерево: `list_public_subtree` / `get_public_site_tree` / `get_public_site_page` — обход как у `list_subtree`, но ветка обрезается на первом `is_published=False`. Страница вне опубликованного поддерева → 404. Роуты: `GET .../tree`, `GET .../pages/{wiki_page_id}`, `GET .../pages/{wiki_page_id}/markdown`, `GET .../files/{file_id}`.
 - Медиа: файлы платформы приватны, поэтому публичный ответ переписывает `image.src` (и обложку) на `/wiki/api/v1/public/pages/{token}/files/{file_id}` через `apps/wiki/content/public_media.py`. Роут файла проверяет, что `file_id` встречается в контенте страницы опубликованного поддерева, и стримит через `files_service`. Чип `platform_file` не переписывается в JSON — базу ссылки подставляет редактор (`file-url-base`).
-- `comment` у ссылки шире `view` только по замыслу: публичных операций записи в `/public/*` нет, поэтому обе роли дают одно и то же чтение.
 - Публичная страница ставит `document.title` из заголовка. OG-разметки и индексации нет намеренно: ссылка секретная, wiki отдаётся под `noindex`, а без SSR краулер увидит пустой каркас.
 - Оси «только участники пространства» в модели нет: namespace — граница данных, а не уровень доступа.
 
@@ -110,7 +121,7 @@ Wiki входит в `FACTORY_CANON_SERVICES` (`scripts/check_ui_canon.sh`, `scr
 
 ## Lara
 
-Tier-1 skill `wiki-platform` (children `wiki-pages`, `wiki-access`, `wiki-discovery`). Builtins `wiki_*` в `apps/flows/tools/wiki_tools.py` — тонкие обёртки над `core.clients.wiki_client.WikiClient` (не прямой REST в теле тула). Eval / `code_node`: `await wiki.create_page(...)` через capability-gateway (`wiki.*`, `sdk_namespace="wiki"`). Тело страницы для агента — markdown (`wiki_get_markdown` / `wiki_update_markdown` / `wiki_import_markdown`), не ProseMirror JSON. Visibility — через участников, не PATCH. Публичная ссылка — `wiki_rotate_public_link` (raw URL один раз).
+Tier-1 skill `wiki-platform` (children `wiki-pages`, `wiki-access`, `wiki-discovery`). Builtins `wiki_*` в `apps/flows/tools/wiki_tools.py` — тонкие обёртки над `core.clients.wiki_client.WikiClient` (не прямой REST в теле тула). Eval / `code_node`: `await wiki.create_page(...)` через capability-gateway (`wiki.*`, `sdk_namespace="wiki"`). Тело страницы для агента — markdown (`wiki_get_markdown` / `wiki_update_markdown` / `wiki_import_markdown`), не ProseMirror JSON. Ограничение доступа — `wiki_set_company_visible(company_visible=false)` первым шагом, затем `wiki_set_member(relation=viewer|editor)`; снятие ограничения — `wiki_set_company_visible(company_visible=true)`. Публичная ссылка — `wiki_rotate_public_link` (raw URL один раз).
 
 ## Тесты
 

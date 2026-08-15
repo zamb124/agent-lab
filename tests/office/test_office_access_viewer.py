@@ -69,7 +69,7 @@ async def test_public_open_view_permission_stream_without_save_url(
         office_client,
         auth_headers_system,
         file_id,
-        link_permission="view",
+        link_permission="viewer",
     )
     open_body = await public_open(office_client, token)
     text_payload = open_body.get("text")
@@ -101,7 +101,7 @@ async def test_public_open_view_permission_viewer_save_forbidden(
         office_client,
         auth_headers_system,
         file_id,
-        link_permission="edit",
+        link_permission="editor",
     )
     open_body = await public_open(office_client, token)
     save_url = parse_text_save_url(open_body)
@@ -109,7 +109,7 @@ async def test_public_open_view_permission_viewer_save_forbidden(
     downgrade = await office_client.patch(
         f"/documents/api/v1/documents/{file_id}/access",
         headers=auth_headers_system,
-        json={"link_permission": "view"},
+        json={"link_permission": "viewer"},
     )
     assert downgrade.status_code == 200
 
@@ -137,7 +137,7 @@ async def test_public_open_edit_permission_viewer_save_updates_content(
         office_client,
         auth_headers_system,
         file_id,
-        link_permission="edit",
+        link_permission="editor",
     )
     open_body = await public_open(office_client, token)
     save_url = parse_text_save_url(open_body)

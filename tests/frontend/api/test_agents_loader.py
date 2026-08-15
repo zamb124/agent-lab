@@ -192,6 +192,7 @@ async def test_flows_loader_filter_public(container, unique_id: str):
             node_repository=container.node_repository,
             tool_repository=container.tool_repository,
             registry_path=registry_path,
+            flow_access_service=container.flow_access_service,
         )
 
         # Тест 1: Загрузка с фильтром (только public)

@@ -38,8 +38,8 @@ Lara / LLM still loads skills and calls `wiki_*` tools; tools are thin wrappers 
 | History / restore version | `wiki_list_revisions` → `wiki_get_revision` → `wiki_restore_revision` |
 | Comments | `wiki_list_comments` / `wiki_create_comment` / `wiki_resolve_comment` |
 | Who can access? | `wiki_get_access` |
-| Restrict page | `team_resolve_user` → `wiki_set_member` |
-| Company-wide again | remove all members via `wiki_remove_member` |
+| Restrict page | `wiki_set_company_visible(company_visible=false)` → `team_resolve_user` → `wiki_set_member(relation=viewer\|editor)` |
+| Company-wide again | `wiki_set_company_visible(company_visible=true)` (clears members automatically) |
 | Public URL | ensure `is_published` → `wiki_rotate_public_link(enabled=true)` — show `url` once |
 | Find pages | `wiki_search(mode=auto)` |
 | Who links here? | `wiki_list_backlinks` |
@@ -53,9 +53,9 @@ Lara / LLM still loads skills and calls `wiki_*` tools; tools are thin wrappers 
 
 ## Visibility model
 
-- `visibility` is derived: any `WikiPageMember` → `restricted`; none → `company`.
-- There is no PATCH visibility field.
-- Restriction inherits down the tree (`inherited_from_page_id`).
+- `company_visible: bool` is a direct per-page flag (OpenFGA `company` tuple), not derived and not cascading.
+- Members (`viewer`/`editor`) are only accepted while `company_visible=false`; flipping it back to `true` clears them.
+- `viewer`/`editor` member relations do cascade down the tree via `parent`; `inherited_from_page_id` reports the nearest restricted ancestor for UI.
 
 ## Public link
 

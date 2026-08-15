@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from core.authz.company_sync import sync_company_member_roles
+from core.authz.service import AuthzService
 from core.db.repositories.company_repository import CompanyRepository
 from core.db.repositories.subdomain_repository import SubdomainRepository
 from core.db.repositories.user_repository import UserRepository
@@ -52,6 +54,7 @@ async def ensure_system_admin_membership(
     company_repository: CompanyRepository,
     subdomain_repository: SubdomainRepository,
     user_repository: UserRepository,
+    authz: AuthzService,
     user_email: str = SYSTEM_ADMIN_EMAIL,
 ) -> tuple[Company, User | None]:
     """Гарантирует system-компанию и при наличии пользователя user_email — роль admin в ней."""
@@ -86,12 +89,24 @@ async def ensure_system_admin_membership(
     if company_needs_update or user_needs_update:
         _ = await company_repository.set(system_company)
         _ = await user_repository.set(target_user)
+        await sync_company_member_roles(
+            authz,
+            company_id=system_company.company_id,
+            user_id=target_user.user_id,
+            roles=system_company.members[target_user.user_id],
+        )
         logger.info(
             "Bootstrap updated: granted admin role for %s in company %s",
             user_email,
             system_company.company_id,
         )
     else:
+        await sync_company_member_roles(
+            authz,
+            company_id=system_company.company_id,
+            user_id=target_user.user_id,
+            roles=system_company.members.get(target_user.user_id, [ADMIN_ROLE]),
+        )
         logger.info(
             "Bootstrap check passed: %s already has admin rights in %s",
             user_email,

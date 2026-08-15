@@ -21,6 +21,8 @@ from apps.crm.constants_graph import (
     PLATFORM_COMPANY_ID_ATTR,
     PLATFORM_NAMESPACE_ATTR,
 )
+from apps.crm.db.base import CRMDatabase
+from apps.crm.db.integrity import is_unique_violation
 from apps.crm.db.models import CompanyMapping, CRMEntity, EntityType, Relationship, RelationshipType
 from apps.crm.db.repositories.company_mapping_repository import CompanyMappingRepository
 from apps.crm.db.repositories.entity_repository import EntityRepository
@@ -28,6 +30,7 @@ from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
 from apps.crm.db.repositories.namespace_template_repository import NamespaceTemplateRepository
 from apps.crm.db.repositories.relationship_repository import RelationshipRepository
 from apps.crm.db.repositories.relationship_type_repository import RelationshipTypeRepository
+from apps.crm.services.crm_entity_access_service import CrmEntityAccessService
 from apps.crm.system_templates import (
     COMMON_NAMESPACE_ANCHOR_TYPES,
     NAMESPACE_TEMPLATE_SEEDS,
@@ -59,6 +62,7 @@ class CompanyInitService:
 
     def __init__(
         self,
+        crm_db: CRMDatabase,
         entity_type_repo: EntityTypeRepository,
         relationship_type_repo: RelationshipTypeRepository,
         namespace_template_repo: NamespaceTemplateRepository,
@@ -68,7 +72,9 @@ class CompanyInitService:
         company_mapping_repo: CompanyMappingRepository,
         namespace_service: NamespaceService,
         user_repo: UserRepository,
+        entity_access: CrmEntityAccessService,
     ) -> None:
+        self._crm_db: CRMDatabase = crm_db
         self._entity_type_repo: EntityTypeRepository = entity_type_repo
         self._relationship_type_repo: RelationshipTypeRepository = relationship_type_repo
         self._namespace_template_repo: NamespaceTemplateRepository = namespace_template_repo
@@ -78,27 +84,48 @@ class CompanyInitService:
         self._company_mapping_repo: CompanyMappingRepository = company_mapping_repo
         self._namespace_service: NamespaceService = namespace_service
         self._user_repo: UserRepository = user_repo
+        self._entity_access: CrmEntityAccessService = entity_access
 
-    async def initialize_company(self, company_id: str) -> dict[str, int | bool]:
+    async def initialize_company(self, company_id: str, *, reseed: bool = False) -> dict[str, int | bool]:
         """
         Инициализирует компанию: копирует системные типы с company_id.
 
-        Аргументы:
-            company_id: ID компании для инициализации
+        Insert-only по умолчанию: существующие типы/шаблоны/сущности не
+        переписываются и не re-sync в OpenFGA. Полный reseed (update_metadata,
+        upsert шаблонов, backfill personal namespace, FGA repair) — только
+        ``reseed=True`` (lifespan CRM для ``system``).
 
-        Возвращает:
-            Статистика: сколько типов создано
+        Параллельные granian workers и xdist сериализуются Postgres
+        ``pg_advisory_lock`` на ``company_id``: иначе N lifespan'ов на пустой
+        ``company_mapping`` ловят UniqueViolation и валят ASGI startup.
+
+        Иначе 10 xdist workers на первой волне CRM e2e каждый проходит
+        personal namespace всех накопленных ``system.members`` и душит
+        Postgres/OpenFGA → ERROR setup ``crm_client``.
         """
+        async with self._crm_db.advisory_lock("crm.company_init", company_id):
+            return await self._initialize_company_locked(company_id, reseed=reseed)
+
+    async def _initialize_company_locked(
+        self, company_id: str, *, reseed: bool
+    ) -> dict[str, int | bool]:
         logger.info(f"Initializing company: {company_id}")
 
-        entity_types_created = await self._init_entity_types(company_id)
-        relationship_types_created = await self._init_relationship_types(company_id)
-        templates_created = await self._init_namespace_templates(company_id)
-        _ = await self._ensure_company_entity(company_id)
-        _ = await self._ensure_namespace_entity(company_id, "default")
+        entity_types_created = await self._init_entity_types(company_id, reseed=reseed)
+        relationship_types_created = await self._init_relationship_types(company_id, reseed=reseed)
+        templates_created = await self._init_namespace_templates(company_id, reseed=reseed)
+        _ = await self._ensure_company_entity(company_id, reseed=reseed)
+        _ = await self._ensure_namespace_entity(company_id, "default", reseed=reseed)
         await self._ensure_default_namespace_record(company_id)
-        await self._ensure_default_organization_entity(company_id)
-        personal_ensured = await self._ensure_personal_namespaces_for_members(company_id)
+        await self._ensure_default_organization_entity(company_id, reseed=reseed)
+        created_anything = (
+            entity_types_created > 0
+            or relationship_types_created > 0
+            or templates_created > 0
+        )
+        personal_ensured = 0
+        if reseed or created_anything:
+            personal_ensured = await self._ensure_personal_namespaces_for_members(company_id)
 
         logger.info(
             (
@@ -118,7 +145,7 @@ class CompanyInitService:
             and templates_created == 0,
         }
 
-    async def _init_entity_types(self, company_id: str) -> int:
+    async def _init_entity_types(self, company_id: str, *, reseed: bool) -> int:
         """Создаёт или обновляет минимальное системное ядро типов в пространстве default.
 
         Insert-только стратегия: каждая INSERT выполняется атомарно; IntegrityError
@@ -137,6 +164,8 @@ class CompanyInitService:
             key = (init_namespace, template["type_id"])
             existing = existing_by_key.get(key)
             if existing is not None:
+                if not reseed:
+                    continue
                 await self._entity_type_repo.update_metadata(
                     template["type_id"],
                     namespace=init_namespace,
@@ -183,7 +212,7 @@ class CompanyInitService:
                 _ = await self._entity_type_repo.create(entity_type)
                 created_count += 1
             except IntegrityError as exc:
-                if not _is_unique_violation(exc):
+                if not is_unique_violation(exc):
                     raise
                 logger.info(
                     "EntityType %r уже создан параллельным worker для company=%r namespace=%r, пропуск",
@@ -194,7 +223,7 @@ class CompanyInitService:
 
         return created_count
 
-    async def _init_relationship_types(self, company_id: str) -> int:
+    async def _init_relationship_types(self, company_id: str, *, reseed: bool) -> int:
         """Создаёт или обновляет минимальное системное ядро связей.
 
         merge() внутри update уже обрабатывает INSERT-ON-CONFLICT для
@@ -209,6 +238,8 @@ class CompanyInitService:
         for template in SYSTEM_RELATIONSHIP_TYPE_TEMPLATES:
             existing = existing_by_id.get(template["type_id"])
             if existing is not None:
+                if not reseed:
+                    continue
                 existing.name = template["name"]
                 existing.description = template.get("description")
                 # prompt — user-editable AI text; re-init не затирает правки компании.
@@ -241,7 +272,7 @@ class CompanyInitService:
                 _ = await self._relationship_type_repo.update(rel_type)
                 created_count += 1
             except IntegrityError as exc:
-                if not _is_unique_violation(exc):
+                if not is_unique_violation(exc):
                     raise
                 logger.info(
                     "RelationshipType %r уже создан параллельным worker для company=%r, пропуск",
@@ -251,7 +282,7 @@ class CompanyInitService:
 
         return created_count
 
-    async def _init_namespace_templates(self, company_id: str) -> int:
+    async def _init_namespace_templates(self, company_id: str, *, reseed: bool) -> int:
         """Идемпотентно создаёт шаблоны namespace и их типы.
 
         check-then-create защищён от параллельных worker через IntegrityError при
@@ -269,6 +300,8 @@ class CompanyInitService:
                 seed["template_id"], company_id=company_id
             )
             if existing is not None:
+                if not reseed:
+                    continue
                 existing.name = seed["name"]
                 existing.description = seed.get("description")
                 existing.icon = seed.get("icon")
@@ -288,7 +321,7 @@ class CompanyInitService:
                     )
                     created_count += 1
                 except IntegrityError as exc:
-                    if not _is_unique_violation(exc):
+                    if not is_unique_violation(exc):
                         raise
                     logger.info(
                         "NamespaceTemplate %r уже создан параллельным worker для company=%r, пропуск",
@@ -323,15 +356,16 @@ class CompanyInitService:
                     is_voice_target=item.get("is_voice_target", False),
                 )
 
-        for retired_id in sorted(RETIRED_NAMESPACE_TEMPLATE_IDS):
-            retired_row = await self._namespace_template_repo.get_by_template_id(
-                retired_id,
-                company_id=company_id,
-            )
-            if retired_row is not None:
-                _ = await self._namespace_template_repo.delete_template_with_types(
-                    retired_row.template_key,
+        if reseed:
+            for retired_id in sorted(RETIRED_NAMESPACE_TEMPLATE_IDS):
+                retired_row = await self._namespace_template_repo.get_by_template_id(
+                    retired_id,
+                    company_id=company_id,
                 )
+                if retired_row is not None:
+                    _ = await self._namespace_template_repo.delete_template_with_types(
+                        retired_row.template_key,
+                    )
 
         return created_count
 
@@ -348,9 +382,11 @@ class CompanyInitService:
         return await self._entity_type_repo.list_by_company(company_id=company_id, limit=10000)
 
     async def _check_existing_relationship_types(self, company_id: str) -> list[RelationshipType]:
-        return await self._relationship_type_repo.list_by_company(company_id=company_id, limit=10000)
+        return await self._relationship_type_repo.list_all_by_company(
+            company_id=company_id, include_system=True
+        )
 
-    async def _ensure_company_entity(self, company_id: str) -> str:
+    async def _ensure_company_entity(self, company_id: str, *, reseed: bool) -> str:
         """Идемпотентно создает CRM-сущность для компании-тенанта."""
         existing = await self._entity_repo.find_by_attribute(
             entity_type=COMPANY_ENTITY_TYPE,
@@ -359,6 +395,8 @@ class CompanyInitService:
             company_id=company_id,
         )
         if existing:
+            if reseed:
+                await self._entity_access.sync_entity_created(existing[0])
             return existing[0].entity_id
 
         company = await self._company_repo.get(company_id)
@@ -378,21 +416,27 @@ class CompanyInitService:
         try:
             _ = await self._entity_repo.create(entity)
         except IntegrityError as exc:
-            if not _is_unique_violation(exc):
+            if not is_unique_violation(exc):
                 raise
             logger.info(
                 "CRM entity %r уже создан параллельным worker для company=%r, пропуск",
                 entity.entity_id,
                 company_id,
             )
-            existing = await self._entity_repo.find_by_attribute(
+            raced = await self._entity_repo.find_by_attribute(
                 entity_type=COMPANY_ENTITY_TYPE,
                 attribute_key=PLATFORM_COMPANY_ID_ATTR,
                 attribute_value=company_id,
                 company_id=company_id,
             )
-            if existing:
-                return existing[0].entity_id
+            if raced:
+                await self._entity_access.sync_entity_created(raced[0])
+                return raced[0].entity_id
+            raise
+        try:
+            await self._entity_access.sync_entity_created(entity)
+        except Exception:
+            _ = await self._entity_repo.delete(entity.entity_id)
             raise
         logger.info(f"Created company entity {entity.entity_id} for company {company_id}")
         return entity.entity_id
@@ -429,6 +473,8 @@ class CompanyInitService:
         self,
         company_id: str,
         namespace_name: str,
+        *,
+        reseed: bool = False,
     ) -> str:
         """Идемпотентно создает CRM-сущность для namespace."""
         existing = await self._entity_repo.find_by_attribute(
@@ -438,9 +484,14 @@ class CompanyInitService:
             company_id=company_id,
         )
         if existing:
+            if reseed:
+                await self._entity_access.sync_entity_created(existing[0])
             return existing[0].entity_id
 
-        company_entity_id = await self._ensure_company_entity(company_id)
+        company_entity_id = await self._ensure_company_entity(company_id, reseed=reseed)
+        company = await self._company_repo.get(company_id)
+        if company is None:
+            raise ValueError(f"Company not found: {company_id}")
 
         entity = CRMEntity(
             entity_id=str(uuid.uuid4()),
@@ -450,26 +501,32 @@ class CompanyInitService:
             name=namespace_name,
             attributes={PLATFORM_NAMESPACE_ATTR: namespace_name},
             tags=[],
-            user_id=company_id,
+            user_id=company.owner_user_id or company_id,
         )
         try:
             _ = await self._entity_repo.create(entity)
         except IntegrityError as exc:
-            if not _is_unique_violation(exc):
+            if not is_unique_violation(exc):
                 raise
             logger.info(
                 "Namespace entity %r уже создан параллельным worker для company=%r, пропуск",
                 entity.entity_id,
                 company_id,
             )
-            existing = await self._entity_repo.find_by_attribute(
+            raced = await self._entity_repo.find_by_attribute(
                 entity_type=NAMESPACE_ENTITY_TYPE,
                 attribute_key=PLATFORM_NAMESPACE_ATTR,
                 attribute_value=namespace_name,
                 company_id=company_id,
             )
-            if existing:
-                return existing[0].entity_id
+            if raced:
+                await self._entity_access.sync_entity_created(raced[0])
+                return raced[0].entity_id
+            raise
+        try:
+            await self._entity_access.sync_entity_created(entity)
+        except Exception:
+            _ = await self._entity_repo.delete(entity.entity_id)
             raise
 
         rel = Relationship(
@@ -483,7 +540,7 @@ class CompanyInitService:
         try:
             _ = await self._relationship_repo.create(rel)
         except IntegrityError as exc:
-            if not _is_unique_violation(exc):
+            if not is_unique_violation(exc):
                 raise
             logger.info(
                 "Relationship %r уже создан параллельным worker для company=%r, пропуск",
@@ -495,9 +552,29 @@ class CompanyInitService:
         return entity.entity_id
 
     async def ensure_namespace_entity(self, company_id: str, namespace_name: str) -> str:
-        return await self._ensure_namespace_entity(company_id, namespace_name)
+        return await self._ensure_namespace_entity(company_id, namespace_name, reseed=False)
 
-    async def _ensure_default_organization_entity(self, company_id: str) -> None:
+    async def _ensure_company_mapping(self, company_id: str, entity_id: str) -> None:
+        """Один ``company_mapping`` на компанию. UniqueViolation = параллельный worker уже записал."""
+        existing_mapping = await self._company_mapping_repo.get(company_id)
+        if existing_mapping is not None:
+            return
+        mapping = CompanyMapping(
+            company_id=company_id,
+            entity_id=entity_id,
+            is_owner=True,
+        )
+        try:
+            _ = await self._company_mapping_repo.create(mapping)
+        except IntegrityError as exc:
+            if not is_unique_violation(exc):
+                raise
+            logger.info(
+                "CompanyMapping для company=%r уже создан параллельным worker, пропуск",
+                company_id,
+            )
+
+    async def _ensure_default_organization_entity(self, company_id: str, *, reseed: bool) -> None:
         """Организация по умолчанию для графа CRM и company_mapping (is_owner)."""
         existing_mapping = await self._company_mapping_repo.get(company_id)
         if existing_mapping is not None:
@@ -510,12 +587,9 @@ class CompanyInitService:
             limit=1,
         )
         if len(entities) > 0:
-            mapping = CompanyMapping(
-                company_id=company_id,
-                entity_id=entities[0].entity_id,
-                is_owner=True,
-            )
-            _ = await self._company_mapping_repo.create(mapping)
+            if reseed:
+                await self._entity_access.sync_entity_created(entities[0])
+            await self._ensure_company_mapping(company_id, entities[0].entity_id)
             return
 
         company = await self._company_repo.get(company_id)
@@ -535,40 +609,34 @@ class CompanyInitService:
         try:
             _ = await self._entity_repo.create(entity)
         except IntegrityError as exc:
-            if not _is_unique_violation(exc):
+            if not is_unique_violation(exc):
                 raise
             logger.info(
                 "Organization entity %r уже создан параллельным worker для company=%r, пропуск",
                 entity.entity_id,
                 company_id,
             )
-        mapping = CompanyMapping(
-            company_id=company_id,
-            entity_id=entity.entity_id,
-            is_owner=True,
-        )
-        try:
-            _ = await self._company_mapping_repo.create(mapping)
-        except IntegrityError as exc:
-            if not _is_unique_violation(exc):
-                raise
-            logger.info(
-                "CompanyMapping для company=%r уже создан параллельным worker, пропуск",
-                company_id,
+            entities, _, _ = await self._entity_repo.list_by_cursor(
+                entity_type="organization",
+                namespace="default",
+                company_id=company_id,
+                limit=1,
             )
+            if not entities:
+                raise
+            entity = entities[0]
+            created_now = False
+        else:
+            created_now = True
+        try:
+            await self._entity_access.sync_entity_created(entity)
+        except Exception:
+            if created_now:
+                _ = await self._entity_repo.delete(entity.entity_id)
+            raise
+        await self._ensure_company_mapping(company_id, entity.entity_id)
         logger.info(
             f"Created default organization entity {entity.entity_id} for company {company_id}"
         )
 
 
-def _is_unique_violation(exc: IntegrityError) -> bool:
-    """Проверяет, что IntegrityError вызвана нарушением уникальности (parallel insert).
-
-    asyncpg UniqueViolationError не импортируется напрямую (basedpyright не может
-    резолвить типы без установленного asyncpg). Идентифицируем по имени класса
-    причины: 'UniqueViolationError'.
-    """
-    cause = exc.orig or exc.__cause__
-    if cause is None:
-        return False
-    return type(cause).__name__ == "UniqueViolationError"

@@ -230,7 +230,7 @@ describe('Flow UI runtime invariants', () => {
             baseUrl: '/flows', profile: profile({ share: true }),
         });
         await controller.connect();
-        const result = await controller.createShare({ permission: 'interact' });
+        const result = await controller.createShare({ permission: 'viewer' });
 
         expect(result.share_url).toBe('https://linnex.io/l/share123');
         const shareRequest = bodies.at(-1);
@@ -238,7 +238,7 @@ describe('Flow UI runtime invariants', () => {
         expect(shareRequest.body).toMatchObject({
             flow_id: 'flow-1', context_id: 'context-1',
             document_id: 'flow-ui:context-1', minimum_revision: 7,
-            permission: 'interact',
+            permission: 'viewer',
         });
         controller.dispose();
     });
@@ -264,7 +264,7 @@ describe('Flow UI runtime invariants', () => {
             baseUrl: '/flows', profile: profile({ share: true }),
         });
         await controller.connect();
-        await controller.createShare({ permission: 'view' });
+        await controller.createShare({ permission: 'viewer' });
         let revoked = null;
         controller.addEventListener('flow-ui-share-revoked', (event) => { revoked = event.detail; });
         await controller.revokeShare('grant-123');

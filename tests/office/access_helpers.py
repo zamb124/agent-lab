@@ -10,7 +10,8 @@ from httpx import AsyncClient
 
 from tests.office.helpers import upload_office_file_bytes
 
-OfficeLinkPermission = Literal["view", "edit"]
+OfficeLinkPermission = Literal["viewer", "editor"]
+OfficeMemberRelation = Literal["viewer", "editor"]
 
 
 def parse_viz_stream_url(editor_config: dict[str, object]) -> str:
@@ -33,7 +34,7 @@ async def create_private_catalog(
     response = await office_client.post(
         "/documents/api/v1/catalogs",
         headers=headers,
-        json={"title": f"{title_prefix}-{unique_id}", "is_public": False},
+        json={"title": f"{title_prefix}-{unique_id}", "company_visible": False},
     )
     assert response.status_code == 200, response.text
     return response.json()["catalog_id"]
@@ -49,7 +50,7 @@ async def create_public_catalog(
     response = await office_client.post(
         "/documents/api/v1/catalogs",
         headers=headers,
-        json={"title": f"{title_prefix}-{unique_id}", "is_public": True},
+        json={"title": f"{title_prefix}-{unique_id}", "company_visible": True},
     )
     assert response.status_code == 200, response.text
     return response.json()["catalog_id"]
@@ -61,7 +62,7 @@ async def create_nested_catalog(
     unique_id: str,
     *,
     parent_catalog_id: str,
-    is_public: bool = False,
+    company_visible: bool = False,
     title_prefix: str = "access-nested",
 ) -> str:
     response = await office_client.post(
@@ -69,7 +70,7 @@ async def create_nested_catalog(
         headers=headers,
         json={
             "title": f"{title_prefix}-{unique_id}",
-            "is_public": is_public,
+            "company_visible": company_visible,
             "parent_catalog_id": parent_catalog_id,
         },
     )
@@ -194,7 +195,7 @@ async def enable_catalog_link(
     headers: dict[str, str],
     catalog_id: str,
     *,
-    link_permission: OfficeLinkPermission = "view",
+    link_permission: OfficeLinkPermission = "viewer",
 ) -> tuple[str, dict[str, object]]:
     response = await office_client.patch(
         f"/documents/api/v1/catalogs/{catalog_id}/access",
@@ -213,7 +214,7 @@ async def enable_document_link(
     headers: dict[str, str],
     file_id: str,
     *,
-    link_permission: OfficeLinkPermission = "view",
+    link_permission: OfficeLinkPermission = "viewer",
 ) -> tuple[str, dict[str, object]]:
     response = await office_client.patch(
         f"/documents/api/v1/documents/{file_id}/access",
@@ -225,3 +226,22 @@ async def enable_document_link(
     public_url = body["public_url"]
     assert isinstance(public_url, str) and public_url
     return extract_public_token(public_url), body
+
+
+async def patch_access_members(
+    office_client: AsyncClient,
+    headers: dict[str, str],
+    *,
+    resource_path: str,
+    members: list[dict[str, str]],
+) -> dict[str, object]:
+    response = await office_client.patch(
+        resource_path,
+        headers=headers,
+        json={"members": members},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    if not isinstance(body, dict):
+        raise AssertionError("patch access: JSON object required")
+    return body

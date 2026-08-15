@@ -1,5 +1,5 @@
 """
-Каталоги документов и участники (ACL).
+Каталоги документов (data plane). ACL — только OpenFGA через OfficeAccessService.
 """
 
 from __future__ import annotations
@@ -7,11 +7,10 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import exists, func, or_, select
+from sqlalchemy import func, select
 
 from apps.office.db.base import OfficeDatabase
 from apps.office.db.models import (
-    OfficeCatalogMember,
     OfficeDocumentBinding,
     OfficeDocumentCatalog,
 )
@@ -28,21 +27,24 @@ class CatalogRepository:
         company_id: str,
         namespace: str,
         owner_user_id: str,
-    ) -> OfficeDocumentCatalog:
+    ) -> tuple[OfficeDocumentCatalog, bool]:
+        """Возвращает (catalog, created). Caller пишет FGA при created=True."""
+        if owner_user_id.strip() == "":
+            raise ValueError("owner_user_id is required")
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeDocumentCatalog)
                 .where(
                     OfficeDocumentCatalog.company_id == company_id,
                     OfficeDocumentCatalog.namespace == namespace,
-                    OfficeDocumentCatalog.owner_user_id == owner_user_id,
+                    OfficeDocumentCatalog.parent_catalog_id.is_(None),
                 )
                 .order_by(OfficeDocumentCatalog.created_at.asc())
                 .limit(1)
             )
             existing = result.scalar_one_or_none()
             if existing is not None:
-                return existing
+                return existing, False
             catalog_id = uuid.uuid4().hex
             row = OfficeDocumentCatalog(
                 catalog_id=catalog_id,
@@ -50,13 +52,12 @@ class CatalogRepository:
                 namespace=namespace,
                 title="Общие",
                 owner_user_id=owner_user_id,
-                is_public=True,
                 created_at=datetime.now(timezone.utc),
             )
             session.add(row)
             await session.commit()
             await session.refresh(row)
-            return row
+            return row, True
 
     async def get(
         self, catalog_id: str, company_id: str, namespace: str
@@ -71,81 +72,22 @@ class CatalogRepository:
             )
             return result.scalar_one_or_none()
 
-    async def user_can_access_catalog(
-        self,
-        catalog_id: str,
-        company_id: str,
-        namespace: str,
-        user_id: str,
-    ) -> bool:
-        visited: set[str] = set()
-        current_id: str | None = catalog_id
-        while current_id is not None:
-            if current_id in visited:
-                return False
-            visited.add(current_id)
-            cat = await self.get(current_id, company_id, namespace)
-            if cat is None:
-                return False
-            if cat.is_public:
-                return True
-            if cat.owner_user_id == user_id:
-                return True
-            async with self._db.session() as session:
-                result = await session.execute(
-                    select(OfficeCatalogMember).where(
-                        OfficeCatalogMember.catalog_id == current_id,
-                        OfficeCatalogMember.user_id == user_id,
-                    )
-                )
-                if result.scalar_one_or_none() is not None:
-                    return True
-            current_id = cat.parent_catalog_id
-        return False
-
-    async def user_is_owner(
-        self,
-        catalog_id: str,
-        company_id: str,
-        namespace: str,
-        user_id: str,
-    ) -> bool:
-        cat = await self.get(catalog_id, company_id, namespace)
-        if cat is None:
-            return False
-        return cat.owner_user_id == user_id
-
-    async def list_accessible_with_file_counts(
+    async def list_by_company_namespace(
         self,
         *,
         company_id: str,
         namespace: str,
-        user_id: str,
-    ) -> list[tuple[OfficeDocumentCatalog, int]]:
-        member_exists = exists(
-            select(1)
-            .select_from(OfficeCatalogMember)
-            .where(
-                OfficeCatalogMember.catalog_id == OfficeDocumentCatalog.catalog_id,
-                OfficeCatalogMember.user_id == user_id,
-            )
-        )
+    ) -> list[OfficeDocumentCatalog]:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeDocumentCatalog)
                 .where(
                     OfficeDocumentCatalog.company_id == company_id,
                     OfficeDocumentCatalog.namespace == namespace,
-                    or_(
-                        OfficeDocumentCatalog.is_public.is_(True),
-                        OfficeDocumentCatalog.owner_user_id == user_id,
-                        member_exists,
-                    ),
                 )
                 .order_by(OfficeDocumentCatalog.created_at.asc())
             )
-            catalogs = list(result.scalars().all())
-        return [(catalog, await self.count_documents(catalog.catalog_id)) for catalog in catalogs]
+            return list(result.scalars().all())
 
     async def create(
         self,
@@ -154,9 +96,10 @@ class CatalogRepository:
         namespace: str,
         title: str,
         owner_user_id: str,
-        is_public: bool = True,
         parent_catalog_id: str | None = None,
     ) -> OfficeDocumentCatalog:
+        if owner_user_id.strip() == "":
+            raise ValueError("owner_user_id is required")
         if parent_catalog_id is not None:
             parent = await self.get(parent_catalog_id, company_id, namespace)
             if parent is None:
@@ -169,7 +112,6 @@ class CatalogRepository:
             parent_catalog_id=parent_catalog_id,
             title=title.strip(),
             owner_user_id=owner_user_id,
-            is_public=is_public,
             created_at=datetime.now(timezone.utc),
         )
         async with self._db.session() as session:
@@ -207,7 +149,7 @@ class CatalogRepository:
         parent_catalog_id: str | None,
         title: str,
         owner_user_id: str,
-    ) -> OfficeDocumentCatalog:
+    ) -> tuple[OfficeDocumentCatalog, bool]:
         existing = await self.find_child_by_title(
             company_id=company_id,
             namespace=namespace,
@@ -215,14 +157,15 @@ class CatalogRepository:
             title=title,
         )
         if existing is not None:
-            return existing
-        return await self.create(
+            return existing, False
+        created = await self.create(
             company_id=company_id,
             namespace=namespace,
             title=title,
             owner_user_id=owner_user_id,
             parent_catalog_id=parent_catalog_id,
         )
+        return created, True
 
     async def update_catalog(
         self,
@@ -231,7 +174,6 @@ class CatalogRepository:
         namespace: str,
         *,
         title: str | None = None,
-        is_public: bool | None = None,
     ) -> OfficeDocumentCatalog | None:
         async with self._db.session() as session:
             result = await session.execute(
@@ -246,8 +188,6 @@ class CatalogRepository:
                 return None
             if title is not None:
                 row.title = title.strip()
-            if is_public is not None:
-                row.is_public = is_public
             await session.commit()
             await session.refresh(row)
             return row
@@ -428,65 +368,6 @@ class CatalogRepository:
                     OfficeDocumentCatalog.catalog_id == catalog_id,
                     OfficeDocumentCatalog.company_id == company_id,
                     OfficeDocumentCatalog.namespace == namespace,
-                )
-            )
-            row = result.scalar_one_or_none()
-            if row is None:
-                return False
-            await session.delete(row)
-            await session.commit()
-            return True
-
-    async def list_members(self, catalog_id: str) -> list[OfficeCatalogMember]:
-        async with self._db.session() as session:
-            result = await session.execute(
-                select(OfficeCatalogMember).where(
-                    OfficeCatalogMember.catalog_id == catalog_id
-                )
-            )
-            return list(result.scalars().all())
-
-    async def add_member(
-        self,
-        catalog_id: str,
-        user_id: str,
-        *,
-        company_id: str,
-        namespace: str,
-    ) -> OfficeCatalogMember:
-        cat = await self.get(catalog_id, company_id, namespace)
-        if cat is None:
-            raise ValueError("Каталог не найден")
-        if cat.is_public:
-            raise ValueError("Публичный каталог доступен всей компании в этом пространстве")
-        if cat.owner_user_id == user_id:
-            raise ValueError("Владелец уже имеет полный доступ к каталогу")
-        async with self._db.session() as session:
-            existing = await session.execute(
-                select(OfficeCatalogMember).where(
-                    OfficeCatalogMember.catalog_id == catalog_id,
-                    OfficeCatalogMember.user_id == user_id,
-                )
-            )
-            found = existing.scalar_one_or_none()
-            if found is not None:
-                return found
-            row = OfficeCatalogMember(
-                catalog_id=catalog_id,
-                user_id=user_id,
-                created_at=datetime.now(timezone.utc),
-            )
-            session.add(row)
-            await session.commit()
-            await session.refresh(row)
-            return row
-
-    async def remove_member(self, catalog_id: str, user_id: str) -> bool:
-        async with self._db.session() as session:
-            result = await session.execute(
-                select(OfficeCatalogMember).where(
-                    OfficeCatalogMember.catalog_id == catalog_id,
-                    OfficeCatalogMember.user_id == user_id,
                 )
             )
             row = result.scalar_one_or_none()

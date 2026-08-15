@@ -58,6 +58,8 @@ docs/video/*.mov
 /reports/db_test_profile/
 /reports/postgres-test-logs/
 /reports/coverage/
+/reports/openfga-test.env
+/reports/openfga-dev.env
 /data/
 /apps/provider_litserve/data/
 /scripts/logs/agents.log

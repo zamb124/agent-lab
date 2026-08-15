@@ -67,6 +67,7 @@ TEST_TASKIQ_APPS = (
     "apps.search_worker.worker:worker_app",
     "apps.sync_worker.worker:worker_app",
     "apps.crm_worker.worker:worker_app",
+    "apps.crm_worker.summary_worker:worker_app",
     "apps.idle_worker.worker:worker_app",
     "apps.scheduler.scheduler:scheduler",
 )

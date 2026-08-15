@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import override
 
-from sqlalchemy import exists, nullslast, select, update
+from sqlalchemy import nullslast, select, update
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 
@@ -127,11 +127,12 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
-    async def list_member_user_ids(
+    async def list_settings_user_ids(
         self,
         channel_id: str,
         company_id: str | None = None,
     ) -> list[str]:
+        """User ids с settings-row (prefs). Не ACL — membership только OpenFGA."""
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
             stmt = select(SyncChannelMember.user_id).where(
@@ -141,49 +142,30 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
-    async def is_member(
+    async def ensure_member_row(
         self,
         channel_id: str,
         user_id: str,
         company_id: str | None = None,
-    ) -> bool:
-        """Проверяет членство пользователя в канале (в рамках компании)."""
-        cid = company_id or self._get_company_id()
-        async with self._db.session() as session:
-            stmt = select(
-                exists().where(
-                    SyncChannelMember.channel_id == channel_id,
-                    SyncChannelMember.user_id == user_id,
-                    SyncChannelMember.company_id == cid,
-                )
-            )
-            result = await session.execute(stmt)
-            return result.scalar() or False
-
-    async def upsert_member(self, channel_id: str, user_id: str, role: str, company_id: str | None = None) -> None:
-        """Добавляет или обновляет роль участника канала."""
+    ) -> None:
+        """Создаёт строку настроек участника канала, если её ещё нет."""
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
             existing = await session.get(SyncChannelMember, (channel_id, user_id))
-            if existing:
-                existing.role = role
-            else:
-                member = SyncChannelMember(
-                    channel_id=channel_id,
-                    user_id=user_id,
-                    company_id=cid,
-                    role=role,
-                    notifications_muted=False,
-                )
-                session.add(member)
+            if existing is not None:
+                if existing.company_id != cid:
+                    raise ValueError(
+                        f"Запись участника принадлежит другой компании: channel_id={channel_id}."
+                    )
+                return
+            member = SyncChannelMember(
+                channel_id=channel_id,
+                user_id=user_id,
+                company_id=cid,
+                notifications_muted=False,
+            )
+            session.add(member)
             await session.commit()
-
-    async def add_member_if_missing(self, channel_id: str, user_id: str, role: str, company_id: str | None = None) -> None:
-        """Добавляет участника, если его ещё нет."""
-        cid = company_id or self._get_company_id()
-        is_already = await self.is_member(channel_id, user_id, company_id=cid)
-        if not is_already:
-            await self.upsert_member(channel_id, user_id, role, company_id=cid)
 
     async def delete_member(
         self,
@@ -199,33 +181,6 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
             await session.delete(row)
             await session.commit()
             return True
-
-    async def get_member_role(self, channel_id: str, user_id: str) -> str | None:
-        async with self._db.session() as session:
-            row = await session.get(SyncChannelMember, (channel_id, user_id))
-            if row is None:
-                return None
-            return row.role
-
-    async def list_member_rows(
-        self,
-        channel_id: str,
-        *,
-        company_id: str | None = None,
-    ) -> list[tuple[str, str]]:
-        """Список (user_id, role) участников канала в компании."""
-        cid = company_id or self._get_company_id()
-        async with self._db.session() as session:
-            stmt = (
-                select(SyncChannelMember.user_id, SyncChannelMember.role)
-                .where(
-                    SyncChannelMember.channel_id == channel_id,
-                    SyncChannelMember.company_id == cid,
-                )
-                .order_by(SyncChannelMember.user_id.asc())
-            )
-            result = await session.execute(stmt)
-            return [(r[0], r[1]) for r in result.all()]
 
     async def set_member_last_read_at(
         self,

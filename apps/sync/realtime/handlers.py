@@ -60,6 +60,9 @@ from apps.sync.realtime.task_names import (
     SYNC_TRANSCRIBE_AUDIO_MESSAGE,
 )
 from apps.sync.sender_display import sender_brief_for_message
+from apps.sync.services.sync_channel_access_service import SyncChannelAccessService
+from core.authz.models import AuthzObject
+from core.authz.service import AuthzService
 from core.calls.livekit_client import LiveKitClient
 from core.calls.livekit_usage_spans import trace_livekit_egress_composite_usage
 from core.config import get_settings
@@ -96,11 +99,10 @@ if TYPE_CHECKING:
 
 
 async def channel_recipient_user_ids(
-    channels: ChannelRepository,
+    channel_access: SyncChannelAccessService,
     channel_id: str,
-    company_id: str,
 ) -> list[str]:
-    return await channels.list_member_user_ids(channel_id, company_id=company_id)
+    return await channel_access.list_member_user_ids(channel_id)
 
 
 async def maybe_start_speech_to_chat_poll(
@@ -275,6 +277,7 @@ async def _enqueue_channel_message_notifications(
     company_id: str,
     actor_user_id: str,
     channels: ChannelRepository,
+    channel_access: SyncChannelAccessService,
     user_repository: UserRepository,
 ) -> None:
     entity = await channels.get(channel_id)
@@ -286,7 +289,7 @@ async def _enqueue_channel_message_notifications(
         title = message.sender.display_name
     else:
         title = entity.name or "Канал"
-    member_ids = await channels.list_member_user_ids(channel_id, company_id=company_id)
+    member_ids = await channel_access.list_member_user_ids(channel_id)
     mentioned: set[str] = set(message.mentioned_user_ids or [])
     is_root_lane = body.thread_id is None
 
@@ -331,10 +334,11 @@ async def _normalize_message_create_mentions(
     channel_id: str,
     company_id: str,
     actor_user_id: str,
-    channels: ChannelRepository,
+    channel_access: SyncChannelAccessService,
 ) -> MessageCreate:
+    _ = company_id
     member_ids = set(
-        await channels.list_member_user_ids(channel_id, company_id=company_id)
+        await channel_access.list_member_user_ids(channel_id)
     )
 
     def validate_mention_ids(raw: list[str]) -> list[str]:
@@ -528,34 +532,38 @@ async def _ensure_actor_may_send_to_channel(
     company_id: str,
     actor_user_id: str,
     body: MessageCreate,
-    channels: ChannelRepository,
+    authz: AuthzService,
     calls: CallRepository | None,
 ) -> None:
-    is_member = await channels.is_member(channel_id, actor_user_id, company_id=company_id)
-    if is_member:
+    # guest:* — не OpenFGA user id (`user:guest:...` invalid); доступ только через call.
+    if actor_user_id.startswith("guest:"):
         if body.call_id is None:
-            return
+            raise PermissionError("Гостю нужен call_id в сообщении.")
         if calls is None:
-            raise RuntimeError("CallRepository обязателен при call_id в сообщении.")
+            raise RuntimeError("CallRepository обязателен для сообщений гостя.")
         call = await calls.get_call(body.call_id, company_id)
         if call.channel_id != channel_id:
             raise ValueError("call_id не относится к этому каналу.")
+        if call.status not in ("ringing", "active"):
+            raise PermissionError("Звонок не активен.")
+        participants = await calls.list_participants(body.call_id)
+        mine = next((p for p in participants if p.user_id == actor_user_id), None)
+        if mine is None or mine.status != "joined":
+            raise PermissionError("Гость не в этом звонке.")
         return
-    if not actor_user_id.startswith("guest:"):
+
+    is_member = await authz.can_view(
+        AuthzObject.sync_channel(channel_id), user_id=actor_user_id
+    )
+    if not is_member:
         raise PermissionError(f"Пользователь не состоит в канале {channel_id}.")
     if body.call_id is None:
-        raise PermissionError("Гостю нужен call_id в сообщении.")
+        return
     if calls is None:
-        raise RuntimeError("CallRepository обязателен для сообщений гостя.")
+        raise RuntimeError("CallRepository обязателен при call_id в сообщении.")
     call = await calls.get_call(body.call_id, company_id)
     if call.channel_id != channel_id:
         raise ValueError("call_id не относится к этому каналу.")
-    if call.status not in ("ringing", "active"):
-        raise PermissionError("Звонок не активен.")
-    participants = await calls.list_participants(body.call_id)
-    mine = next((p for p in participants if p.user_id == actor_user_id), None)
-    if mine is None or mine.status != "joined":
-        raise PermissionError("Гость не в этом звонке.")
 
 
 async def _user_brief(user_repository: UserRepository | None, user_id: str) -> UserBrief:
@@ -589,6 +597,7 @@ async def _channel_read_for_viewer(
     viewer_user_id: str,
     company_id: str,
     channels: ChannelRepository,
+    channel_access: SyncChannelAccessService,
     user_repository: UserRepository,
 ) -> ChannelRead:
     """ChannelRead для ответа create/list: direct с заполненным peer."""
@@ -596,6 +605,7 @@ async def _channel_read_for_viewer(
         entity,
         viewer_user_id=viewer_user_id,
         channel_repository=channels,
+        channel_access=channel_access,
         user_repository=user_repository,
         company_id=company_id,
         lane_summary=None,
@@ -609,14 +619,18 @@ async def update_channel(
     actor_user_id: str,
     company_id: str,
     channels: ChannelRepository,
+    authz: AuthzService,
 ) -> ChannelRead:
     data = body.model_dump(exclude_unset=True)
     if not data:
         raise ValueError("Нет полей для обновления канала.")
-    role = await channels.get_member_role(channel_id, actor_user_id)
-    if role is None:
+    if not await authz.can_view(
+        AuthzObject.sync_channel(channel_id), user_id=actor_user_id
+    ):
         raise PermissionError(f"Пользователь не состоит в канале {channel_id}.")
-    if role not in ("owner", "admin"):
+    if not await authz.can_admin(
+        AuthzObject.sync_channel(channel_id), user_id=actor_user_id
+    ):
         raise PermissionError("Изменение настроек канала доступно только ролям owner и admin.")
     entity = await channels.get(channel_id)
     if entity is None:
@@ -644,6 +658,7 @@ async def _find_existing_direct_for_pair(
     namespace: str,
     company_id: str,
     channels: ChannelRepository,
+    channel_access: SyncChannelAccessService,
 ) -> SyncChannel | None:
     """Один личный чат с собеседником в рамках namespace (без дублей create)."""
     candidates = await channels.list_channels_where_both_members(
@@ -654,7 +669,7 @@ async def _find_existing_direct_for_pair(
             continue
         if ch.namespace != namespace:
             continue
-        member_ids = await channels.list_member_user_ids(ch.channel_id, company_id=company_id)
+        member_ids = await channel_access.list_member_user_ids(ch.channel_id)
         if len(member_ids) == 2:
             return ch
     return None
@@ -666,6 +681,7 @@ async def create_channel(
     actor_user_id: str,
     company_id: str,
     channels: ChannelRepository,
+    channel_access: SyncChannelAccessService,
     namespaces: NamespaceService,
     user_repository: UserRepository,
 ) -> tuple[ChannelRead, bool]:
@@ -718,6 +734,7 @@ async def create_channel(
             namespace=namespace,
             company_id=company_id,
             channels=channels,
+            channel_access=channel_access,
         )
         if existing is not None:
             read = await _channel_read_for_viewer(
@@ -725,6 +742,7 @@ async def create_channel(
                 viewer_user_id=actor_user_id,
                 company_id=company_id,
                 channels=channels,
+                channel_access=channel_access,
                 user_repository=user_repository,
             )
             return read, False
@@ -744,17 +762,27 @@ async def create_channel(
         speech_to_chat_enabled=speech_to_chat,
     )
     _ = await channels.create(entity)
-    await channels.add_member_if_missing(channel_id, actor_user_id, "owner", company_id)
-
-    if body.member_ids is not None:
-        for member_id in body.member_ids:
-            await channels.add_member_if_missing(channel_id, member_id, "member", company_id)
+    member_ids = list(body.member_ids) if body.member_ids is not None else []
+    await channels.ensure_member_row(channel_id, actor_user_id, company_id)
+    for member_id in member_ids:
+        await channels.ensure_member_row(channel_id, member_id, company_id)
+    try:
+        await channel_access.sync_channel_created(
+            channel_id,
+            company_id=company_id,
+            owner_user_id=actor_user_id,
+            member_user_ids=member_ids,
+        )
+    except Exception:
+        _ = await channels.delete(channel_id)
+        raise
 
     read = await _channel_read_for_viewer(
         entity,
         viewer_user_id=actor_user_id,
         company_id=company_id,
         channels=channels,
+        channel_access=channel_access,
         user_repository=user_repository,
     )
     return read, True
@@ -803,7 +831,7 @@ async def send_message_with_side_effects(
         company_id=company_id,
         actor_user_id=user.user_id,
         body=body,
-        channels=container.channel_repository,
+        authz=container.authz_service,
         calls=container.call_repository,
     )
     normalized_body = await _normalize_message_create_mentions(
@@ -811,7 +839,7 @@ async def send_message_with_side_effects(
         channel_id=channel_id,
         company_id=company_id,
         actor_user_id=user.user_id,
-        channels=container.channel_repository,
+        channel_access=container.channel_access_service,
     )
     message = await send_message(
         channel_id,
@@ -828,10 +856,11 @@ async def send_message_with_side_effects(
         company_id=company_id,
         actor_user_id=user.user_id,
         channels=container.channel_repository,
+        channel_access=container.channel_access_service,
         user_repository=container.user_repository,
     )
     recipients = await channel_recipient_user_ids(
-        container.channel_repository, channel_id, company_id
+        container.channel_access_service, channel_id
     )
     channel_entity = await container.channel_repository.get(channel_id)
     if channel_entity is None:

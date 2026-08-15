@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 
 from pydantic import Field
 
+from core.authz.models import AuthzObject
+from core.authz.service import AuthzService
 from core.files.file_ref import FileRef
 from core.identity.flow_employee import is_flow_employee_user_id
 from core.logging import get_logger
@@ -56,6 +58,7 @@ from core.worktracker.models import (
     WorktrackerModel,
     build_generic_board_columns,
 )
+from core.worktracker.queue_access import WorkQueueAccessPort, WorkQueueMemberRelation
 from core.worktracker.repository import WorktrackerRepository
 
 logger = get_logger(__name__)
@@ -82,8 +85,15 @@ class WorkItemMineSummary(WorktrackerModel):
 class WorkItemService:
     """Бизнес-логика гибкого ядра задач."""
 
-    def __init__(self, repository: WorktrackerRepository) -> None:
+    def __init__(
+        self,
+        repository: WorktrackerRepository,
+        queue_access: WorkQueueAccessPort,
+        authz: AuthzService,
+    ) -> None:
         self._repo: WorktrackerRepository = repository
+        self._queue_access: WorkQueueAccessPort = queue_access
+        self._authz: AuthzService = authz
 
     # === Чтение ===
 
@@ -161,7 +171,11 @@ class WorkItemService:
             assignee_user_id=user_id,
             exclude_terminal=True,
         )
-        queue_ids = await self._repo.list_queue_ids_for_member(company_id, user_id)
+        queue_ids = await self._queue_access.list_viewable_queue_ids(user_id=user_id)
+        company_queue_ids = {
+            queue.work_queue_id for queue in await self._repo.list_queues(company_id)
+        }
+        queue_ids = [qid for qid in queue_ids if qid in company_queue_ids]
         queue_inbox_count = 0
         if queue_ids:
             queue_inbox_count = await self.count(
@@ -412,8 +426,8 @@ class WorkItemService:
             and item.assignment.claimed_by_user_id != user_id
         ):
             raise ValueError("Задача уже взята другим участником очереди")
-        if not await self._repo.is_member(
-            item.assignment.work_queue_id, UserActor(user_id=user_id)
+        if not await self._authz.can_view(
+            AuthzObject.work_queue(item.assignment.work_queue_id), user_id=user_id
         ):
             raise PermissionError("Нет доступа к очереди этой задачи")
         item.assignment = QueueAssignment(
@@ -533,6 +547,12 @@ class WorkItemService:
         existing = await self._repo.get_queue_by_slug(company_id, slug)
         if existing is not None:
             raise ValueError(f"Очередь со slug {slug!r} уже существует")
+        if creator is not None and not isinstance(creator, UserActor):
+            raise ValueError("owner очереди должен быть UserActor")
+        if isinstance(creator, UserActor):
+            owner_user_id = creator.user_id
+        else:
+            owner_user_id = await self._queue_access.resolve_company_admin_owner(company_id)
         now = _utcnow()
         queue = WorkQueue(
             work_queue_id=f"wq_{uuid.uuid4().hex}",
@@ -540,18 +560,38 @@ class WorkItemService:
             name=name,
             work_queue_slug=slug,
             description=description,
+            owner_user_id=owner_user_id,
             created_at=now,
             updated_at=now,
         )
         saved = await self._repo.insert_queue(queue)
-        if creator is not None:
-            _ = await self.add_queue_member(
+        try:
+            await self._queue_access.sync_queue_created(
+                saved.work_queue_id,
                 company_id=company_id,
-                work_queue_id=saved.work_queue_id,
-                member=creator,
-                role="owner",
+                owner_user_id=owner_user_id,
             )
+        except Exception:
+            await self._queue_access.sync_queue_deleted(saved.work_queue_id)
+            await self._repo.delete_queue(company_id, saved.work_queue_id)
+            raise
         return saved
+
+    async def delete_queue(
+        self,
+        *,
+        company_id: str,
+        work_queue_id: str,
+        actor_user_id: str,
+    ) -> None:
+        await self._authz.require_can_admin(
+            AuthzObject.work_queue(work_queue_id), user_id=actor_user_id
+        )
+        queue = await self._repo.get_queue(company_id, work_queue_id)
+        if queue is None:
+            raise ValueError(f"Очередь {work_queue_id!r} не найдена")
+        await self._queue_access.sync_queue_deleted(work_queue_id)
+        await self._repo.delete_queue(company_id, work_queue_id)
 
     async def update_queue(
         self,
@@ -560,7 +600,11 @@ class WorkItemService:
         work_queue_id: str,
         name: str | None = None,
         description: str | None = None,
+        actor_user_id: str,
     ) -> WorkQueue:
+        await self._authz.require_can_admin(
+            AuthzObject.work_queue(work_queue_id), user_id=actor_user_id
+        )
         queue = await self._repo.get_queue(company_id, work_queue_id)
         if queue is None:
             raise ValueError(f"Очередь {work_queue_id!r} не найдена")
@@ -577,8 +621,13 @@ class WorkItemService:
             raise ValueError(f"Очередь со slug {slug!r} не найдена")
         return queue
 
-    async def list_queues(self, company_id: str) -> list[WorkQueue]:
-        return await self._repo.list_queues(company_id)
+    async def list_queues(self, company_id: str, *, user_id: str) -> list[WorkQueue]:
+        viewable = set(await self._queue_access.list_viewable_queue_ids(user_id=user_id))
+        return [
+            queue
+            for queue in await self._repo.list_queues(company_id)
+            if queue.work_queue_id in viewable
+        ]
 
     async def add_queue_member(
         self,
@@ -586,20 +635,57 @@ class WorkItemService:
         company_id: str,
         work_queue_id: str,
         member: WorkActor,
-        role: str = "member",
+        role: WorkQueueMemberRelation = "member",
+        actor_user_id: str | None = None,
     ) -> WorkQueueMember:
-        queue_member = WorkQueueMember(work_queue_id=work_queue_id, member=member, role=role)
-        await self._repo.add_queue_member(queue_member, company_id)
-        return queue_member
+        _ = company_id
+        if not isinstance(member, UserActor):
+            raise ValueError("участник очереди должен быть UserActor")
+        if actor_user_id is not None:
+            await self._authz.require_can_admin(
+                AuthzObject.work_queue(work_queue_id), user_id=actor_user_id
+            )
+        await self._queue_access.set_member(
+            work_queue_id, user_id=member.user_id, relation=role
+        )
+        return WorkQueueMember(work_queue_id=work_queue_id, member=member, role=role)
 
-    async def remove_queue_member(self, *, work_queue_id: str, member: WorkActor) -> bool:
-        return await self._repo.remove_queue_member(work_queue_id, member)
+    async def remove_queue_member(
+        self,
+        *,
+        work_queue_id: str,
+        member: WorkActor,
+        actor_user_id: str,
+    ) -> bool:
+        if not isinstance(member, UserActor):
+            raise ValueError("участник очереди должен быть UserActor")
+        await self._authz.require_can_admin(
+            AuthzObject.work_queue(work_queue_id), user_id=actor_user_id
+        )
+        if not await self._authz.can_view(
+            AuthzObject.work_queue(work_queue_id), user_id=member.user_id
+        ):
+            return False
+        await self._queue_access.remove_member(work_queue_id, user_id=member.user_id)
+        return True
 
     async def list_queue_members(self, work_queue_id: str) -> list[WorkQueueMember]:
-        return await self._repo.list_queue_members(work_queue_id)
+        rows = await self._queue_access.list_member_rows(work_queue_id)
+        return [
+            WorkQueueMember(
+                work_queue_id=work_queue_id,
+                member=UserActor(user_id=user_id),
+                role=role,
+            )
+            for user_id, role in rows
+        ]
 
     async def is_member(self, work_queue_id: str, member: WorkActor) -> bool:
-        return await self._repo.is_member(work_queue_id, member)
+        if not isinstance(member, UserActor):
+            return False
+        return await self._authz.can_view(
+            AuthzObject.work_queue(work_queue_id), user_id=member.user_id
+        )
 
     async def operator_authorized(self, item: WorkItem, user_id: str) -> bool:
         """Оператор допущен к задаче: участник очереди и (если claim) он же claimed."""
@@ -611,8 +697,8 @@ class WorkItemService:
             and assignment.claimed_by_user_id != user_id
         ):
             return False
-        return await self._repo.is_member(
-            assignment.work_queue_id, UserActor(user_id=user_id)
+        return await self._authz.can_view(
+            AuthzObject.work_queue(assignment.work_queue_id), user_id=user_id
         )
 
     # === Доски ===

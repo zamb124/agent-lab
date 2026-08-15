@@ -1041,7 +1041,7 @@ class TestExplicitModeStreaming:
             name="Explicit Streaming Test",
             description="Test agent for streaming",
             prompt="Отвечай через finish.",
-            llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.2),
+            llm=NodeLLMConfig(provider="mock", model="mock-gpt-4", temperature=0.2),
             react=ReactConfig(loop_mode=ReactLoopMode.EXPLICIT, exit_tool="finish", strict=True),
         )
         mock_llm_with_queue(
@@ -1093,7 +1093,7 @@ class TestExplicitModeStreaming:
             name="Auto Streaming Test",
             description="Test agent for streaming",
             prompt="Отвечай как хочешь.",
-            llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.2),
+            llm=NodeLLMConfig(provider="mock", model="mock-gpt-4", temperature=0.2),
             react=ReactConfig(loop_mode=ReactLoopMode.AUTO),
         )
         mock_llm_with_queue([{"type": "text", "content": "Текстовый ответ"}])

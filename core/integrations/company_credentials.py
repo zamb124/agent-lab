@@ -11,13 +11,14 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from core.ai.company_settings import decrypt_secret, encrypt_secret
+from core.authz.errors import AuthzDenied
+from core.authz.service import AuthzService
 from core.clients.google_workspace_auth import GoogleAuthMaterial
 from core.clients.google_workspace_scopes import (
     GOOGLE_OAUTH_SERVICE_CANONICAL,
     GOOGLE_WORKSPACE_SCOPES,
 )
 from core.config.models import GoogleWorkspaceConfig
-from core.context import get_context
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.integrations.constants import (
     COMPANY_INTEGRATION_USER_ID,
@@ -34,7 +35,7 @@ logger = get_logger(__name__)
 
 
 class CompanyIntegrationPermissionError(Exception):
-    """Caller lacks admin role for company-owned credentials."""
+    """Caller lacks company admin (OpenFGA can_admin) for company-owned credentials."""
 
 
 class CompanyIntegrationConfigError(Exception):
@@ -52,6 +53,7 @@ class GoogleWorkspaceCompanyCredentialPublic(StrictBaseModel):
     service: str
     token_type: str
     configured: bool
+    can_admin: bool = False
     impersonate_email: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -68,17 +70,6 @@ class GoogleWorkspaceSystemReconcileResult(StrictBaseModel):
     """Результат seed system company Google Workspace SA из conf."""
 
     ensured: bool
-
-
-def require_company_admin(company_id: str) -> None:
-    ctx = get_context()
-    if ctx is None:
-        raise CompanyIntegrationPermissionError("authenticated user is required")
-    roles = ctx.user.companies.get(company_id, [])
-    if "admin" not in roles:
-        raise CompanyIntegrationPermissionError(
-            f"admin role required for company_id={company_id}"
-        )
 
 
 def google_auth_material_from_service_account_credential(
@@ -142,19 +133,31 @@ class CompanyIntegrationCredentialService:
 
     _repository: IntegrationCredentialRepository
     _google_workspace_config: GoogleWorkspaceConfig
+    _authz: AuthzService
 
     def __init__(
         self,
         repository: IntegrationCredentialRepository,
         google_workspace_config: GoogleWorkspaceConfig,
+        authz: AuthzService,
     ) -> None:
         self._repository = repository
         self._google_workspace_config = google_workspace_config
+        self._authz = authz
+
+    async def _require_company_admin(self, company_id: str) -> None:
+        try:
+            await self._authz.require_company_admin(company_id=company_id)
+        except AuthzDenied as exc:
+            raise CompanyIntegrationPermissionError(
+                f"company admin required for company_id={company_id}"
+            ) from exc
 
     async def get_google_workspace_company_public(
         self,
         company_id: str,
     ) -> GoogleWorkspaceCompanyCredentialPublic:
+        can_admin = await self._authz.check_company_admin(company_id=company_id)
         credential = await self._repository.get_by_user_provider_service(
             company_id=company_id,
             user_id=COMPANY_INTEGRATION_USER_ID,
@@ -167,6 +170,7 @@ class CompanyIntegrationCredentialService:
                 service=GOOGLE_OAUTH_SERVICE_CANONICAL,
                 token_type=TOKEN_TYPE_SERVICE_ACCOUNT,
                 configured=False,
+                can_admin=can_admin,
             )
         return GoogleWorkspaceCompanyCredentialPublic(
             provider=str(credential.provider),
@@ -175,6 +179,7 @@ class CompanyIntegrationCredentialService:
             if credential.token_type is not None
             else TOKEN_TYPE_SERVICE_ACCOUNT,
             configured=True,
+            can_admin=can_admin,
             impersonate_email=_optional_impersonate_email(credential.metadata),
             created_at=credential.created_at,
             updated_at=credential.updated_at,
@@ -206,7 +211,7 @@ class CompanyIntegrationCredentialService:
                 "system company Google Workspace is managed via reconcile"
             )
         if not allow_system:
-            require_company_admin(company_id)
+            await self._require_company_admin(company_id)
 
         sa_json = _validate_service_account_json(payload.service_account_json)
         impersonate = _normalize_impersonate_email(payload.impersonate_email)
@@ -255,7 +260,7 @@ class CompanyIntegrationCredentialService:
                 "system company Google Workspace is managed via reconcile"
             )
         if not allow_system:
-            require_company_admin(company_id)
+            await self._require_company_admin(company_id)
         deleted = await self._repository.delete_by_user_provider_service(
             company_id=company_id,
             user_id=COMPANY_INTEGRATION_USER_ID,

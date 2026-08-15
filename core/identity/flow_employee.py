@@ -14,7 +14,12 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime, timezone
 
+from core.authz.company_sync import remove_company_member
 from core.container.base import BaseContainer
+from core.identity.company_membership import (
+    remove_company_membership,
+    sync_existing_company_member,
+)
 from core.identity.runtime_users import ensure_persisted_runtime_user
 from core.models.identity_models import User, UserStatus
 from core.types import JsonObject
@@ -145,6 +150,12 @@ async def ensure_flow_employee(
         company.members[user_id] = merged_member_roles
         company.updated_at = now
         _ = await container.company_repository.set(company)
+    await sync_existing_company_member(
+        authz=container.authz_service,
+        company_id=clean_company_id,
+        user_id=user_id,
+        roles=merged_member_roles,
+    )
 
     return user
 
@@ -167,6 +178,23 @@ async def deactivate_flow_employee(
     now = datetime.now(timezone.utc)
 
     user = await container.user_repository.get(user_id)
+    company = await container.company_repository.get(clean_company_id)
+    if user is not None and company is not None and (
+        clean_company_id in user.companies or user_id in company.members
+    ):
+        if user.status != UserStatus.INACTIVE:
+            user.status = UserStatus.INACTIVE
+            user.updated_at = now
+        await remove_company_membership(
+            company_repository=container.company_repository,
+            user_repository=container.user_repository,
+            authz=container.authz_service,
+            company=company,
+            user=user,
+            allow_empty_companies=True,
+        )
+        return
+
     if user is not None:
         changed = False
         if user.status != UserStatus.INACTIVE:
@@ -179,8 +207,12 @@ async def deactivate_flow_employee(
             user.updated_at = now
             _ = await container.user_repository.set(user)
 
-    company = await container.company_repository.get(clean_company_id)
     if company is not None and user_id in company.members:
         del company.members[user_id]
         company.updated_at = now
         _ = await container.company_repository.set(company)
+        await remove_company_member(
+            container.authz_service,
+            company_id=clean_company_id,
+            user_id=user_id,
+        )

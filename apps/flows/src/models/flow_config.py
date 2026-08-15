@@ -185,7 +185,9 @@ class BranchConfig(StrictBaseModel):
     tags: list[str] = Field(default_factory=list, description="Теги ветки")
     permission: list[str] = Field(
         default_factory=list,
-        description="Группы с доступом к ветке. Пустой список = доступ для всех",
+        description=(
+            "Группы с доступом к ветке. Пустой список = наследование viewer от flow"
+        ),
     )
 
     @field_validator("permission", mode="before")
@@ -311,6 +313,15 @@ class FlowToolPickerItem(StrictBaseModel):
     tags: list[str] = Field(default_factory=list)
 
 
+class FlowListIndexItem(StrictBaseModel):
+    """Проекция списка flows: id и type без полного FlowConfig / Flow UI."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
+
+    flow_id: str
+    type: FlowType
+
+
 class FlowConfig(StrictBaseModel):
     """
     СТРОГАЯ конфигурация агента.
@@ -376,7 +387,7 @@ class FlowConfig(StrictBaseModel):
     agent_card: JsonObject | None = Field(default=None, description="Кэш agent-card.json")
     permission: list[str] = Field(
         default_factory=list,
-        description="Группы с доступом. Пустой список = доступ для всех",
+        description="Группы с доступом. Пустой список = company-visible (member компании)",
     )
 
     @field_validator("permission", mode="before")

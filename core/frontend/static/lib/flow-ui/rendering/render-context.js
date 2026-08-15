@@ -33,7 +33,7 @@ export function createFlowUIRenderContext(input) {
         locale: input.locale || 'ru',
         timezone: input.timezone || 'Europe/Moscow',
         direction: input.direction || 'ltr',
-        viewer_permissions: Object.freeze([...(input.viewerPermissions || ['view', 'interact'])]),
+        viewer_permissions: Object.freeze([...(input.viewerPermissions || ['viewer', 'editor'])]),
         client_capabilities: Object.freeze({ ...(input.clientCapabilities || {}) }),
         data_model_hash: input.dataModelHash || '',
         task_projection_sequence: input.taskProjectionSequence || 0,

@@ -85,7 +85,7 @@ async def test_flow_ui_share_viewer_cannot_submit(
     await flows_chat_wait_ready(page)
     await flows_chat_fill_draft(page, draft)
     await flows_chat_wait_saved(page)
-    share = await flows_chat_create_share(page, permission="view")
+    share = await flows_chat_create_share(page, permission="viewer")
     code = share.share_url.rstrip("/").split("/l/")[-1]
 
     viewer = await page.context.new_page()
@@ -134,7 +134,7 @@ async def test_flow_ui_owner_collaborator_occ_conflict_surfaces(
     await flows_chat_wait_ready(page)
     await flows_chat_fill_draft(page, seed)
     await flows_chat_wait_saved(page)
-    share = await flows_chat_create_share(page, permission="interact")
+    share = await flows_chat_create_share(page, permission="editor")
     code = share.share_url.rstrip("/").split("/l/")[-1]
 
     collaborator = await page.context.new_page()

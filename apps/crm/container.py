@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from apps.crm.config import get_crm_settings
 from apps.crm.db.base import CRMDatabase
-from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
 from apps.crm.db.repositories.access_request_repository import AccessRequestRepository
 from apps.crm.db.repositories.company_mapping_repository import CompanyMappingRepository
 from apps.crm.db.repositories.entity_repository import EntityRepository
@@ -21,11 +20,11 @@ from apps.crm.db.repositories.suggest_repository import SuggestRepository
 from apps.crm.db.repositories.task_repository import TaskRepository
 from apps.crm.integrations.amocrm.connector import AmoCRMConnector
 from apps.crm.integrations.registry import IntegrationRegistry
-from apps.crm.services.access_control_service import AccessControlService
 from apps.crm.services.access_grant_service import AccessGrantService
 from apps.crm.services.access_request_service import AccessRequestService
 from apps.crm.services.attachment_service import AttachmentService
 from apps.crm.services.company_init_service import CompanyInitService
+from apps.crm.services.crm_entity_access_service import CrmEntityAccessService
 from apps.crm.services.crm_work_item_service import CrmWorkItemService
 from apps.crm.services.daily_summary_artifact_service import DailySummaryArtifactService
 from apps.crm.services.daily_summary_cache_service import DailySummaryCacheService
@@ -39,6 +38,7 @@ from apps.crm.services.note_processing_service import NoteProcessingService
 from apps.crm.services.suggest_service import SuggestService
 from apps.crm.services.task_service import TaskService
 from apps.crm.services.user_person_service import UserPersonService
+from apps.worktracker.services.work_queue_access_service import WorkQueueAccessService
 from core.clients.a2a_client import A2AClient
 from core.clients.redis_client import RedisClient
 from core.config import get_settings
@@ -119,10 +119,6 @@ class CRMContainer(BaseContainer):
         return AccessRequestRepository(db=self.crm_db)
 
     @lazy
-    def access_grant_repository(self) -> AccessGrantRepository:
-        return AccessGrantRepository(db=self.crm_db)
-
-    @lazy
     def suggest_repository(self) -> SuggestRepository:
         return SuggestRepository(db=self.crm_db)
 
@@ -132,8 +128,7 @@ class CRMContainer(BaseContainer):
     def attachment_service(self) -> AttachmentService:
         return AttachmentService(
             entity_repository=self.entity_repository,
-            access_grant_repository=self.access_grant_repository,
-            company_repository=self.company_repository,
+            authz=self.authz_service,
             file_repository=self.file_repository,
             files_service=self.files_service,
             note_markdown_format_scheduler=self.schedule_note_markdown_format,
@@ -155,6 +150,7 @@ class CRMContainer(BaseContainer):
     @lazy
     def company_init_service(self) -> CompanyInitService:
         return CompanyInitService(
+            crm_db=self.crm_db,
             entity_type_repo=self.entity_type_repository,
             relationship_type_repo=self.relationship_type_repository,
             namespace_template_repo=self.namespace_template_repository,
@@ -164,6 +160,7 @@ class CRMContainer(BaseContainer):
             company_mapping_repo=self.company_mapping_repository,
             namespace_service=self.namespace_service,
             user_repo=self.user_repository,
+            entity_access=self.crm_entity_access_service,
         )
 
     @lazy
@@ -183,6 +180,7 @@ class CRMContainer(BaseContainer):
             entity_type_repo=self.entity_type_repository,
             user_repository=self.user_repository,
             relationship_repo=self.relationship_repository,
+            entity_access=self.crm_entity_access_service,
         )
 
     @lazy
@@ -204,7 +202,11 @@ class CRMContainer(BaseContainer):
 
     @lazy
     def work_item_service(self) -> WorkItemService:
-        return WorkItemService(repository=self.worktracker_repository)
+        return WorkItemService(
+            repository=self.worktracker_repository,
+            queue_access=WorkQueueAccessService(self.authz_service),
+            authz=self.authz_service,
+        )
 
     @lazy
     def crm_work_item_service(self) -> CrmWorkItemService:
@@ -219,30 +221,31 @@ class CRMContainer(BaseContainer):
             relationship_repo=self.relationship_repository,
             namespace_service=self.namespace_service,
             attachment_service=self.attachment_service,
-            a2a_client=A2AClient(timeout=300.0),
+            a2a_client=A2AClient(timeout=get_crm_settings().analysis_a2a_timeout_seconds),
             daily_summary_cache_service=self.daily_summary_cache_service,
             daily_summary_artifact_service=self.daily_summary_artifact_service,
             user_person_service=self.user_person_service,
-            access_grant_repo=self.access_grant_repository,
+            authz=self.authz_service,
             access_request_repo=self.access_request_repository,
             company_mapping_repo=self.company_mapping_repository,
-            company_repo=self.company_repository,
-            access_control=self.access_control_service,
+            entity_access=self.crm_entity_access_service,
             task_repository=self.task_repository,
             crm_work_item_service=self.crm_work_item_service,
             note_markdown_format_scheduler=self.schedule_note_markdown_format,
         )
 
     @lazy
-    def access_control_service(self) -> AccessControlService:
-        return AccessControlService(
-            grant_repo=self.access_grant_repository, entity_type_repo=self.entity_type_repository
+    def crm_entity_access_service(self) -> CrmEntityAccessService:
+        return CrmEntityAccessService(
+            entity_type_repo=self.entity_type_repository,
+            authz=self.authz_service,
         )
 
     @lazy
     def access_grant_service(self) -> AccessGrantService:
         return AccessGrantService(
-            grant_repo=self.access_grant_repository, entity_repo=self.entity_repository
+            entity_repo=self.entity_repository,
+            authz=self.authz_service,
         )
 
     @lazy
@@ -251,6 +254,8 @@ class CRMContainer(BaseContainer):
             access_request_repo=self.access_request_repository,
             entity_repo=self.entity_repository,
             relationship_repo=self.relationship_repository,
+            authz=self.authz_service,
+            entity_access=self.crm_entity_access_service,
         )
 
     @lazy
@@ -259,7 +264,8 @@ class CRMContainer(BaseContainer):
             relationship_repo=self.relationship_repository,
             relationship_type_repo=self.relationship_type_repository,
             entity_repo=self.entity_repository,
-            access_control=self.access_control_service,
+            entity_access=self.crm_entity_access_service,
+            authz=self.authz_service,
         )
 
     @lazy
@@ -291,8 +297,7 @@ class CRMContainer(BaseContainer):
         return await schedule_note_markdown_format(
             task_service=self.task_service,
             entity_repository=self.entity_repository,
-            company_repository=self.company_repository,
-            access_grant_repository=self.access_grant_repository,
+            authz=self.authz_service,
             note_id=note_id,
             company_id=company_id,
             namespace=namespace,
@@ -320,6 +325,7 @@ class CRMContainer(BaseContainer):
                     task_service=self.task_service,
                     integration_external_author=self.integration_external_author_service,
                     namespace_template_service=self.namespace_template_service,
+                    entity_access=self.crm_entity_access_service,
                 )
             ]
         )

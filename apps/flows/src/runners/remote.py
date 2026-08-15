@@ -47,6 +47,7 @@ from core.state.mutation_policy import (
 from core.tracing.operation_span import traced_operation
 
 CAPABILITY_MANIFEST_PATH = "/capability-gateway/api/v1/capabilities/manifest"
+TOOL_RUNTIME_MANIFEST_PATH = "/flows/api/v1/tool-runtime/manifest"
 CODE_SANDBOX_MEMORY_LIMIT_MB = 256
 CODE_SANDBOX_FILESYSTEM_LIMIT_MB = 64
 CODE_SANDBOX_STDOUT_STDERR_LIMIT_BYTES = 1_048_576
@@ -294,15 +295,27 @@ class RemoteCodeRunner(BaseCodeRunner):
         *,
         allowed_capabilities: list[str] | None = None,
     ) -> CapabilityManifest:
-        # Манифест включает динамические tools.<tool_id>, которые меняются при создании/удалении
-        # tool'ов, поэтому он берётся из capability_gateway на каждый вызов без процессного кэша:
-        # устаревший снимок привёл бы к "capability is not declared in manifest" для свежих tool'ов.
-        raw_manifest = await self._client.get(
+        # Gateway без AuthMiddleware: только platform caps + builtins.
+        # Company tools — с текущего flows context (signed headers), иначе
+        # sandbox не видит только что созданный tool_repository row.
+        raw_gateway = await self._client.get(
             "capability_gateway",
             CAPABILITY_MANIFEST_PATH,
             timeout=30.0,
         )
-        manifest = CapabilityManifest.model_validate(raw_manifest)
+        raw_tools = await self._client.get(
+            "flows",
+            TOOL_RUNTIME_MANIFEST_PATH,
+            timeout=30.0,
+        )
+        gateway = CapabilityManifest.model_validate(raw_gateway)
+        tools = CapabilityManifest.model_validate(raw_tools)
+        by_name = {capability.name: capability for capability in gateway.capabilities}
+        by_name.update({capability.name: capability for capability in tools.capabilities})
+        manifest = CapabilityManifest(
+            version=gateway.version,
+            capabilities=[by_name[name] for name in sorted(by_name)],
+        )
         if allowed_capabilities:
             allowed = set(allowed_capabilities)
             manifest = CapabilityManifest(

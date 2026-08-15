@@ -1764,17 +1764,6 @@ export class PlatformMailModal extends PlatformModal {
         }
     }
 
-    _isCompanyAdmin() {
-        const auth = this._authSelect.value;
-        const companyId = auth.activeCompanyId;
-        const raw = auth.user && auth.user.raw;
-        if (!companyId || !raw || !raw.companies || typeof raw.companies !== 'object') {
-            return false;
-        }
-        const roles = raw.companies[companyId];
-        return Array.isArray(roles) && roles.includes('admin');
-    }
-
     _activeBinding() {
         const mail = this._mailSelect.value;
         return mail.bindings.find((b) => b.mailbox_binding_id === mail.activeMailboxBindingId) || null;
@@ -2798,7 +2787,7 @@ export class PlatformMailModal extends PlatformModal {
                 use_ssl: true,
             };
         this.dispatch(MAIL_EVENTS.ADMIN_MODE_SET, { open: true });
-        if (this._isCompanyAdmin()) {
+        if (this._mailSelect.value.canAdmin === true) {
             this.dispatch(MAIL_EVENTS.COMPANY_BINDINGS_LOAD_REQUESTED, null);
             this.dispatch(MAIL_EVENTS.CONNECTION_LOAD_REQUESTED, null);
         }
@@ -4388,7 +4377,7 @@ export class PlatformMailModal extends PlatformModal {
 
     _renderSettings(mail) {
         if (!mail.adminMode || !this._adminDraft) return nothing;
-        const isAdmin = this._isCompanyAdmin();
+        const isAdmin = mail.canAdmin === true;
         const memberOptions = this._memberOptions();
         return html`
             <div class="settings-overlay">

@@ -1,8 +1,5 @@
 """
-Доступ к странице: участники и публичная ссылка.
-
-Любое изменение здесь пересчитывает видимость поддерева и переносит индекс
-RAG — это делает сервис, роутер лишь передаёт намерение.
+Доступ к странице: участники FGA и публичная ссылка (token AuthN).
 """
 
 from __future__ import annotations
@@ -13,6 +10,7 @@ from apps.wiki.api._scope import require_scope
 from apps.wiki.dependencies import ContainerDep
 from apps.wiki.models.api import (
     WikiAccessResponse,
+    WikiCompanyVisibleRequest,
     WikiMemberUpsertRequest,
     WikiPublicLinkRequest,
     WikiPublicLinkResponse,
@@ -27,7 +25,7 @@ router = APIRouter(prefix="/pages", tags=["wiki-access"])
 def _to_response(access: WikiPageAccess) -> WikiAccessResponse:
     return WikiAccessResponse(
         wiki_page_id=access.wiki_page_id,
-        visibility=access.visibility,
+        company_visible=access.company_visible,
         inherited_from_page_id=access.inherited_from_page_id,
         members=access.members,
         link_enabled=access.link_enabled,
@@ -49,15 +47,35 @@ async def get_access(container: ContainerDep, wiki_page_id: str) -> WikiAccessRe
     return _to_response(access)
 
 
+@router.patch("/{wiki_page_id}/access/company-visible", response_model=WikiAccessResponse)
+async def patch_company_visible(
+    container: ContainerDep,
+    wiki_page_id: str,
+    body: WikiCompanyVisibleRequest,
+) -> WikiAccessResponse:
+    scope = await require_scope(container)
+    try:
+        return _to_response(
+            await container.wiki_service.set_company_visible(
+                company_id=scope.company_id,
+                namespace=scope.namespace,
+                user_id=scope.user_id,
+                wiki_page_id=wiki_page_id,
+                company_visible=body.company_visible,
+            )
+        )
+    except WikiPageNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Страница не найдена") from exc
+    except WikiAccessDeniedError as exc:
+        raise HTTPException(status_code=403, detail="Нет прав на изменение доступа") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.post("/{wiki_page_id}/access/members", response_model=WikiAccessResponse)
 async def upsert_member(
     container: ContainerDep, wiki_page_id: str, request: WikiMemberUpsertRequest
 ) -> WikiAccessResponse:
-    """Добавить участника.
-
-    Первый участник переводит страницу и её поддерево в ограниченный режим:
-    контент уезжает из общего knowledge-namespace в служебный.
-    """
     scope = await require_scope(container)
     try:
         access = await container.wiki_service.set_member(
@@ -66,12 +84,14 @@ async def upsert_member(
             user_id=scope.user_id,
             wiki_page_id=wiki_page_id,
             member_user_id=request.user_id,
-            permission=request.permission,
+            relation=request.relation,
         )
     except WikiPageNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Страница не найдена") from exc
     except WikiAccessDeniedError as exc:
         raise HTTPException(status_code=403, detail="Нет прав на изменение доступа") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _to_response(access)
 
 
@@ -121,7 +141,6 @@ async def rotate_public_link(
     if raw_token is None:
         return WikiPublicLinkResponse(enabled=False, permission=body.permission, url=None)
 
-    # Публичный origin из запроса (Host / X-Forwarded-*), не из internal service URL.
     origin = build_service_base_url(http_request).rstrip("/")
     return WikiPublicLinkResponse(
         enabled=True,

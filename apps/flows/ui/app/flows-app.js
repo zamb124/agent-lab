@@ -63,7 +63,7 @@ import {
 } from '../events/resources/metadata.resource.js';
 import { modelsListOp } from '../events/resources/models.resource.js';
 import { providersListOp } from '../events/resources/providers.resource.js';
-import { codeCompletionsOp, codeDocumentationOp, codeTemplatesOp,
+import { codeLspSessionOp, codeDocumentationOp, codeTemplatesOp,
          codeEditorStateOp, codeSourceOp, codeFlowFunctionsOp,
          codeToolSourceOp, codeParseSignatureOp, codeValidateOp,
          codeExecuteOp } from '../events/resources/code.resource.js';
@@ -75,6 +75,10 @@ import {
     flowsRagNamespacesCreateOp,
     flowsRagSearchDefaultsOp,
 } from '../events/resources/rag-namespaces.resource.js';
+import {
+    flowsDataTableCreateOp,
+    flowsDataTableSnapshotOp,
+} from '../events/resources/data-tables.resource.js';
 import {
     integrationsListOp,
     integrationsRemoveOp,
@@ -267,7 +271,7 @@ export class FlowsApp extends PlatformApp {
         executionLimitsOp,
         modelsListOp,
         providersListOp,
-        codeCompletionsOp,
+        codeLspSessionOp,
         codeDocumentationOp,
         codeTemplatesOp,
         codeEditorStateOp,
@@ -282,6 +286,8 @@ export class FlowsApp extends PlatformApp {
         flowsRagNamespacesListOp,
         flowsRagNamespacesCreateOp,
         flowsRagSearchDefaultsOp,
+        flowsDataTableCreateOp,
+        flowsDataTableSnapshotOp,
         promptRenderOp,
         integrationsListOp,
         integrationsRemoveOp,

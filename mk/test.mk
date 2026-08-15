@@ -58,8 +58,13 @@ test-up: runtime-bootstrap
 	@sleep 7
 	@echo "Сброс тестовой БД (TRUNCATE managed таблиц + Redis FLUSHDB)..."
 	@uv run python -m scripts.db_test_reset
-	@echo "Применение Alembic-миграций всех сервисных деревьев..."
+	@echo "Применение Alembic-миграций всех сервисных деревьев (+ CREATE DATABASE openfga)..."
 	@uv run python -m scripts.test_migrate
+	@echo "Старт OpenFGA (после создания БД openfga)..."
+	@docker-compose -f docker-compose-test.yaml --env-file $(DOCKER_COMPOSE_ENV_FILE) rm -f -s openfga-migrate-test openfga-test >/dev/null 2>&1 || true
+	@docker-compose -f docker-compose-test.yaml --env-file $(DOCKER_COMPOSE_ENV_FILE) up -d --force-recreate --pull $(DOCKER_COMPOSE_PULL) openfga-migrate-test openfga-test
+	@echo "Bootstrap OpenFGA store + authorization model..."
+	@uv run python scripts/openfga_env_bootstrap.py --api-url http://127.0.0.1:9093 --env-path reports/openfga-test.env
 	@echo "Старт стека сервисов (granian + TaskIQ) через test_stack..."
 	@WORKERS=$(WORKERS) uv run python -m scripts.test_stack up
 
@@ -69,7 +74,7 @@ test-reset:
 
 test-down:
 	@uv run python -m scripts.test_stack down
-	docker-compose -f docker-compose-test.yaml --env-file $(DOCKER_COMPOSE_ENV_FILE) stop postgres-test redis-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test loki-test tempo-test alloy-test grafana-test
+	docker-compose -f docker-compose-test.yaml --env-file $(DOCKER_COMPOSE_ENV_FILE) stop postgres-test redis-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test loki-test tempo-test alloy-test grafana-test openfga-test
 
 # Запуск unit/API тестов параллельно (без browser тестов)
 test-unit: test-up

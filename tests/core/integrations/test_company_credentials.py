@@ -13,6 +13,8 @@ from apps.flows.src.clients.google_workspace_client import GoogleWorkspaceClient
 from apps.flows.src.container import get_container
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from core.ai.company_settings import decrypt_secret
+from core.authz.errors import AuthzDenied
+from core.authz.service import AuthzService
 from core.clients.google_workspace_auth import GoogleAuthMaterial
 from core.config.models import (
     GoogleWorkspaceConfig,
@@ -50,6 +52,38 @@ _MINIMAL_SA_JSON = json.dumps(
 )
 
 
+class _StubAuthz:
+    """Минимальный Authz для unit-тестов company credentials (без OpenFGA)."""
+
+    def __init__(self, *, allow_admin: bool = True) -> None:
+        self._allow_admin = allow_admin
+
+    async def check_company_admin(
+        self,
+        *,
+        company_id: str | None = None,
+        user_id: str | None = None,
+    ) -> bool:
+        _ = company_id
+        _ = user_id
+        return self._allow_admin
+
+    async def require_company_admin(
+        self,
+        *,
+        company_id: str | None = None,
+        user_id: str | None = None,
+    ) -> None:
+        _ = company_id
+        _ = user_id
+        if not self._allow_admin:
+            raise AuthzDenied("denied")
+
+
+def _as_authz(stub: _StubAuthz) -> AuthzService:
+    return stub  # type: ignore[return-value]
+
+
 @pytest.fixture()
 def credential_repository(app) -> IntegrationCredentialRepository:
     from core.config import get_settings
@@ -64,6 +98,7 @@ def company_cred_service(
     return CompanyIntegrationCredentialService(
         repository=credential_repository,
         google_workspace_config=GoogleWorkspaceConfig(),
+        authz=_as_authz(_StubAuthz(allow_admin=True)),
     )
 
 
@@ -180,14 +215,19 @@ class TestCompanyGoogleWorkspaceCredential:
     @pytest.mark.asyncio
     async def test_member_cannot_upsert(
         self,
-        company_cred_service: CompanyIntegrationCredentialService,
+        credential_repository: IntegrationCredentialRepository,
         unique_id: str,
     ) -> None:
         company_id = f"co-gw-member-{unique_id}"
+        service = CompanyIntegrationCredentialService(
+            repository=credential_repository,
+            google_workspace_config=GoogleWorkspaceConfig(),
+            authz=_as_authz(_StubAuthz(allow_admin=False)),
+        )
         set_context(_member_context(company_id))
         try:
             with pytest.raises(CompanyIntegrationPermissionError):
-                await company_cred_service.upsert_google_workspace_service_account(
+                await service.upsert_google_workspace_service_account(
                     company_id,
                     GoogleWorkspaceCompanyCredentialPut(
                         service_account_json=_MINIMAL_SA_JSON,
@@ -231,6 +271,7 @@ class TestCompanyGoogleWorkspaceCredential:
                     impersonate_email="sys@example.com",
                 )
             ),
+            authz=_as_authz(_StubAuthz(allow_admin=True)),
         )
         try:
             result = await service.reconcile_system_google_workspace()
@@ -253,6 +294,7 @@ class TestCompanyGoogleWorkspaceCredential:
             google_workspace_config=GoogleWorkspaceConfig(
                 system=GoogleWorkspaceSystemConfig(enabled=False)
             ),
+            authz=_as_authz(_StubAuthz(allow_admin=True)),
         )
         result = await service.reconcile_system_google_workspace()
         assert result.ensured is False

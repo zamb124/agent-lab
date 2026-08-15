@@ -20,7 +20,7 @@ _VISUAL_READY_MS = 12_000
 _STABLE_LAYOUT_FRAMES = 6
 # Lit-корни платформенных SPA в E2E (см. tests/ui/apps.py).
 _SHELL_SELECTOR = "sync-app, crm-app, rag-app, flows-app, frontend-app, office-app"
-_LOADING_SELECTOR = (
+LOADING_SELECTOR = (
     "glass-spinner, "
     ".loading-container, "
     ".loading-spinner, "
@@ -35,6 +35,38 @@ _LOADING_SELECTOR = (
     "glass-button[loading], "
     "[role='progressbar']"
 )
+_LOADING_SELECTOR = LOADING_SELECTOR
+
+# getComputedStyle(el).opacity не композирует предков. Закрытый Lara drawer
+# (flow-ui-drawer .panel { opacity: 0 }) оставляет .skeleton с собственной opacity 1
+# и ненулевым rect в viewport — без обхода предков screenshot helper висит 12s.
+ELEMENT_IS_PAINTED_JS = """(el) => {
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return false;
+    if (rect.bottom < 0 || rect.right < 0) return false;
+    if (rect.top > window.innerHeight || rect.left > window.innerWidth) return false;
+    let node = el;
+    while (node) {
+        if (node.nodeType === 1) {
+            const style = window.getComputedStyle(node);
+            if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+                return false;
+            }
+        }
+        const parent = node.parentElement;
+        if (parent) {
+            node = parent;
+            continue;
+        }
+        const root = node.getRootNode();
+        if (root instanceof ShadowRoot && root.host) {
+            node = root.host;
+            continue;
+        }
+        break;
+    }
+    return true;
+}"""
 
 
 async def _force_light_theme(page: Page) -> None:
@@ -72,18 +104,11 @@ async def _await_visible_images_ready(page: Page) -> None:
                     if (el.shadowRoot) walk(el.shadowRoot);
                 }
             };
-            const visible = (el) => {
-                const rect = el.getBoundingClientRect();
-                if (rect.width <= 0 || rect.height <= 0) return false;
-                if (rect.bottom < 0 || rect.right < 0) return false;
-                if (rect.top > window.innerHeight || rect.left > window.innerWidth) return false;
-                const style = window.getComputedStyle(el);
-                return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
-            };
+            const isPainted = """ + ELEMENT_IS_PAINTED_JS + """;
 
             walk(document);
             return elements
-                .filter((el) => el instanceof HTMLImageElement && visible(el))
+                .filter((el) => el instanceof HTMLImageElement && isPainted(el))
                 .every((img) => img.complete && img.naturalWidth > 0);
         }
         """,
@@ -103,20 +128,11 @@ async def _await_no_blocking_loaders(page: Page) -> None:
                     if (el.shadowRoot) walk(el.shadowRoot);
                 }
             };
-            const visible = (el) => {
-                const rect = el.getBoundingClientRect();
-                if (rect.width <= 0 || rect.height <= 0) return false;
-                if (rect.bottom < 0 || rect.right < 0) return false;
-                if (rect.top > window.innerHeight || rect.left > window.innerWidth) return false;
-                const style = window.getComputedStyle(el);
-                if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
-                    return false;
-                }
-                return true;
-            };
-
+            const isPainted = """
+        + ELEMENT_IS_PAINTED_JS
+        + """;
             walk(document);
-            return !matches.some(visible);
+            return !matches.some(isPainted);
         }
         """,
         arg=_LOADING_SELECTOR,

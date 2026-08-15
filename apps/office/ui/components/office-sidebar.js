@@ -316,7 +316,7 @@ export class OfficeSidebar extends PlatformElement {
             this.openModal('office.catalog_edit', {
                 catalogId: catalog.catalog_id,
                 title: catalog.title,
-                isPublic: Boolean(catalog.is_public),
+                companyVisible: Boolean(catalog.company_visible),
             });
             return;
         }
@@ -324,7 +324,7 @@ export class OfficeSidebar extends PlatformElement {
             this.openModal('office.catalog_members', {
                 catalogId: catalog.catalog_id,
                 catalogTitle: catalog.title,
-                isPublic: Boolean(catalog.is_public),
+                companyVisible: Boolean(catalog.company_visible),
             });
             return;
         }

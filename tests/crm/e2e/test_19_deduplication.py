@@ -102,7 +102,7 @@ async def _analyze_note(
     assert start.status_code == 202, start.text
     start_payload = _http_json(start)
     task_id = object_str(start_payload.get("task_id"), field="task_id")
-    deadline = time.monotonic() + 60.0
+    deadline = time.monotonic() + 90.0
     last: dict[str, object] = {}
     while time.monotonic() < deadline:
         tr = await crm_client.get(f"/crm/api/v1/tasks/{task_id}", headers=headers)

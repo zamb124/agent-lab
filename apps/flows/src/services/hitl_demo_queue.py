@@ -1,31 +1,35 @@
 """
 Демо-очередь HITL (WorkQueue) для примеров в bundles (example_react, example_graph).
 
-Создаёт очередь `example_hitl` и гарантирует членство company owner/admin —
+Создаёт очередь `example_hitl` и гарантирует членство company admins из OpenFGA —
 иначе claim/complete недоступны и ответ оператора не уходит в user chat.
 """
 
-from core.models.identity_models import Company
+from core.authz.models import AuthzObject
+from core.authz.service import AuthzService
+from core.authz.types import AuthzRelation, AuthzSubjectKind
+from core.logging import get_logger
 from core.worktracker.models import UserActor
 from core.worktracker.service import WorkItemService
 
 EXAMPLE_HITL_SLUG = "example_hitl"
 
+logger = get_logger(__name__)
 
-def hitl_demo_operator_user_ids(company: Company) -> list[str]:
-    """Owner + members с ролью admin/owner — операторы демо-очереди."""
-    user_ids: list[str] = []
-    owner = company.owner_user_id
-    if owner is not None and owner.strip() != "":
-        user_ids.append(owner.strip())
-    for user_id, roles in company.members.items():
-        if user_id.strip() == "":
-            continue
-        if "admin" not in roles and "owner" not in roles:
-            continue
-        cleaned = user_id.strip()
-        if cleaned not in user_ids:
-            user_ids.append(cleaned)
+
+async def hitl_demo_operator_user_ids(authz: AuthzService, company_id: str) -> list[str]:
+    """Пользователи с company can_admin (OpenFGA) — операторы демо-очереди."""
+    subjects = await authz.list_users(
+        AuthzObject.company(company_id),
+        AuthzRelation.CAN_ADMIN,
+    )
+    user_ids = sorted(
+        {
+            subject.value.strip()
+            for subject in subjects
+            if subject.kind is AuthzSubjectKind.USER and subject.value.strip() != ""
+        }
+    )
     return user_ids
 
 
@@ -36,26 +40,32 @@ async def ensure_example_hitl_queue(
     member_user_ids: list[str] | None = None,
 ) -> None:
     queue = None
-    for existing in await work_item_service.list_queues(company_id):
-        if existing.work_queue_slug == EXAMPLE_HITL_SLUG:
-            queue = existing
-            break
+    try:
+        queue = await work_item_service.get_queue_by_slug(company_id, EXAMPLE_HITL_SLUG)
+    except ValueError:
+        queue = None
 
     members = [uid.strip() for uid in (member_user_ids or []) if uid.strip()]
     if queue is None:
-        creator = UserActor(user_id=members[0]) if members else None
+        if not members:
+            logger.info(
+                "hitl_demo.queue_skipped_no_admin",
+                company_id=company_id,
+                slug=EXAMPLE_HITL_SLUG,
+            )
+            return
+        creator = UserActor(user_id=members[0])
         queue = await work_item_service.create_queue(
             company_id=company_id,
             name="Demo HITL (example_hitl)",
             slug=EXAMPLE_HITL_SLUG,
             description=(
                 "Демо-очередь для сценариев HITL в example_react и example_graph. "
-                "Owner/admin компании добавляются автоматически при ensure."
+                "Company admins добавляются автоматически при ensure."
             ),
             creator=creator,
         )
-        # create_queue уже добавил creator; остальных — ниже
-        members = members[1:] if creator is not None else members
+        members = members[1:]
 
     for user_id in members:
         actor = UserActor(user_id=user_id)

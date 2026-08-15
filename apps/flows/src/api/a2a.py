@@ -71,7 +71,8 @@ from core.a2a.extensions import (
     parse_a2a_extensions_header,
     strip_subscribe_platform_metadata,
 )
-from core.context import get_context
+from core.authz.models import AuthzObject
+from core.context import get_context, require_context
 from core.events import publish_event_to_user
 from core.identity.embed_guest_turns import (
     EMBED_GUEST_USER_TURNS_REDIS_PREFIX,
@@ -94,6 +95,22 @@ JsonRpcId = str | int
 
 A2A_PROTOCOL_VERSION = "1.0"
 A2A_VERSION_HEADER = "A2A-Version"
+
+
+def _actor_user_id() -> str:
+    return require_context().user.user_id
+
+
+async def _require_view_flow(container: ContainerDep, flow_id: str) -> None:
+    await container.authz_service.require_can_view(
+        AuthzObject.flow(flow_id), user_id=_actor_user_id()
+    )
+
+
+async def _require_edit_flow(container: ContainerDep, flow_id: str) -> None:
+    await container.authz_service.require_can_edit(
+        AuthzObject.flow(flow_id), user_id=_actor_user_id()
+    )
 
 
 def _embed_session_branch_from_token_metadata(metadata: JsonObject) -> str | None:
@@ -244,7 +261,7 @@ def _validate_flow_ui_share_claims(
     metadata = token_data.metadata
     expected: dict[str, set[str] | None] = {
         "flow_ui_share_grant_id": None,
-        "flow_ui_share_permission": {"view", "interact"},
+        "flow_ui_share_permission": {"viewer", "editor"},
         "flow_ui_share_flow_id": None,
         "flow_ui_share_branch_id": None,
         "flow_ui_share_context_id": None,
@@ -579,6 +596,7 @@ async def get_agent_card_well_known(
     Параметры query:
         v: версия агента (опционально)
     """
+    await _require_view_flow(container, flow_id)
     config = await _get_flow_config(flow_id, container, version=v)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
@@ -610,6 +628,7 @@ async def get_agent_card(
     Параметры query:
         v: версия агента (опционально)
     """
+    await _require_view_flow(container, flow_id)
     config = await _get_flow_config(flow_id, container, version=v)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
@@ -816,6 +835,8 @@ async def _json_rpc_handler_internal(
         }
     version = v or version_raw
 
+    if embed_target is None and not _is_flow_ui_share_token(token_data):
+        await _require_view_flow(container, flow_id)
     config = await _get_flow_config(flow_id, container, version=version)
     if not config:
         version_info = f" version '{version}'" if version else ""
@@ -1127,17 +1148,18 @@ async def _interface_profile_internal(
     embed_target: EmbedTarget | None = None,
 ) -> InterfaceProfileResponse:
     """Resolve host controls without exposing a second runtime UI representation."""
+    token_data_raw = _request_state_mapping(request).get("token_data")
+    token_data = token_data_raw if isinstance(token_data_raw, TokenData) else None
+    is_embed_session = _is_embed_session_token(token_data)
+    is_share_session = _is_flow_ui_share_token(token_data)
+    if embed_target is None and not is_share_session and not is_embed_session:
+        await _require_view_flow(container, flow_id)
     config = await _get_flow_config(flow_id, container)
     if config is None:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
     if embed_target is None and config.branches and branch_id != "default":
         if branch_id not in config.branches:
             raise HTTPException(status_code=404, detail=f"Branch '{branch_id}' not found")
-
-    token_data_raw = _request_state_mapping(request).get("token_data")
-    token_data = token_data_raw if isinstance(token_data_raw, TokenData) else None
-    is_embed_session = _is_embed_session_token(token_data)
-    is_share_session = _is_flow_ui_share_token(token_data)
     if is_embed_session and isinstance(token_data, TokenData):
         claims_error = _validate_embed_session_claims(
             request=request,
@@ -1167,7 +1189,7 @@ async def _interface_profile_internal(
                 flow_id=flow_id,
                 context_id=str(token_data.metadata["flow_ui_share_context_id"]),
                 document_id=str(token_data.metadata["flow_ui_share_document_id"]),
-                require_interact=False,
+                require_editor=False,
             )
         except PermissionError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
@@ -1189,7 +1211,7 @@ async def _interface_profile_internal(
         branch_id=branch_id,
         viewer=InterfaceProfileViewer(
             can_edit_flow=not is_embed_session and not is_share_session,
-            can_interact=share_permission != "view",
+            can_interact=share_permission != "viewer",
             can_share=(
                 not is_share_session
                 and (
@@ -1208,12 +1230,12 @@ async def _interface_profile_internal(
         look=look,
         catalog=InterfaceCatalogProfile(),
         capabilities=InterfaceCapabilitiesProfile(
-            autosync=share_permission != "view",
-            cancel=policy.allow_cancel and share_permission != "view",
+            autosync=share_permission != "viewer",
+            cancel=policy.allow_cancel and share_permission != "viewer",
             files=policy.show_files_panel and not is_share_session,
             voice=(
                 policy.allow_voice
-                and share_permission != "view"
+                and share_permission != "viewer"
                 and (look is None or look.voice_enabled)
             ),
         ),
@@ -1265,6 +1287,7 @@ async def get_embed_interface_profile(
 async def list_branches(flow_id: str, container: ContainerDep) -> list[JsonObject]:
     context = get_context()
     channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
+    await _require_view_flow(container, flow_id)
     config = await _get_flow_config(flow_id, container)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
@@ -1275,6 +1298,7 @@ async def list_branches(flow_id: str, container: ContainerDep) -> list[JsonObjec
 async def get_branch(flow_id: str, branch_id: str, container: ContainerDep) -> JsonObject:
     context = get_context()
     channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
+    await _require_view_flow(container, flow_id)
     config = await _get_flow_config(flow_id, container)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
@@ -1290,6 +1314,7 @@ async def get_branch_tools(flow_id: str, branch_id: str, container: ContainerDep
     """Получить список tools для ветки с полной информацией."""
     context = get_context()
     channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
+    await _require_view_flow(container, flow_id)
     config = await _get_flow_config(flow_id, container)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
@@ -1310,6 +1335,7 @@ async def get_branch_schema(flow_id: str, container: ContainerDep) -> JsonObject
     context = get_context()
     channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
     try:
+        await _require_view_flow(container, flow_id)
         return await channel.get_branch_schema()
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -1324,6 +1350,7 @@ async def create_branch(
     """Создать новую ветку."""
     context = get_context()
     channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
+    await _require_edit_flow(container, flow_id)
     config = await _get_flow_config(flow_id, container)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
@@ -1358,6 +1385,7 @@ async def update_branch(
     """Обновить существующую ветку."""
     context = get_context()
     channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
+    await _require_edit_flow(container, flow_id)
     config = await _get_flow_config(flow_id, container)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
@@ -1385,6 +1413,7 @@ async def delete_branch(flow_id: str, branch_id: str, container: ContainerDep) -
     """Удалить ветку."""
     context = get_context()
     channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
+    await _require_edit_flow(container, flow_id)
     config = await _get_flow_config(flow_id, container)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")

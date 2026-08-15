@@ -66,6 +66,7 @@ async def test_upsert_note_without_note_date_sets_today(
     try:
         ent, created = await upsert_canonical_by_external_ref(
             entity_repo=crm_container.entity_repository,
+            entity_access=crm_container.crm_entity_access_service,
             namespace=ns,
             company_id="system",
             user_id=system_user_id,
@@ -118,6 +119,7 @@ async def test_upsert_note_update_backfills_null_note_date(
 
         ent1, created1 = await upsert_canonical_by_external_ref(
             entity_repo=crm_container.entity_repository,
+            entity_access=crm_container.crm_entity_access_service,
             namespace=ns,
             company_id="system",
             user_id=system_user_id,

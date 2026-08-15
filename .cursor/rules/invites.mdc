@@ -68,8 +68,8 @@ Redis-ключ `invite:used:{jti}`, TTL = оставшееся время жиз
 
 ## Права
 
-- `generate` — owner/admin действующей компании (требует `company` в state).
-- `accept` — любой авторизованный, без обязательного `company_id` в сессии.
+- `generate` — FGA `require_company_admin` действующей компании (требует `company` в state).
+- `accept` — любой авторизованный, без обязательного `company_id` в сессии; в том же step dual-write roster + OpenFGA company membership (`sync_company_member_roles` / AccessService), fail-closed.
 
 ## Route config
 

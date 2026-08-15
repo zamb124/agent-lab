@@ -11,6 +11,7 @@ from urllib.parse import quote, urlencode
 from core.clients.crm_models import (
     CrmAnalyzeNoteTextArgs,
     CrmApplyAnalysisDraftArgs,
+    CrmCapabilityCreateNoteArgs,
     CrmCreateActivityTaskArgs,
     CrmCreateEntityArgs,
     CrmCreateNoteAndAnalyzeArgs,
@@ -183,20 +184,29 @@ class CrmClient:
 
     async def create_note(
         self,
-        name: str,
-        description: str,
+        name: str | CrmCapabilityCreateNoteArgs,
+        description: str = "",
         note_date: str | None = None,
         namespace: str | None = None,
     ) -> JsonObject:
-        ns = self._resolve_namespace(namespace)
+        if isinstance(name, CrmCapabilityCreateNoteArgs):
+            args = name
+        else:
+            args = CrmCapabilityCreateNoteArgs(
+                name=name,
+                description=description,
+                note_date=note_date,
+                namespace=namespace,
+            )
+        ns = self._resolve_namespace(args.namespace)
         body: JsonObject = {
             "entity_type": "note",
             "namespace": ns,
-            "name": name.strip(),
-            "description": description,
+            "name": args.name.strip(),
+            "description": args.description,
         }
-        if note_date is not None and str(note_date).strip():
-            body["note_date"] = str(note_date).strip()
+        if args.note_date is not None and str(args.note_date).strip():
+            body["note_date"] = str(args.note_date).strip()
         raw = await self._http.post(
             "crm",
             f"{_API}/entities",

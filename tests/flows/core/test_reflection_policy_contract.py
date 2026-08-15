@@ -96,7 +96,7 @@ def test_node_config_reflection_requires_critic_policy() -> None:
             node_id="critic",
             type=NodeType.REFLECTION,
             name="Critic",
-            llm=NodeLLMConfig(model="mock-gpt-4"),
+            llm=NodeLLMConfig(provider="mock", model="mock-gpt-4"),
         )
 
 
@@ -131,7 +131,7 @@ def test_node_config_reflection_forbids_tools() -> None:
             node_id="critic",
             type=NodeType.REFLECTION,
             name="Critic",
-            llm=NodeLLMConfig(model="mock-gpt-4"),
+            llm=NodeLLMConfig(provider="mock", model="mock-gpt-4"),
             critic_policy=reflection_policy(),
             tools=[{"tool_id": "calculator"}],
         )
@@ -143,7 +143,7 @@ def test_node_config_reflection_forbids_agent_skills() -> None:
             node_id="critic",
             type=NodeType.REFLECTION,
             name="Critic",
-            llm=NodeLLMConfig(model="mock-gpt-4"),
+            llm=NodeLLMConfig(provider="mock", model="mock-gpt-4"),
             critic_policy=reflection_policy(),
             agent_skills=["some-skill"],
         )
@@ -155,7 +155,7 @@ def test_node_config_reflection_forbids_prompt() -> None:
             node_id="critic",
             type=NodeType.REFLECTION,
             name="Critic",
-            llm=NodeLLMConfig(model="mock-gpt-4"),
+            llm=NodeLLMConfig(provider="mock", model="mock-gpt-4"),
             critic_policy=reflection_policy(),
             prompt="You are a critic",
         )
@@ -167,7 +167,7 @@ def test_node_config_reflection_forbids_react() -> None:
             node_id="critic",
             type=NodeType.REFLECTION,
             name="Critic",
-            llm=NodeLLMConfig(model="mock-gpt-4"),
+            llm=NodeLLMConfig(provider="mock", model="mock-gpt-4"),
             critic_policy=reflection_policy(),
             react=ReactConfig(loop_mode=ReactLoopMode.AUTO),
         )
@@ -179,7 +179,7 @@ def test_node_config_reflection_forbids_structured_output() -> None:
             node_id="critic",
             type=NodeType.REFLECTION,
             name="Critic",
-            llm=NodeLLMConfig(model="mock-gpt-4"),
+            llm=NodeLLMConfig(provider="mock", model="mock-gpt-4"),
             critic_policy=reflection_policy(),
             structured_output=True,
         )
@@ -190,7 +190,7 @@ def test_node_config_reflection_accepts_valid_policy() -> None:
         node_id="critic",
         type=NodeType.REFLECTION,
         name="Critic",
-        llm=NodeLLMConfig(model="mock-gpt-4"),
+        llm=NodeLLMConfig(provider="mock", model="mock-gpt-4"),
         critic_policy=reflection_policy(),
     )
     assert cfg.critic_policy is not None

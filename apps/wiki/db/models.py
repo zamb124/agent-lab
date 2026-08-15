@@ -59,14 +59,14 @@ class WikiPageRow(Base):
     content: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
     text_markdown: Mapped[str] = mapped_column(Text, nullable=False, default="")
     crdt_state: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
-    visibility: Mapped[str] = mapped_column(String(16), nullable=False, default="company")
+    company_visible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     is_published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_template: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_full_width: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     link_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     link_token_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    link_permission: Mapped[str] = mapped_column(String(16), nullable=False, default="view")
+    link_permission: Mapped[str] = mapped_column(String(16), nullable=False, default="viewer")
     created_by_user_id: Mapped[str] = mapped_column(String(100), nullable=False)
     last_edited_by_user_id: Mapped[str] = mapped_column(String(100), nullable=False)
     revision_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -115,22 +115,6 @@ class WikiRevisionRow(Base):
 
     __table_args__: tuple[object, ...] = (
         Index("ix_wiki_revisions_page", "company_id", "namespace", "wiki_page_id", "created_at"),
-    )
-
-
-class WikiPageMemberRow(Base):
-    __tablename__: str = "wiki_page_members"
-
-    wiki_page_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(100), primary_key=True)
-    company_id: Mapped[str] = mapped_column(String(100), nullable=False)
-    namespace: Mapped[str] = mapped_column(String(100), nullable=False)
-    permission: Mapped[str] = mapped_column(String(16), nullable=False, default="read")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
-
-    __table_args__: tuple[object, ...] = (
-        Index("ix_wiki_page_members_scope", "company_id", "namespace", "wiki_page_id"),
-        Index("ix_wiki_page_members_user", "company_id", "user_id"),
     )
 
 

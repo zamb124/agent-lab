@@ -59,11 +59,12 @@ def _require_api_key_principal() -> tuple[User, Company]:
     return context.user, company
 
 
-def _require_api_key_admin() -> tuple[User, Company]:
+async def _require_api_key_admin(container: ContainerDep) -> tuple[User, Company]:
     user, company = _require_api_key_principal()
-    roles = company.members.get(user.user_id, [])
-    if "owner" not in roles and "admin" not in roles:
-        raise HTTPException(status_code=403, detail="Недостаточно прав")
+    await container.authz_service.require_company_admin(
+        company_id=company.company_id,
+        user_id=user.user_id,
+    )
     return user, company
 
 
@@ -87,7 +88,7 @@ async def create_api_key(
     key_data: ApiKeyCreate,
     container: ContainerDep,
 ) -> ApiKeyCreated:
-    user, company = _require_api_key_admin()
+    user, company = await _require_api_key_admin(container)
 
     for scope in key_data.scopes:
         if scope not in VALID_SCOPES:
@@ -127,7 +128,7 @@ async def update_api_key(
     body: ApiKeyUpdate,
     container: ContainerDep,
 ) -> JsonObject:
-    _, company = _require_api_key_admin()
+    _, company = await _require_api_key_admin(container)
 
     updated = await container.api_key_repository.update_name(key_id, company.company_id, body.name)
     if not updated:
@@ -140,7 +141,7 @@ async def revoke_api_key(
     key_id: str,
     container: ContainerDep,
 ) -> JsonObject:
-    _, company = _require_api_key_admin()
+    _, company = await _require_api_key_admin(container)
 
     revoked = await container.api_key_repository.revoke(key_id, company.company_id)
     if not revoked:

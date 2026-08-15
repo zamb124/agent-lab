@@ -1,7 +1,7 @@
 """
 Alembic env для БД platform_wiki (база знаний).
 
-Управляет таблицами: wiki_pages, wiki_revisions, wiki_page_members,
+Управляет таблицами: wiki_pages, wiki_revisions,
 wiki_page_links, wiki_comments.
 """
 
@@ -20,7 +20,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from apps.wiki.db.models import (  # noqa: F401
     WikiCommentRow,
     WikiPageLinkRow,
-    WikiPageMemberRow,
     WikiPageRow,
     WikiRevisionRow,
 )
@@ -37,7 +36,6 @@ target_metadata = Base.metadata
 MANAGED_TABLES = {
     "wiki_pages",
     "wiki_revisions",
-    "wiki_page_members",
     "wiki_page_links",
     "wiki_comments",
 }

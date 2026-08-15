@@ -6,6 +6,7 @@ from typing import Protocol
 
 from core.clients.redis_client import RedisClient
 from core.clients.service_client import ServiceClient
+from core.data_tables.service import DataTableService
 from core.db.repositories.company_repository import CompanyRepository
 from core.db.repositories.user_repository import UserRepository
 from core.files.file_repository import FileRepository
@@ -32,3 +33,6 @@ class CapabilityGatewayContainerProtocol(Protocol):
 
     @property
     def redis_client(self) -> RedisClient: ...
+
+    @property
+    def data_table_service(self) -> DataTableService: ...

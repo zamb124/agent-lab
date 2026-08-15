@@ -12,6 +12,8 @@ import pytest
 from apps.flows.src.clients.google_workspace_client import GoogleWorkspaceClient
 from apps.flows.src.container import get_container
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from core.authz.errors import AuthzDenied
+from core.authz.service import AuthzService
 from core.clients.google_sheets_client import GoogleSheetsClient
 from core.clients.google_workspace_auth import GoogleAuthMaterial
 from core.config import get_settings
@@ -34,6 +36,38 @@ from core.state.interrupt import InterruptKind, OAuthInterrupt
 from tests.fixtures.google_api_emulator import GoogleApiEmulatorHandle
 
 
+class _StubAuthz:
+    """Минимальный Authz для emulator-тестов (без OpenFGA)."""
+
+    def __init__(self, *, allow_admin: bool = True) -> None:
+        self._allow_admin = allow_admin
+
+    async def check_company_admin(
+        self,
+        *,
+        company_id: str | None = None,
+        user_id: str | None = None,
+    ) -> bool:
+        _ = company_id
+        _ = user_id
+        return self._allow_admin
+
+    async def require_company_admin(
+        self,
+        *,
+        company_id: str | None = None,
+        user_id: str | None = None,
+    ) -> None:
+        _ = company_id
+        _ = user_id
+        if not self._allow_admin:
+            raise AuthzDenied("denied")
+
+
+def _as_authz(stub: _StubAuthz) -> AuthzService:
+    return stub  # type: ignore[return-value]
+
+
 @pytest.fixture()
 def credential_repository(app: object) -> IntegrationCredentialRepository:
     _ = app
@@ -47,6 +81,7 @@ def company_cred_service(
     return CompanyIntegrationCredentialService(
         repository=credential_repository,
         google_workspace_config=get_settings().google_workspace,
+        authz=_as_authz(_StubAuthz()),
     )
 
 
@@ -356,6 +391,7 @@ async def test_company_api_put_get_delete_and_system_put_forbidden(
     service = CompanyIntegrationCredentialService(
         repository=credential_repository,
         google_workspace_config=get_settings().google_workspace,
+        authz=_as_authz(_StubAuthz()),
     )
     set_context(_admin_context(company_id, f"admin-{unique_id}"))
     try:

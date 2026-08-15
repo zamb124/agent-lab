@@ -9,9 +9,9 @@
  *
  * Backend (namespace grants):
  *   GET    /crm/api/v1/namespaces/{namespace}/grants          → OffsetPage[AccessGrantResponse]
- *   POST   /crm/api/v1/namespaces/{namespace}/grants/public   → AccessGrantResponse
  *   POST   /crm/api/v1/namespaces/{namespace}/grants/user     → AccessGrantResponse
  *   POST   /crm/api/v1/namespaces/{namespace}/grants/company  → AccessGrantResponse
+ *   POST   /crm/api/v1/namespaces/{namespace}/grants/public   → 400 (forbidden ACL)
  *
  * Backend (revoke):
  *   DELETE /crm/api/v1/grants/{grant_id}                      → 204

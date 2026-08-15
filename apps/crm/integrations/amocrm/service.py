@@ -22,6 +22,7 @@ from apps.crm.integrations.amocrm.mapping import (
 )
 from apps.crm.integrations.entity_upsert import upsert_canonical_by_external_ref
 from apps.crm.models.api import NoteProcessingConfig
+from apps.crm.services.crm_entity_access_service import CrmEntityAccessService
 from apps.crm.services.crm_work_item_service import CrmTaskWorkSeed
 from apps.crm.services.entity_service import EntityService
 from apps.crm.services.task_service import ActiveTaskExistsError, TaskService
@@ -67,6 +68,7 @@ class AmoCRMIntegrationService:
         namespace_service: NamespaceService,
         task_service: TaskService,
         integration_external_author: IntegrationExternalAuthorService,
+        entity_access: CrmEntityAccessService,
     ) -> None:
         self._oauth: OAuthService = oauth_service
         self._entity_repo: EntityRepository = entity_repository
@@ -76,6 +78,7 @@ class AmoCRMIntegrationService:
         self._namespace_service: NamespaceService = namespace_service
         self._task_service: TaskService = task_service
         self._integration_author: IntegrationExternalAuthorService = integration_external_author
+        self._entity_access: CrmEntityAccessService = entity_access
 
     def _service_key(self, namespace_name: str) -> str:
         return f"amocrm:{namespace_name}"
@@ -391,6 +394,7 @@ class AmoCRMIntegrationService:
             patch_attrs["amo_created_by"] = cb
         ent, created = await upsert_canonical_by_external_ref(
             entity_repo=self._entity_repo,
+            entity_access=self._entity_access,
             namespace=namespace,
             company_id=company_id,
             user_id=sync_user_id,
@@ -567,6 +571,7 @@ class AmoCRMIntegrationService:
 
                 task_ent, _ = await upsert_canonical_by_external_ref(
                     entity_repo=self._entity_repo,
+                    entity_access=self._entity_access,
                     namespace=namespace,
                     company_id=company_id,
                     user_id=sync_user_id,
@@ -754,6 +759,7 @@ class AmoCRMIntegrationService:
                 attrs["amo_created_by"] = lcb
             lead_ent, _ = await upsert_canonical_by_external_ref(
                 entity_repo=self._entity_repo,
+                entity_access=self._entity_access,
                 namespace=ns,
                 company_id=cid,
                 user_id=uid,
@@ -838,6 +844,7 @@ class AmoCRMIntegrationService:
                 attrs["amo_created_by"] = ccb
             contact_ent, _ = await upsert_canonical_by_external_ref(
                 entity_repo=self._entity_repo,
+                entity_access=self._entity_access,
                 namespace=ns,
                 company_id=cid,
                 user_id=uid,
@@ -900,6 +907,7 @@ class AmoCRMIntegrationService:
                 org_attrs["amo_created_by"] = ocb
             org_ent, _ = await upsert_canonical_by_external_ref(
                 entity_repo=self._entity_repo,
+                entity_access=self._entity_access,
                 namespace=ns,
                 company_id=cid,
                 user_id=uid,
@@ -1008,6 +1016,7 @@ class AmoCRMIntegrationService:
                 attrs["is_active"] = bool(raw.get("is_active"))
             _, _ = await upsert_canonical_by_external_ref(
                 entity_repo=self._entity_repo,
+                entity_access=self._entity_access,
                 namespace=namespace_name,
                 company_id=company_id,
                 user_id=user_id,

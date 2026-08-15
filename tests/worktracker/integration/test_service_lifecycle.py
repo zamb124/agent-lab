@@ -141,16 +141,12 @@ async def test_claim_only_unclaimed_queue_item(
     worktracker_service,
     unique_id: str,
 ) -> None:
+    member = f"user_{unique_id}"
     queue = await worktracker_service.create_queue(
         company_id="system",
         name="Ops",
         slug=f"ops-{unique_id}",
-    )
-    member = f"user_{unique_id}"
-    await worktracker_service.add_queue_member(
-        company_id="system",
-        work_queue_id=queue.work_queue_id,
-        member=UserActor(user_id=member),
+        creator=UserActor(user_id=member),
     )
     item = await worktracker_service.create(
         company_id="system",

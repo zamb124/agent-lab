@@ -37,7 +37,7 @@ def _make_state(
     return ExecutionState(
         task_id=f"task-gdocs-emu-{unique_id}",
         context_id=f"ctx-gdocs-emu-{unique_id}",
-        user_id=f"user-gdocs-emu-{unique_id}",
+        user_id="u1",
         session_id=f"flow-gdocs-emu:{unique_id}",
         variables={"google_access_token": google_api_emulator.oauth_token},
     )

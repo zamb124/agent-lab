@@ -79,7 +79,7 @@ Namespace-операции (`list`/`sync_settings update`) — REST-only чер�
 ## Таблицы (`sync_*`)
 
 - `sync_channels` — каналы (`direct`/`group`/`topic`/`calendar_meeting`), `namespace` (1:1 с shared `Namespace`), `pinned_message_ids: jsonb` (упорядоченный список id).
-- `sync_channel_members` — `last_read_at` (курсор корневой ленты, `thread_id IS NULL`); `notifications_muted`.
+- `sync_channel_members` — dual-write **settings mirror** (не PDP): `last_read_at` (курсор корневой ленты, `thread_id IS NULL`), `notifications_muted`. Membership / ACL / push recipients — только OpenFGA `sync_channel` через `SyncChannelAccessService.list_member_user_ids` / `can_*`; SQL `list_member_user_ids` запрещён для delivery. Колонки `role` нет.
 - `sync_threads`, `sync_messages` (`reactions: jsonb`, `deleted_at`, `forwarded_from_*`).
 - `sync_message_contents` (полиморфный), `sync_message_files`, `sync_files`.
 - `sync_git_resource_refs`.
@@ -128,6 +128,13 @@ Namespace-операции (`list`/`sync_settings update`) — REST-only чер�
 
 `sync_aggregate_call_transcript_task` собирает агрегат по сессии звонка (сообщения с `call_id`) → новое текстовое сообщение в ленте. Если нечего собирать — одно сообщение с текстом из корневого ключа `call_aggregate_empty_body` в `core/i18n/translations/ru/sync.json` (без `ValueError`).
 
+## Access (OpenFGA)
+
+- Check в ops/HTTP — `container.authz_service.can_view` / `require_can_admin` + `AuthzObject.sync_channel`. `SyncChannelAccessService` — только `sync_channel_*` + `list_member_user_ids`.
+- Mutate members / channel create-delete — `SyncChannelAccessService` + fail-closed FGA tuples в том же path; SQL settings row — dual-write prefs.
+- Push / mention / call / calendar recipients — `SyncChannelAccessService.list_member_user_ids` (`authz.list_users`), не SQL.
+- Удаление канала: FGA tuples delete до/вместе с SQL (fail-closed).
+
 ## Уведомления и presence
 
 - После `messages.send` (только корневая лента, без `thread_id`) для каждого участника кроме отправителя, **если его нет в `mentioned_user_ids`** — TaskIQ `deliver_channel_message_notification` (`apps/sync/realtime/notification_tasks.py`): есть presence `sync:ws:presence:{user_id}` — выход без `notify_user`; иначе проверка `notifications_muted`; иначе `notify_user(NotificationType.SYNC_NEW_MESSAGE, action_url=/sync/c/...)`.
@@ -169,8 +176,8 @@ Namespace-операции (`list`/`sync_settings update`) — REST-only чер�
 ### Лента и каналы
 
 - **Лента (`GET /messages`, `list_by_channel`):** `thread_id IS NULL`, `deleted_at IS NULL`. Ответы на сообщения в основной полосе **включены** (`parent_message_id` может быть задан при `thread_id IS NULL`).
-- **Каналы (`GET /channels`):** только где текущий пользователь в `sync_channel_members` (`ChannelRepository.list_for_user`). Опц. `?namespace=`. Для `type: direct` поле `peer: UserBrief`.
-- **`channels.create`:** для `direct` `namespace` опционален (default `'default'`), `member_ids: [один user_id]`. Для `topic` `namespace` обязателен (`NamespaceRepository.get`); только создатель в участниках. Чтобы коллега видел — фабрика `sync/channel_add_member` (`POST /channels/{channel_id}/members`, `ChannelMemberAdd`). Список участников: фабрика `sync/channel_members_list` (`GET /channels/{channel_id}/members`, только участникам). После `POST` — push `sync/channel/member_added` через `recipient_user_ids` = участники канала; UI `extraReducer` `sync/channels` мерджит в `membersByChannel[channel_id]`.
+- **Каналы (`GET /channels`):** SQL settings-rows (`ChannelRepository.list_for_user`) ∩ FGA `batch_check(can_view)`. Settings-row без FGA membership в список не попадает. Опц. `?namespace=`. Для `type: direct` поле `peer: UserBrief`.
+- **`channels.create`:** для `direct` `namespace` опционален (default `'default'`), `member_ids: [один user_id]`. Для `topic` `namespace` обязателен (`NamespaceRepository.get`); creator = FGA `owner`, extras = `member`. Чтобы коллега видел — фабрика `sync/channel_add_member` (`POST /channels/{channel_id}/members`, `ChannelMemberAdd`, role ∈ `owner|admin|member`, только `can_admin`). Список участников: фабрика `sync/channel_members_list` (`GET /channels/{channel_id}/members`) — FGA `list_tuples`. После `POST` — push `sync/channel/member_added` через `recipient_user_ids` = settings-rows канала; UI `extraReducer` `sync/channels` мерджит в `membersByChannel[channel_id]`.
 - **Сводка (`GET /channels`):** в `ChannelRead` — `unread_count` (только корневая лента, чужие сообщения после `last_read_at`; `IS NULL` — все), `mention_unread_count` (корневая лента: непрочитанные с текущим в `data.mentions`), `last_message_preview`, `last_message_at`. Считаются в `MessageRepository.channel_lane_summaries_batch`. После открытия — `channelMarkReadOp.run({channel_id})` (`sync/channels/mark_read_requested`, REST `POST /channels/{channel_id}/read`). Push `sync/channel/read_updated` обновляет `peerReadAtByChannel` slice.
 - **`messages.send` с `call_id` для участника канала:** только проверка, что звонок принадлежит каналу (`handlers._ensure_actor_may_send_to_channel`). Статус звонка и `sync_call_speech_egress_tracks` на доступ к постингу не влияют.
 
@@ -182,12 +189,12 @@ Namespace-операции (`list`/`sync_settings update`) — REST-only чер�
 
 ## Namespace
 
-Платформенный реестр — **`namespace.mdc`**. Sync list API: только `kind=company_workspace` (personal/technical не в product list). Создание/удаление registry — не Sync; Sync пишет **только** `Namespace.sync_settings` через `PUT /sync/api/v1/namespaces/{name}`. `channel.namespace` — slug company_workspace; ACL каналов = membership, не namespace. **UI Sync без namespace switcher**: список чатов = все membership-каналы; create/adhoc → `default`; STT defaults — modal `sync.namespace_settings` на `default`. Shared `setPlatformNamespaceSelection` — только CRM/Office.
+Платформенный реестр — **`namespace.mdc`**. Sync list API: только `kind=company_workspace` (personal/technical не в product list). Создание/удаление registry — не Sync; Sync пишет **только** `Namespace.sync_settings` через `PUT /sync/api/v1/namespaces/{name}`. `channel.namespace` — slug company_workspace; ACL каналов = OpenFGA (`SyncChannelAccessService`), не namespace roster. **UI Sync без namespace switcher**: список чатов = settings-rows ∩ FGA `can_view`; create/adhoc → `default`; STT defaults — modal `sync.namespace_settings` на `default`. Shared `setPlatformNamespaceSelection` — только CRM/Office.
 
 ## Участники компании
 
 - `GET /company/members` — `CompanyMemberRead` для активной компании из `company.members` + `UserRepository` (текущий исключён); поля `is_online`, `last_seen_at` (Redis presence + last_seen). UI — фабрика `sync/company_members` (`autoload: true`); push `sync/presence/changed` (фильтр по `company_id` на backend) обновляет `presenceByUserId` в slice `state.syncPresence` (`createSlice('sync/presence')`). DM-канал: `sync-direct-member-row.js` → `sync/channels.actions.create({type:'direct', member_ids:[peer.user_id]})` или существующий из `byId`.
-- `GET /company/members/{user_id}/shared-channels` — каналы, где есть и текущий пользователь, и указанный участник (пересечение `sync_channel_members`). `user_id` совпадает с текущим — все каналы пользователя как `GET /channels`. Ответ — `ChannelRead`. UI карточки профиля — core-модалка `platform.user_info`; фабрика `sync/shared_channels` (REST-only).
+- `GET /company/members/{user_id}/shared-channels` — пересечение settings-rows ∩ FGA `can_view` обоих участников. `user_id` совпадает с текущим — все каналы пользователя как `GET /channels`. Ответ — `ChannelRead`. UI карточки профиля — core-модалка `platform.user_info`; фабрика `sync/shared_channels` (REST-only).
 
 ## Файлы
 

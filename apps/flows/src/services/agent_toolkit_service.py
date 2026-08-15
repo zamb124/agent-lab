@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 import yaml
@@ -50,15 +51,27 @@ async def delete_agent_toolkit(
     _ = await repository.delete(toolkit_id)
 
 
+async def toolkit_ids_by_flow_ids(
+    repository: AgentToolkitRepository,
+    flow_ids: Sequence[str],
+) -> dict[str, list[str]]:
+    wanted = set(flow_ids)
+    by_flow: dict[str, list[str]] = {flow_id: [] for flow_id in flow_ids}
+    if not wanted:
+        return by_flow
+    for toolkit in await list_agent_toolkits(repository):
+        for flow_id in toolkit.flow_ids:
+            if flow_id in wanted:
+                by_flow[flow_id].append(toolkit.toolkit_id)
+    return by_flow
+
+
 async def get_toolkit_ids_for_flow(
     repository: AgentToolkitRepository,
     flow_id: str,
 ) -> list[str]:
-    toolkit_ids: list[str] = []
-    for toolkit in await list_agent_toolkits(repository):
-        if flow_id in toolkit.flow_ids:
-            toolkit_ids.append(toolkit.toolkit_id)
-    return toolkit_ids
+    by_flow = await toolkit_ids_by_flow_ids(repository, [flow_id])
+    return by_flow[flow_id]
 
 
 async def get_toolkit_ids_for_tool(
