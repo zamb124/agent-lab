@@ -25,7 +25,7 @@ from core.events import (
 )
 from core.events.redis_client import events_redis_client
 from core.worktracker import events as _worktracker_events
-from tests.fixtures.platform_events import platform_events_listener
+from tests.fixtures.platform_events import initial_platform_events_cursor, platform_events_listener
 
 _ = (_crm_entity_events, _worktracker_events)
 
@@ -43,6 +43,11 @@ def test_event_delivery_requires_exactly_one_target() -> None:
     assert EventDelivery(user_ids=["u1"]).user_ids == ["u1"]
     assert EventDelivery(company_id="c1").company_id == "c1"
     assert EventDelivery(broadcast=True).broadcast is True
+
+
+def test_empty_stream_cursor_is_not_dollar() -> None:
+    assert initial_platform_events_cursor(None) == "0-0"
+    assert initial_platform_events_cursor("1710000000000-0") == "1710000000000-0"
 
 
 def test_ws_frame_excludes_delivery() -> None:

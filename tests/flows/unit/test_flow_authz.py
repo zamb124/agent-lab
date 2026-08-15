@@ -7,10 +7,10 @@ import pytest
 from apps.flows.src.models import Edge, FlowConfig
 from apps.flows.src.services.flow_access_service import FlowAccessService
 from core.authz.company_sync import sync_company_member_roles
-from core.authz.errors import AuthzDenied
+from core.authz.errors import AuthzConfigError, AuthzDenied
 from core.authz.group_sync import sync_user_groups
-from core.authz.models import AuthzObject
-from core.authz.types import AuthzRelation
+from core.authz.models import AuthzObject, AuthzSubject, AuthzTuple
+from core.authz.types import AuthzObjectType, AuthzRelation
 
 
 @pytest.mark.asyncio
@@ -44,12 +44,16 @@ async def test_platform_admin_views_restricted_flow_via_fga(container, unique_id
     await access.sync_flow_saved(
         config, company_id=company_id, owner_user_id=owner_id
     )
-    await authz.require_can_view(AuthzObject.flow(flow_id), user_id=admin_id)
-    await authz.require_can_edit(AuthzObject.flow(flow_id), user_id=admin_id)
+    await authz.require_can_view(
+        AuthzObject.flow(flow_id, company_id=company_id), user_id=admin_id
+    )
+    await authz.require_can_edit(
+        AuthzObject.flow(flow_id, company_id=company_id), user_id=admin_id
+    )
     with pytest.raises(AuthzDenied):
         await authz.require_relation(
             AuthzRelation.CAN_SHARE,
-            AuthzObject.flow(flow_id),
+            AuthzObject.flow(flow_id, company_id=company_id),
             user_id=admin_id,
         )
 
@@ -84,10 +88,13 @@ async def test_group_viewer_can_view_flow(container, unique_id) -> None:
     await access.sync_flow_saved(
         config, company_id=company_id, owner_user_id=f"owner_{unique_id}"
     )
-    await authz.require_can_view(AuthzObject.flow(flow_id), user_id=user_id)
+    await authz.require_can_view(
+        AuthzObject.flow(flow_id, company_id=company_id), user_id=user_id
+    )
     with pytest.raises(AuthzDenied):
         await authz.require_can_view(
-            AuthzObject.flow(flow_id), user_id=f"stranger_{unique_id}"
+            AuthzObject.flow(flow_id, company_id=company_id),
+            user_id=f"stranger_{unique_id}",
         )
 
 
@@ -140,10 +147,16 @@ async def test_cross_company_group_does_not_view_foreign_flow(
         company_ids=[],
         previous_groups=[],
     )
-    await authz.require_can_view(AuthzObject.flow(flow_id), user_id=member_a)
+    await authz.require_can_view(
+        AuthzObject.flow(flow_id, company_id=company_a), user_id=member_a
+    )
     with pytest.raises(AuthzDenied):
-        await authz.require_can_view(AuthzObject.flow(flow_id), user_id=member_b)
-    await authz.require_can_view(AuthzObject.flow(flow_id), user_id=admin_id)
+        await authz.require_can_view(
+            AuthzObject.flow(flow_id, company_id=company_a), user_id=member_b
+        )
+    await authz.require_can_view(
+        AuthzObject.flow(flow_id, company_id=company_a), user_id=admin_id
+    )
 
 
 @pytest.mark.asyncio
@@ -175,7 +188,7 @@ async def test_empty_permission_company_visible(container, unique_id) -> None:
         config, company_id=company_id, owner_user_id=f"owner_{unique_id}"
     )
     assert await container.authz_service.can_view(
-        AuthzObject.flow(flow_id), user_id=member_id
+        AuthzObject.flow(flow_id, company_id=company_id), user_id=member_id
     )
 
 
@@ -201,6 +214,116 @@ async def test_sync_flow_saved_admin_group_is_unscoped(container, unique_id) -> 
     await access.sync_flow_saved(
         config, company_id=company_id, owner_user_id=f"owner_{unique_id}"
     )
-    subjects = {item.subject.fga_user for item in await authz.list_tuples(AuthzObject.flow(flow_id))}
+    subjects = {
+        item.subject.fga_user
+        for item in await authz.list_tuples(
+            AuthzObject.flow(flow_id, company_id=company_id)
+        )
+    }
     assert "group:admin#member" in subjects
     assert f"group:{company_id}/developers#member" in subjects
+
+
+@pytest.mark.asyncio
+async def test_same_flow_id_two_companies_keep_independent_tuples(
+    container, unique_id
+) -> None:
+    authz = container.authz_service
+    access = FlowAccessService(authz)
+    company_a = f"co_a_{unique_id}"
+    company_b = f"co_b_{unique_id}"
+    member_a = f"mem_a_{unique_id}"
+    member_b = f"mem_b_{unique_id}"
+    flow_id = "example_react"
+    await sync_company_member_roles(
+        authz, company_id=company_a, user_id=member_a, roles=["member"]
+    )
+    await sync_company_member_roles(
+        authz, company_id=company_b, user_id=member_b, roles=["member"]
+    )
+    config = FlowConfig(
+        flow_id=flow_id,
+        name="demo",
+        entry="main",
+        permission=[],
+        nodes={
+            "main": {
+                "type": "code",
+                "code": "async def run(args, state): return state",
+            }
+        },
+        edges=[Edge(from_node="main", to_node=None)],
+    )
+    await access.sync_flow_saved(
+        config, company_id=company_a, owner_user_id=f"owner_a_{unique_id}"
+    )
+    await access.sync_flow_saved(
+        config, company_id=company_b, owner_user_id=f"owner_b_{unique_id}"
+    )
+    assert await authz.can_view(
+        AuthzObject.flow(flow_id, company_id=company_a), user_id=member_a
+    )
+    assert await authz.can_view(
+        AuthzObject.flow(flow_id, company_id=company_b), user_id=member_b
+    )
+    with pytest.raises(AuthzDenied):
+        await authz.require_can_view(
+            AuthzObject.flow(flow_id, company_id=company_a), user_id=member_b
+        )
+    with pytest.raises(AuthzDenied):
+        await authz.require_can_view(
+            AuthzObject.flow(flow_id, company_id=company_b), user_id=member_a
+        )
+    await access.sync_flow_saved(
+        config, company_id=company_a, owner_user_id=f"owner_a_{unique_id}"
+    )
+    assert await authz.can_view(
+        AuthzObject.flow(flow_id, company_id=company_b), user_id=member_b
+    )
+
+
+@pytest.mark.asyncio
+async def test_list_viewable_flow_ids_rejects_unscoped_object_keys(
+    container, unique_id
+) -> None:
+    authz = container.authz_service
+    access = FlowAccessService(authz)
+    company_id = f"co_{unique_id}"
+    member_id = f"mem_{unique_id}"
+    flow_id = f"flow_{unique_id}"
+    await sync_company_member_roles(
+        authz, company_id=company_id, user_id=member_id, roles=["member"]
+    )
+    config = FlowConfig(
+        flow_id=flow_id,
+        name="demo",
+        entry="main",
+        permission=[],
+        nodes={
+            "main": {
+                "type": "code",
+                "code": "async def run(args, state): return state",
+            }
+        },
+        edges=[Edge(from_node="main", to_node=None)],
+    )
+    await access.sync_flow_saved(
+        config, company_id=company_id, owner_user_id=f"owner_{unique_id}"
+    )
+    ids = await access.list_viewable_flow_ids(
+        user_id=member_id, company_id=company_id
+    )
+    assert flow_id in ids
+    unscoped = AuthzTuple(
+        subject=AuthzSubject.company_member(company_id),
+        relation=AuthzRelation.VIEWER,
+        obj=AuthzObject(AuthzObjectType.FLOW, flow_id),
+    )
+    await authz.write([unscoped])
+    try:
+        with pytest.raises(AuthzConfigError):
+            _ = await access.list_viewable_flow_ids(
+                user_id=member_id, company_id=company_id
+            )
+    finally:
+        await authz.delete([unscoped])

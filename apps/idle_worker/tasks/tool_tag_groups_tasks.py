@@ -28,7 +28,7 @@ async def tool_tag_groups_describe_tick(
         trace_id=f"scheduler:tool_tag_groups_describe:{schedule_task_id}",
         session_id=f"tool_tag_groups_describe:{schedule_task_id}",
     )
-    set_context(scheduler_context)
+    _ = set_context(scheduler_context)
     try:
         stats = await container.tool_tag_group_service.describe_all_platform_tags()
         logger.info(

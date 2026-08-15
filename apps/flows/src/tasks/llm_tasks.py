@@ -59,7 +59,7 @@ async def invoke_llm(
     previous_context = None
     if context_data is not None:
         previous_context = get_context()
-        set_context(Context.from_dict(context_data))
+        _ = set_context(Context.from_dict(context_data))
 
     try:
         trace_extra: dict[str, str] = {}
@@ -171,6 +171,6 @@ async def invoke_llm(
     finally:
         if context_data is not None:
             if previous_context is not None:
-                set_context(previous_context)
+                _ = set_context(previous_context)
             else:
                 clear_context()

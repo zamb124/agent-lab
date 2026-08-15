@@ -9,18 +9,20 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveUiIconFile } from '@platform/lib/utils/file-icons.js';
+import { resolveFileIconBasename, resolveUiIconFile } from '@platform/lib/utils/file-icons.js';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
 const iconsDir = path.join(rootDir, 'core/frontend/static/assets/icons');
+const fileIconsDir = path.join(iconsDir, 'files_icons');
 const scanRoots = [
     path.join(rootDir, 'core/frontend/static/lib'),
     path.join(rootDir, 'apps'),
 ];
 
-/** `<platform-icon ... name="foo">` — только строковый литерал, без `${}`. */
-const ICON_TAG_RE = /<platform-icon\b[^>]*?\bname="([a-z0-9_-]+)"/gs;
-/** `icon: 'foo'` в описаниях пунктов меню, вкладок и навигации. */
+/** Целый тег: `file-icon` может стоять и до, и после `name`. */
+const ICON_TAG_RE = /<platform-icon\b([^>]*)>/gs;
+const ICON_NAME_ATTR_RE = /\bname="([a-z0-9_-]+)"/;
+/** `icon: 'foo'` в описаниях пунктов меню, вкладок и навигации — UI-иконки. */
 const ICON_PROP_RE = /\bicon:\s*'([a-z0-9_-]+)'/g;
 
 function collectJsFiles(dir, acc) {
@@ -41,20 +43,44 @@ function collectIconUsages() {
     for (const root of scanRoots) {
         for (const file of collectJsFiles(root, [])) {
             const source = fs.readFileSync(file, 'utf8');
-            for (const re of [ICON_TAG_RE, ICON_PROP_RE]) {
-                re.lastIndex = 0;
-                let match = re.exec(source);
-                while (match !== null) {
-                    const name = match[1];
-                    if (!usages.has(name)) {
-                        usages.set(name, path.relative(rootDir, file));
+            const relative = path.relative(rootDir, file);
+
+            ICON_TAG_RE.lastIndex = 0;
+            let tagMatch = ICON_TAG_RE.exec(source);
+            while (tagMatch !== null) {
+                const attrs = tagMatch[1];
+                const nameMatch = ICON_NAME_ATTR_RE.exec(attrs);
+                if (nameMatch !== null) {
+                    const name = nameMatch[1];
+                    const kind = /\bfile-icon\b/.test(attrs) ? 'file' : 'ui';
+                    const key = `${kind}:${name}`;
+                    if (!usages.has(key)) {
+                        usages.set(key, { kind, name, file: relative });
                     }
-                    match = re.exec(source);
                 }
+                tagMatch = ICON_TAG_RE.exec(source);
+            }
+
+            ICON_PROP_RE.lastIndex = 0;
+            let propMatch = ICON_PROP_RE.exec(source);
+            while (propMatch !== null) {
+                const name = propMatch[1];
+                const key = `ui:${name}`;
+                if (!usages.has(key)) {
+                    usages.set(key, { kind: 'ui', name, file: relative });
+                }
+                propMatch = ICON_PROP_RE.exec(source);
             }
         }
     }
     return usages;
+}
+
+function resolveIconAssetPath(kind, name) {
+    if (kind === 'file') {
+        return path.join(fileIconsDir, `${resolveFileIconBasename(name)}.svg`);
+    }
+    return path.join(iconsDir, `${resolveUiIconFile(name)}.svg`);
 }
 
 describe('UI icons', () => {
@@ -63,10 +89,10 @@ describe('UI icons', () => {
         expect(usages.size).toBeGreaterThan(50);
 
         const missing = [];
-        for (const [name, file] of usages) {
-            const asset = path.join(iconsDir, `${resolveUiIconFile(name)}.svg`);
+        for (const { kind, name, file } of usages.values()) {
+            const asset = resolveIconAssetPath(kind, name);
             if (!fs.existsSync(asset)) {
-                missing.push(`${name} (${file})`);
+                missing.push(`${kind}:${name} (${file})`);
             }
         }
 

@@ -31,6 +31,7 @@ from core.authz.ids import (
     group_member_company_id,
     group_object_key,
     is_openfga_user_subject_id,
+    parse_flow_branch_key,
     parse_object_id,
 )
 from core.authz.types import AuthzObjectType
@@ -116,9 +117,13 @@ def test_authz_object_factories_and_subject_kinds() -> None:
     assert AuthzObject.sync_channel("ch").fga_id == "sync_channel:ch"
     assert AuthzObject.work_queue("q").fga_id == "work_queue:q"
     assert AuthzObject.mailbox_binding("mb").fga_id == "mailbox_binding:mb"
-    assert AuthzObject.flow("flow1").fga_id == "flow:flow1"
-    assert AuthzObject.flow_branch("flow1", "main").fga_id == "flow_branch:flow1/main"
-    assert AuthzObject.tool("tool1").fga_id == "tool:tool1"
+    assert AuthzObject.flow("flow1", company_id="c").fga_id == "flow:c/flow1"
+    assert (
+        AuthzObject.flow_branch("flow1", "main", company_id="c").fga_id
+        == "flow_branch:c/flow1/main"
+    )
+    assert parse_flow_branch_key("c/flow1/main") == ("c", "flow1", "main")
+    assert AuthzObject.tool("tool1", company_id="c").fga_id == "tool:c/tool1"
     assert AuthzObject.flow_ui_share("share1").fga_id == "flow_ui_share:share1"
     assert AuthzObject.agent_device("dev1").fga_id == "agent_device:dev1"
     assert AuthzObject.from_fga_id("crm_entity:e1").object_key == "e1"

@@ -9,6 +9,8 @@ from apps.flows.src.services.mcp_catalog_ids import server_id_from_catalog_id
 from apps.flows.src.services.mcp_catalog_provisioner import catalog_entry_to_server_config
 from apps.flows.src.services.mcp_server_display_order import sort_mcp_catalog_entries_for_display
 from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
+from apps.flows.tools.builtin_specs import require_not_builtin_tool_id
+from core.context import require_active_company
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -132,7 +134,10 @@ async def uninstall_catalog_entry_from_company(
         raise ValueError(f"MCP server {server_id!r} catalog_id mismatch")
 
     for tool_id in server.cached_tools:
+        require_not_builtin_tool_id(tool_id, source="mcp cached_tools")
         _ = await container.tool_repository.delete(tool_id)
-        await container.flow_access_service.sync_tool_deleted(tool_id)
+        await container.flow_access_service.sync_tool_deleted(
+            tool_id, company_id=require_active_company().company_id
+        )
     _ = await container.mcp_server_repository.delete(server_id)
     logger.info("MCP Store uninstall: catalog_id=%s server_id=%s", catalog_id, server_id)

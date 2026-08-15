@@ -404,7 +404,14 @@ class BaseChannel(ABC):
         """
         authz = self.container.authz_service
         try:
-            await authz.require_can_view(AuthzObject.flow(self.flow_id), user_id=user_id)
+            ctx = self.context
+            if ctx is None or ctx.active_company is None:
+                raise ValueError("active company required for flow authz check")
+            company_id = ctx.active_company.company_id
+            await authz.require_can_view(
+                AuthzObject.flow(self.flow_id, company_id=company_id),
+                user_id=user_id,
+            )
             flow_config = await self.container.flow_repository.get(self.flow_id)
             if (
                 flow_config is not None
@@ -412,7 +419,9 @@ class BaseChannel(ABC):
                 and branch_id in flow_config.branches
             ):
                 await authz.require_can_view(
-                    AuthzObject.flow_branch(self.flow_id, branch_id),
+                    AuthzObject.flow_branch(
+                        self.flow_id, branch_id, company_id=company_id
+                    ),
                     user_id=user_id,
                 )
         except AuthzDenied as exc:
@@ -920,7 +929,7 @@ class BaseChannel(ABC):
             ctx.metadata = {**ctx.metadata, **params.metadata}
 
         # Устанавливаем в ContextVar для доступа из других компонентов
-        set_context(ctx)
+        _ = set_context(ctx)
         bind_log_context(**{LOG_SESSION_AGENT: params.session_id})
 
         # Загружаем state для определения task_id, resume и закреплённой версии flow
@@ -1916,7 +1925,12 @@ class BaseChannel(ABC):
         del config.branches[branch_id]
         _ = await container.flow_repository.set(config)
         try:
-            await container.flow_access_service.sync_branch_deleted(self.flow_id, branch_id)
+            ctx = self.context
+            if ctx is None or ctx.active_company is None:
+                raise ValueError("active company required for flow authz sync")
+            await container.flow_access_service.sync_branch_deleted(
+                self.flow_id, branch_id, company_id=ctx.active_company.company_id
+            )
             await self._sync_flow_authz(config)
         except Exception:
             _ = await container.flow_repository.set(previous)

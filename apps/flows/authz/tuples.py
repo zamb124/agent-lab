@@ -15,23 +15,23 @@ def flow_company_link(flow_id: str, company_id: str) -> AuthzTuple:
     return AuthzTuple(
         subject=AuthzSubject.object_ref(AuthzObject.company(company_id)),
         relation=AuthzRelation.COMPANY,
-        obj=AuthzObject.flow(flow_id),
+        obj=AuthzObject.flow(flow_id, company_id=company_id),
     )
 
 
-def flow_platform_link(flow_id: str) -> AuthzTuple:
+def flow_platform_link(flow_id: str, *, company_id: str) -> AuthzTuple:
     return AuthzTuple(
         subject=AuthzSubject.object_ref(AuthzObject.platform()),
         relation=AuthzRelation.PLATFORM,
-        obj=AuthzObject.flow(flow_id),
+        obj=AuthzObject.flow(flow_id, company_id=company_id),
     )
 
 
-def flow_owner_tuple(flow_id: str, owner_user_id: str) -> AuthzTuple:
+def flow_owner_tuple(flow_id: str, owner_user_id: str, *, company_id: str) -> AuthzTuple:
     return AuthzTuple(
         subject=AuthzSubject.user(owner_user_id),
         relation=AuthzRelation.OWNER,
-        obj=AuthzObject.flow(flow_id),
+        obj=AuthzObject.flow(flow_id, company_id=company_id),
     )
 
 
@@ -44,7 +44,7 @@ def flow_group_viewer_tuple(
             company_id=group_member_company_id(group_name, company_id),
         ),
         relation=AuthzRelation.VIEWER,
-        obj=AuthzObject.flow(flow_id),
+        obj=AuthzObject.flow(flow_id, company_id=company_id),
     )
 
 
@@ -52,15 +52,15 @@ def flow_company_viewer_tuple(flow_id: str, company_id: str) -> AuthzTuple:
     return AuthzTuple(
         subject=AuthzSubject.company_member(company_id),
         relation=AuthzRelation.VIEWER,
-        obj=AuthzObject.flow(flow_id),
+        obj=AuthzObject.flow(flow_id, company_id=company_id),
     )
 
 
-def flow_branch_flow_link(flow_id: str, branch_id: str) -> AuthzTuple:
+def flow_branch_flow_link(flow_id: str, branch_id: str, *, company_id: str) -> AuthzTuple:
     return AuthzTuple(
-        subject=AuthzSubject.object_ref(AuthzObject.flow(flow_id)),
+        subject=AuthzSubject.object_ref(AuthzObject.flow(flow_id, company_id=company_id)),
         relation=AuthzRelation.FLOW,
-        obj=AuthzObject.flow_branch(flow_id, branch_id),
+        obj=AuthzObject.flow_branch(flow_id, branch_id, company_id=company_id),
     )
 
 
@@ -73,7 +73,7 @@ def flow_branch_group_viewer_tuple(
             company_id=group_member_company_id(group_name, company_id),
         ),
         relation=AuthzRelation.VIEWER,
-        obj=AuthzObject.flow_branch(flow_id, branch_id),
+        obj=AuthzObject.flow_branch(flow_id, branch_id, company_id=company_id),
     )
 
 
@@ -83,7 +83,7 @@ def flow_branch_company_viewer_tuple(
     return AuthzTuple(
         subject=AuthzSubject.company_member(company_id),
         relation=AuthzRelation.VIEWER,
-        obj=AuthzObject.flow_branch(flow_id, branch_id),
+        obj=AuthzObject.flow_branch(flow_id, branch_id, company_id=company_id),
     )
 
 
@@ -91,15 +91,15 @@ def tool_company_link(tool_id: str, company_id: str) -> AuthzTuple:
     return AuthzTuple(
         subject=AuthzSubject.object_ref(AuthzObject.company(company_id)),
         relation=AuthzRelation.COMPANY,
-        obj=AuthzObject.tool(tool_id),
+        obj=AuthzObject.tool(tool_id, company_id=company_id),
     )
 
 
-def tool_platform_link(tool_id: str) -> AuthzTuple:
+def tool_platform_link(tool_id: str, *, company_id: str) -> AuthzTuple:
     return AuthzTuple(
         subject=AuthzSubject.object_ref(AuthzObject.platform()),
         relation=AuthzRelation.PLATFORM,
-        obj=AuthzObject.tool(tool_id),
+        obj=AuthzObject.tool(tool_id, company_id=company_id),
     )
 
 
@@ -112,7 +112,7 @@ def tool_group_viewer_tuple(
             company_id=group_member_company_id(group_name, company_id),
         ),
         relation=AuthzRelation.VIEWER,
-        obj=AuthzObject.tool(tool_id),
+        obj=AuthzObject.tool(tool_id, company_id=company_id),
     )
 
 
@@ -120,13 +120,15 @@ def tool_company_viewer_tuple(tool_id: str, company_id: str) -> AuthzTuple:
     return AuthzTuple(
         subject=AuthzSubject.company_member(company_id),
         relation=AuthzRelation.VIEWER,
-        obj=AuthzObject.tool(tool_id),
+        obj=AuthzObject.tool(tool_id, company_id=company_id),
     )
 
 
-def flow_ui_share_flow_link(share_grant_id: str, flow_id: str) -> AuthzTuple:
+def flow_ui_share_flow_link(
+    share_grant_id: str, flow_id: str, *, company_id: str
+) -> AuthzTuple:
     return AuthzTuple(
-        subject=AuthzSubject.object_ref(AuthzObject.flow(flow_id)),
+        subject=AuthzSubject.object_ref(AuthzObject.flow(flow_id, company_id=company_id)),
         relation=AuthzRelation.FLOW,
         obj=AuthzObject.flow_ui_share(share_grant_id),
     )

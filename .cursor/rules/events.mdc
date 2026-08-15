@@ -76,6 +76,8 @@ Redis-клиент шины — `events_redis_client()` (`core/events/redis_clie
 | tail | `PlatformEventTailReader` (`XREAD`) | `NotificationManager` в каждом HTTP-поде: события с `delivery` → WS-сокеты `/{svc}/api/ws/notifications` | at-most-once, resume с последнего id |
 | group | `PlatformEventGroupConsumer` (`XREADGROUP` + `XACK` + `XAUTOCLAIM`) | durable-потребители; первый — группа `flows` в `flows_worker` (триггеры `platform_event` + employee inbox) | at-least-once; poison-записи логируются и ACK'аются |
 
+Тестовый `platform_events_listener`: курсор = id последней записи стрима, на пустом стриме `0-0`. `XREAD $` запрещён — Redis `$` пропускает publish между open и первым `XREAD` (пустой стрим после FLUSHDB / старт сессии). WS-хвост `$` остаётся live-only, это другой контракт.
+
 Любой сервис может завести свою consumer group и перехватить любое
 событие платформы. Идемпотентность обязана обеспечиваться потребителем
 (flows: детерминированный `task_id` из `event_id + trigger_id`).

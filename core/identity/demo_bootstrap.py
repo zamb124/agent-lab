@@ -152,7 +152,7 @@ async def ensure_demo_company_and_user(
     )
 
     service_client = ServiceClient()
-    set_context(init_context)
+    _ = set_context(init_context)
     try:
         init_response = await service_client.post(
             "flows",

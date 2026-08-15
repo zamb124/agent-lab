@@ -51,11 +51,11 @@ from apps.flows.src.models import (
     ResourceReference,
     ResourceReferenceInput,
 )
-from apps.flows.src.models.resource import ResourceType
 from apps.flows.src.models.enums import ChannelType, NodeToolCallType, NodeType
 from apps.flows.src.models.exception_absorb_allow import ExceptionAbsorbAllowName
 from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod
 from apps.flows.src.models.hitl_schemas import HitlInterruptSnapshot, build_hitl_handoff_command
+from apps.flows.src.models.resource import ResourceType
 from apps.flows.src.runtime.agent_skill_runtime import AgentSkillRuntimeHost
 from apps.flows.src.runtime.effective_llm_config import resolve_effective_llm_config_for_node
 from apps.flows.src.runtime.exception_policy import node_exception_policy, should_absorb_exception

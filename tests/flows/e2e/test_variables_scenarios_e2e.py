@@ -7,7 +7,7 @@ import pytest
 from apps.flows.src.container import get_container
 from core.context import clear_context, set_context
 from core.models.context_models import Context
-from core.models.identity_models import Company, Namespace, User
+from core.models.identity_models import Company, User
 from core.variables.models import ResolutionContext
 from core.variables.scenarios import DEMO_VARIABLE_KEYS, VariableScenario
 from tests.flows.durable_runtime_harness import run_flow, workflow_state
@@ -25,19 +25,13 @@ def _system_context(*, user_id: str = "test_user", namespace: str = "default", c
 
 @pytest.fixture(autouse=True)
 async def ensure_demo_sales_namespace(container) -> None:
-    """Scoped demo_greeting использует namespace=sales; auth middleware требует запись в реестре."""
+    """Scoped demo_greeting использует namespace=sales; Check — OpenFGA tuples через NamespaceService."""
     set_context(_system_context())
     try:
-        namespace_repository = container.namespace_repository
-        existing = await namespace_repository.get("sales")
-        if existing is None:
-            _ = await namespace_repository.set(
-                Namespace(
-                    name="sales",
-                    company_id="system",
-                    description="Demo sales namespace for variable scope tests",
-                )
-            )
+        _ = await container.namespace_service.get_or_create(
+            "sales",
+            description="Demo sales namespace for variable scope tests",
+        )
     finally:
         clear_context()
 

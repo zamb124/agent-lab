@@ -42,11 +42,18 @@ async def test_format_and_parse_object_ids() -> None:
     assert format_namespace_key("acme", "idx_x:ns") == "acme/idx_x%3Ans"
     assert parse_namespace_key("acme/idx_x%3Ans") == ("acme", "idx_x:ns")
     assert (
-        format_object_id(AuthzObjectType.TOOL, "mcp:search:meta_web_search")
-        == "tool:mcp%3Asearch%3Ameta_web_search"
+        format_object_id(
+            AuthzObjectType.TOOL,
+            format_namespace_key("acme", "mcp:search:meta_web_search"),
+        )
+        == "tool:acme/mcp%3Asearch%3Ameta_web_search"
     )
-    assert parse_object_id("tool:mcp%3Asearch%3Ameta_web_search") == (
+    assert parse_object_id("tool:acme/mcp%3Asearch%3Ameta_web_search") == (
         AuthzObjectType.TOOL,
+        "acme/mcp%3Asearch%3Ameta_web_search",
+    )
+    assert parse_namespace_key("acme/mcp%3Asearch%3Ameta_web_search") == (
+        "acme",
         "mcp:search:meta_web_search",
     )
     assert PUBLIC_USER == "user:*"

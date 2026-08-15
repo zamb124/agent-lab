@@ -33,13 +33,40 @@ from apps.flows.src.models.tool_reference import ToolReference
 from core.authz.factory import build_authz_service
 from core.authz.models import AuthzObject, AuthzTuple
 from core.authz.platform_sync import ensure_platform_global_admin
-from core.authz.types import AuthzRelation
+from core.authz.service import AuthzService
+from core.authz.types import AuthzObjectType, AuthzRelation
 from core.config import get_settings
 from core.db.storage import Storage
 from core.logging import get_logger
 from core.types import parse_json_object
 
 logger = get_logger(__name__)
+
+_OPENFGA_WRITE_CHUNK = 100
+
+
+def _compound_object_key_is_unscoped(
+    object_type: AuthzObjectType, object_key: str
+) -> bool:
+    if object_type in (AuthzObjectType.FLOW, AuthzObjectType.TOOL):
+        return "/" not in object_key
+    if object_type is AuthzObjectType.FLOW_BRANCH:
+        return object_key.count("/") != 2
+    raise ValueError(f"not a compound flow object type: {object_type}")
+
+
+async def _delete_unscoped_compound_tuples(
+    authz: AuthzService, object_type: AuthzObjectType
+) -> int:
+    tuples = await authz.list_tuples(object_type=object_type)
+    deletes = [
+        item
+        for item in tuples
+        if _compound_object_key_is_unscoped(object_type, item.obj.object_key)
+    ]
+    for start in range(0, len(deletes), _OPENFGA_WRITE_CHUNK):
+        await authz.delete(deletes[start : start + _OPENFGA_WRITE_CHUNK])
+    return len(deletes)
 
 
 def _flow_permission_writes(
@@ -60,7 +87,9 @@ def _branch_permission_writes(
     company_id: str,
     permission: list[str],
 ) -> list[AuthzTuple]:
-    writes: list[AuthzTuple] = [flow_branch_flow_link(flow_id, branch_id)]
+    writes: list[AuthzTuple] = [
+        flow_branch_flow_link(flow_id, branch_id, company_id=company_id)
+    ]
     if not permission:
         return writes
     groups = [item.strip() for item in permission if item.strip()]
@@ -81,7 +110,7 @@ def _tool_permission_writes(
 ) -> list[AuthzTuple]:
     writes: list[AuthzTuple] = [
         tool_company_link(tool_id, company_id),
-        tool_platform_link(tool_id),
+        tool_platform_link(tool_id, company_id=company_id),
     ]
     groups = [item.strip() for item in permission if item.strip()]
     if not groups:
@@ -118,6 +147,21 @@ async def backfill_flows_authz(*, limit: int | None = None) -> tuple[int, int, i
         raise RuntimeError("openfga.enabled must be true for flows authz backfill")
 
     await ensure_platform_global_admin(authz)
+    unscoped_flows = await _delete_unscoped_compound_tuples(
+        authz, AuthzObjectType.FLOW
+    )
+    unscoped_tools = await _delete_unscoped_compound_tuples(
+        authz, AuthzObjectType.TOOL
+    )
+    unscoped_branches = await _delete_unscoped_compound_tuples(
+        authz, AuthzObjectType.FLOW_BRANCH
+    )
+    logger.info(
+        "flows authz backfill purged unscoped flows=%s tools=%s branches=%s",
+        unscoped_flows,
+        unscoped_tools,
+        unscoped_branches,
+    )
 
     storage = Storage(db_url=str(settings.database.flows_url))
     flows_written = 0
@@ -140,10 +184,12 @@ async def backfill_flows_authz(*, limit: int | None = None) -> tuple[int, int, i
                 )
             flow_desired = [
                 flow_company_link(flow_id, company_id),
-                flow_platform_link(flow_id),
+                flow_platform_link(flow_id, company_id=company_id),
                 *_flow_permission_writes(flow_id, company_id, config.permission),
             ]
-            flow_existing = await authz.list_tuples(AuthzObject.flow(flow_id))
+            flow_existing = await authz.list_tuples(
+                AuthzObject.flow(flow_id, company_id=company_id)
+            )
             flow_desired_set = frozenset(flow_desired)
             flow_existing_set = frozenset(flow_existing)
             await authz.write_and_delete(
@@ -159,7 +205,7 @@ async def backfill_flows_authz(*, limit: int | None = None) -> tuple[int, int, i
                     flow_id, branch_id, company_id, branch.permission
                 )
                 branch_existing = await authz.list_tuples(
-                    AuthzObject.flow_branch(flow_id, branch_id)
+                    AuthzObject.flow_branch(flow_id, branch_id, company_id=company_id)
                 )
                 branch_desired_set = frozenset(branch_desired)
                 branch_existing_set = frozenset(branch_existing)
@@ -186,7 +232,9 @@ async def backfill_flows_authz(*, limit: int | None = None) -> tuple[int, int, i
             tool_desired = _tool_permission_writes(
                 tool_id, company_id, tool.permission
             )
-            tool_existing = await authz.list_tuples(AuthzObject.tool(tool_id))
+            tool_existing = await authz.list_tuples(
+                AuthzObject.tool(tool_id, company_id=company_id)
+            )
             tool_desired_set = frozenset(tool_desired)
             tool_existing_set = frozenset(tool_existing)
             await authz.write_and_delete(
@@ -200,7 +248,7 @@ async def backfill_flows_authz(*, limit: int | None = None) -> tuple[int, int, i
         try:
             async with engine.connect() as connection:
                 share_sql = (
-                    "SELECT grant_id, flow_id, created_by_user_id, permission "
+                    "SELECT grant_id, flow_id, company_id, created_by_user_id, permission "
                     "FROM flow_ui_share_grants "
                     "WHERE revoked_at IS NULL "
                     "ORDER BY grant_id"
@@ -229,10 +277,11 @@ async def backfill_flows_authz(*, limit: int | None = None) -> tuple[int, int, i
         for row in share_rows:
             grant_id = cast(str, row["grant_id"])
             flow_id = cast(str, row["flow_id"])
+            company_id = cast(str, row["company_id"])
             owner_user_id = cast(str, row["created_by_user_id"])
             permission = cast(str, row["permission"])
             writes = [
-                flow_ui_share_flow_link(grant_id, flow_id),
+                flow_ui_share_flow_link(grant_id, flow_id, company_id=company_id),
                 flow_ui_share_owner_tuple(grant_id, owner_user_id),
             ]
             if permission == "editor":

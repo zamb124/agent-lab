@@ -16,6 +16,7 @@ from core.integrations.mcp import (
     validate_mcp_output_schema,
     validate_mcp_parameters_schema,
 )
+from core.models import StrictBaseModel
 from core.types import JsonObject, JsonValue, require_json_object
 
 from .enums import CodeMode, ReactToolRole
@@ -233,3 +234,30 @@ class ToolReference(BaseModel):
             "type": "inline_code",
             "attributes": attrs,
         }
+
+
+class ToolListIndexItem(StrictBaseModel):
+    """Проекция списка tools: id и поля фильтра picker без полного ToolReference / code."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
+
+    tool_id: str
+    title: str | None = None
+    description: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    code_mode: CodeMode = CodeMode.INLINE_CODE
+    mcp_server_id: str | None = None
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def tags_none_to_list(cls, value: object) -> object:
+        if value is None:
+            return []
+        return value
+
+    @field_validator("code_mode", mode="before")
+    @classmethod
+    def code_mode_none_to_inline(cls, value: object) -> object:
+        if value is None or value == "":
+            return CodeMode.INLINE_CODE
+        return value

@@ -14,7 +14,9 @@ _SLASH_COMPOUND_OBJECT_TYPES: frozenset[AuthzObjectType] = frozenset(
     {
         AuthzObjectType.PLATFORM_NAMESPACE,
         AuthzObjectType.CRM_NAMESPACE,
+        AuthzObjectType.FLOW,
         AuthzObjectType.FLOW_BRANCH,
+        AuthzObjectType.TOOL,
         AuthzObjectType.GROUP,
     }
 )
@@ -74,6 +76,32 @@ def format_namespace_key(company_id: str, namespace: str) -> str:
     return (
         f"{encode_fga_object_id_segment(company_id)}/"
         f"{encode_fga_object_id_segment(namespace)}"
+    )
+
+
+def format_flow_branch_key(company_id: str, flow_id: str, branch_id: str) -> str:
+    if not company_id or not flow_id or not branch_id:
+        raise AuthzConfigError("company_id, flow_id and branch_id are required")
+    if "/" in company_id or "/" in flow_id or "/" in branch_id:
+        raise AuthzConfigError(
+            f"company_id/flow_id/branch_id must not contain '/': {company_id!r}/{flow_id!r}/{branch_id!r}"
+        )
+    return (
+        f"{encode_fga_object_id_segment(company_id)}/"
+        f"{encode_fga_object_id_segment(flow_id)}/"
+        f"{encode_fga_object_id_segment(branch_id)}"
+    )
+
+
+def parse_flow_branch_key(object_key: str) -> tuple[str, str, str]:
+    """Разбор `company_id/flow_id/branch_id` object_key → доменные id."""
+    parts = object_key.split("/")
+    if len(parts) != 3:
+        raise AuthzConfigError(f"invalid flow_branch object key: {object_key!r}")
+    return (
+        decode_fga_object_id_segment(parts[0]),
+        decode_fga_object_id_segment(parts[1]),
+        decode_fga_object_id_segment(parts[2]),
     )
 
 

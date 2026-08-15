@@ -117,7 +117,7 @@ async def ensure_system_landing_demo_embeds(container: FrontendContainer) -> Non
         session_id="ensure_system_landing_demo_embeds",
         channel="http",
     )
-    set_context(ctx)
+    _ = set_context(ctx)
     try:
         cfg_repo = container.embed_config_repository
         map_repo = container.embed_mapping_repository

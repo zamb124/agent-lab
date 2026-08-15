@@ -249,6 +249,8 @@ Resolved LLM candidate может нести `context_length`; context layer и�
 
 Evaluation Lab (`apps/flows/src/evaluation/`, UI `/flows/.../evaluation/...`) — dataset/suite → experiment/run → scorers для flow.
 
+Ledger `evaluation_run_events.sequence` назначается в `append_event` как `MAX+1` в той же транзакции под `SELECT … FOR UPDATE` на `evaluation_runs`. HTTP (granian) и TaskIQ — разные процессы; in-process `asyncio.Lock` append не сериализует.
+
 ### Вход turn (`EvaluationInput`)
 
 | `type` | Смысл | Persistence |

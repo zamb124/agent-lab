@@ -15,6 +15,7 @@ from apps.flows.src.models.enums import CodeMode
 from apps.flows.src.models.mcp import MCPDiscoveredTool, MCPServerConfig
 from apps.flows.src.models.tool_reference import ToolReference
 from apps.flows.src.services.mcp_defaults import build_default_mcp_servers
+from apps.flows.tools.builtin_specs import require_not_builtin_tool_id
 from core.context import get_context, require_active_company
 from core.integrations.mcp import mcp_tool_reference_id
 from core.logging import get_logger
@@ -74,6 +75,7 @@ async def sync_mcp_server_tools(
     server_id = server_config.server_id
     previous_cached = list(server_config.cached_tools)
     tool_ids: list[str] = []
+    company = require_active_company()
 
     for t in tools:
         tool_id = mcp_tool_reference_id(server_id, t.tool_name)
@@ -95,7 +97,6 @@ async def sync_mcp_server_tools(
             tags=["mcp", f"mcp:{server_id}"],
         )
         _ = await container.tool_repository.set(tool_ref)
-        company = require_active_company()
         await container.flow_access_service.sync_tool_saved(
             tool_id,
             company_id=company.company_id,
@@ -104,8 +105,11 @@ async def sync_mcp_server_tools(
 
     for old_tool_id in previous_cached:
         if old_tool_id not in tool_ids:
+            require_not_builtin_tool_id(old_tool_id, source="mcp cached_tools")
             _ = await container.tool_repository.delete(old_tool_id)
-            await container.flow_access_service.sync_tool_deleted(old_tool_id)
+            await container.flow_access_service.sync_tool_deleted(
+                old_tool_id, company_id=company.company_id
+            )
 
     server_config.cached_tools = tool_ids
     server_config.last_sync_at = datetime.now(tz=timezone.utc)

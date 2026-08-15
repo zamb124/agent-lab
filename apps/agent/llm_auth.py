@@ -81,7 +81,7 @@ async def _set_context_for_company_user(
     if company_id not in user.companies:
         raise HTTPException(status_code=403, detail="user не состоит в company из токена")
 
-    set_context(
+    _ = set_context(
         Context(
             user=user,
             host=_request_host(request),

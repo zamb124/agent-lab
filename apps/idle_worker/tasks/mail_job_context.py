@@ -46,7 +46,7 @@ async def enter_mail_binding_context(
                 + f"mailbox_binding_id={binding.mailbox_binding_id} "
                 + f"company_id={binding.company_id}"
             )
-    set_context(
+    _ = set_context(
         build_job_context(
             company=company,
             user=user,
@@ -61,6 +61,6 @@ async def enter_mail_binding_context(
 
 def leave_mail_binding_context(previous: Context | None) -> None:
     if previous is not None:
-        set_context(previous)
+        _ = set_context(previous)
     else:
         clear_context()

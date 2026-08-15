@@ -72,7 +72,7 @@ from core.a2a.extensions import (
     strip_subscribe_platform_metadata,
 )
 from core.authz.models import AuthzObject
-from core.context import get_context, require_context
+from core.context import get_context, require_active_company, require_context
 from core.events import publish_event_to_user
 from core.identity.embed_guest_turns import (
     EMBED_GUEST_USER_TURNS_REDIS_PREFIX,
@@ -101,15 +101,19 @@ def _actor_user_id() -> str:
     return require_context().user.user_id
 
 
+def _actor_company_id() -> str:
+    return require_active_company().company_id
+
+
 async def _require_view_flow(container: ContainerDep, flow_id: str) -> None:
     await container.authz_service.require_can_view(
-        AuthzObject.flow(flow_id), user_id=_actor_user_id()
+        AuthzObject.flow(flow_id, company_id=_actor_company_id()), user_id=_actor_user_id()
     )
 
 
 async def _require_edit_flow(container: ContainerDep, flow_id: str) -> None:
     await container.authz_service.require_can_edit(
-        AuthzObject.flow(flow_id), user_id=_actor_user_id()
+        AuthzObject.flow(flow_id, company_id=_actor_company_id()), user_id=_actor_user_id()
     )
 
 

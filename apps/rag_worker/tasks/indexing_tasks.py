@@ -94,7 +94,7 @@ async def index_rag_document_s3_task(
     if not trace_user_id or str(trace_user_id).strip() == "":
         raise ValueError("metadata.uploaded_by_user_id обязателен для rag.worker.index.upload_s3.")
 
-    set_context(
+    _ = set_context(
         await _embedding_context_for_rag_worker(
             company_id=str(trace_company_id).strip(),
             user_id=str(trace_user_id).strip(),

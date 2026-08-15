@@ -13,7 +13,7 @@ import subprocess
 import uuid
 from pathlib import Path
 
-from tests.fixtures.test_database_env import TEST_DATABASE_ENV
+from tests.fixtures.test_database_env import TEST_DATABASE_ENV, TEST_LIVEKIT_API_SECRET
 
 for _k, _v in TEST_DATABASE_ENV.items():
     os.environ.setdefault(_k, _v)
@@ -63,7 +63,7 @@ from apps.sync.db.repositories.git_resource_ref_repository import (  # noqa: E40
 from apps.sync.db.repositories.meeting_repository import CallRecordingRepository  # noqa: E402
 from apps.sync.db.repositories.message_repository import MessageRepository  # noqa: E402
 from apps.sync.db.repositories.thread_repository import ThreadRepository  # noqa: E402
-from core.models.identity_models import Company, Namespace, User  # noqa: E402
+from core.models.identity_models import Company, User  # noqa: E402
 from core.utils.tokens import get_token_service  # noqa: E402
 
 _SYNC_REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -249,28 +249,6 @@ def company_id(unique_id: str) -> str:
     return f"test_company_{unique_id}"
 
 
-@pytest_asyncio.fixture()
-async def sync_namespace(sync_auth_token: str, company_id: str, unique_id: str) -> str:
-    """Создаёт уникальный namespace в shared `NamespaceRepository` и возвращает его имя.
-
-    Sync-каналы привязываются к платформенному namespace (1:1); тесты,
-    создающие topic-канал, должны использовать это имя напрямую.
-    """
-    from apps.sync.container import get_sync_container
-
-    container = get_sync_container()
-    name = f"ns_{unique_id}"
-    await container.namespace_repository.set(
-        Namespace(
-            name=name,
-            company_id=company_id,
-            description=f"sync test namespace {unique_id}",
-            is_default=False,
-        )
-    )
-    return name
-
-
 @pytest.fixture()
 def channel_repo(sync_database: SyncDatabase) -> ChannelRepository:
     return ChannelRepository(db=sync_database)
@@ -368,9 +346,9 @@ async def livekit_demo_publisher(livekit_cli_test_container):
             "--url",
             "ws://livekit-test:7880",
             "--api-key",
-            "devkey",
+            TEST_DATABASE_ENV["CALLS__LIVEKIT_API_KEY"],
             "--api-secret",
-            "secret",
+            TEST_LIVEKIT_API_SECRET,
             "--identity",
             pub_identity,
             "--publish",

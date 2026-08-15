@@ -217,7 +217,7 @@ class TelegramDevPolling:
                 user_companies=[company],
                 channel="system",
             )
-            set_context(context)
+            _ = set_context(context)
             try:
                 all_flows = await container.flow_repository.list(limit=10_000)
                 logger.info(f"[{subdomain}] Found {len(all_flows)} flows")

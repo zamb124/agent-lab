@@ -883,8 +883,37 @@ class EvaluationLabRepository:
         )
 
     async def append_event(self, event: EvaluationRunEvent) -> EvaluationRunEvent:
+        """Пишет событие; sequence берётся как MAX+1 в той же транзакции.
+
+        Granian и TaskIQ — разные процессы, in-process Lock на sequence не сериализует
+        их. FOR UPDATE на evaluation_runs держит append одного run до commit.
+        """
         company_id = _company_id()
         async with self._storage.get_session() as session:
+            locked = await session.execute(
+                text("""
+                    SELECT run_id
+                    FROM evaluation_runs
+                    WHERE company_id = :company_id AND run_id = :run_id
+                    FOR UPDATE
+                """),
+                {"company_id": company_id, "run_id": event.run_id},
+            )
+            if locked.first() is None:
+                raise ValueError(f"Evaluation run not found: {event.run_id}")
+            seq_result = await session.execute(
+                text("""
+                    SELECT COALESCE(MAX(sequence), 0) + 1
+                    FROM evaluation_run_events
+                    WHERE company_id = :company_id AND run_id = :run_id
+                """),
+                {"company_id": company_id, "run_id": event.run_id},
+            )
+            sequence = _int_scalar(
+                cast(EvaluationLabRowValue, seq_result.scalar_one()),
+                "evaluation_run_events.next_sequence",
+            )
+            stored = event.model_copy(update={"sequence": sequence})
             _ = await session.execute(
                 text("""
                     INSERT INTO evaluation_run_events
@@ -893,18 +922,18 @@ class EvaluationLabRepository:
                         (:event_id, :run_id, :case_run_id, :company_id, :sequence, :event_type, :payload, :created_at)
                 """),
                 {
-                    "event_id": event.event_id,
-                    "run_id": event.run_id,
-                    "case_run_id": event.case_run_id,
+                    "event_id": stored.event_id,
+                    "run_id": stored.run_id,
+                    "case_run_id": stored.case_run_id,
                     "company_id": company_id,
-                    "sequence": event.sequence,
-                    "event_type": str(event.event_type),
-                    "payload": _json_payload(event.payload),
-                    "created_at": event.created_at,
+                    "sequence": stored.sequence,
+                    "event_type": str(stored.event_type),
+                    "payload": _json_payload(stored.payload),
+                    "created_at": stored.created_at,
                 },
             )
             await session.commit()
-        return event
+        return stored
 
     async def list_events(self, run_id: str) -> list[EvaluationRunEvent]:
         company_id = _company_id()

@@ -459,12 +459,17 @@ class FlowFactory:
 
     async def delete_flow(self, flow_id: str) -> bool:
         """Удаляет flow из БД"""
+        ctx = require_context()
+        if ctx.active_company is None:
+            raise ValueError("active company required for flow authz sync")
         config = await self.flow_repository.get(flow_id)
         branch_ids = list(config.branches.keys()) if config is not None else []
         deleted = await self.flow_repository.delete(flow_id)
         if deleted:
             await self.container.flow_access_service.sync_flow_deleted(
-                flow_id, branch_ids=branch_ids
+                flow_id,
+                company_id=ctx.active_company.company_id,
+                branch_ids=branch_ids,
             )
         return deleted
 

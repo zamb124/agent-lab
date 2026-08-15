@@ -142,7 +142,12 @@ async def test_console_create_rejects_reserved_prefixes(
     auth_headers: dict[str, str],
     unique_id: str,
 ) -> None:
-    for name in (f"user-{unique_id}", f"office-catalog-{unique_id}", f"llm-memory-{unique_id}"):
+    for name in (
+        f"user-{unique_id}",
+        f"office-catalog-{unique_id}",
+        f"llm-memory-{unique_id}",
+        f"wiki-restricted-{unique_id}",
+    ):
         response = await frontend_client.post(
             "/frontend/api/namespaces",
             headers=auth_headers,

@@ -97,7 +97,7 @@ async def _set_system_context(container: "FrontendContainer", *, session_id: str
         company_repository=container.company_repository,
         subdomain_repository=container.subdomain_repository,
     )
-    set_context(
+    _ = set_context(
         Context(
             user=_system_user(),
             active_company=company,

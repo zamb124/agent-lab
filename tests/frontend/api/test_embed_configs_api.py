@@ -95,7 +95,9 @@ async def _cleanup_embed_flow(
             channel="test",
         )
     )
-    await flows_container.flow_access_service.sync_flow_deleted(flow_id, branch_ids=[])
+    await flows_container.flow_access_service.sync_flow_deleted(
+        flow_id, company_id=company.company_id, branch_ids=[]
+    )
     await flows_container.flow_repository.delete(flow_id)
     clear_context()
 
@@ -133,7 +135,9 @@ async def test_agent():
     yield agent
 
     # Cleanup
-    await flows_container.flow_access_service.sync_flow_deleted("test_agent", branch_ids=[])
+    await flows_container.flow_access_service.sync_flow_deleted(
+        "test_agent", company_id="system", branch_ids=[]
+    )
     await flows_container.flow_repository.delete("test_agent")
 
 

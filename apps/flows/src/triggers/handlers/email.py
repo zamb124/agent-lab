@@ -282,7 +282,7 @@ async def dispatch_email_triggers_for_messages(
         user_companies=[company],
         channel="trigger:email",
     )
-    set_context(context)
+    _ = set_context(context)
     try:
         for member in members:
             parsed = parse_email_trigger_index_member(member)
@@ -366,7 +366,7 @@ async def dispatch_email_triggers_for_messages(
                 fired += 1
     finally:
         if previous_context is not None:
-            set_context(previous_context)
+            _ = set_context(previous_context)
         else:
             clear_context()
 

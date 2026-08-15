@@ -20,6 +20,24 @@ def test_extract_text_from_status_message() -> None:
     assert extract_text_from_task_json(task) == "hello from status"
 
 
+def test_extract_text_prefers_status_over_prior_history() -> None:
+    task = {
+        "history": [
+            {"role": "ROLE_USER", "parts": [{"text": "first"}]},
+            {"role": "ROLE_AGENT", "parts": [{"text": "first turn"}]},
+            {"role": "ROLE_USER", "parts": [{"text": "second"}]},
+        ],
+        "status": {
+            "state": "TASK_STATE_COMPLETED",
+            "message": {
+                "role": "ROLE_AGENT",
+                "parts": [{"text": "second turn"}],
+            },
+        },
+    }
+    assert extract_text_from_task_json(task) == "second turn"
+
+
 def test_extract_text_from_history_role_agent() -> None:
     task = {
         "history": [

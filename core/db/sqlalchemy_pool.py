@@ -39,7 +39,7 @@ def resolve_sqlalchemy_pool_config() -> SqlAlchemyPoolConfig:
 
 
 def sqlalchemy_async_engine_pool_kwargs() -> SqlAlchemyAsyncEnginePoolKwargs:
-    """pytest-xdist: компактный пул; overflow=2 — вложенные session() в одном call-stack."""
+    """Долгоживущий процесс (стек и pytest-worker) — QueuePool; overflow=2 для вложенных session()."""
     if _pytest_parallel_worker():
         return {"pool_size": 1, "max_overflow": 2, "pool_timeout": 60.0}
     pool_config = resolve_sqlalchemy_pool_config()

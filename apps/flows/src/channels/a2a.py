@@ -99,6 +99,27 @@ def _a2a_projection_is_parked(task: Task) -> bool:
     return is_terminal_a2a_task_state(state) or is_interrupted_a2a_task_state(state)
 
 
+def _projection_fingerprint(task: Task) -> tuple[int, int, str, str]:
+    state = int(task.status.state) if task.HasField("status") else -1
+    history_len = len(task.history)
+    last_history_id = task.history[-1].message_id if task.history else ""
+    status_message_id = ""
+    if task.HasField("status") and task.status.HasField("message"):
+        status_message_id = task.status.message.message_id
+    return (state, history_len, last_history_id, status_message_id)
+
+
+def _this_send_finished_in_process(prior: Task | None, current: Task) -> bool:
+    """Pub/Sub already dropped: return durable row only if THIS send parked it."""
+    if not _a2a_projection_is_parked(current):
+        return False
+    if prior is None:
+        return True
+    if not _a2a_projection_is_parked(prior):
+        return True
+    return _projection_fingerprint(prior) != _projection_fingerprint(current)
+
+
 def _text_part(text: str) -> Part:
     return new_text_part(text)
 
@@ -244,7 +265,7 @@ class A2AChannel(BaseChannel):
             raise ValueError("A2A task access requires authenticated user")
         return context.active_company.company_id, user_id
 
-    async def _projected_task(self, task_id: str) -> Task:
+    async def _load_projected_task(self, task_id: str) -> Task | None:
         company_id, owner_user_id = self._task_access_scope()
         share_context = (
             self.context.metadata.get("flow_ui_share_context_id")
@@ -272,8 +293,17 @@ class A2AChannel(BaseChannel):
                 task_id=task_id,
             )
         if task is None:
-            raise RuntimeError(f"Durable A2A Task {task_id!r} was not materialized")
+            return None
         return await self._task_for_share_viewer(task, grant)
+
+    async def _projected_task(self, task_id: str) -> Task:
+        task = await self._load_projected_task(task_id)
+        if task is None:
+            raise RuntimeError(f"Durable A2A Task {task_id!r} was not materialized")
+        return task
+
+    async def _prior_projection(self, task_id: str) -> Task | None:
+        return await self._load_projected_task(task_id)
 
     async def _replay_durable_stream_events(
         self, task_id: str, *, after_sequence: int = 0
@@ -654,6 +684,7 @@ class A2AChannel(BaseChannel):
             await self.create_task(prepared)
             return await self._projected_task(prepared.task_id)
 
+        prior = await self._prior_projection(prepared.task_id)
         timeout = 120.0 if is_testing() else 300.0
         subscriber = EventSubscriber(self.container.redis_client)
         ready_event = asyncio.Event()
@@ -669,10 +700,10 @@ class A2AChannel(BaseChannel):
         logger.debug(f"[A2A] Subscribed to stream:{prepared.task_id}, kicking task")
         await self.create_task(prepared)
         projected = await self._projected_task(prepared.task_id)
-        if _a2a_projection_is_parked(projected):
+        if _this_send_finished_in_process(prior, projected):
             # In-process enqueue (sync_tools) finishes while collect is blocked
             # off the event loop: Pub/Sub drops, collect waits until pytest timeout.
-            # Durable projection is the source of truth.
+            # Durable projection is the source of truth — only for THIS send.
             _ = collect_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await collect_task
@@ -711,6 +742,7 @@ class A2AChannel(BaseChannel):
         logger.info(
             f"[on_message_stream] Prepared task_id={prepared.task_id}, subscribing to Redis..."
         )
+        prior = await self._prior_projection(prepared.task_id)
         subscriber = EventSubscriber(self.container.redis_client)
         event_queue: asyncio.Queue[StreamEvent | None] = asyncio.Queue()
         ready_event = asyncio.Event()
@@ -728,7 +760,7 @@ class A2AChannel(BaseChannel):
 
             await self.create_task(prepared)
             projected = await self._projected_task(prepared.task_id)
-            if _a2a_projection_is_parked(projected):
+            if _this_send_finished_in_process(prior, projected):
                 # In-process enqueue (sync_tools) finishes before the live
                 # listener reads Redis: Pub/Sub is not a queue and drops.
                 # Durable ledger is the source of truth — same as SendMessage.

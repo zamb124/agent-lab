@@ -20,7 +20,7 @@ from core.ai.providers import HUMANITEC_LLM_PROVIDER, AICapability
 from core.authz.models import AuthzObject
 from core.config import get_settings
 from core.config.models import PlatformBrandConfig
-from core.context import get_context, require_context
+from core.context import get_context, require_active_company, require_context
 from core.frontend.viewport import PLATFORM_MOBILE_VIEWPORT_CONTENT
 from core.logging import get_logger
 from core.middleware.auth.company_resolver import build_service_base_url
@@ -748,7 +748,8 @@ async def get_flow_schema(flow_id: str, container: ContainerDep) -> HTMLResponse
     Использует Mermaid.js для отрисовки графов.
     """
     await container.authz_service.require_can_view(
-        AuthzObject.flow(flow_id), user_id=require_context().user.user_id
+        AuthzObject.flow(flow_id, company_id=require_active_company().company_id),
+        user_id=require_context().user.user_id,
     )
     schema = await container.flow_factory.get_flow_schema(flow_id)
 

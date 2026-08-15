@@ -26,6 +26,7 @@ from httpx import ASGITransport, AsyncClient
 from tests.fixtures.test_database_env import TEST_DATABASE_ENV
 
 pytest_plugins = [
+    "tests.hang_guard",
     "tests.fixtures.workers",
     "tests.fixtures.services",
     "tests.fixtures.clients",

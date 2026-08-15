@@ -387,7 +387,7 @@ async def _set_sync_ws_context(user: User, container: SyncContainer) -> None:
         raise WsCommandError("not_found", f"Компания {company_id!r} не найдена.")
 
     context_user = stored_user.model_copy(update={"active_company_id": company_id})
-    set_context(
+    _ = set_context(
         Context(
             user=context_user,
             channel="ws",

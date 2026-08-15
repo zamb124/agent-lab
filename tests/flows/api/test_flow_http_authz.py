@@ -89,7 +89,9 @@ async def test_restricted_flow_hidden_from_member_without_group(
     )
     assert mutate.status_code == 403
 
-    await container.flow_access_service.sync_flow_deleted(flow_id, branch_ids=[])
+    await container.flow_access_service.sync_flow_deleted(
+        flow_id, company_id="system", branch_ids=[]
+    )
     set_context(
         Context(
             user=User(user_id=system_user_id, name="System"),
@@ -163,7 +165,9 @@ async def test_restricted_flow_visible_to_platform_admin_via_fga(
     assert listed_admin.status_code == 200, listed_admin.text
     assert flow_id in {item["flow_id"] for item in listed_admin.json()["items"]}
 
-    await container.flow_access_service.sync_flow_deleted(flow_id, branch_ids=[])
+    await container.flow_access_service.sync_flow_deleted(
+        flow_id, company_id="system", branch_ids=[]
+    )
     set_context(
         Context(
             user=User(user_id=system_user_id, name="System"),

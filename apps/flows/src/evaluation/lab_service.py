@@ -3252,7 +3252,7 @@ class EvaluationLabService:
                 event_id=_new_id(),
                 run_id=run_id,
                 case_run_id=case_run_id,
-                sequence=await self._repository.next_event_sequence(run_id),
+                sequence=0,
                 event_type=event_type,
                 payload=payload,
                 created_at=_utc_now(),

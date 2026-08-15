@@ -6,6 +6,7 @@ from core.logging import bind_log_context, unbind_log_context
 from core.test_scope import (
     LOG_TEST_SCOPE,
     MOCK_LLM_SIDE_EFFECT_CRM_SUMMARY,
+    MOCK_LLM_SIDE_EFFECT_NOTE_MARKDOWN,
     TEST_SCOPE_DEFAULT_ENV,
     mock_llm_side_effect_enqueue_labels,
     side_effect_test_scope,
@@ -16,6 +17,10 @@ def test_side_effect_test_scope_appends_kind() -> None:
     assert (
         side_effect_test_scope("test_deadbeef", MOCK_LLM_SIDE_EFFECT_CRM_SUMMARY)
         == "test_deadbeef:crm_summary"
+    )
+    assert (
+        side_effect_test_scope("test_deadbeef", MOCK_LLM_SIDE_EFFECT_NOTE_MARKDOWN)
+        == "test_deadbeef:note_markdown"
     )
 
 

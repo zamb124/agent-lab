@@ -79,7 +79,7 @@ async def execute_evaluation_run(
         raise ValueError("Context is required. Context must be created in middleware.")
     if trace_context:
         set_current_trace_context(trace_context)
-    set_context(Context.from_dict(context_data))
+    _ = set_context(Context.from_dict(context_data))
     labels = taskiq_context.message.labels
     if "evaluation_run_id" not in labels:
         raise ValueError("TaskIQ label evaluation_run_id is required")
@@ -114,7 +114,7 @@ async def enqueue_pending_evaluation_runs(
         raise ValueError("Context is required. Context must be created in middleware.")
     if limit < 1:
         raise ValueError("limit must be >= 1")
-    set_context(Context.from_dict(context_data))
+    _ = set_context(Context.from_dict(context_data))
     container = require_current_container()
     jobs = await container.evaluation_lab_service.list_pending_run_jobs(limit)
     enqueued_run_ids: list[str] = []
@@ -168,7 +168,7 @@ async def run_evaluation_gate_policy(
         raise ValueError("Context is required. Context must be created in middleware.")
     if trace_context:
         set_current_trace_context(trace_context)
-    set_context(Context.from_dict(context_data))
+    _ = set_context(Context.from_dict(context_data))
     container = require_current_container()
     created = await container.evaluation_lab_service.create_gate_policy_run(
         gate_policy_id,
@@ -201,7 +201,7 @@ async def run_evaluation_monitor_cycle(
         raise ValueError("Context is required. Context must be created in middleware.")
     if trace_context:
         set_current_trace_context(trace_context)
-    set_context(Context.from_dict(context_data))
+    _ = set_context(Context.from_dict(context_data))
     container = require_current_container()
     cycle = await container.evaluation_lab_service.run_monitor_cycle(
         monitor_id,

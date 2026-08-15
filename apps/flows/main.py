@@ -182,7 +182,7 @@ async def on_startup(_app: FastAPI, container: FlowContainer, settings: FlowSett
             user_companies=[],
             trace_id="system:startup",
         )
-        set_context(system_context)
+        _ = set_context(system_context)
         try:
             loaded_tools = await load_tools_to_db(
                 container.tool_repository,

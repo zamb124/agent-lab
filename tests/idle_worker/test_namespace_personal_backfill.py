@@ -66,9 +66,9 @@ async def test_namespace_personal_backfill_creates_missing_personal(
     finally:
         clear_context()
 
-    result = await namespace_personal_backfill()
+    result = await namespace_personal_backfill(company_id=company_id)
     assert result["ensured"] >= 1
-    assert result["companies"] >= 1
+    assert result["companies"] == 1
 
     set_context(
         Context(

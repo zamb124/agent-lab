@@ -238,4 +238,12 @@ def builtin_tool_ids() -> frozenset[str]:
     return frozenset(ids)
 
 
-__all__ = ["BUILTIN_TOOL_SPECS", "builtin_tool_ids"]
+def require_not_builtin_tool_id(tool_id: str, *, source: str) -> None:
+    """SQL/MCP не владеют id platform builtin: иначе delete tuples снимает tool из picker."""
+    if tool_id in builtin_tool_ids():
+        raise ValueError(
+            f"{source} must not use platform builtin tool_id {tool_id!r}"
+        )
+
+
+__all__ = ["BUILTIN_TOOL_SPECS", "builtin_tool_ids", "require_not_builtin_tool_id"]

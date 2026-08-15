@@ -71,7 +71,7 @@ async def span_billing_settlement_tick(
             continue
 
         if span_company_id != prev_company_id:
-            set_context(Context(
+            _ = set_context(Context(
                 user=User(user_id="billing-worker", name="Billing Worker"),
                 active_company=Company(company_id=span_company_id, name=span_company_id),
                 session_id=f"billing-settlement:{span_company_id}",

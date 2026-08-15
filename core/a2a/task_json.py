@@ -63,8 +63,22 @@ def extract_text_from_task_json(task_payload: JsonObject) -> str:
     """
     Текст ответа Task из ProtoJSON.
 
-    Порядок: history ROLE_AGENT (с конца) → status.message → artifacts text → data.res.
+    Порядок: status.message (текущий ход) → history ROLE_AGENT с конца
+    → artifacts text → data.res.
+
+    History на Task замораживается при ensure (может содержать прошлые ходы
+    той же session). Status.message — сообщение текущего состояния Task.
     """
+    status_value = task_payload.get("status")
+    if isinstance(status_value, dict):
+        status_object = require_json_object(status_value, "a2a.task.status")
+        message_value = status_object.get("message")
+        if isinstance(message_value, dict):
+            message = require_json_object(message_value, "a2a.task.status.message")
+            text = _message_text(message)
+            if text is not None:
+                return text
+
     history_raw = task_payload.get("history")
     if isinstance(history_raw, list):
         for message_item in reversed(history_raw):
@@ -73,16 +87,6 @@ def extract_text_from_task_json(task_payload: JsonObject) -> str:
             message = require_json_object(message_item, "a2a.task.history.message")
             if message.get("role") != _ROLE_AGENT:
                 continue
-            text = _message_text(message)
-            if text is not None:
-                return text
-
-    status_value = task_payload.get("status")
-    if isinstance(status_value, dict):
-        status_object = require_json_object(status_value, "a2a.task.status")
-        message_value = status_object.get("message")
-        if isinstance(message_value, dict):
-            message = require_json_object(message_value, "a2a.task.status.message")
             text = _message_text(message)
             if text is not None:
                 return text

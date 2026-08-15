@@ -299,7 +299,7 @@ async def dispatch_platform_event_triggers(
         channel="trigger:platform_event",
         trace_id=event.meta.trace_id,
     )
-    set_context(context)
+    _ = set_context(context)
     try:
         for member in members:
             parsed = parse_platform_event_trigger_index_member(member)
@@ -375,7 +375,7 @@ async def dispatch_platform_event_triggers(
             fired += 1
     finally:
         if previous_context is not None:
-            set_context(previous_context)
+            _ = set_context(previous_context)
         else:
             clear_context()
 

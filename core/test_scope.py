@@ -12,7 +12,7 @@ Test scope — сквозная метка теста для маршрутиз�
 MockLLM читает scope из лог-контекста и работает строго со своей очередью
 ``mock_llm:responses:<scope>`` — никакого скана чужих ключей.
 
-Event-driven side-effect (daily/period summary) при enqueue получает
+Event-driven side-effect (daily/period summary, note markdown format) при enqueue получает
 ``{parent_scope}:{kind}`` (см. ``side_effect_test_scope``), чтобы A2A/LLM
 фона не снимал FIFO ``mock_llm:responses:<parent>``, который тест готовил
 для note-analyze / flow.
@@ -37,6 +37,7 @@ LOG_TEST_SCOPE = "test_scope"
 TEST_SCOPE_DEFAULT_ENV = "TEST_SCOPE_DEFAULT"
 TEST_SCOPE_STATIC_E2E = "test_e2e_static"
 MOCK_LLM_SIDE_EFFECT_CRM_SUMMARY = "crm_summary"
+MOCK_LLM_SIDE_EFFECT_NOTE_MARKDOWN = "note_markdown"
 
 
 def resolve_test_scope() -> str | None:

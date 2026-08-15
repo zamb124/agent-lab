@@ -479,7 +479,7 @@ class TestAuthzExplorerAPI:
         target_user_id = f"expl_grp_user_{unique_id}"
         flow_id = f"expl_grp_flow_{unique_id}"
         group_name = f"explg{unique_id[:8]}"
-        obj = AuthzObject.flow(flow_id)
+        obj = AuthzObject.flow(flow_id, company_id=company_id)
         await frontend_container.authz_service.write(
             [
                 group_company_link(group_name, company_id),
@@ -503,7 +503,7 @@ class TestAuthzExplorerAPI:
         by_object = await frontend_client.get(
             "/frontend/api/authz/explorer/by-object",
             headers=auth_headers,
-            params={"object_type": "flow", "object_key": flow_id},
+            params={"object_type": "flow", "object_key": obj.object_key},
         )
         assert by_object.status_code == 200, by_object.text
         group_rows = [
@@ -520,7 +520,7 @@ class TestAuthzExplorerAPI:
             params={
                 "user_id": target_user_id,
                 "object_type": "flow",
-                "object_key": flow_id,
+                "object_key": obj.object_key,
             },
         )
         assert why.status_code == 200, why.text

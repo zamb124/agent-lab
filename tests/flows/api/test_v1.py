@@ -455,6 +455,23 @@ class TestToolsAPI:
         assert "schedule_one_time_task" in ids
 
     @pytest.mark.asyncio
+    async def test_create_tool_rejects_platform_builtin_id(
+        self, client, app, auth_headers_system
+    ):
+        response = await client.post(
+            "/flows/api/v1/tools/",
+            headers=auth_headers_system,
+            json={
+                "tool_id": "browser_page_markdown",
+                "title": "shadow",
+                "description": "shadow",
+                "code": "async def run(args, state):\n    return args",
+                "parameters_schema": {"type": "object", "properties": {}},
+            },
+        )
+        assert response.status_code == 409
+
+    @pytest.mark.asyncio
     async def test_get_tool(self, client, app, auth_headers_system):
         """Получение tool."""
         response = await client.get("/flows/api/v1/tools/calculator", headers=auth_headers_system)

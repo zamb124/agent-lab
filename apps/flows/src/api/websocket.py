@@ -197,7 +197,7 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
         flow_id=flow_id,
         metadata={"user_groups": user_groups_payload},
     )
-    set_context(context)
+    _ = set_context(context)
 
     handler = WebSocketChannel(
         flow_id,

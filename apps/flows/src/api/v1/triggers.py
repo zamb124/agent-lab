@@ -51,7 +51,7 @@ from apps.flows.src.triggers.webhook_inbound import (
     webhook_secret_from_request,
 )
 from core.authz.models import AuthzObject
-from core.context import get_context, require_context, set_context
+from core.context import get_context, require_active_company, require_context, set_context
 from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.models.context_models import Context
@@ -67,15 +67,19 @@ def _actor_user_id() -> str:
     return require_context().user.user_id
 
 
+def _actor_company_id() -> str:
+    return require_active_company().company_id
+
+
 async def _require_view_flow(container: ContainerDep, flow_id: str) -> None:
     await container.authz_service.require_can_view(
-        AuthzObject.flow(flow_id), user_id=_actor_user_id()
+        AuthzObject.flow(flow_id, company_id=_actor_company_id()), user_id=_actor_user_id()
     )
 
 
 async def _require_edit_flow(container: ContainerDep, flow_id: str) -> None:
     await container.authz_service.require_can_edit(
-        AuthzObject.flow(flow_id), user_id=_actor_user_id()
+        AuthzObject.flow(flow_id, company_id=_actor_company_id()), user_id=_actor_user_id()
     )
 
 
@@ -640,7 +644,7 @@ async def telegram_webhook(
                 name="Telegram Inbound",
                 groups=["guest"],
             )
-            set_context(
+            _ = set_context(
                 Context(
                     user=inbound_user,
                     host=ctx.host if ctx else "",
@@ -752,7 +756,7 @@ async def generic_webhook(
                 name="Webhook Inbound",
                 groups=["guest"],
             )
-            set_context(
+            _ = set_context(
                 Context(
                     user=inbound_user,
                     host=ctx.host if ctx else "",

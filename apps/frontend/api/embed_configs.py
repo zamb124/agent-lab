@@ -64,7 +64,7 @@ async def _require_edit_embed_flow(
 ) -> tuple[User, Company]:
     user, company = await _require_company_view(container)
     await container.authz_service.require_can_edit(
-        AuthzObject.flow(flow_id), user_id=user.user_id
+        AuthzObject.flow(flow_id, company_id=company.company_id), user_id=user.user_id
     )
     return user, company
 
@@ -526,7 +526,8 @@ async def update_embed_config(
         if request_data.flow_id is None:
             raise HTTPException(status_code=400, detail="flow_id не может быть null")
         await container.authz_service.require_can_edit(
-            AuthzObject.flow(request_data.flow_id), user_id=user.user_id
+            AuthzObject.flow(request_data.flow_id, company_id=company.company_id),
+            user_id=user.user_id,
         )
         config.flow_id = request_data.flow_id
     if "branch_id" in fields:

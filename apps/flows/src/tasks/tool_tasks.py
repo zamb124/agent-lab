@@ -46,7 +46,7 @@ async def execute_tool(
     previous_context = None
     if context_data is not None:
         previous_context = get_context()
-        set_context(Context.from_dict(context_data))
+        _ = set_context(Context.from_dict(context_data))
 
     container = get_container()
     tool = await container.tool_registry.create_tool(tool_config)
@@ -111,6 +111,6 @@ async def execute_tool(
     finally:
         if context_data is not None:
             if previous_context is not None:
-                set_context(previous_context)
+                _ = set_context(previous_context)
             else:
                 clear_context()

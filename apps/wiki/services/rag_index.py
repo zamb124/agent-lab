@@ -96,8 +96,14 @@ class WikiRagIndexService:
         await self.remove_page_from_namespace(page.wiki_page_id, page.namespace)
 
     async def remove_page_from_namespace(self, wiki_page_id: str, namespace: str) -> None:
-        for namespace_id in (namespace, restricted_namespace_id(namespace)):
-            await self._drop_index(namespace_id, wiki_page_id)
+        await self._drop_index(namespace, wiki_page_id)
+        if not await self._restricted_namespace_registered(namespace):
+            return
+        await self._drop_index(restricted_namespace_id(namespace), wiki_page_id)
+
+    async def _restricted_namespace_registered(self, namespace: str) -> bool:
+        """Служебный слой создаётся лениво; без записи в registry RAG Check даёт 403."""
+        return await self._namespace_service.get(restricted_namespace_id(namespace)) is not None
 
     async def _drop_index(self, namespace_id: str, wiki_page_id: str) -> None:
         """Снять документ с индекса; отсутствие записи — штатный исход.
@@ -139,12 +145,8 @@ class WikiRagIndexService:
         restricted_id = restricted_namespace_id(namespace)
         if restricted_id in self._ensured_restricted_namespaces:
             return
-        _ = await self._rag.create_namespace(
-            restricted_id,
-            description=f"Ограниченные страницы wiki пространства {namespace}",
-        )
-        # Dual-write platform_namespace FGA in-process (RAG HTTP create may
-        # already do this; fail-closed ensure here so ingest can_view works).
+        # Registry + OpenFGA. pgvector не требует отдельного HTTP create:
+        # POST /rag/namespaces требует company_admin и дублирует persist.
         _ = await self._namespace_service.get_or_create(
             restricted_id,
             description=f"Ограниченные страницы wiki пространства {namespace}",
@@ -168,7 +170,7 @@ class WikiRagIndexService:
         RAG попросту нет. Отсев по правам уже сделан фильтром, который собрал
         вызывающий.
         """
-        if not include_restricted:
+        if not include_restricted or not await self._restricted_namespace_registered(namespace):
             payload = require_json_object(
                 await self._rag.search(namespace, query, limit=limit, filters=filters),
                 "wiki RAG search response",

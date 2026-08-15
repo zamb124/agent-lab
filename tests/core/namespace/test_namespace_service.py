@@ -30,6 +30,7 @@ def test_infer_namespace_kind() -> None:
     assert infer_namespace_kind("user-abc") == NamespaceKind.PERSONAL
     assert infer_namespace_kind("office-catalog-x") == NamespaceKind.TECHNICAL
     assert infer_namespace_kind("llm-memory-x") == NamespaceKind.TECHNICAL
+    assert infer_namespace_kind("wiki-restricted-sales") == NamespaceKind.TECHNICAL
 
 
 @pytest.fixture()

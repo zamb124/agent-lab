@@ -69,8 +69,7 @@ async def _analyze_note_task(
     body: dict[str, object] = {"note_id": note_id}
     body.update(kwargs)
     start = await crm_client.post("/crm/api/v1/tasks/note-analyze", json=body, headers=headers)
-    if start.status_code != 202:
-        return _http_json(start), _DraftResponse(start.status_code, {})
+    assert start.status_code == 202, start.text
     start_payload = _http_json(start)
     task_id = object_str(start_payload.get("task_id"), field="task_id")
     deadline = _time.monotonic() + 90.0
@@ -387,8 +386,10 @@ class TestAnalyzeWithAttachments:
             {"type": "text", "content": _analyze_llm_response(note_name=note_name, person_name=f"Менеджер {unique_id}")},
         ])
 
-        _, resp = await _analyze_note_task(crm_client, auth_headers_system, note_id, check_duplicates=False)
-        assert _draft_entity_count(resp) >= 1
+        last, resp = await _analyze_note_task(
+            crm_client, auth_headers_system, note_id, check_duplicates=False
+        )
+        assert _draft_entity_count(resp) >= 1, f"task={last} draft={resp.json()}"
 
     @pytest.mark.asyncio
     async def test_large_attachment_summarized_then_analyzed(
@@ -450,8 +451,10 @@ class TestAnalyzeWithAttachments:
             ]
         )
 
-        _, resp = await _analyze_note_task(crm_client, auth_headers_system, note_id, check_duplicates=False)
-        assert _draft_entity_count(resp) >= 1
+        last, resp = await _analyze_note_task(
+            crm_client, auth_headers_system, note_id, check_duplicates=False
+        )
+        assert _draft_entity_count(resp) >= 1, f"task={last} draft={resp.json()}"
 
     @pytest.mark.asyncio
     async def test_attachment_chars_limit_per_file_configurable(
@@ -503,8 +506,14 @@ class TestAnalyzeWithAttachments:
             {"type": "text", "content": _analyze_llm_response(note_name=note_name, person_name=f"Менеджер {unique_id}")},
         ])
 
-        _, resp = await _analyze_note_task(crm_client, auth_headers_system, note_id, attachment_chars_limit_per_file=5_000, check_duplicates=False)
-        assert _draft_entity_count(resp) >= 1
+        last, resp = await _analyze_note_task(
+            crm_client,
+            auth_headers_system,
+            note_id,
+            attachment_chars_limit_per_file=5_000,
+            check_duplicates=False,
+        )
+        assert _draft_entity_count(resp) >= 1, f"task={last} draft={resp.json()}"
 
     @pytest.mark.asyncio
     async def test_include_attachments_false_single_llm_call(
@@ -551,8 +560,14 @@ class TestAnalyzeWithAttachments:
             {"type": "text", "content": _analyze_llm_response(note_name=note_name, person_name=f"Менеджер {unique_id}")},
         ])
 
-        _, resp = await _analyze_note_task(crm_client, auth_headers_system, note_id, include_attachments=False, check_duplicates=False)
-        assert _draft_entity_count(resp) >= 1, f"Expected entities >= 1, got: {resp}"
+        last, resp = await _analyze_note_task(
+            crm_client,
+            auth_headers_system,
+            note_id,
+            include_attachments=False,
+            check_duplicates=False,
+        )
+        assert _draft_entity_count(resp) >= 1, f"task={last} draft={resp.json()}"
 
 
 class TestAttachmentGuarantee:

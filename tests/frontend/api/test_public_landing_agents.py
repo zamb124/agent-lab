@@ -169,7 +169,9 @@ async def system_landing_embed_guest_capped(frontend_container, unique_id):
     )
     await frontend_container.embed_config_repository.delete(embed_id)
     await frontend_container.embed_mapping_repository.delete_by_embed_id(embed_id)
-    await flows_container.flow_access_service.sync_flow_deleted(flow_id, branch_ids=[])
+    await flows_container.flow_access_service.sync_flow_deleted(
+        flow_id, company_id=SYSTEM_COMPANY_ID, branch_ids=[]
+    )
     await flows_container.flow_repository.delete(flow_id)
     clear_context()
 

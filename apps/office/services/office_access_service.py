@@ -163,6 +163,29 @@ class OfficeAccessService:
             for item in tuples
         )
 
+    async def ensure_catalog_authz(self, catalog: OfficeDocumentCatalog) -> None:
+        """Дописывает owner/company/parent, если SQL-запись есть, а tuples нет."""
+        existing = await self._authz.list_tuples(self._catalog_obj(catalog.catalog_id))
+        relations = {item.relation for item in existing}
+        writes: list[AuthzTuple] = []
+        if AuthzRelation.OWNER not in relations:
+            writes.append(
+                office_catalog_owner_tuple(catalog.catalog_id, catalog.owner_user_id)
+            )
+        if AuthzRelation.COMPANY not in relations:
+            writes.append(
+                office_catalog_company_link(catalog.catalog_id, catalog.company_id)
+            )
+        if (
+            catalog.parent_catalog_id is not None
+            and AuthzRelation.PARENT not in relations
+        ):
+            writes.append(
+                office_catalog_parent_tuple(catalog.catalog_id, catalog.parent_catalog_id)
+            )
+        if writes:
+            await self._authz.write(writes)
+
     async def resolve_catalog_owner_user_id(self, catalog_id: str) -> str:
         subjects = await self._authz.list_users(
             self._catalog_obj(catalog_id),

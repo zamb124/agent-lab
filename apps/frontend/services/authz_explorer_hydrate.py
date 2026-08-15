@@ -16,7 +16,7 @@ from apps.sync.db.models import SyncChannel
 from apps.wiki.db.base import WikiDatabase
 from apps.wiki.db.models import WikiPageRow
 from core.authz.explorer import AuthzExplorerObjectHit, AuthzTitleStatus
-from core.authz.ids import parse_namespace_key
+from core.authz.ids import format_namespace_key, parse_flow_branch_key, parse_namespace_key
 from core.authz.types import AuthzObjectType
 from core.config import get_settings
 from core.mail.models import MailboxBinding
@@ -58,10 +58,12 @@ def explorer_hrefs(
     if object_type is AuthzObjectType.OFFICE_CATALOG:
         return "/documents", f"/documents?catalog_id={object_key}&access=1"
     if object_type is AuthzObjectType.FLOW:
-        href = f"/flows/{object_key}"
+        _company_id, flow_id = parse_namespace_key(object_key)
+        href = f"/flows/{flow_id}"
         return href, ""
     if object_type is AuthzObjectType.FLOW_BRANCH:
-        href = f"/flows/{object_key}"
+        _company_id, flow_id, _branch_id = parse_flow_branch_key(object_key)
+        href = f"/flows/{flow_id}"
         return href, ""
     if object_type is AuthzObjectType.TOOL:
         return "/flows", ""
@@ -185,6 +187,10 @@ class AuthzExplorerHydrator:
             return await self._hydrate_office_document(object_key, company_id)
         if object_type is AuthzObjectType.FLOW:
             return await self._hydrate_flow(object_key, company_id)
+        if object_type is AuthzObjectType.FLOW_BRANCH:
+            return self._hydrate_flow_branch(object_key, company_id)
+        if object_type is AuthzObjectType.TOOL:
+            return self._hydrate_tool(object_key, company_id)
         if object_type is AuthzObjectType.SYNC_CHANNEL:
             return await self._hydrate_sync_channel(object_key, company_id)
         if object_type is AuthzObjectType.WORK_QUEUE:
@@ -435,13 +441,25 @@ class AuthzExplorerHydrator:
             company_id=row.company_id,
         )
 
-    async def _hydrate_flow(self, flow_id: str, company_id: str) -> AuthzHydratedObject:
-        href, manage_href = explorer_hrefs(AuthzObjectType.FLOW, flow_id, namespace=None)
+    async def _hydrate_flow(self, object_key: str, company_id: str) -> AuthzHydratedObject:
+        href, manage_href = explorer_hrefs(AuthzObjectType.FLOW, object_key, namespace=None)
+        key_company_id, flow_id = parse_namespace_key(object_key)
+        if key_company_id != company_id:
+            return AuthzHydratedObject(
+                object_type=AuthzObjectType.FLOW,
+                object_key=object_key,
+                title=None,
+                title_status=AuthzTitleStatus.MISSING,
+                href=href,
+                manage_href=manage_href,
+                namespace=None,
+                company_id=None,
+            )
         config = await self._flow_repository.get_latest(flow_id)
         if config is None:
             return AuthzHydratedObject(
                 object_type=AuthzObjectType.FLOW,
-                object_key=flow_id,
+                object_key=object_key,
                 title=None,
                 title_status=AuthzTitleStatus.MISSING,
                 href=href,
@@ -452,13 +470,49 @@ class AuthzExplorerHydrator:
         name = config.name.strip()
         return AuthzHydratedObject(
             object_type=AuthzObjectType.FLOW,
-            object_key=flow_id,
+            object_key=object_key,
             title=name if name != "" else None,
             title_status=AuthzTitleStatus.LOADED if name != "" else AuthzTitleStatus.MISSING,
             href=href,
             manage_href=manage_href,
             namespace=None,
             company_id=company_id,
+        )
+
+    def _hydrate_flow_branch(
+        self, object_key: str, company_id: str
+    ) -> AuthzHydratedObject:
+        href, manage_href = explorer_hrefs(
+            AuthzObjectType.FLOW_BRANCH, object_key, namespace=None
+        )
+        key_company_id, _flow_id, _branch_id = parse_flow_branch_key(object_key)
+        matched = key_company_id == company_id
+        return AuthzHydratedObject(
+            object_type=AuthzObjectType.FLOW_BRANCH,
+            object_key=object_key,
+            title=None,
+            title_status=AuthzTitleStatus.MISSING,
+            href=href,
+            manage_href=manage_href,
+            namespace=None,
+            company_id=company_id if matched else None,
+        )
+
+    def _hydrate_tool(self, object_key: str, company_id: str) -> AuthzHydratedObject:
+        href, manage_href = explorer_hrefs(
+            AuthzObjectType.TOOL, object_key, namespace=None
+        )
+        key_company_id, _tool_id = parse_namespace_key(object_key)
+        matched = key_company_id == company_id
+        return AuthzHydratedObject(
+            object_type=AuthzObjectType.TOOL,
+            object_key=object_key,
+            title=None,
+            title_status=AuthzTitleStatus.MISSING,
+            href=href,
+            manage_href=manage_href,
+            namespace=None,
+            company_id=company_id if matched else None,
         )
 
     async def _hydrate_sync_channel(
@@ -637,7 +691,7 @@ class AuthzExplorerHydrator:
         if object_type is AuthzObjectType.OFFICE_CATALOG:
             return await self._search_office_catalogs(company_id, needle)
         if object_type is AuthzObjectType.FLOW:
-            return await self._search_flows(needle)
+            return await self._search_flows(company_id, needle)
         if object_type is AuthzObjectType.SYNC_CHANNEL:
             return await self._search_sync(company_id, needle)
         if object_type is AuthzObjectType.WORK_QUEUE:
@@ -784,7 +838,9 @@ class AuthzExplorerHydrator:
             )
         return hits
 
-    async def _search_flows(self, query: str) -> list[AuthzExplorerObjectHit]:
+    async def _search_flows(
+        self, company_id: str, query: str
+    ) -> list[AuthzExplorerObjectHit]:
         configs = await self._flow_repository.list(limit=_SEARCH_LIMIT, offset=0)
         hits: list[AuthzExplorerObjectHit] = []
         needle = query.casefold()
@@ -792,13 +848,14 @@ class AuthzExplorerHydrator:
             name = config.name.strip()
             if needle != "" and needle not in name.casefold():
                 continue
+            object_key = format_namespace_key(company_id, config.flow_id)
             href, _manage = explorer_hrefs(
-                AuthzObjectType.FLOW, config.flow_id, namespace=None
+                AuthzObjectType.FLOW, object_key, namespace=None
             )
             hits.append(
                 AuthzExplorerObjectHit(
                     object_type=AuthzObjectType.FLOW,
-                    object_key=config.flow_id,
+                    object_key=object_key,
                     title=name if name != "" else None,
                     title_status=(
                         AuthzTitleStatus.LOADED if name != "" else AuthzTitleStatus.MISSING

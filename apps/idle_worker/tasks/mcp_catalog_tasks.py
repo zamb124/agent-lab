@@ -93,7 +93,7 @@ async def mcp_catalog_crawl_task(
         trace_id=f"scheduler:{TASK_MCP_CATALOG_CRAWL.name}:{schedule_task_id}",
         session_id=f"{TASK_MCP_CATALOG_CRAWL.name}:{schedule_task_id}",
     )
-    set_context(scheduler_context)
+    _ = set_context(scheduler_context)
     try:
         runtime = as_flow_runtime_container(container)
         crawl_stats: MCPCatalogCrawlStats | None = None
@@ -182,7 +182,7 @@ async def mcp_catalog_provision_companies_task(
             company=company,
             trace_suffix=f"provision:{schedule_task_id}",
         )
-        set_context(company_context)
+        _ = set_context(company_context)
         try:
             stats = await provision_mcp_catalog_for_company(container=runtime)
         finally:
@@ -224,7 +224,7 @@ async def mcp_catalog_resync_tools_task(
             company=company,
             trace_suffix=f"resync:{schedule_task_id}",
         )
-        set_context(company_context)
+        _ = set_context(company_context)
         try:
             sync_ok, sync_failed = await resync_catalog_tools_for_company(container=runtime)
         finally:

@@ -24,7 +24,7 @@ from core.types import JsonObject, require_json_object
 
 async def _enter_worker_context(*, trace_id: str) -> None:
     container = get_search_container()
-    set_context(
+    _ = set_context(
         await build_search_system_context(
             trace_id=trace_id,
             company_repository=container.company_repository,

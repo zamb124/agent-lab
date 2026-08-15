@@ -28,7 +28,7 @@ from apps.flows.src.runtime.message_metadata import MESSAGE_SOURCE_TASK
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from core.a2a import platform_task_state_to_a2a, set_task_status_state, struct_from_mapping
 from core.authz.models import AuthzObject
-from core.context import get_context
+from core.context import get_context, require_active_company
 from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.state import ExecutionState
@@ -66,7 +66,7 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> Js
         raise ValueError("Context is required. Context must be created in middleware.")
     user_id = request.user_id if request.user_id is not None else context.user.user_id
     await container.authz_service.require_can_view(
-        AuthzObject.flow(request.flow_id),
+        AuthzObject.flow(request.flow_id, company_id=require_active_company().company_id),
         user_id=user_id,
     )
 

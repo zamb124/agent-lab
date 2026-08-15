@@ -82,7 +82,7 @@ async def init_company_resources(
         user_companies=[],
         trace_id=f"system:init_company:{company_id}",
     )
-    set_context(company_context)
+    _ = set_context(company_context)
 
     try:
         container = get_container()

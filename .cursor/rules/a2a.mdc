@@ -60,7 +60,7 @@ Optional Flow UI/A2UI extension объявляется стандартным ex
 
 Запрещён proprietary async через `metadata.execution_mode` / `metadata.mode`.
 
-Blocking `Task`, streaming shadow state, `GetTask`, `ListTasks`, `SubscribeToTask` и outbound client materialize Artifacts одним `core.a2a.ArtifactAccumulator`. Произвольные names, все четыре Part variants, metadata и extensions сохраняются lossless. Text extraction — только derived convenience; пересборка standard Artifact из текста/`res` запрещена.
+Blocking `Task`, streaming shadow state, `GetTask`, `ListTasks`, `SubscribeToTask` и outbound client materialize Artifacts одним `core.a2a.ArtifactAccumulator`. Произвольные names, все четыре Part variants, metadata и extensions сохраняются lossless. Text extraction (`extract_text_from_task_json`) — derived convenience: **сначала `status.message` (текущий ход Task)**, затем history ROLE_AGENT с конца, затем artifacts. History на Task замораживается при ensure и может содержать прошлые ходы той же session; пересборка standard Artifact из текста/`res` запрещена.
 
 Artifact stream имеет stable непустой `artifactId`: `append=false` заменяет Artifact, `append=true` добавляет Parts, `lastChunk=true` закрывает identity. Первый encounter задаёт ordering. Duplicate event identity idempotent только при идентичном payload.
 
@@ -88,6 +88,7 @@ Artifact stream имеет stable непустой `artifactId`: `append=false` 
 - Push webhooks: `idle_worker` в `scripts/test_stack.py` (очередь `idle`); регистрация URL — в `SendMessage.configuration.taskPushNotificationConfig` до старта task (иначе race с terminal).
 - Shared builders: `tests/flows/_a2a_v1.py`.
 - HTTP e2e `SendMessage` для llm_node/tools: `configuration.returnImmediately=true` + `GetTask` poll (как `A2AClient.send_task`). Blocking `SendMessage` занимает flows granian на весь граф; `flows_client_http` без явного timeout = httpx 5 с → `ReadTimeout` под `-n10`.
+- Blocking `SendMessage`/`SendStreamingMessage`: short-circuit «проекция уже parked» только если **этот** send довёл задачу до terminal/interrupt (in-process, Pub/Sub уже дропнут). Если task_id уже был parked/completed до `create_task` (следующий ход той же сессии / resume interrupt) — ждать collect, иначе клиент получает текст прошлого хода.
 - CI: `make check-a2a-fixtures` в `test-static`.
 
 ## Запреты

@@ -30,7 +30,6 @@ async def test_schedule_note_markdown_format_skips_when_feature_disabled(monkeyp
         note_id="note-1",
         company_id="company-1",
         namespace="default",
-        expected_updated_at_iso="2026-05-10T12:00:00+00:00",
     )
     assert out is False
 
@@ -51,7 +50,41 @@ async def test_schedule_note_markdown_format_skips_without_context(monkeypatch: 
         note_id="note-1",
         company_id="company-1",
         namespace="default",
-        expected_updated_at_iso="2026-05-10T12:00:00+00:00",
+    )
+    assert out is False
+
+
+@pytest.mark.asyncio
+async def test_schedule_note_markdown_format_coalesces_active_task(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from apps.crm.services.task_service import ActiveTaskExistsError
+
+    mock_settings = MagicMock()
+    mock_settings.note_attachment_markdown_format_enabled = True
+    monkeypatch.setattr(
+        "apps.crm.services.note_markdown_format_schedule.get_crm_settings",
+        lambda: mock_settings,
+    )
+    mock_context = MagicMock()
+    mock_context.auth_token = "token"
+    monkeypatch.setattr(
+        "apps.crm.services.note_markdown_format_schedule.get_context",
+        lambda: mock_context,
+    )
+    task_service = MagicMock()
+    task_service.start_note_markdown_format = AsyncMock(
+        side_effect=ActiveTaskExistsError("note_markdown_format", "task-1", dedup={"note_id": "note-1"}),
+    )
+    from apps.crm.services.note_markdown_format_schedule import schedule_note_markdown_format
+
+    out = await schedule_note_markdown_format(
+        task_service=task_service,
+        entity_repository=MagicMock(),
+        authz=MagicMock(),
+        note_id="note-1",
+        company_id="company-1",
+        namespace="default",
     )
     assert out is False
 
@@ -72,5 +105,4 @@ async def test_enqueue_note_markdown_format_task_requires_context() -> None:
             note_id="note-1",
             company_id="company-1",
             namespace="default",
-            expected_updated_at_iso="2026-05-10T12:00:00+00:00",
         )

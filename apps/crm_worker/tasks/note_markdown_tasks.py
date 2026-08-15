@@ -21,19 +21,6 @@ from core.types import JsonObject
 logger = get_logger(__name__)
 
 
-def _normalize_utc_dt(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
-
-
-def _parse_expected_updated_at(raw: str) -> datetime:
-    s = raw.strip()
-    normalized = s.replace("Z", "+00:00") if s.endswith("Z") and "+00:00" not in s else s
-    parsed = datetime.fromisoformat(normalized)
-    return _normalize_utc_dt(parsed)
-
-
 async def _journal_terminal_markdown(
     *,
     container: CRMContainer,
@@ -76,7 +63,6 @@ async def format_note_description_markdown_task(
     auth_token: str,
     user_id: str,
     interface_language: str,
-    expected_updated_at_iso: str,
     task_id: str | None = None,
 ) -> JsonObject:
     """
@@ -134,29 +120,6 @@ async def format_note_description_markdown_task(
             data_patch={"markdown_format_result": "skipped_not_note"},
         )
         return {"status": "skipped_not_note", "note_id": note_id}
-
-    expected = _parse_expected_updated_at(expected_updated_at_iso)
-    current = _normalize_utc_dt(entity.updated_at)
-    delta_seconds = abs((current - expected).total_seconds())
-    if delta_seconds > 0.05:
-        logger.info(
-            "note_markdown_format_skip_stale_updated_at",
-            note_id=note_id,
-            expected=expected.isoformat(),
-            current=current.isoformat(),
-            delta_seconds=delta_seconds,
-        )
-        await _journal_terminal_markdown(
-            container=container,
-            task_id=task_id,
-            company_id=company_id,
-            snapshot_user_id=snapshot_user_id,
-            status="completed",
-            stage="skipped_stale",
-            progress_pct=100,
-            data_patch={"markdown_format_result": "skipped_stale"},
-        )
-        return {"status": "skipped_stale", "note_id": note_id}
 
     if entity.company_id != company_id:
         msg = (
@@ -226,10 +189,28 @@ async def format_note_description_markdown_task(
         raise ValueError(msg)
 
     chunks_processed = chunks_total
-
-    entity.description = markdown
-    entity.updated_at = datetime.now(timezone.utc)
-    merged = await container.entity_repository.update(entity)
+    original_description = str(desc)
+    merged = await container.entity_repository.update_description_if_current(
+        note_id,
+        expected_description=original_description,
+        description=markdown,
+    )
+    if merged is None:
+        logger.info(
+            "note_markdown_format_skip_stale_description",
+            note_id=note_id,
+        )
+        await _journal_terminal_markdown(
+            container=container,
+            task_id=task_id,
+            company_id=company_id,
+            snapshot_user_id=snapshot_user_id,
+            status="completed",
+            stage="skipped_stale",
+            progress_pct=100,
+            data_patch={"markdown_format_result": "skipped_stale"},
+        )
+        return {"status": "skipped_stale", "note_id": note_id}
 
     await _journal_terminal_markdown(
         container=container,

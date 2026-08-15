@@ -449,24 +449,33 @@ class OpenFgaAuthzClient:
     ) -> list[AuthzTuple]:
         """Прямые tuples (OpenFGA Read), без TTU-развёртки.
 
-        OpenFGA 1.18+ требует object type в tuple_key. Конкретный объект —
-        ``obj``; все объекты типа — ``object_type`` (Read ``type:``).
+        Конкретный объект — ``obj``. Type + subject — Read ``type:`` + user
+        (OpenFGA 1.18 требует object id или user). Type без subject — полный
+        Read store и фильтр по типу (backfill / admin), не ``object="type:"``.
         """
         if obj is None and object_type is None:
             raise AuthzConfigError("list_tuples requires obj or object_type")
         client = await self._get_client()
+        type_filter: AuthzObjectType | None = None
+        relation_filter: AuthzRelation | None = None
         if obj is not None:
-            object_filter = obj.fga_id
-        else:
+            key_fields: dict[str, str] = {"object": obj.fga_id}
+            if subject is not None:
+                key_fields["user"] = subject.fga_user
+            if relation is not None:
+                key_fields["relation"] = relation.value
+            body = ReadRequestTupleKey(**key_fields)
+        elif subject is not None:
             if object_type is None:
                 raise AuthzConfigError("list_tuples requires obj or object_type")
-            object_filter = f"{object_type.value}:"
-        key_fields: dict[str, str] = {"object": object_filter}
-        if subject is not None:
-            key_fields["user"] = subject.fga_user
-        if relation is not None:
-            key_fields["relation"] = relation.value
-        body = ReadRequestTupleKey(**key_fields)
+            key_fields = {"object": f"{object_type.value}:", "user": subject.fga_user}
+            if relation is not None:
+                key_fields["relation"] = relation.value
+            body = ReadRequestTupleKey(**key_fields)
+        else:
+            type_filter = object_type
+            relation_filter = relation
+            body = ReadRequestTupleKey()
         collected: list[AuthzTuple] = []
         continuation_token: str | None = None
         while True:
@@ -497,13 +506,19 @@ class OpenFgaAuthzClient:
                     or not isinstance(key.object, str)
                 ):
                     raise AuthzUnavailable(f"OpenFGA read tuple key incomplete: {key!r}")
-                collected.append(
-                    AuthzTuple(
-                        subject=AuthzSubject.from_fga_user(key.user),
-                        relation=AuthzRelation(key.relation),
-                        obj=AuthzObject.from_fga_id(key.object),
-                    )
+                parsed = AuthzTuple(
+                    subject=AuthzSubject.from_fga_user(key.user),
+                    relation=AuthzRelation(key.relation),
+                    obj=AuthzObject.from_fga_id(key.object),
                 )
+                if type_filter is not None and parsed.obj.object_type is not type_filter:
+                    continue
+                if (
+                    relation_filter is not None
+                    and parsed.relation is not relation_filter
+                ):
+                    continue
+                collected.append(parsed)
             continuation_token = response.continuation_token
             if continuation_token is None or continuation_token == "":
                 break

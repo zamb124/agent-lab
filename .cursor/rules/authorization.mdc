@@ -91,7 +91,7 @@ Company-visible — не другая формула `can_view`, а запись
 - Пакет: `core/authz/`
 - Публичный API: `AuthzService` (`check` / `require` / `can_*` / `require_can_*` / `require_relation` / `require_company_admin` / `batch_check` / `list_*` / `write` / `delete` / `expand`)
 - HTTP: `container.authz_service.require_*` + `AuthzObject.*` (не Depends-обёртка, не `*AccessService.require_*`). `require_authz` FastAPI Depends удалён. Check **до** existence: нет tuples / нет объекта → **403**, не 404 (existence leak). 404 — только после успешного Check (ветка/версия внутри уже видимого flow). `GET /tools/{id}` — Check `tool` ∨ `flow` (flow-as-tool) до existence.
-- Flows HTTP get/mutate / A2A / channels — `authz.require_can_view|edit(AuthzObject.flow|tool|flow_branch)`; list = company index ∩ `page_viewable_flow_ids` (`batch_check` окна `offset+limit`, hydrate page; `total` = размер каталога). Не `batch_check` всего каталога на каждый list (OpenFGA HOL). `list_objects` не заменяет Check: ListObjects не перечисляет TTU `admin from platform`
+- Flows HTTP get/mutate / A2A / channels — `authz.require_can_view|edit(AuthzObject.flow|tool|flow_branch(..., company_id=))`; list = company index ∩ `page_viewable_flow_ids` (`batch_check` окна `offset+limit`, hydrate page; `total` = размер каталога). Не `batch_check` всего каталога на каждый list (OpenFGA HOL). `list_objects` не заменяет Check: ListObjects не перечисляет TTU `admin from platform`
 - DI: `container.authz_service` (`BaseContainer`)
 - Прямой `openfga_sdk` / `OpenFgaClient` в `apps/**` — **запрещён** (CI `scripts/check_authz_canon.py`)
 
@@ -195,7 +195,7 @@ await authz.write([crm_entity_owner_tuple(entity_id, owner_user_id)])
 ### Platform namespace
 
 - Type: `platform_namespace` (`company` = tenancy; `can_view`/`can_edit` = owner ∨ явный `company#member` viewer/editor)
-- Object key: `format_namespace_key(company_id, namespace)` = `{company}/{namespace}` с percent-encode сегментов (`:`/`#`/whitespace → OpenFGA-safe); разбор — `parse_namespace_key`. Простые object keys (`tool`, `crm_entity`, …) тоже percent-encode через `to_fga_object_id` (MCP `mcp:…` и т.п.)
+- Object key: `format_namespace_key(company_id, namespace)` = `{company}/{namespace}` с percent-encode сегментов (`:`/`#`/whitespace → OpenFGA-safe); разбор — `parse_namespace_key`. Compound keys (`platform_namespace`, `crm_namespace`, `flow`, `tool`, `group`, `flow_branch`) не содержат сырой `:`. Простые keys (`crm_entity`, …) percent-encode через `to_fga_object_id` (MCP `mcp:…` живёт внутри `tool:{company}/{encoded}`)
 - Dual-write: `NamespaceService.create` / `ensure_default` / `ensure_exists` / `get_or_create` / `ensure_personal_namespace` / `delete` → `core/namespace/authz/tuples.py` (tenancy link + `company#member` viewer и editor). SQL без tuples — `ensure_*` дописывает FGA (fail-closed), не второй PDP.
 - Check: RAG / `X-Platform-Namespace` → `require_can_view(AuthzObject.platform_namespace(...))`
 - Console list/create: `require_company_admin`
@@ -230,7 +230,7 @@ await authz.write([crm_entity_owner_tuple(entity_id, owner_user_id)])
 
 ### Flows
 
-- Checks: HTTP get/mutate / A2A / channels — `container.authz_service.require_can_view|edit` + `AuthzObject.flow|tool|flow_branch`. List — company index ∩ `filter_viewable_*` (`batch_check`) **до** offset, hydrate page; не `list_objects` (TTU `admin from platform` не перечисляется) и не N+1 `list_agent_toolkits`. Picker `GET /tools/all`: candidates ∩ `list_viewable_flow_ids` / `list_viewable_tool_ids` (`list_objects`, не `batch_check` каталога на страницу). `FlowAccessService` — только `sync_*` + list extras. `ensure_platform_global_admin` — bootstrap / `sync_user_groups(admin)` / backfill, **не** каждый `sync_flow_saved` / `sync_tool_saved`.
+- Checks: HTTP get/mutate / A2A / channels — `container.authz_service.require_can_view|edit` + `AuthzObject.flow|tool|flow_branch(..., company_id=)`. Object key: `flow:{company}/{flow_id}`, `tool:{company}/{tool_id}` (`format_namespace_key`); `flow_branch:{company}/{flow_id}/{branch_id}` (`format_flow_branch_key`). KV per-company, store один: глобальный `flow:{flow_id}` запрещён — `sync_flow_saved` `write_and_delete` иначе перетирает ACL чужой компании с тем же slug (`example_react` под `-n10`). `list_viewable_flow_ids` / `list_viewable_tool_ids` разбирают ключ через `parse_namespace_key` (нет `/` → `AuthzConfigError`, fail-closed; не silent skip). Backfill удаляет **все** tuples на голом `flow:{id}` / `tool:{id}` / `flow_branch:{flow}/{branch}` (store-wide Read без tuple_key + фильтр типа: OpenFGA 1.18 отклоняет `object="type:"` без user/object id). List — company index ∩ `filter_viewable_*` (`batch_check`) **до** offset, hydrate page; не `list_objects` (TTU `admin from platform` не перечисляется) и не N+1 `list_agent_toolkits`. Picker `GET /tools/all`: candidates ∩ `list_viewable_flow_ids` / `list_viewable_tool_ids` (`list_objects`, не `batch_check` каталога на страницу). `FlowAccessService` — только `sync_*` + list extras. `ensure_platform_global_admin` — bootstrap / `sync_user_groups(admin)` / backfill, **не** каждый `sync_flow_saved` / `sync_tool_saved`.
 - Platform admin (`User.groups` ⊇ `admin` → `group:admin#member`) получает view/edit через TTU `admin from platform` на `flow`/`tool` (объект `platform:global`, seed `group:admin#member` → `platform:global#admin`). **Не** вешать `admin from platform` на `company` (иначе secrets/RAG чужих компаний). `company#admin` даёт `can_admin`/`can_share`, **не** view restricted flow.
 - Ветка: `can_view` = viewer ∨ editor ∨ `can_view from flow` (иначе platform admin не видит branch).
 - `permission: []` = company-visible (`company#member` → viewer)
@@ -246,7 +246,7 @@ await authz.write([crm_entity_owner_tuple(entity_id, owner_user_id)])
 
 - Register: `company` + `owner` tuples
 - List: `list_objects(can_view, agent_device)` ∩ Redis records
-- Revoke: `require_can_admin` (owner ∪ company admin) + delete tuples
+- Revoke: `require_can_admin` (owner ∪ company admin) + Redis `is_active=false` + denylist + tunnel disconnect. Tuples `company`/`owner` не удалять — иначе list_objects прячет запись и UI не показывает Revoked
 - Backfill: `uv run python -m apps.agent.authz`
 
 ### CRM

@@ -207,7 +207,7 @@ class HitlWorkItemService:
 
         previous_context = get_context()
         resume_context = Context.from_dict(context_data)
-        set_context(resume_context)
+        _ = set_context(resume_context)
         try:
             resolved_company_id = company_id
             if resolved_company_id is None:
@@ -276,7 +276,7 @@ class HitlWorkItemService:
             if previous_context is None:
                 clear_context()
             else:
-                set_context(previous_context)
+                _ = set_context(previous_context)
 
     @staticmethod
     def _require_str(binding: JsonObject, key: str) -> str:

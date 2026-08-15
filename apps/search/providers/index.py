@@ -199,7 +199,7 @@ class IndexSearchProvider:
 
         retrieve_limit = self._resolve_retrieve_limit(request, definitions)
         trace_id = f"search:index:{uuid.uuid4().hex}"
-        set_context(await self._build_system_context(trace_id))
+        _ = set_context(await self._build_system_context(trace_id))
         try:
             try:
                 per_index_limit = max(1, math.ceil(retrieve_limit / len(definitions)))

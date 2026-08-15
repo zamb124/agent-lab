@@ -79,7 +79,7 @@ class FlowUIShareService:
         _assert_owner(state, user_id)
         await self._authz.require_relation(
             AuthzRelation.CAN_SHARE,
-            AuthzObject.flow(request.flow_id),
+            AuthzObject.flow(request.flow_id, company_id=company_id),
             user_id=user_id,
         )
         if state.session_flow_id != request.flow_id or state.context_id != request.context_id:
@@ -115,6 +115,7 @@ class FlowUIShareService:
             await self._flow_access.sync_share_created(
                 share_grant_id=grant.grant_id,
                 flow_id=grant.flow_id,
+                company_id=company_id,
                 owner_user_id=user_id,
                 permission=grant.permission,
             )

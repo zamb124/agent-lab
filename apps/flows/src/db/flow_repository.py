@@ -242,6 +242,19 @@ class FlowRepository(BaseRepository[FlowConfig]):
                 return items
             offset += self._LIST_INDEX_PAGE
 
+    async def list_picker_index(self) -> list[FlowToolPickerItem]:
+        """Все flow компании с полями tool picker, без полного FlowConfig."""
+        items: list[FlowToolPickerItem] = []
+        offset = 0
+        while True:
+            page = await self.list_for_tool_picker(
+                limit=self._LIST_INDEX_PAGE, offset=offset
+            )
+            items.extend(page)
+            if len(page) < self._LIST_INDEX_PAGE:
+                return items
+            offset += self._LIST_INDEX_PAGE
+
     async def list_for_tool_picker(self, *, limit: int, offset: int = 0) -> list[FlowToolPickerItem]:
         """Страница flow только с полями tool picker (SQL projection, без полного JSON)."""
         base_prefix = self._get_prefix()

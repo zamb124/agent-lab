@@ -39,7 +39,6 @@ class NoteMarkdownFormatScheduler(Protocol):
         note_id: str,
         company_id: str,
         namespace: str,
-        expected_updated_at_iso: str,
     ) -> Awaitable[bool]: ...
 
 
@@ -185,7 +184,6 @@ class AttachmentService:
                 note_id=entity_id,
                 company_id=company_id,
                 namespace=namespace,
-                expected_updated_at_iso=merged.updated_at.isoformat(),
             )
 
         logger.info(

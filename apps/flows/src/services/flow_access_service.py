@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from typing import Protocol
 
 from apps.flows.authz.tuples import (
     flow_branch_company_viewer_tuple,
@@ -23,9 +24,30 @@ from apps.flows.authz.tuples import (
     tool_platform_link,
 )
 from apps.flows.src.models.flow_config import FlowConfig
+from core.authz.ids import parse_namespace_key
 from core.authz.models import AuthzCheckItem, AuthzObject, AuthzSubject, AuthzTuple
 from core.authz.service import AuthzService
 from core.authz.types import AuthzObjectType, AuthzRelation
+
+
+class _ViewableIdsFilter(Protocol):
+    async def __call__(
+        self,
+        object_ids: Sequence[str],
+        *,
+        user_id: str,
+        company_id: str,
+    ) -> list[str]: ...
+
+
+def _object_ids_in_company(objects: Sequence[AuthzObject], company_id: str) -> list[str]:
+    """Только object_key `{company}/{id}`. Битый ключ — AuthzConfigError (fail-closed)."""
+    object_ids: list[str] = []
+    for obj in objects:
+        object_company_id, object_id = parse_namespace_key(obj.object_key)
+        if object_company_id == company_id:
+            object_ids.append(object_id)
+    return object_ids
 
 
 class FlowAccessService:
@@ -33,17 +55,49 @@ class FlowAccessService:
         self._authz: AuthzService = authz
 
     async def filter_viewable_flow_ids(
-        self, flow_ids: Sequence[str], *, user_id: str
+        self, object_ids: Sequence[str], *, user_id: str, company_id: str
     ) -> list[str]:
         return await self._filter_viewable_ids(
-            flow_ids, user_id=user_id, obj_factory=AuthzObject.flow
+            object_ids,
+            user_id=user_id,
+            obj_factory=lambda object_id: AuthzObject.flow(
+                object_id, company_id=company_id
+            ),
         )
+
+    async def _page_viewable_ids(
+        self,
+        object_ids: Sequence[str],
+        *,
+        user_id: str,
+        company_id: str,
+        offset: int,
+        limit: int,
+        filter_ids: _ViewableIdsFilter,
+    ) -> list[str]:
+        if not object_ids or limit <= 0:
+            return []
+        if offset < 0:
+            raise ValueError("offset must be >= 0")
+        needed = offset + limit
+        viewable: list[str] = []
+        pos = 0
+        while pos < len(object_ids) and len(viewable) < needed:
+            remaining = needed - len(viewable)
+            window = object_ids[pos : pos + remaining]
+            pos += len(window)
+            allowed = await filter_ids(
+                window, user_id=user_id, company_id=company_id
+            )
+            viewable.extend(allowed)
+        return viewable[offset : offset + limit]
 
     async def page_viewable_flow_ids(
         self,
         flow_ids: Sequence[str],
         *,
         user_id: str,
+        company_id: str,
         offset: int,
         limit: int,
     ) -> list[str]:
@@ -54,43 +108,60 @@ class FlowAccessService:
         large company catalog on every list request. Sole PDP remains OpenFGA
         Check (TTU ``admin from platform`` included); ListObjects is not used.
         """
-        if not flow_ids or limit <= 0:
-            return []
-        if offset < 0:
-            raise ValueError("offset must be >= 0")
-        needed = offset + limit
-        viewable: list[str] = []
-        pos = 0
-        while pos < len(flow_ids) and len(viewable) < needed:
-            remaining = needed - len(viewable)
-            window = flow_ids[pos : pos + remaining]
-            pos += len(window)
-            allowed = await self.filter_viewable_flow_ids(window, user_id=user_id)
-            viewable.extend(allowed)
-        return viewable[offset : offset + limit]
-
-    async def filter_viewable_tool_ids(
-        self, tool_ids: Sequence[str], *, user_id: str
-    ) -> list[str]:
-        return await self._filter_viewable_ids(
-            tool_ids, user_id=user_id, obj_factory=AuthzObject.tool
+        return await self._page_viewable_ids(
+            flow_ids,
+            user_id=user_id,
+            company_id=company_id,
+            offset=offset,
+            limit=limit,
+            filter_ids=self.filter_viewable_flow_ids,
         )
 
-    async def list_viewable_flow_ids(self, *, user_id: str) -> list[str]:
+    async def page_viewable_tool_ids(
+        self,
+        tool_ids: Sequence[str],
+        *,
+        user_id: str,
+        company_id: str,
+        offset: int,
+        limit: int,
+    ) -> list[str]:
+        """Как ``page_viewable_flow_ids``: catalog order, windowed OpenFGA Check, без ListObjects."""
+        return await self._page_viewable_ids(
+            tool_ids,
+            user_id=user_id,
+            company_id=company_id,
+            offset=offset,
+            limit=limit,
+            filter_ids=self.filter_viewable_tool_ids,
+        )
+
+    async def filter_viewable_tool_ids(
+        self, object_ids: Sequence[str], *, user_id: str, company_id: str
+    ) -> list[str]:
+        return await self._filter_viewable_ids(
+            object_ids,
+            user_id=user_id,
+            obj_factory=lambda object_id: AuthzObject.tool(
+                object_id, company_id=company_id
+            ),
+        )
+
+    async def list_viewable_flow_ids(self, *, user_id: str, company_id: str) -> list[str]:
         objects = await self._authz.list_objects(
             AuthzSubject.user(user_id),
             AuthzRelation.CAN_VIEW,
             AuthzObjectType.FLOW,
         )
-        return [obj.object_key for obj in objects]
+        return _object_ids_in_company(objects, company_id)
 
-    async def list_viewable_tool_ids(self, *, user_id: str) -> list[str]:
+    async def list_viewable_tool_ids(self, *, user_id: str, company_id: str) -> list[str]:
         objects = await self._authz.list_objects(
             AuthzSubject.user(user_id),
             AuthzRelation.CAN_VIEW,
             AuthzObjectType.TOOL,
         )
-        return [obj.object_key for obj in objects]
+        return _object_ids_in_company(objects, company_id)
 
     async def _filter_viewable_ids(
         self,
@@ -162,11 +233,13 @@ class FlowAccessService:
         owner_user_id: str,
     ) -> None:
         flow_id = config.flow_id
-        existing = await self._authz.list_tuples(AuthzObject.flow(flow_id))
+        existing = await self._authz.list_tuples(
+            AuthzObject.flow(flow_id, company_id=company_id)
+        )
         writes: list[AuthzTuple] = [
             flow_company_link(flow_id, company_id),
-            flow_platform_link(flow_id),
-            flow_owner_tuple(flow_id, owner_user_id),
+            flow_platform_link(flow_id, company_id=company_id),
+            flow_owner_tuple(flow_id, owner_user_id, company_id=company_id),
             *self._permission_viewer_writes(
                 flow_id=flow_id,
                 company_id=company_id,
@@ -182,10 +255,14 @@ class FlowAccessService:
         branch_writes: list[AuthzTuple] = []
         branch_deletes: list[AuthzTuple] = []
         for branch_id, branch in config.branches.items():
-            branch_obj = AuthzObject.flow_branch(flow_id, branch_id)
+            branch_obj = AuthzObject.flow_branch(
+                flow_id, branch_id, company_id=company_id
+            )
             branch_existing = await self._authz.list_tuples(branch_obj)
             inherit = not branch.permission
-            branch_desired: list[AuthzTuple] = [flow_branch_flow_link(flow_id, branch_id)]
+            branch_desired: list[AuthzTuple] = [
+                flow_branch_flow_link(flow_id, branch_id, company_id=company_id)
+            ]
             branch_desired.extend(
                 self._branch_permission_viewer_writes(
                     flow_id=flow_id,
@@ -202,17 +279,27 @@ class FlowAccessService:
         if branch_writes or branch_deletes:
             await self._authz.write_and_delete(branch_writes, branch_deletes)
 
-    async def sync_flow_deleted(self, flow_id: str, *, branch_ids: Sequence[str]) -> None:
-        deletes = await self._authz.list_tuples(AuthzObject.flow(flow_id))
+    async def sync_flow_deleted(
+        self, flow_id: str, *, company_id: str, branch_ids: Sequence[str]
+    ) -> None:
+        deletes = await self._authz.list_tuples(
+            AuthzObject.flow(flow_id, company_id=company_id)
+        )
         for branch_id in branch_ids:
             deletes.extend(
-                await self._authz.list_tuples(AuthzObject.flow_branch(flow_id, branch_id))
+                await self._authz.list_tuples(
+                    AuthzObject.flow_branch(flow_id, branch_id, company_id=company_id)
+                )
             )
         if deletes:
             await self._authz.delete(deletes)
 
-    async def sync_branch_deleted(self, flow_id: str, branch_id: str) -> None:
-        deletes = await self._authz.list_tuples(AuthzObject.flow_branch(flow_id, branch_id))
+    async def sync_branch_deleted(
+        self, flow_id: str, branch_id: str, *, company_id: str
+    ) -> None:
+        deletes = await self._authz.list_tuples(
+            AuthzObject.flow_branch(flow_id, branch_id, company_id=company_id)
+        )
         if deletes:
             await self._authz.delete(deletes)
 
@@ -223,11 +310,13 @@ class FlowAccessService:
         company_id: str,
         permission: Sequence[str],
     ) -> None:
-        existing = await self._authz.list_tuples(AuthzObject.tool(tool_id))
+        existing = await self._authz.list_tuples(
+            AuthzObject.tool(tool_id, company_id=company_id)
+        )
         groups = [item.strip() for item in permission if item.strip()]
         desired: list[AuthzTuple] = [
             tool_company_link(tool_id, company_id),
-            tool_platform_link(tool_id),
+            tool_platform_link(tool_id, company_id=company_id),
         ]
         if not groups:
             desired.append(tool_company_viewer_tuple(tool_id, company_id))
@@ -242,8 +331,10 @@ class FlowAccessService:
         deletes = list(existing_set - desired_set)
         await self._authz.write_and_delete(writes, deletes)
 
-    async def sync_tool_deleted(self, tool_id: str) -> None:
-        deletes = await self._authz.list_tuples(AuthzObject.tool(tool_id))
+    async def sync_tool_deleted(self, tool_id: str, *, company_id: str) -> None:
+        deletes = await self._authz.list_tuples(
+            AuthzObject.tool(tool_id, company_id=company_id)
+        )
         if deletes:
             await self._authz.delete(deletes)
 
@@ -252,11 +343,12 @@ class FlowAccessService:
         *,
         share_grant_id: str,
         flow_id: str,
+        company_id: str,
         owner_user_id: str,
         permission: str,
     ) -> None:
         writes: list[AuthzTuple] = [
-            flow_ui_share_flow_link(share_grant_id, flow_id),
+            flow_ui_share_flow_link(share_grant_id, flow_id, company_id=company_id),
             flow_ui_share_owner_tuple(share_grant_id, owner_user_id),
         ]
         if permission == "editor":

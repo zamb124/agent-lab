@@ -122,7 +122,7 @@ class TestAttachments:
                 content=content,
                 content_type=mime_type,
             )
-            assert response.status_code == 200
+            assert response.status_code == 200, response.text
             uploaded_ids.append(_document_id(response))
 
             await asyncio.sleep(0.5)

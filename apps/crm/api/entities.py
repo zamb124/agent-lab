@@ -658,7 +658,6 @@ async def request_note_markdown_format(
     try:
         row = await container.task_service.start_note_markdown_format(
             note_id=note_id,
-            expected_updated_at_iso=note.updated_at.isoformat(),
         )
     except ActiveTaskExistsError as exc:
         raise active_task_conflict(exc) from exc

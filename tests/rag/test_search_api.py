@@ -302,20 +302,13 @@ async def test_global_search(
 
 @pytest.mark.asyncio
 async def test_search_nonexistent_namespace(rag_client, auth_headers_system):
-    """POST /namespaces/{id}/search с несуществующим namespace возвращает ошибку или пустые результаты"""
-    # Используем правильный формат namespace_id: company_id:name
+    """Нет FGA tuples на namespace → 403 (Check до existence, без leak 404/пустой 200)."""
     response = await rag_client.post(
         "/rag/api/v1/namespaces/nonexistent_ns/search",
             json={"query": "test", "limit": 5},
         headers=auth_headers_system
     )
-    # pgvector может возвращать 200 с пустыми результатами или ошибку
-    # Другие провайдеры могут возвращать 404 или 500
-    assert response.status_code in [200, 404, 500]
-    if response.status_code == 200:
-        data = response.json()
-        # Если 200, то должны быть пустые результаты
-        assert len(data.get("results", [])) == 0
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio

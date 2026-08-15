@@ -30,8 +30,9 @@ from apps.flows.src.services.mcp_catalog_store import (
 from apps.flows.src.services.mcp_server_display_order import sort_mcp_servers_for_display
 from apps.flows.src.services.mcp_server_search import filter_mcp_servers_by_search
 from apps.flows.src.services.mcp_sync import resolve_mcp_client_variables, sync_mcp_server_tools
+from apps.flows.tools.builtin_specs import require_not_builtin_tool_id
 from core.authz.models import AuthzObject
-from core.context import get_context, require_context
+from core.context import get_context, require_active_company, require_context
 from core.logging import get_logger
 from core.pagination import OffsetPage
 from core.types import JsonObject
@@ -438,8 +439,11 @@ async def delete_server(
 
     # Удаляем связанные tools
     for tool_id in server.cached_tools:
+        require_not_builtin_tool_id(tool_id, source="mcp cached_tools")
         _ = await container.tool_repository.delete(tool_id)
-        await container.flow_access_service.sync_tool_deleted(tool_id)
+        await container.flow_access_service.sync_tool_deleted(
+            tool_id, company_id=require_active_company().company_id
+        )
 
     _ = await container.mcp_server_repository.delete(server_id)
     logger.info(f"MCP server deleted: {server_id}")

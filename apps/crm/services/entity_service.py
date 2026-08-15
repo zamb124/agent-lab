@@ -120,7 +120,6 @@ class NoteMarkdownFormatScheduler(Protocol):
         note_id: str,
         company_id: str,
         namespace: str,
-        expected_updated_at_iso: str,
     ) -> Awaitable[bool]: ...
 
 
@@ -1266,7 +1265,6 @@ class EntityService:
                 note_id=entity.entity_id,
                 company_id=entity.company_id,
                 namespace=entity.namespace,
-                expected_updated_at_iso=entity.updated_at.isoformat(),
             )
 
         if entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID:
@@ -1552,7 +1550,11 @@ class EntityService:
         context_entity_id: str | None = None,
         context_entity_in_payload: bool = False,
     ) -> CRMEntity:
-        """Обновляет entity"""
+        """Обновляет entity.
+
+        ``updates["attributes"]`` — полный новый JSONB-документ, не shallow merge:
+        отсутствующий ключ удаляется. Частичный merge — на call site.
+        """
 
         entity = await self._entity_repo.get(entity_id)
         if not entity:
@@ -1593,10 +1595,13 @@ class EntityService:
             if parsed_update_attributes is None:
                 raise ValueError("attributes must be an object or null")
             update_attributes = parsed_update_attributes
-        merged_attributes: JsonObject = {**(entity.attributes or {}), **update_attributes}
+        if "attributes" in updates:
+            attributes_for_validation = update_attributes
+        else:
+            attributes_for_validation = dict(entity.attributes or {})
         await self._validate_entity_attributes(
             entity_type=next_entity_type,
-            attributes=merged_attributes,
+            attributes=attributes_for_validation,
             namespace=next_namespace,
             entity_subtype=next_entity_subtype,
         )
@@ -1610,6 +1615,8 @@ class EntityService:
             if value is not None:
                 setattr(entity, key, value)
         entity.namespace = next_namespace
+        if "attributes" in updates:
+            entity.attributes = update_attributes
 
         # Для задачи канбан-статус живёт в WorkItem, а не в attributes CRM-узла.
         task_board_status: str | None = None
@@ -2417,7 +2424,17 @@ class EntityService:
         if snapshot.attachment_summaries:
             attrs["attachment_summaries"] = snapshot.attachment_summaries
 
-        _ = await self.update_entity(note_id, {"attributes": attrs})
+        note = await self._persist_note_analysis_attributes(note, attrs)
+        note_date_iso = note.note_date.isoformat() if note.note_date is not None else None
+        await broadcast_crm_note_event(
+            company_id=note.company_id,
+            namespace=note.namespace,
+            note_id=note.entity_id,
+            note_date_iso=note_date_iso,
+            action="updated",
+            note=note,
+            authz=self._authz,
+        )
 
     async def record_note_analysis_failure(
         self,
@@ -2453,7 +2470,7 @@ class EntityService:
             attrs["ai_analysis_apply_failures"] = cleaned
         else:
             _ = attrs.pop("ai_analysis_apply_failures", None)
-        await self._persist_note_analysis_attributes(note, attrs)
+        _ = await self._persist_note_analysis_attributes(note, attrs)
 
     async def clear_note_analysis_error(self, note_id: str) -> None:
         note = await self._entity_repo.get(note_id)
@@ -2469,16 +2486,17 @@ class EntityService:
             return
         for k in error_keys:
             _ = attrs.pop(k, None)
-        await self._persist_note_analysis_attributes(note, attrs)
+        _ = await self._persist_note_analysis_attributes(note, attrs)
 
     async def _persist_note_analysis_attributes(
         self, note: CRMEntity, attrs: JsonObject
-    ) -> None:
-        """Пишет только attributes. update_entity resync note_voice/in_context и при
-        параллельном reconcile падает UniqueViolation (uq_relationships_unique_edge)."""
-        note.attributes = require_json_object(attrs, "note.attributes")
-        note.updated_at = datetime.now(UTC)
-        _ = await self._entity_repo.update(note)
+    ) -> CRMEntity:
+        """Пишет только JSONB attributes. Полный merge строки затирал бы description
+        (markdown) и вызывал resync note_voice через update_entity."""
+        return await self._entity_repo.update_attributes(
+            note.entity_id,
+            require_json_object(attrs, "note.attributes"),
+        )
 
     async def _validate_draft_repair_patch_list(
         self,
@@ -2667,7 +2685,17 @@ class EntityService:
             return
         for k in keys:
             _ = attrs.pop(k, None)
-        _ = await self.update_entity(note_id, {"attributes": attrs})
+        note = await self._persist_note_analysis_attributes(note, attrs)
+        note_date_iso = note.note_date.isoformat() if note.note_date is not None else None
+        await broadcast_crm_note_event(
+            company_id=note.company_id,
+            namespace=note.namespace,
+            note_id=note.entity_id,
+            note_date_iso=note_date_iso,
+            action="updated",
+            note=note,
+            authz=self._authz,
+        )
 
     async def _load_analysis_draft_from_note(
         self,
@@ -2926,7 +2954,17 @@ class EntityService:
 
         attrs = dict(note.attributes or {})
         attrs["ai_analysis_draft"] = next_draft.model_dump(mode="json")
-        _ = await self.update_entity(note_id, {"attributes": attrs})
+        note = await self._persist_note_analysis_attributes(note, attrs)
+        note_date_iso = note.note_date.isoformat() if note.note_date is not None else None
+        await broadcast_crm_note_event(
+            company_id=note.company_id,
+            namespace=note.namespace,
+            note_id=note.entity_id,
+            note_date_iso=note_date_iso,
+            action="updated",
+            note=note,
+            authz=self._authz,
+        )
         return next_draft
 
     async def _persist_analysis_draft_entity_row(
@@ -3171,7 +3209,22 @@ class EntityService:
         if "ai_analysis_draft" in attrs:
             del attrs["ai_analysis_draft"]
         attrs["ai_analysis_applied_at"] = datetime.now(UTC).isoformat()
-        _ = await self.update_entity(note_id, {"attributes": attrs})
+        note = await self._persist_note_analysis_attributes(note, attrs)
+        if note.note_date is not None:
+            _ = await self.enqueue_daily_summary_rebuild(
+                date_str=note.note_date.isoformat(),
+                namespace=note.namespace,
+            )
+        note_date_iso = note.note_date.isoformat() if note.note_date is not None else None
+        await broadcast_crm_note_event(
+            company_id=note.company_id,
+            namespace=note.namespace,
+            note_id=note.entity_id,
+            note_date_iso=note_date_iso,
+            action="updated",
+            note=note,
+            authz=self._authz,
+        )
 
         return AIAnalysisDraftApplyResult(
             created_entity_ids=created_entity_ids,
@@ -3816,6 +3869,10 @@ class EntityService:
         )
 
         result_data = self._extract_data_from_a2a_response(response)
+        if NOTE_ROOT_ENTITY_TYPE_ID not in result_data and "entities" not in result_data:
+            raise ValueError(
+                "CRM analyze A2A не вернул structured payload (note/entities)"
+            )
         normalized_result = self._normalize_analyze_result(result_data)
         self._validate_analyze_entity_descriptions(normalized_result)
 
@@ -3956,92 +4013,94 @@ class EntityService:
     def _looks_like_structured_a2a_payload(payload: JsonObject) -> bool:
         return any(key in payload for key in _A2A_STRUCTURED_DATA_KEYS)
 
-    def _extract_data_from_a2a_response(self, response: A2ATaskResult) -> JsonObject:
-        """
-        Извлекает структурированные данные из A2A response.
+    @staticmethod
+    def _is_flow_runtime_telemetry_payload(payload: JsonObject) -> bool:
+        event = payload.get("event")
+        if not isinstance(event, str) or not event.strip():
+            return False
+        if EntityService._looks_like_structured_a2a_payload(payload):
+            return False
+        return event.startswith("node_") or event.startswith("edge_")
 
-        Поддерживает:
-        1. data parts в artifacts
-        2. text parts с JSON в markdown (```json ... ```)
-        """
-        raw_response = response.raw
-
-        if "result" not in raw_response:
-            return {}
-
-        task_result = _as_json_object(raw_response["result"])
-        if task_result is None:
-            return {}
-        raw_artifacts = task_result.get("artifacts")
-        artifacts = cast(list[object], raw_artifacts) if isinstance(raw_artifacts, list) else []
-
-        if not artifacts:
-            if response.response.strip():
-                extracted = self._extract_json_from_text(response.response)
+    def _payloads_from_a2a_data_part(self, data: JsonObject) -> list[JsonObject]:
+        payloads: list[JsonObject] = []
+        if "res" in data:
+            raw_res = data["res"]
+            raw_res_obj = _as_json_object(raw_res)
+            if raw_res_obj is not None:
+                payloads.append(raw_res_obj)
+            elif isinstance(raw_res, str) and raw_res.strip():
+                extracted = self._extract_json_from_text(raw_res)
                 if extracted:
-                    return extracted
-            history = task_result.get("history")
-            if isinstance(history, list):
-                for raw_message in reversed(cast(list[object], history)):
-                    message = _as_json_object(raw_message)
-                    if message is None:
-                        continue
-                    for part in iter_json_parts(message.get("parts")):
-                        if part_json_has_text(part):
-                            text = part.get("text")
-                            if isinstance(text, str) and text.strip():
-                                extracted = self._extract_json_from_text(text)
-                                if extracted:
-                                    return extracted
-                        elif part_json_has_data(part):
-                            data = _as_json_object(part.get("data"))
-                            if data is not None and self._looks_like_structured_a2a_payload(data):
-                                return data
-            return {}
+                    payloads.append(extracted)
+        if self._looks_like_structured_a2a_payload(data):
+            payloads.append(data)
+        content = data.get("content")
+        if isinstance(content, str) and content.strip():
+            extracted = self._extract_json_from_text(content)
+            if extracted:
+                payloads.append(extracted)
+        else:
+            content_obj = _as_json_object(content)
+            if content_obj is not None:
+                payloads.append(content_obj)
+        return payloads
 
-        for raw_artifact in artifacts:
-            artifact = _as_json_object(raw_artifact)
-            if artifact is None:
-                continue
-            for part in iter_json_parts(artifact.get("parts")):
+    def _collect_a2a_json_payloads(self, response: A2ATaskResult) -> list[JsonObject]:
+        task_result = _as_json_object(response.raw.get("result"))
+        if task_result is None:
+            return []
+        found: list[JsonObject] = []
+
+        def add_from_parts(parts_raw: object) -> None:
+            for part in iter_json_parts(parts_raw):
                 if part_json_has_data(part):
                     data = _as_json_object(part.get("data"))
                     if data is None:
                         continue
-                    if "res" in data:
-                        raw_res = data["res"]
-                        raw_res_obj = _as_json_object(raw_res)
-                        if raw_res_obj is not None:
-                            return raw_res_obj
-                        if isinstance(raw_res, str) and raw_res.strip():
-                            try:
-                                parsed_raw_res = cast(object, json.loads(raw_res))
-                            except (json.JSONDecodeError, TypeError):
-                                parsed_raw_res = None
-                            parsed_obj = _as_json_object(parsed_raw_res)
-                            if parsed_obj is not None:
-                                return parsed_obj
-                        continue
-                    if self._looks_like_structured_a2a_payload(data):
-                        return data
-                    content = data.get("content")
-                    if isinstance(content, str) and content.strip():
-                        extracted = self._extract_json_from_text(content)
-                        if extracted:
-                            return extracted
+                    found.extend(self._payloads_from_a2a_data_part(data))
                     continue
-
                 if part_json_has_text(part):
                     text = part.get("text")
-                    if isinstance(text, str):
+                    if isinstance(text, str) and text.strip():
                         extracted = self._extract_json_from_text(text)
                         if extracted:
-                            return extracted
+                            found.append(extracted)
+
+        raw_artifacts = task_result.get("artifacts")
+        if isinstance(raw_artifacts, list):
+            for raw_artifact in cast(list[object], raw_artifacts):
+                artifact = _as_json_object(raw_artifact)
+                if artifact is None:
+                    continue
+                add_from_parts(artifact.get("parts"))
+
+        history = task_result.get("history")
+        if isinstance(history, list):
+            for raw_message in reversed(cast(list[object], history)):
+                message = _as_json_object(raw_message)
+                if message is None:
+                    continue
+                add_from_parts(message.get("parts"))
 
         if response.response.strip():
             extracted = self._extract_json_from_text(response.response)
             if extracted:
-                return extracted
+                found.append(extracted)
+        return found
+
+    def _extract_data_from_a2a_response(self, response: A2ATaskResult) -> JsonObject:
+        """Structured JSON из artifacts, history и status text; telemetry node_* не побеждает."""
+        payloads = [
+            payload
+            for payload in self._collect_a2a_json_payloads(response)
+            if payload and not self._is_flow_runtime_telemetry_payload(payload)
+        ]
+        for payload in payloads:
+            if self._looks_like_structured_a2a_payload(payload):
+                return payload
+        if payloads:
+            return payloads[0]
         return {}
 
     def _extract_json_from_text(self, text: str) -> JsonObject:

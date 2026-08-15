@@ -165,7 +165,7 @@ class EmployeeInboxService:
             channel="employee_inbox",
         )
         previous_context = get_context()
-        set_context(initiator_context)
+        _ = set_context(initiator_context)
         try:
             flow_config = await container.flow_repository.get(flow_id)
             if flow_config is None:
@@ -207,7 +207,7 @@ class EmployeeInboxService:
             if previous_context is None:
                 clear_context()
             else:
-                set_context(previous_context)
+                _ = set_context(previous_context)
         return True
 
     async def _write_back_started(

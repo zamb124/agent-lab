@@ -87,6 +87,8 @@ async def embed_test_auth(frontend_container, unique_id):
             channel="test",
         )
     )
-    await flows_container.flow_access_service.sync_flow_deleted(flow_id, branch_ids=[])
+    await flows_container.flow_access_service.sync_flow_deleted(
+        flow_id, company_id=company_id, branch_ids=[]
+    )
     await flows_container.flow_repository.delete(flow_id)
     clear_context()

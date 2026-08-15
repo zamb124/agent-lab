@@ -31,9 +31,10 @@ from core.namespace.authz.tuples import (
 _DEFAULT_NAMESPACE_NAME = "default"
 _DEFAULT_NAMESPACE_DESCRIPTION = "Основное пространство"
 
-_TECHNICAL_NAME_PREFIXES: tuple[str, ...] = (
+TECHNICAL_NAMESPACE_NAME_PREFIXES: tuple[str, ...] = (
     "office-catalog-",
     "llm-memory-",
+    "wiki-restricted-",
 )
 
 _PRODUCT_LIST_KINDS: frozenset[NamespaceKind] = frozenset(
@@ -56,7 +57,7 @@ def infer_namespace_kind(name: str, *, explicit: NamespaceKind | None = None) ->
     """Определяет kind по явному аргументу или эвристике имени (technical prefixes)."""
     if explicit is not None:
         return explicit
-    for prefix in _TECHNICAL_NAME_PREFIXES:
+    for prefix in TECHNICAL_NAMESPACE_NAME_PREFIXES:
         if name.startswith(prefix):
             return NamespaceKind.TECHNICAL
     if name.startswith("user-"):
@@ -282,8 +283,9 @@ class NamespaceService:
         return migrated
 
     async def save(self, namespace: Namespace) -> Namespace:
-        """Персистит уже загруженную/изменённую запись namespace."""
+        """Персистит уже загруженную/изменённую запись namespace и FGA tuples."""
         _ = await self._repository.set(namespace)
+        await self._ensure_platform_namespace_authz(namespace)
         return namespace
 
     async def delete(self, name: str) -> bool:

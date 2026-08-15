@@ -4,7 +4,23 @@
 
 import { registerFactory, collectFactories, getPlatformBus } from '@platform/lib/events/index.js';
 import { bootstrapTestBus } from '../browser/helpers/reset.js';
-import { editorResource } from '../../../apps/flows/ui/events/resources/editor.resource.js';
+import {
+    editorBulkDeleteOp,
+    editorResource,
+    stickyNoteUpsertOp,
+} from '../../../apps/flows/ui/events/resources/editor.resource.js';
+import { flowsDataTableCreateOp } from '../../../apps/flows/ui/events/resources/data-tables.resource.js';
+
+/**
+ * Фабрики constructor `useOp` у `<flows-flow-canvas>`.
+ * Isolated fixture без полного списка падает на getFactory.
+ */
+export const FLOW_CANVAS_FACTORIES = [
+    editorResource,
+    editorBulkDeleteOp,
+    stickyNoteUpsertOp,
+    flowsDataTableCreateOp,
+];
 
 export const SAMPLE_DATAFLOW_NODES = {
     code_1: {

@@ -292,7 +292,6 @@ class CRMContainer(BaseContainer):
         note_id: str,
         company_id: str,
         namespace: str,
-        expected_updated_at_iso: str,
     ) -> bool:
         return await schedule_note_markdown_format(
             task_service=self.task_service,
@@ -301,7 +300,6 @@ class CRMContainer(BaseContainer):
             note_id=note_id,
             company_id=company_id,
             namespace=namespace,
-            expected_updated_at_iso=expected_updated_at_iso,
         )
 
     @lazy

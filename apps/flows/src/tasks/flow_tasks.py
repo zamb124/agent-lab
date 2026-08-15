@@ -68,7 +68,7 @@ async def process_flow_task(
 
     context = Context.from_dict(context_data)
     context.session_id = session_id
-    set_context(context)
+    _ = set_context(context)
 
     channel_instance = get_container().get_channel(channel, flow_id)
     file_refs = [FileRef.model_validate(item) for item in files] if files is not None else []

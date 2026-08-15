@@ -35,7 +35,7 @@ async def ensure_personal_namespace_for_user(
                 update={"active_company_id": company.company_id}
             )
             if previous is None:
-                set_context(
+                _ = set_context(
                     Context(
                         user=scoped_user,
                         active_company=company,
@@ -43,7 +43,7 @@ async def ensure_personal_namespace_for_user(
                     )
                 )
             else:
-                set_context(
+                _ = set_context(
                     previous.model_copy(
                         update={
                             "active_company": company,
@@ -61,6 +61,6 @@ async def ensure_personal_namespace_for_user(
     finally:
         if switched:
             if previous is not None:
-                set_context(previous)
+                _ = set_context(previous)
             else:
                 clear_context()

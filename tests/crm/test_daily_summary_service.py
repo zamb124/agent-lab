@@ -691,6 +691,65 @@ def test_extract_data_from_a2a_response_res_as_dict_not_string():
     assert out.get("summary") == "OK"
 
 
+def test_extract_data_from_a2a_response_skips_node_complete_telemetry():
+    _set_test_context()
+    service = _build_service()
+    out = service._extract_data_from_a2a_response(
+        _a2a_response(
+            response="",
+            raw={
+                "result": {
+                    "artifacts": [
+                        {
+                            "parts": [
+                                {
+                                    "data": {
+                                        "res": {
+                                            "event": "node_complete",
+                                            "node_id": "main",
+                                            "node_type": "llm_node",
+                                        }
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "parts": [
+                                {
+                                    "data": {
+                                        "content": json.dumps(
+                                            {
+                                                "note": {
+                                                    "entity_type": "note",
+                                                    "name": "Встреча",
+                                                    "description": "Итог встречи для CRM анализа",
+                                                },
+                                                "entities": [
+                                                    {
+                                                        "entity_type": "task",
+                                                        "name": "Иван",
+                                                        "description": "Контакт из встречи менеджер",
+                                                    }
+                                                ],
+                                                "relationships": [],
+                                            },
+                                            ensure_ascii=False,
+                                        )
+                                    }
+                                }
+                            ]
+                        },
+                    ]
+                }
+            },
+        )
+    )
+    assert out.get("note") is not None
+    entities = out.get("entities")
+    assert isinstance(entities, list)
+    assert len(entities) == 1
+
+
 @pytest.mark.asyncio
 async def test_update_entity_note_date_triggers_both_dates(monkeypatch):
     _set_test_context()

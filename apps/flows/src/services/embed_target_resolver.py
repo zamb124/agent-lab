@@ -72,7 +72,7 @@ async def _load_embed_config_in_company_scope(
     language = previous_context.language if previous_context is not None else Language.RU
     active_namespace = previous_context.active_namespace if previous_context is not None else "default"
 
-    set_context(
+    _ = set_context(
         Context(
             user=user,
             host=host,
@@ -88,6 +88,6 @@ async def _load_embed_config_in_company_scope(
         return await container.embed_config_repository.get(embed_id)
     finally:
         if previous_context is not None:
-            set_context(previous_context)
+            _ = set_context(previous_context)
         else:
             clear_context()

@@ -3,23 +3,17 @@ import { resetPlatformState } from '../helpers/reset.js';
 import { collectFactories, getPlatformBus } from '@platform/lib/events/index.js';
 import { registerFactory } from '@platform/lib/events/factory-registry.js';
 import {
-    editorResource,
-    editorBulkDeleteOp,
-    stickyNoteUpsertOp,
-} from '../../../../apps/flows/ui/events/resources/editor.resource.js';
-import {
     bootstrapFlowsEditor,
+    FLOW_CANVAS_FACTORIES,
     SAMPLE_BRANCH_NODES,
 } from '../../helpers/flows-dataflow-fixtures.js';
 import '../../../../apps/flows/ui/components/flow-canvas/flows-flow-canvas.js';
 
-const CANVAS_FACTORIES = [editorResource, editorBulkDeleteOp, stickyNoteUpsertOp];
-
 describe('flows-flow-canvas node run result pill', () => {
     beforeEach(() => {
         resetPlatformState();
-        for (const factory of CANVAS_FACTORIES) registerFactory(factory);
-        const collected = collectFactories(CANVAS_FACTORIES);
+        for (const factory of FLOW_CANVAS_FACTORIES) registerFactory(factory);
+        const collected = collectFactories(FLOW_CANVAS_FACTORIES);
         bootstrapFlowsEditor({ slices: collected.slices });
     });
     afterEach(() => fixtureCleanup());

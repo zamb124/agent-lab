@@ -15,10 +15,19 @@ logger = get_logger(__name__)
 
 
 @platform_task(TASK_NAMESPACE_PERSONAL_BACKFILL)
-async def namespace_personal_backfill() -> dict[str, int]:
-    """Создаёт missing personal ns для каждого member каждой компании."""
+async def namespace_personal_backfill(company_id: str | None = None) -> dict[str, int]:
+    """Создаёт missing personal ns для members компании (все компании, если company_id нет)."""
     container = get_container()
-    companies = await container.company_repository.list(limit=10000)
+    if company_id is not None:
+        cleaned_company_id = company_id.strip()
+        if cleaned_company_id == "":
+            raise ValueError("company_id is required when provided")
+        company = await container.company_repository.get(cleaned_company_id)
+        if company is None:
+            raise ValueError(f"Company not found: {cleaned_company_id}")
+        companies = [company]
+    else:
+        companies = await container.company_repository.list(limit=10000)
     ensured = 0
     skipped = 0
     previous = get_context()
@@ -29,7 +38,7 @@ async def namespace_personal_backfill() -> dict[str, int]:
                 if user is None:
                     skipped += 1
                     continue
-                set_context(
+                _ = set_context(
                     Context(
                         user=user.model_copy(
                             update={"active_company_id": company.company_id}
@@ -51,7 +60,7 @@ async def namespace_personal_backfill() -> dict[str, int]:
                 ensured += 1
     finally:
         if previous is not None:
-            set_context(previous)
+            _ = set_context(previous)
         else:
             clear_context()
 

@@ -112,7 +112,7 @@ async def reindex_document_task(
     context = Context.from_dict(context_data)
     if not context.active_company:
         raise ValueError("context_data: active_company обязателен")
-    set_context(context)
+    _ = set_context(context)
     try:
         company_id = context.active_company.company_id
 

@@ -1216,7 +1216,9 @@ class TestA2ABranches:
             owner_user_id=ctx.user.user_id,
         )
         yield fid
-        await container.flow_access_service.sync_flow_deleted(fid, branch_ids=[])
+        await container.flow_access_service.sync_flow_deleted(
+            fid, company_id=ctx.active_company.company_id, branch_ids=[]
+        )
         await container.flow_repository.delete(fid)
 
     @pytest.mark.asyncio

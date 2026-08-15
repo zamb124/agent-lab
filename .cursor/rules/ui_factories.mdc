@@ -306,7 +306,7 @@ apps/<svc>/ui/
 
 - **Reducer** — unit без mocks/без bus, `(state, event) => state`.
 - **Effect** — фейковый `ctx = {dispatch, getState}`; реальный `httpRequest` с mock `fetch` (msw/undici).
-- **Controller** — Web Test Runner: `clearFactoryRegistry()` + `registerFactory(f)`, рендер компонента, проверка по dispatch'ам.
+- **Controller** — Web Test Runner: `clearFactoryRegistry()` + `registerFactory(f)`, рендер компонента, проверка по dispatch'ам. Isolated `<flows-flow-canvas>` — `FLOW_CANVAS_FACTORIES` (`tests/frontend_core/helpers/flows-dataflow-fixtures.js`): каждый constructor `useOp` обязан быть в списке, иначе `getFactory` throw.
 - Между тестами: `clearFactoryRegistry()`, `_resetResourceRegistryForTests()` (`factories/_internal.js`), `resetPlatformBusForTests()`.
 
 Канон тестов сериализованного `create`: `tests/frontend_core/unit/factories/resource-collection.spec.js` и `resource-controller-create-idempotency.spec.js`.

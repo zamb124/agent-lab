@@ -118,7 +118,7 @@ class CrawlOrchestratorService:
             raise ValueError(f"crawl profile disabled: {crawl_profile_id}")
         job = await self._crawl_job_repository.start(crawl_profile_id, trigger, schedule_task_id)
         trace_id = f"crawl:tick:{job.crawl_job_id}"
-        set_context(await self._build_system_context(trace_id))
+        _ = set_context(await self._build_system_context(trace_id))
         search_index_id = profile_bundle.search_index.search_index_id
         log_crawl_tick_started(
             crawl_profile_id=crawl_profile_id,

@@ -245,6 +245,8 @@ class OfficeCatalogRagIndexService:
             company_id=company_id,
             workspace_namespace=workspace_namespace,
         )
+        if not catalog.rag_index_enabled:
+            return
         rag_namespace_id = self.rag_namespace_id(catalog.catalog_id)
         try:
             _ = await self._rag_client.delete_document_index(rag_namespace_id, file_id)

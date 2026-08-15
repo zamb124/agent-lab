@@ -33,7 +33,7 @@ logger = get_logger(__name__)
 
 async def on_startup(_app: FastAPI, container: CRMContainer, _settings: CRMSettings) -> None:
     """Кастомная логика при старте"""
-    set_context(
+    _ = set_context(
         Context(
             user=User(user_id="system", name="System"),
             active_company=Company(company_id="system", name="System"),
@@ -54,7 +54,7 @@ async def on_startup(_app: FastAPI, container: CRMContainer, _settings: CRMSetti
 
     async def _on_oauth_credential_saved(credential: IntegrationCredential) -> None:
         prev = get_context()
-        set_context(
+        _ = set_context(
             Context(
                 user=User(user_id=credential.user_id, name="OAuth"),
                 active_company=Company(
@@ -68,7 +68,7 @@ async def on_startup(_app: FastAPI, container: CRMContainer, _settings: CRMSetti
             await container.integration_registry.dispatch_credential_saved(credential)
         finally:
             if prev is not None:
-                set_context(prev)
+                _ = set_context(prev)
             else:
                 clear_context()
 

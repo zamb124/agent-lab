@@ -17,7 +17,7 @@ alwaysApply: false
 |---|---|---|---|---|---|
 | `company_workspace` | Отдел/проект (NetWorkle/Office/Sync) | admin / CRM template / lightweight | да | да | да для CRM product create |
 | `personal` | Именной каталог юзера (mail, private RAG) | **только** `ensure_personal_namespace` при membership | нет (чужие) | **да** | нет |
-| `technical` | Vector/system (`office-catalog-*`, `llm-memory-*`, …) | сервисы через `get_or_create(..., kind=technical)` | нет | diagnostics only | нет |
+| `technical` | Vector/system (`office-catalog-*`, `llm-memory-*`, `wiki-restricted-*`, …) | сервисы через `get_or_create(..., kind=technical)` | нет | diagnostics only | нет |
 
 Поля: `kind`, `owner_user_id` (обязателен при `kind=personal`, иначе `null`).
 
@@ -50,7 +50,7 @@ Personal ≠ CRM `member` entity (entity живёт в `default` company_workspa
 
 - company_workspace / personal: `namespace_id = Namespace.name` (bare slug), плюс filter `company_id` в vector search
 - **Не** формула `{company_id}_{namespace}` (устаревший drift в docs)
-- technical: свой slug (`office-catalog-{catalog_id}`, `llm-memory-…`) в том же registry с `kind=technical`
+- technical: свой slug (`office-catalog-{catalog_id}`, `llm-memory-…`, `wiki-restricted-{namespace}`) в том же registry с `kind=technical`
 - mutating/search API: запись должна быть в registry (`require_registered_rag_namespace`)
 
 ## Lifecycle

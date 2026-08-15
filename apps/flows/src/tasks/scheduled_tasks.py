@@ -126,7 +126,7 @@ async def execute_scheduled_task(
         flow_config=flow_config,
         initiator_context=initiator_context,
     )
-    set_context(execution.context)
+    _ = set_context(execution.context)
     actor_user_id = execution.context.user.user_id
 
     try:

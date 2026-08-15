@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from core.authz.ids import (
     PUBLIC_USER,
     format_company_member_userset,
+    format_flow_branch_key,
     format_group_id,
     format_namespace_key,
     format_object_id,
@@ -86,19 +87,27 @@ class AuthzObject:
         return cls(AuthzObjectType.MAILBOX_BINDING, mailbox_binding_id)
 
     @classmethod
-    def flow(cls, flow_id: str) -> "AuthzObject":
-        return cls(AuthzObjectType.FLOW, flow_id)
-
-    @classmethod
-    def flow_branch(cls, flow_id: str, branch_id: str) -> "AuthzObject":
+    def flow(cls, flow_id: str, *, company_id: str) -> "AuthzObject":
         return cls(
-            AuthzObjectType.FLOW_BRANCH,
-            format_namespace_key(flow_id, branch_id),
+            AuthzObjectType.FLOW,
+            format_namespace_key(company_id, flow_id),
         )
 
     @classmethod
-    def tool(cls, tool_id: str) -> "AuthzObject":
-        return cls(AuthzObjectType.TOOL, tool_id)
+    def flow_branch(
+        cls, flow_id: str, branch_id: str, *, company_id: str
+    ) -> "AuthzObject":
+        return cls(
+            AuthzObjectType.FLOW_BRANCH,
+            format_flow_branch_key(company_id, flow_id, branch_id),
+        )
+
+    @classmethod
+    def tool(cls, tool_id: str, *, company_id: str) -> "AuthzObject":
+        return cls(
+            AuthzObjectType.TOOL,
+            format_namespace_key(company_id, tool_id),
+        )
 
     @classmethod
     def flow_ui_share(cls, share_grant_id: str) -> "AuthzObject":

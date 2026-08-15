@@ -443,7 +443,12 @@ Doc output: `docs/scenarios/platform/ui-kit/<doc_slug>/`. Taxonomy tag: `platfor
 
 ## Иконки
 
-Имя иконки резолвится через `UI_ICON_MAP` (`utils/file-icons.js`) в файл `assets/icons/<file>.svg`; неизвестное имя берётся как имя файла напрямую. Имени без ассета соответствует 404 и **пустое место в интерфейсе без единой ошибки в коде** — так пропадали кнопки меню блока и панели форматирования редактора. Новое имя добавляется парой: SVG в `assets/icons/` (Material Symbols, `viewBox="0 -960 960 960"`, один `path`, без `fill`) плюс запись в `UI_ICON_MAP` — либо алиас на существующий файл. Гейт — `tests/frontend_core/unit/utils/ui-icon-assets.spec.js`: сканирует литералы `<platform-icon name="...">` и `icon: '...'` в `core/frontend/static/lib` и `apps/**` и падает на именах без ассета.
+Два канона, один тег `<platform-icon>`:
+
+- UI: `name="edit"` → `UI_ICON_MAP` → `assets/icons/<file>.svg`. Неизвестное имя берётся как имя файла напрямую.
+- Файл: атрибут `file-icon` + `name="csv"` / `xlsx` / `pdf` → `resolveFileIconBasename` (`FILE_ICON_ALIASES`) → `assets/icons/files_icons/<basename>.svg`. Не смешивать с UI-каталогом: `csv.svg` в корне `icons/` нет и не должно быть.
+
+Имени без ассета соответствует 404 и **пустое место в интерфейсе без единой ошибки в коде** — так пропадали кнопки меню блока и панели форматирования редактора. Новое UI-имя добавляется парой: SVG в `assets/icons/` (Material Symbols, `viewBox="0 -960 960 960"`, один `path`, без `fill`) плюс запись в `UI_ICON_MAP` — либо алиас на существующий файл. Новый тип файла — алиас в `FILE_ICON_ALIASES` на basename из `FILE_ICON_BASE_NAMES` (SVG уже в `files_icons/`). Гейт — `tests/frontend_core/unit/utils/ui-icon-assets.spec.js`: литералы `<platform-icon … name="…">` (с `file-icon` — файловый канон) и `icon: '…'` (UI) в `core/frontend/static/lib` и `apps/**`.
 
 ## Витрина сервисов (launcher + модалка)
 

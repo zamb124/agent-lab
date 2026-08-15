@@ -26,6 +26,18 @@ from core.events import PLATFORM_EVENTS_STREAM
 PlatformEventsReceive = Callable[[str, str | None, float], Awaitable[list[dict[str, Any]]]]
 
 
+# Redis XREAD `$` = только сообщения ПОСЛЕ этого вызова. Если стрим пуст и
+# publish случился между xrevrange и первым xread — событие теряется.
+_EMPTY_STREAM_CURSOR = "0-0"
+
+
+def initial_platform_events_cursor(last_entry_id: str | None) -> str:
+    """Курсор «с этого момента»: конкретный id или начало пустого стрима."""
+    if last_entry_id is None:
+        return _EMPTY_STREAM_CURSOR
+    return last_entry_id
+
+
 def _delivery_matches_user(event: dict[str, Any], target_user_id: str) -> bool:
     delivery = event.get("delivery")
     if not isinstance(delivery, dict):
@@ -42,11 +54,9 @@ async def platform_events_listener() -> AsyncIterator[PlatformEventsReceive]:
         raise RuntimeError("database.redis_url не задан для platform_events_listener.")
 
     client = redis_async.from_url(settings.database.redis_url, decode_responses=True)
-    stream_info_last_id = "$"
     last_entries = await client.xrevrange(PLATFORM_EVENTS_STREAM, count=1)
-    if last_entries:
-        stream_info_last_id = last_entries[0][0]
-    state = {"last_id": stream_info_last_id}
+    last_entry_id = last_entries[0][0] if last_entries else None
+    state = {"last_id": initial_platform_events_cursor(last_entry_id)}
 
     async def _receive(
         filter_type: str,

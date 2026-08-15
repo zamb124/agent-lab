@@ -138,7 +138,7 @@ async def call_tool_runtime(
     verify_execution_context(request.context)
     runtime_context = await _build_context(container, request.context)
     previous_context = get_context()
-    set_context(runtime_context)
+    _ = set_context(runtime_context)
     try:
         state = ExecutionState.model_validate(request.state)
         _attach_durable_context(state, request.context)
@@ -183,7 +183,7 @@ async def call_tool_runtime(
         if previous_context is None:
             clear_context()
         else:
-            set_context(previous_context)
+            _ = set_context(previous_context)
 
 
 def _attach_durable_context(

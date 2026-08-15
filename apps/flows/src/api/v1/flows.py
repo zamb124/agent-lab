@@ -59,7 +59,7 @@ from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzObject
 from core.authz.types import AuthzRelation
 from core.config import get_settings
-from core.context import get_context, require_context
+from core.context import get_context, require_active_company, require_context
 from core.events import publish_event_to_user
 from core.identity.embed_guest_turns import EMBED_SESSION_ID_METADATA_KEY
 from core.identity.flow_preview_handoff import store_flow_preview_handoff
@@ -155,6 +155,14 @@ def _actor_user_id() -> str:
     return require_context().user.user_id
 
 
+def _actor_company_id() -> str:
+    return require_active_company().company_id
+
+
+def _flow_obj(flow_id: str) -> AuthzObject:
+    return AuthzObject.flow(flow_id, company_id=_actor_company_id())
+
+
 async def _require_company_member(container: FlowContainer) -> None:
     ctx = require_context()
     if ctx.active_company is None:
@@ -167,13 +175,13 @@ async def _require_company_member(container: FlowContainer) -> None:
 
 async def _require_view_flow(container: FlowContainer, flow_id: str) -> None:
     await container.authz_service.require_can_view(
-        AuthzObject.flow(flow_id), user_id=_actor_user_id()
+        _flow_obj(flow_id), user_id=_actor_user_id()
     )
 
 
 async def _require_edit_flow(container: FlowContainer, flow_id: str) -> None:
     await container.authz_service.require_can_edit(
-        AuthzObject.flow(flow_id), user_id=_actor_user_id()
+        _flow_obj(flow_id), user_id=_actor_user_id()
     )
 
 
@@ -185,7 +193,7 @@ async def _authorize_reload_from_bundle(container: FlowContainer, flow_id: str) 
     Если tuples уже есть, а ``can_edit`` нет — 403, без overwrite чужого объекта.
     """
     actor = _actor_user_id()
-    flow_obj = AuthzObject.flow(flow_id)
+    flow_obj = _flow_obj(flow_id)
     if await container.authz_service.can_edit(flow_obj, user_id=actor):
         return False
     existing_tuples = await container.authz_service.list_tuples(flow_obj)
@@ -198,7 +206,7 @@ async def _authorize_reload_from_bundle(container: FlowContainer, flow_id: str) 
 async def _require_share_flow(container: FlowContainer, flow_id: str) -> None:
     await container.authz_service.require_relation(
         AuthzRelation.CAN_SHARE,
-        AuthzObject.flow(flow_id),
+        _flow_obj(flow_id),
         user_id=_actor_user_id(),
     )
 
@@ -1117,6 +1125,7 @@ async def list_flows(
     page_ids = await container.flow_access_service.page_viewable_flow_ids(
         catalog_ids,
         user_id=_actor_user_id(),
+        company_id=_actor_company_id(),
         offset=offset,
         limit=limit,
     )
@@ -2020,7 +2029,9 @@ async def delete_flow(flow_id: str, container: ContainerDep) -> JsonObject:
         raise HTTPException(status_code=404, detail="Flow not found")
 
     branch_ids = list(existing.branches.keys()) if existing is not None else []
-    await container.flow_access_service.sync_flow_deleted(flow_id, branch_ids=branch_ids)
+    await container.flow_access_service.sync_flow_deleted(
+        flow_id, company_id=_actor_company_id(), branch_ids=branch_ids
+    )
     await remove_flow_employee(container, flow_id)
 
     ctx = get_context()

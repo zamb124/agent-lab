@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from apps.frontend.dependencies import ContainerDep, require_frontend_user
 from core.models.identity_models import NamespaceKind
-from core.namespace import personal_namespace_name
+from core.namespace import TECHNICAL_NAMESPACE_NAME_PREFIXES, personal_namespace_name
 from core.pagination import OffsetPage
 
 router = APIRouter(prefix="/api/namespaces", tags=["namespaces"])
@@ -93,8 +93,8 @@ async def create_console_namespace(
     name = body.name.strip()
     if name == "":
         raise HTTPException(status_code=422, detail="name is required")
-    if name.startswith("user-") or name.startswith("office-catalog-") or name.startswith(
-        "llm-memory-"
+    if name.startswith("user-") or any(
+        name.startswith(prefix) for prefix in TECHNICAL_NAMESPACE_NAME_PREFIXES
     ):
         raise HTTPException(status_code=422, detail="reserved namespace name prefix")
     try:

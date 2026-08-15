@@ -26,12 +26,10 @@ async def enqueue_note_markdown_format_task(
     note_id: str,
     company_id: str,
     namespace: str,
-    expected_updated_at_iso: str,
 ) -> bool:
     """Ставит задачу в TaskIQ. Требует активный request context (JWT, user). Возвращает True, если задача поставлена и разослан WS ``started``."""
     task = await task_service.start_note_markdown_format(
         note_id=note_id,
-        expected_updated_at_iso=expected_updated_at_iso,
     )
     logger.info(
         "note_markdown_format_task_started",
@@ -55,7 +53,7 @@ async def enqueue_note_markdown_format_task(
         note_date_iso=note_date_iso,
         action="updated",
         note=entity,
-                authz=authz,
+        authz=authz,
         skip_notification_center=True,
         markdown_format={
             "phase": "started",
@@ -74,7 +72,6 @@ async def schedule_note_markdown_format(
     note_id: str,
     company_id: str,
     namespace: str,
-    expected_updated_at_iso: str,
 ) -> bool:
     settings = get_crm_settings()
     if not settings.note_attachment_markdown_format_enabled:
@@ -90,11 +87,14 @@ async def schedule_note_markdown_format(
         return await enqueue_note_markdown_format_task(
             task_service=task_service,
             entity_repository=entity_repository,
-                authz=authz,
+            authz=authz,
             note_id=note_id,
             company_id=company_id,
             namespace=namespace,
-            expected_updated_at_iso=expected_updated_at_iso,
         )
     except ActiveTaskExistsError:
-        raise
+        logger.info(
+            "note_markdown_format_already_running",
+            note_id=note_id,
+        )
+        return False

@@ -1030,9 +1030,6 @@ async def revoke_device(
         )
     except AuthzDenied as exc:
         raise HTTPException(status_code=403, detail="Недостаточно прав для отзыва устройства") from exc
-    deletes = await container.authz_service.list_tuples(AuthzObject.agent_device(device_id))
-    if deletes:
-        await container.authz_service.delete(deletes)
     device.is_active = False
     _ = await container.shared_storage.set(
         _device_storage_key(device_id),

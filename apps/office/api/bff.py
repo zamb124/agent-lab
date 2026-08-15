@@ -245,7 +245,7 @@ async def _index_binding_if_catalog_enabled_with_job_context(
         session_id=session_id,
         channel="office",
     ).model_copy(update={"active_namespace": normalized_namespace})
-    set_context(job_context)
+    _ = set_context(job_context)
     try:
         await _index_binding_if_catalog_enabled(
             container,
@@ -256,7 +256,7 @@ async def _index_binding_if_catalog_enabled_with_job_context(
         )
     finally:
         if previous_context is not None:
-            set_context(previous_context)
+            _ = set_context(previous_context)
         else:
             clear_context()
 
@@ -318,6 +318,8 @@ async def _resolve_catalog_for_create(
             except Exception:
                 _ = await c.catalog_repository.delete_catalog(row.catalog_id, company_id, namespace)
                 raise
+        else:
+            await access.ensure_catalog_authz(row)
         return row.catalog_id
     raise HTTPException(
         status_code=400,
@@ -435,7 +437,7 @@ async def _build_catalog_list_item(
     current_user_id: str,
 ) -> OfficeCatalogListItem:
     access = container.office_access_service
-    owner_user_id = await access.resolve_catalog_owner_user_id(catalog.catalog_id)
+    owner_user_id = catalog.owner_user_id
     company_visible = await access.catalog_is_company_visible(
         catalog.catalog_id,
         catalog.company_id,

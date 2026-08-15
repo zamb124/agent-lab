@@ -36,12 +36,16 @@ from apps.crm_worker.tasks.task_names import (
     CRM_RUN_KNOWLEDGE_IMPORT,
     CRM_RUN_NAMESPACE_INTEGRATION_JOB,
 )
-from core.context import clear_context, get_context, resolve_namespace_or_raise, set_context
+from core.context import get_context, reset_context, resolve_namespace_or_raise, set_context
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import User
 from core.tasks import enqueue
+from core.test_scope import (
+    MOCK_LLM_SIDE_EFFECT_NOTE_MARKDOWN,
+    mock_llm_side_effect_enqueue_labels,
+)
 from core.types import JsonObject
 from core.utils.knowledge_text_split import validate_chunk_max_chars
 
@@ -576,7 +580,6 @@ class TaskService:
         self,
         *,
         note_id: str,
-        expected_updated_at_iso: str,
     ) -> CRMTask:
         note = await self._entity_service.get_entity(note_id)
         if note is None:
@@ -605,7 +608,6 @@ class TaskService:
             data={
                 "note_id": note_id,
                 "note_name": note.name or "",
-                "expected_updated_at_iso": expected_updated_at_iso,
             },
         )
         _ = await self._task_repo.create(row)
@@ -623,9 +625,11 @@ class TaskService:
                 auth_token=auth_token,
                 user_id=row.user_id,
                 interface_language=ctx.language.value,
-                expected_updated_at_iso=expected_updated_at_iso,
                 task_id=task_id,
                 background_kind="crm_task",
+                extra_labels=mock_llm_side_effect_enqueue_labels(
+                    MOCK_LLM_SIDE_EFFECT_NOTE_MARKDOWN
+                ),
             )
             taskiq_id = str(task.task_id)
         except Exception as exc:
@@ -744,7 +748,7 @@ class TaskService:
                             row.company_id,
                         )
                     else:
-                        set_context(
+                        context_token = set_context(
                             Context(
                                 user=User(user_id=row.user_id, name="CRM worker"),
                                 active_company=company_row,
@@ -760,7 +764,7 @@ class TaskService:
                                 row.error_message or "",
                             )
                         finally:
-                            clear_context()
+                            reset_context(context_token)
             await broadcast_crm_task_updated_for_user(user_id=row.user_id, row=row)
         logger.info("crm.tasks.reconcile_stale_finished reconciled=%s", len(rows))
         return len(rows)
@@ -1071,13 +1075,7 @@ class TaskService:
     async def _retry_note_markdown_format(self, old: CRMTask) -> CRMTask:
         data = old.data
         note_id = _task_data_required_str(data, "note_id")
-        note = await self._entity_service.get_entity(note_id)
-        if note is None:
-            raise ValueError(f"Заметка не найдена: {note_id}")
-        return await self.start_note_markdown_format(
-            note_id=note_id,
-            expected_updated_at_iso=note.updated_at.isoformat(),
-        )
+        return await self.start_note_markdown_format(note_id=note_id)
 
     async def _retry_daily_summary(self, old: CRMTask) -> CRMTask:
         data = old.data

@@ -73,7 +73,7 @@ async def sync_llm_models_task(
         trace_id=f"scheduler:sync_llm_models:{schedule_task_id}",
         session_id=f"sync_llm_models:{schedule_task_id}",
     )
-    set_context(scheduler_context)
+    _ = set_context(scheduler_context)
 
     try:
         result = await container.llm_models_service.sync_all_providers()

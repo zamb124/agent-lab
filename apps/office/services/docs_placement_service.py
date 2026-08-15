@@ -82,7 +82,7 @@ class DocsPlacementService:
             await self._office_access_service.sync_document_created(
                 row,
                 owner_user_id=user_id,
-            ) 
+            )
         except Exception:
             _ = await self._document_binding_repository.delete_binding(
                 row.file_id, company_id, placement.namespace
@@ -129,6 +129,8 @@ class DocsPlacementService:
                         catalog.catalog_id, company_id, namespace
                     )
                     raise
+            else:
+                await self._office_access_service.ensure_catalog_authz(catalog)
             parent_id = catalog.catalog_id
         if parent_id is None:
             raise ValueError("empty path segments")

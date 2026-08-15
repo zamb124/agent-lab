@@ -62,11 +62,11 @@ class CapabilityContextService:
     @contextmanager
     def activate(self, context: Context) -> Generator[None, None, None]:
         previous_context = get_context()
-        set_context(context)
+        _ = set_context(context)
         try:
             yield
         finally:
             if previous_context is None:
                 clear_context()
             else:
-                set_context(previous_context)
+                _ = set_context(previous_context)

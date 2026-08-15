@@ -122,6 +122,32 @@ class TestEntityLifecycle:
         assert object_str(updated.get("description"), field="description") == "Добавлено описание"
 
     @pytest.mark.asyncio
+    async def test_update_entity_attributes_replaces_document(
+        self,
+        crm_client: AsyncClient,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
+    ) -> None:
+        create_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "contact",
+            "name": f"Контакт {unique_id}",
+            "attributes": {"email": f"keep-{unique_id}@example.com", "stale": "drop-me"},
+        }, headers=auth_headers_system)
+        entity_id = _entity_id(create_resp)
+
+        update_resp = await crm_client.put(f"/crm/api/v1/entities/{entity_id}", json={
+            "attributes": {"email": f"keep-{unique_id}@example.com"},
+        }, headers=auth_headers_system)
+        assert update_resp.status_code == 200
+
+        get_resp = await crm_client.get(
+            f"/crm/api/v1/entities/{entity_id}", headers=auth_headers_system
+        )
+        attrs = object_dict(_http_json(get_resp).get("attributes"), field="attributes")
+        assert attrs.get("email") == f"keep-{unique_id}@example.com"
+        assert "stale" not in attrs
+
+    @pytest.mark.asyncio
     async def test_delete_entity(
         self,
         crm_client: AsyncClient,

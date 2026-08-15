@@ -65,7 +65,7 @@ async def sync_landing_public_demo_flows_from_bundles(container: FlowContainer, 
         user_companies=[],
         trace_id="system:landing_bundle_dev_sync",
     )
-    set_context(system_context)
+    _ = set_context(system_context)
     try:
         loader = FlowsLoader(
             bundles_dir=bundles_dir,

@@ -959,7 +959,7 @@ async def get_resolved(container: ContainerDep) -> JsonObject:
     """Диагностика: что резолвится для текущей компании по всем capabilities."""
     user, company = await _require_admin(container)
     ctx = Context(user=user, active_company=company, channel="settings_resolved")
-    set_context(ctx)
+    _ = set_context(ctx)
     try:
         items: list[JsonObject] = []
         for cap in _LLM_CAPABILITIES:

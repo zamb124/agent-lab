@@ -39,7 +39,7 @@ Authenticated ACL — **только OpenFGA** (`AuthzService` через `Offic
 | Ось | Хранение | Смысл |
 |---|---|---|
 | Company-visible | FGA `office_catalog#viewer@company:{id}#member` | Вся компания в namespace (не internet-public); API `company_visible`; `company` tuple = tenancy |
-| Owner | FGA `owner` на `office_catalog` / `office_document` | Admin/share; list/UI через `list_users(OWNER)` / `resolve_catalog_owner_user_id` |
+| Owner | FGA `owner` на `office_catalog` / `office_document` | Admin/share — `list_users(OWNER)` / `resolve_catalog_owner_user_id`. List item `owner_user_id` — SQL dual-write mirror после FGA `can_view` (не Check, не N+1 `list_users` на каждое дерево) |
 | Members | FGA `viewer`/`editor` user tuples | `members: [{user_id, relation}]` |
 | Parent TTU | FGA `parent` на catalog | Nested inherit viewer/editor |
 | Document↔catalog | FGA `catalog` на `office_document` | Document inherits catalog ACL |
@@ -132,8 +132,8 @@ Authenticated ACL — **только OpenFGA** (`AuthzService` через `Offic
 ## Иконки типов файлов
 
 - SVG: `core/frontend/static/assets/icons/files_icons/` (цветные иконки типов; не смешивать с UI-иконками в корне `assets/icons/`).
-- Slice `state.icon` (`core/frontend/static/lib/events/reducers/icon.js`); эффект `effects/icon.effect.js` грузит SVG по `ICON_EVENTS.LOAD_REQUESTED` (общие) и `ICON_EVENTS.FILE_LOAD_REQUESTED` (файловые; имя — `resolveFileIconKey(filename, mimeType)` из `lib/utils/file-icons.js`). Список — экспорт `FILE_ICON_BASE_NAMES`. Компонент `<platform-icon>` подписан на slice; в коде сервиса `IconService` напрямую дёргать не нужно — `<platform-icon name=...>` или `<file-icon filename=... mime-type=...>`. URL: `{basePath}/files_icons/{encodeURIComponent(basename)}.svg`.
-- `<platform-icon kind="file-icon" name="...">` (например `word`/`pdf`/`cell`) — вызывает `loadFileIcon`; стили обводки UI к таким SVG не применяются.
+- Slice `state.icon` (`core/frontend/static/lib/events/reducers/icon.js`); эффект `effects/icon.effect.js` грузит SVG по `ICON_EVENTS.UI_LOAD_REQUESTED` (UI) и `ICON_EVENTS.FILE_LOAD_REQUESTED` (файловые). Список basename — `FILE_ICON_BASE_NAMES`; алиасы расширений — `FILE_ICON_ALIASES` (`csv`/`xlsx` → `006-excel`). Компонент `<platform-icon>` подписан на slice; `IconService` в сервисах нет. URL файловой иконки: `{basePath}/files_icons/{encodeURIComponent(basename)}.svg`.
+- `<platform-icon file-icon name="csv">` (алиас `word`/`pdf`/`xlsx`/`cell`) — `resolveFileIconBasename` → `FILE_LOAD_REQUESTED`; стили обводки UI к таким SVG не применяются. Гейт ассетов различает `file-icon` и UI: `tests/frontend_core/unit/utils/ui-icon-assets.spec.js`.
 
 ## UI канон
 
@@ -201,7 +201,7 @@ Slice `office/documents` хранит `items`, `loadedCatalogIds`, `activeCatalo
 - **RAG namespace:** детерминированно `office-catalog-{catalog_id}` (отдельный namespace на каталог); создаётся через `RagClient.create_namespace` при enable.
 - **Индексация файла:** `RagClient.index_file` → TaskIQ `rag_index_document_s3` по существующему `FileRecord.s3_key` (`document_id = file_id`). **Не** `upload_namespace_document` и **не** `delete_namespace_document` (удаляет S3).
 - **Только RAG-indexable категории:** whitelist `core/rag/indexable.py::RAG_INDEXABLE_FILE_CATEGORIES` (`is_rag_indexable_file_category` / `effective_rag_file_category`). Skip до enqueue в `index_document` и `rag_index_office_catalog`; defense в `rag_index_document_s3`. Не indexable: `signature` (`.sig`/`.p7s`/`.sgn`), `archive`, `unknown`. В `GET …/rag-index/status` такие документы всегда в `totals.absent` (старые failed-статусы подписей не считаются ошибками).
-- **Деиндексация:** `RagClient.delete_document_index` (только vector chunks + processing status).
+- **Деиндексация:** только если `rag_index_enabled` (как index); `RagClient.delete_document_index` (vector chunks + processing status). Каталог без RAG не ходит в RAG — иначе Check `platform_namespace:office-catalog-{id}` без tuples даёт 403 на move/delete.
 - **Batch rebuild:** TaskIQ `rag_index_office_catalog` (очередь `rag`), payload — список file_id из Office BFF.
 - **REST:** `POST /documents/api/v1/catalogs/{catalog_id}/rag-index/{enable,disable,rebuild}`, `GET .../status` (`search_options` = catalog overrides, `platform_defaults` = `resolve_platform_search_options` для UI placeholders), `PATCH .../settings` (`include_subcatalogs`), `POST .../search` (семантический поиск по scope каталога; управление settings — только owner, search/status — access как у каталога).
 - **Per-file status:** `OfficeDocumentItem.rag_index_status` ∈ `ready|pending|failed|absent|null`. `null` если у каталога `rag_index_enabled=false`; иначе batch через `RagClient.get_documents_processing_statuses` → `POST /rag/api/v1/documents/statuses`. Totals в `GET …/rag-index/status` тоже через batch.

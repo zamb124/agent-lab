@@ -162,7 +162,7 @@ async def _run_reembed_round(
             session_id=tid,
             channel=channel,
         )
-        set_context(ctx)
+        _ = set_context(ctx)
         try:
             embeddings = await embedding_client.generate_embeddings(
                 [p[1] for p in slice_pairs]

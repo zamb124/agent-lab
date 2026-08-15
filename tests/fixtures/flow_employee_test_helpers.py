@@ -65,7 +65,9 @@ async def cleanup_flow_employee_for_tests(
     await deactivate_flow_employee(container, flow_id=flow_id, company_id=company_id)
     emp_id = flow_employee_user_id(flow_id)
     _ = await container.user_repository.delete(emp_id)
-    await container.flow_access_service.sync_flow_deleted(flow_id, branch_ids=[])
+    await container.flow_access_service.sync_flow_deleted(
+        flow_id, company_id=company_id, branch_ids=[]
+    )
     _ = await container.flow_repository.delete(flow_id)
 
 

@@ -320,14 +320,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
-    @override
-    async def update(self, entity: CRMEntity) -> CRMEntity:
-        """Обновляет entity в crm_entities + переиндексирует через сервис rag."""
-        async with self._db.session() as session:
-            merged = await session.merge(entity)
-            await session.commit()
-            await session.refresh(merged)
-
+    async def _reindex_entity(self, entity: CRMEntity) -> None:
         rag_namespace = _entity_namespace(entity)
         try:
             _ = await self._rag.delete_document(rag_namespace, entity.entity_id)
@@ -343,8 +336,68 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
                 f"RAG re-indexing failed for entity {entity.entity_id} (will be retried by reembed task): {exc}"
             )
 
-        logger.info(f"Updated entity: {entity.entity_id}, type={entity.full_type}")
+    @override
+    async def update(self, entity: CRMEntity) -> CRMEntity:
+        """Обновляет entity в crm_entities + переиндексирует через сервис rag."""
+        async with self._db.session() as session:
+            merged = await session.merge(entity)
+            await session.commit()
+            await session.refresh(merged)
+
+        await self._reindex_entity(merged)
+        logger.info(f"Updated entity: {merged.entity_id}, type={merged.full_type}")
         return merged
+
+    async def update_attributes(self, entity_id: str, attributes: JsonObject) -> CRMEntity:
+        """Пишет только JSONB attributes; description и прочие колонки не трогает."""
+        now = datetime.now(UTC)
+        async with self._db.session() as session:
+            stmt = (
+                update(CRMEntity)
+                .where(
+                    CRMEntity.entity_id == entity_id,
+                    CRMEntity.company_id == self._get_company_id(),
+                )
+                .values(attributes=attributes, updated_at=now)
+                .returning(CRMEntity)
+            )
+            result = await session.execute(stmt)
+            row = result.scalar_one_or_none()
+            await session.commit()
+        if row is None:
+            raise ValueError(f"Сущность не найдена: {entity_id}")
+        await self._reindex_entity(row)
+        logger.info(f"Updated entity attributes: {row.entity_id}, type={row.full_type}")
+        return row
+
+    async def update_description_if_current(
+        self,
+        entity_id: str,
+        *,
+        expected_description: str,
+        description: str,
+    ) -> CRMEntity | None:
+        """OCC: пишет description только если текст в БД всё ещё expected_description."""
+        now = datetime.now(UTC)
+        async with self._db.session() as session:
+            stmt = (
+                update(CRMEntity)
+                .where(
+                    CRMEntity.entity_id == entity_id,
+                    CRMEntity.company_id == self._get_company_id(),
+                    CRMEntity.description == expected_description,
+                )
+                .values(description=description, updated_at=now)
+                .returning(CRMEntity)
+            )
+            result = await session.execute(stmt)
+            row = result.scalar_one_or_none()
+            await session.commit()
+        if row is None:
+            return None
+        await self._reindex_entity(row)
+        logger.info(f"Updated entity description: {row.entity_id}, type={row.full_type}")
+        return row
 
     @override
     async def delete(self, entity_id: str) -> bool:

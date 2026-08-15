@@ -214,12 +214,13 @@ async def _assert_rag_namespace_absent(
     rag_namespace_id: str,
     headers: dict[str, str],
 ) -> None:
+    """Нет FGA tuples на platform_namespace → 403 (Check до existence; 404 только после can_view)."""
     response = await rag_client.post(
         f"/rag/api/v1/namespaces/{rag_namespace_id}/search",
         json={"query": "probe", "limit": 1},
         headers=headers,
     )
-    assert response.status_code == 404
+    assert response.status_code == 403
 
 
 async def _assert_file_record_preserved(file_id: str) -> None:

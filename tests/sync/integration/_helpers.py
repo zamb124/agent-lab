@@ -1,8 +1,7 @@
 """Общие helpers для интеграционных тестов sync.
 
 После удаления SyncSpace тесты создают канал через `op_channels_create`,
-предварительно засевая платформенный namespace в shared
-`NamespaceRepository`.
+предварительно засевая платформенный namespace через `NamespaceService`.
 """
 
 from __future__ import annotations
@@ -10,7 +9,8 @@ from __future__ import annotations
 from apps.sync.container import SyncContainer
 from apps.sync.models.channels import ChannelCreate, ChannelType
 from apps.sync.realtime.operations import op_channels_create
-from core.models.identity_models import Namespace, User
+from core.context import require_active_company
+from core.models.identity_models import User
 
 
 async def seed_test_namespace(
@@ -20,18 +20,19 @@ async def seed_test_namespace(
     *,
     suffix: str = "",
 ) -> str:
-    """Создаёт namespace в shared `NamespaceRepository` и возвращает имя."""
+    """Создаёт namespace через NamespaceService (SQL + OpenFGA tuples) и возвращает имя."""
     company_id = op_user.active_company_id
     if not isinstance(company_id, str) or company_id == "":
         raise ValueError("op_user.active_company_id обязателен для seed_test_namespace.")
-    name = f"ns_{unique_id}_{suffix}" if suffix else f"ns_{unique_id}"
-    await op_container.namespace_repository.set(
-        Namespace(
-            name=name,
-            company_id=company_id,
-            description=f"sync test namespace {unique_id}",
-            is_default=False,
+    active_company_id = require_active_company().company_id
+    if active_company_id != company_id:
+        raise ValueError(
+            f"seed_test_namespace company mismatch: context={active_company_id} user={company_id}"
         )
+    name = f"ns_{unique_id}_{suffix}" if suffix else f"ns_{unique_id}"
+    _ = await op_container.namespace_service.get_or_create(
+        name,
+        description=f"sync test namespace {unique_id}",
     )
     return name
 
