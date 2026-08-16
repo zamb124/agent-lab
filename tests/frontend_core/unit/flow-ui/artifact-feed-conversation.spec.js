@@ -323,6 +323,18 @@ describe('resolveFlowUITheme', () => {
         expect(resolveFlowUITheme('auto', doc)).toBe('dark');
     });
 
+    it('keeps explicit dark when host html is light', () => {
+        const doc = {
+            documentElement: {
+                getAttribute(name) {
+                    if (name !== 'data-theme') return null;
+                    return 'light';
+                },
+            },
+        };
+        expect(resolveFlowUITheme('dark', doc)).toBe('dark');
+    });
+
     it('rejects unknown theme', () => {
         expect(() => resolveFlowUITheme('sepia')).toThrow(/unsupported theme/);
     });

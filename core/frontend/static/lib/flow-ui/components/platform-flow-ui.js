@@ -79,6 +79,54 @@ export class PlatformFlowUI extends LitElement {
             background: var(--flow-ui-page-background, var(--bg-primary, #16213e));
         }
         /*
+         * Embed host pages do not load platform tokens.css. Literal values only:
+         * host --text-primary / color must not leak into the widget.
+         */
+        :host([data-resolved-theme="dark"]) {
+            --flow-ui-text: rgba(255, 255, 255, 0.95);
+            --flow-ui-heading: rgba(255, 255, 255, 0.95);
+            --flow-ui-muted: rgba(255, 255, 255, 0.45);
+            --flow-ui-border: rgba(255, 255, 255, 0.1);
+            --flow-ui-border-strong: rgba(255, 255, 255, 0.06);
+            --flow-ui-panel: rgba(35, 35, 55, 0.85);
+            --flow-ui-panel-strong: rgba(40, 40, 64, 0.92);
+            --flow-ui-surface: rgba(35, 35, 55, 0.85);
+            --flow-ui-surface-subtle: rgba(28, 28, 46, 0.75);
+            --flow-ui-surface-hover: rgba(255, 255, 255, 0.08);
+            --flow-ui-input: rgba(0, 0, 0, 0.22);
+            --flow-ui-composer-bg: rgba(28, 28, 46, 0.75);
+            --flow-ui-page-background: #16213e;
+            --flow-ui-accent: #99A6F9;
+            --flow-ui-accent-hover: #8794F0;
+            --flow-ui-on-accent: #ffffff;
+            --flow-ui-accent-muted: rgba(153, 166, 249, 0.15);
+            --flow-ui-button-text: #ffffff;
+            color: var(--flow-ui-text);
+            background: var(--flow-ui-page-background);
+        }
+        :host([data-resolved-theme="light"]) {
+            --flow-ui-text: #1c1f2e;
+            --flow-ui-heading: #1c1f2e;
+            --flow-ui-muted: rgba(28, 31, 46, 0.52);
+            --flow-ui-border: rgba(28, 31, 46, 0.1);
+            --flow-ui-border-strong: rgba(28, 31, 46, 0.08);
+            --flow-ui-panel: rgba(255, 255, 255, 0.98);
+            --flow-ui-panel-strong: #ffffff;
+            --flow-ui-surface: rgba(28, 31, 46, 0.05);
+            --flow-ui-surface-subtle: #f2f3f8;
+            --flow-ui-surface-hover: rgba(28, 31, 46, 0.08);
+            --flow-ui-input: rgba(255, 255, 255, 0.92);
+            --flow-ui-composer-bg: #f2f3f8;
+            --flow-ui-page-background: #f8fafc;
+            --flow-ui-accent: #6d62e8;
+            --flow-ui-accent-hover: #5a50d4;
+            --flow-ui-on-accent: #ffffff;
+            --flow-ui-accent-muted: rgba(109, 98, 232, 0.2);
+            --flow-ui-button-text: #ffffff;
+            color: var(--flow-ui-text);
+            background: var(--flow-ui-page-background);
+        }
+        /*
          * Viewport row MUST be minmax(0, 1fr): bare 1fr is minmax(auto, 1fr) and
          * refuses to shrink below content, so ConversationFeed never becomes a
          * scrollport and overflow:hidden ancestors just clip the chat.
@@ -983,6 +1031,7 @@ export class PlatformFlowUI extends LitElement {
         const effectiveReadonly = this.readonly || this.runtimeState?.profile?.viewer?.can_interact === false;
         const chromeMode = this._chromeMode(document);
         this.setAttribute('data-chrome', chromeMode);
+        this.setAttribute('data-resolved-theme', this._resolvedTheme());
         const locale = resolveFlowUILocale(this.locale);
         const statusLabel = this.initialDocument
             ? flowUIText(locale, 'status_preview')

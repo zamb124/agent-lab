@@ -1872,7 +1872,7 @@ app.post("/api/flow-ui-token", async (req, res) => {
 | `data-locale` | Нет | Язык UI виджета: `ru`, `en`, `auto`. | Для русского сайта ставьте `ru`. |
 | `data-show-launcher` | Нет | Показывать стандартную плавающую кнопку открытия. | `true` - виджет сам показывает кнопку. `false` - открывайте своей кнопкой через `linnex-flow-ui-toggle`. |
 | `data-flows-base-url` | Да | Base URL сервиса Flows с префиксом `/flows`. | В production используйте значение из консоли, например `https://api.linnex.io/flows`. |
-| `data-platform-ui-origin` | Да для внешнего сайта | Origin платформы для static UI (логотипы, spinner). | Оставьте значение из консоли. |
+| `data-platform-ui-origin` | Да для внешнего сайта | Origin платформы для static UI (логотипы, spinner). | Оставьте значение из консоли. В CSP страницы `img-src` должен разрешать этот origin (и `*.` того же apex). |
 | `data-token-url` | Да | URL вашего backend endpoint, который выдаёт короткий token браузеру. | Обычно `/api/flow-ui-token`. Можно указать полный URL, если backend на другом origin и CORS настроен. |
 | `data-token-expires-seconds` | Нет | TTL короткого token, который браузер просит у вашего backend. | Положительное число. Platform endpoint принимает 60..900 секунд. Обычно `300`. |
 | `data-use-credentials` | Нет | Credentials для запросов виджета: `false` → `omit`, иначе `include`. | На внешнем сайте `false`. |

@@ -533,7 +533,7 @@ Ledger — источник истины. Query projection хранит Task, me
 
 Своя кнопка: `window.dispatchEvent(new CustomEvent('linnex-flow-ui-toggle', { detail: { open: true } }))`.
 
-После mount: `window.linnexFlowUI` (`element`, `embedId`, `presentation`, `setTheme`, `setLocale`, `setLauncherVisible`, `setAssistantTitle`, `setToggleEventName`, `setMetadataHooks`, `setAuthProvider`) и событие `linnex-flow-ui-mounted`. Статика chrome (`/static/core/...`) режется через `data-platform-ui-origin`.
+После mount: `window.linnexFlowUI` (`element`, `embedId`, `presentation`, `setTheme`, `setLocale`, `setLauncherVisible`, `setAssistantTitle`, `setToggleEventName`, `setMetadataHooks`, `setAuthProvider`) и событие `linnex-flow-ui-mounted`. Статика chrome (`/static/core/...`) режется через `data-platform-ui-origin`. На чужом сайте CSP `img-src` обязан разрешать этот origin (apex и `*.`), иначе иконки и лого блокируются. `theme=auto` без `html[data-theme]` резолвится в `dark`; палитра живёт на `platform-flow-ui[data-resolved-theme]`, не на токенах host-страницы.
 
 ## Обязательные gates
 
