@@ -49,4 +49,18 @@ describe('render-context + profile', () => {
         expect(overridden.capabilities.voice).toBe(true);
         expect(applyFlowUIProfileKindOverrides(live, 'spa').capabilities.autosync).toBe(true);
     });
+
+    it('forces can_interact and disables autosync for operator_handoff', () => {
+        const live = Object.freeze({
+            viewer: Object.freeze({ can_interact: false }),
+            catalog: Object.freeze({ platform_catalog_id: LINNEX_CATALOG_ID }),
+            capabilities: Object.freeze({
+                bootstrap: true, autosync: true, cancel: true, files: true, voice: true,
+            }),
+        });
+        const overridden = applyFlowUIProfileKindOverrides(live, 'operator_handoff');
+        expect(overridden.viewer.can_interact).toBe(true);
+        expect(overridden.capabilities.autosync).toBe(false);
+        expect(overridden.capabilities.voice).toBe(true);
+    });
 });

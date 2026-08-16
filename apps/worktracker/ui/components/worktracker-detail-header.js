@@ -17,6 +17,7 @@ export class WorktrackerDetailHeader extends PlatformElement {
         showBack: { type: Boolean, attribute: 'show-back' },
         showProperties: { type: Boolean, attribute: 'show-properties' },
         showLifecycleActions: { type: Boolean, attribute: 'show-lifecycle-actions' },
+        showComplete: { type: Boolean, attribute: 'show-complete' },
     };
 
     static styles = [
@@ -67,6 +68,7 @@ export class WorktrackerDetailHeader extends PlatformElement {
         this.showBack = false;
         this.showProperties = false;
         this.showLifecycleActions = true;
+        this.showComplete = true;
     }
 
     render() {
@@ -102,11 +104,13 @@ export class WorktrackerDetailHeader extends PlatformElement {
                     ></worktracker-icon-action>
                 ` : nothing}
                 ${this.showLifecycleActions && item && !isTerminal ? html`
+                    ${this.showComplete ? html`
                     <worktracker-icon-action
                         icon="check"
                         title=${this.t('detail_panel.complete')}
                         @action=${() => this.emit('wt-complete', null)}
                     ></worktracker-icon-action>
+                    ` : nothing}
                     <worktracker-icon-action
                         icon="close"
                         title=${this.t('detail_panel.cancel')}

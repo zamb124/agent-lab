@@ -307,6 +307,7 @@
         "assign_error": "Не удалось назначить исполнителя",
         "detail_title": "Задача",
         "open_full": "Открыть полностью",
+        "open_in_tasks": "Открыть в задачах",
         "open_entity": "Открыть в графе",
         "close_panel": "Закрыть",
         "empty_description": "Добавить описание…",

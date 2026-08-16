@@ -139,6 +139,9 @@ export function applyA2AFrame(accumulator, frame) {
     if (Number.isFinite(sequence)) task.latestSequence = Math.max(task.latestSequence, sequence);
     if (kind === 'statusUpdate') {
         task.status = clone(value.status || null);
+        if (value.metadata && typeof value.metadata === 'object') {
+            task.metadata = mergeMetadata(task.metadata, value.metadata);
+        }
     } else {
         const artifact = value.artifact;
         const id = artifact?.artifactId || artifact?.artifact_id;

@@ -26,6 +26,12 @@ function isResponseArtifact(artifact) {
     return name === 'response';
 }
 
+function isOperatorReplyArtifact(artifact) {
+    if (!isOrdinaryFeedArtifact(artifact)) return false;
+    const name = typeof artifact.name === 'string' ? artifact.name : '';
+    return name === 'operator_reply';
+}
+
 function isUserMessageArtifact(artifact) {
     if (!isOrdinaryFeedArtifact(artifact)) return false;
     const name = typeof artifact.name === 'string' ? artifact.name : '';
@@ -321,19 +327,28 @@ export function mergeConversationTasks(tasks, pendingTurns) {
 }
 
 /**
- * Conversation turn text: streamed `response` artifact wins; otherwise A2A status.message.
- * Observability artifacts (node_complete_*, tool_result:*) are not conversation content.
+ * Conversation turn text: streamed `response` artifact, then HITL `operator_reply`.
+ * Otherwise A2A status.message. Observability artifacts (node_complete_*, tool_result:*)
+ * are not conversation content.
  */
 export function conversationTurnText(task) {
     if (!task || typeof task !== 'object') {
         throw new Error('flow-ui: conversationTurnText requires task object');
     }
-    const responseArtifacts = (Array.isArray(task.artifacts) ? task.artifacts : [])
-        .filter(isResponseArtifact);
-    const fromArtifacts = responseArtifacts
+    const artifacts = Array.isArray(task.artifacts) ? task.artifacts : [];
+    const fromResponse = artifacts
+        .filter(isResponseArtifact)
         .map((artifact) => textFromParts(artifact.parts))
         .join('');
-    if (fromArtifacts !== '') return fromArtifacts;
+    const fromOperator = artifacts
+        .filter(isOperatorReplyArtifact)
+        .map((artifact) => textFromParts(artifact.parts))
+        .join('');
+    if (fromResponse !== '' && fromOperator !== '') {
+        return `${fromResponse}\n${fromOperator}`;
+    }
+    if (fromOperator !== '') return fromOperator;
+    if (fromResponse !== '') return fromResponse;
     const message = task.status?.message;
     if (message && typeof message === 'object' && !isUserRole(messageRole(message))) {
         return textFromParts(message.parts);

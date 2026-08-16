@@ -93,6 +93,35 @@ describe('conversationTurnText', () => {
         expect(text).toBe('streamed-chunk');
     });
 
+    it('uses HITL operator_reply instead of interrupt status.message', () => {
+        const text = conversationTurnText({
+            id: 't-hitl',
+            status: {
+                state: 'TASK_STATE_INPUT_REQUIRED',
+                message: { role: 'ROLE_AGENT', parts: [{ text: 'Диалог передан оператору' }] },
+            },
+            artifacts: [
+                { name: 'operator_reply', parts: [{ text: 'Марина из поддержки: приняла заказ' }] },
+            ],
+        });
+        expect(text).toBe('Марина из поддержки: приняла заказ');
+    });
+
+    it('appends operator_reply after streamed response on the same task', () => {
+        const text = conversationTurnText({
+            id: 't-both',
+            status: {
+                state: 'TASK_STATE_INPUT_REQUIRED',
+                message: { parts: [{ text: 'ignored' }] },
+            },
+            artifacts: [
+                { name: 'response', parts: [{ text: 'Сейчас подключу человека.' }] },
+                { name: 'operator_reply', parts: [{ text: 'Марина на линии' }] },
+            ],
+        });
+        expect(text).toBe('Сейчас подключу человека.\nМарина на линии');
+    });
+
     it('returns empty string when only observability artifacts exist', () => {
         const text = conversationTurnText({
             id: 't3',

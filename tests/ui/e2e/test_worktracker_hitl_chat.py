@@ -16,12 +16,14 @@ from tests.ui.e2e.hitl_e2e_bridge import (
     EXAMPLE_GRAPH_ID,
     GREEN_GARDEN_HITL_MESSAGE,
     GREEN_GARDEN_TAKEOVER_MESSAGE,
+    hitl_api_assert_turn_role,
     hitl_api_wait_conversation_text,
     hitl_trigger_deterministic,
 )
 from tests.ui.e2e.worktracker_e2e_helpers import (
     flows_user_chat_wait_text,
     worktracker_claim_task,
+    worktracker_hitl_assert_chat_height,
     worktracker_hitl_chat_send,
     worktracker_hitl_chat_wait_text,
     worktracker_hitl_embedded_chat,
@@ -93,6 +95,7 @@ async def test_worktracker_hitl_embedded_operator_chat(
     try:
         editor = await worktracker_open_task_page(wt_page, worktracker_ui, work_item_id)
         await worktracker_hitl_embedded_chat(editor)
+        await worktracker_hitl_assert_chat_height(editor)
         await worktracker_hitl_chat_wait_text(editor, GREEN_GARDEN_TAKEOVER_MESSAGE)
         await scenario.step(
             "Откройте задачу оператора с встроенным чатом",
@@ -134,6 +137,13 @@ async def test_worktracker_hitl_embedded_operator_chat(
         )
 
         await worktracker_hitl_chat_send(editor, operator_reply)
+        await hitl_api_assert_turn_role(
+            flows_ui.origin,
+            auth_token_system,
+            work_item_id,
+            operator_reply,
+            "operator",
+        )
         await scenario.step(
             "Отправьте ответ покупателю",
             wt_page,
@@ -222,6 +232,8 @@ async def test_worktracker_hitl_single_reply_complete(
     user_page = ui_page_system
     await flows_open_chat_page(user_page, flows_ui, EXAMPLE_GRAPH_ID)
     work_item_id = await hitl_trigger_deterministic(user_page, GREEN_GARDEN_HITL_MESSAGE)
+    user_composer = user_page.locator("chat-page textarea[data-canon='composer']").first
+    await expect(user_composer).to_have_attribute("readonly", "", timeout=20_000)
     await hitl_api_wait_conversation_text(
         flows_ui.origin,
         auth_token_system,

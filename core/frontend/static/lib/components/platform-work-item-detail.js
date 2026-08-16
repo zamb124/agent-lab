@@ -116,6 +116,22 @@ export class PlatformWorkItemDetail extends PlatformElement {
                 background: var(--glass-tint-medium);
                 color: var(--text-primary);
             }
+            .cta-btn {
+                display: inline-flex;
+                align-items: center;
+                min-height: 32px;
+                padding: 0 var(--space-3);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                background: var(--glass-tint-subtle);
+                color: var(--text-primary);
+                font: inherit;
+                font-size: var(--text-sm);
+                cursor: pointer;
+            }
+            .cta-btn:hover {
+                background: var(--glass-tint-medium);
+            }
             .body {
                 flex: 1;
                 min-height: 0;
@@ -316,7 +332,7 @@ export class PlatformWorkItemDetail extends PlatformElement {
         if (this._items && this._items.byId && typeof id === 'string' && this._items.byId[id]) {
             return this._items.byId[id];
         }
-        const result = this._getOp && this._getOp.result;
+        const result = this._getOp && this._getOp.lastResult;
         if (result && typeof result === 'object' && typeof result.work_item_id === 'string') {
             return result;
         }
@@ -576,6 +592,13 @@ export class PlatformWorkItemDetail extends PlatformElement {
             <div class="head">
                 <span class="head-title">${this.t('work_item.detail_title')}</span>
                 <div class="head-actions">
+                    ${item.kind === 'operator_handoff' ? html`
+                        <button
+                            type="button"
+                            class="cta-btn"
+                            @click=${() => this._openFull()}
+                        >${this.t('work_item.open_in_tasks')}</button>
+                    ` : nothing}
                     <button
                         type="button"
                         class="icon-btn"

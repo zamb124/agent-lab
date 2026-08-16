@@ -104,13 +104,36 @@ Sole PDP — `AuthzService`. `WorkItemService` Check — `authz.require_can_admi
 `handoff_mode` на hitl_node — режим HITL (`single_reply`/`takeover`), **не** agent handoff между flows (→ **`handoff.mdc`**).
 
 1. `hitl_node` / tool `hitl_operator_task` бросает `OperatorTaskInterrupt` (поле `work_item_id`; контракт в `core/state/interrupt.py`) и через `HitlWorkItemService` (flows) создаёт `WorkItem(kind=operator_handoff, blocking=true)` с `hooks.completed` (binding + path=`platform:events`) + `flow_session` link. Resume — consumer `flows` на `worktracker/work_item/completed`. Диалог HITL пишется durable-append'ом в `ExecutionState.messages` (`HitlConversationService`), **не** в `WorkItemComment`.
-2. Оператор:
-   - **Доступ:** claim/complete требуют FGA `can_view` на `work_queue` задачи. Демо-очередь `example_hitl` при `ensure_example_hitl_queue` пишет owner/admin компании как FGA members (иначе UI скрывает «Ответить и завершить», claim → «Нет доступа к очереди»).
-   - **`single_reply`:** ответ через embedded `<platform-flow-ui display="page" profile="operator_handoff">` с operator render context (default template содержит полный input/file/Submit); Submit = `complete` + closing reply durable-append + ordinary A2A Artifact в `stream:{a2a_task_id}`.
-   - **`takeover`:** ask через тот же embedded chat → REST `/flows/api/v1/hitl/{work_item_id}/conversation/messages` (+ `file_ids`); live — `SubscribeToTask`. Close — отдельная кнопка Complete.
+2. Оператор и пользователь смотрят **один** `FlowUIDocument` через `<platform-flow-ui>`. Отдельного HITL-шаблона нет. Оператор: `profile="operator_handoff"` в worktracker editor.
+3. Оператор:
+   - **Доступ:** claim/complete требуют FGA `can_view` на `work_queue` задачи. Демо-очередь `example_hitl` при `ensure_example_hitl_queue` пишет owner/admin компании как FGA members (иначе composer `readonly`, hint «Нет доступа к очереди», Complete скрыт).
+   - **`can_send` / `can_complete`:** оба true, когда оператор авторизован и задача не terminal (**оба** режима). Composer — рабочий инструмент.
+   - **`single_reply`:** Submit в `operator_handoff` = `FlowUIHitlTransport.send()` → `POST .../complete` + closing reply durable-append + ordinary A2A Artifact в `stream:{a2a_task_id}`. Лейбл Submit — «Ответить и завершить». Отдельной Complete в HITL-секции нет. Header/kebab Complete без текста запрещён (UI скрывает; `WorkItemService.complete` при DONE без text/files — `ValueError`).
+   - **`takeover`:** Submit = ask REST `/flows/api/v1/hitl/{work_item_id}/conversation/messages` (+ `file_ids`), без resume. Live — `SubscribeToTask` (`runA2aTaskLiveTail`). Close — отдельная кнопка «Завершить задачу» **только при `can_complete`**. Complete без текста допустим. Header/inspector/kebab Complete без `can_complete` скрыты.
+   - Submit в `operator_handoff` **никогда** не идёт в A2A `SendStreamingMessage`.
    - Хост `.wt-hitl-chat` обязан иметь **specified height** (не только `min-height`): conversation shell (`page-shell--conversation`) — `height: 100%` и не растёт по контенту. В `layout=panel` высоту даёт flex-колонка панели; в `layout=page` (полноэкранная задача) — явная высота на `.wt-hitl-chat`. Иначе `platform-flow-ui` схлопывается в 0px и клипается `overflow:hidden`.
+   - Если в документе нет message composer + Submit — `<platform-flow-ui>` рисует host-composer **только** для `operator_handoff` (тот же `send()`).
    - Блок **«Активность»** (`WorkItemComment`) — только внутренние заметки команды; покупатель их не видит.
-3. На первом терминале ядро диспатчит `completed`-хук; flows-endpoint делает closing append при необходимости и возобновляет flow (`process_flow_task(is_resume=True)`, `content=resolution.text`). Маршрутизация по `state.current_nodes`/`interrupt_path`.
+   - CRM `<platform-work-item-detail>` без HITL: CTA «Открыть в задачах» на `kind=operator_handoff`.
+4. Пользователь (SPA / embed / Test Run, тот же `<platform-flow-ui>`):
+   - После `operator_task` interrupt — баннер `.input-required-banner` (`hitl_banner_single_reply` / `hitl_banner_takeover`) + `platform-work-item-badge`.
+   - **`single_reply`:** composer disabled; Send не уходит в resume. Бэкенд (`_prepare_task_params`) отвергает user submit/plain A2A, кроме Flow UI BOOTSTRAP/SYNC.
+   - **`takeover`:** composer enabled; реплика — `append_user_message` (`is_resume=false`).
+   - Live хвост операторских реплик: `runA2aTaskLiveTail` / SubscribeToTask после закрытия SendStreamingMessage.
+5. На первом терминале ядро диспатчит `completed`-хук; flows-endpoint делает closing append при необходимости и возобновляет flow (`process_flow_task(is_resume=True)`, `content=resolution.text`). Маршрутизация по `state.current_nodes`/`interrupt_path`.
+
+### HITL test matrix (web)
+
+Контракт без `unittest.mock` / `AsyncMock` / `monkeypatch` / `vi.fn` / stub `fetch`. Единственный мок — MockLLM.
+
+| Слой | Что закрывает | Файлы |
+|---|---|---|
+| HTTP/сервис | POST conversation, complete, files, FGA 403, A2A U3, resume по шине | `tests/flows/api/test_hitl_conversation_http.py`, `tests/flows/channels/test_hitl_takeover_user_submit.py`, `tests/flows/integration/test_hitl_resume_platform_events.py` |
+| llm_node + тул | `hitl_operator_task` в `single_reply`/`takeover`: calculator→HITL→resume, A2A append, operator ask, A2A SendMessage park; `tool_call_id` на interrupt | `tests/flows/integration/test_hitl_llm_node_tool.py` |
+| Playwright E2E | SPA / embed / Test Run / page / panel / CRM CTA / host-composer | `tests/ui/e2e/test_worktracker_hitl_chat.py`, `tests/ui/e2e/test_hitl_user_surfaces.py`, `tests/ui/e2e/test_hitl_operator_matrix.py`, `tests/ui/e2e/test_hitl_custom_ui.py`, `tests/ui/e2e/test_worktracker_operators.py` |
+| Чистые unit | policy, labels, `operatorHandoffFromTask`, `document-composer` | `tests/worktracker/unit/test_models.py`, `tests/frontend_core/unit/flow-ui/` |
+
+Spy/fake-fetch не считаются покрытием HITL.
 
 Тяжёлый `context_data` snapshot и `interrupt_snapshot` живут в `hook.binding` (flows-owned, для ядра непрозрачны).
 

@@ -72,3 +72,14 @@ export function truncateWorkItemId(workItemId) {
     }
     return `${workItemId.slice(0, 8)}…`;
 }
+
+/** Header/kebab Complete without reply: HITL only when takeover and can_complete. */
+export function workItemAllowsSilentComplete(item) {
+    if (!item || typeof item !== 'object') return true;
+    if (item.kind !== 'operator_handoff') return true;
+    const policy = item.interaction_policy;
+    if (!policy || typeof policy !== 'object') return false;
+    if (policy.mode === 'single_reply') return false;
+    if (policy.mode !== 'takeover') return false;
+    return policy.can_complete === true;
+}

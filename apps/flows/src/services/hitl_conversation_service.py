@@ -32,6 +32,7 @@ from core.logging import get_logger
 from core.state import ExecutionState
 from core.types import JsonObject, require_json_array, require_json_object
 from core.worktracker.models import (
+    TERMINAL_WORK_ITEM_STATES,
     WorkItemConversationRef,
     WorkItemInteractionMode,
     WorkItemInteractionPolicy,
@@ -228,6 +229,8 @@ class HitlConversationService:
         item = await self._work_items.get(company_id, work_item_id)
         if not await self._work_items.operator_authorized(item, operator_user_id):
             raise PermissionError("Нет доступа к разговору этой задачи")
+        if item.state in TERMINAL_WORK_ITEM_STATES:
+            raise ValueError("Нельзя отправить сообщение в завершённую HITL-задачу")
         spec = item.interaction
         if spec is None or spec.mode != WorkItemInteractionMode.TAKEOVER:
             raise ValueError("Отправка сообщения доступна только в режиме takeover")
@@ -439,22 +442,25 @@ class HitlConversationService:
         company_id: str,
         content: str | None = None,
     ) -> Emitter:
-        task_id = ref.a2a_task_id
-        if not isinstance(task_id, str) or not task_id.strip():
+        parked_task_id = ref.a2a_task_id
+        if not isinstance(parked_task_id, str) or parked_task_id.strip() == "":
             raise ValueError(
                 f"HITL stream requires a2a_task_id on conversation ref (session={ref.session_id!r})"
             )
+        parked_task_id = parked_task_id.strip()
         runtime_state = await self._runtime.get_state(ref.session_id)
         if runtime_state is not None:
             state = runtime_state
         else:
             state = create_initial_state(
-                task_id=task_id.strip(),
+                task_id=parked_task_id,
                 context_id=ref.context_id,
                 user_id="",
                 session_id=ref.session_id,
                 branch_id=ref.branch_id,
             )
+        if state.task_id != parked_task_id:
+            state = state.model_copy(update={"task_id": parked_task_id})
         await ensure_submitted_a2a_task(
             repository=self._a2a_projection.task_repository,
             company_id=company_id,
@@ -476,7 +482,7 @@ class HitlConversationService:
         company_id: str,
     ) -> None:
         emitter = await self._stream_emitter(ref, company_id=company_id, content=text)
-        await emitter.emit_text(text, append=True, last_chunk=False, artifact_name=artifact_name)
+        await emitter.emit_text(text, append=False, last_chunk=True, artifact_name=artifact_name)
 
     async def _stream_operator_files(
         self,

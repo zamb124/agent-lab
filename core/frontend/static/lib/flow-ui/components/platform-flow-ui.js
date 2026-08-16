@@ -10,7 +10,7 @@ import { flowUIGlyph } from '../catalog/flow-ui-glyph.js';
 import { activeConversationTask, conversationSessionFiles, mergeConversationTasks } from '../catalog/platform/conversation-turn.js';
 import { normalizeFlowUIBranchId } from '../protocol/a2a-codec.js';
 import { resolveFlowUITheme } from '../shell/resolve-theme.js';
-import { flowUIText, resolveFlowUILocale } from '../utils/text.js';
+import { flowUIText, hitlComposerSendLabel, resolveFlowUILocale } from '../utils/text.js';
 import { copyTextToClipboard } from '../../utils/clipboard.js';
 import {
     flowUIVoiceSessionReady,
@@ -23,6 +23,8 @@ import './flow-ui-surface.js';
 import './flow-ui-turn-toasts.js';
 import './flow-ui-files-panel.js';
 import { deriveTurnActivityToasts } from '../runtime/turn-activity.js';
+import { flowUIDocumentHasMessageComposer } from '../runtime/document-composer.js';
+import '../../components/platform-work-item-badge.js';
 
 const FORWARDED_EVENTS = [
     'flow-ui-ready', 'flow-ui-error', 'flow-ui-a2a-frame', 'flow-ui-value-change',
@@ -55,6 +57,8 @@ export class PlatformFlowUI extends LitElement {
         shareState: { state: true },
         embedState: { state: true },
         voiceSessionActive: { state: true },
+        _hostComposerText: { state: true },
+        _hostComposerFiles: { state: true },
         drawerExpanded: { type: Boolean, attribute: 'drawer-expanded', reflect: true },
         companyId: { type: String, attribute: 'company-id' },
         voiceBaseUrl: { type: String, attribute: 'voice-base-url' },
@@ -381,7 +385,60 @@ export class PlatformFlowUI extends LitElement {
             display: flex;
             flex-direction: column;
         }
-        flow-ui-surface { flex: 1 1 0; min-height: 0; height: 100%; }
+        flow-ui-surface { flex: 1 1 0; min-height: 0; }
+        .input-required-banner {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin: 8px 12px 0;
+            padding: 8px 12px;
+            border-radius: 10px;
+            border: 1px solid var(--flow-ui-border);
+            background: var(--flow-ui-surface-subtle);
+            color: var(--flow-ui-text);
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        .input-required-banner span { min-width: 0; }
+        .hitl-host-composer {
+            flex: 0 0 auto;
+            display: grid;
+            gap: 8px;
+            padding: 10px 12px 12px;
+            border-top: 1px solid var(--flow-ui-border);
+            background: var(--flow-ui-panel-strong, var(--flow-ui-panel));
+        }
+        .hitl-host-composer textarea {
+            width: 100%;
+            min-height: 44px;
+            resize: none;
+            box-sizing: border-box;
+            border: 1px solid var(--flow-ui-border);
+            border-radius: 12px;
+            background: var(--flow-ui-composer-bg);
+            color: var(--flow-ui-text);
+            padding: 10px 12px;
+            font: inherit;
+        }
+        .hitl-host-composer-row {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+        .hitl-host-send {
+            min-height: 36px;
+            padding: 0 14px;
+            border: 0;
+            border-radius: 999px;
+            background: var(--flow-ui-accent);
+            color: var(--flow-ui-on-accent, #fff);
+            font: inherit;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .hitl-host-send:disabled { opacity: .45; cursor: not-allowed; }
         .statusbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 13px; border-top: 1px solid var(--flow-ui-border); color: var(--flow-ui-muted); font-size: 11px; }
         .status { display: inline-flex; align-items: center; gap: 6px; }
         .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success, #5ad0a0); box-shadow: 0 0 0 3px color-mix(in srgb, var(--success, #5ad0a0) 20%, transparent); }
@@ -450,6 +507,8 @@ export class PlatformFlowUI extends LitElement {
         this.getExtraMetadataVariables = null;
         this.assistantTitle = '';
         this._hitlTransport = null;
+        this._hostComposerText = '';
+        this._hostComposerFiles = [];
         this._themeObserver = null;
         this._sessionGeneration = 0;
         this._voiceMedia = null;
@@ -567,6 +626,9 @@ export class PlatformFlowUI extends LitElement {
         if (this.initialDocument != null || this.profile === 'editor_test') {
             return 'none';
         }
+        if (this.profile === 'operator_handoff') {
+            return 'none';
+        }
         const pages = Object.values(document?.pages || {}).filter((page) => page.navigation?.visible !== false);
         if (pages.length > 1) return 'full';
         // Drawer always keeps minimal chrome so Expand / Share / Embed / Close stay reachable.
@@ -577,6 +639,110 @@ export class PlatformFlowUI extends LitElement {
             return this.runtimeState?.profile?.viewer?.can_share === true ? 'minimal' : 'none';
         }
         return 'full';
+    }
+
+    _userOperatorHandoff(context) {
+        if (this.profile === 'operator_handoff') return null;
+        const handoff = context?.operatorHandoff;
+        if (!handoff || typeof handoff !== 'object') return null;
+        if (handoff.mode !== 'single_reply' && handoff.mode !== 'takeover') {
+            throw new Error(`platform-flow-ui: unsupported operatorHandoff.mode ${JSON.stringify(handoff.mode)}`);
+        }
+        return handoff;
+    }
+
+    _operatorHitlMode() {
+        if (this.profile !== 'operator_handoff') return null;
+        const mode = this.interactionPolicy && this.interactionPolicy.mode;
+        if (mode !== 'single_reply' && mode !== 'takeover') {
+            throw new Error(`platform-flow-ui: operator_handoff requires HITL mode, got ${JSON.stringify(mode)}`);
+        }
+        return mode;
+    }
+
+    _effectiveReadonly(context) {
+        if (this.profile === 'operator_handoff') {
+            if (this.readonly) return true;
+            const policy = this.interactionPolicy;
+            if (!policy || typeof policy !== 'object') {
+                throw new Error('platform-flow-ui: operator_handoff requires interactionPolicy');
+            }
+            return policy.can_send !== true;
+        }
+        if (this.readonly) return true;
+        if (this.runtimeState?.profile?.viewer?.can_interact === false) return true;
+        return this._userOperatorHandoff(context)?.mode === 'single_reply';
+    }
+
+    _renderWaitingBanner(context, locale) {
+        const handoff = this._userOperatorHandoff(context);
+        if (!handoff) return nothing;
+        const key = handoff.mode === 'takeover' ? 'hitl_banner_takeover' : 'hitl_banner_single_reply';
+        const workItemId = typeof handoff.workItemId === 'string' ? handoff.workItemId.trim() : '';
+        return html`<div class="input-required-banner" role="status">
+            ${workItemId !== ''
+                ? html`<platform-work-item-badge
+                    work-item-id=${workItemId}
+                    size="sm"
+                ></platform-work-item-badge>`
+                : nothing}
+            <span>${flowUIText(locale, key)}</span>
+        </div>`;
+    }
+
+    _showHostComposer(document, effectiveReadonly) {
+        return this.profile === 'operator_handoff'
+            && !effectiveReadonly
+            && !flowUIDocumentHasMessageComposer(document);
+    }
+
+    async _submitHostComposer() {
+        const controller = this.controller;
+        if (!controller || typeof controller.submitFromHost !== 'function') {
+            throw new Error('platform-flow-ui: host composer requires FlowUIController.submitFromHost');
+        }
+        const message = this._hostComposerText;
+        const files = this._hostComposerFiles;
+        this._hostComposerText = '';
+        this._hostComposerFiles = [];
+        await controller.submitFromHost({ message, files });
+    }
+
+    _renderHostComposer(locale, effectiveReadonly, document) {
+        if (!this._showHostComposer(document, effectiveReadonly)) return nothing;
+        const sendLabel = hitlComposerSendLabel(locale, this._operatorHitlMode());
+        if (sendLabel === null) {
+            throw new Error('platform-flow-ui: host composer requires HITL submit label');
+        }
+        const canSend = this._hostComposerText.trim() !== '' || this._hostComposerFiles.length > 0;
+        const submitting = this.controller?.activeContext?.submitting === true;
+        return html`<div class="hitl-host-composer">
+            <textarea
+                data-canon="composer"
+                .value=${this._hostComposerText}
+                ?readonly=${effectiveReadonly}
+                placeholder=${flowUIText(locale, 'composer_placeholder')}
+                @input=${(event) => { this._hostComposerText = event.target.value; }}
+            ></textarea>
+            <div class="hitl-host-composer-row">
+                <input
+                    type="file"
+                    multiple
+                    @change=${(event) => {
+                        const picked = event.target.files ? [...event.target.files] : [];
+                        this._hostComposerFiles = [...this._hostComposerFiles, ...picked];
+                        event.target.value = '';
+                    }}
+                >
+                <button
+                    type="button"
+                    class="hitl-host-send"
+                    ?disabled=${effectiveReadonly || !canSend || submitting}
+                    aria-label=${sendLabel}
+                    @click=${() => this._submitHostComposer()}
+                >${sendLabel}</button>
+            </div>
+        </div>`;
     }
 
     async _start() {
@@ -1002,6 +1168,9 @@ export class PlatformFlowUI extends LitElement {
     }
 
     _topActions(chromeMode, effectiveReadonly) {
+        if (chromeMode === 'none') {
+            return nothing;
+        }
         const sessionFiles = this._sessionFiles();
         const filesPanel = sessionFiles.length > 0
             ? html`<flow-ui-files-panel
@@ -1049,11 +1218,12 @@ export class PlatformFlowUI extends LitElement {
         if (!surface) return html`<flow-ui-error-boundary .error=${new Error('Active page surface is missing')}></flow-ui-error-boundary>`;
         const tasks = context.taskOrder.map((id) => context.tasksById[id]).filter(Boolean);
         const statusClass = context.saveStatus === 'pending' ? 'pending' : context.saveStatus === 'conflict' ? 'error' : '';
-        const effectiveReadonly = this.readonly || this.runtimeState?.profile?.viewer?.can_interact === false;
+        const effectiveReadonly = this._effectiveReadonly(context);
         const chromeMode = this._chromeMode(document);
         this.setAttribute('data-chrome', chromeMode);
         this.setAttribute('data-resolved-theme', this._resolvedTheme());
         const locale = resolveFlowUILocale(this.locale);
+        const hitlMode = this._operatorHitlMode();
         const statusLabel = this.initialDocument
             ? flowUIText(locale, 'status_preview')
             : effectiveReadonly
@@ -1084,12 +1254,17 @@ export class PlatformFlowUI extends LitElement {
                 ${chromeMode === 'full' ? this._navigation(document) : nothing}
                 ${topActions}
             </header>` : nothing}
-            <main class="viewport"><flow-ui-surface
-                .surface=${surface} .tasks=${tasks} .controller=${this.controller}
-                .readonly=${effectiveReadonly} .locale=${resolveFlowUILocale(this.locale)}
-                .platformUiOrigin=${this.platformUiOrigin}
-                .selectedComponentId=${this.selectedComponentId}
-            ></flow-ui-surface></main>
+            <main class="viewport">
+                ${this._renderWaitingBanner(context, locale)}
+                <flow-ui-surface
+                    .surface=${surface} .tasks=${tasks} .controller=${this.controller}
+                    .readonly=${effectiveReadonly} .locale=${resolveFlowUILocale(this.locale)}
+                    .hitlMode=${hitlMode}
+                    .platformUiOrigin=${this.platformUiOrigin}
+                    .selectedComponentId=${this.selectedComponentId}
+                ></flow-ui-surface>
+                ${this._renderHostComposer(locale, effectiveReadonly, document)}
+            </main>
             ${chromeMode === 'full' ? html`<footer class="statusbar"><span class="status"><span class="dot ${statusClass}"></span>${statusLabel}</span><span>${document.revision ? `r${document.revision}` : ''}${this.parityReady ? ' · Exact' : ''}</span></footer>` : nothing}
             ${turnToasts.length > 0
                 ? html`<flow-ui-turn-toasts

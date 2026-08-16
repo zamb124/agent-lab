@@ -105,6 +105,10 @@ const FLOW_UI_TEXT = Object.freeze({
         turn_toast_error_generic: 'Не удалось выполнить запрос',
         turn_toast_dismiss: 'Закрыть',
         turn_toast_stop: 'Остановить',
+        hitl_banner_single_reply: 'Оператор готовит ответ. Писать не нужно.',
+        hitl_banner_takeover: 'Можете писать оператору. Агент продолжит после завершения задачи.',
+        hitl_submit_single_reply: 'Ответить и завершить',
+        hitl_submit_takeover: 'Отправить',
     }),
     en: Object.freeze({
         composer_send: 'Send',
@@ -204,6 +208,10 @@ const FLOW_UI_TEXT = Object.freeze({
         turn_toast_error_generic: 'The request could not be completed',
         turn_toast_dismiss: 'Dismiss',
         turn_toast_stop: 'Stop',
+        hitl_banner_single_reply: 'The operator is preparing a reply. You do not need to write.',
+        hitl_banner_takeover: 'You can message the operator. The agent continues after the task is completed.',
+        hitl_submit_single_reply: 'Reply and complete',
+        hitl_submit_takeover: 'Send',
     }),
 });
 
@@ -224,6 +232,19 @@ export function resolveFlowUILocale(locale, doc = globalThis.document) {
                 : 'en');
     }
     return tag === 'ru' || tag.startsWith('ru-') ? 'ru' : 'en';
+}
+
+/**
+ * Submit label for operator_handoff. User SPA keeps generic composer_send.
+ * @param {'ru' | 'en'} locale
+ * @param {unknown} mode
+ * @returns {string | null}
+ */
+export function hitlComposerSendLabel(locale, mode) {
+    if (mode === undefined || mode === null) return null;
+    if (mode === 'single_reply') return flowUIText(locale, 'hitl_submit_single_reply');
+    if (mode === 'takeover') return flowUIText(locale, 'hitl_submit_takeover');
+    throw new Error(`flow-ui: unsupported HITL mode ${JSON.stringify(mode)}`);
 }
 
 /**

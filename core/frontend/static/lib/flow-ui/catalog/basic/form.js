@@ -12,15 +12,26 @@ import {
     resolveBound,
     wrapFlowNode,
 } from '../render-helpers.js';
-import { flowUIText } from '../../utils/text.js';
+import { flowUIText, hitlComposerSendLabel } from '../../utils/text.js';
 
 function isSubmitPressAction(component) {
     const press = component?.actions?.press;
     return press?.kind === 'event' && press?.name === FLOW_UI_ACTIONS.submit;
 }
 
+function composerSendChrome(host) {
+    const hitlLabel = hitlComposerSendLabel(host.locale, host.hitlMode);
+    if (hitlLabel !== null) return hitlLabel;
+    return flowUIText(host.locale, 'composer_send');
+}
+
 export function renderButton(host, component) {
-    const label = labelOfComponent(host, component) || flowUIText(host.locale, 'submit_default');
+    const hitlSubmitLabel = isSubmitPressAction(component)
+        ? hitlComposerSendLabel(host.locale, host.hitlMode)
+        : null;
+    const label = hitlSubmitLabel !== null
+        ? hitlSubmitLabel
+        : (labelOfComponent(host, component) || flowUIText(host.locale, 'submit_default'));
     const variant = optionalComponentProperty(component, 'variant');
     const presentation = optionalComponentProperty(component, 'presentation');
     const disabled = optionalComponentProperty(component, 'disabled') === true || host.readonly;
@@ -61,8 +72,8 @@ export function renderButton(host, component) {
                     type="button"
                     class="circle-btn send"
                     ?disabled=${disabled}
-                    aria-label=${flowUIText(host.locale, 'composer_send')}
-                    title=${flowUIText(host.locale, 'composer_send')}
+                    aria-label=${composerSendChrome(host)}
+                    title=${composerSendChrome(host)}
                     @click=${() => host._action(component, 'press')}
                 >${flowUIGlyph('send', 18, host.platformUiOrigin)}</button>`,
         );

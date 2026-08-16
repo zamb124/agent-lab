@@ -253,7 +253,7 @@ output_mapping - куда пишем результат:
 - `InterruptManager.push_interrupt_path()` - добавляет в НАЧАЛО пути
 - `InterruptManager.apply_interrupt()` - единая запись `InterruptData` в state
 - `InterruptManager.enrich_system_from_channel()` - task_id/context_id после run в канале
-- `Flow.run()` - определяет resume по `state.interrupt + state.content`
+- `Flow.run()` - ask_user resume: `interrupt` + непустой `content`; operator_task: `interrupt.body` + `correlation_id` (content может быть пустым)
 
 ### Merge при interrupt
 

@@ -1252,6 +1252,14 @@ def container(app):
     return c
 
 
+@pytest.fixture
+def worktracker_container():
+    """Worktracker DI: держит autouse test_context при HTTP-клиентах worktracker."""
+    from apps.worktracker.container import get_worktracker_container
+
+    return get_worktracker_container()
+
+
 @pytest.fixture(scope="session")
 def frontend_container(frontend_app):
     """

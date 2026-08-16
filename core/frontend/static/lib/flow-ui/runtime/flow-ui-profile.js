@@ -62,6 +62,22 @@ export function applyFlowUIProfileKindOverrides(profile, profileKind) {
     if (typeof profileKind !== 'string' || profileKind.trim() === '') {
         throw new Error('flow-ui profile override requires profileKind');
     }
+    if (profileKind === 'operator_handoff') {
+        if (!profile.viewer || typeof profile.viewer !== 'object') {
+            throw new Error('flow-ui operator_handoff profile requires viewer');
+        }
+        return Object.freeze({
+            ...profile,
+            viewer: Object.freeze({
+                ...profile.viewer,
+                can_interact: true,
+            }),
+            capabilities: Object.freeze({
+                ...profile.capabilities,
+                autosync: false,
+            }),
+        });
+    }
     if (profileKind !== 'editor_test') return profile;
     if (profile.capabilities.autosync === false) return profile;
     return Object.freeze({

@@ -180,7 +180,7 @@ Proactive user Connect (без interrupt): `GET .../credentials/google/workspace
 - `build_auth_url(..., flow_context=...)` сохраняет в OAuth state (Storage) контекст flow: `flow_id`, `session_id`, `task_id`, `context_id`, `branch_id`, `channel`, `context_data`.
 - OAuth callback после `complete_oauth` — если `flow_context` есть, вызывает `enqueue(TASK_PROCESS_FLOW, is_resume=True, content="oauth_completed:...")`.
 - SSE: `emit_interrupt` для `OAUTH_REQUIRED` шлёт `statusUpdate` с `TASK_STATE_INPUT_REQUIRED` и `metadata.platform_oauth_continue=true` (без `final` на wire) — SSE остаётся открытым.
-- UI: `interruptKind === 'oauth_required'` — кнопка/ссылка авторизации (`target=_blank`); после закрытия `SendStreamingMessage` chat поднимает `SubscribeToTask` (`findActiveOauthPause` / `syncHitlLiveTail`), как HITL. Question/кнопка для `service=workspace` — i18n `platform_chat.interrupt_oauth_workspace_*`.
+- UI: `interruptKind === 'oauth_required'` — кнопка/ссылка авторизации (`target=_blank`); после закрытия `SendStreamingMessage` chat поднимает `SubscribeToTask` (`runA2aTaskLiveTail`), как HITL. Question/кнопка для `service=workspace` — i18n `platform_chat.interrupt_oauth_workspace_*`.
 
 ### Безопасность и прозрачность
 

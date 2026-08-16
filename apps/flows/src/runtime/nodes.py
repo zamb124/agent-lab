@@ -2584,7 +2584,7 @@ class HitlNode(BaseNode):
             )
         company_id = ctx.active_company.company_id
         cid_resume = state.hitl_handoff_correlation_id
-        if isinstance(cid_resume, str) and cid_resume.strip() and state.content:
+        if isinstance(cid_resume, str) and cid_resume.strip():
             container = self.container
             existing_resume = await container.work_item_service.find_by_completion_correlation(
                 company_id, cid_resume.strip()

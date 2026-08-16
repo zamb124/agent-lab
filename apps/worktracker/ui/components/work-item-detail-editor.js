@@ -18,6 +18,7 @@ import {
     assigneeUserId,
     queueUnclaimed,
     workItemFromEventPayload,
+    workItemAllowsSilentComplete,
 } from '../utils/work-item-detail-shared.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { normalizeIsoDateTimeForField } from '@platform/lib/utils/format-platform-date.js';
@@ -468,11 +469,11 @@ export class WorkItemDetailEditor extends PlatformElement {
         this._claimOp.run({ work_item_id: this.workItemId });
     }
 
-    _complete() {
+    async _complete() {
         if (!this.workItemId) {
             return;
         }
-        this._completeOp.run({ work_item_id: this.workItemId, resolution_text: '' });
+        await this._completeOp.run({ work_item_id: this.workItemId, resolution_text: '' });
     }
 
     _cancel() {
@@ -630,6 +631,7 @@ export class WorkItemDetailEditor extends PlatformElement {
                     locale=${this._localeSel.value}
                     ?show-title=${showTitle}
                     ?show-lifecycle-actions=${!isTerminal}
+                    .showComplete=${workItemAllowsSilentComplete(item)}
                     ?show-claim=${showClaim}
                     @wt-complete=${() => this._complete()}
                     @wt-cancel=${() => this._cancel()}
@@ -712,6 +714,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         if (!policy || policy.mode === 'none') {
             return nothing;
         }
+        const canSend = policy.can_send === true;
         const canComplete = policy.can_complete === true;
         const isTakeover = policy.mode === 'takeover';
         const modeHint = policy.mode === 'single_reply'
@@ -725,7 +728,7 @@ export class WorkItemDetailEditor extends PlatformElement {
                 ${modeHint
                     ? html`<p class="wt-hitl-hint">${modeHint}</p>`
                     : nothing}
-                ${!canComplete && item && !TERMINAL_STATES.has(item.state)
+                ${!canSend && item && !TERMINAL_STATES.has(item.state)
                     ? html`<p class="wt-hitl-hint">${this.t('hitl_chat.hint_need_queue_access')}</p>`
                     : nothing}
                 <div class="wt-hitl-chat">
@@ -734,6 +737,7 @@ export class WorkItemDetailEditor extends PlatformElement {
                         display="page"
                         work-item-id=${this.workItemId}
                         base-url="/flows"
+                        .readonly=${!canSend}
                         .interactionPolicy=${policy}
                     ></platform-flow-ui>
                 </div>

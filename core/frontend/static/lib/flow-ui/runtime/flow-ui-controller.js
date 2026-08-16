@@ -24,6 +24,9 @@ import {
     evaluateFlowUIChecks,
 } from './flow-ui-checks.js';
 import { applyFlowUIProfileKindOverrides, fetchFlowUIProfile } from './flow-ui-profile.js';
+import { runA2aTaskLiveTail } from './a2a-task-live-tail.js';
+import { overlayFlowUILocalValues } from './document-composer.js';
+import { operatorHandoffFromTasks } from './operator-handoff-from-task.js';
 import { readRecoveryJournal, writeRecoveryJournal } from './flow-ui-recovery-journal.js';
 import { cloneSerializable } from '../utils/clone.js';
 import { resolveFlowUILocale } from '../utils/text.js';
@@ -88,6 +91,9 @@ export class FlowUIController extends EventTarget {
         this.autosync = new FlowUIAutosync(() => this.sync(), autosyncDelay);
         this.fieldErrors = Object.freeze({});
         this.locale = resolveFlowUILocale('auto');
+        this.hitlTransport = null;
+        this._userHitlLiveAbort = null;
+        this._userHitlLiveTaskId = '';
     }
 
     get activeContext() {
@@ -103,6 +109,9 @@ export class FlowUIController extends EventTarget {
     }
 
     _canInteract() {
+        if (this.profileKind === 'operator_handoff') {
+            return true;
+        }
         return this.profile?.viewer?.can_interact !== false;
     }
 
@@ -235,7 +244,16 @@ export class FlowUIController extends EventTarget {
             );
             const order = this.accumulator.taskOrder.filter((id) => tasks[id]);
             const active = [...order].reverse().find((id) => !taskBoundary(this.accumulator.tasksById[id])) || order.at(-1) || null;
-            this._commit({ type: 'tasks.changed', contextId, tasksById: tasks, taskOrder: order, activeTaskId: active });
+            const operatorHandoff = operatorHandoffFromTasks(tasks, order);
+            this._commit({
+                type: 'tasks.changed',
+                contextId,
+                tasksById: tasks,
+                taskOrder: order,
+                activeTaskId: active,
+                operatorHandoff,
+            });
+            this._syncUserHitlLiveTail(operatorHandoff);
             const next = typeof result.nextPageToken === 'string' ? result.nextPageToken : '';
             if (next === '') {
                 return;
@@ -248,8 +266,17 @@ export class FlowUIController extends EventTarget {
     applyA2AFrame(frame) {
         const wrapped = unwrapFrame(frame);
         const result = accumulateA2AFrame(this.accumulator, frame);
-        let nextDocument = this.document;
+        const previousDocument = this.document;
+        let nextDocument = previousDocument;
         for (const artifact of uiArtifacts(wrapped)) nextDocument = applyA2UIArtifact(nextDocument, artifact);
+        if (
+            this.hitlTransport
+            && previousDocument
+            && nextDocument
+            && nextDocument !== previousDocument
+        ) {
+            nextDocument = overlayFlowUILocalValues(previousDocument, nextDocument);
+        }
         const task = result.changedTaskId ? this.accumulator.tasksById[result.changedTaskId] : null;
         const contextId = task?.contextId || this.contextId;
         if (contextId && contextId !== this.contextId) this.contextId = contextId;
@@ -265,7 +292,16 @@ export class FlowUIController extends EventTarget {
             );
             const order = this.accumulator.taskOrder.filter((id) => tasks[id]);
             const active = [...order].reverse().find((id) => !taskBoundary(this.accumulator.tasksById[id])) || order.at(-1) || null;
-            this._commit({ type: 'tasks.changed', contextId, tasksById: tasks, taskOrder: order, activeTaskId: active });
+            const operatorHandoff = operatorHandoffFromTasks(tasks, order);
+            this._commit({
+                type: 'tasks.changed',
+                contextId,
+                tasksById: tasks,
+                taskOrder: order,
+                activeTaskId: active,
+                operatorHandoff,
+            });
+            this._syncUserHitlLiveTail(operatorHandoff);
         }
         this._emit('flow-ui-a2a-frame', { frame, taskId: result.changedTaskId, contextId });
     }
@@ -279,7 +315,7 @@ export class FlowUIController extends EventTarget {
         const document = clone(context.document);
         document.surfaces[surfaceId].data_model = setPointer(surface.data_model, path, value);
         this.fieldErrors = clearFieldErrorsForPath(this.fieldErrors, surface, path);
-        if (this.localPreview) {
+        if (this.localPreview || this.hitlTransport) {
             this._commit({ type: 'document.preview', contextId: this.contextId, document });
             this._emit('flow-ui-value-change', {
                 surfaceId, path, value: clone(value), mutationId: null, preview: true,
@@ -521,7 +557,9 @@ export class FlowUIController extends EventTarget {
         this._commit({ type: 'submit.started', contextId: this.contextId });
         this._emit('flow-ui-submit-start', { contextId: this.contextId, surfaceId, componentId });
         try {
-            await this.autosync.flushNow();
+            if (this.hitlTransport == null) {
+                await this.autosync.flushNow();
+            }
             const mutationId = createProtocolId('submit');
             const draftText = this._composerDraftText(surfaceId);
             const draftFiles = this._composerDraftFiles(surfaceId);
@@ -536,11 +574,14 @@ export class FlowUIController extends EventTarget {
             // snapshots cannot resurrect the draft into the composer.
             const wireDocument = clone(this.document);
             this._clearComposerValues(surfaceId);
-            await this._sendControl('submit', mutationId, {
+            await this._dispatchSubmit({
+                mutationId,
                 surfaceId,
-                sourceComponentId: componentId,
+                componentId,
                 actionContext,
                 wireDocument,
+                draftText,
+                draftFiles,
             });
         } catch (error) {
             // Host disconnect / route change aborts the SSE body; do not surface as failure.
@@ -567,6 +608,104 @@ export class FlowUIController extends EventTarget {
         const files = surface?.data_model?.values?.files;
         if (!Array.isArray(files)) return [];
         return files.filter((ref) => ref && typeof ref === 'object').map((ref) => clone(ref));
+    }
+
+    async _dispatchSubmit({
+        mutationId,
+        surfaceId,
+        componentId,
+        actionContext,
+        wireDocument,
+        draftText,
+        draftFiles,
+    }) {
+        if (this.hitlTransport) {
+            await this.hitlTransport.send({
+                message: draftText,
+                files: draftFiles,
+            });
+            return;
+        }
+        await this._sendControl('submit', mutationId, {
+            surfaceId,
+            sourceComponentId: componentId,
+            actionContext,
+            wireDocument,
+        });
+    }
+
+    async submitFromHost({ message, files }) {
+        const draftText = typeof message === 'string' ? message.trim() : '';
+        const draftFiles = Array.isArray(files) ? [...files] : [];
+        if (this.hitlTransport == null) {
+            throw new Error('flow-ui: submitFromHost requires HITL transport');
+        }
+        this._assertCanInteract('submit');
+        if (this.activeContext?.submitting === true) return;
+        this._commit({ type: 'submit.started', contextId: this.contextId });
+        this._emit('flow-ui-submit-start', {
+            contextId: this.contextId,
+            surfaceId: 'host',
+            componentId: 'hitl-host-composer',
+        });
+        try {
+            const mutationId = createProtocolId('submit');
+            if (draftText !== '' || draftFiles.length > 0) {
+                this._commit({
+                    type: 'turn.optimistic',
+                    contextId: this.contextId,
+                    turn: { id: mutationId, text: draftText, files: draftFiles },
+                });
+            }
+            await this.hitlTransport.send({ message: draftText, files: draftFiles });
+        } catch (error) {
+            if (flowUIIsAbortError(error)) return;
+            throw error;
+        } finally {
+            this._commit({ type: 'submit.finished', contextId: this.contextId });
+            this._emit('flow-ui-submit-end', {
+                contextId: this.contextId,
+                taskId: this.activeContext?.activeTaskId,
+            });
+        }
+    }
+
+    _stopUserHitlLiveTail() {
+        if (this._userHitlLiveAbort !== null) {
+            this._userHitlLiveAbort.abort();
+            this._userHitlLiveAbort = null;
+        }
+        this._userHitlLiveTaskId = '';
+    }
+
+    _syncUserHitlLiveTail(handoff) {
+        if (this.localPreview || this.hitlTransport || this.profileKind === 'operator_handoff') {
+            this._stopUserHitlLiveTail();
+            return;
+        }
+        const taskId = handoff && typeof handoff.taskId === 'string' ? handoff.taskId.trim() : '';
+        if (taskId === '') {
+            this._stopUserHitlLiveTail();
+            return;
+        }
+        if (this._userHitlLiveTaskId === taskId && this._userHitlLiveAbort !== null) {
+            return;
+        }
+        this._stopUserHitlLiveTail();
+        this._userHitlLiveTaskId = taskId;
+        const abort = new AbortController();
+        this._userHitlLiveAbort = abort;
+        void runA2aTaskLiveTail({
+            target: this.target,
+            taskId,
+            headersFn: () => this._headers(),
+            credentials: this.credentials,
+            signal: abort.signal,
+            onFrame: (frame) => {
+                if (abort.signal.aborted) return;
+                this.applyA2AFrame(frame);
+            },
+        });
     }
 
     async cancelActiveTask() {
@@ -737,6 +876,7 @@ export class FlowUIController extends EventTarget {
     }
 
     dispose() {
+        this._stopUserHitlLiveTail();
         this.autosync.dispose();
         const abortController = this.abortController;
         this.abortController = null;

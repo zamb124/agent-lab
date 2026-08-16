@@ -405,8 +405,10 @@ class Flow:
         Единственная точка входа для выполнения flow.
 
         Автоматически определяет режим:
-        - Resume: если есть state.interrupt и state.content (ответ пользователя)
-        - Handoff resume: если interrupt был HANDOFF, и дочерний вернул управление
+        - Resume ask_user: interrupt + непустой state.content
+        - Resume operator_task: interrupt body operator_task + correlation_id
+          (content может быть пустым — takeover complete без текста)
+        - Handoff resume: interrupt был HANDOFF
         - Start: новый запуск с entry ноды
 
         Аргументы:
@@ -417,7 +419,7 @@ class Flow:
         """
         await self._require_workflow_instance(state)
 
-        if state.interrupt and state.content:
+        if state.interrupt is not None:
             ir = state.interrupt
             if isinstance(ir.body, HandoffInterrupt):
                 state.interrupt = None
@@ -426,7 +428,7 @@ class Flow:
             ):
                 state.hitl_handoff_correlation_id = str(ir.correlation_id)
                 state.interrupt = None
-            else:
+            elif state.content:
                 state.interrupt = None
         elif not state.current_nodes:
             state.current_nodes = [self.entry]

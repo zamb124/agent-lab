@@ -33,6 +33,7 @@ describe('Catalog VoiceInput', () => {
         );
         expect(layout).toContain("children.find((child) => child.type === 'VoiceInput')");
         expect(layout).toContain('renderVoiceInput');
+        expect(layout).toContain("host.hitlMode === 'takeover'");
         expect(layout.includes('<platform-voice-dictation')).toBe(false);
     });
 

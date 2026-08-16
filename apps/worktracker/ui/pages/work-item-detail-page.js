@@ -7,6 +7,7 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { readWorkItemFromParam } from '@platform/lib/utils/work-item-deeplink.js';
 import {
     truncateWorkItemId,
+    workItemAllowsSilentComplete,
     workItemFromEventPayload,
 } from '../utils/work-item-detail-shared.js';
 import {
@@ -225,6 +226,7 @@ export class WorktrackerWorkItemDetailPage extends PlatformPage {
                             .item=${item}
                             show-back
                             show-properties
+                            .showComplete=${workItemAllowsSilentComplete(item)}
                             ?show-lifecycle-actions=${false}
                             @wt-back=${() => this._back()}
                             @wt-open-properties=${() => this._openProperties()}

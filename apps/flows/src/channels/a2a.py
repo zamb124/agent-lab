@@ -10,7 +10,7 @@ import uuid
 from collections.abc import AsyncGenerator
 from typing import override
 
-from a2a.helpers.proto_helpers import get_message_text, new_text_part
+from a2a.helpers.proto_helpers import get_message_text
 from a2a.types import (
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
@@ -21,14 +21,11 @@ from a2a.types import (
     ListTasksRequest,
     ListTasksResponse,
     Message,
-    Part,
-    Role,
     SendMessageRequest,
     SubscribeToTaskRequest,
     Task,
     TaskArtifactUpdateEvent,
     TaskPushNotificationConfig,
-    TaskState,
     TaskStatusUpdateEvent,
 )
 
@@ -58,7 +55,6 @@ from core.a2a import (
     A2ARepresentation,
     is_interrupted_a2a_task_state,
     is_terminal_a2a_task_state,
-    make_task_status,
     mapping_from_struct,
     struct_from_mapping,
 )
@@ -71,6 +67,7 @@ from core.logging import get_logger
 from core.models.flow_interface import EmbedInterfaceOverride
 from core.models.flow_ui_share import FlowUIShareGrant
 from core.state import ExecutionState
+from core.state.interrupt import OperatorTaskInterrupt
 from core.tasks import enqueue
 from core.tasks.push_notifications import (
     delete_push_config,
@@ -118,18 +115,6 @@ def _this_send_finished_in_process(prior: Task | None, current: Task) -> bool:
     if not _a2a_projection_is_parked(prior):
         return True
     return _projection_fingerprint(prior) != _projection_fingerprint(current)
-
-
-def _text_part(text: str) -> Part:
-    return new_text_part(text)
-
-
-def _agent_text_message(text: str) -> Message:
-    return Message(
-        message_id=str(uuid.uuid4()),
-        role=Role.ROLE_AGENT,
-        parts=[_text_part(text)],
-    )
 
 
 def _message_metadata(params: SendMessageRequest) -> JsonObject | None:
@@ -265,6 +250,49 @@ class A2AChannel(BaseChannel):
             raise ValueError("A2A task access requires authenticated user")
         return context.active_company.company_id, user_id
 
+    async def _operator_task_interrupt_state(
+        self, *, company_id: str, context_id: str
+    ) -> ExecutionState | None:
+        state = await self.container.workflow_runtime.get_state(
+            self._generate_session_id(context_id),
+            company_id=company_id,
+        )
+        if state is None:
+            return None
+        if state.interrupt is None or not isinstance(
+            state.interrupt.body, OperatorTaskInterrupt
+        ):
+            return None
+        return state
+
+    async def _load_hitl_parked_task(self, *, company_id: str, task_id: str) -> Task | None:
+        """Company-scoped Task when the session is parked on OperatorTaskInterrupt.
+
+        Owner filter would hide the customer's parked task from a queue member
+        opening the WorkItem card. Share grants keep their own context path.
+        """
+        task = await self.container.a2a_task_repository.get_task(
+            company_id=company_id,
+            task_id=task_id,
+        )
+        if task is None:
+            return None
+        scoped = await self.container.a2a_task_repository.get_task_for_context(
+            company_id=company_id,
+            flow_id=self.flow_id,
+            context_id=task.context_id,
+            task_id=task_id,
+        )
+        if scoped is None:
+            return None
+        parked = await self._operator_task_interrupt_state(
+            company_id=company_id,
+            context_id=scoped.context_id,
+        )
+        if parked is None:
+            return None
+        return scoped
+
     async def _load_projected_task(self, task_id: str) -> Task | None:
         company_id, owner_user_id = self._task_access_scope()
         share_context = (
@@ -292,6 +320,11 @@ class A2AChannel(BaseChannel):
                 owner_user_id=owner_user_id,
                 task_id=task_id,
             )
+            if task is None:
+                task = await self._load_hitl_parked_task(
+                    company_id=company_id,
+                    task_id=task_id,
+                )
         if task is None:
             return None
         return await self._task_for_share_viewer(task, grant)
@@ -385,21 +418,33 @@ class A2AChannel(BaseChannel):
             prepared.task_id,
             work_item_id,
         )
-        event = TaskStatusUpdateEvent(
-            task_id=prepared.task_id,
-            context_id=prepared.context_id,
-            status=make_task_status(
-                TaskState.TASK_STATE_INPUT_REQUIRED,
-                message=_agent_text_message(prepared.content),
-            ),
-        )
-        stored = await self.container.a2a_task_projection_service.publish(
+        parked_task_id = ref.a2a_task_id
+        if not isinstance(parked_task_id, str) or parked_task_id.strip() == "":
+            raise ValueError(f"WorkItem {work_item_id!r} без a2a_task_id для takeover reply")
+        parked_state = await self._operator_task_interrupt_state(
             company_id=company_id,
-            event=event,
+            context_id=ref.context_id,
         )
-        if not isinstance(stored, TaskStatusUpdateEvent):
-            raise RuntimeError("takeover status projection returned non-status event")
-        yield stored
+        if parked_state is None:
+            raise ValueError("takeover user reply requires parked OperatorTaskInterrupt")
+        interrupt = parked_state.interrupt
+        if interrupt is None:
+            raise ValueError("takeover user reply requires parked OperatorTaskInterrupt")
+        if parked_state.task_id != parked_task_id:
+            parked_state = parked_state.model_copy(update={"task_id": parked_task_id})
+        emitter = await Emitter.create_ensured(self.container, parked_state)
+        await emitter.emit_interrupt(interrupt)
+        parked_task = await self._projected_task(parked_task_id)
+        if not parked_task.HasField("status"):
+            raise ValueError("takeover user reply requires parked task status")
+        event = TaskStatusUpdateEvent(
+            task_id=parked_task.id,
+            context_id=parked_task.context_id,
+            status=parked_task.status,
+        )
+        if parked_task.HasField("metadata"):
+            event.metadata.CopyFrom(parked_task.metadata)
+        yield event
 
     async def _persist_incoming_a2a_files(self, message: Message) -> tuple[list[FileRef], str]:
         """Part.raw → S3; Part.url platform download → file_id; external url → SSRF-safe fetch."""
@@ -677,8 +722,12 @@ class A2AChannel(BaseChannel):
             return await self._projected_task(prepared.task_id)
 
         if prepared.is_takeover_user_reply:
-            _ = [event async for event in self._handle_takeover_user_reply(prepared)]
-            return await self._projected_task(prepared.task_id)
+            closing: TaskStatusUpdateEvent | None = None
+            async for event in self._handle_takeover_user_reply(prepared):
+                closing = event
+            if closing is None:
+                raise RuntimeError("takeover user reply produced no status event")
+            return await self._projected_task(closing.task_id)
 
         if _should_return_immediately(params):
             await self.create_task(prepared)
@@ -832,6 +881,11 @@ class A2AChannel(BaseChannel):
                     owner_user_id=owner_user_id,
                     flow_id=self.flow_id,
                     context_id=params.id,
+                )
+            if task is None:
+                task = await self._load_hitl_parked_task(
+                    company_id=company_id,
+                    task_id=params.id,
                 )
         if task is None:
             return None
@@ -1018,6 +1072,23 @@ class A2AChannel(BaseChannel):
                 limit=page_size,
                 offset=offset,
             )
+            context_id = params.context_id.strip() if params.context_id else ""
+            if total == 0 and context_id:
+                parked = await self._operator_task_interrupt_state(
+                    company_id=ctx.active_company.company_id,
+                    context_id=context_id,
+                )
+                if parked is not None:
+                    tasks, total = (
+                        await self.container.a2a_task_repository.list_tasks_for_context(
+                            company_id=ctx.active_company.company_id,
+                            flow_id=self.flow_id,
+                            context_id=context_id,
+                            task_state=int(params.status) if params.status else None,
+                            limit=page_size,
+                            offset=offset,
+                        )
+                    )
 
         # next_page_token REQUIRED в A2A 1.0 (пустая строка = конец списка)
         response = ListTasksResponse(

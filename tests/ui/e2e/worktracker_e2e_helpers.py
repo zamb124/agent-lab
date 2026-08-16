@@ -9,7 +9,7 @@ from typing import Any
 from urllib.parse import urlparse, urlunparse
 
 import httpx
-from playwright.async_api import Locator, Page, expect
+from playwright.async_api import Locator, Page, Response, expect
 
 from tests.ui.apps import SERVICE_UI_REGISTRY
 from tests.ui.harness import AppUI
@@ -308,9 +308,15 @@ async def worktracker_inbox_open_task(
 
 
 async def worktracker_claim_task(page: Page, editor: Locator) -> None:
-    claim = editor.locator("worktracker-icon-action[icon='user-plus']").first
+    claim = editor.locator("worktracker-icon-action[icon='user-plus'] button").first
     await expect(claim).to_be_visible(timeout=15_000)
     await claim.click()
+    await expect(
+        editor.locator("worktracker-icon-action[icon='user-plus']")
+    ).to_have_count(0, timeout=20_000)
+    await expect(
+        editor.get_by_text(re.compile(r"Нужен доступ к очереди|You need queue access"))
+    ).to_have_count(0, timeout=20_000)
 
 
 async def worktracker_add_comment(page: Page, editor: Locator, text: str) -> None:
@@ -380,24 +386,147 @@ async def worktracker_hitl_chat_wait_text(
     )
 
 
+def _is_hitl_operator_send_http(response: Response) -> bool:
+    if response.request.method != "POST":
+        return False
+    url = response.url
+    if "/conversation/messages" in url:
+        return True
+    return "/work-items/" in url and url.rstrip("/").endswith("/complete")
+
+
+async def worktracker_hitl_click_send_and_assert_http(page: Page, send_button: Locator) -> None:
+    posts: list[str] = []
+
+    def _on_request(request: Any) -> None:
+        if request.method == "POST":
+            posts.append(f"{request.method} {request.url}")
+
+    page.on("request", _on_request)
+    try:
+        async with page.expect_response(_is_hitl_operator_send_http, timeout=30_000) as pending:
+            await send_button.click()
+        response = await pending.value
+    except Exception as exc:
+        raise AssertionError(
+            f"HITL operator send produced no matching POST. POSTs seen: {posts}"
+        ) from exc
+    finally:
+        page.remove_listener("request", _on_request)
+    if response.status >= 400:
+        body = await response.text()
+        raise AssertionError(f"HITL operator send HTTP {response.status}: {body}")
+
+
 async def worktracker_hitl_chat_send(editor: Locator, text: str) -> None:
     chat = await worktracker_hitl_embedded_chat(editor)
     textarea = chat.locator(
-        '[data-flow-ui-component="message-input"] textarea, textarea'
+        '[data-flow-ui-component="message-input"] textarea, textarea[data-canon="composer"]'
     ).first
     await expect(textarea).to_be_visible(timeout=30_000)
+    await expect(textarea).to_be_editable(timeout=20_000)
+    await textarea.click()
     await textarea.fill(text)
-    send_btn = chat.locator("button").filter(
-        has_text=re.compile(r"^\s*(Submit|Отправить|Send)\s*$")
+    send_btn = chat.locator(
+        "button.circle-btn.send:not(.composer-stop):not([disabled]), button.hitl-host-send:not([disabled])"
     ).first
+    if await send_btn.count() == 0:
+        send_btn = chat.get_by_role(
+            "button",
+            name=re.compile(
+                r"Ответить и завершить|Reply and complete|Отправить|Send|Submit"
+            ),
+        ).first
     await expect(send_btn).to_be_enabled(timeout=10_000)
-    await send_btn.click()
+    await worktracker_hitl_click_send_and_assert_http(editor.page, send_btn)
     await worktracker_hitl_chat_wait_text(editor, text.strip(), timeout_s=60.0)
 
 
 async def worktracker_hitl_single_reply_complete(editor: Locator, text: str) -> None:
     """single_reply: Send в platform-flow-ui = complete + closing reply."""
     await worktracker_hitl_chat_send(editor, text)
+
+
+async def worktracker_hitl_complete_takeover_click(editor: Locator) -> None:
+    complete = editor.locator("section.wt-hitl .wt-hitl-complete button").first
+    await expect(complete).to_be_visible(timeout=15_000)
+    await worktracker_hitl_click_send_and_assert_http(editor.page, complete)
+
+
+async def worktracker_hitl_assert_complete_hidden(editor: Locator) -> None:
+    await expect(editor.locator("section.wt-hitl .wt-hitl-complete")).to_have_count(0)
+    await expect(
+        editor.locator("worktracker-detail-header worktracker-icon-action[icon='check']")
+    ).to_have_count(0)
+    await expect(
+        editor.locator("worktracker-detail-inspector worktracker-icon-action[icon='check']")
+    ).to_have_count(0)
+
+
+async def worktracker_hitl_assert_chat_height(editor: Locator) -> None:
+    chat = await worktracker_hitl_embedded_chat(editor)
+    box = await chat.bounding_box()
+    if box is None:
+        raise AssertionError("HITL embedded chat has no bounding box")
+    if box["height"] <= 0:
+        raise AssertionError(f"HITL embedded chat height must be > 0, got {box['height']}")
+
+
+async def worktracker_hitl_attach_file(editor: Locator, file_path: str) -> None:
+    chat = await worktracker_hitl_embedded_chat(editor)
+    file_input = chat.locator("input[type='file']").first
+    await expect(file_input).to_be_attached(timeout=15_000)
+    await file_input.set_input_files(file_path)
+    await expect(chat.locator(".composer-file-chip").first).to_be_visible(timeout=30_000)
+
+
+async def worktracker_inbox_open_panel(
+    page: Page,
+    worktracker_ui: AppUI,
+    work_item_id: str,
+) -> Locator:
+    await worktracker_open_inbox(page, worktracker_ui)
+    badge = page.locator(f"platform-work-item-badge[work-item-id='{work_item_id}']").first
+    await expect(badge).to_be_visible(timeout=60_000)
+    card = page.locator("worktracker-work-item-card").filter(has=badge).first
+    await card.locator(".body").first.click()
+    panel = page.locator(
+        f"work-item-detail-panel[panel-open][work-item-id='{work_item_id}']"
+    ).first
+    await expect(panel).to_be_visible(timeout=30_000)
+    editor = panel.locator("work-item-detail-editor").first
+    await expect(editor).to_be_visible(timeout=30_000)
+    return editor
+
+
+async def worktracker_api_complete_work_item_response(
+    origin: str,
+    auth_token: str,
+    work_item_id: str,
+    *,
+    resolution_text: str = "",
+) -> httpx.Response:
+    async with _worktracker_client(origin, auth_token) as client:
+        return await client.post(
+            f"{WORKTRACKER_API_PREFIX}/work-items/{work_item_id}/complete",
+            json={"resolution_text": resolution_text},
+        )
+
+
+async def crm_open_work_item_page(
+    page: Page,
+    crm_ui: AppUI,
+    work_item_id: str,
+) -> Locator:
+    await page.goto(
+        f"{crm_ui.origin}/crm/tasks/{work_item_id}",
+        wait_until="domcontentloaded",
+    )
+    await expect(page.locator("crm-app")).to_be_visible(timeout=30_000)
+    detail = page.locator(f"platform-work-item-detail[work-item-id='{work_item_id}']").first
+    await expect(detail).to_be_visible(timeout=30_000)
+    return detail
+
 
 async def flows_user_chat_wait_text(page: Page, text_pattern: re.Pattern[str] | str) -> None:
     """Текст в чате покупателя (flows chat-page) — в т.ч. ответ оператора по Emitter."""

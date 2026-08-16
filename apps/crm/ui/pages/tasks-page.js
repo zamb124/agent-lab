@@ -133,6 +133,9 @@ export class CRMTasksPage extends CRMNamespacePage {
             this._selectedId = routeId;
             const fromList = (this._workItems.items || []).find((i) => i.work_item_id === routeId);
             this._selectedItem = fromList || null;
+            if (!this._selectedItem) {
+                this._workItems.get(routeId);
+            }
         }
     }
 
@@ -193,6 +196,10 @@ export class CRMTasksPage extends CRMNamespacePage {
         this.toggleAttribute('data-no-panel', !showPanel);
 
         const routeKey = this.select((s) => s.router.routeKey).value;
+        const fromCache = selectedId && this._workItems && this._workItems.byId
+            ? this._workItems.byId[selectedId]
+            : null;
+        const selectedItem = this._selectedItem || fromCache || null;
         if (routeKey === 'task' && selectedId) {
             return html`
                 <div class="page">
@@ -200,7 +207,7 @@ export class CRMTasksPage extends CRMNamespacePage {
                     <platform-work-item-detail
                         layout="page"
                         work-item-id=${selectedId}
-                        .item=${this._selectedItem}
+                        .item=${selectedItem}
                         show-graph-link
                         @open-crm-entity=${(e) => this._onOpenEntity(e.detail)}
                     ></platform-work-item-detail>

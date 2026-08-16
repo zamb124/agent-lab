@@ -9,6 +9,7 @@ import { html, css, render } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { openWorkItemDetail, isMobileViewport } from '@platform/lib/utils/work-item-deeplink.js';
 import { worktrackerListStyles } from '../styles/worktracker-list.styles.js';
+import { workItemAllowsSilentComplete } from '../utils/work-item-detail-shared.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-work-item-badge.js';
 
@@ -368,13 +369,15 @@ export class WorktrackerWorkItemCard extends PlatformElement {
                 </button>
             `);
         }
-        if (!this._isTerminal()) {
+        if (!this._isTerminal() && workItemAllowsSilentComplete(this.item)) {
             items.push(html`
                 <button type="button" class="menu-item" role="menuitem" @click=${() => this._runAction('complete')}>
                     <platform-icon name="check" size="14"></platform-icon>
                     ${this.t('work_item_card.complete')}
                 </button>
             `);
+        }
+        if (!this._isTerminal()) {
             items.push(html`
                 <button type="button" class="menu-item danger" role="menuitem" @click=${() => this._runAction('cancel')}>
                     <platform-icon name="close" size="14"></platform-icon>

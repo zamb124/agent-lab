@@ -13,6 +13,7 @@ function emptyContext(contextId) {
         taskOrder: [],
         tasksById: {},
         activeTaskId: null,
+        operatorHandoff: null,
         connection: 'offline',
         conflict: null,
         error: null,
@@ -95,6 +96,9 @@ export function reduceFlowUIState(state, event) {
                 taskOrder: event.taskOrder,
                 activeTaskId: event.activeTaskId,
                 pendingTurns: pendingTurns.filter((item) => !consumed.has(item.id)),
+                operatorHandoff: Object.prototype.hasOwnProperty.call(event, 'operatorHandoff')
+                    ? event.operatorHandoff
+                    : context.operatorHandoff,
             });
         }
         case 'turn.optimistic': {

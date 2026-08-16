@@ -637,6 +637,19 @@ class BaseChannel(ABC):
                     if op_task is not None:
                         is_takeover_user_reply = True
                         takeover_work_item_id = op_task
+                elif (
+                    isinstance(state.interrupt.body, OperatorTaskInterrupt)
+                    and state.interrupt.body.handoff_mode == HandoffMode.SINGLE_REPLY
+                    and state.interrupt.correlation_id is not None
+                    and (
+                        flow_ui_command is None
+                        or flow_ui_command.kind
+                        not in (FlowUIIngressKind.BOOTSTRAP, FlowUIIngressKind.SYNC)
+                    )
+                ):
+                    raise ValueError(
+                        "Ожидается ответ оператора: пользователь не может резюмировать HITL single_reply"
+                    )
                 elif isinstance(state.interrupt.body, HandoffInterrupt):
                     routing = self.container.handoff_orchestrator_service.resolve_active_handoff_child(
                         state

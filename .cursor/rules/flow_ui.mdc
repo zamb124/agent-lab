@@ -274,6 +274,25 @@ Default chat template (`linnex.default-chat`) обязан визуально с
 
 `<platform-flow-ui>` — единственный production surface для SPA, editor test, embed, landing, Lara, HITL/operator и shared session. Различаются только `FlowUIRenderContext` и capabilities, не reducer/transport/renderer.
 
+HITL (`hitl_node.handoff_mode` = `single_reply` | `takeover`, не agent handoff):
+
+| Режим | Кто | Submit | Composer | Complete |
+|---|---|---|---|---|
+| `single_reply` | оператор (`profile=operator_handoff`) | `FlowUIHitlTransport.send()` → worktracker complete | `can_send` | нет в HITL-секции; header/kebab без текста запрещён |
+| `takeover` | оператор | `send()` → HITL ask REST | `can_send` | кнопка «Завершить задачу» |
+| `single_reply` | пользователь | блок (readonly + баннер) | disabled | — |
+| `takeover` | пользователь | A2A append (`_handle_takeover_user_reply`) | enabled + баннер | — |
+
+User followup в takeover не подменяет `status.message` текстом покупателя и не снимает `metadata.platform_interrupt` (live tail SubscribeToTask остаётся на parked `a2a_task_id`). Closing interrupt status — тот же parked Task. HITL Emitter (`user_message` / `operator_reply`) пишет в `WorkItemConversationRef.a2a_task_id`, не в action-scoped `ExecutionState.task_id` после Flow UI SUBMIT. Takeover complete без текста резюмит граф по `correlation_id` (не требует `state.content`).
+
+- Submit в `operator_handoff` всегда `hitlTransport.send()`, не `_sendControl('submit')` / A2A. `submit()` не делает A2A `flushNow`/`sync`; `setValue` пишет `document.preview`. Live tail не затирает локальные `values` (`overlayFlowUILocalValues`). Ask REST несёт `idempotency_key` UUID v4 из `crypto.getRandomValues` (`randomUUID` только в secure context — HTTP company-host его нет).
+- `operator_handoff` chrome `none` (карточка Worktracker — хост). Composer не уходит в Stop/Cancel parked A2A Task: `hitlMode` держит `composerState=send`.
+- Нет composer в документе — host-composer только в `operator_handoff` (тот же transport).
+- User live tail после `operator_task`: `runA2aTaskLiveTail` (SubscribeToTask), не отдельный ChatController. Лента покупателя читает Artifact `operator_reply` в `conversationTurnText` (не только `response`).
+- Лейблы Submit оператора — `hitlComposerSendLabel` в [`text.js`](../../core/frontend/static/lib/flow-ui/utils/text.js) (`hitl_submit_single_reply` / `hitl_submit_takeover`). User SPA остаётся на generic `composer_send`.
+
+HITL test matrix (web, без spy/`fetch` stub): HTTP `tests/flows/api/test_hitl_conversation_http.py` + channel/resume; `llm_node` + тул `hitl_operator_task` (`single_reply`/`takeover`) — `tests/flows/integration/test_hitl_llm_node_tool.py`; UX — `tests/ui/e2e/test_hitl_user_surfaces.py` (SPA/embed/Test Run), `tests/ui/e2e/test_hitl_operator_matrix.py` (page/panel/CRM), `tests/ui/e2e/test_hitl_custom_ui.py` (host-composer / form Submit). Чистые unit: labels, `document-composer`, `operatorHandoffFromTask`. Канон моков — **`testing.mdc`**.
+
 Canonical frontend layers:
 
 ```text

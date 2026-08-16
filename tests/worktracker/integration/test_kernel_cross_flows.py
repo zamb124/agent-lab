@@ -25,6 +25,7 @@ from apps.flows.tools.work_item_tools import (
     work_item_create,
     work_item_list,
 )
+from apps.worktracker.services.work_queue_access_service import WorkQueueAccessService
 from core.files.file_ref import FileRef
 from core.identity.flow_employee import flow_employee_user_id
 from core.state import ExecutionState
@@ -47,7 +48,6 @@ from core.worktracker.models import (
     WorkItemResolution,
     WorkItemState,
 )
-from apps.worktracker.services.work_queue_access_service import WorkQueueAccessService
 from core.worktracker.service import WorkItemService
 from tests.fixtures.flow_employee_test_helpers import (
     cleanup_flow_employee_for_tests,
@@ -327,7 +327,7 @@ async def test_hitl_register_creates_operator_handoff_work_item(app, container, 
     assert completed_hook.binding["session_id"] == state.session_id
     # HITL больше не регистрирует comment-хук: диалог идёт durable append в лог сессии
     assert item.hooks_for(WorkItemHookEvent.COMMENT) == []
-    # single_reply -> read-only чат + одна кнопка «Завершить»
+    # HITL: Submit оператора = complete + closing reply; чат не read-only
     assert item.interaction is not None
     assert item.interaction.mode is WorkItemInteractionMode.SINGLE_REPLY
     # flow_session link на исходную сессию с flow_id/branch_id для встроенного чата
@@ -336,6 +336,35 @@ async def test_hitl_register_creates_operator_handoff_work_item(app, container, 
     assert link.session_id == state.session_id
     assert link.flow_id == state.session_flow_id
     assert link.branch_id == state.branch_id
+
+
+async def test_hitl_single_reply_complete_requires_resolution(app, container, unique_id):
+    slug = f"hitl-sr-{unique_id}"
+    await container.work_item_service.create_queue(
+        company_id="system", name="HITL", slug=slug
+    )
+    state = _hitl_state(unique_id)
+    command = _hitl_command(unique_id)
+    _cid, work_item_id = await container.hitl_work_item_service.register_handoff(
+        state,
+        question="q",
+        task_title="t",
+        assignee_queue_slug=slug,
+        handoff_mode=HandoffMode.SINGLE_REPLY,
+        command=command,
+    )
+    with pytest.raises(ValueError, match="single_reply"):
+        await container.work_item_service.complete(
+            company_id="system",
+            work_item_id=work_item_id,
+            resolution=WorkItemResolution(text=""),
+        )
+    completed = await container.work_item_service.complete(
+        company_id="system",
+        work_item_id=work_item_id,
+        resolution=WorkItemResolution(text="ответ оператора"),
+    )
+    assert completed.work_item.state is WorkItemState.DONE
 
 
 async def test_hitl_register_is_idempotent_by_correlation(app, container, unique_id):
@@ -511,7 +540,7 @@ async def test_hitl_operator_chat_materializes_state_content_without_messages(
 async def test_hitl_operator_chat_rejects_unauthorized_and_non_takeover_send(
     app, container, unique_id
 ):
-    """Не член очереди не пишет; single_reply запрещает append (только Завершить)."""
+    """Не член очереди не пишет; single_reply запрещает ask-append (ответ через complete)."""
     slug = f"hitlchat2-{unique_id}"
     await container.work_item_service.create_queue(
         company_id="system", name="HITLChat2", slug=slug

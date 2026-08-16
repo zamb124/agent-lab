@@ -412,8 +412,9 @@ def build_interaction_policy(
 ) -> WorkItemInteractionPolicy:
     """Вычисляет политику композера карточки задачи.
 
-    single_reply: чат read-only + только «Завершить».
-    takeover: двусторонний чат «Отправить» + «Завершить».
+    Оба HITL-режима: composer доступен, если оператор авторизован и задача не terminal.
+    single_reply: Submit = complete + closing reply (лейбл «Ответить и завершить»).
+    takeover: Submit = ask; отдельная кнопка Complete.
     Прочее: mode=none (обычная задача, встроенного чата нет).
     """
     spec = item.interaction
@@ -421,11 +422,9 @@ def build_interaction_policy(
         return WorkItemInteractionPolicy(mode=WorkItemInteractionMode.NONE)
     is_terminal = item.state in TERMINAL_WORK_ITEM_STATES
     active = operator_authorized and not is_terminal
-    can_send = active and spec.mode == WorkItemInteractionMode.TAKEOVER
-    can_complete = active
     return WorkItemInteractionPolicy(
         mode=spec.mode,
-        can_send=can_send,
-        can_complete=can_complete,
+        can_send=active,
+        can_complete=active,
         conversation=build_conversation_ref(item),
     )

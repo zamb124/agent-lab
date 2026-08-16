@@ -3,12 +3,8 @@
  * History: REST snapshot. Live: A2A SubscribeToTask. Send: HITL ask or worktracker complete.
  */
 
-import {
-    a2aEndpointUrl,
-    buildSubscribeTaskBody,
-} from '../protocol/a2a-codec.js';
-import { consumeA2AStream } from '../protocol/a2a-stream.js';
 import { buildWorkItemFileCreateSpecJson } from '../../utils/file-create-spec.js';
+import { runA2aTaskLiveTail } from './a2a-task-live-tail.js';
 import {
     isPlatformFileRef,
     uploadPlatformFile,
@@ -22,10 +18,17 @@ function flowsRoot(baseUrl) {
 }
 
 function randomIdempotencyKey() {
-    if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
-        return globalThis.crypto.randomUUID();
+    // crypto.randomUUID есть только в secure context (HTTPS / localhost).
+    // Локальный стенд и E2E ходят по HTTP company-host — UUID собираем из getRandomValues.
+    if (!globalThis.crypto || typeof globalThis.crypto.getRandomValues !== 'function') {
+        throw new Error('hitl-transport: crypto.getRandomValues is required');
     }
-    throw new Error('hitl-transport: crypto.randomUUID is required');
+    const bytes = new Uint8Array(16);
+    globalThis.crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 function isBrowserFile(file) {
@@ -96,6 +99,7 @@ export class FlowUIHitlTransport {
             throw new Error('FlowUIHitlTransport.attach: FlowUIController required');
         }
         this._controller = controller;
+        controller.hitlTransport = this;
         if (this._conversation.context_id) {
             controller.contextId = this._conversation.context_id;
         }
@@ -143,34 +147,20 @@ export class FlowUIHitlTransport {
      * @param {AbortController} abort
      */
     async _runLiveTail(abort) {
-        const target = {
-            baseUrl: this._root,
-            flowId: this._conversation.flow_id,
-        };
-        while (!abort.signal.aborted) {
-            try {
-                const headers = await this._getHeaders();
-                await consumeA2AStream(
-                    {
-                        url: a2aEndpointUrl(target),
-                        body: buildSubscribeTaskBody(this._a2aTaskId),
-                        headers,
-                        credentials: this._credentials,
-                        signal: abort.signal,
-                    },
-                    (frame) => {
-                        if (abort.signal.aborted || this._controller === null) return;
-                        this._controller.applyA2AFrame(frame);
-                    },
-                );
-            } catch (error) {
-                if (error instanceof Error && error.name === 'AbortError') break;
-                await new Promise((resolve) => { setTimeout(resolve, 800); });
-                continue;
-            }
-            if (abort.signal.aborted) break;
-            await new Promise((resolve) => { setTimeout(resolve, 400); });
-        }
+        await runA2aTaskLiveTail({
+            target: {
+                baseUrl: this._root,
+                flowId: this._conversation.flow_id,
+            },
+            taskId: this._a2aTaskId,
+            headersFn: () => this._getHeaders(),
+            credentials: this._credentials,
+            signal: abort.signal,
+            onFrame: (frame) => {
+                if (abort.signal.aborted || this._controller === null) return;
+                this._controller.applyA2AFrame(frame);
+            },
+        });
         if (this._liveAbort === abort) this._liveAbort = null;
     }
 
@@ -287,6 +277,9 @@ export class FlowUIHitlTransport {
 
     dispose() {
         this._stopLiveTail();
+        if (this._controller && this._controller.hitlTransport === this) {
+            this._controller.hitlTransport = null;
+        }
         this._controller = null;
     }
 }

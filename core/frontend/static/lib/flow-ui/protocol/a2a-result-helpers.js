@@ -150,13 +150,19 @@ function _isDataPart(part) {
 
 export function inputRequiredFieldsFromA2a(message, resultMetadata) {
     const resultMeta = resultMetadata && typeof resultMetadata === 'object' ? resultMetadata : {};
+    const messageMeta = message && typeof message === 'object'
+        && message.metadata && typeof message.metadata === 'object'
+        ? message.metadata
+        : {};
     let question = '';
     if (message && typeof message === 'object' && Array.isArray(message.parts)) {
         question = extractA2aTextFromParts(message.parts);
     }
     let interruptKind = null;
     let authUrl = '';
-    const packed = resultMeta.platform_interrupt;
+    const packed = Object.prototype.hasOwnProperty.call(resultMeta, 'platform_interrupt')
+        ? resultMeta.platform_interrupt
+        : messageMeta.platform_interrupt;
     if (packed && typeof packed === 'object') {
         if (typeof packed.question === 'string' && packed.question.length > 0) {
             question = packed.question;
@@ -855,7 +861,8 @@ function _statusUpdateToRuntimeEvents(out, event, contextId, taskId) {
             out.terminal = true;
             return out;
         }
-        // HITL: закрываем SendStreamingMessage → ChatController.syncHitlLiveTail (SubscribeToTask).
+        // HITL: SendStreamingMessage closes; live tail is SubscribeToTask
+        // (runA2aTaskLiveTail — operator transport and user session).
         if (body && typeof body === 'object' && body.kind === 'operator_task') {
             out.terminal = true;
             return out;

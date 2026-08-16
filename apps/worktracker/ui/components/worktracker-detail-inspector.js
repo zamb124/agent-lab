@@ -33,6 +33,7 @@ export class WorktrackerDetailInspector extends PlatformElement {
         locale: { type: String },
         showTitle: { type: Boolean, attribute: 'show-title' },
         showLifecycleActions: { type: Boolean, attribute: 'show-lifecycle-actions' },
+        showComplete: { type: Boolean, attribute: 'show-complete' },
         showClaim: { type: Boolean, attribute: 'show-claim' },
     };
 
@@ -62,6 +63,7 @@ export class WorktrackerDetailInspector extends PlatformElement {
         this.locale = 'ru';
         this.showTitle = true;
         this.showLifecycleActions = false;
+        this.showComplete = true;
         this.showClaim = false;
     }
 
@@ -86,11 +88,13 @@ export class WorktrackerDetailInspector extends PlatformElement {
                     ></worktracker-icon-action>
                 ` : nothing}
                 ${this.showLifecycleActions ? html`
+                    ${this.showComplete ? html`
                     <worktracker-icon-action
                         icon="check"
                         title=${this.t('detail_panel.complete')}
                         @action=${() => this.emit('wt-complete', null)}
                     ></worktracker-icon-action>
+                    ` : nothing}
                     <worktracker-icon-action
                         icon="close"
                         title=${this.t('detail_panel.cancel')}

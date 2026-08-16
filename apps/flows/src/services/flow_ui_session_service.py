@@ -44,6 +44,7 @@ from core.state.flow_ui_delta import (
     apply_flow_ui_commands,
 )
 from core.state.flow_ui_share_redaction import assert_share_mutation_allowed
+from core.state.interrupt import OperatorTaskInterrupt
 from core.types import JsonObject, JsonValue, require_json_object
 
 _ALLOWED_VIEW_STATE_KEYS = frozenset(
@@ -101,6 +102,12 @@ def _assert_session_access(
     if state.initiator_user_id is not None:
         allowed.add(state.initiator_user_id)
     if user_id in allowed:
+        return
+    if (
+        not require_editor
+        and state.interrupt is not None
+        and isinstance(state.interrupt.body, OperatorTaskInterrupt)
+    ):
         return
     if share_grant is None:
         raise PermissionError("Flow UI session is not owned by the current viewer")

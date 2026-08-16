@@ -18,10 +18,13 @@ from core.worktracker.models import (
     WorkActor,
     WorkItem,
     WorkItemAssignment,
+    WorkItemInteractionMode,
+    WorkItemInteractionSpec,
     WorkItemKind,
     WorkItemLink,
     WorkItemPriority,
     WorkItemState,
+    build_interaction_policy,
 )
 
 
@@ -85,3 +88,39 @@ def test_work_item_defaults() -> None:
     assert item.blocking is False
     assert isinstance(item.assignment, UnassignedAssignment)
     assert item.hooks == []
+
+
+def test_interaction_policy_can_send_for_single_reply() -> None:
+    item = WorkItem(
+        work_item_id="wi_1",
+        company_id="company_1",
+        title="HITL",
+        kind=WorkItemKind.OPERATOR_HANDOFF,
+        created_by=SystemActor(),
+        created_at=_now(),
+        updated_at=_now(),
+        interaction=WorkItemInteractionSpec(mode=WorkItemInteractionMode.SINGLE_REPLY),
+    )
+    authorized = build_interaction_policy(item, operator_authorized=True)
+    assert authorized.can_send is True
+    assert authorized.can_complete is True
+    denied = build_interaction_policy(item, operator_authorized=False)
+    assert denied.can_send is False
+    assert denied.can_complete is False
+
+
+def test_interaction_policy_terminal_disables_send() -> None:
+    item = WorkItem(
+        work_item_id="wi_1",
+        company_id="company_1",
+        title="HITL",
+        kind=WorkItemKind.OPERATOR_HANDOFF,
+        state=WorkItemState.DONE,
+        created_by=SystemActor(),
+        created_at=_now(),
+        updated_at=_now(),
+        interaction=WorkItemInteractionSpec(mode=WorkItemInteractionMode.TAKEOVER),
+    )
+    policy = build_interaction_policy(item, operator_authorized=True)
+    assert policy.can_send is False
+    assert policy.can_complete is False

@@ -47,6 +47,7 @@ from core.worktracker.models import (
     WorkItemComment,
     WorkItemCommentRole,
     WorkItemHook,
+    WorkItemInteractionMode,
     WorkItemInteractionSpec,
     WorkItemKind,
     WorkItemLink,
@@ -454,6 +455,21 @@ class WorkItemService:
         item = await self.get(company_id, work_item_id)
         if item.state in TERMINAL_WORK_ITEM_STATES:
             return WorkItemCompletion(item, newly_terminal=False)
+        if (
+            terminal_state == WorkItemState.DONE
+            and item.kind == WorkItemKind.OPERATOR_HANDOFF
+            and item.interaction is not None
+            and item.interaction.mode == WorkItemInteractionMode.SINGLE_REPLY
+        ):
+            resolution_text = ""
+            resolution_files: list[FileRef] = []
+            if resolution is not None:
+                resolution_text = resolution.text.strip()
+                resolution_files = resolution.files
+            if resolution_text == "" and len(resolution_files) == 0:
+                raise ValueError(
+                    "HITL single_reply complete requires resolution text or files"
+                )
         item.state = terminal_state
         if resolution is not None:
             item.resolution = resolution

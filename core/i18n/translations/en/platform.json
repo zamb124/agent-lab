@@ -307,6 +307,7 @@
         "assign_error": "Failed to assign",
         "detail_title": "Task",
         "open_full": "Open full page",
+        "open_in_tasks": "Open in Tasks",
         "open_entity": "Open in graph",
         "close_panel": "Close",
         "empty_description": "Add a description…",

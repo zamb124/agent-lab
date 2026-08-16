@@ -23,19 +23,21 @@ from tests.ui.e2e.hitl_e2e_bridge import (
     GREEN_GARDEN_OPERATOR_REPLY,
     GREEN_GARDEN_TAKEOVER_MESSAGE,
     HITL_BRANCH_NODE,
+    hitl_api_assert_turn_role,
+    hitl_assert_work_item_terminal,
     hitl_open_react_branch_chat,
     hitl_trigger_deterministic,
     hitl_wait_chat_resume,
 )
 from tests.ui.e2e.worktracker_e2e_helpers import (
-    worktracker_add_comment,
-    worktracker_api_complete_work_item,
     worktracker_api_create_board,
     worktracker_api_create_queue,
     worktracker_api_create_work_item,
     worktracker_api_reassign_work_item,
     worktracker_claim_task,
     worktracker_create_queue_ui,
+    worktracker_hitl_chat_send,
+    worktracker_hitl_complete_takeover_click,
     worktracker_hitl_single_reply_complete,
     worktracker_open_inbox,
     worktracker_open_queues,
@@ -297,83 +299,96 @@ async def test_worktracker_operator_takeover_dialog(
     flows_service,
     taskiq_worker,
     worktracker_http_service,
+    unique_id: str,
 ) -> None:
     _ = hitl_demo_ready, flows_service, taskiq_worker, worktracker_http_service
+    followup = f"{OPERATOR_FOLLOWUP} ({unique_id})"
     page = ui_page_system
     await flows_open_chat_page(page, flows_ui, EXAMPLE_GRAPH_ID)
     work_item_id = await hitl_trigger_deterministic(page, GREEN_GARDEN_TAKEOVER_MESSAGE)
 
     wt_page = await page.context.new_page()
     try:
-        await worktracker_open_task_page(wt_page, worktracker_ui, work_item_id)
-        editor = wt_page.locator(
-            f"work-item-detail-editor[work-item-id='{work_item_id}']"
-        ).first
+        editor = await worktracker_open_task_page(wt_page, worktracker_ui, work_item_id)
         await scenario.step(
             "Откройте задачу режима перехвата",
             wt_page,
             screenshot_name="takeover-task-opened",
             label_en="Open the takeover-mode task",
             details=(
-                "В чате демо-агента напишите «перехват» — создаётся задача с полным перехватом "
-                "диалога. Откройте её в разделе задач: Марина видит контекст спорного возврата."
+                "В чате демо-агента напишите про перехват — создаётся задача с полным "
+                "перехватом диалога. Откройте её в разделе задач: в центре тот же чат, "
+                "что у покупателя."
             ),
             details_en=(
-                "In the demo agent chat, type takeover trigger text; a full dialog takeover "
-                "task is created. Open it in tasks; Marina sees the disputed return context."
+                "In the demo agent chat, type takeover trigger text; a full dialog "
+                "takeover task is created. Open it in Tasks: the center shows the same "
+                "chat the customer has."
             ),
         )
 
         await worktracker_claim_task(wt_page, editor)
-        await worktracker_add_comment(wt_page, editor, OPERATOR_FOLLOWUP)
+        await worktracker_hitl_chat_send(editor, followup)
+        await hitl_api_assert_turn_role(
+            flows_ui.origin,
+            auth_token_system,
+            work_item_id,
+            followup,
+            "operator",
+        )
         await scenario.step(
-            "Напишите покупателю уточняющий вопрос",
+            "Напишите покупателю в чате задачи",
             wt_page,
             screenshot_name="operator-followup-sent",
-            label_en="Send a follow-up question to the customer",
+            label_en="Write to the customer in the task chat",
             details=(
-                "Возьмите задачу и напишите уточняющий вопрос в ленте задачи. В режиме "
-                "перехвата оператор ведёт живой диалог, а не ограничивается одним финальным "
-                "ответом."
+                "Возьмите задачу и отправьте уточнение во встроенном чате — не в "
+                "«Активности». В режиме перехвата это живой диалог с покупателем."
             ),
             details_en=(
-                "Claim the task and write a follow-up in the task thread. In takeover mode the "
-                "operator runs a live dialog instead of a single final reply."
+                "Claim the task and send a follow-up in the embedded chat, not in "
+                "Activity. In takeover this is a live dialog with the customer."
             ),
         )
 
-        takeover_resolution = (
-            f"{GREEN_GARDEN_OPERATOR}: оформим возврат по фото и номеру заказа. "
-            f"{OPERATOR_FOLLOWUP}"
+        await worktracker_hitl_complete_takeover_click(editor)
+        await hitl_assert_work_item_terminal(
+            worktracker_ui.origin, auth_token_system, work_item_id
         )
-        await worktracker_api_complete_work_item(
-            worktracker_ui.origin,
-            auth_token_system,
-            work_item_id,
-            resolution_text=takeover_resolution,
+        await scenario.step(
+            "Нажмите «Завершить задачу»",
+            wt_page,
+            screenshot_name="takeover-complete-clicked",
+            label_en="Click Complete task",
+            details=(
+                "Когда детали собраны, нажмите «Завершить задачу» под чатом. Это "
+                "закрывает перехват и возвращает диалог агенту."
+            ),
+            details_en=(
+                "When the details are in, click Complete task under the chat. This "
+                "closes takeover and returns the dialog to the agent."
+            ),
         )
     finally:
         await wt_page.close()
 
-    await hitl_wait_chat_resume(page, expect_operator_text=GREEN_GARDEN_OPERATOR)
+    await hitl_wait_chat_resume(page, expect_operator_text=followup)
     await scenario.step(
-        "Завершите перехват с итогом диалога",
+        "Проверьте, что агент продолжил диалог",
         page,
         screenshot_name="takeover-chat-resumed",
-        label_en="Complete takeover with dialog outcome",
+        label_en="Confirm the agent continued the dialog",
         details=(
-            "**Демонстрация результата.** Закройте задачу с итогом переписки. В чате "
-            "покупателя появляется ответ Марины — агент подхватывает весь диалог "
-            "оператора и продолжает обслуживание.\n\n"
-            "**Итог.** Теперь вы умеете отличать «один ответ» от «перехвата» и вести "
-            "многошаговый разговор оператора с покупателем."
+            "**Демонстрация результата.** В чате покупателя виден ответ Марины из "
+            "встроенного чата. Плашка ожидания исчезла — агент подхватил диалог.\n\n"
+            "**Итог.** Вы умеете вести переписку в задаче и завершать перехват "
+            "кнопкой, а не комментарием в активности."
         ),
         details_en=(
-            "**Result demonstration.** Close the task with the conversation outcome. "
-            "Marina's reply appears in the customer chat; the agent picks up the full "
-            "operator dialog and continues service.\n\n"
-            "**Summary.** You can now tell single-reply from takeover and run a multi-step "
-            "operator–customer conversation."
+            "**Result demonstration.** The customer chat shows Marina's reply from "
+            "the embedded chat. The waiting banner is gone — the agent picked up.\n\n"
+            "**Summary.** You can chat in the task and end takeover with the button, "
+            "not with an Activity comment."
         ),
     )
 

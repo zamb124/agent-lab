@@ -5,13 +5,36 @@ from __future__ import annotations
 import asyncio
 import re
 import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from typing import Literal
 from urllib.parse import quote
 
-from playwright.async_api import Page, expect
+import httpx
+from playwright.async_api import Locator, Page, expect
 
 from apps.flows.src.services.hitl_demo_queue import EXAMPLE_HITL_SLUG
+from core.a2a.extensions import A2UI_PLATFORM_CATALOG_ID, PLATFORM_UI_SUBMIT_ACTION
+from core.models.flow_interface import (
+    FlowInterfaceConfig,
+    FlowInterfacePolicy,
+    FlowUIDocumentTemplate,
+)
+from core.state.flow_ui import (
+    FlowUIAction,
+    FlowUIComponent,
+    FlowUIContainerLayout,
+    FlowUIDataModel,
+    FlowUIDocument,
+    FlowUIFlexDefinition,
+    FlowUIPage,
+    FlowUISurface,
+    LocalizedText,
+)
 from core.types import JsonObject
+from tests.flows._a2a_v1 import A2A_HEADERS, a2a_send_message
 from tests.ui.e2e.flows_e2e_helpers import (
+    flows_api_create_flow,
     flows_chat_send_message,
     flows_open_chat_page,
 )
@@ -20,6 +43,7 @@ from tests.ui.e2e.worktracker_e2e_helpers import (
     worktracker_api_get_work_item,
     worktracker_api_list_work_items,
     worktracker_api_origin,
+    worktracker_wait_queue_task_id,
 )
 from tests.ui.harness import AppUI
 
@@ -43,9 +67,43 @@ def hitl_worktracker_api_origin(origin: str) -> str:
     return worktracker_api_origin(origin)
 
 
-async def hitl_ensure_demo_queue_member(origin: str, auth_token: str, user_id: str) -> str:
-    import httpx
+def _queue_member_user_id(row: object) -> str:
+    if not isinstance(row, dict):
+        raise AssertionError(f"queue member row must be an object, got {type(row)}")
+    member = row.get("member")
+    if not isinstance(member, dict):
+        raise AssertionError("queue member.member must be an object")
+    member_user_id = member.get("user_id")
+    if not isinstance(member_user_id, str) or member_user_id == "":
+        raise AssertionError("queue member.member.user_id must be a non-empty string")
+    return member_user_id
 
+
+async def _ensure_queue_member(client: httpx.AsyncClient, queue_id: str, user_id: str) -> None:
+    add_resp = await client.post(
+        f"{WORKTRACKER_API_PREFIX}/work-queues/{queue_id}/members",
+        json={
+            "member": {"actor_kind": "user", "user_id": user_id},
+            "role": "member",
+        },
+    )
+    if add_resp.status_code not in {200, 201, 409, 403}:
+        add_resp.raise_for_status()
+    members_resp = await client.get(f"{WORKTRACKER_API_PREFIX}/work-queues/{queue_id}/members")
+    members_resp.raise_for_status()
+    members = members_resp.json()
+    if not isinstance(members, list):
+        raise AssertionError(f"queue members must be a list, got {type(members)}")
+    for row in members:
+        if _queue_member_user_id(row) == user_id:
+            return
+    raise AssertionError(
+        f"{user_id} is not a member of queue {queue_id} "
+        f"(add_status={add_resp.status_code} add_body={add_resp.text})"
+    )
+
+
+async def hitl_ensure_demo_queue_member(origin: str, auth_token: str, user_id: str) -> str:
     from tests.ui.e2e_worker import ui_e2e_scope_headers
 
     api_origin = hitl_worktracker_api_origin(origin)
@@ -57,9 +115,14 @@ async def hitl_ensure_demo_queue_member(origin: str, auth_token: str, user_id: s
     ) as client:
         queues_resp = await client.get(f"{WORKTRACKER_API_PREFIX}/work-queues")
         queues_resp.raise_for_status()
-        items = queues_resp.json().get("items") or []
+        payload = queues_resp.json()
+        items = payload.get("items") if isinstance(payload, dict) else None
+        if not isinstance(items, list):
+            raise AssertionError("work-queues list must contain items[]")
         queue_id = ""
         for item in items:
+            if not isinstance(item, dict):
+                raise AssertionError("work-queue row must be an object")
             if item.get("work_queue_slug") == EXAMPLE_HITL_SLUG:
                 queue_id = str(item["work_queue_id"])
                 break
@@ -68,14 +131,30 @@ async def hitl_ensure_demo_queue_member(origin: str, auth_token: str, user_id: s
                 f"{WORKTRACKER_API_PREFIX}/work-queues",
                 json={"name": "Demo HITL", "slug": EXAMPLE_HITL_SLUG},
             )
-            create_resp.raise_for_status()
-            queue_id = str(create_resp.json()["work_queue_id"])
-        member_resp = await client.post(
-            f"{WORKTRACKER_API_PREFIX}/work-queues/{queue_id}/members",
-            json={"member": {"actor_kind": "user", "user_id": user_id}, "role": "member"},
-        )
-        if member_resp.status_code >= 400 and member_resp.status_code != 409:
-            member_resp.raise_for_status()
+            if create_resp.status_code == 409:
+                queues_resp = await client.get(f"{WORKTRACKER_API_PREFIX}/work-queues")
+                queues_resp.raise_for_status()
+                payload = queues_resp.json()
+                items = payload.get("items") if isinstance(payload, dict) else None
+                if not isinstance(items, list):
+                    raise AssertionError("work-queues list must contain items[]")
+                for item in items:
+                    if not isinstance(item, dict):
+                        raise AssertionError("work-queue row must be an object")
+                    if item.get("work_queue_slug") == EXAMPLE_HITL_SLUG:
+                        queue_id = str(item["work_queue_id"])
+                        break
+                if not queue_id:
+                    raise AssertionError(
+                        f"example_hitl exists but is not visible to {user_id}"
+                    )
+            else:
+                create_resp.raise_for_status()
+                created = create_resp.json()
+                if not isinstance(created, dict):
+                    raise AssertionError("create work-queue must return an object")
+                queue_id = str(created["work_queue_id"])
+        await _ensure_queue_member(client, queue_id, user_id)
         return queue_id
 
 
@@ -164,15 +243,50 @@ async def hitl_api_wait_conversation_text(
     )
 
 
+async def hitl_api_assert_turn_role(
+    flows_origin: str,
+    auth_token: str,
+    work_item_id: str,
+    text: str,
+    role: str,
+    *,
+    timeout_s: float = 60.0,
+) -> None:
+    import httpx
+
+    deadline = time.monotonic() + timeout_s
+    path = f"/flows/api/v1/hitl/{work_item_id}/conversation"
+    last_turns: object | None = None
+    last_status: int | None = None
+    async with httpx.AsyncClient(
+        base_url=flows_origin,
+        cookies={"auth_token": auth_token},
+        timeout=30.0,
+    ) as client:
+        while time.monotonic() < deadline:
+            response = await client.get(path)
+            last_status = response.status_code
+            if response.status_code < 400:
+                payload = response.json()
+                turns = payload.get("turns")
+                last_turns = turns
+                if isinstance(turns, list):
+                    for turn in turns:
+                        if (
+                            isinstance(turn, dict)
+                            and turn.get("text") == text
+                            and turn.get("role") == role
+                        ):
+                            return
+            await asyncio.sleep(0.5)
+    raise AssertionError(
+        f"conversation {work_item_id!r} has no turn text={text!r} role={role!r}"
+        f"; status={last_status!r} last={last_turns!r}"
+    )
+
+
 async def hitl_wait_chat_input_required(page: Page) -> str:
-    banner = page.locator("chat-page .input-required-banner").first
-    await expect(banner).to_be_visible(timeout=20_000)
-    badge = page.locator("chat-page platform-work-item-badge[work-item-id]").first
-    await expect(badge).to_be_visible(timeout=10_000)
-    work_item_id = await badge.get_attribute("work-item-id")
-    if not work_item_id:
-        raise AssertionError("platform-work-item-badge must expose work-item-id")
-    return work_item_id
+    return await hitl_wait_host_input_required(hitl_user_flow_ui(page, surface="spa"))
 
 
 def _work_item_session_id(item: JsonObject) -> str:
@@ -409,3 +523,528 @@ async def hitl_assert_work_item_terminal(origin: str, auth_token: str, work_item
     state = str(item.get("state") or "")
     if state not in {"done", "cancelled"}:
         raise AssertionError(f"Expected terminal work item, got state={state!r}")
+
+
+async def hitl_assert_work_item_open(origin: str, auth_token: str, work_item_id: str) -> None:
+    item = await worktracker_api_get_work_item(origin, auth_token, work_item_id)
+    state = str(item.get("state") or "")
+    if state in {"done", "cancelled", "failed"}:
+        raise AssertionError(f"Expected open HITL work item, got state={state!r}")
+
+
+def hitl_user_flow_ui(
+    page: Page,
+    *,
+    surface: Literal["spa", "embed", "run"],
+) -> Locator:
+    if surface == "spa":
+        return page.locator("chat-page platform-flow-ui").first
+    if surface == "embed":
+        return page.locator(
+            "flow-ui-drawer platform-flow-ui, flow-ui-page-host platform-flow-ui, platform-flow-ui"
+        ).first
+    if surface == "run":
+        return page.locator("flows-execution-panel platform-flow-ui").first
+    raise ValueError(f"unknown HITL user surface: {surface!r}")
+
+
+async def hitl_wait_host_input_required(host: Locator) -> str:
+    banner = host.locator(".input-required-banner").first
+    await expect(banner).to_be_visible(timeout=90_000)
+    badge = host.locator("platform-work-item-badge[work-item-id]").first
+    await expect(badge).to_be_attached(timeout=30_000)
+    work_item_id = await badge.get_attribute("work-item-id")
+    if not work_item_id:
+        raise AssertionError("platform-work-item-badge must expose work-item-id")
+    return work_item_id
+
+
+async def hitl_assert_composer_readonly(host: Locator) -> None:
+    textarea = host.locator(
+        '[data-flow-ui-component="message-input"] textarea, textarea[data-canon="composer"], textarea'
+    ).first
+    await expect(textarea).to_be_visible(timeout=30_000)
+    await expect(textarea).not_to_be_editable(timeout=20_000)
+
+
+async def hitl_assert_composer_editable(host: Locator) -> None:
+    textarea = host.locator(
+        '[data-flow-ui-component="message-input"] textarea, textarea[data-canon="composer"], textarea'
+    ).first
+    await expect(textarea).to_be_visible(timeout=30_000)
+    await expect(textarea).to_be_editable(timeout=20_000)
+
+
+async def hitl_host_send(host: Locator, text: str) -> None:
+    textarea = host.locator(
+        '[data-flow-ui-component="message-input"] textarea, textarea[data-canon="composer"], textarea'
+    ).first
+    await expect(textarea).to_be_visible(timeout=30_000)
+    await textarea.fill(text)
+    send_btn = host.get_by_role(
+        "button",
+        name=re.compile(
+            r"Ответить и завершить|Reply and complete|Отправить|Send|Submit"
+        ),
+    ).first
+    await expect(send_btn).to_be_enabled(timeout=10_000)
+    await send_btn.click()
+
+
+async def hitl_host_attach_files(host: Locator, file_path: str) -> None:
+    file_input = host.locator("input[type='file']").first
+    await expect(file_input).to_be_attached(timeout=15_000)
+    await file_input.set_input_files(file_path)
+
+
+async def hitl_api_get_conversation(
+    flows_origin: str,
+    auth_token: str,
+    work_item_id: str,
+) -> JsonObject:
+    import httpx
+
+    path = f"/flows/api/v1/hitl/{work_item_id}/conversation"
+    async with httpx.AsyncClient(
+        base_url=flows_origin,
+        cookies={"auth_token": auth_token},
+        timeout=30.0,
+    ) as client:
+        response = await client.get(path)
+    if response.status_code >= 400:
+        raise AssertionError(
+            f"GET conversation failed: {response.status_code} {response.text}"
+        )
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise AssertionError("GET conversation must return an object")
+    return payload
+
+
+async def hitl_api_assert_conversation_lacks_text(
+    flows_origin: str,
+    auth_token: str,
+    work_item_id: str,
+    text: str,
+) -> None:
+    payload = await hitl_api_get_conversation(flows_origin, auth_token, work_item_id)
+    turns = payload.get("turns")
+    if not isinstance(turns, list):
+        raise AssertionError("conversation turns must be a list")
+    for turn in turns:
+        if isinstance(turn, dict) and turn.get("text") == text:
+            raise AssertionError(
+                f"conversation {work_item_id!r} unexpectedly contains {text!r}"
+            )
+
+
+async def hitl_api_assert_turn_has_files(
+    flows_origin: str,
+    auth_token: str,
+    work_item_id: str,
+    text: str,
+    *,
+    timeout_s: float = 60.0,
+) -> None:
+    import httpx
+
+    deadline = time.monotonic() + timeout_s
+    path = f"/flows/api/v1/hitl/{work_item_id}/conversation"
+    last_turns: object = None
+    async with httpx.AsyncClient(
+        base_url=flows_origin,
+        cookies={"auth_token": auth_token},
+        timeout=30.0,
+    ) as client:
+        while time.monotonic() < deadline:
+            response = await client.get(path)
+            if response.status_code < 400:
+                payload = response.json()
+                turns = payload.get("turns")
+                last_turns = turns
+                if isinstance(turns, list):
+                    for turn in turns:
+                        if not isinstance(turn, dict):
+                            continue
+                        if turn.get("text") != text:
+                            continue
+                        file_ids = turn.get("file_ids")
+                        if isinstance(file_ids, list) and len(file_ids) > 0:
+                            return
+            await asyncio.sleep(0.5)
+    raise AssertionError(
+        f"conversation {work_item_id!r} has no file_ids on turn {text!r}; last={last_turns!r}"
+    )
+
+
+def _column_layout() -> FlowUIContainerLayout:
+    return FlowUIContainerLayout(
+        mode="flex",
+        flex=FlowUIFlexDefinition(direction="column", gap_token="space.3"),
+    )
+
+
+def hitl_host_composer_interface_config() -> JsonObject:
+    """Interface без message composer: оператор видит host-composer."""
+    policy = FlowInterfacePolicy()
+    note = FlowUIComponent(
+        component_id="note",
+        type="Text",
+        properties={"text": "Operator form"},
+    )
+    submit = FlowUIComponent(
+        component_id="submit",
+        type="Button",
+        properties={"label": "Send", "variant": "primary"},
+        actions={
+            "press": FlowUIAction(
+                kind="event",
+                name=PLATFORM_UI_SUBMIT_ACTION,
+                context={},
+            ),
+        },
+    )
+    root = FlowUIComponent(
+        component_id="root",
+        type="PageShell",
+        kind="container",
+        children=["note", "submit"],
+        container_layout=_column_layout(),
+    )
+    document = FlowUIDocument(
+        document_id="template:hitl.host-composer:1.0.0",
+        template_version="1.0.0",
+        catalog_id=A2UI_PLATFORM_CATALOG_ID,
+        active_page_id="main",
+        pages={
+            "main": FlowUIPage(
+                page_id="main",
+                title=LocalizedText(default="HITL"),
+                route="/",
+                root_surface_id="main",
+            )
+        },
+        surfaces={
+            "main": FlowUISurface(
+                surface_id="main",
+                catalog_id=A2UI_PLATFORM_CATALOG_ID,
+                components={"root": root, "note": note, "submit": submit},
+                data_model=FlowUIDataModel(values={}),
+            )
+        },
+        policy=policy,
+    )
+    config = FlowInterfaceConfig(
+        template=FlowUIDocumentTemplate(
+            template_id="hitl.host-composer",
+            version="1.0.0",
+            document=document,
+        ),
+        catalog_id=A2UI_PLATFORM_CATALOG_ID,
+        policy=policy,
+    )
+    dumped = config.model_dump(mode="json")
+    if not isinstance(dumped, dict):
+        raise RuntimeError("FlowInterfaceConfig dump must be an object")
+    return dumped
+
+
+def hitl_form_submit_interface_config() -> JsonObject:
+    """Кастомная форма с Submit без chat-composer."""
+    policy = FlowInterfacePolicy()
+    submit = FlowUIComponent(
+        component_id="submit",
+        type="Button",
+        properties={"label": "Send", "variant": "primary"},
+        actions={
+            "press": FlowUIAction(
+                kind="event",
+                name=PLATFORM_UI_SUBMIT_ACTION,
+                context={"formId": "operator-form"},
+            ),
+        },
+    )
+    note_field = FlowUIComponent(
+        component_id="note-field",
+        type="TextField",
+        bindings={"value": "/values/message"},
+        properties={"label": "Reply"},
+    )
+    form = FlowUIComponent(
+        component_id="operator-form",
+        type="Form",
+        kind="container",
+        children=["note-field", "submit"],
+        container_layout=_column_layout(),
+        properties={"formId": "operator-form"},
+    )
+    root = FlowUIComponent(
+        component_id="root",
+        type="PageShell",
+        kind="container",
+        children=["operator-form"],
+        container_layout=_column_layout(),
+    )
+    document = FlowUIDocument(
+        document_id="template:hitl.form-submit:1.0.0",
+        template_version="1.0.0",
+        catalog_id=A2UI_PLATFORM_CATALOG_ID,
+        active_page_id="main",
+        pages={
+            "main": FlowUIPage(
+                page_id="main",
+                title=LocalizedText(default="HITL form"),
+                route="/",
+                root_surface_id="main",
+            )
+        },
+        surfaces={
+            "main": FlowUISurface(
+                surface_id="main",
+                catalog_id=A2UI_PLATFORM_CATALOG_ID,
+                components={
+                    "root": root,
+                    "operator-form": form,
+                    "note-field": note_field,
+                    "submit": submit,
+                },
+                data_model=FlowUIDataModel(values={"message": ""}),
+            )
+        },
+        policy=policy,
+    )
+    config = FlowInterfaceConfig(
+        template=FlowUIDocumentTemplate(
+            template_id="hitl.form-submit",
+            version="1.0.0",
+            document=document,
+        ),
+        catalog_id=A2UI_PLATFORM_CATALOG_ID,
+        policy=policy,
+    )
+    dumped = config.model_dump(mode="json")
+    if not isinstance(dumped, dict):
+        raise RuntimeError("FlowInterfaceConfig dump must be an object")
+    return dumped
+
+
+def hitl_custom_ui_flow_payload(
+    *,
+    flow_id: str,
+    queue_slug: str,
+    mode: str,
+    interface: JsonObject,
+    title: str,
+) -> JsonObject:
+    return {
+        "flow_id": flow_id,
+        "name": flow_id,
+        "entry": "hitl",
+        "nodes": {
+            "hitl": {
+                "type": "hitl_node",
+                "work_queue_slug": queue_slug,
+                "handoff_task_title": title,
+                "handoff_user_message": "Ожидается оператор",
+                "handoff_mode": mode,
+            }
+        },
+        "edges": [{"from_node": "hitl", "to_node": None}],
+        "interface": interface,
+    }
+
+
+async def hitl_create_custom_ui_flow(
+    origin: str,
+    auth_token: str,
+    *,
+    flow_id: str,
+    mode: str,
+    interface: JsonObject,
+    title: str,
+    queue_slug: str = EXAMPLE_HITL_SLUG,
+) -> None:
+    await flows_api_create_flow(
+        origin,
+        auth_token,
+        hitl_custom_ui_flow_payload(
+            flow_id=flow_id,
+            queue_slug=queue_slug,
+            mode=mode,
+            interface=interface,
+            title=title,
+        ),
+    )
+
+
+def hitl_chat_hitl_flow_payload(
+    *,
+    flow_id: str,
+    queue_slug: str,
+    mode: str,
+    title: str,
+) -> JsonObject:
+    return {
+        "flow_id": flow_id,
+        "name": flow_id,
+        "entry": "hitl",
+        "nodes": {
+            "hitl": {
+                "type": "hitl_node",
+                "work_queue_slug": queue_slug,
+                "handoff_task_title": title,
+                "handoff_user_message": "Ожидается оператор",
+                "handoff_mode": mode,
+            }
+        },
+        "edges": [{"from_node": "hitl", "to_node": None}],
+    }
+
+
+async def hitl_create_chat_hitl_flow(
+    origin: str,
+    auth_token: str,
+    *,
+    flow_id: str,
+    mode: str,
+    title: str,
+    queue_slug: str = EXAMPLE_HITL_SLUG,
+) -> None:
+    await flows_api_create_flow(
+        origin,
+        auth_token,
+        hitl_chat_hitl_flow_payload(
+            flow_id=flow_id,
+            queue_slug=queue_slug,
+            mode=mode,
+            title=title,
+        ),
+    )
+
+
+async def hitl_start_via_a2a(
+    origin: str,
+    auth_token: str,
+    *,
+    flow_id: str,
+    text: str,
+    title_contains: str,
+) -> str:
+    import httpx
+
+    from tests.ui.e2e_worker import ui_e2e_scope_headers
+
+    async with httpx.AsyncClient(
+        base_url=origin,
+        cookies={"auth_token": auth_token},
+        headers={**ui_e2e_scope_headers(), **A2A_HEADERS},
+        timeout=630.0,
+    ) as client:
+        response = await client.post(
+            f"/flows/api/v1/{flow_id}",
+            json=a2a_send_message(text),
+        )
+    if response.status_code >= 400:
+        raise AssertionError(
+            f"A2A SendMessage failed: {response.status_code} {response.text}"
+        )
+    body = response.json()
+    if isinstance(body, dict) and body.get("error") is not None:
+        raise AssertionError(f"A2A SendMessage error: {body}")
+    return await worktracker_wait_queue_task_id(
+        origin,
+        auth_token,
+        title_contains=title_contains,
+        timeout_s=120.0,
+    )
+
+
+@asynccontextmanager
+async def hitl_embed_opened(
+    page: Page,
+    *,
+    frontend_ui: AppUI,
+    flows_ui: AppUI,
+    auth_headers: dict[str, str],
+    company_id: str,
+    unique_id: str,
+    flow_id: str = EXAMPLE_GRAPH_ID,
+) -> AsyncIterator[Locator]:
+    from httpx import AsyncClient
+
+    from tests.ui.e2e.test_embed_autoload_browser import (
+        _build_embed_page_html,
+        _create_embed_config,
+        _delete_embed_config,
+        _external_embed_origin,
+        _flows_api_origin,
+        _frontend_api_origin,
+    )
+
+    frontend_origin = _frontend_api_origin(frontend_ui).rstrip("/")
+    flows_public_base = _flows_api_origin(flows_ui).rstrip("/")
+    script_src = f"{frontend_origin}/static/core/lib/embed-flow-ui/flow-ui-embed-autoload.js"
+    flows_base = f"{flows_public_base}/flows"
+    embed_id: str | None = None
+    errors: list[str] = []
+    network_events: list[str] = []
+    try:
+        async with AsyncClient(
+            base_url=frontend_origin,
+            follow_redirects=True,
+            timeout=20.0,
+        ) as fc:
+            embed_id = await _create_embed_config(
+                frontend_origin,
+                auth_headers,
+                flow_id=flow_id,
+                unique_id=unique_id,
+                show_launcher=True,
+            )
+            mint = await fc.post(
+                f"/frontend/api/embed/configs/{embed_id}/session-token",
+                headers=auth_headers,
+                json={"expires_in_seconds": 300},
+            )
+            if mint.status_code >= 400:
+                raise AssertionError(
+                    f"embed session-token failed: {mint.status_code} {mint.text}"
+                )
+            token_payload = {"token": mint.json()["token"]}
+        page_html = _build_embed_page_html(
+            script_src=script_src,
+            embed_id=embed_id,
+            flows_base=flows_base,
+            frontend_origin=frontend_origin,
+            company_id=company_id,
+            show_launcher=True,
+        )
+        with _external_embed_origin(
+            html_page_utf8=page_html,
+            token_payload=token_payload,
+        ) as host_origin:
+            await page.goto(f"{host_origin}/", wait_until="domcontentloaded")
+            try:
+                await page.wait_for_function(
+                    "typeof window.linnexFlowUI !== 'undefined' && window.linnexFlowUI && window.linnexFlowUI.element",
+                    timeout=60_000,
+                )
+                await page.locator("flow-ui-drawer, flow-ui-page-host").first.wait_for(
+                    state="attached",
+                    timeout=30_000,
+                )
+            except Exception as exc:
+                raise AssertionError(
+                    "linnexFlowUI не смонтировался для HITL embed\n"
+                    f"errors:\n{chr(10).join(errors) or '<empty>'}\n\n"
+                    f"network:\n{chr(10).join(network_events) or '<empty>'}"
+                ) from exc
+            fab = page.locator("flow-ui-drawer").locator("button.launcher, button.fab").first
+            await expect(fab).to_be_visible(timeout=15_000)
+            await fab.click()
+            host = hitl_user_flow_ui(page, surface="embed")
+            await expect(host).to_be_visible(timeout=30_000)
+            yield host
+    finally:
+        if embed_id is not None:
+            await _delete_embed_config(frontend_origin, auth_headers, embed_id)

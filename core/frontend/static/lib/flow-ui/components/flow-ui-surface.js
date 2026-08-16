@@ -17,6 +17,7 @@ export class FlowUISurfaceElement extends LitElement {
         locale: { type: String },
         platformUiOrigin: { type: String },
         selectedComponentId: { attribute: false },
+        hitlMode: { type: String, attribute: false },
         uploadState: { state: true },
         feedJump: { state: true },
         copiedTaskId: { state: true },
@@ -950,6 +951,7 @@ export class FlowUISurfaceElement extends LitElement {
         this.locale = 'en';
         this.platformUiOrigin = '';
         this.selectedComponentId = null;
+        this.hitlMode = null;
         this.uploadState = {};
         this.feedJump = false;
         this.copiedTaskId = null;
