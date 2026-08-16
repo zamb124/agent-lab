@@ -1,8 +1,7 @@
 import { LitElement, css, html } from '../../lit-shim.js';
 import '../components/platform-flow-ui.js';
+import { brandLogoSrc } from './brand-logo.js';
 import { FLOW_UI_TOGGLE_EVENT } from './preferences.js';
-
-const BRAND_LOGO_SRC = '/static/core/assets/service_logos/linnex_spinner_logo.png';
 
 export class FlowUIDrawer extends LitElement {
     static properties = {
@@ -189,6 +188,11 @@ export class FlowUIDrawer extends LitElement {
         }
         const companyId = typeof c.companyId === 'string' ? c.companyId : '';
         const voiceBaseUrl = typeof c.voiceBaseUrl === 'string' ? c.voiceBaseUrl : '';
+        const platformUiOrigin = typeof c.platformUiOrigin === 'string' ? c.platformUiOrigin.trim().replace(/\/+$/, '') : '';
+        if (platformUiOrigin !== '') {
+            this.setAttribute('platform-ui-origin', platformUiOrigin);
+        }
+        const logoSrc = brandLogoSrc(platformUiOrigin);
         return html`<div class="panel"><platform-flow-ui
             embed-id=${c.embedId || ''}
             flow-id=${c.flowId || ''}
@@ -197,11 +201,13 @@ export class FlowUIDrawer extends LitElement {
             context-id=${c.contextId || ''}
             company-id=${companyId}
             voice-base-url=${voiceBaseUrl}
+            platform-ui-origin=${platformUiOrigin}
             display="drawer"
             profile=${c.profile || 'embed_public'}
             theme=${c.theme || 'auto'}
             locale=${c.locale || 'ru'}
             credentials=${this._credentials(c)}
+            assistant-title=${typeof c.assistantTitle === 'string' ? c.assistantTitle : ''}
             ?drawer-expanded=${this.expanded === true}
             .getRequestHeaders=${c.getRequestHeaders}
             .getExtraMetadataVariables=${c.getExtraMetadataVariables}
@@ -212,7 +218,7 @@ export class FlowUIDrawer extends LitElement {
                 class="launcher"
                 aria-label=${this.open ? 'Close assistant' : 'Open assistant'}
                 @click=${() => { this.open = !this.open; }}
-            ><img src=${BRAND_LOGO_SRC} alt="" aria-hidden="true"></button>`}`;
+            ><img src=${logoSrc} alt="" aria-hidden="true"></button>`}`;
     }
 }
 

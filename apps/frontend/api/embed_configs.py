@@ -728,8 +728,6 @@ async def get_embed_code(
         allowed_origins=allowed_origins,
         expires_in_seconds=ttl,
     )
-    assistant_title = config.assistant_title or config.name
-    voice_default_active = config.voice_enabled and config.voice_default_on
     presentation = resolve_embed_presentation(
         presentation=config.presentation,
         position=config.position,
@@ -749,7 +747,6 @@ async def get_embed_code(
     open_tag_parts = [
         f'src="{html.escape(script_url, quote=True)}"',
         f'data-embed-id="{html.escape(config.embed_id, quote=True)}"',
-        f'data-assistant-title="{html.escape(assistant_title, quote=True)}"',
         f'data-presentation="{presentation}"',
         f'data-position="{html.escape(position, quote=True)}"',
         f'data-theme="{html.escape(config.theme, quote=True)}"',
@@ -760,10 +757,7 @@ async def get_embed_code(
         'data-token-url="/api/flow-ui-token"',
         f'data-token-expires-seconds="{ttl}"',
         'data-use-credentials="false"',
-        'data-event-namespace="flow-ui"',
         'data-toggle-event-name="linnex-flow-ui-toggle"',
-        ('data-voice-enabled="true"' if config.voice_enabled else 'data-voice-enabled="false"'),
-        ('data-voice-default-on="true"' if voice_default_active else 'data-voice-default-on="false"'),
         f'data-voice-base-url="{html.escape(f"{base_url}/voice", quote=True)}"',
         f'data-company-id="{html.escape(company_id, quote=True)}"',
     ]

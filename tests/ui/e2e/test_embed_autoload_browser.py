@@ -155,26 +155,41 @@ def _build_embed_page_html(
     frontend_origin: str,
     company_id: str,
     show_launcher: bool,
+    presentation: str = "drawer",
+    position: str = "bottom-right",
+    theme: str = "dark",
+    locale: str = "ru",
+    token_url: str | None = "/api/flow-ui-token",
+    token_expires_seconds: str = "300",
+    use_credentials: bool = False,
+    toggle_event_name: str = "linnex-flow-ui-toggle",
+    initial_open: bool = False,
 ) -> str:
     launcher_attr = "true" if show_launcher else "false"
+    credentials_attr = "true" if use_credentials else "false"
+    initial_open_attr = "true" if initial_open else "false"
+    token_lines = ""
+    if token_url is not None:
+        token_lines = (
+            f'  data-token-url="{html_stdlib.escape(token_url, quote=True)}"\n'
+            f'  data-token-expires-seconds="{html_stdlib.escape(token_expires_seconds, quote=True)}"\n'
+        )
     return (
         "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>e2e-embed-host</title></head><body>"
         '<script type="module"\n'
         f'  src="{html_stdlib.escape(script_src, quote=True)}"\n'
         f'  data-embed-id="{html_stdlib.escape(embed_id, quote=True)}"\n'
-        '  data-assistant-title="E2E embed"\n'
-        '  data-theme="dark"\n'
-        '  data-locale="ru"\n'
+        f'  data-presentation="{html_stdlib.escape(presentation, quote=True)}"\n'
+        f'  data-position="{html_stdlib.escape(position, quote=True)}"\n'
+        f'  data-theme="{html_stdlib.escape(theme, quote=True)}"\n'
+        f'  data-locale="{html_stdlib.escape(locale, quote=True)}"\n'
         f'  data-show-launcher="{launcher_attr}"\n'
+        f'  data-initial-open="{initial_open_attr}"\n'
         f'  data-flows-base-url="{html_stdlib.escape(flows_base, quote=True)}"\n'
         f'  data-platform-ui-origin="{html_stdlib.escape(frontend_origin, quote=True)}"\n'
-        '  data-token-url="/api/flow-ui-token"\n'
-        '  data-token-expires-seconds="300"\n'
-        '  data-use-credentials="false"\n'
-        '  data-event-namespace="flow-ui"\n'
-        '  data-toggle-event-name="linnex-flow-ui-toggle"\n'
-        '  data-voice-enabled="false"\n'
-        '  data-voice-default-on="false"\n'
+        f'{token_lines}'
+        f'  data-use-credentials="{credentials_attr}"\n'
+        f'  data-toggle-event-name="{html_stdlib.escape(toggle_event_name, quote=True)}"\n'
         f'  data-voice-base-url="{html_stdlib.escape(f"{frontend_origin}/voice", quote=True)}"\n'
         f'  data-company-id="{html_stdlib.escape(company_id, quote=True)}"\n'
         "></script></body></html>"
@@ -243,9 +258,13 @@ def _is_benign_embed_host_404(url: str) -> bool:
     return path in _EMBED_HOST_BENIGN_404_PATHS
 
 
-async def _attach_embed_page_diagnostics(page: Page) -> tuple[list[str], list[str]]:
+async def _attach_embed_page_diagnostics(
+    page: Page,
+) -> tuple[list[str], list[str], list[str], list[str]]:
     errors: list[str] = []
     network_events: list[str] = []
+    static_urls: list[str] = []
+    a2a_bodies: list[str] = []
 
     def _on_console(msg) -> None:
         if msg.type != "error":
@@ -257,8 +276,14 @@ async def _attach_embed_page_diagnostics(page: Page) -> tuple[list[str], list[st
         errors.append(f"console.{msg.type}: {text}")
 
     def _record_embed_request(req) -> None:
+        if "/static/core/assets/" in req.url:
+            static_urls.append(req.url)
         if "/api/v1/embed/" in req.url or req.url.endswith("/api/flow-ui-token"):
             network_events.append(f"request {req.method} {req.url}")
+        if "/api/v1/embed/" in req.url and req.method == "POST":
+            body = req.post_data
+            if isinstance(body, str) and body != "":
+                a2a_bodies.append(body)
 
     def _record_embed_response(resp) -> None:
         if resp.status == 404 and not _is_benign_embed_host_404(resp.url):
@@ -289,33 +314,232 @@ async def _attach_embed_page_diagnostics(page: Page) -> tuple[list[str], list[st
     page.on("console", _on_console)
     page.on("request", _record_embed_request)
     page.on("response", _record_embed_response)
-    return errors, network_events
+    return errors, network_events, static_urls, a2a_bodies
 
 
-async def _wait_humanitec_embed(page: Page, errors: list[str], network_events: list[str]) -> None:
+async def _wait_flow_ui_embed(page: Page, errors: list[str], network_events: list[str]) -> None:
     try:
         await page.wait_for_function(
-            "typeof window.humanitecEmbed !== 'undefined' && window.humanitecEmbed && window.humanitecEmbed.element",
+            "typeof window.linnexFlowUI !== 'undefined' && window.linnexFlowUI && window.linnexFlowUI.element",
             timeout=8_000,
+        )
+        await page.locator("flow-ui-drawer, flow-ui-page-host").first.wait_for(
+            state="attached",
+            timeout=5_000,
         )
     except Exception as exc:
         raise AssertionError(
-            "humanitecEmbed не смонтировался\n"
+            "linnexFlowUI не смонтировался\n"
             f"errors:\n{chr(10).join(errors) or '<empty>'}\n\n"
             f"network:\n{chr(10).join(network_events) or '<empty>'}"
         ) from exc
 
 
+def _assert_chrome_static_from_platform(
+    static_urls: list[str],
+    *,
+    frontend_origin: str,
+    host_origin: str,
+) -> None:
+    chrome = [url for url in static_urls if "/static/core/assets/" in url]
+    assert chrome, "embed chrome должен грузить иконки или лого с platform-ui-origin"
+    platform = frontend_origin.rstrip("/")
+    host = host_origin.rstrip("/")
+    for url in chrome:
+        assert url.startswith(f"{platform}/static/core/"), url
+        assert not url.startswith(f"{host}/static/core/"), url
+
+
+async def _assert_linnex_flow_ui_host_api(page: Page) -> None:
+    state = await page.evaluate(
+        """async () => {
+            const api = window.linnexFlowUI;
+            const host = api.element;
+            if (host.updateComplete) {
+                await host.updateComplete;
+            }
+            api.setTheme('light');
+            api.setMetadataHooks(() => ({ page_url: 'https://shop.example' }));
+            let themeThrew = false;
+            try {
+                api.setTheme('neon');
+            } catch (_error) {
+                themeThrew = true;
+            }
+            return {
+                embedId: api.embedId,
+                presentation: api.presentation,
+                theme: host.config.theme,
+                hooksOk: typeof host.config.getExtraMetadataVariables === 'function',
+                themeThrew,
+            };
+        }"""
+    )
+    assert state["presentation"] == "drawer"
+    assert state["theme"] == "light"
+    assert state["hooksOk"] is True
+    assert state["themeThrew"] is True
+
+
+async def _dispatch_toggle(page: Page, event_name: str, *, open_panel: bool) -> None:
+    await page.evaluate(
+        """({ eventName, openPanel }) => {
+            window.dispatchEvent(new CustomEvent(eventName, { detail: { open: openPanel } }));
+        }""",
+        {"eventName": event_name, "openPanel": open_panel},
+    )
+
+
+async def _exercise_all_host_api(
+    page: Page,
+    *,
+    expected_embed_id: str,
+    presentation: str,
+) -> None:
+    state = await page.evaluate(
+        """async ({ expectedEmbedId, presentation }) => {
+            const api = window.linnexFlowUI;
+            const host = api.element;
+            if (host.updateComplete) {
+                await host.updateComplete;
+            }
+            const flowUi = host.shadowRoot.querySelector('platform-flow-ui');
+            const threw = (fn) => {
+                try {
+                    fn();
+                    return false;
+                } catch (_error) {
+                    return true;
+                }
+            };
+            const snippet = {
+                embedId: api.embedId,
+                presentation: api.presentation,
+                theme: flowUi.theme,
+                locale: flowUi.locale,
+                credentials: flowUi.credentials,
+                companyId: flowUi.getAttribute('company-id'),
+                voiceBaseUrl: flowUi.getAttribute('voice-base-url'),
+                platformUiOrigin: flowUi.getAttribute('platform-ui-origin'),
+                position: host.getAttribute('data-embed-position'),
+            };
+            api.setTheme('dark');
+            const themeDark = flowUi.theme;
+            api.setTheme('auto');
+            const themeAuto = flowUi.theme;
+            api.setTheme('light');
+            const themeLight = flowUi.theme;
+            const themeThrew = threw(() => api.setTheme('neon'));
+            api.setLocale('ru');
+            const localeRu = flowUi.locale;
+            api.setLocale('en');
+            const localeEn = flowUi.locale;
+            const localeThrew = threw(() => api.setLocale('de'));
+            api.setAssistantTitle('Shop support');
+            const title = flowUi.assistantTitle;
+            const titleThrew = threw(() => api.setAssistantTitle(''));
+            let launcherOn = null;
+            let launcherOff = null;
+            let launcherThrew = null;
+            let launcherPageThrew = null;
+            if (presentation === 'drawer') {
+                api.setLauncherVisible(true);
+                launcherOn = host.config.showLauncher;
+                api.setLauncherVisible(false);
+                launcherOff = host.config.showLauncher;
+                launcherThrew = threw(() => api.setLauncherVisible('no'));
+            } else {
+                launcherPageThrew = threw(() => api.setLauncherVisible(true));
+            }
+            api.setToggleEventName('site-chat-open');
+            const toggleName = host.config.toggleEventName;
+            const toggleThrew = threw(() => api.setToggleEventName(''));
+            window.__embedAuthCalls = 0;
+            const previousAuth = host.config.getRequestHeaders;
+            api.setAuthProvider(() => {
+                window.__embedAuthCalls += 1;
+                return previousAuth();
+            });
+            const authThrew = threw(() => api.setAuthProvider(null));
+            api.setMetadataHooks(() => ({
+                page_url: 'https://shop.example/cart',
+                cart_id: 'c1',
+            }));
+            const metaThrew = threw(() => api.setMetadataHooks(null));
+            if (host.updateComplete) {
+                await host.updateComplete;
+            }
+            return {
+                snippet,
+                expectedEmbedId,
+                themeDark,
+                themeAuto,
+                themeLight,
+                themeThrew,
+                localeRu,
+                localeEn,
+                localeThrew,
+                title,
+                titleThrew,
+                launcherOn,
+                launcherOff,
+                launcherThrew,
+                launcherPageThrew,
+                toggleName,
+                toggleThrew,
+                authThrew,
+                metaThrew,
+            };
+        }""",
+        {"expectedEmbedId": expected_embed_id, "presentation": presentation},
+    )
+    assert state["snippet"]["embedId"] == expected_embed_id
+    assert state["snippet"]["presentation"] == presentation
+    assert state["themeDark"] == "dark"
+    assert state["themeAuto"] == "auto"
+    assert state["themeLight"] == "light"
+    assert state["themeThrew"] is True
+    assert state["localeRu"] == "ru"
+    assert state["localeEn"] == "en"
+    assert state["localeThrew"] is True
+    assert state["title"] == "Shop support"
+    assert state["titleThrew"] is True
+    if presentation == "drawer":
+        assert state["launcherOn"] is True
+        assert state["launcherOff"] is False
+        assert state["launcherThrew"] is True
+        assert state["snippet"]["position"] == "bottom-left"
+    else:
+        assert state["launcherPageThrew"] is True
+    assert state["toggleName"] == "site-chat-open"
+    assert state["toggleThrew"] is True
+    assert state["authThrew"] is True
+    assert state["metaThrew"] is True
+
+
+def _assert_a2a_variables(a2a_bodies: list[str], *, page_url: str, cart_id: str) -> None:
+    assert a2a_bodies, "embed должен отправить A2A POST"
+    matched: dict[str, object] | None = None
+    for raw in a2a_bodies:
+        payload = json.loads(raw)
+        variables = payload.get("params", {}).get("metadata", {}).get("variables")
+        if isinstance(variables, dict) and variables.get("page_url") == page_url:
+            matched = variables
+            break
+    assert matched is not None, f"metadata.variables не найдены в A2A: {a2a_bodies}"
+    assert matched["cart_id"] == cart_id
+
+
 async def _send_embed_message(page: Page, user_line: str, network_events: list[str], errors: list[str]) -> None:
-    root = page.locator("flow-ui-drawer platform-flow-ui, platform-flow-ui").first
+    root = page.locator(
+        "flow-ui-drawer platform-flow-ui, flow-ui-page-host platform-flow-ui, platform-flow-ui"
+    ).first
     textarea = root.locator(
         '[data-flow-ui-component="message-input"] textarea, textarea'
     ).first
     await expect(textarea).to_be_visible(timeout=5_000)
     await textarea.fill(user_line)
-    send_btn = root.locator("button").filter(
-        has_text=re.compile(r"^\s*(Submit|Отправить|Send)\s*$")
-    ).first
+    send_btn = root.get_by_role("button", name=re.compile(r"Submit|Отправить|Send")).first
     await expect(send_btn).to_be_enabled(timeout=5_000)
     await send_btn.click()
     try:
@@ -352,7 +576,7 @@ async def test_embed_autoload_script_mounts_chat_and_streams_reply(
     flows_base = f"{flows_public_base}/flows"
 
     embed_id: str | None = None
-    errors, network_events = await _attach_embed_page_diagnostics(page)
+    errors, network_events, static_urls, _a2a_bodies = await _attach_embed_page_diagnostics(page)
 
     async with AsyncClient(
         base_url=frontend_origin,
@@ -386,11 +610,17 @@ async def test_embed_autoload_script_mounts_chat_and_streams_reply(
     try:
         with _external_embed_origin(html_page_utf8=page_html, token_payload=token_payload_for_host) as host_origin:
             await page.goto(f"{host_origin}/", wait_until="domcontentloaded", timeout=8_000)
-            await _wait_humanitec_embed(page, errors, network_events)
-            await expect(page.locator("flow-ui-drawer, platform-flow-ui")).to_be_attached(timeout=5_000)
-            fab = page.locator("flow-ui-drawer, platform-flow-ui").locator("button.launcher, button.fab").first
+            await _wait_flow_ui_embed(page, errors, network_events)
+            await _assert_linnex_flow_ui_host_api(page)
+            await expect(page.locator("flow-ui-drawer")).to_be_attached(timeout=5_000)
+            fab = page.locator("flow-ui-drawer").locator("button.launcher, button.fab").first
             await expect(fab).to_be_visible(timeout=5_000)
             await fab.click()
+            _assert_chrome_static_from_platform(
+                static_urls,
+                frontend_origin=frontend_origin,
+                host_origin=host_origin,
+            )
             await _send_embed_message(page, user_line, network_events, errors)
             if errors:
                 pytest.fail("embed браузер: ошибки страницы/консоли:\n" + "\n".join(errors))
@@ -444,7 +674,7 @@ async def test_flows_embed_agent_on_site(
     flows_base = f"{flows_public_base}/flows"
 
     embed_id: str | None = None
-    errors, network_events = await _attach_embed_page_diagnostics(page)
+    errors, network_events, static_urls, _a2a_bodies = await _attach_embed_page_diagnostics(page)
     try:
         embed_id = await _create_embed_config(
             frontend_origin,
@@ -511,9 +741,9 @@ async def test_flows_embed_agent_on_site(
             token_payload=token_payload_for_host,
         ) as host_origin:
             await page.goto(f"{host_origin}/", wait_until="domcontentloaded", timeout=8_000)
-            await _wait_humanitec_embed(page, errors, network_events)
-            await expect(page.locator("flow-ui-drawer, platform-flow-ui")).to_be_attached(timeout=5_000)
-            fab = page.locator("flow-ui-drawer, platform-flow-ui").locator("button.launcher, button.fab").first
+            await _wait_flow_ui_embed(page, errors, network_events)
+            await expect(page.locator("flow-ui-drawer")).to_be_attached(timeout=5_000)
+            fab = page.locator("flow-ui-drawer").locator("button.launcher, button.fab").first
             await expect(fab).to_be_visible(timeout=5_000)
             await scenario.step(
                 "Откройте виджет чата на сайте",
@@ -534,7 +764,7 @@ async def test_flows_embed_agent_on_site(
             await _send_embed_message(page, user_line, network_events, errors)
             if errors:
                 pytest.fail("embed браузер: ошибки страницы/консоли:\n" + "\n".join(errors))
-            reply = page.locator("flow-ui-drawer, platform-flow-ui").get_by_text(
+            reply = page.locator("flow-ui-drawer").get_by_text(
                 re.compile(rf"embed-ok:{re.escape(user_line)}", re.I)
             ).first
             await expect(reply).to_be_visible(timeout=8_000)
@@ -585,7 +815,7 @@ async def test_embed_autoload_toggle_opens_chat_without_launcher(
     flows_base = f"{flows_public_base}/flows"
 
     embed_id: str | None = None
-    errors, network_events = await _attach_embed_page_diagnostics(page)
+    errors, network_events, static_urls, _a2a_bodies = await _attach_embed_page_diagnostics(page)
 
     async with AsyncClient(
         base_url=frontend_origin,
@@ -619,17 +849,22 @@ async def test_embed_autoload_toggle_opens_chat_without_launcher(
     try:
         with _external_embed_origin(html_page_utf8=page_html, token_payload=token_payload_for_host) as host_origin:
             await page.goto(f"{host_origin}/", wait_until="domcontentloaded", timeout=8_000)
-            await _wait_humanitec_embed(page, errors, network_events)
-            fab = page.locator("flow-ui-drawer, platform-flow-ui").locator("button.launcher, button.fab")
+            await _wait_flow_ui_embed(page, errors, network_events)
+            fab = page.locator("flow-ui-drawer").locator("button.launcher, button.fab")
             await expect(fab).to_have_count(0, timeout=5_000)
             await page.evaluate(
                 """() => {
                     window.dispatchEvent(
-                        new CustomEvent('humanitec-embed-chat-toggle', { detail: { open: true } }),
+                        new CustomEvent('linnex-flow-ui-toggle', { detail: { open: true } }),
                     );
                 }"""
             )
             await _send_embed_message(page, user_line, network_events, errors)
+            _assert_chrome_static_from_platform(
+                static_urls,
+                frontend_origin=frontend_origin,
+                host_origin=host_origin,
+            )
             if errors:
                 pytest.fail("embed toggle: ошибки страницы/консоли:\n" + "\n".join(errors))
     finally:
@@ -665,7 +900,7 @@ async def test_embed_autoload_host_proxy_mints_session_token_s2s(
         unique_id=f"proxy-{unique_id}",
         show_launcher=True,
     )
-    errors, network_events = await _attach_embed_page_diagnostics(page)
+    errors, network_events, static_urls, _a2a_bodies = await _attach_embed_page_diagnostics(page)
 
     page_html = _build_embed_page_html(
         script_src=script_src,
@@ -687,8 +922,8 @@ async def test_embed_autoload_host_proxy_mints_session_token_s2s(
             session_token_proxy=session_proxy,
         ) as host_origin:
             await page.goto(f"{host_origin}/", wait_until="domcontentloaded", timeout=8_000)
-            await _wait_humanitec_embed(page, errors, network_events)
-            fab = page.locator("flow-ui-drawer, platform-flow-ui").locator("button.launcher, button.fab").first
+            await _wait_flow_ui_embed(page, errors, network_events)
+            fab = page.locator("flow-ui-drawer").locator("button.launcher, button.fab").first
             await expect(fab).to_be_visible(timeout=5_000)
             await fab.click()
             await _send_embed_message(page, user_line, network_events, errors)
@@ -696,5 +931,291 @@ async def test_embed_autoload_host_proxy_mints_session_token_s2s(
             assert token_requests, "autoload должен запросить /api/flow-ui-token у mock host"
             if errors:
                 pytest.fail("embed proxy S2S: ошибки страницы/консоли:\n" + "\n".join(errors))
+    finally:
+        await _delete_embed_config(frontend_origin, auth_headers, embed_id)
+
+
+@pytest.mark.timeout(30)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+async def test_embed_site_all_live_attrs_host_api_and_message(
+    page: Page,
+    embed_browser_http_stack_ready,
+    taskiq_worker,
+    frontend_ui: AppUI,
+    flows_ui: AppUI,
+    embed_test_auth,
+    unique_id: str,
+) -> None:
+    _ = embed_browser_http_stack_ready, taskiq_worker
+    page.set_default_timeout(8_000)
+    auth_headers, flow_id, company_id, _user_part = embed_test_auth
+    user_line = f"embed-matrix-{unique_id}"
+    frontend_origin = _frontend_api_origin(frontend_ui).rstrip("/")
+    flows_base = f"{_flows_api_origin(flows_ui).rstrip('/')}/flows"
+    script_src = f"{frontend_origin}/static/core/lib/embed-flow-ui/flow-ui-embed-autoload.js"
+    toggle_name = "shop-open-chat"
+
+    errors, network_events, static_urls, a2a_bodies = await _attach_embed_page_diagnostics(page)
+    embed_id = await _create_embed_config(
+        frontend_origin,
+        auth_headers,
+        flow_id=flow_id,
+        unique_id=f"matrix-{unique_id}",
+        show_launcher=False,
+    )
+    async with AsyncClient(
+        base_url=frontend_origin,
+        follow_redirects=True,
+        timeout=_HTTP_TIMEOUT,
+    ) as fc:
+        mint = await fc.post(
+            f"/frontend/api/embed/configs/{embed_id}/session-token",
+            headers=auth_headers,
+            json={"expires_in_seconds": 300},
+        )
+        assert mint.status_code == 200, mint.text
+        token_payload = {"token": mint.json()["token"]}
+
+    page_html = _build_embed_page_html(
+        script_src=script_src,
+        embed_id=embed_id,
+        flows_base=flows_base,
+        frontend_origin=frontend_origin,
+        company_id=company_id,
+        show_launcher=False,
+        presentation="drawer",
+        position="bottom-left",
+        theme="light",
+        locale="en",
+        use_credentials=False,
+        toggle_event_name=toggle_name,
+    )
+    try:
+        with _external_embed_origin(html_page_utf8=page_html, token_payload=token_payload) as host_origin:
+            await page.goto(f"{host_origin}/", wait_until="domcontentloaded", timeout=8_000)
+            await _wait_flow_ui_embed(page, errors, network_events)
+            snippet = await page.evaluate(
+                """() => {
+                    const api = window.linnexFlowUI;
+                    const host = api.element;
+                    const flowUi = host.shadowRoot.querySelector('platform-flow-ui');
+                    return {
+                        embedId: api.embedId,
+                        presentation: api.presentation,
+                        theme: flowUi.theme,
+                        locale: flowUi.locale,
+                        credentials: flowUi.credentials,
+                        companyId: flowUi.getAttribute('company-id'),
+                        voiceBaseUrl: flowUi.getAttribute('voice-base-url'),
+                        platformUiOrigin: flowUi.getAttribute('platform-ui-origin'),
+                        position: host.getAttribute('data-embed-position'),
+                        launcherCount: host.shadowRoot.querySelectorAll('button.launcher').length,
+                    };
+                }"""
+            )
+            assert snippet["embedId"] == embed_id
+            assert snippet["presentation"] == "drawer"
+            assert snippet["theme"] == "light"
+            assert snippet["locale"] == "en"
+            assert snippet["credentials"] == "omit"
+            assert snippet["companyId"] == company_id
+            assert snippet["voiceBaseUrl"] == f"{frontend_origin}/voice"
+            assert snippet["platformUiOrigin"] == frontend_origin
+            assert snippet["position"] == "bottom-left"
+            assert snippet["launcherCount"] == 0
+
+            await _dispatch_toggle(page, toggle_name, open_panel=True)
+            await expect(
+                page.locator("platform-flow-ui").get_by_role("textbox").first
+            ).to_be_visible(timeout=5_000)
+            await expect(
+                page.locator("platform-flow-ui").get_by_role(
+                    "button", name=re.compile(r"Send")
+                ).first
+            ).to_be_visible(timeout=5_000)
+
+            await _exercise_all_host_api(page, expected_embed_id=embed_id, presentation="drawer")
+            await expect(page.locator("flow-ui-drawer").locator("button.launcher")).to_have_count(0)
+            title = await page.evaluate(
+                """() => window.linnexFlowUI.element.shadowRoot
+                    .querySelector('platform-flow-ui').assistantTitle"""
+            )
+            assert title == "Shop support"
+            await _dispatch_toggle(page, "site-chat-open", open_panel=False)
+            await expect(page.locator("flow-ui-drawer[open]")).to_have_count(0)
+            await _dispatch_toggle(page, toggle_name, open_panel=True)
+            await expect(page.locator("flow-ui-drawer[open]")).to_have_count(0)
+            await _dispatch_toggle(page, "site-chat-open", open_panel=True)
+            await expect(page.locator("flow-ui-drawer[open]")).to_have_count(1)
+            await _send_embed_message(page, user_line, network_events, errors)
+            auth_calls = await page.evaluate("window.__embedAuthCalls")
+            assert auth_calls >= 1
+            _assert_a2a_variables(
+                a2a_bodies,
+                page_url="https://shop.example/cart",
+                cart_id="c1",
+            )
+            _assert_chrome_static_from_platform(
+                static_urls,
+                frontend_origin=frontend_origin,
+                host_origin=host_origin,
+            )
+            if errors:
+                pytest.fail("embed matrix: ошибки страницы/консоли:\n" + "\n".join(errors))
+    finally:
+        await _delete_embed_config(frontend_origin, auth_headers, embed_id)
+
+
+@pytest.mark.timeout(20)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+async def test_embed_page_presentation_streams_reply(
+    page: Page,
+    embed_browser_http_stack_ready,
+    taskiq_worker,
+    frontend_ui: AppUI,
+    flows_ui: AppUI,
+    embed_test_auth,
+    unique_id: str,
+) -> None:
+    _ = embed_browser_http_stack_ready, taskiq_worker
+    page.set_default_timeout(8_000)
+    auth_headers, flow_id, company_id, _user_part = embed_test_auth
+    user_line = f"embed-page-{unique_id}"
+    frontend_origin = _frontend_api_origin(frontend_ui).rstrip("/")
+    flows_base = f"{_flows_api_origin(flows_ui).rstrip('/')}/flows"
+    script_src = f"{frontend_origin}/static/core/lib/embed-flow-ui/flow-ui-embed-autoload.js"
+
+    errors, network_events, static_urls, a2a_bodies = await _attach_embed_page_diagnostics(page)
+    embed_id = await _create_embed_config(
+        frontend_origin,
+        auth_headers,
+        flow_id=flow_id,
+        unique_id=f"page-{unique_id}",
+        show_launcher=False,
+    )
+    async with AsyncClient(
+        base_url=frontend_origin,
+        follow_redirects=True,
+        timeout=_HTTP_TIMEOUT,
+    ) as fc:
+        mint = await fc.post(
+            f"/frontend/api/embed/configs/{embed_id}/session-token",
+            headers=auth_headers,
+            json={"expires_in_seconds": 300},
+        )
+        assert mint.status_code == 200, mint.text
+        token_payload = {"token": mint.json()["token"]}
+
+    page_html = _build_embed_page_html(
+        script_src=script_src,
+        embed_id=embed_id,
+        flows_base=flows_base,
+        frontend_origin=frontend_origin,
+        company_id=company_id,
+        show_launcher=False,
+        presentation="page",
+        theme="dark",
+        locale="ru",
+        use_credentials=True,
+    )
+    try:
+        with _external_embed_origin(html_page_utf8=page_html, token_payload=token_payload) as host_origin:
+            await page.goto(f"{host_origin}/", wait_until="domcontentloaded", timeout=8_000)
+            await _wait_flow_ui_embed(page, errors, network_events)
+            await expect(page.locator("flow-ui-page-host")).to_be_attached(timeout=5_000)
+            await expect(page.locator("flow-ui-drawer")).to_have_count(0)
+            page_state = await page.evaluate(
+                """() => {
+                    const api = window.linnexFlowUI;
+                    const flowUi = api.element.shadowRoot.querySelector('platform-flow-ui');
+                    return {
+                        presentation: api.presentation,
+                        display: flowUi.getAttribute('display'),
+                        credentials: flowUi.credentials,
+                        theme: flowUi.theme,
+                        locale: flowUi.locale,
+                    };
+                }"""
+            )
+            assert page_state["presentation"] == "page"
+            assert page_state["display"] == "page"
+            assert page_state["credentials"] == "include"
+            assert page_state["theme"] == "dark"
+            assert page_state["locale"] == "ru"
+            await _exercise_all_host_api(page, expected_embed_id=embed_id, presentation="page")
+            await expect(page.locator("platform-flow-ui").locator(".brand-label")).to_have_text(
+                "Shop support"
+            )
+            await _send_embed_message(page, user_line, network_events, errors)
+            auth_calls = await page.evaluate("window.__embedAuthCalls")
+            assert auth_calls >= 1
+            _assert_a2a_variables(
+                a2a_bodies,
+                page_url="https://shop.example/cart",
+                cart_id="c1",
+            )
+            _assert_chrome_static_from_platform(
+                static_urls,
+                frontend_origin=frontend_origin,
+                host_origin=host_origin,
+            )
+            if errors:
+                pytest.fail("embed page: ошибки страницы/консоли:\n" + "\n".join(errors))
+    finally:
+        await _delete_embed_config(frontend_origin, auth_headers, embed_id)
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+async def test_embed_missing_token_url_fires_error(
+    page: Page,
+    embed_browser_http_stack_ready,
+    frontend_ui: AppUI,
+    flows_ui: AppUI,
+    embed_test_auth,
+    unique_id: str,
+) -> None:
+    _ = embed_browser_http_stack_ready
+    page.set_default_timeout(8_000)
+    auth_headers, flow_id, company_id, _user_part = embed_test_auth
+    frontend_origin = _frontend_api_origin(frontend_ui).rstrip("/")
+    flows_base = f"{_flows_api_origin(flows_ui).rstrip('/')}/flows"
+    script_src = f"{frontend_origin}/static/core/lib/embed-flow-ui/flow-ui-embed-autoload.js"
+    errors, network_events, _static_urls, _a2a_bodies = await _attach_embed_page_diagnostics(page)
+    embed_id = await _create_embed_config(
+        frontend_origin,
+        auth_headers,
+        flow_id=flow_id,
+        unique_id=f"notoken-{unique_id}",
+        show_launcher=True,
+    )
+    page_html = _build_embed_page_html(
+        script_src=script_src,
+        embed_id=embed_id,
+        flows_base=flows_base,
+        frontend_origin=frontend_origin,
+        company_id=company_id,
+        show_launcher=True,
+        token_url=None,
+    )
+    try:
+        await page.add_init_script(
+            """
+            window.__embedErrorMessage = null;
+            window.addEventListener('linnex-flow-ui-error', (event) => {
+                window.__embedErrorMessage = event.detail.message;
+            });
+            """
+        )
+        with _external_embed_origin(html_page_utf8=page_html) as host_origin:
+            await page.goto(f"{host_origin}/", wait_until="domcontentloaded", timeout=8_000)
+            await page.wait_for_function("window.__embedErrorMessage", timeout=8_000)
+            error_message = await page.evaluate("window.__embedErrorMessage")
+            assert "data-token-url" in error_message
+            assert await page.evaluate("typeof window.linnexFlowUI === 'undefined'")
+            _ = errors, network_events
     finally:
         await _delete_embed_config(frontend_origin, auth_headers, embed_id)

@@ -1,4 +1,5 @@
 import { LitElement, css, html, nothing } from '../../lit-shim.js';
+import { brandLogoSrc } from '../shell/brand-logo.js';
 import { FlowUIController } from '../runtime/flow-ui-controller.js';
 import { createLocalFlowUIProfile } from '../runtime/flow-ui-profile.js';
 import { FlowUIHitlTransport } from '../runtime/hitl-transport.js';
@@ -22,8 +23,6 @@ import './flow-ui-surface.js';
 import './flow-ui-turn-toasts.js';
 import './flow-ui-files-panel.js';
 import { deriveTurnActivityToasts } from '../runtime/turn-activity.js';
-
-const BRAND_LOGO_SRC = '/static/core/assets/service_logos/linnex_spinner_logo.png';
 
 const FORWARDED_EVENTS = [
     'flow-ui-ready', 'flow-ui-error', 'flow-ui-a2a-frame', 'flow-ui-value-change',
@@ -59,8 +58,10 @@ export class PlatformFlowUI extends LitElement {
         drawerExpanded: { type: Boolean, attribute: 'drawer-expanded', reflect: true },
         companyId: { type: String, attribute: 'company-id' },
         voiceBaseUrl: { type: String, attribute: 'voice-base-url' },
+        platformUiOrigin: { type: String, attribute: 'platform-ui-origin' },
         getRequestHeaders: { attribute: false },
         getExtraMetadataVariables: { attribute: false },
+        assistantTitle: { type: String, attribute: 'assistant-title' },
     };
 
     static styles = css`
@@ -396,8 +397,10 @@ export class PlatformFlowUI extends LitElement {
         this.drawerExpanded = false;
         this.companyId = '';
         this.voiceBaseUrl = '';
+        this.platformUiOrigin = '';
         this.getRequestHeaders = null;
         this.getExtraMetadataVariables = null;
+        this.assistantTitle = '';
         this._hitlTransport = null;
         this._themeObserver = null;
         this._sessionGeneration = 0;
@@ -856,7 +859,7 @@ export class PlatformFlowUI extends LitElement {
                 class="chrome-icon-btn"
                 aria-label=${flowUIText(locale, 'share_aria')}
                 title=${flowUIText(locale, 'share')}
-            >${flowUIGlyph('share', 18)}</summary>
+            >${flowUIGlyph('share', 18, this.platformUiOrigin)}</summary>
             <div class="share-card">
                 <div><div class="share-title">${flowUIText(locale, 'share_title')}</div><div class="share-copy">${flowUIText(locale, 'share_description')}</div></div>
                 <div class="share-options">
@@ -900,7 +903,7 @@ export class PlatformFlowUI extends LitElement {
                 class="chrome-icon-btn"
                 aria-label=${flowUIText(locale, 'embed_aria')}
                 title=${flowUIText(locale, 'embed')}
-            >${flowUIGlyph('code', 18)}</summary>
+            >${flowUIGlyph('code', 18, this.platformUiOrigin)}</summary>
             <div class="embed-card">
                 <div>
                     <div class="embed-title">${flowUIText(locale, 'embed_title')}</div>
@@ -928,7 +931,7 @@ export class PlatformFlowUI extends LitElement {
             aria-label=${flowUIText(locale, expanded ? 'collapse_aria' : 'expand_aria')}
             title=${flowUIText(locale, expanded ? 'collapse_aria' : 'expand_aria')}
             @click=${this._toggleDrawerExpand}
-        >${flowUIGlyph(expanded ? 'minimize' : 'expand', 18)}</button>`;
+        >${flowUIGlyph(expanded ? 'minimize' : 'expand', 18, this.platformUiOrigin)}</button>`;
     }
 
     _topActions(chromeMode, effectiveReadonly) {
@@ -990,7 +993,10 @@ export class PlatformFlowUI extends LitElement {
                 : context.saveStatus === 'conflict'
                   ? flowUIText(locale, 'status_conflict')
                   : flowUIText(locale, 'status_saved');
-        const brandTitle = this.runtimeState?.profile?.flow_identity?.title || page.title?.default || 'Linnex';
+        const titleOverride = typeof this.assistantTitle === 'string' ? this.assistantTitle.trim() : '';
+        const brandTitle = titleOverride !== ''
+            ? titleOverride
+            : (this.runtimeState?.profile?.flow_identity?.title || page.title?.default || 'Linnex');
         const turnToasts = deriveTurnActivityToasts({
             document,
             context,
@@ -1002,7 +1008,7 @@ export class PlatformFlowUI extends LitElement {
         return html`<div class="shell" data-chrome=${chromeMode}>
             ${showTopbar ? html`<header class="topbar">
                 ${chromeMode === 'full' ? html`<div class="brand">
-                    <span class="mark" aria-hidden="true"><img src=${BRAND_LOGO_SRC} alt=""></span>
+                    <span class="mark" aria-hidden="true"><img src=${brandLogoSrc(this.platformUiOrigin)} alt=""></span>
                     <span class="brand-label">${brandTitle}</span>
                 </div>` : nothing}
                 ${chromeMode === 'full' ? this._navigation(document) : nothing}
@@ -1011,6 +1017,7 @@ export class PlatformFlowUI extends LitElement {
             <main class="viewport"><flow-ui-surface
                 .surface=${surface} .tasks=${tasks} .controller=${this.controller}
                 .readonly=${effectiveReadonly} .locale=${resolveFlowUILocale(this.locale)}
+                .platformUiOrigin=${this.platformUiOrigin}
                 .selectedComponentId=${this.selectedComponentId}
             ></flow-ui-surface></main>
             ${chromeMode === 'full' ? html`<footer class="statusbar"><span class="status"><span class="dot ${statusClass}"></span>${statusLabel}</span><span>${document.revision ? `r${document.revision}` : ''}${this.parityReady ? ' · Exact' : ''}</span></footer>` : nothing}

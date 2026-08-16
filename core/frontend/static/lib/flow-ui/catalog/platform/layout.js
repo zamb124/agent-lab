@@ -110,7 +110,7 @@ function renderComposerFileChips(host, fileUpload) {
                 title=${fileRefLabel(ref)}
                 @click=${() => openFlowUISessionFile(ref, 'flow_ui_composer')}
             >
-                ${flowUIGlyph('file', 14)}
+                ${flowUIGlyph('file', 14, host.platformUiOrigin)}
                 <span class="composer-file-name">${fileRefLabel(ref)}</span>
             </button>
             ${host.readonly ? nothing : html`<button
@@ -118,7 +118,7 @@ function renderComposerFileChips(host, fileUpload) {
                 class="composer-file-remove"
                 aria-label=${flowUIText(host.locale, 'remove_file', { name: fileRefLabel(ref) })}
                 @click=${() => host._removeUploadedFile(fileUpload, ref.file_id)}
-            >${flowUIGlyph('x', 12)}</button>`}
+            >${flowUIGlyph('x', 12, host.platformUiOrigin)}</button>`}
         </span>`)}
     </div>`;
 }
@@ -155,7 +155,7 @@ function renderComposerAttach(host, component) {
             }}
         >${busy
             ? html`<span class="composer-attach-spinner" aria-hidden="true"></span>`
-            : flowUIGlyph('paperclip', 18)}</button>
+            : flowUIGlyph('paperclip', 18, host.platformUiOrigin)}</button>
         ${upload.error ? html`<span class="upload-error">${upload.error}</span>` : nothing}
     </div>`;
 }
@@ -350,7 +350,7 @@ export function renderConversationFeed(host, component) {
                 aria-label=${flowUIText(host.locale, 'scroll_to_bottom')}
                 title=${flowUIText(host.locale, 'scroll_to_bottom')}
                 @click=${() => host._scrollFeedToBottom()}
-            >${flowUIGlyph('arrow-down', 16)}</button>
+            >${flowUIGlyph('arrow-down', 16, host.platformUiOrigin)}</button>
         </div>`
         : nothing;
     return wrapFlowNode(host, component, html`${renderChildren(host, component)}${jump}`);

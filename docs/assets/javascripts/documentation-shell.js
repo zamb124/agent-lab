@@ -95,39 +95,41 @@
     });
   };
 
-  const nextFrame = () => new Promise((resolve) => window.requestAnimationFrame(resolve));
-
-  const waitForDocsAssistant = async () => {
-    const startedAt = Date.now();
-    while (Date.now() - startedAt <= 8000) {
-      if (window.humanitecEmbed && window.humanitecEmbed.element) {
-        const assistant = window.humanitecEmbed.element;
-        if (assistant.updateComplete && typeof assistant.updateComplete.then === "function") {
-          await assistant.updateComplete;
-        }
-        return window.humanitecEmbed;
-      }
-      await nextFrame();
+  const waitForDocsAssistant = () => new Promise((resolve, reject) => {
+    if (window.linnexFlowUI) {
+      resolve(window.linnexFlowUI);
+      return;
     }
-    throw new Error("docs assistant mount timeout");
-  };
+    const timer = window.setTimeout(() => {
+      window.removeEventListener("linnex-flow-ui-mounted", onMounted);
+      reject(new Error("docs assistant mount timeout"));
+    }, 8000);
+    const onMounted = () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("linnex-flow-ui-mounted", onMounted);
+      if (!window.linnexFlowUI) {
+        reject(new Error("docs assistant mount missing linnexFlowUI"));
+        return;
+      }
+      resolve(window.linnexFlowUI);
+    };
+    window.addEventListener("linnex-flow-ui-mounted", onMounted);
+  });
 
   const configureDocsAssistantMetadata = (embed) => {
-    if (!embed || typeof embed.setMetadataHooks !== "function") return;
-    const extraMetadata = async () => ({
+    if (!embed || typeof embed.setMetadataHooks !== "function") {
+      throw new Error("docs assistant: linnexFlowUI.setMetadataHooks is required");
+    }
+    embed.setMetadataHooks(async () => ({
       page_url: window.location.href,
       page_title: document.title,
       docs_language: docsLanguage(),
       docs_path: window.location.pathname,
-    });
-    const contextVariables = async () => ({
       viewport_width: window.innerWidth,
       viewport_height: window.innerHeight,
-    });
-    embed.setMetadataHooks(extraMetadata, contextVariables);
-    if (typeof embed.setLocale === "function") {
-      embed.setLocale(docsLanguage());
-    }
+    }));
+    embed.setLocale(docsLanguage());
+    embed.setAssistantTitle("Ask AI");
   };
 
   const platformUiOrigin = () => {
@@ -153,9 +155,9 @@
   };
 
   const ensureDocsAssistantLoaded = async () => {
-    if (window.humanitecEmbed && window.humanitecEmbed.element) {
-      configureDocsAssistantMetadata(window.humanitecEmbed);
-      return window.humanitecEmbed;
+    if (window.linnexFlowUI) {
+      configureDocsAssistantMetadata(window.linnexFlowUI);
+      return window.linnexFlowUI;
     }
     if (window.__docsAssistantLoading) {
       const embed = await window.__docsAssistantLoading;
@@ -164,7 +166,7 @@
     }
 
     const origin = platformUiOrigin();
-    const scriptUrl = `${origin}/static/core/lib/embed-chat/humanitec-embed-autoload.js`;
+    const scriptUrl = `${origin}/static/core/lib/embed-flow-ui/flow-ui-embed-autoload.js`;
 
     window.__docsAssistantLoading = (async () => {
       await assertJavascriptModuleUrl(scriptUrl);
@@ -173,19 +175,18 @@
         script.type = "module";
         script.src = scriptUrl;
         script.dataset.embedId = "docs_assistant";
-        script.dataset.flowId = "lara";
-        script.dataset.branchId = "docs";
-        script.dataset.assistantTitle = "Ask AI";
+        script.dataset.presentation = "drawer";
+        script.dataset.position = "bottom-right";
         script.dataset.theme = "light";
         script.dataset.locale = docsLanguage();
         script.dataset.showLauncher = "false";
         script.dataset.initialOpen = "false";
         script.dataset.flowsBaseUrl = `${origin}/flows`;
         script.dataset.platformUiOrigin = origin;
-        script.dataset.chatTokenUrl = `${origin}/frontend/api/public/docs-assistant/session`;
+        script.dataset.tokenUrl = `${origin}/frontend/api/public/docs-assistant/session`;
         script.dataset.tokenExpiresSeconds = "600";
-        script.dataset.eventNamespace = "docs-assistant";
-        script.dataset.toggleEventName = "humanitec-docs-assistant-toggle";
+        script.dataset.useCredentials = "false";
+        script.dataset.toggleEventName = "linnex-docs-assistant-toggle";
         script.onload = async () => {
           try {
             resolve(await waitForDocsAssistant());
@@ -219,9 +220,9 @@
         try {
           node.disabled = true;
           await ensureDocsAssistantLoaded();
-          configureDocsAssistantMetadata(window.humanitecEmbed);
+          configureDocsAssistantMetadata(window.linnexFlowUI);
           window.dispatchEvent(
-            new CustomEvent("humanitec-docs-assistant-toggle", {
+            new CustomEvent("linnex-docs-assistant-toggle", {
               detail: { open: true },
             }),
           );

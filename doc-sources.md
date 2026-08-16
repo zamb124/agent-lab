@@ -4,7 +4,7 @@
 
 Логотип документации — тот же файл, что у SPA: `core/frontend/static/assets/service_logos/frontend_logo.svg`. `docs_prepare` копирует его в `docs/assets/logo.svg` при каждой сборке (zensical `logo` / `favicon`).
 
-**Ask AI:** грузит `/static/core/lib/embed-chat/humanitec-embed-autoload.js` и session API `/frontend/api/public/docs-assistant/session`. Работает только там, где есть mount платформы (`/documentation/` на frontend или `make doc-serve` → `scripts/docs_dev_server.py`). Голый `zensical serve` (`make doc-serve-zensical`) отдаёт HTML на `/static/core/*` → MIME error у module script.
+**Ask AI:** грузит `/static/core/lib/embed-flow-ui/flow-ui-embed-autoload.js` и session API `/frontend/api/public/docs-assistant/session`. Работает только там, где есть mount платформы (`/documentation/` на frontend или `make doc-serve` → `scripts/docs_dev_server.py`). Голый `zensical serve` (`make doc-serve-zensical`) отдаёт HTML на `/static/core/*` → MIME error у module script.
 
 ## Разделы сайта
 

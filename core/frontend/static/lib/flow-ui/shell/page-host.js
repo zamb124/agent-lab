@@ -42,17 +42,33 @@ export class FlowUIPageHost extends LitElement {
         if (typeof c.baseUrl !== 'string' || c.baseUrl.trim() === '') {
             throw new Error('flow-ui-page-host: config.baseUrl is required');
         }
+        const companyId = typeof c.companyId === 'string' ? c.companyId : '';
+        const voiceBaseUrl = typeof c.voiceBaseUrl === 'string' ? c.voiceBaseUrl : '';
+        const platformUiOrigin = typeof c.platformUiOrigin === 'string' ? c.platformUiOrigin.trim().replace(/\/+$/, '') : '';
+        if (platformUiOrigin !== '') {
+            this.setAttribute('platform-ui-origin', platformUiOrigin);
+        }
+        let credentials = 'include';
+        if (typeof c.credentials === 'string' && c.credentials.trim() !== '') {
+            credentials = c.credentials;
+        }
         return html`<platform-flow-ui
             embed-id=${c.embedId || ''}
             flow-id=${c.flowId || ''}
             branch-id=${c.branchId || 'default'}
             base-url=${c.baseUrl}
             context-id=${c.contextId || ''}
+            company-id=${companyId}
+            voice-base-url=${voiceBaseUrl}
+            platform-ui-origin=${platformUiOrigin}
             display="page"
             profile=${c.profile || 'embed_public'}
             theme=${c.theme || 'auto'}
             locale=${c.locale || 'ru'}
+            credentials=${credentials}
+            assistant-title=${typeof c.assistantTitle === 'string' ? c.assistantTitle : ''}
             .getRequestHeaders=${c.getRequestHeaders}
+            .getExtraMetadataVariables=${c.getExtraMetadataVariables}
         ></platform-flow-ui>`;
     }
 }

@@ -26,7 +26,7 @@ export function renderIcon(host, component) {
         host,
         component,
         html`<span class="flow-ui-icon" role="img" aria-label=${label}>
-            ${flowUIGlyph(String(name).trim(), 20)}
+            ${flowUIGlyph(String(name).trim(), 20, host.platformUiOrigin)}
         </span>`,
     );
 }

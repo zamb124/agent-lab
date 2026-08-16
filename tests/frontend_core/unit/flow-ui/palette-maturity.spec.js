@@ -74,7 +74,7 @@ describe('flow-ui Icon glyph', () => {
             path.join(REPO_ROOT, 'core/frontend/static/lib/flow-ui/catalog/flow-ui-glyph.js'),
             'utf8',
         );
-        expect(extrasSrc).toMatch(/flowUIGlyph\(\s*String\(name\)\.trim\(\)\s*,\s*20\s*\)/);
+        expect(extrasSrc).toMatch(/flowUIGlyph\(\s*String\(name\)\.trim\(\)\s*,\s*20\s*,\s*host\.platformUiOrigin\s*\)/);
         expect(extrasSrc).not.toMatch(/\.slice\(\s*0\s*,\s*2\s*\)/);
         expect(glyphSrc).toContain('/static/core/assets/icons/');
         expect(glyphSrc).toContain('flow-ui-glyph');

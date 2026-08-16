@@ -5,6 +5,7 @@ Integration тесты для API управления конфигурация�
 Проверяем изоляцию по компаниям.
 """
 
+import re
 import uuid
 from urllib.parse import urlparse
 
@@ -20,6 +21,35 @@ from core.models.context_models import Context
 from core.models.identity_models import Company, User
 from core.utils.tokens import get_token_service
 from tests.fixtures.auth import set_test_company_member_roles
+
+_SNIPPET_DATA_ATTRS = frozenset({
+    "data-embed-id",
+    "data-presentation",
+    "data-position",
+    "data-theme",
+    "data-locale",
+    "data-show-launcher",
+    "data-flows-base-url",
+    "data-platform-ui-origin",
+    "data-token-url",
+    "data-token-expires-seconds",
+    "data-use-credentials",
+    "data-toggle-event-name",
+    "data-voice-base-url",
+    "data-company-id",
+})
+
+_DEAD_DATA_ATTRS = (
+    "data-assistant-title",
+    "data-event-namespace",
+    "data-voice-enabled",
+    "data-voice-default-on",
+    "data-chat-token-url",
+)
+
+
+def _html_data_attrs(html_code: str) -> set[str]:
+    return set(re.findall(r"\bdata-[a-z0-9-]+", html_code))
 
 
 async def _seed_embed_company_flow(
@@ -600,10 +630,16 @@ async def test_get_embed_code(frontend_client: AsyncClient, test_auth_with_agent
     assert "expires_in_seconds:" in client_snip
     assert "fetch('/api/flow-ui-token'" in client_snip
     assert 'data-token-expires-seconds="300"' in html_code and "300" in html_code
-    assert 'data-voice-enabled="false"' in html_code
-    assert 'data-voice-default-on="false"' in html_code
+    assert "data-voice-enabled" not in html_code
+    assert "data-voice-default-on" not in html_code
+    assert "data-assistant-title" not in html_code
+    assert "data-event-namespace" not in html_code
+    assert 'data-toggle-event-name="linnex-flow-ui-toggle"' in html_code
     assert "data-voice-base-url=" in html_code
     assert "data-company-id=" in html_code and company_id in html_code
+    assert _html_data_attrs(html_code) == _SNIPPET_DATA_ATTRS
+    for dead_attr in _DEAD_DATA_ATTRS:
+        assert dead_attr not in html_code
 
     # Cleanup
     await frontend_client.delete(
@@ -665,8 +701,8 @@ async def test_get_embed_code_voice_enabled_wires_assistant(frontend_client: Asy
     )
     assert response.status_code == 200
     html_code = response.json()["html_code"]
-    assert 'data-voice-enabled="true"' in html_code
-    assert 'data-voice-default-on="true"' in html_code
+    assert "data-voice-enabled" not in html_code
+    assert "data-voice-default-on" not in html_code
     assert "data-voice-base-url=" in html_code
     assert company_id in html_code
 
@@ -1015,7 +1051,7 @@ async def test_embed_code_includes_assistant_title_and_locale(frontend_client: A
     )
     assert code_response.status_code == 200
     html_code = code_response.json()["html_code"]
-    assert 'data-assistant-title="Lara QA"' in html_code
+    assert "data-assistant-title" not in html_code
     assert 'data-locale="ru"' in html_code
     assert 'data-theme="light"' in html_code
     assert 'data-show-launcher="false"' in html_code

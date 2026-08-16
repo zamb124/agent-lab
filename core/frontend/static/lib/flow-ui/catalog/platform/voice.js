@@ -139,7 +139,7 @@ function renderSessionControl(host, component, dense) {
                 }
                 host.toggleVoiceSession();
             }}
-        >${flowUIGlyph(active ? 'mic-off' : 'mic', dense ? 18 : 20)}</button>`,
+        >${flowUIGlyph(active ? 'mic-off' : 'mic', dense ? 18 : 20, host.platformUiOrigin)}</button>`,
     );
 }
 
@@ -163,7 +163,7 @@ export function renderVoiceInput(host, component, options = {}) {
                 aria-disabled="true"
                 title=${flowUIText(host.locale, 'voice_unavailable')}
                 aria-label=${flowUIText(host.locale, 'voice_unavailable')}
-            >${flowUIGlyph('mic', dense ? 18 : 20)}</button>`,
+            >${flowUIGlyph('mic', dense ? 18 : 20, host.platformUiOrigin)}</button>`,
         );
     }
     const mode = resolveVoiceMode(component);

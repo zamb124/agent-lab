@@ -15,6 +15,7 @@ export class FlowUISurfaceElement extends LitElement {
         controller: { attribute: false },
         readonly: { type: Boolean },
         locale: { type: String },
+        platformUiOrigin: { type: String },
         selectedComponentId: { attribute: false },
         uploadState: { state: true },
         feedJump: { state: true },
@@ -947,6 +948,7 @@ export class FlowUISurfaceElement extends LitElement {
         this.controller = null;
         this.readonly = false;
         this.locale = 'en';
+        this.platformUiOrigin = '';
         this.selectedComponentId = null;
         this.uploadState = {};
         this.feedJump = false;

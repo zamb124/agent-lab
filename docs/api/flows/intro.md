@@ -1603,12 +1603,12 @@ Embed widget нужен, когда вы хотите поставить чат 
 
 1. В консоли платформы вы создаете embed widget для конкретного flow и branch.
 2. Консоль дает вам `<script ...></script>` для сайта.
-3. Вы добавляете на своем backend endpoint, например `POST /api/chat-token`.
+3. Вы добавляете на своем backend endpoint `POST /api/flow-ui-token`.
 4. Браузер сайта просит у вашего backend короткий token.
 5. Ваш backend с `hum_...` ключом просит платформу выдать embed-session token.
 6. Браузер получает короткий token и отправляет сообщения в `/flows/api/v1/embed/{embed_id}`.
 
-Главное правило безопасности: `hum_...` ключ никогда не должен попадать в браузер. Он не должен быть в HTML, JavaScript bundle, localStorage, query string, публичном репозитории или ответе `/api/chat-token`. В браузер можно вернуть только короткий embed-session token.
+Главное правило безопасности: `hum_...` ключ никогда не должен попадать в браузер. Он не должен быть в HTML, JavaScript bundle, localStorage, query string, публичном репозитории или ответе `/api/flow-ui-token`. В браузер можно вернуть только короткий embed-session token.
 
 ### Шаг 1. Подготовьте flow
 
@@ -1660,7 +1660,7 @@ http://demo.lvh.me:8002/embed-configs
 | `Ветка` | Branch внутри выбранного flow. | Для простого сценария используйте `default`. Для отдельных сценариев используйте отдельные branches: `support`, `sales`, `beta`. |
 | `Позиция на странице` | Визуальная позиция launcher/panel в настройке виджета. | Обычно `Справа внизу`. Для полноэкранных сценариев используйте `На весь экран`, если такой режим нужен вашему сайту. |
 | `Тема оформления` | Цветовая схема виджета. | `Светлая`, `Темная` или `Как в системе`. Для внешнего сайта чаще выбирают `Как в системе` или явно `Светлая`. |
-| `Имя ассистента` | Заголовок в шапке чата. | Например `AI-помощник`, `Поддержка`, `Консультант`. Это значение попадает в `data-assistant-title`. |
+| `Имя ассистента` | Заголовок в шапке чата. | Например `AI-помощник`, `Поддержка`, `Консультант`. Хранится в конфиге виджета на сервере, в HTML-сниппет не попадает. |
 | `Приветственное сообщение` | Первое сообщение, которое увидит пользователь при открытии чата. | Пишите коротко и понятно: `Здравствуйте! Чем помочь?`. Если приветствие не нужно, оставьте пустым. |
 | `Подсказка в поле ввода` | Placeholder в пустом поле сообщения. | Например `Напишите вопрос...`, `Опишите проблему...`. |
 | `Язык интерфейса` | Язык кнопок, подсказок и системных элементов виджета. | `Русский`, `English` или `Авто`. Если сайт русский, выбирайте `Русский`, чтобы не зависеть от браузера пользователя. |
@@ -1710,21 +1710,19 @@ http://demo.lvh.me:8002/embed-configs
 
 ```html
 <script type="module"
-  src="https://cdn.linnex.io/lib/embed-chat/humanitec-embed-autoload.js"
+  src="https://cdn.linnex.io/lib/embed-flow-ui/flow-ui-embed-autoload.js"
   data-embed-id="embed_abc123"
-  data-assistant-title="AI-помощник"
+  data-presentation="drawer"
+  data-position="bottom-right"
   data-theme="auto"
   data-locale="ru"
   data-show-launcher="true"
   data-flows-base-url="https://api.linnex.io/flows"
   data-platform-ui-origin="https://api.linnex.io"
-  data-chat-token-url="/api/chat-token"
+  data-token-url="/api/flow-ui-token"
   data-token-expires-seconds="300"
   data-use-credentials="false"
-  data-event-namespace="assistant"
-  data-toggle-event-name="humanitec-embed-chat-toggle"
-  data-voice-enabled="false"
-  data-voice-default-on="false"
+  data-toggle-event-name="linnex-flow-ui-toggle"
   data-voice-base-url="https://api.linnex.io/voice"
   data-company-id="your_company_id"
 ></script>
@@ -1732,9 +1730,9 @@ http://demo.lvh.me:8002/embed-configs
 
 В dev-окружении `src`, `data-flows-base-url`, `data-platform-ui-origin` и `data-voice-base-url` будут указывать на локальный host. В production используйте код, который выдала production-консоль.
 
-### Шаг 5. Реализуйте backend endpoint `/api/chat-token`
+### Шаг 5. Реализуйте backend endpoint `/api/flow-ui-token`
 
-`data-chat-token-url="/api/chat-token"` означает: браузер вашего сайта будет делать `POST /api/chat-token` на ваш backend. Этот endpoint должны реализовать вы.
+`data-token-url="/api/flow-ui-token"` означает: браузер вашего сайта будет делать `POST /api/flow-ui-token` на ваш backend. Этот endpoint должны реализовать вы.
 
 Браузер отправит примерно такое тело:
 
@@ -1771,7 +1769,7 @@ const PLATFORM_API_BASE = "https://api.linnex.io";
 const PLATFORM_API_KEY = process.env.PLATFORM_API_KEY;
 const PLATFORM_EMBED_ID = process.env.PLATFORM_EMBED_ID;
 
-app.post("/api/chat-token", async (req, res) => {
+app.post("/api/flow-ui-token", async (req, res) => {
   const embedId = String(req.body?.embed_id || "");
   if (embedId !== PLATFORM_EMBED_ID) {
     return res.status(400).json({ error: "Unknown embed_id" });
@@ -1839,21 +1837,19 @@ app.post("/api/chat-token", async (req, res) => {
     </main>
 
     <script type="module"
-      src="https://cdn.linnex.io/lib/embed-chat/humanitec-embed-autoload.js"
+      src="https://cdn.linnex.io/lib/embed-flow-ui/flow-ui-embed-autoload.js"
       data-embed-id="embed_abc123"
-      data-assistant-title="AI-помощник"
+      data-presentation="drawer"
+      data-position="bottom-right"
       data-theme="auto"
       data-locale="ru"
       data-show-launcher="true"
       data-flows-base-url="https://api.linnex.io/flows"
       data-platform-ui-origin="https://api.linnex.io"
-      data-chat-token-url="/api/chat-token"
+      data-token-url="/api/flow-ui-token"
       data-token-expires-seconds="300"
       data-use-credentials="false"
-      data-event-namespace="assistant"
-      data-toggle-event-name="humanitec-embed-chat-toggle"
-      data-voice-enabled="false"
-      data-voice-default-on="false"
+      data-toggle-event-name="linnex-flow-ui-toggle"
       data-voice-base-url="https://api.linnex.io/voice"
       data-company-id="your_company_id"
     ></script>
@@ -1861,30 +1857,28 @@ app.post("/api/chat-token", async (req, res) => {
 </html>
 ```
 
-После загрузки страницы должен появиться launcher виджета. При первом сообщении виджет запросит `/api/chat-token`, получит короткий token и отправит A2A `SendStreamingMessage`.
+После загрузки страницы должен появиться launcher виджета. Autoload запросит `/api/flow-ui-token`, получит короткий token и отправит A2A `SendStreamingMessage`.
 
 ### Каждый атрибут script
 
 | Атрибут | Обязателен | Что делает | Как использовать |
 | --- | --- | --- | --- |
 | `type="module"` | Да | Загружает widget как ES module. | Не меняйте. Без этого браузер не загрузит модульный скрипт корректно. |
-| `src` | Да | URL autoload-скрипта виджета. | Берите из консоли. В production обычно CDN, в dev - локальный `/static/core/...`. |
+| `src` | Да | URL autoload-скрипта виджета. | Берите из консоли. В production: `https://cdn.linnex.io/lib/embed-flow-ui/flow-ui-embed-autoload.js`. Исторический shim `embed-chat/humanitec-embed-autoload.js` только реэкспортит этот файл. |
 | `data-embed-id` | Да | ID конкретного embed widget. | Не придумывайте вручную. Копируйте из консоли. |
-| `data-assistant-title` | Нет | Заголовок в шапке чата. | Например `AI-помощник`. Если пусто, будет использовано имя из конфигурации. |
-| `data-theme` | Нет | Тема виджета: `light`, `dark`, `auto`. | `auto` подстраивается под окружение. Для фиксированного сайта можно поставить `light` или `dark`. |
-| `data-locale` | Нет | Язык UI виджета: `ru`, `en`, `auto`. | Для русского сайта ставьте `ru`, для английского `en`. |
-| `data-show-launcher` | Нет | Показывать стандартную плавающую кнопку открытия. | `true` - виджет сам показывает кнопку. `false` - открывайте своей кнопкой через event. |
+| `data-presentation` | Нет | `drawer` или `page`. | Консоль ставит значение из настроек виджета. |
+| `data-position` | Нет | Позиция launcher: `bottom-right` или `bottom-left`. | Для `presentation=page` в сниппете всё равно `bottom-right`. |
+| `data-theme` | Нет | Тема виджета: `light`, `dark`, `auto`. | `auto` подстраивается под окружение. |
+| `data-locale` | Нет | Язык UI виджета: `ru`, `en`, `auto`. | Для русского сайта ставьте `ru`. |
+| `data-show-launcher` | Нет | Показывать стандартную плавающую кнопку открытия. | `true` - виджет сам показывает кнопку. `false` - открывайте своей кнопкой через `linnex-flow-ui-toggle`. |
 | `data-flows-base-url` | Да | Base URL сервиса Flows с префиксом `/flows`. | В production используйте значение из консоли, например `https://api.linnex.io/flows`. |
-| `data-platform-ui-origin` | Да для CDN/внешнего сайта | Origin платформы для вспомогательных ресурсов UI. | Оставьте значение из консоли. Обычно это `https://api.linnex.io`. |
-| `data-chat-token-url` | Да для безопасной схемы | URL вашего backend endpoint, который выдает короткий token браузеру. | Обычно `/api/chat-token`. Можно указать полный URL, если backend на другом origin и CORS настроен. |
-| `data-token-expires-seconds` | Нет | TTL короткого token, который браузер просит у вашего backend. | Значение должно быть положительным. Platform endpoint принимает 60..900 секунд. Обычно `300`. |
-| `data-use-credentials` | Нет | Управляет browser credentials для запросов виджета. | Обычно `false`. `true` нужно только если вы сознательно используете cookie-based схему на том же домене. |
-| `data-event-namespace` | Нет | Namespace событий виджета. | Оставьте `assistant`, если у вас нет своей event-интеграции. |
-| `data-toggle-event-name` | Нет | Имя browser event, который открывает/закрывает drawer. | По умолчанию `humanitec-embed-chat-toggle`. Меняйте только если на странице несколько независимых виджетов. |
-| `data-voice-enabled` | Нет | Разрешает голосовой режим. | `true`, если включили голос в настройках и сайт готов работать с микрофоном. |
-| `data-voice-default-on` | Нет | Пытаться включать голос сразу при открытии. | Имеет смысл только при `data-voice-enabled="true"`. |
+| `data-platform-ui-origin` | Да для внешнего сайта | Origin платформы для static UI (логотипы, spinner). | Оставьте значение из консоли. |
+| `data-token-url` | Да | URL вашего backend endpoint, который выдаёт короткий token браузеру. | Обычно `/api/flow-ui-token`. Можно указать полный URL, если backend на другом origin и CORS настроен. |
+| `data-token-expires-seconds` | Нет | TTL короткого token, который браузер просит у вашего backend. | Положительное число. Platform endpoint принимает 60..900 секунд. Обычно `300`. |
+| `data-use-credentials` | Нет | Credentials для запросов виджета: `false` → `omit`, иначе `include`. | На внешнем сайте `false`. |
+| `data-toggle-event-name` | Нет | Имя browser event, который открывает/закрывает drawer. | В сниппете консоли: `linnex-flow-ui-toggle`. |
 | `data-voice-base-url` | Нет | Base URL voice-сервиса. | Оставьте значение из консоли. |
-| `data-company-id` | Нет | Идентификатор компании для функций, которым нужен company context. | Не меняйте вручную. Берите из консоли. |
+| `data-company-id` | Нет | Идентификатор компании для voice и company context. | Не меняйте вручную. Берите из консоли. |
 
 Дополнительные атрибуты для продвинутых случаев:
 
@@ -1895,29 +1889,7 @@ app.post("/api/chat-token", async (req, res) => {
 | `data-branch-id` | Явно задает branch ID для компонента. | В обычном embed-коде не нужен. Branch закреплен в настройке виджета и token. Несовпадение приведет к ошибке доступа. |
 | `data-static-bearer` | Позволяет передать bearer token прямо в script. | Не используйте на публичном сайте. Это допустимо только для закрытых preview/локальных тестов, где нет риска утечки. |
 
-### Query-параметры страницы
-
-Embed drawer умеет читать несколько параметров из URL страницы. Это удобно для preview-ссылок, демо-страниц и точечной отладки внешнего сайта.
-
-Пример:
-
-```text
-https://example.com/help?embed_theme=dark&embed_lang=ru&embed_width=420
-```
-
-Поддерживаемые параметры:
-
-| Параметр | Синонимы | Что делает | Пример |
-| --- | --- | --- | --- |
-| `embed_theme` | `embed-theme` | Переопределяет тему drawer. Допустимые значения: `light`, `dark`, `auto`. | `embed_theme=dark` |
-| `embed_lang` | `embed_locale`, `embed-lang`, `embed-locale` | Переопределяет язык UI. Допустимые значения: `ru`, `en`, `auto`. | `embed_lang=ru` |
-| `embed_width` | `embed-panel-width` | Задает ширину панели. Число превращается в pixels, CSS-значение используется как есть. | `embed_width=420` |
-| `embed_max_height` | `embed-panel-max-height` | Задает максимальную высоту панели. | `embed_max_height=720` |
-| `embed_locale_control` | `embed-locale-control` | Показывает или скрывает переключатель языка в composer. `0`, `false`, `no` означают выключить. | `embed_locale_control=0` |
-| `embed_assistant_name` | `embed-assistant-name`, `embed_chat_title`, `embed-chat-title` | Переопределяет подпись ассистента в шапке панели. | `embed_assistant_name=Support` |
-| `embed_branch` | `embed-branch`, `embed_branch_id`, `embed-branch-id` | Пытается передать branch в drawer. | Для обычного публичного embed не используйте. Branch должен быть закреплен в widget config и token. |
-
-Не используйте query-параметр `embed_branch` как способ выбора сценария для посетителя сайта. В безопасной embed-схеме branch задается в консоли виджета, а затем фиксируется в embed-session token. Если нужно два сценария, например `sales` и `support`, создайте два embed widgets.
+Тема, язык и заголовок после загрузки меняются только через `window.linnexFlowUI` (см. Runtime API ниже), не через query-параметры URL.
 
 ### Своя кнопка открытия чата
 
@@ -1929,7 +1901,7 @@ https://example.com/help?embed_theme=dark&embed_lang=ru&embed_width=420
 <script>
   document.getElementById("open-ai-chat").addEventListener("click", () => {
     window.dispatchEvent(
-      new CustomEvent("humanitec-embed-chat-toggle", {
+      new CustomEvent("linnex-flow-ui-toggle", {
         detail: { open: true },
       }),
     );
@@ -1941,7 +1913,7 @@ https://example.com/help?embed_theme=dark&embed_lang=ru&embed_width=420
 
 ```js
 window.dispatchEvent(
-  new CustomEvent("humanitec-embed-chat-toggle", {
+  new CustomEvent("linnex-flow-ui-toggle", {
     detail: { open: false },
   }),
 );
@@ -1950,43 +1922,35 @@ window.dispatchEvent(
 Переключить состояние туда-сюда:
 
 ```js
-window.dispatchEvent(new CustomEvent("humanitec-embed-chat-toggle"));
+window.dispatchEvent(new CustomEvent("linnex-flow-ui-toggle"));
 ```
 
-Если вы поменяли `data-toggle-event-name`, используйте свое имя события вместо `humanitec-embed-chat-toggle`.
+Если вы поменяли `data-toggle-event-name`, используйте свое имя события вместо `linnex-flow-ui-toggle`.
 
 ### Runtime API в браузере
 
-После загрузки autoload-скрипта появляется `window.humanitecEmbed`. Его можно использовать для точечной настройки виджета со стороны сайта.
+После успешного mount autoload выставляет `window.linnexFlowUI` и шлёт `linnex-flow-ui-mounted`. На странице один embed.
 
 ```js
-function configureHumanitecEmbed() {
-  if (!window.humanitecEmbed) {
-    window.setTimeout(configureHumanitecEmbed, 50);
-    return;
-  }
-
-  window.humanitecEmbed.setTheme("light");
-  window.humanitecEmbed.setLocale("ru");
-  window.humanitecEmbed.setAssistantTitle("AI-помощник");
-}
-
-configureHumanitecEmbed();
+window.addEventListener("linnex-flow-ui-mounted", () => {
+  window.linnexFlowUI.setTheme("light");
+  window.linnexFlowUI.setLocale("ru");
+  window.linnexFlowUI.setAssistantTitle("AI-помощник");
+});
 ```
 
-Доступные методы:
-
-| Метод | Что делает |
+| Поле / метод | Что делает |
 | --- | --- |
-| `setTheme(nextTheme)` | Меняет тему: `light`, `dark`, `auto`. |
-| `setLocale(nextLocale)` | Меняет язык UI: `ru`, `en`, `auto`. |
-| `setLauncherVisible(visible)` | Показывает или скрывает стандартный launcher. |
-| `setAssistantTitle(nextTitle)` | Меняет заголовок в шапке чата. |
-| `setFlowsBaseUrl(nextBaseUrl)` | Меняет base URL Flows. Обычно не нужно. |
-| `setEventNamespace(nextNamespace)` | Меняет namespace событий. |
-| `setToggleEventName(nextEventName)` | Меняет имя события открытия/закрытия. |
-| `setMetadataHooks(extraMetadataProvider, contextProvider)` | Добавляет variables/context к каждому сообщению. |
-| `setAuthProvider(authProvider)` | Заменяет способ получения Authorization header. Обычно не нужно, если работает `/api/chat-token`. |
+| `element` | Смонтированный `flow-ui-drawer` или `flow-ui-page-host`. |
+| `embedId` | ID виджета. |
+| `presentation` | `drawer` или `page`. |
+| `setTheme(theme)` | `light`, `dark` или `auto`. Иначе ошибка. |
+| `setLocale(locale)` | `ru`, `en` или `auto`. Иначе ошибка. |
+| `setLauncherVisible(visible)` | Показать или скрыть launcher. Только `presentation=drawer`. |
+| `setAssistantTitle(title)` | Непустой заголовок шапки. |
+| `setToggleEventName(name)` | Непустое имя события открытия/закрытия. |
+| `setMetadataHooks(extraMetadataProvider)` | Функция → object, уходит в `metadata.variables`. |
+| `setAuthProvider(authProvider)` | Функция → headers. Обычно не нужно, если работает `/api/flow-ui-token`. |
 
 ### Variables в embed widget
 
@@ -2026,29 +1990,17 @@ Embed widget автоматически передает полезный кон
 
 ```html
 <script>
-  function configureEmbedVariables() {
-    if (!window.humanitecEmbed) {
-      window.setTimeout(configureEmbedVariables, 50);
-      return;
-    }
-
-    window.humanitecEmbed.setMetadataHooks(
-      async () => ({
-        customer_id: window.currentCustomerId || null,
-        tariff: window.currentTariff || "free",
-        page_kind: "help_center",
-      }),
-      async () => ({
-        cart_total: window.currentCartTotal || 0,
-      }),
-    );
-  }
-
-  configureEmbedVariables();
+  window.addEventListener("linnex-flow-ui-mounted", () => {
+    window.linnexFlowUI.setMetadataHooks(async () => ({
+      customer_id: window.currentCustomerId,
+      tariff: window.currentTariff,
+      page_kind: "help_center",
+    }));
+  });
 </script>
 ```
 
-Оба provider должны возвращать обычный object. Виджет объединит эти данные и отправит их как `metadata.variables`.
+Provider должен вернуть обычный object. Эти данные уходят как `metadata.variables`.
 
 Правила:
 
@@ -2403,15 +2355,19 @@ JSON-RPC error `-32000` с `not allowed for this company`.
 
 Что проверить:
 
-- существует ли endpoint `/api/chat-token` на вашем сайте;
+- существует ли endpoint `/api/flow-ui-token` на вашем сайте;
 - возвращает ли он JSON с полем `token`;
 - не отвечает ли backend HTML-страницей ошибки;
 - не блокирует ли CORS запрос к вашему backend;
 - не падает ли server-to-server запрос с backend в платформу.
 
-Ошибка `token response missing token field`.
+Ошибка `Linnex Flow UI token response has no token`.
 
-Причина: `/api/chat-token` вернул JSON без поля `token` или `access_token`.
+Причина: `/api/flow-ui-token` вернул JSON без поля `token`.
+
+Ошибка `Linnex Flow UI embed requires data-token-url`.
+
+Причина: в `<script>` нет `data-token-url`. Старый атрибут `data-chat-token-url` autoload не читает.
 
 Ошибка `data-embed-id required`.
 

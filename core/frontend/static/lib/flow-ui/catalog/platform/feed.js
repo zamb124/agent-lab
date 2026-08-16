@@ -1,4 +1,5 @@
 import { html, nothing } from '../../../lit-shim.js';
+import { brandLogoSrc } from '../../shell/brand-logo.js';
 import { flowUIGlyph } from '../flow-ui-glyph.js';
 import {
     labelOfComponent,
@@ -36,8 +37,6 @@ export {
     mergeConversationTasks,
 } from './conversation-turn.js';
 
-const BRAND_LOGO_SRC = '/static/core/assets/service_logos/linnex_spinner_logo.png';
-
 /**
  * Close a dangling `**`/backtick pair so a streaming chunk renders styled
  * progressively instead of flashing raw markers until the closing token lands.
@@ -70,7 +69,7 @@ function renderFileChips(host, files) {
                 aria-label=${flowUIText(host.locale, 'open_file', { name })}
                 @click=${() => openFlowUISessionFile(ref, 'flow_ui_bubble')}
             >
-                ${flowUIGlyph('file', 14)}
+                ${flowUIGlyph('file', 14, host.platformUiOrigin)}
                 <span class="bubble-file-name">${name}</span>
             </button>`;
         })}
@@ -87,14 +86,14 @@ function renderUserBubble(host, task, text, files) {
     </div>`;
 }
 
-function assistantAvatar() {
-    return html`<div class="avatar" aria-hidden="true"><img src=${BRAND_LOGO_SRC} alt=""></div>`;
+function assistantAvatar(host) {
+    return html`<div class="avatar" aria-hidden="true"><img src=${brandLogoSrc(host.platformUiOrigin)} alt=""></div>`;
 }
 
 function renderAssistantBubble(host, task, text, { streaming, failed }) {
     const copied = host.copiedTaskId === task.id;
     return html`<div class="message-row assistant">
-        ${assistantAvatar()}
+        ${assistantAvatar(host)}
         <article class="bubble">
             <div class="part-text">
                 ${renderSanitizedMarkdown(streaming ? streamingSafeMarkdown(text) : text)}${streaming
@@ -109,21 +108,21 @@ function renderAssistantBubble(host, task, text, { streaming, failed }) {
                 aria-label=${flowUIText(host.locale, copied ? 'message_copied' : 'message_copy')}
                 title=${flowUIText(host.locale, copied ? 'message_copied' : 'message_copy')}
                 @click=${() => host._copyTurnText(task.id, text)}
-            >${flowUIGlyph(copied ? 'check' : 'copy', 14)}</button>
+            >${flowUIGlyph(copied ? 'check' : 'copy', 14, host.platformUiOrigin)}</button>
             ${failed && !host.readonly ? html`<button
                 type="button"
                 class="msg-action-btn"
                 aria-label=${flowUIText(host.locale, 'retry')}
                 title=${flowUIText(host.locale, 'retry')}
                 @click=${() => host._retryTurn(task)}
-            >${flowUIGlyph('rotate-ccw', 14)}</button>` : nothing}
+            >${flowUIGlyph('rotate-ccw', 14, host.platformUiOrigin)}</button>` : nothing}
         </div>`}
     </div>`;
 }
 
 function renderTypingBubble(host) {
     return html`<div class="message-row assistant">
-        ${assistantAvatar()}
+        ${assistantAvatar(host)}
         <article class="bubble" aria-label=${flowUIText(host.locale, 'assistant_typing')}>
             <span class="typing-indicator" aria-hidden="true">
                 <span class="dot-pulse"></span><span class="dot-pulse"></span><span class="dot-pulse"></span>
@@ -144,7 +143,7 @@ function renderActivityChip(host, item) {
     const pulse = item.status === 'running'
         ? html`<span class="turn-activity-pulse" aria-hidden="true"></span>`
         : nothing;
-    const glyph = flowUIGlyph(item.glyph, 14);
+    const glyph = flowUIGlyph(item.glyph, 14, host.platformUiOrigin);
     if (item.interactive === true && item.action) {
         return html`<button
             type="button"
@@ -255,7 +254,7 @@ export function renderAgentIdentity(host, component) {
         || 'Agent';
     const logoSrc = typeof agent?.logo_path === 'string' && agent.logo_path.trim() !== ''
         ? agent.logo_path
-        : BRAND_LOGO_SRC;
+        : brandLogoSrc(host.platformUiOrigin);
     const subtitle = typeof agent?.subtitle === 'string' ? agent.subtitle : '';
     return wrapFlowNode(
         host,

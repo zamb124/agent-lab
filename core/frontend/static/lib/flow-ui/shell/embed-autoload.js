@@ -1,5 +1,23 @@
 import './drawer.js';
 import './page-host.js';
+import { assignLinnexFlowUI, createLinnexFlowUI } from './embed-host-api.js';
+import {
+    bearerFor,
+    buildHostConfig,
+    resolveLauncherPosition,
+    resolvePresentation,
+    resolveShowLauncher,
+} from './embed-script-config.js';
+
+export {
+    bearerFor,
+    buildHostConfig,
+    LINNEX_FLOW_UI_TOGGLE_EVENT,
+    resolveCredentials,
+    resolvePresentation,
+    resolveToggleEventName,
+} from './embed-script-config.js';
+export { createLinnexFlowUI } from './embed-host-api.js';
 
 function sourceScript() {
     const current = document.currentScript;
@@ -11,50 +29,28 @@ function sourceScript() {
     return scripts[scripts.length - 1];
 }
 
-async function bearerFor(script) {
-    if (script.dataset.staticBearer) return script.dataset.staticBearer;
-    const endpoint = script.dataset.tokenUrl;
-    if (typeof endpoint !== 'string' || endpoint.trim() === '') {
-        throw new Error('Linnex Flow UI embed requires data-token-url');
+function applyPlatformUiOrigin(host, origin) {
+    if (origin === '') {
+        return;
     }
-    const expiresRaw = script.dataset.tokenExpiresSeconds;
-    const expiresInSeconds = expiresRaw === undefined || expiresRaw === ''
-        ? 300
-        : Number(expiresRaw);
-    if (!Number.isFinite(expiresInSeconds) || expiresInSeconds <= 0) {
-        throw new Error('Linnex Flow UI embed: invalid data-token-expires-seconds');
-    }
-    const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            embed_id: script.dataset.embedId,
-            origin: globalThis.location.origin,
-            expires_in_seconds: expiresInSeconds,
+    host.setAttribute('platform-ui-origin', origin);
+}
+
+function publishHost(element, embedId, presentation) {
+    const api = createLinnexFlowUI({ element, embedId, presentation });
+    assignLinnexFlowUI(api);
+    globalThis.dispatchEvent(new CustomEvent('linnex-flow-ui-mounted', {
+        detail: Object.freeze({
+            embedId,
+            presentation,
         }),
-    });
-    if (!response.ok) throw new Error(`Linnex Flow UI token: HTTP ${response.status}`);
-    const payload = await response.json();
-    if (typeof payload?.token !== 'string' || payload.token.trim() === '') {
-        throw new Error('Linnex Flow UI token response has no token');
+    }));
+}
+
+export async function mount() {
+    if (globalThis.linnexFlowUI) {
+        throw new Error('Linnex Flow UI embed is already mounted');
     }
-    return payload.token;
-}
-
-function resolvePresentation(script) {
-    const raw = (script.dataset.presentation || 'drawer').trim().toLowerCase();
-    if (raw === 'page') return 'page';
-    if (raw === 'drawer') return 'drawer';
-    throw new Error(`Linnex Flow UI embed: invalid data-presentation ${JSON.stringify(raw)}`);
-}
-
-function resolveLauncherPosition(script) {
-    const raw = (script.dataset.position || 'bottom-right').trim().toLowerCase();
-    if (raw === 'bottom-left') return 'bottom-left';
-    return 'bottom-right';
-}
-
-async function mount() {
     const script = sourceScript();
     if (!script.dataset.embedId && !script.dataset.flowId) {
         throw new Error('Linnex Flow UI embed requires data-embed-id or data-flow-id');
@@ -65,45 +61,27 @@ async function mount() {
         throw new Error('Linnex Flow UI embed requires data-flows-base-url');
     }
     const presentation = resolvePresentation(script);
-    const hostConfig = {
-        embedId: script.dataset.embedId || '',
-        flowId: script.dataset.flowId || '',
-        branchId: script.dataset.branchId || 'default',
-        baseUrl: flowsBaseUrl,
-        contextId: script.dataset.contextId || '',
-        theme: script.dataset.theme || 'auto',
-        locale: script.dataset.locale || 'auto',
-        profile: 'embed_public',
-        getRequestHeaders: () => ({ Authorization: `Bearer ${token}` }),
-    };
+    const hostConfig = buildHostConfig(script, token, flowsBaseUrl);
 
     if (presentation === 'page') {
         const pageHost = document.createElement('flow-ui-page-host');
+        applyPlatformUiOrigin(pageHost, hostConfig.platformUiOrigin);
         pageHost.config = hostConfig;
         document.body.append(pageHost);
-        globalThis.dispatchEvent(new CustomEvent('linnex-flow-ui-mounted', {
-            detail: Object.freeze({
-                embedId: hostConfig.embedId,
-                presentation: 'page',
-            }),
-        }));
+        publishHost(pageHost, hostConfig.embedId, 'page');
         return;
     }
 
     const drawer = document.createElement('flow-ui-drawer');
+    applyPlatformUiOrigin(drawer, hostConfig.platformUiOrigin);
     drawer.open = script.dataset.initialOpen === 'true';
     drawer.config = {
         ...hostConfig,
-        showLauncher: script.dataset.showLauncher !== 'false',
+        showLauncher: resolveShowLauncher(script),
         launcherPosition: resolveLauncherPosition(script),
     };
     document.body.append(drawer);
-    globalThis.dispatchEvent(new CustomEvent('linnex-flow-ui-mounted', {
-        detail: Object.freeze({
-            embedId: drawer.config.embedId,
-            presentation: 'drawer',
-        }),
-    }));
+    publishHost(drawer, drawer.config.embedId, 'drawer');
 }
 
 mount().catch((error) => {

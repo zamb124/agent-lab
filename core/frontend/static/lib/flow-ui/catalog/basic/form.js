@@ -64,7 +64,7 @@ export function renderButton(host, component) {
                     aria-label=${flowUIText(host.locale, 'composer_send')}
                     title=${flowUIText(host.locale, 'composer_send')}
                     @click=${() => host._action(component, 'press')}
-                >${flowUIGlyph('send', 18)}</button>`,
+                >${flowUIGlyph('send', 18, host.platformUiOrigin)}</button>`,
         );
     }
     const submitting = isSubmitPressAction(component)

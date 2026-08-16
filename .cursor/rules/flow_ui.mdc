@@ -521,9 +521,19 @@ Ledger — источник истины. Query projection хранит Task, me
 
 Сохраняются A2A 1.0 methods, SDK protobuf types, все Part variants, произвольные Artifact names/metadata/extensions, Files API links/raw, HITL statuses/artifacts, public embed endpoint/auth/origin controls и historical CDN script URL.
 
-Публичный `embed-chat/humanitec-embed-autoload.js` остаётся только stateless import shim к universal Flow UI autoload до отдельной versioned deprecation. Он не содержит chat runtime/state/protocol.
+Публичный CDN entry: `embed-flow-ui/flow-ui-embed-autoload.js`. `embed-chat/humanitec-embed-autoload.js` — только import того же autoload.
 
-Удаляются после переноса parity: `core/frontend/static/lib/chat/**`, chat settings/profile models/endpoints/forms, chat-only reducers/controllers/stubs, special `ui_event` branches и pending UI state path.
+### Публичный script `data-*` (консоль = autoload)
+
+Канон — сниппет `GET /frontend/api/embed/configs/{embed_id}/code`. Autoload читает те же имена.
+
+Обязательные: `data-embed-id` или `data-flow-id`; `data-token-url` (обычно `/api/flow-ui-token`), кроме preview с `data-static-bearer`; `data-flows-base-url`.
+
+Живые: `data-presentation`, `data-position`, `data-theme`, `data-locale`, `data-show-launcher`, `data-platform-ui-origin`, `data-token-expires-seconds`, `data-use-credentials`, `data-toggle-event-name` (в сниппете `linnex-flow-ui-toggle`), `data-voice-base-url`, `data-company-id`. Preview-only: `data-static-bearer`, `data-flow-id`, `data-branch-id`, `data-initial-open`.
+
+Своя кнопка: `window.dispatchEvent(new CustomEvent('linnex-flow-ui-toggle', { detail: { open: true } }))`.
+
+После mount: `window.linnexFlowUI` (`element`, `embedId`, `presentation`, `setTheme`, `setLocale`, `setLauncherVisible`, `setAssistantTitle`, `setToggleEventName`, `setMetadataHooks`, `setAuthProvider`) и событие `linnex-flow-ui-mounted`. Статика chrome (`/static/core/...`) режется через `data-platform-ui-origin`.
 
 ## Обязательные gates
 

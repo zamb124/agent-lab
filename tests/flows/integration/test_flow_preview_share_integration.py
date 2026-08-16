@@ -56,6 +56,8 @@ async def test_flow_preview_share_one_shot_redis_and_short_link(
             assert res_ok.status_code == 200
             body = res_ok.text
             assert "data-static-bearer=" in body
+            assert "data-token-url" not in body
+            assert "/flow-preview/unused" not in body
             assert 'data-platform-ui-origin="http://testserver"' in body
             assert 'data-flows-base-url="http://testserver/flows"' in body
             assert ":8001" not in body

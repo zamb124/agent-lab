@@ -194,7 +194,7 @@ export function renderFileUpload(host, component) {
                     void host._upload(component, multiple ? dropped : dropped.slice(0, 1));
                 }}
             >
-                <span class="file-upload-icon" aria-hidden="true">${flowUIGlyph('paperclip', 22)}</span>
+                <span class="file-upload-icon" aria-hidden="true">${flowUIGlyph('paperclip', 22, host.platformUiOrigin)}</span>
                 <span class="file-upload-copy">
                     <strong class="file-upload-title">${renderInputLabelText(host, component, title)}</strong>
                     <span class="file-upload-hint">${flowUIText(
@@ -208,14 +208,14 @@ export function renderFileUpload(host, component) {
             </button>
             ${refs.length > 0 ? html`<div class="file-upload-list" role="list">
                 ${refs.map((ref) => html`<span class="composer-file-chip" role="listitem">
-                    ${flowUIGlyph('file', 14)}
+                    ${flowUIGlyph('file', 14, host.platformUiOrigin)}
                     <span class="composer-file-name">${fileRefDisplayName(ref)}</span>
                     ${host.readonly ? nothing : html`<button
                         type="button"
                         class="composer-file-remove"
                         aria-label=${flowUIText(host.locale, 'remove_file', { name: fileRefDisplayName(ref) })}
                         @click=${() => host._removeUploadedFile(component, ref.file_id)}
-                    >${flowUIGlyph('x', 12)}</button>`}
+                    >${flowUIGlyph('x', 12, host.platformUiOrigin)}</button>`}
                 </span>`)}
             </div>` : nothing}
             ${uploadError !== '' ? html`<span class="upload-error">${uploadError}</span>` : nothing}

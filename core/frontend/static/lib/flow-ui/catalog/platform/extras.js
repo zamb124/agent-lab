@@ -1,4 +1,5 @@
 import { html, nothing } from '../../../lit-shim.js';
+import { brandLogoSrc } from '../../shell/brand-logo.js';
 import { isA2UIArtifact } from '../../protocol/a2ui-0-9-1-codec.js';
 import {
     localizedText,
@@ -194,8 +195,10 @@ export function renderAvatar(host, component) {
         ?? optionalComponentProperty(component, 'name')
         ?? labelOf(host, component);
     if (!name) throw new Error(`flow-ui: Avatar ${component.component_id} requires name`);
-    const logoSrc = optionalComponentProperty(component, 'logo_path')
-        || '/static/core/assets/service_logos/linnex_spinner_logo.png';
+    const logoPath = optionalComponentProperty(component, 'logo_path');
+    const logoSrc = typeof logoPath === 'string' && logoPath.trim() !== ''
+        ? logoPath
+        : brandLogoSrc(host.platformUiOrigin);
     return wrapFlowNode(
         host,
         component,
