@@ -141,14 +141,28 @@ export class WorkItemDetailEditor extends PlatformElement {
             }
             .wt-hitl-chat {
                 display: flex;
+                flex-direction: column;
                 min-height: 360px;
                 border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-lg);
                 overflow: hidden;
             }
+            /*
+             * Conversation shell is height:100% and does not size to content.
+             * min-height is not a specified height for % children — page layout
+             * is document-flow (height:auto), so the host must set a real height.
+             */
+            :host([layout="page"]) .wt-hitl-chat {
+                height: min(70vh, 40rem);
+                min-height: 22rem;
+            }
             .wt-hitl-chat platform-flow-ui {
                 flex: 1 1 auto;
+                align-self: stretch;
+                width: 100%;
                 min-width: 0;
+                min-height: 0;
+                height: 100%;
             }
             .wt-hitl-complete {
                 display: flex;
