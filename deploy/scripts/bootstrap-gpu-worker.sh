@@ -25,11 +25,15 @@ log_section "Bootstrap GPU worker (hostname=$GPU_HOSTNAME)"
 
 disable_host_firewall
 
-# 1. hostname
+# 1. hostname + /etc/hosts (иначе sudo: unable to resolve host gpu-worker)
 idempotent \
   "hostname = $GPU_HOSTNAME" \
   "[ \"$(hostname)\" = '$GPU_HOSTNAME' ]" \
   "hostnamectl set-hostname '$GPU_HOSTNAME'"
+idempotent \
+  "/etc/hosts содержит $GPU_HOSTNAME" \
+  "grep -qE '[[:space:]]${GPU_HOSTNAME}([[:space:]]|$)' /etc/hosts" \
+  "if grep -q '^127.0.1.1' /etc/hosts; then sed -i 's/^127.0.1.1.*/127.0.1.1 ${GPU_HOSTNAME}/' /etc/hosts; else printf '127.0.1.1 %s\n' '${GPU_HOSTNAME}' >> /etc/hosts; fi"
 
 # 2. NVIDIA driver
 log_info "Проверка NVIDIA driver"

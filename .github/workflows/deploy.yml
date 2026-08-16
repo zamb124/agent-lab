@@ -63,6 +63,11 @@ on:
         required: false
         default: false
         type: boolean
+      roll_litserve:
+        description: "Сменить provider-litserve на новый agent-lab-gpu:<sha>. По умолчанию оставить текущий образ: GPU тянет GHCR ~1 час на 5 GiB. Перед true: make k8s-gpu-sync IMAGE_TAG=<sha>"
+        required: false
+        default: false
+        type: boolean
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/agent-lab
@@ -485,6 +490,17 @@ jobs:
             OPENFGA_SET_ARGS+=(--set "openfga.authorizationModelId=${OPENFGA_AUTHORIZATION_MODEL_ID}")
           fi
 
+          LITSERVE_IMAGE="${IMAGE_GPU}:${{ steps.tag.outputs.image_tag }}"
+          if [ "${{ inputs.roll_litserve }}" != "true" ]; then
+            CURRENT_LITSERVE="$(kubectl get deploy provider-litserve -n "$K8S_NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)"
+            if [ -z "${CURRENT_LITSERVE}" ]; then
+              echo "::error title=litserve image::provider-litserve ещё нет, а roll_litserve=false. Первый install: roll_litserve=true после make k8s-gpu-sync."
+              exit 1
+            fi
+            echo "litserve image оставляем ${CURRENT_LITSERVE} (GPU GHCR pull ~1h). Новый GPU-образ: roll_litserve=true + make k8s-gpu-sync IMAGE_TAG=${{ steps.tag.outputs.image_tag }}"
+            LITSERVE_IMAGE="${CURRENT_LITSERVE}"
+          fi
+
           echo "helm upgrade --install --wait (до 60m почти без вывода; смотри параллельно kubectl get pods -n ${K8S_NAMESPACE} -w)..."
           # shellcheck disable=SC2086
           helm upgrade --install "$K8S_RELEASE" "$HELM_CHART" \
@@ -493,7 +509,7 @@ jobs:
             --values "$HELM_CHART/values.yaml" \
             --values "$HELM_CHART/values-prod.yaml" \
             --set image.tag="${{ steps.tag.outputs.image_tag }}" \
-            --set litserve.image="${IMAGE_GPU}:${{ steps.tag.outputs.image_tag }}" \
+            --set litserve.image="${LITSERVE_IMAGE}" \
             "${OPENFGA_SET_ARGS[@]}" \
             $NODE_SETS \
             --set-json "platformSecrets=$(bash deploy/scripts/helm_platform_secrets_json.sh)" \

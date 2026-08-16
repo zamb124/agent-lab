@@ -20,19 +20,27 @@ kubectl logs -n platform $POD --tail=200
 - OOMKilled → `kubectl describe pod` → Events показывают OOMKilled. Решение: поднять `resources.limits.memory` в `values.yaml`.
 - Образ не подгрузился (`ImagePullBackOff`) — см. секцию 2.
 
-## 2. `ImagePullBackOff` / `ErrImagePull`
+## 2. `ImagePullBackOff` / `ErrImagePull` / helm `--wait` > 15 минут
 
 **Команды:**
 ```bash
 kubectl describe pod -n platform $POD | grep -A5 Events
+kubectl get pods -n platform -o wide | awk 'NR==1 || /gpu-worker|Init|Pending|ContainerCreating/'
+ssh root@77.91.94.165 'journalctl -u snap.microk8s.daemon-containerd --since "2 hours ago" | grep PullImage'
 ```
 
 **Причины:**
 - Тэг не существует в GHCR → проверить `https://github.com/<owner>/agent-lab/pkgs/container/agent-lab`.
 - Нет access от MicroK8s к ghcr.io → `kubectl get nodes -o wide` (есть ли интернет на ноде), `ssh root@<node> 'docker pull ghcr.io/<owner>/agent-lab:<tag>'`.
 - Приватный образ без imagePullSecret → нужен imagePullSecret (для public образа не требуется).
+- **gpu-worker тянет GHCR ~1 час на 5 GiB** (containerd: `Pulled ... in 1h0m16s`). Pod в `Init:1/2` / `ContainerCreating` **без Events**. helm `--wait` 60m упирается в `voice` (если он на GPU) и `provider-litserve`.
+- kubelet image GC при диске ≥85% сносит слои во время этого pull (`image_gc_manager.go`).
+- Второй `helm upgrade --wait` из `openfga_bootstrap_cluster.sh` снова катит GPU-поды, если pin уже стоит — скрипт это skip'ает.
 
 **Решение:**
+- `voice` только на master (`values.yaml`). Обычный Deploy **не** меняет `litserve.image` (`roll_litserve=false`).
+- Новый GPU-образ: `make k8s-gpu-sync IMAGE_TAG=<sha>` (LAN master→GPU), затем Deploy `roll_litserve=true`.
+- Диск GPU: `make k8s-gpu-prune`. `/etc/hosts` обязан содержать `gpu-worker` (`bootstrap-gpu-worker.sh`).
 - Перебилдить с правильным тэгом: `make k8s-deploy IMAGE_TAG=<correct-tag>`.
 
 ## 3. Certificate `Issuing` уже > 5 минут

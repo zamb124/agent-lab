@@ -134,14 +134,20 @@ log_ok "Secret ${IDS_SECRET} обновлён (канон pin для следу�
 
 if [ "${APPLY}" = "1" ]; then
   require_command helm
-  log_do "helm upgrade --reuse-values --set openfga.storeId / authorizationModelId"
-  helm upgrade "${REL}" "${CHART}" \
-    --namespace "${NS}" \
-    --reuse-values \
-    --set "openfga.storeId=${STORE_ID}" \
-    --set "openfga.authorizationModelId=${MODEL_ID}" \
-    --wait --timeout 15m
-  log_ok "Helm pinned; apps получили OPENFGA__STORE_ID / OPENFGA__AUTHORIZATION_MODEL_ID"
+  LIVE_STORE="$($K get deploy frontend -n "${NS}" -o jsonpath='{range .spec.template.spec.containers[0].env[?(@.name=="OPENFGA__STORE_ID")]}{.value}{end}' 2>/dev/null || true)"
+  LIVE_MODEL="$($K get deploy frontend -n "${NS}" -o jsonpath='{range .spec.template.spec.containers[0].env[?(@.name=="OPENFGA__AUTHORIZATION_MODEL_ID")]}{.value}{end}' 2>/dev/null || true)"
+  if [ -n "${LIVE_STORE}" ] && [ "${LIVE_STORE}" = "${STORE_ID}" ] && [ "${LIVE_MODEL}" = "${MODEL_ID}" ]; then
+    log_skip "OpenFGA pin уже на frontend (store/model совпали) — второй helm --wait не нужен"
+  else
+    log_do "helm upgrade --reuse-values --set openfga.storeId / authorizationModelId"
+    helm upgrade "${REL}" "${CHART}" \
+      --namespace "${NS}" \
+      --reuse-values \
+      --set "openfga.storeId=${STORE_ID}" \
+      --set "openfga.authorizationModelId=${MODEL_ID}" \
+      --wait --timeout 15m
+    log_ok "Helm pinned; apps получили OPENFGA__STORE_ID / OPENFGA__AUTHORIZATION_MODEL_ID"
+  fi
 else
   log_info "APPLY=0 — helm не трогали. Pin: APPLY=1 make k8s-openfga-bootstrap"
 fi

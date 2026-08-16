@@ -60,12 +60,17 @@ MicroK8s cluster
 | `litserve_node` | Нода для provider-litserve. `unchanged` = дефолт (gpu-worker). |
 | `service_overrides` | CSV точечных override: `flows=gpu-worker,redis=master,rag=auto`. Применяются поверх category. |
 | `replace_orphan_platform_secret` | `true` один раз: удалить существующий `platform-secrets` без Helm перед первым install. |
+| `roll_litserve` | `true`: поставить `agent-lab-gpu:<sha>` (сначала `make k8s-gpu-sync IMAGE_TAG=<sha>`). По умолчанию `false` — оставить текущий GPU-образ: pull GHCR с gpu-worker ~1 час на 5 GiB. |
 
 Логика подстановки нод: [`deploy/scripts/build_helm_node_sets.sh`](scripts/build_helm_node_sets.sh) собирает `--set <path>.nodeName=<value>` из ENV и передаёт в `helm upgrade`.
 
 **Локальный `make k8s-deploy`** с **`values-prod.yaml`** не создаёт docker-registry Secret: перед установкой выполните ту же команду, что в workflow (**`kubectl create secret docker-registry ghcr-agent-lab-pull ...`**), или задайте свой список **`image.pullSecrets`** и имя секрета в кластере.
 
-Никакого SSH, SCP, `docker compose`. Один helm-релиз, единый артефакт. В CI **`helm --wait --timeout 30m`** (первый install может упираться в pull образов и StatefulSets). Ошибка **`context deadline exceeded`**: проверить **`kubectl get pods -n platform`**, **`kubectl get events -n platform`**; при необходимости увеличить timeout в [deploy.yml](../.github/workflows/deploy.yml) или **`make k8s-deploy HELM_WAIT_TIMEOUT=45m`**. Ошибка **`another operation ... is in progress`**: **`make k8s-helm-clear-pending`** (снимает только зависшие Helm pending Secret, без отката Pod) — см. [`deploy/scripts/helm_clear_pending_release.sh`](scripts/helm_clear_pending_release.sh) и **`troubleshooting.md`** в skill DevOps. В GitHub Actions перед **`helm upgrade`** шаг [`Deploy`](../.github/workflows/deploy.yml) вызывает тот же скрипт; **`concurrency`** в workflow не отменяет параллельный второй деплой, а ставит его в очередь (**`cancel-in-progress: false`**).
+Обычный релиз (JS/apps, не LitServe): Deploy без `roll_litserve` — helm ждёт только master (минуты). `voice` на master. OpenFGA pin уже на frontend — `openfga_bootstrap_cluster.sh` **не** делает второй `helm --wait`.
+
+Новый GPU-образ LitServe: **`make k8s-gpu-sync IMAGE_TAG=<sha>`** (LAN master→gpu-worker), затем Deploy `roll_litserve=true`. Прямой GHCR pull на GPU ~1 час на 5 GiB; диск ≥85% включает image GC и срывает pull — **`make k8s-gpu-prune`**.
+
+Никакого `docker compose`. Один helm-релиз, единый артефакт. В CI **`helm --wait --timeout 60m`**. Ошибка **`context deadline exceeded`**: проверить **`kubectl get pods -n platform -o wide`** (поды на `gpu-worker` в `Init`/`ContainerCreating` без Events = медленный GHCR). Ошибка **`another operation ... is in progress`**: **`make k8s-helm-clear-pending`**. **`concurrency`** ставит второй деплой в очередь (**`cancel-in-progress: false`**).
 
 ## Конфигурация платформы для Helm (ConfigMap)
 
@@ -119,8 +124,10 @@ kubectl delete secret platform-secrets -n platform
 | [`helm_clear_pending_release.sh`](scripts/helm_clear_pending_release.sh) | локально / CI / master при наличии `kubectl` | Удалить Helm Secret с `status=pending-*` (разблокировать **`another operation is in progress`** без **`helm rollback`**) |
 | [`decommission-compose.sh`](scripts/decommission-compose.sh) | локально (SSH на хост) | Полный снос legacy docker compose стека; dry-run по default, `CONFIRM=1` — реально |
 | [`cluster-reset.sh`](scripts/cluster-reset.sh) | локально (SSH на обе ноды) | Полный reset MicroK8s (helm uninstall, namespace delete, snap purge); `CONFIRM=1` — реально |
+| [`gpu_sync_release_images.sh`](scripts/gpu_sync_release_images.sh) | локально (SSH master) | Pull на master + export/scp/import на gpu-worker. `make k8s-gpu-sync IMAGE_TAG=<sha>` |
+| [`gpu_prune_release_images.sh`](scripts/gpu_prune_release_images.sh) | локально (SSH gpu-worker) | Снести старые `agent-lab{,-gpu}` теги, оставить in-use + 3 последних. `make k8s-gpu-prune` |
 
-Обёртки в Makefile: `make k8s-deploy` / `k8s-health` / `k8s-backup` / `k8s-restore` / `k8s-rollback` / `k8s-uninstall`.
+Обёртки в Makefile: `make k8s-deploy` / `k8s-health` / `k8s-gpu-sync` / `k8s-gpu-prune` / `k8s-backup` / `k8s-restore` / `k8s-rollback` / `k8s-uninstall`.
 
 ## GitHub Secrets
 

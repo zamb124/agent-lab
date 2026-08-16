@@ -2,7 +2,7 @@
 .PHONY: test-frontend test-rag test-crawl-llm-live
 .PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-platform-events-canon check-core-frontend-canon check-embed-esm check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon check-field-canon check-rag-post-retrieval-rerank check-company-ai check-files-canon check-tool-tags check-taskiq-canon build-i18n
 .PHONY: clean-i18n-unused base
-.PHONY: render-helm-app-conf require-image-tag k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-helm-clear-pending k8s-helm-adopt-orphans k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore k8s-decommission-compose k8s-cluster-reset k8s-openfga-bootstrap k8s-openfga-backfill
+.PHONY: render-helm-app-conf require-image-tag k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-helm-clear-pending k8s-helm-adopt-orphans k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore k8s-decommission-compose k8s-cluster-reset k8s-openfga-bootstrap k8s-openfga-backfill k8s-gpu-sync k8s-gpu-prune
 
 STRESS_NUMERIC_TARGETS := $(shell seq 1 300 2>/dev/null)
 STRESS_GOAL_RPS := $(firstword $(filter $(STRESS_NUMERIC_TARGETS),$(MAKECMDGOALS)))
@@ -303,6 +303,16 @@ k8s-deploy: render-helm-app-conf require-image-tag
 	'
 	@PLATFORM_NS=$(K8S_NAMESPACE) bash deploy/scripts/helm_cleanup_stale_ingress.sh
 
+# Образы master → gpu-worker по LAN (не GHCR с GPU: ~1 час на 5 GiB).
+k8s-gpu-sync: require-image-tag
+	IMAGE_APP=ghcr.io/zamb124/agent-lab:$(IMAGE_TAG) \
+	IMAGE_GPU=ghcr.io/zamb124/agent-lab-gpu:$(IMAGE_TAG) \
+	bash deploy/scripts/gpu_sync_release_images.sh
+
+# Старые agent-lab{,-gpu} теги на gpu-worker (оставляет in-use + 3 последних).
+k8s-gpu-prune:
+	bash deploy/scripts/gpu_prune_release_images.sh
+
 # Bootstrap OpenFGA store+model (+ Secret openfga-ids). APPLY=0 — без helm pin.
 k8s-openfga-bootstrap:
 	@PLATFORM_NS=$(K8S_NAMESPACE) HELM_RELEASE=$(K8S_RELEASE) HELM_CHART=$(HELM_CHART) \
@@ -487,6 +497,8 @@ help:
 	@echo "  make k8s-helm-clear-pending - снять pending-upgrade/install/rollback у Helm (не откат Pod)"
 	@echo "  make k8s-secrets-sync    - Обновить Secret platform-secrets через helm (--reuse-values)"
 	@echo "  make k8s-uninstall       - helm uninstall (PVC сохраняются)"
+	@echo "  make k8s-gpu-sync IMAGE_TAG=<sha> - образы master→gpu-worker по LAN (до roll_litserve)"
+	@echo "  make k8s-gpu-prune         - старые agent-lab теги на gpu-worker (диск <85%)"
 	@echo "  make k8s-openfga-bootstrap [APPLY=0] - Bootstrap OpenFGA (default APPLY=1: Secret openfga-ids + helm pin)"
 	@echo "  make k8s-openfga-backfill - SQL/KV roster → OpenFGA tuples в поде (после wipe store / смены ключей)"
 	@echo "  make k8s-health          - Полная проверка кластера (deploy/scripts/cluster-health.sh)"

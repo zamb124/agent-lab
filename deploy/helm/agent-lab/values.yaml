@@ -398,11 +398,10 @@ applications:
         cpu: "1"
         memory: 1Gi
   voice:
-    # Voice gateway держим рядом с provider-litserve (минимизация RTT
-    # STT/TTS-batch вызовов и поддержка backend `silero_local` для VAD).
-    # Сам voice GPU не использует — toleration к dedicated=gpu:NoSchedule
-    # автоматически прокидывается gpuNodeNames-helper'ом.
-    nodeName: gpu-worker
+    # Voice GPU не использует. На gpu-worker pull ghcr.io ~1 час на 5 GiB
+    # (master тянет минуты) — любой релиз с voice на GPU вешает helm --wait.
+    # RTT до litserve идёт через ClusterIP; backend silero_local — в litserve.
+    nodeName: master
     enabled: true
     port: 8015
     replicas: 1

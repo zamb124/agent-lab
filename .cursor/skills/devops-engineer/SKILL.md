@@ -82,7 +82,7 @@ portainer (community-аддон microk8s, `bootstrap-master.sh`).
 | tempo | StatefulSet | master | `observability.tempo.nodeName` | 50Gi | Trace OTel 7 дней |
 | grafana | Deployment | master | `observability.grafana.nodeName` | 10Gi | UI + provisioned dashboards/alerts |
 | alloy | DaemonSet | все ноды | — (DaemonSet) | — | Сбор pod-логов (kubelet API) + OTLP relay в Tempo |
-| flows / frontend / crm / rag / sync / scheduler-api / office / voice / browser | Deployment | master | `applications.<name>.nodeName` | — | App services; browser Pod включает sidecar Chromium CDP (9222), порты 8001–8009 / 8015 |
+| flows / frontend / crm / rag / sync / scheduler-api / office / voice / browser | Deployment | master | `applications.<name>.nodeName` | — | App services; browser Pod включает sidecar Chromium CDP (9222), порты 8001–8009 / 8015. **voice только master** — GPU GHCR pull ~1ч/5GiB, иначе helm `--wait` висит |
 | flows-worker (×2) / scheduler / rag-worker / sync-worker / crm-worker / idle-worker | Deployment | master | `workers.<name>.nodeName` | — | TaskIQ workers |
 | livekit + livekit-egress | Deployment | master (hostNetwork) | `livekit.nodeName` / `livekitEgress.nodeName` | — | WebRTC сигналинг + egress; при смене ноды → `rebind-public-node.sh` |
 | coturn | DaemonSet | master (hostNetwork) | `coturn.nodeName` | — | TURN-сервер для WebRTC; при смене → `rebind-public-node.sh` |
@@ -294,9 +294,9 @@ make agent-ci-build AGENT_PLATFORM=macos-arm64 AGENT_ARTIFACT_MODE=release AGENT
 6. GPU-ноду рестартили — проверь `kubectl exec deployment/provider-litserve -- nvidia-smi`
    (драйвер) и cold-start модели (логи `gigaam-v3-rnnt-ru` / `silero-tts-v5-5-ru` /
    `silero-vad-v5` загружаются один раз на старт пода).
-7. Для co-location со `voice` под `provider-litserve` ходит на `gpu-worker`
-   (`values.yaml: voice.nodeName=gpu-worker`); если voice уехал на master —
-   увидишь рост latency real-time-сессий.
+7. `voice` канон — `master` (`values.yaml`). На `gpu-worker` только `provider-litserve`.
+   Новый GPU-образ: `make k8s-gpu-sync IMAGE_TAG=<sha>` (LAN master→GPU), затем
+   Deploy с `roll_litserve=true`. Прямой GHCR pull на GPU ~1 час на 5 GiB.
 
 ### Расследование инцидента
 
