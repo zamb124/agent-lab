@@ -98,15 +98,20 @@ export class FlowUIDrawer extends LitElement {
             }
             this.expanded = !this.expanded;
         };
+        this._onDrawerClose = () => {
+            this.open = false;
+        };
     }
 
     connectedCallback() {
         super.connectedCallback();
         this._bindToggleListener();
         this.addEventListener('flow-ui-drawer-expand-toggle', this._onExpandToggle);
+        this.addEventListener('flow-ui-drawer-close', this._onDrawerClose);
     }
 
     disconnectedCallback() {
+        this.removeEventListener('flow-ui-drawer-close', this._onDrawerClose);
         this.removeEventListener('flow-ui-drawer-expand-toggle', this._onExpandToggle);
         this._unbindToggleListener();
         super.disconnectedCallback();

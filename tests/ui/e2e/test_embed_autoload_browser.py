@@ -1048,6 +1048,23 @@ async def test_embed_site_all_live_attrs_host_api_and_message(
             await expect(page.locator("flow-ui-drawer[open]")).to_have_count(0)
             await _dispatch_toggle(page, "site-chat-open", open_panel=True)
             await expect(page.locator("flow-ui-drawer[open]")).to_have_count(1)
+            close_btn = page.locator("platform-flow-ui").get_by_role(
+                "button", name=re.compile(r"^Close$")
+            )
+            await expect(close_btn).to_be_visible()
+            last_chrome_label = await page.evaluate(
+                """() => {
+                    const flowUi = window.linnexFlowUI.element.shadowRoot
+                        .querySelector('platform-flow-ui');
+                    const last = flowUi.shadowRoot.querySelector('.top-actions').lastElementChild;
+                    return last.getAttribute('aria-label');
+                }"""
+            )
+            assert last_chrome_label == "Close"
+            await close_btn.click()
+            await expect(page.locator("flow-ui-drawer[open]")).to_have_count(0)
+            await _dispatch_toggle(page, "site-chat-open", open_panel=True)
+            await expect(page.locator("flow-ui-drawer[open]")).to_have_count(1)
             await _send_embed_message(page, user_line, network_events, errors)
             auth_calls = await page.evaluate("window.__embedAuthCalls")
             assert auth_calls >= 1

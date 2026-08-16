@@ -14,6 +14,7 @@ describe('flow-ui-drawer expand', () => {
         expect(source).toContain('expanded: { type: Boolean, reflect: true }');
         expect(source).toContain(':host([expanded][open])');
         expect(source).toContain('flow-ui-drawer-expand-toggle');
+        expect(source).toContain('flow-ui-drawer-close');
         expect(source).toContain('drawer-expanded');
         expect(source).toMatch(/100vw|100dvh|inset:\s*0/);
     });
@@ -24,8 +25,11 @@ describe('flow-ui-drawer expand', () => {
             'utf8',
         );
         expect(source).toContain('_expandControl');
+        expect(source).toContain('_closeControl');
         expect(source).toContain("this.display === 'drawer'");
         expect(source).toContain('flow-ui-drawer-expand-toggle');
+        expect(source).toContain('flow-ui-drawer-close');
+        expect(source).toContain('${filesPanel}${readonlyPill}${runControl}${expandControl}${embedMenu}${shareMenu}${closeControl}');
         expect(source).toContain("if (this.display === 'drawer') {\n            return 'minimal';");
     });
 });

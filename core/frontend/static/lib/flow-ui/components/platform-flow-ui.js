@@ -569,7 +569,7 @@ export class PlatformFlowUI extends LitElement {
         }
         const pages = Object.values(document?.pages || {}).filter((page) => page.navigation?.visible !== false);
         if (pages.length > 1) return 'full';
-        // Drawer always keeps minimal chrome so Expand / Share / Embed stay reachable.
+        // Drawer always keeps minimal chrome so Expand / Share / Embed / Close stay reachable.
         if (this.display === 'drawer') {
             return 'minimal';
         }
@@ -748,6 +748,13 @@ export class PlatformFlowUI extends LitElement {
             bubbles: true,
             composed: true,
             detail: { expanded: this.drawerExpanded !== true },
+        }));
+    }
+
+    _closeDrawer() {
+        this.dispatchEvent(new CustomEvent('flow-ui-drawer-close', {
+            bubbles: true,
+            composed: true,
         }));
     }
 
@@ -982,6 +989,18 @@ export class PlatformFlowUI extends LitElement {
         >${flowUIGlyph(expanded ? 'minimize' : 'expand', 18, this.platformUiOrigin)}</button>`;
     }
 
+    _closeControl() {
+        if (this.display !== 'drawer') return nothing;
+        const locale = resolveFlowUILocale(this.locale);
+        return html`<button
+            type="button"
+            class="chrome-icon-btn"
+            aria-label=${flowUIText(locale, 'close_aria')}
+            title=${flowUIText(locale, 'close_aria')}
+            @click=${this._closeDrawer}
+        >${flowUIGlyph('x', 18, this.platformUiOrigin)}</button>`;
+    }
+
     _topActions(chromeMode, effectiveReadonly) {
         const sessionFiles = this._sessionFiles();
         const filesPanel = sessionFiles.length > 0
@@ -994,6 +1013,7 @@ export class PlatformFlowUI extends LitElement {
         const shareMenu = this._shareMenu();
         const embedMenu = this._embedMenu();
         const expandControl = this._expandControl();
+        const closeControl = this._closeControl();
         const readonlyPill = effectiveReadonly && chromeMode === 'full'
             ? html`<span class="readonly-pill">${flowUIText(resolveFlowUILocale(this.locale), 'read_only')}</span>`
             : nothing;
@@ -1003,11 +1023,12 @@ export class PlatformFlowUI extends LitElement {
             && shareMenu === nothing
             && embedMenu === nothing
             && expandControl === nothing
+            && closeControl === nothing
             && readonlyPill === nothing
         ) {
             return nothing;
         }
-        return html`<div class="top-actions">${filesPanel}${readonlyPill}${runControl}${expandControl}${embedMenu}${shareMenu}</div>`;
+        return html`<div class="top-actions">${filesPanel}${readonlyPill}${runControl}${expandControl}${embedMenu}${shareMenu}${closeControl}</div>`;
     }
 
     _navigation(document) {
