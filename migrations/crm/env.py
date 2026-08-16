@@ -1,8 +1,8 @@
 """
 Alembic env для crm БД.
 
-Управляет таблицами: crm_entities, crm_tasks, entity_types, relationship_types,
-relationships, company_mapping, access_requests.
+Управляет таблицами: crm_entities, crm_tasks, entity_types, entity_type_catalog_revision,
+relationship_types, relationships, company_mapping, access_requests.
 """
 
 import asyncio
@@ -25,6 +25,7 @@ from apps.crm.db.models import (  # noqa: F401
     CRMSuggest,
     CRMTask,
     EntityType,
+    EntityTypeCatalogRevision,
     Relationship,
     RelationshipType,
 )
@@ -41,6 +42,7 @@ MANAGED_TABLES = {
     "crm_entities",
     "crm_tasks",
     "entity_types",
+    "entity_type_catalog_revision",
     "relationship_types",
     "relationships",
     "company_mapping",

@@ -311,12 +311,7 @@ class NamespaceTemplateService:
         return namespace
 
     async def get_namespace_editability(self, namespace_name: str) -> NamespaceEditability:
-        types_here = await self._entity_type_repo.list_by_company(
-            namespace=namespace_name,
-            include_system=True,
-            limit=10_000,
-            offset=0,
-        )
+        types_here = await self._entity_type_repo.list_catalog_by_namespace(namespace_name)
         current_allowed_type_ids = sorted({t.type_id for t in types_here})
 
         type_ids_elsewhere: set[str] = set()

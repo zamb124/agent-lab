@@ -43,6 +43,8 @@ description: "CRM (NetWorkle): entities, relationships, graph, namespaces, AI an
 
 **API типов:** `GET /entity-types?namespace=...`, `POST /entity-types` (тело с `namespace`, дефолт `"default"`), `GET/PUT /entity-types/{type_id}?namespace=...`, `PUT .../public-fields?namespace=...`, `GET /entity-types/by-namespace/{ns}`. Материализация шаблонов namespace — отдельная строка `EntityType` на пару `(целевой namespace, type_id)`. Общая на компанию строка без `namespace` не используется.
 
+**Каталог типов (load_all):** один `SELECT` по `(company_id[, namespace])`, без keyset paging по 200. Process-cache в `apps/crm/db/entity_type_catalog_cache.py` отдаёт снимок только если `memory.revision == entity_type_catalog_revision.revision` (нет строки → 0). Мутация `EntityType` (`create` / `update` / `update_metadata*` / `update_color` / `merge_optional_fields_if_absent` / `delete_entity_type_scoped`) и `revision + 1` — одна транзакция, затем drop cache компании. Ошибка чтения revision → `raise`, не stale. TTL нет. `get_by_type_id` в кеш не входит. Потолок каталога — `CATALOG_MAX_ROWS` (raise, не обрезать).
+
 **Системные типы** (`SYSTEM_ENTITY_TYPE_TEMPLATES`) при инициализации компании создаются в `namespace="default"`: `note`, `meeting` (`parent=note`), `call` (`parent=note`), `task`, `contact`, `member`, `company`, `namespace`. Для других пространств клонируются через `ensure_namespace_ready`.
 
 `member`/`contact`/`company` имеют `optional_fields.aliases` (`array`) — для @-обогащения.

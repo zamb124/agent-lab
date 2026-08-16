@@ -124,6 +124,34 @@ class TestEntityTypes:
         assert "topic" in _required_fields_dict(entity_type)
 
     @pytest.mark.asyncio
+    async def test_created_entity_type_is_in_namespace_list(
+        self,
+        crm_client: AsyncClient,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
+    ) -> None:
+        namespace = f"et_list_{unique_id}"
+        type_id = f"listed_{unique_id}"
+        create_response = await crm_client.post(
+            "/crm/api/v1/entity-types/",
+            json={
+                "type_id": type_id,
+                "namespace": namespace,
+                "name": "Listed type",
+            },
+            headers=auth_headers_system,
+        )
+        assert create_response.status_code == 200, create_response.text
+
+        list_response = await crm_client.get(
+            "/crm/api/v1/entity-types/",
+            headers=auth_headers_system,
+            params={"namespace": namespace, "limit": 200},
+        )
+        assert list_response.status_code == 200, list_response.text
+        assert type_id in _type_ids_from_response(list_response)
+
+    @pytest.mark.asyncio
     async def test_create_entity_with_custom_type(
         self,
         crm_client: AsyncClient,

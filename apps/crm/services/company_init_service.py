@@ -379,7 +379,10 @@ class CompanyInitService:
         Возвращает:
             Список существующих типов компании
         """
-        return await self._entity_type_repo.list_by_company(company_id=company_id, limit=10000)
+        return await self._entity_type_repo.load_all_entity_types_for_company(
+            company_id=company_id,
+            catalog_only=False,
+        )
 
     async def _check_existing_relationship_types(self, company_id: str) -> list[RelationshipType]:
         return await self._relationship_type_repo.list_all_by_company(

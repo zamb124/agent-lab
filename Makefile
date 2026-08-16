@@ -2,7 +2,7 @@
 .PHONY: test-frontend test-rag test-crawl-llm-live
 .PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-platform-events-canon check-core-frontend-canon check-embed-esm check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon check-field-canon check-rag-post-retrieval-rerank check-company-ai check-files-canon check-tool-tags check-taskiq-canon build-i18n
 .PHONY: clean-i18n-unused base
-.PHONY: render-helm-app-conf require-image-tag k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-helm-clear-pending k8s-helm-adopt-orphans k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore k8s-decommission-compose k8s-cluster-reset k8s-openfga-bootstrap
+.PHONY: render-helm-app-conf require-image-tag k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-helm-clear-pending k8s-helm-adopt-orphans k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore k8s-decommission-compose k8s-cluster-reset k8s-openfga-bootstrap k8s-openfga-backfill
 
 STRESS_NUMERIC_TARGETS := $(shell seq 1 300 2>/dev/null)
 STRESS_GOAL_RPS := $(firstword $(filter $(STRESS_NUMERIC_TARGETS),$(MAKECMDGOALS)))
@@ -308,6 +308,12 @@ k8s-openfga-bootstrap:
 	@PLATFORM_NS=$(K8S_NAMESPACE) HELM_RELEASE=$(K8S_RELEASE) HELM_CHART=$(HELM_CHART) \
 	  APPLY=$${APPLY:-1} bash deploy/scripts/openfga_bootstrap_cluster.sh
 
+# SQL/KV → OpenFGA tuples в кластере (идемпотентно). SYNC_LOCAL_FLOWS_BACKFILL=1 — взять backfill.py с диска.
+k8s-openfga-backfill:
+	@PLATFORM_NS=$(K8S_NAMESPACE) \
+	  SYNC_LOCAL_FLOWS_BACKFILL=$${SYNC_LOCAL_FLOWS_BACKFILL:-0} \
+	  bash deploy/scripts/openfga_backfill_cluster.sh
+
 # Снимок состояния кластера: ноды, поды, сервисы, ingress, PVC.
 k8s-status:
 	@echo "=== Nodes ==="
@@ -482,6 +488,7 @@ help:
 	@echo "  make k8s-secrets-sync    - Обновить Secret platform-secrets через helm (--reuse-values)"
 	@echo "  make k8s-uninstall       - helm uninstall (PVC сохраняются)"
 	@echo "  make k8s-openfga-bootstrap [APPLY=0] - Bootstrap OpenFGA (default APPLY=1: Secret openfga-ids + helm pin)"
+	@echo "  make k8s-openfga-backfill - SQL/KV roster → OpenFGA tuples в поде (после wipe store / смены ключей)"
 	@echo "  make k8s-health          - Полная проверка кластера (deploy/scripts/cluster-health.sh)"
 	@echo "  make k8s-backup [S3=s3://...] - pg_dumpall в backups/ (опционально в Selectel S3)"
 	@echo "  make k8s-restore FILE=<path>  - Восстановление дампа в pod postgres-0"

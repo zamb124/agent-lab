@@ -163,6 +163,8 @@ helm rollback agent-lab <REV> -n platform
 | `join-cluster.sh` | add-node + SSH join `--worker` + label `accelerator=nvidia-gpu` + taint `dedicated=gpu:NoSchedule` | master root |
 | `setup-wildcard-tls.sh` | git clone flant/cert-manager-webhook-regru, helm install, ClusterIssuer letsencrypt-prod-dns01, Certificate platform-tls | локально / master |
 | `cluster-health.sh` | Полная health-проверка | локально / master / **CI** |
+| `openfga_bootstrap_cluster.sh` | Store + model pin → Secret `openfga-ids` + helm `--set` | локально / CI; **`make k8s-openfga-bootstrap`** |
+| `openfga_backfill_cluster.sh` | SQL/KV roster → OpenFGA tuples внутри пода `flows` | локально / master; **`make k8s-openfga-backfill`** |
 | `build_helm_node_sets.sh` | Строит `--set <svc>.nodeName=<node>` из ENV (APPS_NODE/WORKERS_NODE/DATA_NODE/PUBLIC_NODE/LITSERVE_NODE/SERVICE_OVERRIDES). Вызывается из CI шага Helm upgrade. | CI / локально |
 | `migrate-pvc.sh` | Переносит StatefulSet с данными на другую ноду: backup → helm upgrade → delete PVC → helm upgrade → restore. `bash migrate-pvc.sh <component> <new_node>` | локально / master |
 | `rebind-public-node.sh` | Обновляет DNS A-записи apex-доменов (`linnex.io`, `humanitec.ru`) через Reg.ru API и переносит hostNetwork-сервисы (livekit/coturn) на новую ноду. `bash rebind-public-node.sh <node> <ip>` | локально / master |

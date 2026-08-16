@@ -14,6 +14,7 @@ from datetime import UTC, date, datetime
 from typing import override
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     Date,
     DateTime,
@@ -199,6 +200,12 @@ class EntityType(Base):
         Index("idx_entity_types_parent", "parent_type_id"),
         Index("idx_entity_types_system", "is_system"),
         Index("ix_entity_types_company_ns", "company_id", "namespace"),
+        Index(
+            "ix_entity_types_company_system_type",
+            "company_id",
+            text("is_system DESC"),
+            text("type_id ASC"),
+        ),
     )
 
     @override
@@ -207,6 +214,15 @@ class EntityType(Base):
             f"<EntityType(type_id='{self.type_id}', namespace='{self.namespace}', "
             f"name='{self.name}', company='{self.company_id}')>"
         )
+
+
+class EntityTypeCatalogRevision(Base):
+    """Поколение каталога EntityType: +1 в той же транзакции, что INSERT/UPDATE/DELETE типа."""
+
+    __tablename__: str = "entity_type_catalog_revision"
+
+    company_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
 
 class RelationshipType(Base):

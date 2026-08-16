@@ -173,7 +173,7 @@ kubectl delete secret platform-secrets -n platform
 | `OPENFGA_STORE_ID` | опциональный override Helm `openfga.storeId` |
 | `OPENFGA_AUTHORIZATION_MODEL_ID` | опциональный override `openfga.authorizationModelId` |
 
-Pin store/model **автоматический** после helm: `openfga_bootstrap_cluster.sh` → Secret `openfga-ids` + `--set`. GitHub Secrets для ids не обязательны. Ручной повтор: `make k8s-openfga-bootstrap`.
+Pin store/model **автоматический** после helm: `openfga_bootstrap_cluster.sh` → Secret `openfga-ids` + `--set`. GitHub Secrets для ids не обязательны. Ручной повтор pin: `make k8s-openfga-bootstrap`. Tuples после wipe store или смены object key: `make k8s-openfga-backfill`.
 
 ## Ручной деплой (без CI)
 

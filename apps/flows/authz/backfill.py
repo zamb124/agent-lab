@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
 from typing import cast
 
 from sqlalchemy import text
@@ -29,7 +29,6 @@ from apps.flows.authz.tuples import (
     tool_platform_link,
 )
 from apps.flows.src.models.flow_config import FlowConfig
-from apps.flows.src.models.tool_reference import ToolReference
 from core.authz.factory import build_authz_service
 from core.authz.models import AuthzObject, AuthzTuple
 from core.authz.platform_sync import ensure_platform_global_admin
@@ -38,11 +37,12 @@ from core.authz.types import AuthzObjectType, AuthzRelation
 from core.config import get_settings
 from core.db.storage import Storage
 from core.logging import get_logger
-from core.types import parse_json_object
+from core.types import JsonObject, parse_json_object
 
 logger = get_logger(__name__)
 
 _OPENFGA_WRITE_CHUNK = 100
+_KV_PAGE_SIZE = 5000
 
 
 def _compound_object_key_is_unscoped(
@@ -67,6 +67,42 @@ async def _delete_unscoped_compound_tuples(
     for start in range(0, len(deletes), _OPENFGA_WRITE_CHUNK):
         await authz.delete(deletes[start : start + _OPENFGA_WRITE_CHUNK])
     return len(deletes)
+
+
+async def _write_tuple_chunks(authz: AuthzService, tuples: list[AuthzTuple]) -> None:
+    total = len(tuples)
+    for start in range(0, total, _OPENFGA_WRITE_CHUNK):
+        await authz.write(tuples[start : start + _OPENFGA_WRITE_CHUNK])
+        done = min(start + _OPENFGA_WRITE_CHUNK, total)
+        if done == total or done % 10000 == 0:
+            logger.info("flows authz backfill tuples written=%s/%s", done, total)
+
+
+async def _delete_tuple_chunks(authz: AuthzService, tuples: list[AuthzTuple]) -> None:
+    total = len(tuples)
+    for start in range(0, total, _OPENFGA_WRITE_CHUNK):
+        await authz.delete(tuples[start : start + _OPENFGA_WRITE_CHUNK])
+        done = min(start + _OPENFGA_WRITE_CHUNK, total)
+        if done == total or done % 10000 == 0:
+            logger.info("flows authz backfill tuples deleted=%s/%s", done, total)
+
+
+async def _iter_company_prefixed_rows(
+    storage: Storage, table_name: str
+) -> AsyncIterator[tuple[str, str]]:
+    offset = 0
+    while True:
+        page = await storage.get_all_by_prefix_and_table(
+            "company:", table_name, limit=_KV_PAGE_SIZE, offset=offset
+        )
+        page_len = len(page)
+        if page_len == 0:
+            break
+        for storage_key, raw_value in page.items():
+            yield storage_key, raw_value
+        if page_len < _KV_PAGE_SIZE:
+            break
+        offset += _KV_PAGE_SIZE
 
 
 def _flow_permission_writes(
@@ -123,16 +159,38 @@ def _tool_permission_writes(
     return writes
 
 
-def _parse_company_resource_key(storage_key: str, resource: str) -> tuple[str, str] | None:
+def parse_company_resource_key(storage_key: str, resource: str) -> tuple[str, str] | None:
     # company:{company_id}:flow:{flow_id} / company:{company_id}:tool:{tool_id}
+    # tool_id MCP содержит `:`, поэтому entity — всё после третьего сегмента.
     parts = storage_key.split(":")
     if len(parts) < 4 or parts[0] != "company" or parts[2] != resource:
         return None
     company_id = parts[1]
-    entity_id = parts[3]
+    entity_id = ":".join(parts[3:])
     if not company_id or not entity_id:
         return None
     return company_id, entity_id
+
+
+def tool_permission_from_payload(
+    payload: JsonObject, *, storage_key: str, tool_id: str
+) -> list[str]:
+    stored_tool_id = payload.get("tool_id")
+    if not isinstance(stored_tool_id, str) or stored_tool_id != tool_id:
+        raise ValueError(
+            f"tool_id mismatch in key {storage_key}: {stored_tool_id!r}"
+        )
+    raw_permission = payload.get("permission")
+    if raw_permission is None:
+        return []
+    if not isinstance(raw_permission, list):
+        raise ValueError(f"permission must be list in key {storage_key}")
+    groups: list[str] = []
+    for item in raw_permission:
+        if not isinstance(item, str):
+            raise ValueError(f"permission item must be str in key {storage_key}")
+        groups.append(item)
+    return groups
 
 
 async def backfill_flows_authz(*, limit: int | None = None) -> tuple[int, int, int]:
@@ -150,16 +208,12 @@ async def backfill_flows_authz(*, limit: int | None = None) -> tuple[int, int, i
     unscoped_flows = await _delete_unscoped_compound_tuples(
         authz, AuthzObjectType.FLOW
     )
-    unscoped_tools = await _delete_unscoped_compound_tuples(
-        authz, AuthzObjectType.TOOL
-    )
     unscoped_branches = await _delete_unscoped_compound_tuples(
         authz, AuthzObjectType.FLOW_BRANCH
     )
     logger.info(
-        "flows authz backfill purged unscoped flows=%s tools=%s branches=%s",
+        "flows authz backfill purged unscoped flows=%s branches=%s",
         unscoped_flows,
-        unscoped_tools,
         unscoped_branches,
     )
 
@@ -168,13 +222,12 @@ async def backfill_flows_authz(*, limit: int | None = None) -> tuple[int, int, i
     tools_written = 0
     shares_written = 0
     try:
-        flow_rows = await storage.get_all_by_prefix("company:", limit=50_000)
-        for storage_key, raw_value in flow_rows.items():
+        async for storage_key, raw_value in _iter_company_prefixed_rows(storage, "flows"):
             if limit is not None and flows_written + tools_written + shares_written >= limit:
                 break
-            parsed = _parse_company_resource_key(storage_key, "flow")
+            parsed = parse_company_resource_key(storage_key, "flow")
             if parsed is None:
-                continue
+                raise ValueError(f"invalid flow storage key: {storage_key}")
             company_id, flow_id = parsed
             payload = parse_json_object(raw_value, "flow_config")
             config = FlowConfig.model_validate(payload)
@@ -214,34 +267,53 @@ async def backfill_flows_authz(*, limit: int | None = None) -> tuple[int, int, i
                     list(branch_existing_set - branch_desired_set),
                 )
             flows_written += 1
+        logger.info("flows authz backfill flows written=%s", flows_written)
 
-        tool_rows = await storage.get_all_by_prefix("company:", limit=50_000)
-        for storage_key, raw_value in tool_rows.items():
+        tool_desired_all: list[AuthzTuple] = []
+        async for storage_key, raw_value in _iter_company_prefixed_rows(storage, "tools"):
             if limit is not None and flows_written + tools_written + shares_written >= limit:
                 break
-            parsed = _parse_company_resource_key(storage_key, "tool")
+            parsed = parse_company_resource_key(storage_key, "tool")
             if parsed is None:
-                continue
+                raise ValueError(f"invalid tool storage key: {storage_key}")
             company_id, tool_id = parsed
             payload = parse_json_object(raw_value, "tool_reference")
-            tool = ToolReference.model_validate(payload)
-            if tool.tool_id != tool_id:
-                raise ValueError(
-                    f"tool_id mismatch in key {storage_key}: {tool.tool_id!r}"
-                )
-            tool_desired = _tool_permission_writes(
-                tool_id, company_id, tool.permission
+            permission = tool_permission_from_payload(
+                payload, storage_key=storage_key, tool_id=tool_id
             )
-            tool_existing = await authz.list_tuples(
-                AuthzObject.tool(tool_id, company_id=company_id)
-            )
-            tool_desired_set = frozenset(tool_desired)
-            tool_existing_set = frozenset(tool_existing)
-            await authz.write_and_delete(
-                list(tool_desired_set - tool_existing_set),
-                list(tool_existing_set - tool_desired_set),
+            tool_desired_all.extend(
+                _tool_permission_writes(tool_id, company_id, permission)
             )
             tools_written += 1
+            if tools_written % 20000 == 0:
+                logger.info(
+                    "flows authz backfill tools scanned=%s",
+                    tools_written,
+                )
+        logger.info(
+            "flows authz backfill tools loaded=%s desired_tuples=%s",
+            tools_written,
+            len(tool_desired_all),
+        )
+        unscoped_tools = 0
+        if limit is None:
+            unscoped_tools = await _delete_unscoped_compound_tuples(
+                authz, AuthzObjectType.TOOL
+            )
+        logger.info(
+            "flows authz backfill purged unscoped tools=%s",
+            unscoped_tools,
+        )
+        tool_desired_set = frozenset(tool_desired_all)
+        if limit is None:
+            tool_existing = await authz.list_tuples(object_type=AuthzObjectType.TOOL)
+            tool_existing_set = frozenset(tool_existing)
+            await _write_tuple_chunks(authz, list(tool_desired_set - tool_existing_set))
+            await _delete_tuple_chunks(
+                authz, list(tool_existing_set - tool_desired_set)
+            )
+        else:
+            await _write_tuple_chunks(authz, list(tool_desired_set))
 
         engine = create_async_engine(str(settings.database.flows_url))
         share_rows: list[Mapping[str, object]] = []
