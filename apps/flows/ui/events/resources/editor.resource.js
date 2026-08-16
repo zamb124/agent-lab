@@ -284,6 +284,360 @@ function _incomingEdgeIndicesToNode(edges, nodeId) {
     return out;
 }
 
+const IDLE_RUN_SESSION = Object.freeze({
+    contextId: null,
+    taskId: null,
+    taskPrimed: false,
+});
+
+const EMPTY_RUN_TRACE = Object.freeze([]);
+const EMPTY_END_WIRE_STATE = Object.freeze({});
+const EMPTY_NODE_RUN_RESULTS = Object.freeze({});
+const EMPTY_EXPANDED_NODE_RUN_KEYS = Object.freeze([]);
+
+function _optionalRunId(value) {
+    if (value === null || value === undefined) {
+        return null;
+    }
+    if (typeof value !== 'string' || value.length === 0) {
+        throw new Error('flows/editor: run id must be a non-empty string or null');
+    }
+    return value;
+}
+
+function _graphEntryId(state) {
+    if (typeof state.entryNodeId === 'string' && state.entryNodeId.length > 0) {
+        return state.entryNodeId;
+    }
+    const entry = state.branchData && typeof state.branchData.entry === 'string'
+        ? state.branchData.entry
+        : '';
+    return entry.length > 0 ? entry : null;
+}
+
+function _isSinkNode(state, nodeId) {
+    const edges = state.branchData && Array.isArray(state.branchData.edges)
+        ? state.branchData.edges
+        : [];
+    for (let i = 0; i < edges.length; i += 1) {
+        const edge = edges[i];
+        if (!_isPlainObject(edge)) {
+            continue;
+        }
+        const from = edge.from_node != null && edge.from_node !== '' ? edge.from_node : edge.from;
+        if (from === nodeId) {
+            return false;
+        }
+    }
+    return true;
+}
+
+function _applyTerminalWires(state, nodeId, phase) {
+    if (typeof nodeId !== 'string' || nodeId.length === 0) {
+        throw new Error('flows/editor: terminal wire node_id required');
+    }
+    if (phase !== 'started' && phase !== 'completed' && phase !== 'failed') {
+        throw new Error(`flows/editor: unsupported terminal wire phase ${String(phase)}`);
+    }
+    const entryId = _graphEntryId(state);
+    let startWireRunState = state.startWireRunState === undefined ? null : state.startWireRunState;
+    const prevEnds = _isPlainObject(state.endWireRunStateByNodeId)
+        ? state.endWireRunStateByNodeId
+        : EMPTY_END_WIRE_STATE;
+    let endWireRunStateByNodeId = prevEnds;
+    if (entryId === nodeId) {
+        if (phase === 'started') {
+            startWireRunState = 'running';
+        } else if (phase === 'completed') {
+            startWireRunState = 'completed';
+        } else {
+            startWireRunState = 'failed';
+        }
+    }
+    if (phase !== 'started' && _isSinkNode(state, nodeId)) {
+        endWireRunStateByNodeId = Object.freeze({
+            ...prevEnds,
+            [nodeId]: phase === 'completed' ? 'completed' : 'failed',
+        });
+    }
+    return {
+        ...state,
+        startWireRunState,
+        endWireRunStateByNodeId,
+    };
+}
+
+function _clearedRunVisualization(state, extras) {
+    return {
+        ...state,
+        runningNodeIds: [],
+        completedNodeIds: [],
+        runningEdgeIndices: [],
+        completedEdgeIndices: [],
+        failedEdgeIndices: [],
+        erroredNodes: {},
+        nodeRunResults: EMPTY_NODE_RUN_RESULTS,
+        expandedNodeRunKeys: EMPTY_EXPANDED_NODE_RUN_KEYS,
+        breakpointHitNodeId: null,
+        runTrace: EMPTY_RUN_TRACE,
+        startWireRunState: null,
+        endWireRunStateByNodeId: EMPTY_END_WIRE_STATE,
+        runSession: extras.runSession,
+        agentExecutionRunning: extras.agentExecutionRunning,
+    };
+}
+
+function _applyFlowStarted(state, payload) {
+    const contextId = _optionalRunId(payload.context_id);
+    const taskId = _optionalRunId(payload.task_id);
+    return _clearedRunVisualization(state, {
+        agentExecutionRunning: true,
+        runSession: Object.freeze({
+            contextId,
+            taskId,
+            taskPrimed: false,
+        }),
+    });
+}
+
+function _applyFlowDone(state) {
+    return { ...state, agentExecutionRunning: false };
+}
+
+function _applySessionCleared(state) {
+    return _clearedRunVisualization(state, {
+        agentExecutionRunning: false,
+        runSession: IDLE_RUN_SESSION,
+    });
+}
+
+function _applyEdgeExecuted(state, payload) {
+    const idx = typeof payload.edge_index === 'number' && Number.isFinite(payload.edge_index)
+        ? Math.floor(payload.edge_index)
+        : -1;
+    if (idx < 0) return state;
+    const completedSet = new Set(Array.isArray(state.completedEdgeIndices) ? state.completedEdgeIndices : []);
+    if (completedSet.has(idx)) return state;
+    const runningSet = new Set(Array.isArray(state.runningEdgeIndices) ? state.runningEdgeIndices : []);
+    runningSet.add(idx);
+    return { ...state, runningEdgeIndices: Array.from(runningSet) };
+}
+
+function _applyEdgeError(state, payload) {
+    const idx = typeof payload.edge_index === 'number' && Number.isFinite(payload.edge_index)
+        ? Math.floor(payload.edge_index)
+        : -1;
+    if (idx < 0) return state;
+    const runSet = new Set(Array.isArray(state.runningEdgeIndices) ? state.runningEdgeIndices : []);
+    const compSet = new Set(Array.isArray(state.completedEdgeIndices) ? state.completedEdgeIndices : []);
+    const failSet = new Set(Array.isArray(state.failedEdgeIndices) ? state.failedEdgeIndices : []);
+    runSet.delete(idx);
+    compSet.delete(idx);
+    failSet.add(idx);
+    return {
+        ...state,
+        runningEdgeIndices: Array.from(runSet),
+        completedEdgeIndices: Array.from(compSet),
+        failedEdgeIndices: Array.from(failSet),
+    };
+}
+
+function _applyNodeStarted(state, payload) {
+    const nodeId = payload.node_id;
+    if (typeof nodeId !== 'string' || nodeId.length === 0) return state;
+    const erroredCopy = { ...state.erroredNodes };
+    delete erroredCopy[nodeId];
+    const edges = state.branchData && Array.isArray(state.branchData.edges)
+        ? state.branchData.edges
+        : [];
+    const incomingIdx = _incomingEdgeIndicesToNode(edges, nodeId);
+    const runSet = new Set(Array.isArray(state.runningEdgeIndices) ? state.runningEdgeIndices : []);
+    const compSet = new Set(Array.isArray(state.completedEdgeIndices) ? state.completedEdgeIndices : []);
+    for (let i = 0; i < incomingIdx.length; i += 1) {
+        const ei = incomingIdx[i];
+        if (runSet.has(ei)) {
+            runSet.delete(ei);
+            compSet.add(ei);
+        }
+    }
+    return _applyTerminalWires({
+        ...state,
+        runningNodeIds: _withId(state.runningNodeIds, nodeId),
+        completedNodeIds: _withoutId(state.completedNodeIds, nodeId),
+        erroredNodes: erroredCopy,
+        runningEdgeIndices: Array.from(runSet),
+        completedEdgeIndices: Array.from(compSet),
+    }, nodeId, 'started');
+}
+
+function _applyNodeCompleted(state, payload) {
+    const nodeId = payload.node_id;
+    if (typeof nodeId !== 'string' || nodeId.length === 0) return state;
+    const existing = state.nodeRunResults && typeof state.nodeRunResults === 'object'
+        ? state.nodeRunResults[nodeId]
+        : null;
+    const runIndex = typeof payload.run_index === 'number' && Number.isFinite(payload.run_index)
+        ? Math.floor(payload.run_index)
+        : (Array.isArray(existing) ? existing.length : 0);
+    const nodeType = typeof payload.node_type === 'string' ? payload.node_type : '';
+    const resultPreview = typeof payload.result_preview === 'string' ? payload.result_preview : '';
+    const primaryField = typeof payload.primary_field === 'string' ? payload.primary_field : '';
+    let durationMs = null;
+    if (typeof payload.duration_ms === 'number' && Number.isFinite(payload.duration_ms)) {
+        durationMs = Math.round(payload.duration_ms);
+    }
+    const diff = Array.isArray(payload.diff) ? _normalizeDiffList(payload.diff) : Object.freeze([]);
+    const result = Object.freeze({
+        kind: 'ok',
+        node_id: nodeId,
+        node_type: nodeType,
+        run_index: runIndex,
+        result_preview: resultPreview,
+        primary_field: primaryField,
+        duration_ms: durationMs,
+        diff,
+    });
+    return _applyTerminalWires({
+        ...state,
+        runningNodeIds: _withoutId(state.runningNodeIds, nodeId),
+        completedNodeIds: _withId(state.completedNodeIds, nodeId),
+        nodeRunResults: _appendNodeRunResult(state.nodeRunResults, nodeId, result),
+    }, nodeId, 'completed');
+}
+
+function _applyNodeFailed(state, payload) {
+    const nodeId = payload.node_id;
+    if (typeof nodeId !== 'string' || nodeId.length === 0) return state;
+    const existing = state.nodeRunResults && typeof state.nodeRunResults === 'object'
+        ? state.nodeRunResults[nodeId]
+        : null;
+    const runIndex = typeof payload.run_index === 'number' && Number.isFinite(payload.run_index)
+        ? Math.floor(payload.run_index)
+        : (Array.isArray(existing) ? existing.length : 0);
+    const nodeType = typeof payload.node_type === 'string' ? payload.node_type : '';
+    let durationMs = null;
+    if (typeof payload.duration_ms === 'number' && Number.isFinite(payload.duration_ms)) {
+        durationMs = Math.round(payload.duration_ms);
+    }
+    const errorText = typeof payload.error === 'string' ? payload.error : '';
+    const result = Object.freeze({
+        kind: 'error',
+        node_id: nodeId,
+        node_type: nodeType,
+        run_index: runIndex,
+        error: errorText,
+        duration_ms: durationMs,
+        diff: Object.freeze([]),
+    });
+    const erroredCopy = { ...state.erroredNodes, [nodeId]: errorText };
+    const edges = state.branchData && Array.isArray(state.branchData.edges)
+        ? state.branchData.edges
+        : [];
+    const incomingIdx = _incomingEdgeIndicesToNode(edges, nodeId);
+    const runSet = new Set(Array.isArray(state.runningEdgeIndices) ? state.runningEdgeIndices : []);
+    const failSet = new Set(Array.isArray(state.failedEdgeIndices) ? state.failedEdgeIndices : []);
+    for (let i = 0; i < incomingIdx.length; i += 1) {
+        const ei = incomingIdx[i];
+        if (runSet.has(ei)) runSet.delete(ei);
+        failSet.add(ei);
+    }
+    return _applyTerminalWires({
+        ...state,
+        runningNodeIds: _withoutId(state.runningNodeIds, nodeId),
+        erroredNodes: erroredCopy,
+        runningEdgeIndices: Array.from(runSet),
+        failedEdgeIndices: Array.from(failSet),
+        nodeRunResults: _appendNodeRunResult(state.nodeRunResults, nodeId, result),
+    }, nodeId, 'failed');
+}
+
+function _applyRunEvent(state, type, payload) {
+    if (type === 'flows/run/node_started') {
+        return _applyNodeStarted(state, payload);
+    }
+    if (type === 'flows/run/node_completed') {
+        return _applyNodeCompleted(state, payload);
+    }
+    if (type === 'flows/run/node_failed') {
+        return _applyNodeFailed(state, payload);
+    }
+    if (type === 'flows/run/edge_executed') {
+        return _applyEdgeExecuted(state, payload);
+    }
+    if (type === 'flows/run/edge_error') {
+        return _applyEdgeError(state, payload);
+    }
+    throw new Error(`flows/editor: unsupported mapped run event ${type}`);
+}
+
+function _applyA2aMapped(state, payload) {
+    const contextId = payload.context_id;
+    if (typeof contextId !== 'string' || contextId.length === 0) {
+        throw new Error('flows/editor: a2a_mapped context_id required');
+    }
+    if (!Array.isArray(payload.runEvents)) {
+        throw new Error('flows/editor: a2a_mapped runEvents array required');
+    }
+    if (!Array.isArray(payload.traceEntries)) {
+        throw new Error('flows/editor: a2a_mapped traceEntries array required');
+    }
+    if (typeof payload.terminal !== 'boolean') {
+        throw new Error('flows/editor: a2a_mapped terminal must be boolean');
+    }
+    if (typeof payload.taskPrimed !== 'boolean') {
+        throw new Error('flows/editor: a2a_mapped taskPrimed must be boolean');
+    }
+    const nextTaskId = _optionalRunId(payload.nextTaskId);
+    let next = state;
+    let hasNodeStarted = false;
+    for (let i = 0; i < payload.runEvents.length; i += 1) {
+        const runEvent = payload.runEvents[i];
+        if (!runEvent || typeof runEvent.type !== 'string' || runEvent.type.length === 0) {
+            throw new Error('flows/editor: a2a_mapped run event type required');
+        }
+        if (runEvent.type === 'flows/run/node_started') {
+            hasNodeStarted = true;
+        }
+    }
+    if (!state.agentExecutionRunning && hasNodeStarted) {
+        next = _applyFlowStarted(next, { context_id: contextId, task_id: nextTaskId });
+    }
+    for (let i = 0; i < payload.runEvents.length; i += 1) {
+        const runEvent = payload.runEvents[i];
+        const eventPayload = runEvent.payload;
+        if (!_isPlainObject(eventPayload)) {
+            throw new Error('flows/editor: a2a_mapped run event payload object required');
+        }
+        next = _applyRunEvent(next, runEvent.type, eventPayload);
+    }
+    const prevTrace = Array.isArray(next.runTrace) ? next.runTrace : EMPTY_RUN_TRACE;
+    const runTrace = payload.traceEntries.length === 0
+        ? prevTrace
+        : Object.freeze([...prevTrace, ...payload.traceEntries]);
+    let breakpointHitNodeId = next.breakpointHitNodeId;
+    for (let i = 0; i < payload.traceEntries.length; i += 1) {
+        const entry = payload.traceEntries[i];
+        if (!_isPlainObject(entry)) {
+            throw new Error('flows/editor: a2a_mapped trace entry must be an object');
+        }
+        if (entry.kind === 'breakpoint' && typeof entry.node_id === 'string' && entry.node_id.length > 0) {
+            breakpointHitNodeId = entry.node_id;
+        }
+    }
+    const session = _isPlainObject(next.runSession) ? next.runSession : IDLE_RUN_SESSION;
+    return {
+        ...next,
+        runTrace,
+        breakpointHitNodeId,
+        runSession: Object.freeze({
+            contextId,
+            taskId: nextTaskId !== null ? nextTaskId : session.taskId,
+            taskPrimed: payload.taskPrimed,
+        }),
+        agentExecutionRunning: payload.terminal ? false : next.agentExecutionRunning,
+    };
+}
+
 export const editorResource = createAsyncOp({
     name: 'flows/editor',
     silent: true,
@@ -327,14 +681,16 @@ export const editorResource = createAsyncOp({
         runningEdgeIndices: [],
         completedEdgeIndices: [],
         failedEdgeIndices: [],
-                erroredNodes: {},
-                nodeRunResults: Object.freeze({}),
-                expandedNodeRunKeys: Object.freeze([]),
-                breakpointNodeIds: [],
+        erroredNodes: {},
+        nodeRunResults: EMPTY_NODE_RUN_RESULTS,
+        expandedNodeRunKeys: EMPTY_EXPANDED_NODE_RUN_KEYS,
+        breakpointNodeIds: [],
         breakpointHitNodeId: null,
-        nodeRunResults: Object.freeze({}),
-        expandedNodeRunKeys: Object.freeze([]),
         showCanvasRunResults: true,
+        runSession: IDLE_RUN_SESSION,
+        runTrace: EMPTY_RUN_TRACE,
+        startWireRunState: null,
+        endWireRunStateByNodeId: EMPTY_END_WIRE_STATE,
         entryNodeId: null,
         inheritedNodeIds: [],
         inheritedEdgeKeys: [],
@@ -476,7 +832,13 @@ export const editorResource = createAsyncOp({
                 completedEdgeIndices: [],
                 failedEdgeIndices: [],
                 erroredNodes: {},
+                nodeRunResults: EMPTY_NODE_RUN_RESULTS,
+                expandedNodeRunKeys: EMPTY_EXPANDED_NODE_RUN_KEYS,
                 breakpointHitNodeId: null,
+                runSession: IDLE_RUN_SESSION,
+                runTrace: EMPTY_RUN_TRACE,
+                startWireRunState: null,
+                endWireRunStateByNodeId: EMPTY_END_WIRE_STATE,
                 entryNodeId: effective.entryNodeId,
                 multiSelection: [],
                 stickyNotes,
@@ -659,6 +1021,9 @@ export const editorResource = createAsyncOp({
             const workspace = p.workspace;
             if (workspace !== 'logic' && workspace !== 'interface' && workspace !== 'run') {
                 throw new Error(`flows/editor: unsupported workspace ${String(workspace)}`);
+            }
+            if (workspace === 'run') {
+                return { ...state, workspace, executionPanelOpen: true };
             }
             return { ...state, workspace };
         }
@@ -849,167 +1214,39 @@ export const editorResource = createAsyncOp({
         }
 
         if (t === 'flows/run/flow_started') {
-            return {
-                ...state,
-                runningNodeIds: [],
-                completedNodeIds: [],
-                runningEdgeIndices: [],
-                completedEdgeIndices: [],
-                failedEdgeIndices: [],
-                erroredNodes: {},
-                nodeRunResults: Object.freeze({}),
-                expandedNodeRunKeys: Object.freeze([]),
-                breakpointHitNodeId: null,
-                agentExecutionRunning: true,
-            };
+            return _applyFlowStarted(state, p);
         }
 
         if (t === 'flows/run/flow_done') {
-            return { ...state, agentExecutionRunning: false };
+            return _applyFlowDone(state);
+        }
+
+        if (t === 'flows/run/session_cleared') {
+            return _applySessionCleared(state);
+        }
+
+        if (t === 'flows/run/a2a_mapped') {
+            return _applyA2aMapped(state, p);
         }
 
         if (t === 'flows/run/edge_executed') {
-            const idx = typeof p.edge_index === 'number' && Number.isFinite(p.edge_index)
-                ? Math.floor(p.edge_index)
-                : -1;
-            if (idx < 0) return state;
-            const completedSet = new Set(Array.isArray(state.completedEdgeIndices) ? state.completedEdgeIndices : []);
-            if (completedSet.has(idx)) return state;
-            const runningSet = new Set(Array.isArray(state.runningEdgeIndices) ? state.runningEdgeIndices : []);
-            runningSet.add(idx);
-            return { ...state, runningEdgeIndices: Array.from(runningSet) };
+            return _applyEdgeExecuted(state, p);
         }
 
         if (t === 'flows/run/edge_error') {
-            const idx = typeof p.edge_index === 'number' && Number.isFinite(p.edge_index)
-                ? Math.floor(p.edge_index)
-                : -1;
-            if (idx < 0) return state;
-            const runSet = new Set(Array.isArray(state.runningEdgeIndices) ? state.runningEdgeIndices : []);
-            const compSet = new Set(Array.isArray(state.completedEdgeIndices) ? state.completedEdgeIndices : []);
-            const failSet = new Set(Array.isArray(state.failedEdgeIndices) ? state.failedEdgeIndices : []);
-            runSet.delete(idx);
-            compSet.delete(idx);
-            failSet.add(idx);
-            return {
-                ...state,
-                runningEdgeIndices: Array.from(runSet),
-                completedEdgeIndices: Array.from(compSet),
-                failedEdgeIndices: Array.from(failSet),
-            };
+            return _applyEdgeError(state, p);
         }
 
         if (t === 'flows/run/node_started') {
-            const nodeId = p.node_id;
-            if (typeof nodeId !== 'string' || nodeId.length === 0) return state;
-            const erroredCopy = { ...state.erroredNodes };
-            delete erroredCopy[nodeId];
-            const edges = state.branchData && Array.isArray(state.branchData.edges)
-                ? state.branchData.edges
-                : [];
-            const incomingIdx = _incomingEdgeIndicesToNode(edges, nodeId);
-            const runSet = new Set(Array.isArray(state.runningEdgeIndices) ? state.runningEdgeIndices : []);
-            const compSet = new Set(Array.isArray(state.completedEdgeIndices) ? state.completedEdgeIndices : []);
-            for (let i = 0; i < incomingIdx.length; i += 1) {
-                const ei = incomingIdx[i];
-                if (runSet.has(ei)) {
-                    runSet.delete(ei);
-                    compSet.add(ei);
-                }
-            }
-            return {
-                ...state,
-                runningNodeIds: _withId(state.runningNodeIds, nodeId),
-                completedNodeIds: _withoutId(state.completedNodeIds, nodeId),
-                erroredNodes: erroredCopy,
-                runningEdgeIndices: Array.from(runSet),
-                completedEdgeIndices: Array.from(compSet),
-            };
+            return _applyNodeStarted(state, p);
         }
 
         if (t === 'flows/run/node_completed') {
-            const nodeId = p.node_id;
-            if (typeof nodeId !== 'string' || nodeId.length === 0) return state;
-            const runIndex = typeof p.run_index === 'number' && Number.isFinite(p.run_index)
-                ? Math.floor(p.run_index)
-                : (() => {
-                    const existing = state.nodeRunResults && typeof state.nodeRunResults === 'object'
-                        ? state.nodeRunResults[nodeId]
-                        : null;
-                    return Array.isArray(existing) ? existing.length : 0;
-                })();
-            const nodeType = typeof p.node_type === 'string' ? p.node_type : '';
-            const resultPreview = typeof p.result_preview === 'string' ? p.result_preview : '';
-            const primaryField = typeof p.primary_field === 'string' ? p.primary_field : '';
-            let durationMs = null;
-            if (typeof p.duration_ms === 'number' && Number.isFinite(p.duration_ms)) {
-                durationMs = Math.round(p.duration_ms);
-            }
-            const diff = Array.isArray(p.diff) ? _normalizeDiffList(p.diff) : Object.freeze([]);
-            const result = Object.freeze({
-                kind: 'ok',
-                node_id: nodeId,
-                node_type: nodeType,
-                run_index: runIndex,
-                result_preview: resultPreview,
-                primary_field: primaryField,
-                duration_ms: durationMs,
-                diff,
-            });
-            return {
-                ...state,
-                runningNodeIds: _withoutId(state.runningNodeIds, nodeId),
-                completedNodeIds: _withId(state.completedNodeIds, nodeId),
-                nodeRunResults: _appendNodeRunResult(state.nodeRunResults, nodeId, result),
-            };
+            return _applyNodeCompleted(state, p);
         }
 
         if (t === 'flows/run/node_failed') {
-            const nodeId = p.node_id;
-            if (typeof nodeId !== 'string' || nodeId.length === 0) return state;
-            const runIndex = typeof p.run_index === 'number' && Number.isFinite(p.run_index)
-                ? Math.floor(p.run_index)
-                : (() => {
-                    const existing = state.nodeRunResults && typeof state.nodeRunResults === 'object'
-                        ? state.nodeRunResults[nodeId]
-                        : null;
-                    return Array.isArray(existing) ? existing.length : 0;
-                })();
-            const nodeType = typeof p.node_type === 'string' ? p.node_type : '';
-            let durationMs = null;
-            if (typeof p.duration_ms === 'number' && Number.isFinite(p.duration_ms)) {
-                durationMs = Math.round(p.duration_ms);
-            }
-            const errorText = typeof p.error === 'string' ? p.error : '';
-            const result = Object.freeze({
-                kind: 'error',
-                node_id: nodeId,
-                node_type: nodeType,
-                run_index: runIndex,
-                error: errorText,
-                duration_ms: durationMs,
-                diff: Object.freeze([]),
-            });
-            const erroredCopy = { ...state.erroredNodes, [nodeId]: errorText };
-            const edges = state.branchData && Array.isArray(state.branchData.edges)
-                ? state.branchData.edges
-                : [];
-            const incomingIdx = _incomingEdgeIndicesToNode(edges, nodeId);
-            const runSet = new Set(Array.isArray(state.runningEdgeIndices) ? state.runningEdgeIndices : []);
-            const failSet = new Set(Array.isArray(state.failedEdgeIndices) ? state.failedEdgeIndices : []);
-            for (let i = 0; i < incomingIdx.length; i += 1) {
-                const ei = incomingIdx[i];
-                if (runSet.has(ei)) runSet.delete(ei);
-                failSet.add(ei);
-            }
-            return {
-                ...state,
-                runningNodeIds: _withoutId(state.runningNodeIds, nodeId),
-                erroredNodes: erroredCopy,
-                runningEdgeIndices: Array.from(runSet),
-                failedEdgeIndices: Array.from(failSet),
-                nodeRunResults: _appendNodeRunResult(state.nodeRunResults, nodeId, result),
-            };
+            return _applyNodeFailed(state, p);
         }
 
         if (t === 'flows/editor/node_run_result_expand_toggled') {

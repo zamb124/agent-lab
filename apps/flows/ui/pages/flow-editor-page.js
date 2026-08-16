@@ -1,20 +1,23 @@
 /**
  * FlowEditorPage — визуальный редактор flow.
  *
- * Макет (canvas):
+ * Макет (canvas, workspace logic и run):
  *   <flows-editor-header />          — chrome: actions + branch tabs
  *   .editor-shell:
  *     <flows-node-types-sidebar />    — drag-source типов нод
  *     .canvas-host:
  *       <flows-flow-canvas />
  *       <flows-bottom-toolbar />
- *       <flows-execution-panel />
+ *       <flows-execution-panel />     — Test Run; workspace=run открывает панель
  *       <flows-floating-panel /> — chrome property/resource panel (drag, resize, collapse)
  *     .editor-right-rail:
  *       <flows-flow-property-panel /> — лимиты и речь (по кнопке в сайдбаре)
  *
  * Макет (agent focus, ровно 1 llm_node):
  *   header + <flows-agent-focus-studio /> вместо сайдбара/канвы
+ *
+ * Workspace interface — редактор Flow UI. Полноэкранный platform-flow-ui вместо
+ * канвы в run запрещён: визуализация графа живёт на канве + панели.
  */
 
 import { html, css, nothing } from 'lit';
@@ -54,7 +57,6 @@ import {
 } from '../_helpers/flow-editor-layout.js';
 import '../components/editor/flows-agent-focus-studio.js';
 import '../components/interface-editor/flows-interface-editor.js';
-import '@platform/lib/flow-ui/components/platform-flow-ui.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 
@@ -157,9 +159,7 @@ export class FlowEditorPage extends PlatformPage {
                 position: relative;
                 z-index: 91;
             }
-            .interface-host, .run-host { flex: 1; min-width: 0; min-height: 0; }
-            .run-host { padding: var(--space-4); }
-            .run-host platform-flow-ui { height: 100%; border: 1px solid var(--border-subtle); border-radius: 22px; overflow: hidden; }
+            .interface-host { flex: 1; min-width: 0; min-height: 0; }
         `,
     ];
 
@@ -573,15 +573,6 @@ export class FlowEditorPage extends PlatformPage {
                         .branchId=${this.branchId === 'base' ? 'default' : this.branchId}
                         @interface-change=${this._onInterfaceChange}
                     ></flows-interface-editor></div>
-                `;
-        }
-        if (workspace === 'run') {
-            return html`
-                    <div class="run-host"><platform-flow-ui
-                        flow-id=${this.flowId}
-                        branch-id=${this.branchId === 'base' ? 'default' : this.branchId}
-                        base-url="/flows" display="page" profile="editor_test"
-                    ></platform-flow-ui></div>
                 `;
         }
         const agentLayout = this._isAgentLayoutActive(state);

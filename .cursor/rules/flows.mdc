@@ -29,6 +29,23 @@ Access (OpenFGA): sole PDP = `AuthzService`. HTTP get/mutate / A2A / channels �
 
 До Submit значения синхронизируются командой `platform.ui.sync` через тот же A2A endpoint. `platform.ui.submit` атомарно подтверждает последнюю revision и создаёт новый Task в текущем `context_id`. Reload/reopen/share получают authoritative document/values через A2A bootstrap/GetTask до первого production render.
 
+### Test Run: визуализация графа
+
+Канвас редактора **не** читает Flow UI accumulator. Единственный store run-визуализации — `flows/editor` slice: `runningNodeIds` / `completedNodeIds` / `erroredNodes` / `runningEdgeIndices` / `completedEdgeIndices` / `failedEdgeIndices` / `nodeRunResults` / `runSession` / `runTrace` / `startWireRunState` / `endWireRunStateByNodeId`.
+
+Workspace `run` рендерит тот же canvas-host, что `logic`, и ставит `executionPanelOpen=true`. Полноэкранный `<platform-flow-ui display="page">` вместо канвы в редакторе запрещён: иначе нет орбит, pills и START/END.
+
+Хост [`apps/flows/ui/components/editor/flows-execution-panel.js`](../../apps/flows/ui/components/editor/flows-execution-panel.js) (`<platform-flow-ui profile="editor_test">`) — тонкий реле:
+
+1. `flow-ui-submit-start` → `flows/run/flow_started` `{ context_id }` (сброс орбит/pills/trace, `agentExecutionRunning=true`, `runSession`).
+2. `flow-ui-a2a-frame` → [`mapEditorA2aFrame`](../../apps/flows/ui/_helpers/flows-editor-a2a-run.js) (`mapA2aResultToChatRuntimeEvents` на `frame.result`) → один `flows/run/a2a_mapped` `{ context_id, runEvents, traceEntries, terminal, nextTaskId, taskPrimed }`. Reducer последовательно применяет те же ветки, что и прямые `flows/run/node_started` / `node_completed` / `node_failed` / `edge_executed` / `edge_error`. Если кадр пришёл без предшествующего submit (HITL/reconnect) и есть `node_started` — сначала `flow_started`.
+3. `mapped.terminal` (внутри `a2a_mapped`) или `flow-ui-submit-end` → `flows/run/flow_done` (`agentExecutionRunning=false`; error pills / `runTrace` остаются до следующего `flow_started` или `flows/run/session_cleared`).
+4. Collapse панели **не** размонтирует `<platform-flow-ui>`: body `hidden`, SSE продолжает писать в slice.
+
+Виртуальные START/END — канвас-хром, не ноды runtime. `startWireRunState`: `running` на `node_started` entry, `completed`/`failed` на complete/fail entry. `endWireRunStateByNodeId[nodeId]`: `completed`/`failed` на complete/fail sink (нет исходящих рёбер). Реальные рёбра — только `edge_executed` / incoming-complete. Канвас читает `data-run-state` так же, как у обычных `.edge`.
+
+Канон data Part `node_start` / `node_complete` / `node_error` / `edge_executed` → **`streaming.mdc`**.
+
 ## HITL и задачи оператора
 
 Доменных WS-команд у flows нет. HITL и задачи оператора ведутся в платформенном ядре `WorkItem` (сервис **worktracker**, `/worktracker/api/v1/work-items*`, → **`worktracker.mdc`**). Завершение HITL: worktracker публикует `worktracker/work_item/completed` на шину `platform:events` → consumer group `flows` (`PlatformEventConsumerService` → `HitlWorkItemService.resume_from_completion`). Диалог HITL: `/flows/api/v1/hitl/{work_item_id}/conversation*` (`HitlConversationService`). HTTP wake `/internal/work-items/*` удалён.

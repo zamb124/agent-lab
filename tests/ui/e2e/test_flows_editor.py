@@ -339,6 +339,14 @@ async def test_flows_branch_by_condition(
         "flows-flow-canvas g.node[data-node-id='returns_path'][data-state='completed']"
     ).first
     await expect(returns_node).to_be_visible(timeout=120_000)
+    await expect(
+        page.locator("flows-flow-canvas .node-run-result-pill[data-tone='ok']").first
+    ).to_be_visible(timeout=15_000)
+    await expect(page.locator("flows-execution-panel .status-badge")).to_have_attribute(
+        "data-status",
+        "passed",
+        timeout=15_000,
+    )
     returns_reply = page.locator("flows-execution-panel").get_by_text("returns-path", exact=False).first
     if await returns_reply.count() > 0:
         await expect(returns_reply).to_be_visible(timeout=15_000)

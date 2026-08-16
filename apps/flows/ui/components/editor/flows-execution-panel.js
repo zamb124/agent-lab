@@ -7,10 +7,11 @@
  * независимо от политики flow). Панель добавляет только editor-специфику:
  *   - useOp('flows/editor') — режим, currentBranchId, breakpointNodeIds;
  *   - useSlice('flows/execution_ui') — persistContext (→ fresh-context-per-turn);
- *   - breakpoints уходят metadata через `.getSendMetadata` (из `breakpointNodeIds`);
- *   - события `chat-run-event` (flows/run/*) диспатчатся в bus — канвас
- *     подсвечивает ноды, agentExecutionRunning синхронизируется.
+ *   - `flow-ui-submit-start` / `flow-ui-a2a-frame` / `flow-ui-submit-end` → bus
+ *     `flows/run/*` — канвас читает только editor slice.
  *
+ * `<platform-flow-ui>` не размонтируется при collapse: скрывается через `hidden`,
+ * SSE продолжает приходить в slice.
  * Панель скрывается display:none (не unmount) — история чата живёт, пока открыт
  * редактор; голосовой дуплекс при скрытии останавливается.
  * Разворот — кнопка в шапке: `position: fixed` + `nextModalLayerZIndex()`, иначе z-index
@@ -28,19 +29,15 @@ import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/flow-ui/components/platform-flow-ui.js';
-import { resolveVoiceHttpOrigin } from '@platform/lib/voice/voice-http-origin.js';
 import '@platform/lib/flow-ui/components/flow-ui-run-trace.js';
 import {
-    asArray,
     asObject,
     asString,
-    authActiveCompanyId,
     deriveRunPanelStatus,
     isPlainObject,
 } from '../../_helpers/flows-resolvers.js';
-import { resolveFlowsActiveTaskId } from '../../_helpers/resolve-flows-active-task-id.js';
+import { mapEditorA2aFrame } from '../../_helpers/flows-editor-a2a-run.js';
 
-const EMPTY_TRACE = Object.freeze([]);
 const PANEL_VIEWPORT_MARGIN = 12;
 const PANEL_MIN_WIDTH = 360;
 const PANEL_MIN_HEIGHT = 320;
@@ -56,7 +53,6 @@ export class FlowsExecutionPanel extends PlatformElement {
         _panelTab: { type: String, state: true },
         _layoutExpanded: { type: Boolean, state: true },
         _collapsed: { type: Boolean, state: true },
-        _lastCanvasBreakpointHitNodeId: { type: String, state: true },
     };
 
     static styles = [
@@ -331,7 +327,6 @@ export class FlowsExecutionPanel extends PlatformElement {
         this._ui = this.useSlice('flows/execution_ui');
         this._layoutExpanded = false;
         this._collapsed = false;
-        this._lastCanvasBreakpointHitNodeId = '';
         this._panelRect = null;
         this._dragState = null;
         this._resizeState = null;
@@ -339,12 +334,7 @@ export class FlowsExecutionPanel extends PlatformElement {
         this._boundPanelPointerMove = (e) => this._onPanelPointerMove(e);
         this._boundPanelPointerUp = () => this._endPanelPointerInteraction();
         this._boundPanelViewportResize = () => this._clampFloatingPanelToViewport();
-        this._activeCompanySel = this.select((s) => authActiveCompanyId(s));
         this._localeSel = this.select((s) => s.i18n.locale);
-        this._voiceBaseUrl =
-            typeof window !== 'undefined' && typeof window.location !== 'undefined'
-                ? resolveVoiceHttpOrigin()
-                : '';
     }
 
     connectedCallback() {
@@ -362,30 +352,20 @@ export class FlowsExecutionPanel extends PlatformElement {
         super.disconnectedCallback();
     }
 
-    /** @returns {HTMLElement|null} */
     _platformChat() {
         const el = this.renderRoot?.querySelector('platform-flow-ui');
-        return el || null;
+        if (!el) {
+            throw new Error('flows-execution-panel: platform-flow-ui host required');
+        }
+        return el;
     }
 
-    _chatRuntimeState() {
-        const host = this._platformChat();
-        if (!host) return {};
-        const state = asObject(host.runtimeState);
-        const activeContextId = typeof state.activeContextId === 'string'
-            ? state.activeContextId
-            : (typeof host.contextId === 'string' ? host.contextId : null);
-        const context = activeContextId && state.contextsById
-            ? asObject(state.contextsById[activeContextId])
-            : asObject(host.controller && host.controller.activeContext);
-        const activeTaskId = typeof context.activeTaskId === 'string' ? context.activeTaskId : null;
-        return {
-            currentContextId: activeContextId,
-            currentTaskId: activeTaskId,
-            streaming: context.saveStatus === 'pending',
-            messagesByContextId: {},
-            runTraceByContextId: {},
-        };
+    _runSession(editorState) {
+        const session = editorState.runSession;
+        if (!isPlainObject(session)) {
+            throw new Error('flows-execution-panel: editor runSession required');
+        }
+        return session;
     }
 
     updated(changedProperties) {
@@ -395,59 +375,70 @@ export class FlowsExecutionPanel extends PlatformElement {
             this.removeAttribute('data-panel-closed');
         } else {
             this.setAttribute('data-panel-closed', '');
-            const host = this._platformChat();
-            if (host) {
-                void host.stopVoice();
-            }
+            void this._platformChat().stopVoice();
         }
         super.updated(changedProperties);
     }
 
-    _onChatRunEvent(e) {
+    _onFlowUiSubmitStart(e) {
         const detail = isPlainObject(e.detail) ? e.detail : null;
-        if (!detail || typeof detail.type !== 'string') {
+        if (!detail || typeof detail.contextId !== 'string' || detail.contextId.length === 0) {
+            throw new Error('flows-execution-panel: flow-ui-submit-start contextId required');
+        }
+        this.dispatch('flows/run/flow_started', { context_id: detail.contextId }, { source: 'http' });
+    }
+
+    _onFlowUiA2aFrame(e) {
+        const detail = isPlainObject(e.detail) ? e.detail : null;
+        if (!detail) {
+            throw new Error('flows-execution-panel: flow-ui-a2a-frame detail required');
+        }
+        if (typeof detail.contextId !== 'string' || detail.contextId.length === 0) {
+            throw new Error('flows-execution-panel: flow-ui-a2a-frame contextId required');
+        }
+        const contextId = detail.contextId;
+        const editorState = asObject(this._editor.state);
+        const session = this._runSession(editorState);
+        if (typeof session.contextId === 'string' && session.contextId.length > 0 && session.contextId !== contextId) {
+            throw new Error('flows-execution-panel: a2a frame contextId does not match runSession');
+        }
+        const runTrace = Array.isArray(editorState.runTrace) ? editorState.runTrace : null;
+        if (runTrace === null) {
+            throw new Error('flows-execution-panel: editor runTrace array required');
+        }
+        const mapped = mapEditorA2aFrame(detail.frame, {
+            contextId,
+            currentTaskId: session.taskId,
+            taskPrimed: session.taskPrimed === true,
+            traceIndexBase: runTrace.length,
+        });
+        this.dispatch('flows/run/a2a_mapped', {
+            context_id: contextId,
+            runEvents: mapped.runEvents,
+            traceEntries: mapped.traceEntries,
+            terminal: mapped.terminal,
+            nextTaskId: mapped.nextTaskId,
+            taskPrimed: mapped.taskPrimed,
+        }, { source: 'http' });
+    }
+
+    _onFlowUiSubmitEnd(e) {
+        const detail = isPlainObject(e.detail) ? e.detail : null;
+        if (!detail) {
+            throw new Error('flows-execution-panel: flow-ui-submit-end detail required');
+        }
+        if (typeof detail.contextId !== 'string' || detail.contextId.length === 0) {
+            throw new Error('flows-execution-panel: flow-ui-submit-end contextId required');
+        }
+        const editorState = asObject(this._editor.state);
+        if (!editorState.agentExecutionRunning) {
             return;
         }
-        const payload = isPlainObject(detail.payload) ? detail.payload : {};
-        this.dispatch(detail.type, payload, { source: 'http' });
-        if (detail.type === 'flows/run/flow_started') {
-            this._lastCanvasBreakpointHitNodeId = '';
-            this._editor.setAgentExecutionRunning({ running: true });
+        const payload = { context_id: detail.contextId };
+        if (typeof detail.taskId === 'string' && detail.taskId.length > 0) {
+            payload.task_id = detail.taskId;
         }
-        if (detail.type === 'flows/run/flow_done') {
-            this._editor.setAgentExecutionRunning({ running: false });
-        }
-    }
-
-    _onChatShowTracing(e) {
-        this._openTracingModalFromDetail(e.detail);
-    }
-
-    _onChatShowLogs(e) {
-        const detail = isPlainObject(e.detail) ? e.detail : {};
-        const sessionId = asString(detail.sessionId);
-        if (sessionId.length === 0) {
-            return;
-        }
-        const props = { sessionId };
-        const taskId = asString(detail.taskId);
-        if (taskId.length > 0) {
-            props.taskId = taskId;
-        }
-        this.openModal('flows.logs', props);
-    }
-
-    _onChatShowDurableHistory(e) {
-        const detail = isPlainObject(e.detail) ? e.detail : {};
-        const sessionId = asString(detail.sessionId);
-        if (sessionId.length === 0) {
-            return;
-        }
-        this.openModal('flows.durable_history', { sessionId });
-    }
-
-    _onViewBreakpointState() {
-        this._openState();
+        this.dispatch('flows/run/flow_done', payload, { source: 'http' });
     }
 
     /** Вместо window.open (default поведение bubble) — платформенная модалка предпросмотра браузера. */
@@ -460,140 +451,6 @@ export class FlowsExecutionPanel extends PlatformElement {
             currentUrl: asString(detail.currentUrl),
             status: asString(detail.status),
         });
-    }
-
-    /** metadata верхнего уровня A2A SendStreamingMessage: breakpoints с канвы редактора. */
-    _sendMetadataForRun() {
-        const editorState = asObject(this._editor.state);
-        const nodeIds = asArray(editorState.breakpointNodeIds);
-        if (nodeIds.length === 0) {
-            return {};
-        }
-        const breakpoints = {};
-        for (let i = 0; i < nodeIds.length; i += 1) {
-            const nodeId = nodeIds[i];
-            if (typeof nodeId === 'string' && nodeId.length > 0) {
-                breakpoints[nodeId] = true;
-            }
-        }
-        if (Object.keys(breakpoints).length === 0) {
-            return {};
-        }
-        return { breakpoints };
-    }
-
-    _shouldHoldCanvasBreakpointHit() {
-        const editorState = asObject(this._editor.state);
-        if (Boolean(editorState.agentExecutionRunning)) {
-            return false;
-        }
-        const chatState = this._chatRuntimeState();
-        if (Boolean(chatState.streaming)) {
-            return false;
-        }
-        return true;
-    }
-
-    _clearCanvasBreakpointHit() {
-        const editorState = asObject(this._editor.state);
-        if (!editorState.breakpointHitNodeId) {
-            this._lastCanvasBreakpointHitNodeId = '';
-            return;
-        }
-        this._lastCanvasBreakpointHitNodeId = '';
-        this.dispatch('flows/breakpoint/clear', {}, { source: 'http' });
-    }
-
-    _syncCanvasBreakpointHit() {
-        if (!this._shouldHoldCanvasBreakpointHit()) {
-            this._clearCanvasBreakpointHit();
-            return;
-        }
-        const assistant = this._activeAssistantMessage();
-        if (!assistant || !isPlainObject(assistant.breakpoint)) {
-            this._clearCanvasBreakpointHit();
-            return;
-        }
-        const breakpoint = assistant.breakpoint;
-        let nodeId = '';
-        if (typeof breakpoint.node_id === 'string' && breakpoint.node_id.length > 0) {
-            nodeId = breakpoint.node_id;
-        } else if (typeof breakpoint.nodeId === 'string' && breakpoint.nodeId.length > 0) {
-            nodeId = breakpoint.nodeId;
-        }
-        if (nodeId.length === 0) {
-            this._clearCanvasBreakpointHit();
-            return;
-        }
-        if (this._lastCanvasBreakpointHitNodeId === nodeId) {
-            return;
-        }
-        this._lastCanvasBreakpointHitNodeId = nodeId;
-        const payload = { node_id: nodeId };
-        if (typeof assistant.taskId === 'string' && assistant.taskId.length > 0) {
-            payload.task_id = assistant.taskId;
-        }
-        this.dispatch('flows/breakpoint/hit', payload, { source: 'http' });
-    }
-
-    _onChatStateChanged() {
-        this._syncCanvasBreakpointHit();
-        this.requestUpdate();
-    }
-
-    _panelChatMessages() {
-        const chatState = this._chatRuntimeState();
-        const ctx = typeof chatState.currentContextId === 'string' ? chatState.currentContextId : null;
-        if (!ctx || !isPlainObject(chatState.messagesByContextId)) {
-            return [];
-        }
-        const bucket = chatState.messagesByContextId[ctx];
-        if (!bucket || !Array.isArray(bucket.messages)) {
-            return [];
-        }
-        return bucket.messages;
-    }
-
-    _lastAssistantMessage() {
-        const messages = this._panelChatMessages();
-        for (let i = messages.length - 1; i >= 0; i--) {
-            const m = messages[i];
-            if (m && m.role === 'assistant') return m;
-        }
-        return null;
-    }
-
-    /** Ассистент текущего task_id (чтобы не показывать ответ прошлого запуска до первого чанка). */
-    _activeAssistantMessage() {
-        const chatState = this._chatRuntimeState();
-        const tid = typeof chatState.currentTaskId === 'string' ? chatState.currentTaskId : null;
-        const messages = this._panelChatMessages();
-        if (tid) {
-            for (let i = messages.length - 1; i >= 0; i -= 1) {
-                const m = messages[i];
-                if (m && m.role === 'assistant' && m.taskId === tid) {
-                    return m;
-                }
-            }
-        }
-        return this._lastAssistantMessage();
-    }
-
-    _currentRunTrace() {
-        const chatState = this._chatRuntimeState();
-        const ctx = typeof chatState.currentContextId === 'string' ? chatState.currentContextId : null;
-        if (!ctx) {
-            return EMPTY_TRACE;
-        }
-        const byCtx = chatState.runTraceByContextId;
-        if (!byCtx || typeof byCtx !== 'object') {
-            return EMPTY_TRACE;
-        }
-        const list = byCtx[ctx];
-        if (!Array.isArray(list)) {
-            return EMPTY_TRACE;
-        }
-        return list;
     }
 
     _onPersistChange(e) {
@@ -891,9 +748,15 @@ export class FlowsExecutionPanel extends PlatformElement {
     }
 
     _buildSessionId() {
-        const chatState = this._chatRuntimeState();
-        const ctx = chatState.currentContextId;
-        if (!this.flowId || typeof ctx !== 'string' || ctx.length === 0) return '';
+        const editorState = asObject(this._editor.state);
+        const session = this._runSession(editorState);
+        const ctx = session.contextId;
+        if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
+            return '';
+        }
+        if (typeof ctx !== 'string' || ctx.length === 0) {
+            return '';
+        }
         return `${this.flowId}:${ctx}`;
     }
 
@@ -931,10 +794,11 @@ export class FlowsExecutionPanel extends PlatformElement {
     _openLogs() {
         const sessionId = this._buildSessionId();
         if (!sessionId) return;
-        const taskId = resolveFlowsActiveTaskId(this._chatRuntimeState());
+        const editorState = asObject(this._editor.state);
+        const session = this._runSession(editorState);
         const props = { sessionId };
-        if (taskId.length > 0) {
-            props.taskId = taskId;
+        if (typeof session.taskId === 'string' && session.taskId.length > 0) {
+            props.taskId = session.taskId;
         }
         this.openModal('flows.logs', props);
     }
@@ -944,14 +808,11 @@ export class FlowsExecutionPanel extends PlatformElement {
      */
     async _onResetChat() {
         const host = this._platformChat();
-        if (!host) {
-            return;
-        }
-        const chatState = this._chatRuntimeState();
-        if (Boolean(chatState.streaming)) {
+        const editorState = asObject(this._editor.state);
+        if (Boolean(editorState.agentExecutionRunning)) {
             await host.cancelActiveTask();
         }
-        this._editor.setAgentExecutionRunning({ running: false });
+        this.dispatch('flows/run/session_cleared', {}, { source: 'http' });
         host.startNewContext();
     }
 
@@ -966,36 +827,25 @@ export class FlowsExecutionPanel extends PlatformElement {
         const editorState = asObject(this._editor.state);
         const ui = this._ui.value;
         const showCanvasRunResults = Boolean(editorState.showCanvasRunResults);
-        const chatState = this._chatRuntimeState();
-        const streaming = Boolean(chatState.streaming);
-        const agentRun = Boolean(editorState.agentExecutionRunning);
-        const runInFlight = streaming || agentRun;
-        const hasContext = typeof chatState.currentContextId === 'string'
-            && chatState.currentContextId.length > 0;
-        const lastAssistant = this._activeAssistantMessage();
-        const inputRequired = Boolean(lastAssistant && lastAssistant.inputRequired);
-        const placeholderKey = inputRequired
-            ? 'execution_panel.placeholder_answer'
-            : 'execution_panel.placeholder_message';
-
-        const runTrace = this._currentRunTrace();
-        const taskId = typeof chatState.currentTaskId === 'string'
-            ? chatState.currentTaskId
+        const session = this._runSession(editorState);
+        const runInFlight = Boolean(editorState.agentExecutionRunning);
+        const hasContext = typeof session.contextId === 'string' && session.contextId.length > 0;
+        const runTrace = Array.isArray(editorState.runTrace) ? editorState.runTrace : null;
+        if (runTrace === null) {
+            throw new Error('flows-execution-panel: editor runTrace array required');
+        }
+        const taskId = typeof session.taskId === 'string' && session.taskId.length > 0
+            ? session.taskId
             : null;
         const panelStatus = deriveRunPanelStatus({
             runInFlight,
             taskId,
-            activeAssistant: lastAssistant,
+            activeAssistant: null,
             runTrace,
         });
         const statusLabelKey = `execution_panel.status_${panelStatus}`;
         const tab = this._panelTab;
-        const companyId = asString(this._activeCompanySel.value);
         const locale = asString(this._localeSel.value);
-        const voiceReady =
-            typeof this.flowId === 'string' && this.flowId.length > 0
-            && companyId !== ''
-            && this._voiceBaseUrl !== '';
 
         return html`
             <div
@@ -1089,8 +939,7 @@ export class FlowsExecutionPanel extends PlatformElement {
                     </div>
                 </div>
 
-                ${this._collapsed ? nothing : html`
-                <div class="panel-tabs">
+                <div class="panel-tabs" ?hidden=${this._collapsed}>
                     <platform-segmented-control
                         full-width
                         density="compact"
@@ -1107,7 +956,7 @@ export class FlowsExecutionPanel extends PlatformElement {
 
                 ${tab === 'trace'
                     ? html`
-                        <div class="tab-toolbar">
+                        <div class="tab-toolbar" ?hidden=${this._collapsed}>
                             <platform-button
                                 variant="primary"
                                 density="compact"
@@ -1126,7 +975,7 @@ export class FlowsExecutionPanel extends PlatformElement {
                     `
                     : nothing}
 
-                <div class="panel-body">
+                <div class="panel-body" ?hidden=${this._collapsed}>
                     <div class="tab-panel" data-tab="chat" ?hidden=${tab !== 'chat'}>
                         <platform-flow-ui
                             display="panel"
@@ -1135,9 +984,10 @@ export class FlowsExecutionPanel extends PlatformElement {
                             branch-id=${this.branchId}
                             base-url="/flows"
                             theme="auto"
-                            locale=${locale || 'ru'}
-                            @flow-ui-state-changed=${this._onChatStateChanged}
-                            @flow-ui-ready=${this._onChatStateChanged}
+                            locale=${locale}
+                            @flow-ui-submit-start=${this._onFlowUiSubmitStart}
+                            @flow-ui-a2a-frame=${this._onFlowUiA2aFrame}
+                            @flow-ui-submit-end=${this._onFlowUiSubmitEnd}
                             @browser-preview-open=${this._onBrowserPreviewOpen}
                         ></platform-flow-ui>
                     </div>
@@ -1170,18 +1020,16 @@ export class FlowsExecutionPanel extends PlatformElement {
                         </div>
                     ` : nothing}
                 </div>
-                `}
-                ${this._collapsed ? nothing : html`
-                    <div
-                        class="resize-handle"
-                        role="separator"
-                        aria-orientation="vertical"
-                        tabindex="0"
-                        title=${this.t('execution_panel.resize_panel')}
-                        aria-label=${this.t('execution_panel.resize_panel')}
-                        @pointerdown=${this._onResizePointerDown}
-                    ></div>
-                `}
+                <div
+                    class="resize-handle"
+                    ?hidden=${this._collapsed}
+                    role="separator"
+                    aria-orientation="vertical"
+                    tabindex="0"
+                    title=${this.t('execution_panel.resize_panel')}
+                    aria-label=${this.t('execution_panel.resize_panel')}
+                    @pointerdown=${this._onResizePointerDown}
+                ></div>
             </div>
         `;
     }

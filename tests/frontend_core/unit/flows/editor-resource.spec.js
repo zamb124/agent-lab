@@ -201,6 +201,145 @@ describe('flows/editor extraReducer', () => {
         expect(getState().flowsEditor.showCanvasRunResults).toBe(false);
     });
 
+    it('node_started entry ставит startWire running, sink complete ставит START/END completed', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/editor/flow_loaded', {
+            flow: {
+                flow_id: 'w1',
+                name: 'W1',
+                nodes: { main: { type: 'llm_node' } },
+                edges: [],
+                entry: 'main',
+                variables: {},
+            },
+            branchId: 'base',
+        });
+        bus.dispatch('flows/run/flow_started', { context_id: 'ctx-1', task_id: 't1' });
+        bus.dispatch('flows/run/node_started', { node_id: 'main', task_id: 't1' });
+        let s = getState().flowsEditor;
+        expect(s.startWireRunState).toBe('running');
+        expect(s.endWireRunStateByNodeId).toEqual({});
+
+        bus.dispatch('flows/run/node_completed', { node_id: 'main', task_id: 't1', result_preview: 'ok' });
+        s = getState().flowsEditor;
+        expect(s.startWireRunState).toBe('completed');
+        expect(s.endWireRunStateByNodeId.main).toBe('completed');
+    });
+
+    it('node_failed entry ставит START и END failed', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/editor/flow_loaded', {
+            flow: {
+                flow_id: 'w2',
+                name: 'W2',
+                nodes: { main: { type: 'llm_node' } },
+                edges: [],
+                entry: 'main',
+                variables: {},
+            },
+            branchId: 'base',
+        });
+        bus.dispatch('flows/run/flow_started', { context_id: 'ctx-2' });
+        bus.dispatch('flows/run/node_started', { node_id: 'main' });
+        bus.dispatch('flows/run/node_failed', { node_id: 'main', error: 'boom' });
+        const s = getState().flowsEditor;
+        expect(s.startWireRunState).toBe('failed');
+        expect(s.endWireRunStateByNodeId.main).toBe('failed');
+        expect(s.nodeRunResults.main[0].kind).toBe('error');
+    });
+
+    it('flows/run/a2a_mapped применяет runEvents, runTrace и terminal', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/editor/flow_loaded', {
+            flow: {
+                flow_id: 'w3',
+                name: 'W3',
+                nodes: { main: { type: 'llm_node' } },
+                edges: [],
+                entry: 'main',
+                variables: {},
+            },
+            branchId: 'base',
+        });
+        bus.dispatch('flows/run/flow_started', { context_id: 'ctx-3' });
+        bus.dispatch('flows/run/a2a_mapped', {
+            context_id: 'ctx-3',
+            runEvents: [{ type: 'flows/run/node_started', payload: { node_id: 'main' } }],
+            traceEntries: [{
+                id: 't1:node_start:main:0',
+                kind: 'node_start',
+                node_id: 'main',
+                context_id: 'ctx-3',
+                task_id: 't1',
+            }],
+            terminal: false,
+            nextTaskId: 't1',
+            taskPrimed: true,
+        });
+        let s = getState().flowsEditor;
+        expect(s.runningNodeIds).toEqual(['main']);
+        expect(s.startWireRunState).toBe('running');
+        expect(s.runTrace).toHaveLength(1);
+        expect(s.runTrace[0].kind).toBe('node_start');
+        expect(s.runSession.taskId).toBe('t1');
+        expect(s.runSession.taskPrimed).toBe(true);
+        expect(s.agentExecutionRunning).toBe(true);
+
+        bus.dispatch('flows/run/a2a_mapped', {
+            context_id: 'ctx-3',
+            runEvents: [{
+                type: 'flows/run/node_failed',
+                payload: { node_id: 'main', error: 'empty response' },
+            }],
+            traceEntries: [{
+                id: 't1:node_error:main:1',
+                kind: 'node_error',
+                node_id: 'main',
+                error: 'empty response',
+                context_id: 'ctx-3',
+                task_id: 't1',
+            }],
+            terminal: false,
+            nextTaskId: 't1',
+            taskPrimed: true,
+        });
+        bus.dispatch('flows/run/a2a_mapped', {
+            context_id: 'ctx-3',
+            runEvents: [],
+            traceEntries: [{
+                id: 't1:status_terminal:2',
+                kind: 'status_terminal',
+                terminal_state: 'failed',
+                context_id: 'ctx-3',
+                task_id: 't1',
+            }],
+            terminal: true,
+            nextTaskId: 't1',
+            taskPrimed: true,
+        });
+        s = getState().flowsEditor;
+        expect(s.agentExecutionRunning).toBe(false);
+        expect(s.erroredNodes.main).toBe('empty response');
+        expect(s.runTrace.map((entry) => entry.kind)).toEqual([
+            'node_start',
+            'node_error',
+            'status_terminal',
+        ]);
+    });
+
+    it('flows/run/session_cleared сбрасывает run visualization', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/run/flow_started', { context_id: 'ctx-4' });
+        bus.dispatch('flows/run/node_started', { node_id: 'main' });
+        bus.dispatch('flows/run/session_cleared', {});
+        const s = getState().flowsEditor;
+        expect(s.agentExecutionRunning).toBe(false);
+        expect(s.runningNodeIds).toEqual([]);
+        expect(s.runTrace).toEqual([]);
+        expect(s.runSession).toEqual({ contextId: null, taskId: null, taskPrimed: false });
+        expect(s.startWireRunState).toBeNull();
+    });
+
     it('flows/run/edge_executed и node_started обновляют runningEdgeIndices / completedEdgeIndices', () => {
         const { bus, getState } = build();
         bus.dispatch('flows/editor/flow_loaded', {
@@ -384,5 +523,19 @@ describe('flows/editor extraReducer', () => {
         const { bus, getState } = build();
         bus.dispatch('flows/editor/dataflow_set', { dataflow: { nodes: { a: { issues: [] } } } });
         expect(getState().flowsEditor.dataflow.nodes.a.issues).toEqual([]);
+    });
+
+    it('workspace_set run открывает execution panel', () => {
+        const { bus, getState } = build();
+        expect(getState().flowsEditor.workspace).toBe('logic');
+        expect(getState().flowsEditor.executionPanelOpen).toBe(false);
+        bus.dispatch('flows/editor/workspace_set', { workspace: 'run' });
+        const runState = getState().flowsEditor;
+        expect(runState.workspace).toBe('run');
+        expect(runState.executionPanelOpen).toBe(true);
+        bus.dispatch('flows/editor/workspace_set', { workspace: 'logic' });
+        const logicState = getState().flowsEditor;
+        expect(logicState.workspace).toBe('logic');
+        expect(logicState.executionPanelOpen).toBe(true);
     });
 });

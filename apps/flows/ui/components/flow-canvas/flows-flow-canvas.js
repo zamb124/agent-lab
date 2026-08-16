@@ -3355,13 +3355,25 @@ export class FlowsFlowCanvas extends PlatformElement {
         this.openModal('flows.incoming_policy', { nodeId });
     }
 
-    _renderVirtualEnd(node, outPort = null) {
+    _renderVirtualEnd(node, outPort = null, nodeId) {
+        if (typeof nodeId !== 'string' || nodeId.length === 0) {
+            throw new Error('flows-flow-canvas: virtual END nodeId required');
+        }
         const start = this._portCoords(node, 'out', outPort);
         const { cx, cy } = terminalEndCenter(start);
         const stopHalf = 5;
+        const editorState = this._state();
+        const endMap = editorState.endWireRunStateByNodeId;
+        const runState = isPlainObject(endMap) && typeof endMap[nodeId] === 'string'
+            ? endMap[nodeId]
+            : null;
         return svg`
             <g class="edge-group terminal-marker terminal-marker--end">
-                <path class="edge" d=${pathFor(start.x, start.y, cx - FLOW_TERMINAL_OUTER_R, cy)}></path>
+                <path
+                    class="edge"
+                    data-run-state=${runState != null ? runState : ''}
+                    d=${pathFor(start.x, start.y, cx - FLOW_TERMINAL_OUTER_R, cy)}
+                ></path>
                 <circle
                     class="terminal-marker-halo"
                     cx=${cx}
@@ -3403,6 +3415,10 @@ export class FlowsFlowCanvas extends PlatformElement {
     _renderVirtualStart(node) {
         const end = this._portCoords(node, 'in');
         const { cx, cy } = terminalStartCenter(end);
+        const editorState = this._state();
+        const runState = typeof editorState.startWireRunState === 'string'
+            ? editorState.startWireRunState
+            : null;
         return svg`
             <g class="edge-group terminal-marker terminal-marker--start">
                 <circle
@@ -3434,7 +3450,11 @@ export class FlowsFlowCanvas extends PlatformElement {
                     y=${cy + FLOW_TERMINAL_OUTER_R + 11}
                     text-anchor="middle"
                 >START</text>
-                <path class="edge" d=${pathFor(cx + FLOW_TERMINAL_OUTER_R, cy, end.x, end.y)}></path>
+                <path
+                    class="edge"
+                    data-run-state=${runState != null ? runState : ''}
+                    d=${pathFor(cx + FLOW_TERMINAL_OUTER_R, cy, end.x, end.y)}
+                ></path>
             </g>
         `;
     }
@@ -3553,7 +3573,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             if (this._isPortlessNode(n)) continue;
             const ports = listTerminalEndPorts(nid, n, edges, nodes);
             for (const outPort of ports) {
-                terminalEnds.push({ node: n, outPort });
+                terminalEnds.push({ nodeId: nid, node: n, outPort });
             }
         }
         const entryId = typeof state.entryNodeId === 'string' && state.entryNodeId.length > 0
@@ -3665,7 +3685,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 <g class="edges-layer">
                     ${edges.map((edge, i) => this._renderEdge(edge, i, nodes))}
                     ${entryNode ? this._renderVirtualStart(entryNode) : ''}
-                    ${terminalEnds.map(({ node, outPort }) => this._renderVirtualEnd(node, outPort))}
+                    ${terminalEnds.map(({ nodeId, node, outPort }) => this._renderVirtualEnd(node, outPort, nodeId))}
                     ${this._connection
                         ? svg`<path class="edge-temp" d=${pathFor(this._connection.x1, this._connection.y1, this._connection.x2, this._connection.y2)}></path>`
                         : ''}
