@@ -23,8 +23,24 @@ TRUNCATION_MARKER: str = "\n…[truncated]"
 DEFAULT_VIRTUAL_PAGE_SIZE: int = 4_000
 """Размер виртуальной страницы для сплошных форматов (txt/csv/json/html/docx без нативных страниц)."""
 
+
+def default_page_label(index: int) -> str:
+    """Стабильный label страницы, когда reader не дал свой (VIRTUAL / unstructured без page_number)."""
+    if index < 0:
+        raise ValueError("page index must be >= 0")
+    return f"page_{index + 1}"
+
+
+def resolved_page_label(index: int, label: str | None) -> str:
+    """Непустой label страницы: свой, иначе ``page_{index+1}``."""
+    if label is not None:
+        stripped = label.strip()
+        if stripped:
+            return stripped
+    return default_page_label(index)
+
 VISION_FULL_READ_MAX_PAGES: int = 20
-"""Порог страниц PDF, выше которого vision применяется лениво только к запрошенным страницам."""
+"""Порог native-единиц, выше которого vision применяется только к запрошенному окну."""
 
 # ---------------------------------------------------------------------------
 # Enums: режимы контента, layout, лейн чтения, причина остановки, сжатие
@@ -88,6 +104,26 @@ class PageLayout(BaseModel):
     page_size: int = Field(ge=0, description="Размер виртуальной страницы; 0 для нативных.")
 
 
+class ExtractBlockKind(StrEnum):
+    """Логический блок страницы FileExtract."""
+
+    HEADING = "heading"
+    PARAGRAPH = "paragraph"
+    TABLE = "table"
+    LIST = "list"
+    CODE = "code"
+    FIGURE = "figure"
+
+
+class ExtractBlock(BaseModel):
+    """Блок страницы: текст и связанные FileRef (для figure)."""
+
+    kind: ExtractBlockKind
+    text: str = ""
+    level: int | None = Field(default=None, ge=1)
+    files: list[FileRef] = Field(default_factory=list)
+
+
 class UniversalPage(BaseModel):
     """Единая страница после нормализации (native или virtual)."""
 
@@ -95,6 +131,8 @@ class UniversalPage(BaseModel):
     label: str = ""
     text: str = ""
     content_mode: ContentMode
+    blocks: list[ExtractBlock] = Field(default_factory=list)
+    files: list[FileRef] = Field(default_factory=list)
 
 
 class PageResult(BaseModel):
@@ -132,6 +170,14 @@ class ReadFileArgs(BaseModel):
     compression: CompressionMode = CompressionMode.NEVER
     transcription_company_id: str | None = None
     forced_lane: ReadLane | None = None
+    persist_assets_namespace: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Namespace RAG: сохранить ассеты страниц как FileRecord "
+            "(FileSourceKind.RAG_DOCUMENT). Без значения ассеты в extract не persist'ятся."
+        ),
+    )
     names: list[str] = Field(
         default_factory=list,
         description=(
@@ -189,6 +235,10 @@ class FileExtract(BaseModel):
     content_chars_total: int = Field(default=0, ge=0)
     warnings: list[str] = Field(default_factory=list)
     source_checksum: str | None = None
+
+    def canonical_text(self) -> str:
+        parts = [page.text.strip() for page in self.pages if page.text.strip()]
+        return "\n\n".join(parts)
 
 
 class FileResult(BaseModel):
@@ -270,6 +320,7 @@ class ReadPage(BaseModel):
     label: str | None = None
     text: str = ""
     assets: list[ReadAsset] = Field(default_factory=list)
+    blocks: list[ExtractBlock] = Field(default_factory=list)
 
 
 class FileReadResult(BaseModel):

@@ -8,9 +8,8 @@ import os
 import uuid
 from collections.abc import Sequence
 from datetime import datetime, timezone
-from typing import ClassVar, Literal, override
+from typing import Literal, override
 
-import tiktoken
 from sqlalchemy import (
     Boolean,
     Float,
@@ -47,6 +46,7 @@ from core.config.testing import is_testing
 from core.db.models import VectorDocument
 from core.db.sqlalchemy_pool import sqlalchemy_async_engine_pool_kwargs
 from core.db.utils import get_rowcount
+from core.files.file_ref import FileRef
 from core.files.reader import FileReader, ReadFileArgs
 from core.files.reader.models import (
     ContentMode,
@@ -59,8 +59,10 @@ from core.files.reader.models import (
 )
 from core.logging import get_logger
 from core.rag.base_provider import BaseRAGProvider, validate_metadata_filters
+from core.rag.chunking import resolve_split_config, split_file_extract
 from core.rag.embedding_runtime import RagEmbeddingRuntime
 from core.rag.models import (
+    RAGChunk,
     RAGDocument,
     RAGDocumentContent,
     RAGMetadata,
@@ -72,7 +74,8 @@ from core.rag.models import (
 from core.rag.rrf import reciprocal_rank_fusion
 from core.rag.ttl import ensure_ttl_seconds_in_metadata
 from core.rag.upload_profile_binding import UploadProfileBinding
-from core.types import JsonValue, require_json_object
+from core.rag_indexing_schema import IndexProfileConfig, IndexProfileSplitConfig
+from core.types import JsonObject, JsonValue, require_json_object
 
 logger = get_logger(__name__)
 # Значения из шаблонного conf.json — не отправлять в OpenRouter как ключ
@@ -92,6 +95,141 @@ TS_HEADLINE_OPTIONS = (
 )
 # Для evergreen-контента freshness decay ослабляется: half-life растягивается.
 FRESHNESS_EVERGREEN_HALF_LIFE_FACTOR = 4.0
+
+_SEARCH_ATTRIBUTE_SKIP_KEYS: frozenset[str] = frozenset(
+    {
+        "page_index",
+        "page_label",
+        "heading_trail",
+        "files",
+        "split",
+        "indexing_runtime",
+        "document_id",
+        "document_name",
+        "chunk_index",
+        "total_chunks",
+    }
+)
+
+
+def _resolve_index_document_id(metadata: RAGMetadata) -> str:
+    document_id_raw = metadata.get("document_id")
+    document_id = str(document_id_raw).strip() if document_id_raw else ""
+    if document_id:
+        return document_id
+    return str(uuid.uuid4())
+
+
+def _chunk_storage_metadata(
+    *,
+    ingest: RAGMetadata,
+    chunk: RAGChunk,
+    indexing_runtime: RAGMetadata,
+) -> RAGMetadata:
+    files_payload: list[JsonObject] = [
+        require_json_object(file_ref.model_dump(mode="json"), "RAGChunk.files item")
+        for file_ref in chunk.files
+    ]
+    stored: RAGMetadata = dict(ingest)
+    stored["page_index"] = chunk.page_index
+    stored["page_label"] = chunk.page_label
+    if chunk.heading_trail:
+        stored["heading_trail"] = list(chunk.heading_trail)
+    else:
+        stored["heading_trail"] = _heading_trail_from_metadata(ingest.get("heading_trail"))
+    stored["files"] = files_payload
+    stored["split"] = require_json_object(
+        chunk.split.model_dump(mode="json"),
+        "RAGChunk.split",
+    )
+    stored["indexing_runtime"] = indexing_runtime
+    stored["document_id"] = chunk.document_id
+    stored["document_name"] = chunk.document_name
+    stored["chunk_index"] = chunk.chunk_index
+    stored["total_chunks"] = chunk.total_chunks
+    return stored
+
+
+def _optional_int(value: JsonValue | None) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError("page_index в metadata чанка должен быть int или null")
+    return value
+
+
+def _optional_label(value: JsonValue | None) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError("page_label в metadata чанка должен быть str или null")
+    stripped = value.strip()
+    if not stripped:
+        return None
+    return stripped
+
+
+def _heading_trail_from_metadata(value: JsonValue | None) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError("heading_trail в metadata чанка должен быть списком строк")
+    trail: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            raise ValueError("heading_trail в metadata чанка должен быть списком строк")
+        trail.append(item)
+    return trail
+
+
+def _files_from_metadata(value: JsonValue | None) -> list[FileRef]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError("files в metadata чанка должен быть списком FileRef")
+    return [FileRef.model_validate(item) for item in value]
+
+
+def _split_from_metadata(value: JsonValue | None) -> IndexProfileSplitConfig:
+    if value is None:
+        return IndexProfileSplitConfig()
+    return IndexProfileSplitConfig.model_validate(value)
+
+
+def _search_attributes(metadata: RAGMetadata) -> JsonObject:
+    attributes: JsonObject = {}
+    for key, item in metadata.items():
+        if key in _SEARCH_ATTRIBUTE_SKIP_KEYS:
+            continue
+        attributes[key] = item
+    return attributes
+
+
+def _rag_search_result_from_document(
+    doc: VectorDocument,
+    *,
+    score: float,
+    namespace_id: str,
+    provenance: RAGMetadata,
+) -> RAGSearchResult:
+    metadata = doc.metadata_ or {}
+    return RAGSearchResult(
+        content=doc.content,
+        document_id=doc.document_id,
+        document_name=doc.document_name or "",
+        namespace=namespace_id,
+        chunk_index=doc.chunk_index,
+        total_chunks=doc.total_chunks,
+        page_index=_optional_int(metadata.get("page_index")),
+        page_label=_optional_label(metadata.get("page_label")),
+        heading_trail=_heading_trail_from_metadata(metadata.get("heading_trail")),
+        files=_files_from_metadata(metadata.get("files")),
+        split=_split_from_metadata(metadata.get("split")),
+        attributes=_search_attributes(metadata),
+        score=score,
+        chunk_id=doc.id,
+        provenance=provenance,
+    )
 
 
 def _parse_metadata_document_date(metadata: RAGMetadata, key: str) -> datetime | None:
@@ -173,9 +311,6 @@ class PgVectorProvider(BaseRAGProvider):
     RAG провайдер на базе pgvector.
     Использует PostgreSQL + pgvector для хранения и поиска векторных документов.
     """
-
-    DEFAULT_CHUNK_SIZE: ClassVar[int] = 1000
-    DEFAULT_CHUNK_OVERLAP: ClassVar[int] = 100
 
     def __init__(
         self,
@@ -259,9 +394,6 @@ class PgVectorProvider(BaseRAGProvider):
         )
 
         self._file_reader: FileReader = FileReader()
-        self._chunk_size: int = config.chunk_size
-        self._chunk_overlap: int = config.chunk_overlap
-        self._tokenizer: tiktoken.Encoding = tiktoken.get_encoding("cl100k_base")
 
         logger.info(f"PgVector провайдер инициализирован: model={model}, dimension={dimension}")
 
@@ -294,51 +426,6 @@ class PgVectorProvider(BaseRAGProvider):
         if self._query_instruction is None:
             return query
         return f"Instruct: {self._query_instruction}\nQuery: {query}"
-
-    # -- Чанкинг --
-
-    def _chunk_text(self, text_content: str) -> list[str]:
-        """Разбивает текст на chunks по токенам."""
-        tokens = self._tokenizer.encode(text_content)
-        chunks: list[str] = []
-        start = 0
-        while start < len(tokens):
-            end = start + self._chunk_size
-            chunk_tokens = tokens[start:end]
-            chunk_text = self._tokenizer.decode(chunk_tokens)
-            chunks.append(chunk_text)
-            start = end - self._chunk_overlap
-        return chunks
-
-    def _chunks_from_file_extract(
-        self,
-        extract: FileExtract,
-    ) -> list[tuple[str, RAGMetadata]]:
-        """Чанки для embeddings из канонического FileExtract."""
-        out: list[tuple[str, RAGMetadata]] = []
-        doc_checksum = extract.source_checksum or ""
-        pages_total = extract.page_layout.pages_total
-        for page in extract.pages:
-            body = (page.text or "").strip()
-            if not body:
-                continue
-            base_meta: RAGMetadata = {
-                "file_read_page_index": page.index,
-                "file_read_page_label": page.label,
-                "file_read_source_checksum": doc_checksum,
-                "file_read_detected_kind": extract.kind.value,
-                "file_read_page_count": pages_total,
-                "file_read_lane": extract.read_lane.value,
-            }
-            subchunks = self._chunk_text(body)
-            for sci, chunk_text in enumerate(subchunks):
-                meta = {**base_meta, "file_read_subchunk_index": sci}
-                out.append((chunk_text, meta))
-        if not out:
-            raise ValueError(
-                f"После FileReader нет текста для индексации (пустые страницы). file={extract.file_name}"
-            )
-        return out
 
     # — Пространства имён —
 
@@ -430,14 +517,14 @@ class PgVectorProvider(BaseRAGProvider):
         doc_name = document_name or original_filename
 
         doc_metadata = dict(metadata) if metadata is not None else {}
-        document_id_raw = doc_metadata.get("document_id")
-        document_id = str(document_id_raw).strip() if document_id_raw else ""
-        read_args = ReadFileArgs(page_end=-1)
+        document_id = _resolve_index_document_id(doc_metadata)
+        doc_metadata["document_id"] = document_id
+        read_args = ReadFileArgs(page_end=-1, persist_assets_namespace=namespace_id)
         extract = await self._file_reader.read(
             file_path,
             read_args,
             file_name=doc_name,
-            file_id=document_id if document_id else None,
+            file_id=document_id,
         )
         doc_metadata["file_type"] = extract.kind.value
         doc_metadata["s3_key"] = s3_key
@@ -474,14 +561,14 @@ class PgVectorProvider(BaseRAGProvider):
         filename = document_name or original_filename
 
         doc_metadata = dict(metadata) if metadata is not None else {}
-        document_id_raw = doc_metadata.get("document_id")
-        document_id = str(document_id_raw).strip() if document_id_raw else ""
-        read_args = ReadFileArgs(page_end=-1)
+        document_id = _resolve_index_document_id(doc_metadata)
+        doc_metadata["document_id"] = document_id
+        read_args = ReadFileArgs(page_end=-1, persist_assets_namespace=namespace_id)
         extract = await self._file_reader.read(
             file_data,
             read_args,
             file_name=filename,
-            file_id=document_id if document_id else None,
+            file_id=document_id,
         )
         doc_metadata["file_type"] = extract.kind.value
         doc_metadata["s3_key"] = s3_key
@@ -547,13 +634,31 @@ class PgVectorProvider(BaseRAGProvider):
             )
             metadata["index_profile_config"] = index_profile_config
 
-        chunk_pairs = self._chunks_from_file_extract(extract)
-        chunks = [pair[0] for pair in chunk_pairs]
-        chunk_metas = [pair[1] for pair in chunk_pairs]
-
         if index_profile_config is not None and not isinstance(index_profile_config, dict):
             raise ValueError("index_profile_config должен быть объектом")
-        indexing_runtime: RAGMetadata = dict(index_profile_config or {})
+        if index_profile_config is None:
+            profile = get_settings().rag.document_indexing
+        else:
+            profile = IndexProfileConfig.model_validate(index_profile_config)
+        split_config = resolve_split_config(extract, profile)
+        rag_chunks = split_file_extract(
+            extract,
+            split_config,
+            document_id=document_id,
+            document_name=document_name,
+            namespace=namespace_id,
+        )
+        if not rag_chunks:
+            raise ValueError(
+                f"После FileReader нет текста для индексации (пустые страницы). file={document_name}"
+            )
+        chunks = [chunk.content for chunk in rag_chunks]
+        indexing_runtime: RAGMetadata = dict(
+            require_json_object(
+                profile.model_dump(mode="json"),
+                "index profile",
+            )
+        )
 
         try:
             raw_embeddings = await self._embedding_client.generate_embeddings(chunks)
@@ -577,7 +682,7 @@ class PgVectorProvider(BaseRAGProvider):
             raise ValueError("metadata.company_id должен быть строкой")
 
         rows: list[VectorDocument] = []
-        for i, (chunk, emb, chunk_meta) in enumerate(zip(chunks, embeddings, chunk_metas)):
+        for i, (chunk, emb) in enumerate(zip(rag_chunks, embeddings)):
             chunk_row_id = uuid.uuid5(
                 uuid.NAMESPACE_URL,
                 f"rag://{namespace_id}/{document_id}/{i}",
@@ -589,20 +694,16 @@ class PgVectorProvider(BaseRAGProvider):
                     company_id=company_id_value,
                     document_id=document_id,
                     document_name=document_name,
-                    content=chunk,
+                    content=chunk.content,
                     embedding=emb,
                     embedding_model=embedding_model,
-                    chunk_index=i,
-                    total_chunks=len(chunks),
-                    metadata_={
-                        **metadata,
-                        **chunk_meta,
-                        "indexing_runtime": indexing_runtime,
-                        "document_id": document_id,
-                        "document_name": document_name,
-                        "chunk_index": i,
-                        "total_chunks": len(chunks),
-                    },
+                    chunk_index=chunk.chunk_index,
+                    total_chunks=chunk.total_chunks,
+                    metadata_=_chunk_storage_metadata(
+                        ingest=metadata,
+                        chunk=chunk,
+                        indexing_runtime=indexing_runtime,
+                    ),
                 )
             )
 
@@ -1171,10 +1272,7 @@ class PgVectorProvider(BaseRAGProvider):
         docs_by_chunk_id = {doc.id: doc for doc, _similarity in rows}
         rescored: list[RAGSearchResult] = []
         for item in results:
-            doc = docs_by_chunk_id[item.chunk_id] if item.chunk_id is not None else None
-            if doc is None:
-                rescored.append(item)
-                continue
+            doc = docs_by_chunk_id[item.chunk_id]
             final_score, freshness_provenance = _freshness_score_and_provenance(
                 doc,
                 item.score,
@@ -1320,14 +1418,10 @@ class PgVectorProvider(BaseRAGProvider):
             if headline:
                 provenance["headline"] = headline
             ordered.append(
-                RAGSearchResult(
-                    content=doc.content,
+                _rag_search_result_from_document(
+                    doc,
                     score=score_by_id[doc_id],
-                    document_id=doc.document_id,
-                    document_name=doc.document_name or "",
-                    metadata=doc.metadata_ or {},
-                    namespace=namespace_id,
-                    chunk_id=doc.id,
+                    namespace_id=namespace_id,
                     provenance=provenance,
                 )
             )
@@ -1369,14 +1463,10 @@ class PgVectorProvider(BaseRAGProvider):
             doc = row[0]
             score = float(row[1]) if row[1] is not None else 0.0
             search_results.append(
-                RAGSearchResult(
-                    content=doc.content,
+                _rag_search_result_from_document(
+                    doc,
                     score=score,
-                    document_id=doc.document_id,
-                    document_name=doc.document_name or "",
-                    metadata=doc.metadata_ or {},
-                    namespace=namespace_id,
-                    chunk_id=doc.id,
+                    namespace_id=namespace_id,
                     provenance={},
                 )
             )

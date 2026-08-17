@@ -14,7 +14,6 @@ from typing import cast as type_cast
 from core.rag_indexing_schema import (
     IndexProfileConfig,
     IndexProfileLexicalConfig,
-    IndexProfileParsingConfig,
     IndexProfileSearchDefaults,
     IndexProfileSplitConfig,
     IndexProfileSplitStrategy,
@@ -23,7 +22,7 @@ from core.rag_indexing_schema import (
 )
 
 from .constants import RAG_IN_PROCESS_PROVIDER_ID
-from .models import FlowRAGConfig, RAGDocument, RAGNamespace, RAGSearchResult
+from .models import FlowRAGConfig, RAGChunk, RAGDocument, RAGNamespace, RAGSearchResult
 from .rag_http_namespace_search import (
     RAG_API_V1_PREFIX,
     SEARCH_REQUEST_OPTION_KEYS,
@@ -38,14 +37,13 @@ if TYPE_CHECKING:
     from types import FunctionType, UnionType
 
     from .base_provider import BaseRAGProvider
-    from .chunking import split_parsed_document, split_plain_text_fixed_tokens
+    from .chunking import resolve_split_config, split_file_extract, split_plain_text_fixed_tokens
     from .factory import get_rag_provider
     from .llm_context_memory_store import (
         RAGLLMContextMemoryStore,
         llm_context_memory_namespace_id,
     )
     from .llm_context_source import RAGLLMContextSource
-    from .parsed_document import BlockKind, ParsedBlock, ParsedDocument
     from .post_retrieval_rerank import (
         apply_rerank_after_retrieve,
         apply_rerank_after_retrieve_grouped,
@@ -55,9 +53,6 @@ if TYPE_CHECKING:
     from .repository import RAGRepository
     type _LazyExportValue = (
         type[BaseRAGProvider]
-        | type[BlockKind]
-        | type[ParsedBlock]
-        | type[ParsedDocument]
         | type[RAGResource]
         | type[RAGRepository]
         | type[RAGLLMContextSource]
@@ -70,11 +65,9 @@ if TYPE_CHECKING:
 
 _LAZY_EXPORTS: dict[str, tuple[str, str]] = {
     "BaseRAGProvider": ("core.rag.base_provider", "BaseRAGProvider"),
-    "BlockKind": ("core.rag.parsed_document", "BlockKind"),
-    "ParsedBlock": ("core.rag.parsed_document", "ParsedBlock"),
-    "ParsedDocument": ("core.rag.parsed_document", "ParsedDocument"),
     "RAGResource": ("core.rag.rag_resource", "RAGResource"),
-    "split_parsed_document": ("core.rag.chunking", "split_parsed_document"),
+    "resolve_split_config": ("core.rag.chunking", "resolve_split_config"),
+    "split_file_extract": ("core.rag.chunking", "split_file_extract"),
     "split_plain_text_fixed_tokens": ("core.rag.chunking", "split_plain_text_fixed_tokens"),
     "get_rag_provider": ("core.rag.factory", "get_rag_provider"),
     "RAGRepository": ("core.rag.repository", "RAGRepository"),
@@ -101,21 +94,18 @@ _LAZY_EXPORTS: dict[str, tuple[str, str]] = {
 
 __all__ = [
     "BaseRAGProvider",
+    "RAGChunk",
     "RAGDocument",
     "RAGSearchResult",
     "RAGNamespace",
     "FlowRAGConfig",
     "IndexProfileConfig",
     "IndexProfileLexicalConfig",
-    "IndexProfileParsingConfig",
     "IndexProfileSearchDefaults",
     "IndexProfileSplitConfig",
     "IndexProfileSplitStrategy",
     "RerankerSearchDefaults",
     "SearchChannelsDefaults",
-    "BlockKind",
-    "ParsedBlock",
-    "ParsedDocument",
     "RAGResource",
     "RAG_IN_PROCESS_PROVIDER_ID",
     "RAG_API_V1_PREFIX",
@@ -126,7 +116,8 @@ __all__ = [
     "merge_search_request_options",
     "RagResourceBindParams",
     "RagResourceBindPatch",
-    "split_parsed_document",
+    "resolve_split_config",
+    "split_file_extract",
     "split_plain_text_fixed_tokens",
     "get_rag_provider",
     "RAGRepository",

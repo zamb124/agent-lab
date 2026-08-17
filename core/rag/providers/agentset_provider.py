@@ -610,11 +610,12 @@ class AgentsetRAGProvider(BaseRAGProvider):
                         item.get("metadata", {}),
                         "agentset search metadata",
                     ).get("filename", ""),
-                    "metadata": require_json_object(
+                    "attributes": require_json_object(
                         item.get("metadata", {}),
                         "agentset search metadata",
                     ),
                     "namespace": namespace_id,
+                    "chunk_id": item.get("id", ""),
                 }
             )
             for item in results

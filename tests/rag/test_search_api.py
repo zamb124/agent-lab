@@ -360,7 +360,7 @@ async def test_search_with_chroma_like_filters(rag_client, unique_namespace_name
     assert response.status_code == 200
     data = response.json()
     assert len(data["results"]) >= 1
-    assert {item["metadata"]["document_name"] for item in data["results"]} == {"alpha.txt"}
+    assert {item["document_name"] for item in data["results"]} == {"alpha.txt"}
 
 
 @pytest.mark.asyncio
@@ -432,7 +432,7 @@ async def test_search_filter_operators_via_api_matrix(
         )
         assert response.status_code == 200
         data = response.json()
-        return {item["metadata"]["document_name"] for item in data["results"]}
+        return {item["document_name"] for item in data["results"]}
 
     assert await _search({"priority": {"$eq": "high"}}) == {"api-r1.txt", "api-r4.txt"}
     assert await _search({"priority": {"$ne": "high"}}) == {"api-r2.txt", "api-r3.txt"}

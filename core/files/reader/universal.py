@@ -12,13 +12,18 @@ from pathlib import Path
 from core.files.reader.models import (
     DEFAULT_VIRTUAL_PAGE_SIZE,
     ContentMode,
+    ExtractBlock,
+    ExtractBlockKind,
     FileExtract,
     FileReadKind,
     FileReadResult,
     PageLayout,
     PageLayoutKind,
     ReadLane,
+    ReadPage,
     UniversalPage,
+    default_page_label,
+    resolved_page_label,
 )
 
 _ROW_DELIMITED_EXTENSIONS: frozenset[str] = frozenset({".csv", ".tsv"})
@@ -47,7 +52,7 @@ def _content_mode_for_lane(lane: ReadLane) -> ContentMode:
 
 
 def _is_natively_paginated(result: FileReadResult) -> bool:
-    """True если формат уже постраничный (несколько native units)."""
+    """True если reader уже отдал native units (страницы, листы, слайды, главы)."""
     if result.detected_kind == FileReadKind.IMAGE:
         return True
     if result.detected_kind in (FileReadKind.PDF, FileReadKind.SPREADSHEET):
@@ -55,6 +60,45 @@ def _is_natively_paginated(result: FileReadResult) -> bool:
     if result.detected_kind == FileReadKind.OFFICE and len(result.pages) > 1:
         return True
     return False
+
+
+def keep_reader_pages(result: FileReadResult) -> bool:
+    if _is_natively_paginated(result):
+        return True
+    return any(page.blocks or page.assets for page in result.pages)
+
+
+def read_pages_for_layout(
+    result: FileReadResult,
+    *,
+    file_name: str,
+    page_size: int = DEFAULT_VIRTUAL_PAGE_SIZE,
+) -> list[ReadPage]:
+    """Native units и страницы со структурой/ассетами — как есть; сплошной текст — окна."""
+    if keep_reader_pages(result):
+        return list(result.pages)
+
+    ext = Path(file_name).suffix.lower()
+    on_row_boundary = ext in _ROW_DELIMITED_EXTENSIONS
+    joined = "\n\n".join(page.text for page in result.pages) if len(result.pages) > 1 else (
+        result.pages[0].text if result.pages else ""
+    )
+    windows = _split_into_windows(joined, page_size=page_size, on_row_boundary=on_row_boundary)
+    pages: list[ReadPage] = []
+    for index, window in enumerate(windows):
+        blocks: list[ExtractBlock] = []
+        if window.strip():
+            blocks.append(ExtractBlock(kind=ExtractBlockKind.PARAGRAPH, text=window))
+        pages.append(
+            ReadPage(
+                index=index,
+                text=window,
+                assets=[],
+                label=default_page_label(index),
+                blocks=blocks,
+            )
+        )
+    return pages
 
 
 def _split_into_windows(text: str, *, page_size: int, on_row_boundary: bool) -> list[str]:
@@ -91,36 +135,31 @@ def build_file_extract(
     content_mode = _content_mode_for_lane(lane)
     mime_type = result.content_type or "application/octet-stream"
 
+    source_pages = read_pages_for_layout(result, file_name=file_name, page_size=page_size)
+    keep_native = keep_reader_pages(result)
+    layout_kind = PageLayoutKind.NATIVE if keep_native else PageLayoutKind.VIRTUAL
+    effective_page_size = 0 if keep_native else page_size
     pages: list[UniversalPage] = []
-    if _is_natively_paginated(result):
-        layout_kind = PageLayoutKind.NATIVE
-        effective_page_size = 0
-        for page in result.pages:
-            pages.append(
-                UniversalPage(
-                    index=len(pages),
-                    label=page.label or "",
-                    text=page.text,
-                    content_mode=content_mode,
-                )
+    for page in source_pages:
+        pages.append(
+            UniversalPage(
+                index=len(pages),
+                label=resolved_page_label(page.index, page.label),
+                text=page.text,
+                content_mode=content_mode,
+                blocks=list(page.blocks),
             )
-    else:
-        layout_kind = PageLayoutKind.VIRTUAL
-        effective_page_size = page_size
-        ext = Path(file_name).suffix.lower()
-        on_row_boundary = ext in _ROW_DELIMITED_EXTENSIONS
-        joined = "\n\n".join(p.text for p in result.pages) if len(result.pages) > 1 else (
-            result.pages[0].text if result.pages else ""
         )
-        for window in _split_into_windows(
-            joined, page_size=page_size, on_row_boundary=on_row_boundary
-        ):
-            pages.append(
-                UniversalPage(index=len(pages), label="", text=window, content_mode=content_mode)
-            )
 
     if not pages:
-        pages.append(UniversalPage(index=0, label="", text="", content_mode=content_mode))
+        pages.append(
+            UniversalPage(
+                index=0,
+                label=default_page_label(0),
+                text="",
+                content_mode=content_mode,
+            )
+        )
 
     content_chars_total = sum(len(p.text) for p in pages)
 

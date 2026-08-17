@@ -97,6 +97,8 @@ Declaration (`task_names.py`) лёгкий и импортируется produce
 
 `core/tasks/worker_bootstrap.py::build_worker` — общий lifecycle (logging, tracing, billing/redis/notifications/file_processors по флагам, redis connect с backoff).
 
+`init_worker_testing_mock_llm(redis_client, service_name=...)` — в TESTING регистрирует process-local MockLLM и вешает Redis-очередь `mock_llm:responses:<test_scope>`. Обязателен у воркеров, которые зовут LLM (включая vision FileReader в `rag_worker`): иначе worker отдаёт дефолт «Mock LLM ответ», а не FIFO теста. Вызов — в доменном `on_startup` после контейнера.
+
 Каждый `apps/<svc>_worker/worker.py` (~десятки строк): `wire_worker` + доменный `on_startup` + `build_worker(...)`.
 
 Запуск воркера: `taskiq worker apps.<svc>_worker.worker:worker_app`.

@@ -176,6 +176,8 @@ async def test_integration(mock_llm_redis, flows_client, unique_id):
 
 **Полный E2E flows** (webhook → `process_flow_task` → LLM из `mock_llm:responses:<scope>` → channel HTTP): маркер `real_taskiq` **не** использовать. Оставляем `sync_tools`: `enqueue(TASK_PROCESS_FLOW, ...)` выполняется in-process, очередь mock читается из Redis; `TESTING=true` должен идти через `core.ai.runtime` mock route и `configure_mock_llm_redis(container.redis_client)`.
 
+**RAG index-file + vision** (`tests/rag/test_index_file_extract_e2e.py`): `@pytest.mark.real_taskiq` + `mock_llm_redis` + `rag_worker`. Worker читает FIFO только после `init_worker_testing_mock_llm` на старте (`apps/rag_worker/worker.py`). После смены reader/split/worker код стека нужно перезапустить (`make test-up` или рестарт `rag_worker`).
+
 `flows_worker` стека — **`-w 8`** baseline (`scripts/test_stack.py`, `scale_stack_workers(8)`). Не сериализовать в 1 consumer: OCC ledger per-session, очередь из одного worker даёт HOL note-analyze под `-n10`.
 
 ## Sync / Browser / Office / FileWriter / Audio

@@ -498,7 +498,7 @@ class OfficeCatalogRagIndexService:
 
     @staticmethod
     def _catalog_id_from_search_hit(hit: RAGSearchResult) -> str | None:
-        metadata_catalog_id = hit.metadata.get("catalog_id")
+        metadata_catalog_id = hit.attributes.get("catalog_id")
         if isinstance(metadata_catalog_id, str) and metadata_catalog_id.strip() != "":
             return metadata_catalog_id.strip()
         namespace_id = hit.namespace.strip()

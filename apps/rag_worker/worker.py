@@ -25,8 +25,13 @@ from apps.rag.container import get_rag_container
 
 from core.billing import set_billing_service
 from core.files.processors import initialize_default_processors
+from core.files.reader.service import FileReader
 from core.logging import get_logger
-from core.tasks.worker_bootstrap import build_worker, init_worker_tracing
+from core.tasks.worker_bootstrap import (
+    build_worker,
+    init_worker_testing_mock_llm,
+    init_worker_tracing,
+)
 
 # side-effect: register platform event catalog types
 _ = importlib.import_module("apps.rag.events")
@@ -44,6 +49,8 @@ async def _startup(state: TaskiqState) -> None:
     set_billing_service(container.billing_service)
     init_worker_tracing("rag_worker", container)
     state.rag_provider = container.rag_provider
+    FileReader.configure_asset_persist(container.files_service)
+    init_worker_testing_mock_llm(container.redis_client, service_name="rag_worker")
     logger.info("worker.rag_provider_initialized", service="rag_worker")
 
 

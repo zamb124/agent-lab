@@ -129,7 +129,7 @@ Promote session → asset: новый `FLOW_ASSET` file (copy), не тихий 
 
 ## RAG
 
-Загрузка байтов — только через Files chunked API. Индексация — `POST /rag/api/v1/namespaces/{id}/documents/index-file` или `post_create.rag_index_namespace` в `FileCreateSpec` (hook на `BaseContainer.files_service`).
+Загрузка байтов — только через Files chunked API. Индексация — `POST /rag/api/v1/namespaces/{id}/documents/index-file` или явный `post_create.rag_index_namespace` в `FileCreateSpec` (hook на `BaseContainer.files_service`). `FileSourceKind.RAG_DOCUMENT` сам по себе индекс не ставит: persist ассетов FileReader пишет `FileRef` + Documents bind, без повторного index-file.
 
 ## Исключение: гостевая выдача wiki
 

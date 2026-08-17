@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from core.app import create_service_app
+from core.files.reader.service import FileReader
 from core.logging import get_logger
 
 from .api import (
@@ -21,7 +22,7 @@ from .api import (
 from .config import RAGSettings, get_rag_settings
 from .container import RAGContainer, get_rag_container
 
-# side-effect: register platform event catalog types
+logger = get_logger(__name__)
 _ = importlib.import_module("apps.rag.events")
 
 logger = get_logger(__name__)
@@ -37,6 +38,7 @@ async def on_startup(app: FastAPI, container: RAGContainer, settings: RAGSetting
         return
 
     _ = container.rag_provider
+    FileReader.configure_asset_persist(container.files_service)
     logger.info(f"RAG провайдер по умолчанию: {settings.rag.default_provider}")
 
     enabled_providers = [

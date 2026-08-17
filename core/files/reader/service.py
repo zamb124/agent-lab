@@ -10,13 +10,15 @@ import shutil
 import subprocess
 import tempfile
 import uuid
+import zipfile
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from email import policy
 from email.parser import BytesParser
 from io import BytesIO
 from pathlib import Path
-from typing import Protocol, TypedDict, TypeIs, cast
+from typing import ClassVar, Protocol, TypedDict, TypeIs, cast
 
 import ebooklib
 import extract_msg
@@ -33,6 +35,7 @@ from odf import opendocument as odf_opendocument
 from odf import teletype as odf_teletype
 from odf import text as odf_text
 from pptx import Presentation as raw_presentation
+from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pymupdf import mupdf as pymupdf_lowlevel
 from striprtf.striprtf import rtf_to_text
 from unstructured.partition.auto import partition as raw_partition
@@ -51,6 +54,8 @@ from core.files.models import FileRecord, FileResponse
 from core.files.reader.exceptions import FileReadError
 from core.files.reader.models import (
     CompressionMode,
+    ExtractBlock,
+    ExtractBlockKind,
     FileExtract,
     FileReadKind,
     FileReadResult,
@@ -60,10 +65,12 @@ from core.files.reader.models import (
     ReadFileArgs,
     ReadOptions,
     ReadPage,
+    default_page_label,
     merge_file_ref_read_options,
 )
 from core.files.reader.vision import prepare_visual_payload
 from core.files.s3_client import S3ClientFactory
+from core.files.service import FilesService
 from core.files.types import FileCategory, extensions_for
 from core.http import get_httpx_client
 from core.models.billing_models import UsageType
@@ -106,7 +113,7 @@ class _PdfExtractedImage(TypedDict):
 
 
 class _PdfPage(Protocol):
-    def get_text(self) -> object: ...
+    def get_text(self, option: str = "text") -> object: ...
     def get_images(self, *, full: bool) -> list[tuple[int, ...]]: ...
     def get_pixmap(self, *, matrix: object) -> _PdfPixmap: ...
 
@@ -126,9 +133,11 @@ class _FitzModule(Protocol):
 
 class _UnstructuredMetadata(Protocol):
     page_number: object | None
+    page_name: object | None
 
 
 class _UnstructuredElement(Protocol):
+    category: str
     metadata: _UnstructuredMetadata | None
 
 
@@ -166,11 +175,18 @@ class _PptxTable(Protocol):
     rows: Iterable[_PptxRow]
 
 
+class _PptxImage(Protocol):
+    blob: bytes
+    content_type: str
+
+
 class _PptxShape(Protocol):
     has_text_frame: bool
     text_frame: _PptxTextFrame
     has_table: bool
     table: _PptxTable
+    shape_type: object
+    image: _PptxImage
 
 
 class _PptxSlide(Protocol):
@@ -374,6 +390,89 @@ def _is_zip_local_header_magic(raw: bytes) -> bool:
     return len(raw) >= 4 and raw[:4] == b"PK\x03\x04"
 
 
+_OFFICE_MEDIA_CONTENT_TYPES: dict[str, str] = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
+
+
+def _office_media_content_type(filename: str) -> str | None:
+    ext = Path(filename).suffix.lower()
+    return _OFFICE_MEDIA_CONTENT_TYPES.get(ext)
+
+
+def _read_asset_from_bytes(
+    data: bytes,
+    *,
+    content_type: str,
+    kind: ReadAssetKind,
+    include_bytes: bool,
+) -> ReadAsset:
+    bytes_b64 = base64.b64encode(data).decode("utf-8") if include_bytes else None
+    return ReadAsset(
+        kind=kind,
+        content_type=content_type,
+        checksum=compute_content_checksum_sha256(data),
+        bytes_b64=bytes_b64,
+    )
+
+
+def _zip_embedded_media_assets(
+    raw: bytes,
+    *,
+    directory_prefix: str,
+    include_bytes: bool,
+) -> list[ReadAsset]:
+    if not _is_zip_local_header_magic(raw):
+        return []
+    try:
+        archive = zipfile.ZipFile(BytesIO(raw))
+    except zipfile.BadZipFile as exc:
+        raise FileReadError("не удалось открыть office zip для media") from exc
+    assets: list[ReadAsset] = []
+    with archive:
+        names = [
+            name
+            for name in archive.namelist()
+            if name.startswith(directory_prefix) and not name.endswith("/")
+        ]
+        names.sort()
+        for name in names:
+            content_type = _office_media_content_type(name)
+            if content_type is None:
+                continue
+            data = archive.read(name)
+            if not data:
+                continue
+            assets.append(
+                _read_asset_from_bytes(
+                    data,
+                    content_type=content_type,
+                    kind=ReadAssetKind.EMBEDDED_IMAGE,
+                    include_bytes=include_bytes,
+                )
+            )
+    return assets
+
+
+def _pptx_picture_asset(shape: _PptxShape, *, include_bytes: bool) -> ReadAsset | None:
+    if shape.shape_type != MSO_SHAPE_TYPE.PICTURE:
+        return None
+    image = shape.image
+    content_type = image.content_type
+    if not content_type.strip():
+        raise FileReadError("PPTX picture без content_type")
+    return _read_asset_from_bytes(
+        image.blob,
+        content_type=content_type,
+        kind=ReadAssetKind.EMBEDDED_IMAGE,
+        include_bytes=include_bytes,
+    )
+
+
 def _try_antiword(raw: bytes) -> str | None:
     """Запускает antiword; возвращает текст или None при сбое."""
     antiword = shutil.which("antiword")
@@ -453,6 +552,21 @@ def _kind_from_extension(ext: str) -> FileReadKind:
 
 class FileReader:
     """Чтение файлов: read() — полный extract (FileExtract); read_raw() — low-level parse."""
+
+    _process_files_service: ClassVar[FilesService | None] = None
+
+    @classmethod
+    def configure_asset_persist(cls, files_service: FilesService) -> None:
+        cls._process_files_service = files_service
+
+    @classmethod
+    def require_files_service(cls) -> FilesService:
+        if cls._process_files_service is None:
+            raise ValueError(
+                "FileReader persist: files_service не настроен — "
+                + "вызовите FileReader.configure_asset_persist при старте процесса"
+            )
+        return cls._process_files_service
 
     def recognize_file_type(self, *, file_name: str, head: bytes | None = None) -> FileTypeInfo:
         ext = _normalize_extension(file_name)
@@ -678,49 +792,15 @@ async def _read_image_impl(
         stripped = opts.vision_prompt.strip()
         if not stripped:
             raise ValueError("ReadOptions.vision_prompt задан пустой строкой")
-        prompt = stripped
-    else:
-        prompt = _DEFAULT_IMAGE_VISION_PROMPT
-    message = Message(
-        message_id=str(uuid.uuid4()),
-        role=Role.ROLE_USER,
-        parts=[
-            Part(text=prompt),
-            Part(
-                raw=raw,
-                media_type=mime,
-                filename=file_name,
-            ),
-        ],
+    if not mime.strip():
+        raise FileReadError(f"image без content_type: {file_name}")
+    asset = _read_asset_from_bytes(
+        raw,
+        content_type=mime,
+        kind=ReadAssetKind.EMBEDDED_IMAGE,
+        include_bytes=opts.include_asset_bytes,
     )
-    resolved_llm = resolve_vision_ai_model(opts.vision_model)
-    llm = create_vision_llm_client(resolved_llm)
-    actx = get_context()
-    if actx is None or actx.active_company is None:
-        raise ValueError("Контекст с active_company обязателен для vision-чтения изображения")
-    if not str(actx.user.user_id).strip():
-        raise ValueError(
-            "Контекст с user обязателен для vision-чтения изображения (биллинг и уведомления)"
-        )
-    if resolved_llm.cost_origin != COST_ORIGIN_COMPANY:
-        await get_billing_service().require_balance_for_billable_operation(
-            actx.active_company.company_id,
-            str(actx.user.user_id).strip(),
-            operation_code=BALANCE_BLOCK_OPERATION_VISION,
-            notification_service="frontend",
-        )
-    async with traced_operation(
-        "core.files.reader.image",
-        event_type="llm.vision",
-        operation_category="llm",
-        billing_usage_type=UsageType.LLM_REQUEST.value,
-        billing_resource_name=resolved_llm.billing_resource_name,
-        billing_quantity=1,
-        billing_pending_settlement=True,
-    ):
-        vision_result = await llm.invoke([message], json_output=False)
-    text = str(vision_result)
-    page = ReadPage(index=0, text=text, assets=[], label=None)
+    page = ReadPage(index=0, text="", assets=[asset], label=None)
     return FileReadResult(
         file_name=file_name,
         content_type=mime,
@@ -859,8 +939,15 @@ def _read_xls_sync(
             if row_text:
                 rows.append(row_text)
         if rows:
+            sheet_text = "\n".join(rows)
             pages.append(
-                ReadPage(index=sheet_idx, text="\n".join(rows), assets=[], label=sheet.name)
+                ReadPage(
+                    index=sheet_idx,
+                    text=sheet_text,
+                    assets=[],
+                    label=sheet.name,
+                    blocks=[ExtractBlock(kind=ExtractBlockKind.TABLE, text=sheet_text)],
+                )
             )
     if not pages:
         raise FileReadError(f"xlrd не извлёк данные: {file_name}")
@@ -930,8 +1017,8 @@ def _pdf_text_printable_ratio(stripped: str) -> float:
     return printable_count / len(stripped)
 
 
-def pdf_page_text_usable(text: str) -> bool:
-    """True если текстовый слой PDF достаточен; иначе нужен OCR (скан / мусорный слой)."""
+def page_text_usable(text: str) -> bool:
+    """True если текстовый слой единицы layout достаточен; иначе нужен vision/OCR."""
     stripped = text.strip()
     if not stripped:
         return False
@@ -940,8 +1027,8 @@ def pdf_page_text_usable(text: str) -> bool:
     return _pdf_text_printable_ratio(stripped) >= 0.85
 
 
-def pdf_page_text_for_merge(text: str) -> str:
-    """Текстовый слой для merge в hybrid: короткий, но чистый текст сохраняем."""
+def page_text_for_merge(text: str) -> str:
+    """Текстовый слой для merge с vision: короткий, но чистый текст сохраняем."""
     stripped = text.strip()
     if not stripped:
         return ""
@@ -981,6 +1068,34 @@ def _pdf_page_embedded_image_assets(
     include_bytes: bool,
 ) -> list[ReadAsset]:
     assets: list[ReadAsset] = []
+    for image in _pdf_page_embedded_images(page, doc):
+        bytes_b64: str | None = None
+        if include_bytes:
+            bytes_b64 = base64.b64encode(image.data).decode("utf-8")
+        assets.append(
+            ReadAsset(
+                kind=ReadAssetKind.EMBEDDED_IMAGE,
+                content_type=image.content_type,
+                checksum=image.checksum,
+                width=image.width,
+                height=image.height,
+                bytes_b64=bytes_b64,
+            )
+        )
+    return assets
+
+
+@dataclass(frozen=True)
+class PdfPageImage:
+    data: bytes
+    content_type: str
+    checksum: str
+    width: int
+    height: int
+
+
+def _pdf_page_embedded_images(page: _PdfPage, doc: _PdfDocument) -> list[PdfPageImage]:
+    images: list[PdfPageImage] = []
     for image_info in page.get_images(full=True):
         xref = image_info[0]
         try:
@@ -1002,20 +1117,145 @@ def _pdf_page_embedded_image_assets(
             continue
         mime = _pdf_mime_from_extracted(extracted["ext"])
         checksum = compute_content_checksum_sha256(image_bytes)
-        bytes_b64: str | None = None
-        if include_bytes:
-            bytes_b64 = base64.b64encode(image_bytes).decode("utf-8")
-        assets.append(
-            ReadAsset(
-                kind=ReadAssetKind.EMBEDDED_IMAGE,
+        images.append(
+            PdfPageImage(
+                data=image_bytes,
                 content_type=mime,
                 checksum=checksum,
                 width=width,
                 height=height,
-                bytes_b64=bytes_b64,
             )
         )
-    return assets
+    return images
+
+
+def _require_str_object_map(value: object, where: str) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise FileReadError(f"{where} должен быть dict")
+    mapping: dict[str, object] = {}
+    for key, item in cast(dict[object, object], value).items():
+        if not isinstance(key, str):
+            raise FileReadError(f"{where}: ключ должен быть str")
+        mapping[key] = item
+    return mapping
+
+
+def _require_object_list(value: object, where: str) -> list[object]:
+    if not isinstance(value, list):
+        raise FileReadError(f"{where} должен быть списком")
+    return cast(list[object], value)
+
+
+def _pdf_structure_blocks(page: _PdfPage) -> list[ExtractBlock]:
+    raw = _require_str_object_map(page.get_text("dict"), "PDF get_text('dict')")
+    blocks_raw = _require_object_list(raw.get("blocks"), "PDF dict.blocks")
+    sized: list[tuple[float, str]] = []
+    for block_raw in blocks_raw:
+        block = _require_str_object_map(block_raw, "PDF dict.blocks item")
+        if block.get("type") != 0:
+            continue
+        lines_raw = _require_object_list(block.get("lines"), "PDF block.lines")
+        span_texts: list[str] = []
+        span_sizes: list[float] = []
+        for line_raw in lines_raw:
+            line = _require_str_object_map(line_raw, "PDF line")
+            spans_raw = _require_object_list(line.get("spans"), "PDF line.spans")
+            for span_raw in spans_raw:
+                span = _require_str_object_map(span_raw, "PDF span")
+                text_raw = span.get("text")
+                if not isinstance(text_raw, str) or not text_raw.strip():
+                    continue
+                span_texts.append(text_raw.strip())
+                size_raw = span.get("size")
+                if isinstance(size_raw, (int, float)) and not isinstance(size_raw, bool):
+                    span_sizes.append(float(size_raw))
+        if not span_texts:
+            continue
+        joined = " ".join(span_texts).strip()
+        avg_size = sum(span_sizes) / len(span_sizes) if span_sizes else 0.0
+        sized.append((avg_size, joined))
+    if not sized:
+        return []
+    sizes = [item[0] for item in sized if item[0] > 0]
+    body_size = sorted(sizes)[len(sizes) // 2] if sizes else 0.0
+    blocks: list[ExtractBlock] = []
+    for avg_size, joined in sized:
+        is_heading = body_size > 0 and avg_size >= body_size * 1.2 and avg_size >= body_size + 0.5
+        if is_heading:
+            blocks.append(ExtractBlock(kind=ExtractBlockKind.HEADING, text=joined, level=1))
+        else:
+            blocks.append(ExtractBlock(kind=ExtractBlockKind.PARAGRAPH, text=joined))
+    return blocks
+
+
+def _pdf_image_to_read_asset(image: PdfPageImage, *, kind: ReadAssetKind) -> ReadAsset:
+    return ReadAsset(
+        kind=kind,
+        content_type=image.content_type,
+        checksum=image.checksum,
+        width=image.width,
+        height=image.height,
+        bytes_b64=base64.b64encode(image.data).decode("utf-8"),
+    )
+
+
+def _pdf_page_raster_png(page: _PdfPage, fitz_module: _FitzModule) -> PdfPageImage:
+    mat = fitz_module.Matrix(2, 2)
+    pix = page.get_pixmap(matrix=mat)
+    img_bytes = pix.tobytes("png")
+    return PdfPageImage(
+        data=img_bytes,
+        content_type="image/png",
+        checksum=compute_content_checksum_sha256(img_bytes),
+        width=pix.width,
+        height=pix.height,
+    )
+
+
+def pdf_page_count(raw: bytes) -> int:
+    fitz = cast(_FitzModule, _as_object(pymupdf))
+    doc = fitz.open(stream=raw, filetype="pdf")
+    try:
+        return doc.page_count
+    finally:
+        doc.close()
+
+
+def iter_pdf_read_pages(
+    raw: bytes,
+    file_name: str,
+    *,
+    page_indices: set[int] | None = None,
+    force_raster: bool = False,
+) -> Iterable[ReadPage]:
+    """Внутренний PDF-reader: по одной ReadPage, без накопления всех картинок документа."""
+    del file_name
+    fitz = cast(_FitzModule, _as_object(pymupdf))
+    doc = fitz.open(stream=raw, filetype="pdf")
+    try:
+        page_count = doc.page_count
+        for index in range(page_count):
+            if page_indices is not None and index not in page_indices:
+                continue
+            page = doc[index]
+            text = _pdf_page_text(page)
+            images = _pdf_page_embedded_images(page, doc)
+            assets = [
+                _pdf_image_to_read_asset(image, kind=ReadAssetKind.EMBEDDED_IMAGE)
+                for image in images
+            ]
+            if force_raster or (not page_text_usable(text) and not assets):
+                raster = _pdf_page_raster_png(page, fitz)
+                assets.append(_pdf_image_to_read_asset(raster, kind=ReadAssetKind.PAGE_RASTER))
+            yield ReadPage(
+                index=index,
+                label=default_page_label(index),
+                text=text,
+                assets=assets,
+                blocks=_pdf_structure_blocks(page),
+            )
+    finally:
+        doc.close()
 
 
 def _read_pdf_sync(
@@ -1059,7 +1299,7 @@ def _read_pdf_sync(
                         include_bytes=True,
                     )
                 )
-                if not pdf_page_text_usable(text) and not assets:
+                if not page_text_usable(text) and not assets:
                     mat = fitz.Matrix(2, 2)
                     pix = page.get_pixmap(matrix=mat)
                     img_bytes = pix.tobytes("png")
@@ -1074,7 +1314,15 @@ def _read_pdf_sync(
                             bytes_b64=base64.b64encode(img_bytes).decode("utf-8"),
                         )
                     )
-            pages.append(ReadPage(index=i, text=text, assets=assets, label=f"page_{i + 1}"))
+            pages.append(
+                ReadPage(
+                    index=i,
+                    text=text,
+                    assets=assets,
+                    label=default_page_label(i),
+                    blocks=_pdf_structure_blocks(page) if page is not None else [],
+                )
+            )
     finally:
         doc.close()
     if not pages:
@@ -1089,6 +1337,53 @@ def _read_pdf_sync(
     )
 
 
+def _extract_block_from_unstructured(category: str, text: str) -> ExtractBlock | None:
+    if category in {"PageBreak", "Header", "Footer"}:
+        return None
+    if category == "Title":
+        return ExtractBlock(kind=ExtractBlockKind.HEADING, text=text, level=1)
+    if category == "ListItem":
+        return ExtractBlock(kind=ExtractBlockKind.LIST, text=text)
+    if category == "Table":
+        return ExtractBlock(kind=ExtractBlockKind.TABLE, text=text)
+    if category in {"CodeSnippet", "Formula"}:
+        return ExtractBlock(kind=ExtractBlockKind.CODE, text=text)
+    if category in {"Image", "FigureCaption"}:
+        return ExtractBlock(kind=ExtractBlockKind.FIGURE, text=text)
+    return ExtractBlock(kind=ExtractBlockKind.PARAGRAPH, text=text)
+
+
+def _unstructured_page_number(md: _UnstructuredMetadata | None) -> int | None:
+    if md is None:
+        return None
+    page_number = md.page_number
+    if isinstance(page_number, int):
+        return page_number
+    if isinstance(page_number, float) and page_number.is_integer():
+        return int(page_number)
+    if isinstance(page_number, str) and page_number.strip():
+        return int(page_number.strip())
+    return None
+
+
+def _unstructured_group_key(
+    kind: FileReadKind,
+    md: _UnstructuredMetadata | None,
+) -> tuple[str, str | None, bool]:
+    if kind == FileReadKind.SPREADSHEET and md is not None:
+        page_name = md.page_name
+        if isinstance(page_name, str) and page_name.strip():
+            sheet_name = page_name.strip()
+            return f"sheet:{sheet_name}", sheet_name, False
+    page_number = _unstructured_page_number(md)
+    if page_number is None:
+        return "page:0", None, True
+    pn = page_number - 1
+    if pn < 0:
+        pn = 0
+    return f"page:{pn}", None, False
+
+
 def _read_unstructured_sync(
     raw: bytes,
     file_name: str,
@@ -1096,7 +1391,6 @@ def _read_unstructured_sync(
     kind: FileReadKind,
     opts: ReadOptions,
 ) -> FileReadResult:
-    del opts
     partition = cast(_UnstructuredPartition, raw_partition)
 
     warnings: list[str] = []
@@ -1105,40 +1399,52 @@ def _read_unstructured_sync(
         elements = partition(file=file_obj, metadata_filename=file_name, languages=["rus", "eng"])
     except Exception as exc:
         raise FileReadError(f"Не удалось разобрать файл через Unstructured: {file_name}") from exc
-    by_page: dict[int, list[str]] = defaultdict(list)
+    by_group: dict[str, list[ExtractBlock]] = defaultdict(list)
+    group_order: list[str] = []
+    group_labels: dict[str, str | None] = {}
     no_page_meta = False
     for el in elements:
         t = str(el).strip()
         if not t:
             continue
+        category = el.category
+        if not category.strip():
+            raise FileReadError(f"Unstructured element без category: {file_name}")
+        block = _extract_block_from_unstructured(category, t)
+        if block is None:
+            continue
         md = el.metadata
-        pn: int | None = None
-        if md is not None:
-            page_number = md.page_number
-            if isinstance(page_number, int):
-                pn = page_number
-            elif isinstance(page_number, float) and page_number.is_integer():
-                pn = int(page_number)
-            elif isinstance(page_number, str) and page_number.strip():
-                pn = int(page_number.strip())
-        if pn is None:
+        group_key, group_label, missing_page = _unstructured_group_key(kind, md)
+        if missing_page:
             no_page_meta = True
-            pn = 0
-        else:
-            pn = pn - 1
-            if pn < 0:
-                pn = 0
-        by_page[pn].append(t)
-    if not by_page:
+        if group_key not in by_group:
+            group_order.append(group_key)
+            group_labels[group_key] = group_label
+        by_group[group_key].append(block)
+    if not by_group:
         raise FileReadError(f"Unstructured не извлёк текст: {file_name}")
-    if no_page_meta and len(by_page) == 1:
+    if no_page_meta and len(by_group) == 1:
         warnings.append("Парсер не вернул номера страниц; весь текст на одной логической странице")
-    sorted_keys = sorted(by_page.keys())
     pages: list[ReadPage] = []
-    for seq, key in enumerate(sorted_keys):
-        body = "\n\n".join(by_page[key])
-        label = None if len(sorted_keys) == 1 else f"page_{key + 1}"
-        pages.append(ReadPage(index=seq, text=body, assets=[], label=label))
+    for seq, group_key in enumerate(group_order):
+        blocks = by_group[group_key]
+        body = "\n\n".join(block.text for block in blocks if block.text.strip())
+        stored_label = group_labels[group_key]
+        if stored_label is not None:
+            label = stored_label
+        else:
+            label = default_page_label(seq)
+        pages.append(ReadPage(index=seq, text=body, assets=[], label=label, blocks=blocks))
+    suffix = Path(file_name).suffix.lower()
+    if suffix in {".docx", ".doc"}:
+        media_assets = _zip_embedded_media_assets(
+            raw,
+            directory_prefix="word/media/",
+            include_bytes=opts.include_asset_bytes,
+        )
+        if media_assets:
+            first = pages[0]
+            pages[0] = first.model_copy(update={"assets": [*first.assets, *media_assets]})
     detected = kind
     if kind == FileReadKind.UNKNOWN:
         detected = FileReadKind.OFFICE
@@ -1159,7 +1465,6 @@ def _read_pptx_sync(
     opts: ReadOptions,
 ) -> FileReadResult:
     """PowerPoint .pptx через python-pptx; одна страница на слайд."""
-    del opts
     presentation = cast(_PptxPresentationFactory, raw_presentation)
     try:
         prs = presentation(BytesIO(raw))
@@ -1168,21 +1473,48 @@ def _read_pptx_sync(
     pages: list[ReadPage] = []
     for slide_idx, slide in enumerate(prs.slides):
         chunks: list[str] = []
+        blocks: list[ExtractBlock] = []
+        assets: list[ReadAsset] = []
         for shape in slide.shapes:
+            picture_asset = _pptx_picture_asset(
+                shape,
+                include_bytes=opts.include_asset_bytes,
+            )
+            if picture_asset is not None:
+                assets.append(picture_asset)
             if shape.has_text_frame:
                 text_frame = shape.text_frame
+                paragraph_parts: list[str] = []
                 for paragraph in text_frame.paragraphs:
                     for run in paragraph.runs:
                         if run.text:
+                            paragraph_parts.append(run.text)
                             chunks.append(run.text)
+                paragraph_text = "\n".join(part for part in paragraph_parts if part)
+                if paragraph_text:
+                    blocks.append(
+                        ExtractBlock(kind=ExtractBlockKind.PARAGRAPH, text=paragraph_text)
+                    )
             if shape.has_table:
                 table = shape.table
+                table_rows: list[str] = []
                 for row in table.rows:
                     cells = [cell.text.strip() for cell in row.cells]
-                    chunks.append("\t".join(cells))
+                    row_text = "\t".join(cells)
+                    table_rows.append(row_text)
+                    chunks.append(row_text)
+                table_text = "\n".join(table_rows)
+                if table_text.strip():
+                    blocks.append(ExtractBlock(kind=ExtractBlockKind.TABLE, text=table_text))
         body = "\n".join(c for c in chunks if c)
         pages.append(
-            ReadPage(index=slide_idx, text=body, assets=[], label=f"slide_{slide_idx + 1}")
+            ReadPage(
+                index=slide_idx,
+                text=body,
+                assets=assets,
+                label=f"slide_{slide_idx + 1}",
+                blocks=blocks,
+            )
         )
     if not pages:
         raise FileReadError(f"PPTX не содержит слайдов: {file_name}")
@@ -1204,13 +1536,12 @@ def _read_ppt_sync(
     opts: ReadOptions,
 ) -> FileReadResult:
     """PowerPoint legacy .ppt: ZIP-сигнатура → переименовать как .pptx, иначе сообщить."""
-    del opts
     if _is_zip_local_header_magic(raw):
         return _read_pptx_sync(
             raw,
             file_name[:-4] + ".pptx" if file_name.lower().endswith(".ppt") else file_name,
             mime,
-            ReadOptions(),
+            opts,
         )
     raise FileReadError(
         f"Legacy .ppt (PowerPoint 97-2003) не поддерживается без libreoffice: {file_name}. "

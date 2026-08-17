@@ -874,8 +874,6 @@
         "enabled": true,
         "embedding_cost_per_1m_tokens": 5.0,
         "embedding_platform_markup": 1.1,
-        "chunk_size": 1000,
-        "chunk_overlap": 100,
         "timeout": 120
       },
       "agentset": {

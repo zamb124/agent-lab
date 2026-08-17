@@ -8,7 +8,6 @@ import uuid
 
 import pytest
 
-from core.files.reader.models import ReadLane
 from tests.core.files.corpus.manifest import CORPUS_DIR
 from tests.rag.test_pgvector_provider import (
     _upload_metadata,
@@ -66,4 +65,5 @@ async def test_pgvector_indexes_scanned_pdf_with_hybrid_ocr(
         rag_company_id,
     )
     assert len(rows) > 0
-    assert rows[0].metadata_.get("file_read_lane") == ReadLane.HYBRID.value
+    joined = " ".join(row.content for row in rows)
+    assert joined.strip()

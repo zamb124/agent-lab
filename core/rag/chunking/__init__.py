@@ -1,11 +1,13 @@
-"""Нарезка текста (Chonkie + fixed-token tiktoken strategy)."""
+"""Нарезка FileExtract (Chonkie + fixed-token tiktoken strategy)."""
 
 from .split import (
-    split_parsed_document,
+    resolve_split_config,
+    split_file_extract,
     split_plain_text_fixed_tokens,
 )
 
 __all__ = [
-    "split_parsed_document",
+    "resolve_split_config",
+    "split_file_extract",
     "split_plain_text_fixed_tokens",
 ]

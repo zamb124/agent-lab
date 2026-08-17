@@ -1587,8 +1587,10 @@ async def rag_provider_pgvector():
 
     Использует PostgreSQL с расширением pgvector для хранения embeddings.
     """
+    from apps.rag.container import get_rag_container
     from core.config import get_settings
     from core.config.models import RAGProviderConfig
+    from core.files.reader.service import FileReader
     from core.rag.embedding_runtime import resolve_rag_embedding_runtime
     from core.rag.providers.pgvector_provider import PgVectorProvider
 
@@ -1598,13 +1600,12 @@ async def rag_provider_pgvector():
             "DATABASE__RAG_URL",
             "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_rag",
         ),
-        chunk_size=1000,
-        chunk_overlap=100,
     )
     embedding_runtime = resolve_rag_embedding_runtime(
         settings.rag.embedding, settings.llm, settings.provider_litserve
     )
     provider = PgVectorProvider(config, embedding_runtime)
+    FileReader.configure_asset_persist(get_rag_container().files_service)
     yield provider
 
 

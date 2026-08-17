@@ -1,12 +1,11 @@
 """
-Pydantic-схема ``rag.document_indexing`` (merged ``RAGConfig``): парсинг, нарезка, лексика, дефолты поиска.
+Pydantic-схема ``rag.document_indexing`` (merged ``RAGConfig``): нарезка, лексика, дефолты поиска.
 
 Модуль вынесен из ``core.rag``, чтобы не замкнуть импорты с ``core.config``.
 
 Состав ``IndexProfileConfig`` (вложенность = JSON при merge):
 
     IndexProfileConfig
-    ├── parsing: IndexProfileParsingConfig
     ├── split: IndexProfileSplitConfig   (strategy: IndexProfileSplitStrategy)
     ├── lexical: IndexProfileLexicalConfig
     └── search_defaults: IndexProfileSearchDefaults | None
@@ -14,6 +13,7 @@ Pydantic-схема ``rag.document_indexing`` (merged ``RAGConfig``): парси
         └── reranker: RerankerSearchDefaults | None
 
 Эмбеддинг в профиле нет: только глобальный ``rag.embedding``.
+Парсер индексации — ``FileReader.read`` → ``FileExtract``; отдельного parsing.engine нет.
 """
 
 from __future__ import annotations
@@ -25,7 +25,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 __all__ = [
     "IndexProfileConfig",
     "IndexProfileLexicalConfig",
-    "IndexProfileParsingConfig",
     "IndexProfileSearchDefaults",
     "IndexProfileSplitConfig",
     "IndexProfileSplitStrategy",
@@ -34,53 +33,30 @@ __all__ = [
 ]
 
 
-# --- Индексация: парсинг ---
-
-
-class IndexProfileParsingConfig(BaseModel):
-    """Движок парсинга и опции, маппящиеся на адаптеры в core/rag/."""
-
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    engine: Literal["unstructured", "marker"] = "unstructured"
-    languages: list[str] = Field(default_factory=lambda: ["rus", "eng"])
-
-
-# --- Индексация: нарезка ---
-
-
 IndexProfileSplitStrategy = Literal[
+    "auto",
     "fixed_tokens",
     "semantic",
     "recursive",
     "structure",
-    "token",
     "sentence",
     "code",
     "table",
-    "fast",
 ]
 
 
 class IndexProfileSplitConfig(BaseModel):
-    """Параметры нарезки текста на чанки (Chonkie + fixed-token tiktoken strategy)."""
+    """Параметры нарезки FileExtract на чанки (Chonkie + fixed-token tiktoken)."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    strategy: IndexProfileSplitStrategy = "fixed_tokens"
+    strategy: IndexProfileSplitStrategy = "auto"
     chunk_size: int = Field(default=512, gt=0)
     chunk_overlap: int = Field(default=50, ge=0)
     chonkie_code_language: str = Field(
         default="auto",
         description="Язык для CodeChunker (auto | python | javascript | ...).",
     )
-    chonkie_fast_delimiters: str | None = Field(
-        default=None,
-        description="Строка-разделители для fast (FastChunker); иначе дефолт Chonkie.",
-    )
-
-
-# --- Индексация: лексический слой ---
 
 
 class IndexProfileLexicalConfig(BaseModel):
@@ -93,9 +69,6 @@ class IndexProfileLexicalConfig(BaseModel):
         default=None,
         description="Язык для tsvector / анализатора, если применимо",
     )
-
-
-# --- Поиск: дефолты (запрос может переопределить) ---
 
 
 class SearchChannelsDefaults(BaseModel):
@@ -131,12 +104,9 @@ class IndexProfileSearchDefaults(BaseModel):
     reranker: RerankerSearchDefaults | None = None
 
 
-# --- Корень профиля ---
-
-
 class IndexProfileConfig(BaseModel):
     """
-    Полная схема индексации документов (парсинг, split, lexical, search_defaults).
+    Полная схема индексации документов (split, lexical, search_defaults).
 
     Поле `embedding` здесь отсутствует — модель эмбеддинга задаётся глобальным ``rag.embedding``.
     """
@@ -144,6 +114,5 @@ class IndexProfileConfig(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     split: IndexProfileSplitConfig = Field(default_factory=IndexProfileSplitConfig)
-    parsing: IndexProfileParsingConfig = Field(default_factory=IndexProfileParsingConfig)
     lexical: IndexProfileLexicalConfig = Field(default_factory=IndexProfileLexicalConfig)
     search_defaults: IndexProfileSearchDefaults | None = None

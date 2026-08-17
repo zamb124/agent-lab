@@ -30,7 +30,6 @@ from apps.platform_tasks.wiring import wire_worker
 from core.billing import set_billing_service
 from core.billing.cbr_rate_provider import refresh_loop_coro as _cbr_loop_coro
 from core.billing.cbr_rate_provider import refresh_rate_once as _cbr_refresh_once
-from core.clients.llm.mock import configure_mock_llm_redis, get_or_create_global_mock_llm
 from core.config import set_settings as set_core_settings
 from core.config.testing import is_testing
 from core.files.create_spec import FileCreateSpec, FileSourceKind, FileSourceRef
@@ -41,6 +40,7 @@ from core.logging import get_logger
 from core.tasks.worker_bootstrap import (
     build_worker,
     connect_redis_with_backoff,
+    init_worker_testing_mock_llm,
     init_worker_tracing,
 )
 from core.utils.background import run_with_log_context
@@ -115,10 +115,7 @@ async def _startup(state: TaskiqState) -> None:
         testing_env=os.environ.get("TESTING"),
         pytest_current_test=os.environ.get("PYTEST_CURRENT_TEST"),
     )
-    if is_testing():
-        _ = get_or_create_global_mock_llm("mock-gpt-4")
-        _ = configure_mock_llm_redis(container.redis_client)
-        logger.info("worker.mock_llm_configured", service=service_name)
+    init_worker_testing_mock_llm(container.redis_client, service_name=service_name)
 
     logger.info("worker.container_initialized", service=service_name)
 

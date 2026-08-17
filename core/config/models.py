@@ -937,10 +937,6 @@ class RAGProviderConfig(BaseModel):
     # Наценка платформы на embedding (1.1 = +10%)
     embedding_platform_markup: float = 1.1
 
-    # Чанкинг
-    chunk_size: int = 1000
-    chunk_overlap: int = 100
-
     extra_params: JsonObject = Field(default_factory=dict)
 
 

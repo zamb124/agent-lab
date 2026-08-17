@@ -219,11 +219,10 @@ class FilesService:
         spec: FileCreateSpec,
         post_create: FilePostCreate,
     ) -> None:
+        _ = spec
         if self._rag_index_hook is None:
             return
         namespace_id = post_create.rag_index_namespace
-        if namespace_id is None and spec.source_kind == "rag_document":
-            namespace_id = spec.source_ref.namespace_id
         if namespace_id is None:
             return
         await self._rag_index_hook(file_record.file_id, namespace_id, post_create.rag_metadata)

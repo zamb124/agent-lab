@@ -251,15 +251,11 @@ async def apply_rerank_after_retrieve(
             prov["rerank"] = True
             prov["rerank_score"] = rerank_score
             out.append(
-                RAGSearchResult(
-                    content=item.content,
-                    score=final_score,
-                    document_id=item.document_id,
-                    document_name=item.document_name,
-                    metadata=item.metadata,
-                    namespace=item.namespace,
-                    chunk_id=item.chunk_id,
-                    provenance=prov,
+                item.model_copy(
+                    update={
+                        "score": final_score,
+                        "provenance": prov,
+                    }
                 )
             )
         return out

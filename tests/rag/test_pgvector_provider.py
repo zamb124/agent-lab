@@ -340,14 +340,13 @@ async def test_upload_text_and_search(rag_provider_pgvector, ns_name, rag_compan
     assert len(results) == doc.metadata["total_chunks"]
     r0 = results[0]
     assert {
-        **r0.model_dump(include={"document_name", "namespace", "document_id", "metadata", "chunk_id", "provenance"}),
+        **r0.model_dump(include={"document_name", "namespace", "document_id", "chunk_id", "provenance"}),
         "score_type": type(r0.score).__name__,
         "has_content": bool(r0.content),
     } == {
         "document_name": "ml.txt",
         "namespace": namespace_id,
         "document_id": r0.document_id,
-        "metadata": r0.metadata,
         "chunk_id": r0.chunk_id,
         "provenance": r0.provenance,
         "score_type": "float",
@@ -435,9 +434,7 @@ async def test_search_with_filters(rag_provider_pgvector, ns_name, rag_company_i
         ns_name, "Python", limit=10, filters={"category": "web"}
     )
     assert len(results) == web_doc.metadata["total_chunks"]
-    assert [r.model_dump(include={"metadata"})["metadata"].get("category") for r in results] == ["web"] * len(
-        results
-    )
+    assert [r.attributes.get("category") for r in results] == ["web"] * len(results)
 
 
 @pytest.mark.asyncio

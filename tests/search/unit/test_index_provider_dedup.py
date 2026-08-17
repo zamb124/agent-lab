@@ -26,7 +26,7 @@ def _rag_result(
         namespace="runet:platform",
         content=content,
         score=score,
-        metadata=metadata,
+        attributes=metadata,
     )
 
 

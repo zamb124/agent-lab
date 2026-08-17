@@ -129,8 +129,7 @@ def _resolve_file_refs_for_read(
         "Читает вложения из state.files по списку имён names. "
         "Передаёшь список original_name — tool находит объекты файлов в state "
         "и вызывает движок чтения. Если names не указан, берутся все файлы в state.files. "
-        "Для PDF автоматически извлекается текстовый слой и OCR встроенных изображений "
-        "(vision); для сканов без текста — OCR всей страницы."
+        "Vision/OCR — только если текст единицы layout непригоден."
     ),
     tags=["files"],
     parameters_model=ReadFileArgs,
@@ -148,6 +147,7 @@ async def read_file(
     compression: CompressionMode | None = None,
     transcription_company_id: str | None = None,
     forced_lane: ReadLane | None = None,
+    persist_assets_namespace: str | None = None,
     budget: int = MAX_READ_BUDGET,
     *,
     state: ExecutionState,
@@ -170,6 +170,7 @@ async def read_file(
             compression=compression if compression is not None else CompressionMode.NEVER,
             transcription_company_id=transcription_company_id,
             forced_lane=forced_lane,
+            persist_assets_namespace=persist_assets_namespace,
             budget=budget,
         )
     else:
@@ -188,6 +189,7 @@ async def read_file(
             compression=compression if compression is not None else CompressionMode.NEVER,
             transcription_company_id=transcription_company_id,
             forced_lane=forced_lane,
+            persist_assets_namespace=persist_assets_namespace,
             budget=budget,
         )
 

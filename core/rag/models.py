@@ -6,8 +6,9 @@ from typing import ClassVar, Literal, NotRequired, TypeAlias, TypedDict
 from pydantic import BaseModel, ConfigDict
 from pydantic import Field as PydanticField
 
+from core.files.file_ref import FileRef
 from core.models import StrictBaseModel
-from core.rag_indexing_schema import SearchChannelsDefaults
+from core.rag_indexing_schema import IndexProfileSplitConfig, SearchChannelsDefaults
 from core.types import JsonObject
 
 RAGMetadata: TypeAlias = JsonObject
@@ -142,20 +143,32 @@ class RAGDocument(StrictBaseModel):
     chunks_count: int | None = None
     indexing_runs: int | None = None
     reindex_count: int | None = None
-    split: RAGMetadata | None = None
+    split: IndexProfileSplitConfig | None = None
 
 
-class RAGSearchResult(StrictBaseModel):
-    """Универсальная модель результата поиска"""
+class RAGChunk(StrictBaseModel):
+    """Единица retrieval: чанк индекса и поля результата поиска без score."""
 
     content: str
-    score: float
     document_id: str
     document_name: str
-    metadata: RAGMetadata = PydanticField(default_factory=dict)
     namespace: str
-    chunk_id: str | None = None
-    provenance: RAGMetadata = PydanticField(default_factory=dict)
+    chunk_index: int = 0
+    total_chunks: int = 1
+    page_index: int | None = None
+    page_label: str | None = None
+    heading_trail: list[str] = PydanticField(default_factory=list)
+    files: list[FileRef] = PydanticField(default_factory=list)
+    split: IndexProfileSplitConfig = PydanticField(default_factory=IndexProfileSplitConfig)
+    attributes: JsonObject = PydanticField(default_factory=dict)
+
+
+class RAGSearchResult(RAGChunk):
+    """Чанк индекса плюс score поиска."""
+
+    score: float
+    chunk_id: str
+    provenance: JsonObject = PydanticField(default_factory=dict)
 
 
 class RAGNamespace(StrictBaseModel):

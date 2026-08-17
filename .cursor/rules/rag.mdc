@@ -75,12 +75,12 @@ Namespace CRUD — `require_company_admin` / `require_can_view(company)`. Docume
 
 ### `pgvector`
 
-- PostgreSQL + pgvector. Чанкинг — `_chunks_from_file_read_result` (tiktoken внутри страниц `FileReadResult`).
+- PostgreSQL + pgvector. Чанкинг — `split_file_extract` по `IndexProfileConfig.split` из канонического `FileExtract`. `auto`: CODE → structure если HEADING/FIGURE → TABLE → structure если NATIVE → recursive (docx с heading+table идёт в structure, xlsx без heading остаётся table). Worker/API: `FileReader.configure_asset_persist(files_service)` + `ReadFileArgs(page_end=-1, persist_assets_namespace=namespace_id)`. `RAGSearchResult` — typed (`page_index`/`page_label`/`heading_trail`/`files`/`split`/`attributes`); поля `metadata` и `indexing_runtime` в результате поиска нет. Пустой page label в extract заполняется `page_{index+1}`.
 - Колонка `embedding_model` на чанке = активной модели; векторы разных моделей не смешиваются.
 - Колонка `embedding` — **`vector(1024)`** с индексом **`ix_vd_embedding_hnsw`** (cosine, `m = 16`, `ef_construction = 64`) при размерности, допустимой для HNSW в сборке pgvector. Перед запросом семантического поиска: **`SET hnsw.iterative_scan = relaxed_order`** (`PgVectorProvider`) для корректного объединения ANN с жёсткими фильтрами SQL.
 - **Гибридный поиск:** semantic + FTS по `content_tsv` (если в параметрах включены `semantic` и `lexical`) — два списка через RRF; полные строки — по id.
 - **`rag.embedding.api`**: полный выход модели (для Qwen3-Embedding-0.6B нативно 1024) и **`mrl_output_dimension`** (совпадает с **`dimension`** для хранения в колонке) — префикс нормализуется и сохраняется как плотный **1024**-мерный вектор; см. `core.ai.embedding_client`.
-- Ключи `conf.json`: `rag.enabled`, `rag.default_provider`, `rag.embedding.{model,dimension,base_url,mrl_output_dimension}`, `rag.providers.pgvector.{enabled,embedding_api_key,chunk_size,chunk_overlap,timeout}`.
+- Ключи `conf.json`: `rag.enabled`, `rag.default_provider`, `rag.embedding.{model,dimension,base_url,mrl_output_dimension}`, `rag.providers.pgvector.{enabled,embedding_api_key,timeout}`. Нарезка — `rag.document_indexing.split`, не поля провайдера.
 
 ### Операционные расширения (не в MVP код-пути)
 

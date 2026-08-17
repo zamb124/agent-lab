@@ -46,7 +46,7 @@ _RAG_ADD_TEXT_DESCRIPTION = """
 _RAG_SEARCH_DESCRIPTION = """
 Семантический поиск по уже проиндексированным документам в указанном namespace.
 
-Ответ: results (массив фрагментов: content, score, document_id, document_name, metadata, namespace), query, namespace_id, provider.
+Ответ: results (массив фрагментов: content, score, document_id, document_name, namespace, page_index, page_label, heading_trail, files, split, attributes), query, namespace_id, provider.
 Ошибки HTTP/ServiceClient пробрасываются.
 
 Параметры:

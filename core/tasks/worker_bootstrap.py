@@ -16,7 +16,10 @@ from typing import Protocol, cast
 from taskiq import TaskiqState
 from taskiq_redis import RedisStreamBroker
 
+from core.clients.llm.mock import configure_mock_llm_redis, get_or_create_global_mock_llm
+from core.clients.redis_client import RedisClient
 from core.config import get_settings
+from core.config.testing import is_testing
 from core.events import store_registered_platform_events
 from core.logging import get_logger
 from core.tasks.broker import create_stale_tasks_recovery, register_worker_events
@@ -52,6 +55,17 @@ def init_worker_tracing(service_name: str, container: object) -> None:
         set_tracing_service_name(service_name)
         set_span_repository(cast(_SpanRepoContainer, container).span_repository)
     logger.info("worker.tracing_initialized", service=service_name)
+
+
+def init_worker_testing_mock_llm(redis_client: RedisClient, *, service_name: str) -> None:
+    """В TESTING подключает process-local MockLLM к Redis-очереди ``test_scope``."""
+    if not is_testing():
+        return
+    _ = get_or_create_global_mock_llm("mock-gpt-4")
+    mock_llm = configure_mock_llm_redis(redis_client)
+    if mock_llm is None:
+        raise RuntimeError(f"{service_name}: MockLLM не зарегистрирован для Redis")
+    logger.info("worker.mock_llm_configured", service=service_name)
 
 
 async def connect_redis_with_backoff(
@@ -117,5 +131,6 @@ __all__ = [
     "WorkerHook",
     "build_worker",
     "connect_redis_with_backoff",
+    "init_worker_testing_mock_llm",
     "init_worker_tracing",
 ]

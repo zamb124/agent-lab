@@ -29,13 +29,13 @@ from apps.idle_worker.tasks.task_names import (
 )
 from apps.platform_tasks.wiring import wire_worker
 
-from core.clients.llm.mock import configure_mock_llm_redis, get_or_create_global_mock_llm
 from core.config.testing import is_testing
 from core.logging import get_logger
 from core.tasks import enqueue
 from core.tasks.worker_bootstrap import (
     build_worker,
     connect_redis_with_backoff,
+    init_worker_testing_mock_llm,
     init_worker_tracing,
 )
 
@@ -57,9 +57,7 @@ async def _startup(state: TaskiqState) -> None:
     init_worker_tracing("idle_worker", container)
 
     if is_testing():
-        _ = get_or_create_global_mock_llm("mock-gpt-4")
-        _ = configure_mock_llm_redis(container.redis_client)
-        logger.info("worker.mock_llm_configured", service="idle_worker")
+        init_worker_testing_mock_llm(container.redis_client, service_name="idle_worker")
     else:
         system_init_task = await enqueue(TASK_INIT_SYSTEM_COMPANY, background_kind="startup")
         logger.info(

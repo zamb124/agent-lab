@@ -1019,7 +1019,7 @@ class WikiService:
             summary = titles.get(page_id)
             if summary is None or page_id not in allowed_ids:
                 continue
-            raw_heading = result.metadata.get("wiki_heading_path")
+            raw_heading = result.attributes.get("wiki_heading_path")
             hits.append(
                 WikiSearchHit(
                     wiki_page_id=page_id,

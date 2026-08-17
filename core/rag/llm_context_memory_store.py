@@ -164,7 +164,7 @@ def _coerce_results(response: JsonObject) -> list[RAGSearchResult]:
 
 
 def _result_to_record(result: RAGSearchResult) -> LLMContextMemoryRecord:
-    metadata = dict(result.metadata)
+    metadata = dict(result.attributes)
     return LLMContextMemoryRecord(
         memory_id=_required_metadata_str(metadata, "memory_id"),
         content=_record_content(metadata, result.content),

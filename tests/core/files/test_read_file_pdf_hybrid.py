@@ -1,4 +1,4 @@
-"""read_file: PDF auto-hybrid — текстовый слой + OCR встроенных изображений."""
+"""read_file: vision только если текст единицы непригоден; иначе TEXT + figure."""
 
 from __future__ import annotations
 
@@ -116,3 +116,4 @@ async def test_read_file_pdf_text_and_embedded_image_merged(
     assert _TEXT_MARKER in merged
     assert _MOCK_VISION in merged
     assert "[image 1]" in merged
+    assert "[figure]" in merged

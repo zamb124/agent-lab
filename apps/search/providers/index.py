@@ -67,7 +67,7 @@ def _apply_domain_authority(
         return rag_results
     boosted: list[RAGSearchResult] = []
     for rag_result in rag_results:
-        authority = _domain_authority(rag_result.metadata)
+        authority = _domain_authority(rag_result.attributes)
         if authority <= 0.0:
             boosted.append(rag_result)
             continue
@@ -118,12 +118,12 @@ def _resolve_index_title(*, document_name: str, metadata: RAGMetadata) -> str:
 
 
 def _rag_document_dedup_key(rag_result: RAGSearchResult) -> str:
-    canonical_url = _metadata_text_field(rag_result.metadata, "canonical_url")
+    canonical_url = _metadata_text_field(rag_result.attributes, "canonical_url")
     if canonical_url is not None:
         return canonical_url
     if rag_result.document_id.strip():
         return f"doc:{rag_result.document_id.strip()}"
-    source_url = _metadata_text_field(rag_result.metadata, "source_url")
+    source_url = _metadata_text_field(rag_result.attributes, "source_url")
     if source_url is not None:
         return source_url
     raise ValueError("RAG search result must have canonical_url, document_id, or source_url")
@@ -352,7 +352,7 @@ class IndexSearchProvider:
         definition: SearchIndexDefinition,
         provider_rank: int,
     ) -> WebSearchResult | None:
-        source_url_value = rag_result.metadata.get("source_url")
+        source_url_value = rag_result.attributes.get("source_url")
         if not isinstance(source_url_value, str) or not source_url_value.strip():
             return None
         source_url = source_url_value.strip()
@@ -360,24 +360,19 @@ class IndexSearchProvider:
         headline = _metadata_text_field(rag_result.provenance, "headline")
         snippet = _resolve_index_snippet(
             content=headline if headline is not None else rag_result.content,
-            metadata=rag_result.metadata,
+            metadata=rag_result.attributes,
             snippet_limit=snippet_limit,
         )
         title = _resolve_index_title(
             document_name=rag_result.document_name,
-            metadata=rag_result.metadata,
+            metadata=rag_result.attributes,
         )
-        heading_trail: list[str] = []
-        heading_value = rag_result.metadata.get("heading_trail")
-        if isinstance(heading_value, list):
-            for entry in heading_value:
-                if isinstance(entry, str) and entry.strip():
-                    heading_trail.append(entry.strip())
+        heading_trail = [entry.strip() for entry in rag_result.heading_trail if entry.strip()]
         display_url = extract_domain_from_url(source_url)
-        site_name = resolve_site_name(metadata=rag_result.metadata, display_url=display_url)
-        preview_image_url = resolve_preview_image_url(rag_result.metadata)
+        site_name = resolve_site_name(metadata=rag_result.attributes, display_url=display_url)
+        preview_image_url = resolve_preview_image_url(rag_result.attributes)
         favicon_url = build_favicon_proxy_url(display_url)
-        published_at = _metadata_text_field(rag_result.metadata, "date_published")
+        published_at = _metadata_text_field(rag_result.attributes, "date_published")
         return WebSearchResult(
             title=title,
             url=source_url,

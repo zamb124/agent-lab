@@ -155,9 +155,9 @@ async def test_rag_context_source_handles_model_results_lexical_mode_and_fallbac
                     score=0.42,
                     document_id="doc-2",
                     document_name="",
-                    metadata={"chunk_index": 7},
                     namespace="kb",
-                    chunk_id=None,
+                    chunk_id="",
+                    chunk_index=7,
                     provenance={},
                 ),
                 {
@@ -165,9 +165,8 @@ async def test_rag_context_source_handles_model_results_lexical_mode_and_fallbac
                     "score": 0.7,
                     "document_id": "doc-3",
                     "document_name": "",
-                    "metadata": {},
                     "namespace": "kb",
-                    "chunk_id": None,
+                    "chunk_id": "",
                     "provenance": {},
                 },
             ]

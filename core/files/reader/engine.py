@@ -13,6 +13,7 @@ from pathlib import Path
 
 from core.files.checksum import compute_content_checksum_sha256
 from core.files.file_ref import FileRef, FileRefSource, file_id_from_download_url
+from core.files.reader.asset_persist import persist_extract_asset
 from core.files.reader.exceptions import FileReadError
 from core.files.reader.extract_cache import (
     load_file_extract,
@@ -23,16 +24,19 @@ from core.files.reader.extract_cache import (
     store_vision_page,
 )
 from core.files.reader.models import (
+    DEFAULT_VIRTUAL_PAGE_SIZE,
     VISION_FULL_READ_MAX_PAGES,
     CompressionMode,
     ContentMode,
     Continuation,
+    ExtractBlock,
+    ExtractBlockKind,
     FileExtract,
     FileReadKind,
     FileResult,
     PageLayout,
     PageLayoutKind,
-    ReadAssetKind,
+    ReadAsset,
     ReadFileArgs,
     ReadFileEnvelope,
     ReadLane,
@@ -41,6 +45,7 @@ from core.files.reader.models import (
     StopReason,
     UniversalPage,
     merge_file_ref_read_options,
+    resolved_page_label,
 )
 from core.files.reader.render import render_file_result
 from core.files.reader.service import (
@@ -48,11 +53,13 @@ from core.files.reader.service import (
     SourceInput,
     guess_mime,
     is_file_ref_source,
-    pdf_page_text_for_merge,
-    pdf_page_text_usable,
+    iter_pdf_read_pages,
+    page_text_for_merge,
+    page_text_usable,
+    pdf_page_count,
     run_vision_on_image_bytes,
 )
-from core.files.reader.universal import build_file_extract
+from core.files.reader.universal import keep_reader_pages, read_lane_for_kind, read_pages_for_layout
 from core.files.types import ext_to_mime
 from core.logging import get_logger
 
@@ -159,8 +166,8 @@ def _display_name(file_ref: FileRef) -> str:
     return file_ref.original_name
 
 
-def cached_pdf_extract_is_stale(extract: FileExtract) -> bool:
-    """Старый TEXT-кэш до hybrid-OCR: пустые страницы PDF без vision."""
+def cached_extract_is_stale(extract: FileExtract) -> bool:
+    """Пустой TEXT-кэш PDF до hybrid: страницы без текста и без vision."""
     if extract.kind != FileReadKind.PDF:
         return False
     if extract.read_lane != ReadLane.TEXT:
@@ -171,7 +178,7 @@ def cached_pdf_extract_is_stale(extract: FileExtract) -> bool:
     return total_text == 0
 
 
-def _pdf_lazy_target_indices(pages_total: int, args: ReadFileArgs) -> tuple[set[int], bool]:
+def _lazy_native_indices(pages_total: int, args: ReadFileArgs) -> tuple[set[int], bool]:
     lazy = pages_total > VISION_FULL_READ_MAX_PAGES
     if lazy:
         start = args.page_start
@@ -180,23 +187,42 @@ def _pdf_lazy_target_indices(pages_total: int, args: ReadFileArgs) -> tuple[set[
     return set(range(pages_total)), False
 
 
-def _merge_pdf_page_hybrid_text(
-    *,
-    base_text: str,
-    image_ocr_blocks: list[str],
-    raster_ocr_text: str,
-) -> str:
+def _merge_page_text(*, base_text: str, image_ocr_blocks: list[str]) -> str:
     parts: list[str] = []
     if base_text:
         parts.append(base_text)
     parts.extend(image_ocr_blocks)
-    if raster_ocr_text:
-        parts.append(raster_ocr_text)
     return "\n\n".join(parts)
 
 
-async def _vision_ocr_pdf_asset(
-    asset_bytes_b64: str,
+def _require_asset_content_type(content_type: str | None) -> str:
+    if content_type is None or not content_type.strip():
+        raise FileReadError("ассет без content_type")
+    return content_type
+
+
+def _asset_extension(content_type: str) -> str:
+    if content_type == "image/png":
+        return "png"
+    if content_type in {"image/jpeg", "image/jpg"}:
+        return "jpg"
+    if content_type == "image/webp":
+        return "webp"
+    if content_type == "image/gif":
+        return "gif"
+    raise FileReadError(f"неизвестный content_type ассета: {content_type}")
+
+
+def _asset_bytes(asset: ReadAsset, *, file_name: str, page_index: int) -> bytes:
+    if not asset.bytes_b64:
+        raise FileReadError(
+            f"ассет без bytes на {file_name}#p{page_index + 1} ({asset.kind.value})"
+        )
+    return base64.b64decode(asset.bytes_b64)
+
+
+async def _vision_ocr_image_bytes(
+    image_bytes: bytes,
     *,
     file_name: str,
     mime: str,
@@ -223,13 +249,13 @@ async def _vision_ocr_pdf_asset(
             return cached
 
     vision_text = await run_vision_on_image_bytes(
-        base64.b64decode(asset_bytes_b64),
+        image_bytes,
         file_name=file_name,
         mime=mime,
         prompt=prompt,
         vision_model=vision_model,
         compression=compression,
-        trace_name="core.files.reader.pdf_vision",
+        trace_name="core.files.reader.page_vision",
     )
     if image_checksum is not None:
         await store_vision_image(
@@ -249,252 +275,236 @@ async def _vision_ocr_pdf_asset(
     return vision_text
 
 
-async def _build_pdf_hybrid_page_text(
+async def _persist_page_assets(
+    assets: list[ReadAsset],
+    *,
+    persist_namespace: str | None,
+    source_file_id: str | None,
+    file_name: str,
+    page_index: int,
+) -> list[FileRef]:
+    if persist_namespace is None:
+        return []
+    if source_file_id is None or not source_file_id.strip():
+        raise ValueError("index persist требует file_id источника")
+    files_service = FileReader.require_files_service()
+    refs: list[FileRef] = []
+    for image_index, asset in enumerate(assets, start=1):
+        content_type = _require_asset_content_type(asset.content_type)
+        ext = _asset_extension(content_type)
+        original_name = f"{file_name}#p{page_index + 1}_img{image_index}.{ext}"
+        refs.append(
+            await persist_extract_asset(
+                files_service=files_service,
+                namespace_id=persist_namespace,
+                source_file_id=source_file_id.strip(),
+                original_name=original_name,
+                content_type=content_type,
+                data=_asset_bytes(asset, file_name=file_name, page_index=page_index),
+            )
+        )
+    return refs
+
+
+async def _materialize_read_page(
     page: ReadPage,
     *,
+    kind: FileReadKind,
     file_name: str,
     prompt: str,
     vision_model: str | None,
     compression: CompressionMode,
     file_id: str | None,
     checksum: str | None,
-) -> tuple[str, bool, ContentMode]:
-    merge_text = pdf_page_text_for_merge(page.text)
-    image_ocr_blocks: list[str] = []
-    raster_ocr_text = ""
-    vision_used = False
-
-    embedded_assets = [
-        asset
-        for asset in page.assets
-        if asset.kind == ReadAssetKind.EMBEDDED_IMAGE and asset.bytes_b64 is not None
-    ]
-    for image_index, asset in enumerate(embedded_assets, start=1):
-        asset_bytes_b64 = asset.bytes_b64
-        if asset_bytes_b64 is None:
-            raise FileReadError(
-                f"PDF embedded image без bytes_b64: {file_name}#p{page.index + 1}:img{image_index}"
-            )
-        ocr_text = await _vision_ocr_pdf_asset(
-            asset_bytes_b64,
-            file_name=f"{file_name}#p{page.index + 1}:img{image_index}",
-            mime=asset.content_type or "image/png",
-            prompt=prompt,
-            vision_model=vision_model,
-            compression=compression,
-            file_id=file_id,
-            checksum=checksum,
-            page_index=page.index,
-            image_checksum=asset.checksum,
-        )
-        vision_used = True
-        image_ocr_blocks.append(f"[image {image_index}]\n{ocr_text}")
-
-    if not embedded_assets:
-        raster_asset = next(
-            (asset for asset in page.assets if asset.kind == ReadAssetKind.PAGE_RASTER),
-            None,
-        )
-        if raster_asset is not None and raster_asset.bytes_b64 is not None:
-            if not pdf_page_text_usable(page.text):
-                raster_ocr_text = await _vision_ocr_pdf_asset(
-                    raster_asset.bytes_b64,
-                    file_name=f"{file_name}#p{page.index + 1}",
-                    mime=raster_asset.content_type or "image/png",
-                    prompt=prompt,
-                    vision_model=vision_model,
-                    compression=compression,
-                    file_id=file_id,
-                    checksum=checksum,
-                    page_index=page.index,
-                    image_checksum=None,
-                )
-                vision_used = True
-
-    merged = _merge_pdf_page_hybrid_text(
-        base_text=merge_text,
-        image_ocr_blocks=image_ocr_blocks,
-        raster_ocr_text=raster_ocr_text,
+    persist_namespace: str | None,
+    force_vision: bool,
+    forced_lane: ReadLane | None,
+) -> tuple[UniversalPage, bool]:
+    merge_text = page_text_for_merge(page.text)
+    text_usable = page_text_usable(page.text)
+    files = await _persist_page_assets(
+        page.assets,
+        persist_namespace=persist_namespace,
+        source_file_id=file_id,
+        file_name=file_name,
+        page_index=page.index,
     )
-    content_mode = ContentMode.HYBRID if vision_used else ContentMode.FULL
-    return merged, vision_used, content_mode
+
+    vision_used = False
+    ocr_blocks: list[str] = []
+    need_vision = bool(page.assets) and (force_vision or not text_usable)
+    if need_vision:
+        for image_index, asset in enumerate(page.assets, start=1):
+            ocr_text = await _vision_ocr_image_bytes(
+                _asset_bytes(asset, file_name=file_name, page_index=page.index),
+                file_name=f"{file_name}#p{page.index + 1}:img{image_index}",
+                mime=_require_asset_content_type(asset.content_type),
+                prompt=prompt,
+                vision_model=vision_model,
+                compression=compression,
+                file_id=file_id,
+                checksum=checksum,
+                page_index=page.index,
+                image_checksum=asset.checksum,
+            )
+            vision_used = True
+            ocr_blocks.append(f"[image {image_index}]\n{ocr_text}")
+
+    merged = _merge_page_text(base_text=merge_text, image_ocr_blocks=ocr_blocks)
+    text_blocks = list(page.blocks)
+    if not text_blocks and merge_text:
+        text_blocks = [ExtractBlock(kind=ExtractBlockKind.PARAGRAPH, text=merge_text)]
+    if ocr_blocks:
+        text_blocks.append(
+            ExtractBlock(kind=ExtractBlockKind.PARAGRAPH, text="\n\n".join(ocr_blocks))
+        )
+    figure_blocks: list[ExtractBlock] = []
+    if files:
+        for file_ref in files:
+            figure_blocks.append(
+                ExtractBlock(kind=ExtractBlockKind.FIGURE, text="[figure]", files=[file_ref])
+            )
+    elif page.assets:
+        for _asset in page.assets:
+            figure_blocks.append(ExtractBlock(kind=ExtractBlockKind.FIGURE, text="[figure]"))
+    blocks = [*text_blocks, *figure_blocks]
+    page_text = merged if merged.strip() else "\n\n".join(
+        block.text.strip() for block in blocks if block.text.strip()
+    )
+    if kind == FileReadKind.IMAGE and vision_used:
+        content_mode = ContentMode.VISION
+    elif forced_lane is ReadLane.VISION and vision_used:
+        content_mode = ContentMode.VISION
+    elif vision_used:
+        content_mode = ContentMode.HYBRID
+    else:
+        content_mode = ContentMode.FULL
+    return (
+        UniversalPage(
+            index=page.index,
+            label=resolved_page_label(page.index, page.label),
+            text=page_text,
+            content_mode=content_mode,
+            blocks=blocks,
+            files=files,
+        ),
+        vision_used,
+    )
 
 
-async def _extract_pdf_auto_hybrid(
+async def _extract_document(
     file_ref: FileRef,
     args: ReadFileArgs,
     *,
     file_id: str | None,
+    forced_lane: ReadLane | None,
     resolved_raw: bytes,
     resolved_name: str,
 ) -> FileExtract:
-    reader = FileReader()
-    opts = read_options_from_args(
-        args,
-        source_file_id=file_id,
-        include_asset_bytes=True,
-    )
-    result = await reader.read_raw_bytes(resolved_raw, resolved_name, opts)
     file_name = _display_name(file_ref)
-    pages_total = len(result.pages)
-    checksum = result.source_checksum
+    reader = FileReader()
+    info = reader.recognize_file_type(file_name=file_name, head=resolved_raw[:8192])
+    persist_namespace = args.persist_assets_namespace
+    if persist_namespace is not None and (file_id is None or not file_id.strip()):
+        raise ValueError("index persist требует file_id источника")
+
     vision_prompt = args.vision_prompt.strip() if args.vision_prompt.strip() else None
     prompt = vision_prompt or "Опиши содержимое страницы и извлеки весь видимый текст."
+    checksum = compute_content_checksum_sha256(resolved_raw)
+    force_vision = forced_lane in (ReadLane.VISION, ReadLane.HYBRID)
+    warnings: list[str] = []
 
-    target_indices, lazy = _pdf_lazy_target_indices(pages_total, args)
+    if info.detected_kind == FileReadKind.PDF and forced_lane != ReadLane.TEXT:
+        pages_total = pdf_page_count(resolved_raw)
+        target_indices, lazy = _lazy_native_indices(pages_total, args)
+        source_pages = list(
+            iter_pdf_read_pages(
+                resolved_raw,
+                resolved_name,
+                page_indices=target_indices,
+                force_raster=force_vision,
+            )
+        )
+        kind = FileReadKind.PDF
+        mime_type = "application/pdf"
+        page_layout = PageLayout(
+            kind=PageLayoutKind.NATIVE, pages_total=pages_total, page_size=0
+        )
+        if lazy:
+            warnings.append(
+                f"vision применён только к запрошенным страницам (pages_total={pages_total} "
+                + f"> порога {VISION_FULL_READ_MAX_PAGES})"
+            )
+    else:
+        opts = read_options_from_args(args, source_file_id=file_id, include_asset_bytes=True)
+        result = await reader.read_raw_bytes(resolved_raw, resolved_name, opts)
+        source_pages = read_pages_for_layout(result, file_name=file_name)
+        kind = result.detected_kind
+        mime_type = result.content_type or "application/octet-stream"
+        if keep_reader_pages(result):
+            page_layout = PageLayout(
+                kind=PageLayoutKind.NATIVE, pages_total=len(source_pages), page_size=0
+            )
+        else:
+            page_layout = PageLayout(
+                kind=PageLayoutKind.VIRTUAL,
+                pages_total=len(source_pages),
+                page_size=DEFAULT_VIRTUAL_PAGE_SIZE,
+            )
+        warnings.extend(result.warnings)
+        lazy = False
+
+    if force_vision and not any(page.assets for page in source_pages):
+        if forced_lane is ReadLane.VISION:
+            raise FileReadError(
+                "lane=vision требует изображения на странице, "
+                + f"а тип — {kind.value}"
+            )
+        warnings.append(
+            f"hybrid: у {kind.value} нет ассетов на страницах, прочитан только текст"
+        )
+
     universal: list[UniversalPage] = []
-    warnings = list(result.warnings)
     any_vision_used = False
-
-    for page in result.pages:
-        if page.index not in target_indices:
-            continue
-        merged, vision_used, content_mode = await _build_pdf_hybrid_page_text(
+    for page in source_pages:
+        materialized, vision_used = await _materialize_read_page(
             page,
+            kind=kind,
             file_name=file_name,
             prompt=prompt,
             vision_model=args.vision_model,
             compression=args.compression,
             file_id=file_id,
             checksum=checksum,
+            persist_namespace=persist_namespace,
+            force_vision=force_vision,
+            forced_lane=forced_lane,
         )
         if vision_used:
             any_vision_used = True
-        universal.append(
-            UniversalPage(
-                index=page.index,
-                label=page.label or f"page_{page.index + 1}",
-                text=merged,
-                content_mode=content_mode,
-            )
-        )
+        universal.append(materialized)
 
-    if lazy:
-        warnings.append(
-            f"vision применён только к запрошенным страницам (pages_total={pages_total} "
-            + f"> порога {VISION_FULL_READ_MAX_PAGES})"
-        )
-    content_chars_total = sum(len(page.text) for page in universal)
-
-    read_lane = ReadLane.HYBRID if any_vision_used else ReadLane.TEXT
-    extract = FileExtract(
-        file_id=file_id,
-        file_name=file_name,
-        kind=FileReadKind.PDF,
-        mime_type=result.content_type or "application/pdf",
-        read_lane=read_lane,
-        page_layout=PageLayout(kind=PageLayoutKind.NATIVE, pages_total=pages_total, page_size=0),
-        pages=universal,
-        content_chars_total=content_chars_total,
-        warnings=warnings,
-        source_checksum=checksum,
-    )
-    if not lazy:
-        await store_file_extract(extract)
-    return extract
-
-
-async def _extract_text_lane(
-    file_ref: FileRef,
-    args: ReadFileArgs,
-    *,
-    file_id: str | None,
-    resolved_raw: bytes,
-    resolved_name: str,
-) -> FileExtract:
-    reader = FileReader()
-    opts = read_options_from_args(args, source_file_id=file_id)
-    result = await reader.read_raw_bytes(resolved_raw, resolved_name, opts)
-    extract = build_file_extract(
-        result, file_name=_display_name(file_ref), file_id=file_id
-    )
-    await store_file_extract(extract)
-    return extract
-
-
-async def _extract_pdf_visual(
-    file_ref: FileRef,
-    args: ReadFileArgs,
-    *,
-    file_id: str | None,
-    lane: ReadLane,
-    resolved_raw: bytes,
-    resolved_name: str,
-) -> FileExtract:
-    reader = FileReader()
-    opts = read_options_from_args(
-        args,
-        source_file_id=file_id,
-        include_asset_bytes=True,
-    )
-    result = await reader.read_raw_bytes(resolved_raw, resolved_name, opts)
-    file_name = _display_name(file_ref)
-    pages_total = len(result.pages)
-    checksum = result.source_checksum
-    content_mode = ContentMode.HYBRID if lane == ReadLane.HYBRID else ContentMode.VISION
-    vision_prompt = args.vision_prompt.strip() if args.vision_prompt.strip() else None
-    prompt = vision_prompt or "Опиши содержимое страницы и извлеки весь видимый текст."
-
-    lazy = pages_total > VISION_FULL_READ_MAX_PAGES
-    if lazy:
-        start = args.page_start
-        end = pages_total - 1 if args.page_end == -1 else min(args.page_end, pages_total - 1)
-        target_indices = set(range(start, end + 1))
+    if forced_lane is ReadLane.VISION:
+        read_lane = ReadLane.VISION
+    elif kind == FileReadKind.IMAGE and any_vision_used:
+        read_lane = ReadLane.VISION
+    elif forced_lane is ReadLane.HYBRID or any_vision_used:
+        read_lane = ReadLane.HYBRID
     else:
-        target_indices = set(range(pages_total))
-
-    universal: list[UniversalPage] = []
-    warnings = list(result.warnings)
-    for page in result.pages:
-        if page.index not in target_indices:
-            continue
-        cached = await load_vision_page(file_id=file_id, checksum=checksum, page=page.index)
-        if cached is not None:
-            vision_text = cached
-        else:
-            raster_b64 = page.assets[0].bytes_b64 if page.assets else None
-            if raster_b64 is None:
-                vision_text = ""
-            else:
-                vision_text = await run_vision_on_image_bytes(
-                    base64.b64decode(raster_b64),
-                    file_name=f"{file_name}#p{page.index + 1}",
-                    mime="image/png",
-                    prompt=prompt,
-                    vision_model=args.vision_model,
-                    compression=args.compression,
-                    trace_name="core.files.reader.pdf_vision",
-                )
-                await store_vision_page(
-                    file_id=file_id, checksum=checksum, page=page.index, text=vision_text
-                )
-        if lane == ReadLane.HYBRID and page.text.strip():
-            merged = f"{page.text}\n\n[vision]\n{vision_text}"
-        else:
-            merged = vision_text
-        universal.append(
-            UniversalPage(
-                index=page.index, label=page.label or f"page_{page.index + 1}",
-                text=merged, content_mode=content_mode,
-            )
-        )
+        read_lane = read_lane_for_kind(kind)
 
     if lazy:
-        warnings.append(
-            f"vision применён только к запрошенным страницам (pages_total={pages_total} "
-            + f"> порога {VISION_FULL_READ_MAX_PAGES})"
-        )
         content_chars_total = -1
     else:
-        content_chars_total = sum(len(p.text) for p in universal)
+        content_chars_total = sum(len(page.text) for page in universal)
 
     extract = FileExtract(
         file_id=file_id,
         file_name=file_name,
-        kind=FileReadKind.PDF,
-        mime_type=result.content_type or "application/pdf",
-        read_lane=lane,
-        page_layout=PageLayout(kind=PageLayoutKind.NATIVE, pages_total=pages_total, page_size=0),
+        kind=kind,
+        mime_type=mime_type,
+        read_lane=read_lane,
+        page_layout=page_layout,
         pages=universal,
         content_chars_total=content_chars_total,
         warnings=warnings,
@@ -524,60 +534,15 @@ async def _get_or_extract(
                 + "используйте универсальный read_file или vision/stt tool"
             )
 
-    if forced_lane is ReadLane.VISION or forced_lane is ReadLane.HYBRID:
-        reader = FileReader()
-        info = reader.recognize_file_type(file_name=_display_name(file_ref))
-        if info.detected_kind == FileReadKind.PDF:
-            return await _extract_pdf_visual(
-                file_ref,
-                args,
-                file_id=file_id,
-                lane=forced_lane,
-                resolved_raw=resolved_raw,
-                resolved_name=resolved_name,
-            )
-        if info.detected_kind == FileReadKind.IMAGE:
-            pass  # обычный vision-путь ниже
-        elif forced_lane is ReadLane.HYBRID:
-            extract = await _extract_text_lane(
-                file_ref,
-                args,
-                file_id=file_id,
-                resolved_raw=resolved_raw,
-                resolved_name=resolved_name,
-            )
-            hybrid_warning = (
-                f"hybrid недоступен для типа {info.detected_kind.value}: "
-                + "встроенные изображения не распознаются, прочитан только текст"
-            )
-            return extract.model_copy(
-                update={"warnings": [*extract.warnings, hybrid_warning]}
-            )
-        else:
-            raise FileReadError(
-                "lane=vision поддержан только для PDF и изображений, "
-                + f"а тип — {info.detected_kind.value}"
-            )
-
     cached = await load_file_extract(file_id=file_id, checksum=None)
-    if cached is not None and not cached_pdf_extract_is_stale(cached):
+    if cached is not None and not cached_extract_is_stale(cached):
         return cached
 
-    reader = FileReader()
-    info = reader.recognize_file_type(file_name=_display_name(file_ref), head=resolved_raw[:8192])
-    if info.detected_kind == FileReadKind.PDF:
-        return await _extract_pdf_auto_hybrid(
-            file_ref,
-            args,
-            file_id=file_id,
-            resolved_raw=resolved_raw,
-            resolved_name=resolved_name,
-        )
-
-    return await _extract_text_lane(
+    return await _extract_document(
         file_ref,
         args,
         file_id=file_id,
+        forced_lane=forced_lane,
         resolved_raw=resolved_raw,
         resolved_name=resolved_name,
     )

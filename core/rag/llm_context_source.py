@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import math
 
 from core.config import get_settings
@@ -120,12 +119,9 @@ def _format_result_content(
 
 
 def _stable_key(result: RAGSearchResult) -> str:
-    chunk_id = result.chunk_id
+    chunk_id = result.chunk_id.strip()
     if not chunk_id:
-        raw_chunk_index = result.metadata.get("chunk_index")
-        chunk_id = str(raw_chunk_index) if raw_chunk_index is not None else None
-    if not chunk_id:
-        chunk_id = hashlib.sha256(result.content.encode("utf-8")).hexdigest()[:16]
+        chunk_id = str(result.chunk_index)
     return f"rag:{result.namespace}:{result.document_id}:{chunk_id}"
 
 
