@@ -211,7 +211,8 @@ export function layoutCapabilitiesForType(type) {
  * Schema field kinds map to inspector controls:
  * string | text | number | boolean | enum (options: [{value,label}] | string[] | number[];
  * inspector stringifies option.value for platform-field-enum) | image
- * (preview + platform.file_picker; stores download URL in the property) | file_id
+ * (preview + platform.file_picker; stores download URL in the property;
+ * publicAsset: true → is_public flow_asset, reject private pick) | file_id
  * (platform.file_picker; stores platform file_id, not a download URL).
  * Field labels are pinned RU/EN pairs because the manifest is standalone
  * flow-ui infrastructure (same contract as flow-ui/utils/text.js).
@@ -605,8 +606,11 @@ const EDITOR_BY_TYPE = Object.freeze({
     AgentIdentity: {
         group: 'platform',
         icon: 'bot',
-        schema: [field('title', 'string', 'Название', 'Title')],
-        defaults: { properties: { title: { ru: 'Агент', en: 'Agent' } } },
+        schema: [
+            field('title', 'string', 'Название', 'Title'),
+            field('image_url', 'image', 'Изображение', 'Image', { publicAsset: true }),
+        ],
+        defaults: { properties: { title: { ru: 'Агент', en: 'Agent' }, image_url: '' } },
     },
     Avatar: {
         group: 'platform',

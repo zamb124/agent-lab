@@ -10,8 +10,8 @@
  *
  * `documentsOp` — list по `catalogIds` (sub-resource), slice хранит
  * `items` + `loadedCatalogIds` + `activeCatalogId` + `filterCatalogIds`.
- * `activeCatalogId` — последний выбранный каталог (для создания/загрузки
- * без явного выбора), `filterCatalogIds` — мультивыбор фильтра в списке.
+ * `activeCatalogId === null` в режиме `catalog` — корень namespace (корневые
+ * каталоги в главной панели, без GET /documents). Файл без каталога запрещён.
  *
  * `documentRenameForm` — форма для модалки `office.document_rename`,
  * submitEvent → `documentRenameOp.events.REQUESTED`.
@@ -181,6 +181,7 @@ export const documentsOp = createAsyncOp({
         sortKey: 'updated_at',
         sortDir: 'desc',
         selectedFileId: null,
+        selectedCatalogId: null,
         selectedFileIds: [],
         uploadJobs: [],
         explorerView: 'catalog',
@@ -198,6 +199,7 @@ export const documentsOp = createAsyncOp({
         SET_SEARCH_MODE:     'set_search_mode',
         SET_SORT:            'set_sort',
         SET_SELECTED_FILE:   'set_selected_file',
+        SET_SELECTED_CATALOG: 'set_selected_catalog',
         TOGGLE_FILE_SELECTION: 'toggle_file_selection',
         SET_FILE_SELECTION:  'set_file_selection',
         CLEAR_FILE_SELECTION: 'clear_file_selection',
@@ -219,6 +221,7 @@ export const documentsOp = createAsyncOp({
         setSearchMode:     'set_search_mode',
         setSort:           'set_sort',
         setSelectedFile: 'set_selected_file',
+        setSelectedCatalog: 'set_selected_catalog',
         toggleFileSelection: 'toggle_file_selection',
         setFileSelection: 'set_file_selection',
         clearFileSelection: 'clear_file_selection',
@@ -335,12 +338,14 @@ export const documentsOp = createAsyncOp({
             return changed ? { ...state, items } : state;
         }
         if (event.type === events.SET_ACTIVE_CATALOG) {
-            const catalogId = event.payload && typeof event.payload.catalogId === 'string'
-                ? event.payload.catalogId
+            const rawCatalogId = event.payload && event.payload.catalogId;
+            const catalogId = typeof rawCatalogId === 'string' && rawCatalogId.length > 0
+                ? rawCatalogId
                 : null;
             return {
                 ...state,
                 activeCatalogId: catalogId,
+                selectedCatalogId: null,
             };
         }
         if (event.type === events.SET_CATALOG_EXPANDED) {
@@ -368,7 +373,7 @@ export const documentsOp = createAsyncOp({
             return { ...state, filterCatalogIds: ids };
         }
         if (event.type === events.CLEAR_FILTER) {
-            return { ...state, filterCatalogIds: [], activeCatalogId: null };
+            return { ...state, filterCatalogIds: [], activeCatalogId: null, selectedCatalogId: null };
         }
         if (event.type === events.SET_VIEW_MODE) {
             const mode = event.payload && event.payload.viewMode;
@@ -407,7 +412,21 @@ export const documentsOp = createAsyncOp({
             const fileId = event.payload && typeof event.payload.fileId === 'string'
                 ? event.payload.fileId
                 : null;
-            return { ...state, selectedFileId: fileId };
+            return {
+                ...state,
+                selectedFileId: fileId,
+                selectedCatalogId: fileId ? null : state.selectedCatalogId,
+            };
+        }
+        if (event.type === events.SET_SELECTED_CATALOG) {
+            const catalogId = event.payload && typeof event.payload.catalogId === 'string'
+                ? event.payload.catalogId
+                : null;
+            return {
+                ...state,
+                selectedCatalogId: catalogId,
+                selectedFileId: catalogId ? null : state.selectedFileId,
+            };
         }
         if (event.type === events.TOGGLE_FILE_SELECTION) {
             const fileId = event.payload && typeof event.payload.fileId === 'string'
@@ -431,7 +450,7 @@ export const documentsOp = createAsyncOp({
             return { ...state, selectedFileIds: ids };
         }
         if (event.type === events.CLEAR_FILE_SELECTION) {
-            return { ...state, selectedFileIds: [], selectedFileId: null };
+            return { ...state, selectedFileIds: [], selectedFileId: null, selectedCatalogId: null };
         }
         if (event.type === events.UPLOAD_JOB_ADD) {
             const job = event.payload && event.payload.job;
@@ -480,7 +499,7 @@ export const documentsOp = createAsyncOp({
                 platformStorageKey('office', EXPLORER_VIEW_STORAGE_KEY),
                 explorerView,
             );
-            return { ...state, explorerView };
+            return { ...state, explorerView, selectedCatalogId: null };
         }
         if (event.type === events.TOGGLE_STARRED) {
             const fileId = event.payload && typeof event.payload.fileId === 'string'

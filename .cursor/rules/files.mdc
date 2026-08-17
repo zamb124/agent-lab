@@ -24,6 +24,8 @@ alwaysApply: false
 
 Download URL на `FileRecord` — `/{creating-service-segment}/api/v1/files/download/{file_id}` (segment процесса, который создал файл). Любой другой сервис с тем же mount может стримить тот же `file_id` через свой prefix (`GET /{segment}/api/v1/files/download/{file_id}`) — источник данных shared `FileRepository` + S3.
 
+`is_public=true` на `FileRecord` разрешает анонимный `GET .../files/download/{file_id}` (`_ensure_file_record_access` не требует компанию). Картинка AgentIdentity в embed `<img>` — public `flow_asset` (`buildFlowAssetFileCreateSpecJson({ flowId, isPublic: true })`). Непубличный файл без cookie/компании — 403. Wiki-файлы публичными не делают — см. исключение ниже.
+
 ### Upload limits (`FilesConfig`)
 
 | Поле | Default | Смысл |
@@ -85,13 +87,13 @@ In-process запись байтов (mail inbound, generated artifacts, A2A ext
 
 ## Durable create ⇒ Documents bind
 
-Инвариант: каждый durable `FilesService.create` / `register_s3` автоматически получает `DocsPlacement` и строку в Documents explorer.
+Инвариант: каждый durable `FilesService.create` / `register_s3` либо получает `DocsPlacement` и строку в Documents explorer, либо exempt, либо падает (create не возвращает файл без каталога).
 
 | Механика | Где |
 |---|---|
 | Auto placement | `default_docs_placement(source_kind, source_ref)` в `core/files/registry.py` |
 | Path tree | `core/documents/placement_paths.py` (`Mail/…`, `Sync/…`, `Flows/…`, `Networkle/…`, `Worktracker/…`, `Wiki/…`, …) |
-| Bind | `FilesService._bind_after_create` → `DocumentsClient` → Office `DocsPlacementService`; office down/`ServiceClientError` → warning + create всё равно возвращает `FileRecord` (repair при следующем явном `bind`) |
+| Bind | `FilesService._bind_after_create` → `DocumentsClient` → Office `DocsPlacementService`. Exempt (`office_document` / `generated_ephemeral` / `platform_auxiliary`) — без bind. Иначе bind обязателен: сбой (office down/`ServiceClientError`/нет hook) → compensation `FilesService.delete` (S3 + `FileRecord`) и `raise`. Orphan durable `FileRecord` без каталога запрещён |
 | Namespace | `resolve_namespace_or_raise()` из Context (`active_namespace`) |
 | Exempt | `office_document` (Office upload уже биндит), `generated_ephemeral`, `platform_auxiliary` |
 

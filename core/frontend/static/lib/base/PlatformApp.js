@@ -30,7 +30,8 @@
  *     если браузер поддерживает document.startViewTransition и не включён reduced motion.
  *   - static platformAssistant = { serviceId, branchId, showLauncher, launcherPosition? }
  *     — глобальный authenticated drawer Lara. `launcherPosition`: `'bottom-right'`
- *     (дефолт) | `'bottom-left'` (Sync: FAB не перекрывает composer Send).
+ *     (дефолт) | `'bottom-left'` — только стартовый угол, пока пользователь не
+ *     двигал кластер. Drag/resize живут в `<flow-ui-drawer>`, не в сервисе.
  *     Контекст точки входа — getPlatformAssistantContextVariables(routeKey, params).
  */
 

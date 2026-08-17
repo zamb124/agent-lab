@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 791.454 791.454" width="512" height="512">
+  <path fill="#0e7490" fill-rule="evenodd" clip-rule="evenodd" d="M202.8 0h264.71L691.727 233.922v454.459c0 56.891-46.182 103.073-103.073 103.073H202.8c-56.891 0-103.073-46.182-103.073-103.073V103.073C99.727 46.182 145.909 0 202.8 0z"/>
+  <path fill="#fff" opacity=".302" fill-rule="evenodd" clip-rule="evenodd" d="M467.176 0v231.914h224.552z"/>
+  <g fill="#fff">
+    <path d="M256 572h280v36c0 19.9-62.7 36-140 36s-140-16.1-140-36v-36z" opacity=".7"/>
+    <ellipse cx="396" cy="608" rx="140" ry="36" opacity=".7"/>
+    <ellipse cx="396" cy="572" rx="140" ry="36" opacity=".7"/>
+    <path d="M256 468h280v36c0 19.9-62.7 36-140 36s-140-16.1-140-36v-36z" opacity=".88"/>
+    <ellipse cx="396" cy="504" rx="140" ry="36" opacity=".88"/>
+    <ellipse cx="396" cy="468" rx="140" ry="36" opacity=".88"/>
+    <path d="M256 364h280v36c0 19.9-62.7 36-140 36s-140-16.1-140-36v-36z"/>
+    <ellipse cx="396" cy="400" rx="140" ry="36"/>
+    <ellipse cx="396" cy="364" rx="140" ry="36"/>
+    <ellipse cx="360" cy="352" rx="70" ry="12" opacity=".3"/>
+  </g>
+</svg>

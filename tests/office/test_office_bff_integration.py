@@ -316,6 +316,7 @@ async def test_office_empty_rejects_spreadsheet_format_for_word(
             "title": f"Bad {unique_id}",
             "document_type": "word",
             "spreadsheet_format": "xlsx",
+            "catalog_id": "catalog-required",
         },
     )
     assert r.status_code == 422

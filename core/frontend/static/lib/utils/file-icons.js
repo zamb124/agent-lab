@@ -11,7 +11,7 @@ export const FILE_ICON_BASE_NAMES = Object.freeze([
     '016-pdf', '017-php', '018-powerpoint', '019-ppt', '020-psd',
     '021-record', '022-sql', '023-svg', '024-text', '025-ttf',
     '026-txt', '027-mail', '028-vector', '029-video', '030-word',
-    '031-xls', '032-zip',
+    '031-xls', '032-zip', '033-folder', '034-database', '035-data-table',
 ]);
 
 export const FILE_ICON_BASENAME_SET = new Set(FILE_ICON_BASE_NAMES);
@@ -42,7 +42,8 @@ export const FILE_ICON_ALIASES = Object.freeze({
     sh: '024-text', bash: '024-text', zsh: '024-text', ps1: '024-text', dockerfile: '024-text',
     lock: '024-text', wasm: '024-text', eml: '012-mail', msg: '012-mail',
     viz: '028-vector',
-    sqlite: '006-excel', db: '006-excel', data_table: '006-excel',
+    sqlite: '035-data-table', db: '034-database', data_table: '035-data-table',
+    folder: '033-folder', catalog: '033-folder',
 });
 
 export const FILE_ICON_ALIAS_KEYS = new Set(Object.keys(FILE_ICON_ALIASES));

@@ -1,6 +1,7 @@
 /**
- * platform-file-card — карточка файла для grid view file manager.
+ * platform-file-card — карточка файла или каталога для grid view file manager.
  * События: `open` (клик — выбор), `activate` (двойной клик — открыть).
+ * Каталог: `itemKind=catalog`, цветная folder file-icon, обязательный `sizeLabel`.
  */
 
 import { html, css, nothing } from 'lit';
@@ -16,18 +17,26 @@ const RAG_INDEX_ICON_BY_STATUS = {
     absent: 'database',
 };
 
+const ITEM_KIND_FILE = 'file';
+const ITEM_KIND_CATALOG = 'catalog';
+
 export class PlatformFileCard extends PlatformElement {
     static properties = {
         fileName: { type: String, attribute: 'file-name' },
         mimeType: { type: String, attribute: 'mime-type' },
         fileSize: { type: Number, attribute: 'file-size' },
+        sizeLabel: { type: String, attribute: 'size-label' },
         dateLabel: { type: String, attribute: 'date-label' },
         retentionLabel: { type: String, attribute: 'retention-label' },
         typeLabel: { type: String, attribute: 'type-label' },
         selected: { type: Boolean, reflect: true },
+        dropTarget: { type: Boolean, reflect: true, attribute: 'drop-target' },
+        itemKind: { type: String, attribute: 'item-kind' },
         itemKey: { type: String, attribute: 'item-key' },
         indexStatus: { type: String, attribute: 'index-status' },
         indexStatusLabel: { type: String, attribute: 'index-status-label' },
+        hintIcon: { type: String, attribute: 'hint-icon' },
+        hintIconLabel: { type: String, attribute: 'hint-icon-label' },
     };
 
     static styles = [
@@ -59,6 +68,11 @@ export class PlatformFileCard extends PlatformElement {
                 border-color: var(--documents-selected-stroke, var(--accent));
                 background: var(--documents-selected-bg, var(--accent-subtle));
             }
+            :host([drop-target]) .card {
+                border-color: var(--accent);
+                background: var(--documents-selected-bg, var(--accent-subtle));
+                box-shadow: var(--glass-shadow-medium);
+            }
             .icon-wrap {
                 width: 2.5rem;
                 height: 2.5rem;
@@ -67,7 +81,8 @@ export class PlatformFileCard extends PlatformElement {
                 justify-content: center;
                 position: relative;
             }
-            .index-status {
+            .index-status,
+            .hint-icon {
                 position: absolute;
                 right: -0.25rem;
                 bottom: -0.25rem;
@@ -125,20 +140,56 @@ export class PlatformFileCard extends PlatformElement {
         this.fileName = '';
         this.mimeType = '';
         this.fileSize = 0;
+        this.sizeLabel = '';
         this.dateLabel = '';
         this.retentionLabel = '';
         this.typeLabel = '';
         this.selected = false;
+        this.dropTarget = false;
+        this.itemKind = ITEM_KIND_FILE;
         this.itemKey = '';
         this.indexStatus = '';
         this.indexStatusLabel = '';
+        this.hintIcon = '';
+        this.hintIconLabel = '';
+    }
+
+    _resolvedItemKind() {
+        const kind = typeof this.itemKind === 'string' && this.itemKind.length > 0
+            ? this.itemKind
+            : ITEM_KIND_FILE;
+        if (kind !== ITEM_KIND_FILE && kind !== ITEM_KIND_CATALOG) {
+            throw new Error(`platform-file-card: itemKind must be file|catalog, got '${kind}'`);
+        }
+        return kind;
     }
 
     _sizeLabel() {
+        const kind = this._resolvedItemKind();
+        if (kind === ITEM_KIND_CATALOG) {
+            if (typeof this.sizeLabel !== 'string' || this.sizeLabel.length === 0) {
+                throw new Error('platform-file-card: sizeLabel required for itemKind=catalog');
+            }
+            return this.sizeLabel;
+        }
         if (typeof this.fileSize !== 'number' || this.fileSize <= 0) {
             return '—';
         }
         return formatFileSize(this.fileSize);
+    }
+
+    _fileIconName() {
+        if (this._resolvedItemKind() === ITEM_KIND_CATALOG) {
+            return 'folder';
+        }
+        return resolveFileIconKey(this.fileName, this.mimeType);
+    }
+
+    _primaryMeta() {
+        if (this._resolvedItemKind() === ITEM_KIND_CATALOG) {
+            return `${this._sizeLabel()} · ${this.typeLabel}`;
+        }
+        return `${this._sizeLabel()} · ${this.dateLabel}`;
     }
 
     _isInteractiveTarget(target) {
@@ -157,6 +208,40 @@ export class PlatformFileCard extends PlatformElement {
             return;
         }
         this.emit('activate', { itemKey: this.itemKey });
+    }
+
+    _onDragOver(e) {
+        if (this._resolvedItemKind() !== ITEM_KIND_CATALOG) {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer) {
+            e.dataTransfer.dropEffect = 'move';
+        }
+        if (!this.dropTarget) {
+            this.dropTarget = true;
+        }
+        this.emit('row-dragover', { itemKey: this.itemKey, nativeEvent: e });
+    }
+
+    _onDragLeave(e) {
+        if (this._resolvedItemKind() !== ITEM_KIND_CATALOG) {
+            return;
+        }
+        e.preventDefault();
+        this.dropTarget = false;
+        this.emit('row-dragleave', { itemKey: this.itemKey, nativeEvent: e });
+    }
+
+    _onDrop(e) {
+        if (this._resolvedItemKind() !== ITEM_KIND_CATALOG) {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        this.dropTarget = false;
+        this.emit('row-drop', { itemKey: this.itemKey, nativeEvent: e });
     }
 
     _renderIndexStatus() {
@@ -178,21 +263,55 @@ export class PlatformFileCard extends PlatformElement {
         `;
     }
 
-    render() {
-        const iconKey = resolveFileIconKey(this.fileName, this.mimeType);
+    _renderHintIcon() {
+        const iconName = typeof this.hintIcon === 'string' ? this.hintIcon.trim() : '';
+        if (iconName.length === 0) {
+            return nothing;
+        }
+        const label = typeof this.hintIconLabel === 'string' ? this.hintIconLabel.trim() : '';
+        if (label.length === 0) {
+            throw new Error('platform-file-card: hintIconLabel required when hintIcon is set');
+        }
         return html`
-            <div class="card" @click=${this._onClick} @dblclick=${this._onDblClick}>
+            <span
+                class="hint-icon"
+                role="img"
+                title=${label}
+                aria-label=${label}
+            >
+                <platform-icon name=${iconName} size="12"></platform-icon>
+            </span>
+        `;
+    }
+
+    render() {
+        const iconKey = this._fileIconName();
+        const kind = this._resolvedItemKind();
+        return html`
+            <div
+                class="card"
+                @click=${this._onClick}
+                @dblclick=${this._onDblClick}
+                @dragover=${this._onDragOver}
+                @dragleave=${this._onDragLeave}
+                @drop=${this._onDrop}
+            >
                 <div class="actions" @click=${(e) => e.stopPropagation()}>
                     <slot name="actions"></slot>
                 </div>
                 <div class="icon-wrap">
                     <platform-icon file-icon name=${iconKey} size="32"></platform-icon>
+                    ${this._renderHintIcon()}
                     ${this._renderIndexStatus()}
                 </div>
                 <div class="title" title=${this.fileName}>${this.fileName}</div>
-                <div class="meta">${this._sizeLabel()} · ${this.dateLabel}</div>
-                ${this.retentionLabel ? html`<div class="meta">${this.retentionLabel}</div>` : ''}
-                ${this.typeLabel ? html`<div class="meta">${this.typeLabel}</div>` : ''}
+                <div class="meta">${this._primaryMeta()}</div>
+                ${kind === ITEM_KIND_FILE && this.retentionLabel
+                    ? html`<div class="meta">${this.retentionLabel}</div>`
+                    : nothing}
+                ${kind === ITEM_KIND_FILE && this.typeLabel
+                    ? html`<div class="meta">${this.typeLabel}</div>`
+                    : nothing}
             </div>
         `;
     }

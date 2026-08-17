@@ -112,7 +112,7 @@ class OfficeEmptyCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=500)
     document_type: Literal["word", "cell", "slide"] = "word"
     spreadsheet_format: Literal["xlsx", "csv"] | None = None
-    catalog_id: str | None = None
+    catalog_id: str = Field(min_length=1, max_length=64)
 
     @model_validator(mode="after")
     def spreadsheet_format_only_for_cell(self) -> Self:

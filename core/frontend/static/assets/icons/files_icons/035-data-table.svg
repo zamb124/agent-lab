@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 791.454 791.454" width="512" height="512">
+  <path fill="#4f46e5" fill-rule="evenodd" clip-rule="evenodd" d="M202.8 0h264.71L691.727 233.922v454.459c0 56.891-46.182 103.073-103.073 103.073H202.8c-56.891 0-103.073-46.182-103.073-103.073V103.073C99.727 46.182 145.909 0 202.8 0z"/>
+  <path fill="#fff" opacity=".302" fill-rule="evenodd" clip-rule="evenodd" d="M467.176 0v231.914h224.552z"/>
+  <g fill="#fff">
+    <rect x="228" y="348" width="336" height="72" rx="16"/>
+    <rect x="248" y="370" width="88" height="28" rx="8" fill="#4f46e5"/>
+    <rect x="352" y="370" width="88" height="28" rx="8" fill="#4f46e5"/>
+    <rect x="456" y="370" width="88" height="28" rx="8" fill="#4f46e5"/>
+    <rect x="228" y="440" width="104" height="56" rx="12"/>
+    <rect x="344" y="440" width="104" height="56" rx="12"/>
+    <rect x="460" y="440" width="104" height="56" rx="12"/>
+    <rect x="228" y="512" width="104" height="56" rx="12" opacity=".86"/>
+    <rect x="344" y="512" width="104" height="56" rx="12" opacity=".86"/>
+    <rect x="460" y="512" width="104" height="56" rx="12" opacity=".86"/>
+    <rect x="228" y="584" width="104" height="56" rx="12" opacity=".68"/>
+    <rect x="344" y="584" width="104" height="56" rx="12" opacity=".68"/>
+    <rect x="460" y="584" width="104" height="56" rx="12" opacity=".68"/>
+  </g>
+</svg>

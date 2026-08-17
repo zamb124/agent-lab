@@ -174,6 +174,94 @@ class TestNodeEventsStreaming:
             await redis_client.close()
 
     @pytest.mark.asyncio
+    async def test_node_complete_emits_full_diff_over_eight_items(
+        self,
+        container,
+        unique_id,
+    ):
+        """node_complete.diff содержит все изменения ноды, включая длинное значение."""
+        redis_client = container.redis_client
+        await redis_client.connect()
+        task_id = f"test-node-diff-{unique_id}"
+        context_id = f"ctx-{unique_id}"
+        flow_id = f"test_node_diff_{unique_id}"
+        long_text = "X" * 400
+        field_assigns = "\n".join(
+            f"    state['field_{index}'] = {index}" for index in range(9)
+        )
+        agent = await Flow.from_config(
+            {
+                "flow_id": flow_id,
+                "name": "Test Full Diff",
+                "entry": "write_many",
+                "nodes": {
+                    "write_many": {
+                        "type": "code",
+                        "code": (
+                            "async def run(args, state):\n"
+                            "    state['response'] = 'ok'\n"
+                            f"    state['big'] = '{'X' * 400}'\n"
+                            f"{field_assigns}\n"
+                            "    return state"
+                        ),
+                    }
+                },
+                "edges": [{"from_node": "write_many", "to_node": None}],
+            },
+            container=container,
+        )
+        state = ExecutionState.create(
+            task_id=task_id,
+            context_id=context_id,
+            user_id=f"user-{unique_id}",
+            session_id=f"{flow_id}:{context_id}",
+            content="test input",
+        )
+        subscriber = EventSubscriber(redis_client)
+        ready_event = asyncio.Event()
+        collected_events = []
+
+        async def collect():
+            async for event in subscriber.subscribe(task_id, timeout=5.0, ready_event=ready_event):
+                collected_events.append(event)
+                if (
+                    isinstance(event, TaskArtifactUpdateEvent)
+                    and event.artifact.name == "node_complete_write_many"
+                ):
+                    break
+
+        async def execute():
+            await ready_event.wait()
+            await asyncio.sleep(0.05)
+            await run_flow(container=container, flow=agent, state=state)
+
+        try:
+            await asyncio.wait_for(asyncio.gather(collect(), execute()), timeout=10.0)
+            complete_event = None
+            for event in collected_events:
+                if (
+                    isinstance(event, TaskArtifactUpdateEvent)
+                    and event.artifact.name == "node_complete_write_many"
+                ):
+                    complete_event = event
+                    break
+            assert complete_event is not None
+            complete_data = get_part_data(complete_event.artifact.parts[0])
+            assert complete_data["event"] == "node_complete"
+            assert complete_data["node_id"] == "write_many"
+            diff_items = complete_data["diff"]
+            assert isinstance(diff_items, list)
+            assert len(diff_items) > 8
+            by_path = {item["path"]: item for item in diff_items}
+            assert by_path["response"]["new_value"] == "ok"
+            assert by_path["big"]["new_value"] == long_text
+            for index in range(9):
+                assert by_path[f"field_{index}"]["new_value"] == index
+                assert by_path[f"field_{index}"]["change_type"] == "added"
+        finally:
+            await redis_client.close()
+
+    @pytest.mark.asyncio
     async def test_node_error_emits_error_event(self, container):
         """При ошибке в ноде эмитится node_error."""
         redis_client = container.redis_client

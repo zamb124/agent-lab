@@ -45,6 +45,8 @@ describe('flow-ui Image asset picker', () => {
         expect(inspectorSrc).toMatch(/flows\/catalogs/);
         expect(inspectorSrc).toMatch(/flows\/documents/);
         expect(inspectorSrc).toMatch(/flows\/documents_search/);
+        expect(inspectorSrc).toMatch(/isPublic:\s*publicAsset/);
+        expect(inspectorSrc).toMatch(/file\.is_public !== true/);
 
         const appSrc = readFileSync(
             path.join(REPO_ROOT, 'apps/flows/ui/app/flows-app.js'),

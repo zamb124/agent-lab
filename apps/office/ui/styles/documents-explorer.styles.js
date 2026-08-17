@@ -112,41 +112,6 @@ export const documentsExplorerStyles = css`
         justify-content: center;
         margin-top: var(--space-2);
     }
-    .folder-rows {
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-1);
-        margin-bottom: var(--space-3);
-    }
-    .folder-row {
-        display: flex;
-        align-items: center;
-        gap: var(--space-2);
-        width: 100%;
-        padding: var(--space-2) var(--space-3);
-        border: 1px solid var(--glass-border-subtle);
-        border-radius: var(--radius-lg);
-        background: var(--glass-solid-subtle);
-        color: var(--text-primary);
-        font-size: var(--text-sm);
-        font-weight: 500;
-        text-align: left;
-        cursor: pointer;
-    }
-    .folder-row:hover {
-        border-color: var(--accent);
-        background: var(--documents-selected-bg, var(--accent-subtle));
-    }
-    .folder-row.active {
-        border-color: var(--documents-selected-stroke, var(--accent));
-        color: var(--documents-selected-text, var(--accent));
-        font-weight: 600;
-    }
-    .folder-row-label {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
     .grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(var(--documents-explorer-grid-min, 11.25rem), 1fr));

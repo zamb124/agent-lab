@@ -1,5 +1,5 @@
 /**
- * office-file-details-panel — metadata, catalog summary, platform links.
+ * office-file-details-panel — сведения выбранного файла или каталога.
  */
 
 import { html, css } from 'lit';
@@ -22,9 +22,11 @@ export class OfficeFileDetailsPanel extends PlatformElement {
     static properties = {
         document: { type: Object },
         catalog: { type: Object },
+        selectedCatalog: { type: Object },
         catalogTitle: { type: String, attribute: 'catalog-title' },
         subcatalogCount: { type: Number, attribute: 'subcatalog-count' },
         explorerView: { type: String, attribute: 'explorer-view' },
+        namespaceRoot: { type: Boolean, attribute: 'namespace-root' },
         starred: { type: Boolean },
     };
 
@@ -123,12 +125,6 @@ export class OfficeFileDetailsPanel extends PlatformElement {
                 flex-direction: column;
                 gap: var(--space-2);
             }
-            .catalog-summary {
-                padding: var(--space-3);
-                border-radius: var(--radius-lg);
-                background: var(--documents-empty-bg, var(--glass-tint-subtle));
-                border: 1px solid var(--documents-explorer-divider, var(--glass-border-subtle));
-            }
             .missing-banner {
                 display: flex;
                 gap: var(--space-2);
@@ -159,9 +155,11 @@ export class OfficeFileDetailsPanel extends PlatformElement {
         super();
         this.document = null;
         this.catalog = null;
+        this.selectedCatalog = null;
         this.catalogTitle = '';
         this.subcatalogCount = 0;
         this.explorerView = 'catalog';
+        this.namespaceRoot = false;
         this.starred = false;
         this._localeSel = this.select((s) => s.i18n.locale);
     }
@@ -204,60 +202,106 @@ export class OfficeFileDetailsPanel extends PlatformElement {
         return remaining;
     }
 
-    _renderCatalogSummary() {
-        const catalog = this.catalog;
-        if (!catalog) {
-            return html`
-                <div class="catalog-summary">
-                    <div class="section-title">${this.t('details.catalogSettings')}</div>
-                    <div class="meta-value">${this.catalogTitle}</div>
-                </div>
-            `;
+    _catalogFileCount(catalog) {
+        if (typeof catalog.file_count !== 'number') {
+            throw new Error('OfficeFileDetailsPanel: catalog.file_count required');
         }
+        return catalog.file_count;
+    }
+
+    _catalogCanDelete(catalog) {
+        if (catalog.is_owner !== true) {
+            return false;
+        }
+        return this._catalogFileCount(catalog) === 0 && this.subcatalogCount === 0;
+    }
+
+    _renderCatalogActions(catalog, { showOpen }) {
+        const isOwner = catalog.is_owner === true;
+        const showMembers = isOwner && catalog.company_visible !== true;
+        const canDelete = this._catalogCanDelete(catalog);
+        return html`
+            <div class="actions">
+                ${showOpen ? html`
+                    <button class="btn btn-primary" type="button" @click=${() => this._action('open')}>
+                        ${this.t('list.open')}
+                    </button>
+                ` : ''}
+                ${isOwner ? html`
+                    <button class="btn ${showOpen ? '' : 'btn-primary'}" type="button" @click=${() => this._action('edit')}>
+                        ${this.t('catalogs.edit')}
+                    </button>
+                    <button class="btn" type="button" @click=${() => this._action('access')}>
+                        ${this.t('access.menuShare')}
+                    </button>
+                ` : ''}
+                ${showMembers ? html`
+                    <button class="btn" type="button" @click=${() => this._action('members')}>
+                        ${this.t('catalogs.members')}
+                    </button>
+                ` : ''}
+                ${isOwner ? html`
+                    <button class="btn" type="button" @click=${() => this._action('rag')}>
+                        ${this.t('catalog_context_menu.rag')}
+                    </button>
+                ` : ''}
+                <button class="btn" type="button" @click=${() => this._action('create-subcatalog')}>
+                    ${this.t('tree.newSubcatalog')}
+                </button>
+                ${isOwner ? html`
+                    <button
+                        class="btn btn-danger"
+                        type="button"
+                        ?disabled=${!canDelete}
+                        @click=${() => { if (canDelete) this._action('delete'); }}
+                    >
+                        ${this.t('catalogs.delete')}
+                    </button>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    _renderCatalogBody(catalog, { showOpen }) {
         const visibilityLabel = catalog.company_visible
             ? this.t('details.catalogCompanyVisible')
             : this.t('details.catalogPrivate');
+        const fileCount = this._catalogFileCount(catalog);
         return html`
-            <div class="catalog-summary">
-                <div class="section-title">${this.t('details.catalogSettings')}</div>
-                <div class="meta-value">${catalog.title}</div>
-                <div class="meta-grid" style="margin-top: var(--space-3);">
-                    <div class="meta-row">
-                        <span class="meta-label">${this.t('details.visibility')}</span>
-                        <span class="meta-value">${visibilityLabel}</span>
-                    </div>
-                    <div class="meta-row">
-                        <span class="meta-label">${this.t('details.owner')}</span>
-                        <span class="meta-value">
-                            <platform-user-chip user-id=${catalog.owner_user_id}></platform-user-chip>
-                        </span>
-                    </div>
-                    <div class="meta-row">
-                        <span class="meta-label">${this.t('details.fileCount')}</span>
-                        <span class="meta-value">${this.t('catalogs.fileCount', { count: typeof catalog.file_count === 'number' ? catalog.file_count : 0 })}</span>
-                    </div>
-                    <div class="meta-row">
-                        <span class="meta-label">${this.t('details.subcatalogCount')}</span>
-                        <span class="meta-value">${this.subcatalogCount}</span>
-                    </div>
-                </div>
+            <div class="icon-wrap">
+                <platform-icon file-icon name="folder" size="48"></platform-icon>
             </div>
-            <div class="actions">
-                <button class="btn btn-primary" type="button" @click=${() => this._action('catalog-edit')}>
-                    ${this.t('catalogs.edit')}
-                </button>
-                <button class="btn" type="button" @click=${() => this._action('catalog-access')}>
-                    ${this.t('access.menuShare')}
-                </button>
-                <button class="btn" type="button" @click=${() => this._action('catalog-members')}>
-                    ${this.t('catalogs.members')}
-                </button>
-                <button class="btn" type="button" @click=${() => this._action('catalog-create-subcatalog')}>
-                    ${this.t('tree.newSubcatalog')}
-                </button>
-                <button class="btn btn-danger" type="button" @click=${() => this._action('catalog-delete')}>
-                    ${this.t('catalogs.delete')}
-                </button>
+            <div class="doc-title">${catalog.title}</div>
+            ${this._renderCatalogActions(catalog, { showOpen })}
+            <div class="meta-grid">
+                <div class="meta-row">
+                    <span class="meta-label">${this.t('details.type')}</span>
+                    <span class="meta-value">${this.t('list.docType.catalog')}</span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label">${this.t('details.size')}</span>
+                    <span class="meta-value">${this.t('catalogs.fileCount', { count: fileCount })}</span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label">${this.t('details.visibility')}</span>
+                    <span class="meta-value">${visibilityLabel}</span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label">${this.t('details.owner')}</span>
+                    <span class="meta-value">
+                        <platform-user-chip user-id=${catalog.owner_user_id}></platform-user-chip>
+                    </span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label">${this.t('details.subcatalogCount')}</span>
+                    <span class="meta-value">${this.subcatalogCount}</span>
+                </div>
+                ${catalog.rag_index_enabled === true ? html`
+                    <div class="meta-row">
+                        <span class="meta-label">${this.t('details.ragIndex')}</span>
+                        <span class="meta-value">${this.t('catalog_context_menu.rag')}</span>
+                    </div>
+                ` : ''}
             </div>
         `;
     }
@@ -406,6 +450,16 @@ export class OfficeFileDetailsPanel extends PlatformElement {
         `;
     }
 
+    _renderNamespaceRoot() {
+        return html`
+            <div class="icon-wrap">
+                <platform-icon file-icon name="folder" size="48"></platform-icon>
+            </div>
+            <div class="doc-title">${this.t('details.rootTitle')}</div>
+            <div class="meta-value">${this.t('details.rootHint')}</div>
+        `;
+    }
+
     render() {
         return html`
             <div class="head">
@@ -417,7 +471,11 @@ export class OfficeFileDetailsPanel extends PlatformElement {
             <div class="body">
                 ${this.document
                     ? this._renderDocumentBody(this.document)
-                    : (this.explorerView === 'catalog' ? this._renderCatalogSummary() : '')}
+                    : (this.selectedCatalog
+                        ? this._renderCatalogBody(this.selectedCatalog, { showOpen: true })
+                        : (this.explorerView === 'catalog' && this.catalog
+                            ? this._renderCatalogBody(this.catalog, { showOpen: false })
+                            : (this.namespaceRoot ? this._renderNamespaceRoot() : '')))}
             </div>
         `;
     }

@@ -53,13 +53,17 @@ async def test_create_durable_source_auto_binds(app, unique_id: str) -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_durable_source_soft_fails_office_bind(app, unique_id: str) -> None:
+async def test_create_durable_source_fails_closed_when_office_bind_unavailable(
+    app, unique_id: str
+) -> None:
     _ = app
     require_s3_configured()
     from apps.frontend.container import get_frontend_container
 
+    bound_file_ids: list[str] = []
+
     async def failing_bind(placement: DocsPlacement) -> DocsBindResult:
-        _ = placement
+        bound_file_ids.append(placement.file_id)
         raise ServiceClientError("office unavailable")
 
     container = get_frontend_container()
@@ -69,23 +73,24 @@ async def test_create_durable_source_soft_fails_office_bind(app, unique_id: str)
         docs_bind_hook=failing_bind,
     )
 
-    record = await service.create(
-        FileCreateSpec(
-            source_kind=FileSourceKind.MAIL_MESSAGE,
-            source_ref=FileSourceRef(
-                mailbox_binding_id=f"mb-{unique_id}",
-                mail_uid=f"uid-{unique_id}",
-                mailbox_email=f"user.{unique_id}@example.com",
+    with pytest.raises(ServiceClientError, match="office unavailable"):
+        _ = await service.create(
+            FileCreateSpec(
+                source_kind=FileSourceKind.MAIL_MESSAGE,
+                source_ref=FileSourceRef(
+                    mailbox_binding_id=f"mb-{unique_id}",
+                    mail_uid=f"uid-{unique_id}",
+                    mailbox_email=f"user.{unique_id}@example.com",
+                ),
+                retention=default_retention_for_source(FileSourceKind.MAIL_MESSAGE),
             ),
-            retention=default_retention_for_source(FileSourceKind.MAIL_MESSAGE),
-        ),
-        f"mail-bind-soft-{unique_id}".encode("utf-8"),
-        original_name=f"mail-{unique_id}.txt",
-        content_type="text/plain",
-    )
-    assert record.file_id
-    loaded = await service.get(record.file_id)
-    assert loaded.file_id == record.file_id
+            f"mail-bind-fail-{unique_id}".encode("utf-8"),
+            original_name=f"mail-{unique_id}.txt",
+            content_type="text/plain",
+        )
+    assert len(bound_file_ids) == 1
+    loaded = await service.get_optional(bound_file_ids[0])
+    assert loaded is None
 
 
 @pytest.mark.asyncio

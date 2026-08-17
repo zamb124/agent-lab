@@ -327,6 +327,28 @@ def build_default_chat_document(
     )
 
 
+def flow_ui_agent_identity_image_url(document: FlowUIDocument) -> str | None:
+    found: str | None = None
+    for surface in document.surfaces.values():
+        for component in surface.components.values():
+            if component.type != "AgentIdentity":
+                continue
+            if "image_url" not in component.properties:
+                continue
+            raw = component.properties["image_url"]
+            if raw is None:
+                continue
+            if not isinstance(raw, str):
+                raise ValueError("AgentIdentity.image_url must be a string")
+            url = raw.strip()
+            if url == "":
+                continue
+            if found is not None and found != url:
+                raise ValueError("AgentIdentity.image_url conflict")
+            found = url
+    return found
+
+
 def default_flow_interface_config() -> FlowInterfaceConfig:
     policy = FlowInterfacePolicy()
     document = build_default_chat_document(policy=policy)
@@ -371,6 +393,7 @@ __all__ = [
     "FlowInterfacePolicy",
     "FlowUIDocumentTemplate",
     "build_default_chat_document",
+    "flow_ui_agent_identity_image_url",
     "apply_embed_interface_override",
     "compact_embed_interface_override",
     "default_flow_interface_config",

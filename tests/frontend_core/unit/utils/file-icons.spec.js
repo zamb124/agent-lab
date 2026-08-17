@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveUiIconFile } from '@platform/lib/utils/file-icons.js';
+import { resolveUiIconFile, resolveFileIconBasename, resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 
 describe('resolveUiIconFile', () => {
     it('maps minus to minus.svg basename', () => {
@@ -20,5 +20,26 @@ describe('resolveUiIconFile', () => {
         expect(resolveUiIconFile('collapse')).toBe('collapse');
         expect(resolveUiIconFile('expand')).toBe('expand');
         expect(resolveUiIconFile('minimize')).toBe('minimize');
+    });
+});
+
+describe('resolveFileIconBasename', () => {
+    it('maps folder and catalog aliases to the colored folder asset', () => {
+        expect(resolveFileIconBasename('folder')).toBe('033-folder');
+        expect(resolveFileIconBasename('catalog')).toBe('033-folder');
+    });
+
+    it('maps database and data table aliases to distinct file assets', () => {
+        expect(resolveFileIconBasename('db')).toBe('034-database');
+        expect(resolveFileIconBasename('data_table')).toBe('035-data-table');
+        expect(resolveFileIconBasename('sqlite')).toBe('035-data-table');
+    });
+});
+
+describe('resolveFileIconKey', () => {
+    it('resolves sqlite MIME and .db extension to their own keys', () => {
+        expect(resolveFileIconKey('sales.sqlite', 'application/vnd.sqlite3')).toBe('sqlite');
+        expect(resolveFileIconKey('cache.db', '')).toBe('db');
+        expect(resolveFileIconKey('grid.sqlite', '')).toBe('sqlite');
     });
 });

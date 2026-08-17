@@ -80,6 +80,7 @@ const uploadOp = createAsyncOp({
             original_name: payload.file.name,
             content_type: payload.file.type || 'application/octet-stream',
             file_size: payload.file.size,
+            is_public: true,
         };
     },
 });
@@ -250,5 +251,6 @@ describe('platform-file-picker-modal', () => {
         expect(selected.file_id).to.equal('uploaded-1');
         expect(selected.original_name).to.equal('notes.txt');
         expect(selected.content_type).to.equal('text/plain');
+        expect(selected.is_public).to.equal(true);
     });
 });

@@ -21,6 +21,7 @@ from core.models.flow_interface import (
     build_default_chat_document,
 )
 from core.models.identity_models import Company, User
+from core.state.flow_ui import FlowUIDocument
 
 PROFILE_KEYS = {
     "flow_id",
@@ -103,6 +104,70 @@ async def _set_interface_policy(
         clear_context()
 
 
+async def _set_agent_identity_image_url(
+    *,
+    flow_id: str,
+    company_id: str,
+    user_id: str,
+    image_url: str,
+) -> None:
+    from apps.flows.src.container import get_container
+
+    set_context(
+        Context(
+            user=User(user_id=user_id, name="Test"),
+            active_company=Company(company_id=company_id, name="Test Company"),
+            session_id="test",
+            channel="test",
+        )
+    )
+    try:
+        container = get_container()
+        config = await container.flow_repository.get(flow_id)
+        assert config is not None
+        payload = config.interface.template.document.model_dump(mode="python")
+        identity = payload["surfaces"]["main"]["components"]["agent-identity"]
+        properties = dict(identity.get("properties") or {})
+        properties["image_url"] = image_url
+        identity["properties"] = properties
+        document = FlowUIDocument.model_validate(payload)
+        config.interface = config.interface.model_copy(
+            update={
+                "template": config.interface.template.model_copy(update={"document": document})
+            }
+        )
+        await container.flow_repository.set(config)
+    finally:
+        clear_context()
+
+
+async def _set_store_card_image_url(
+    *,
+    flow_id: str,
+    company_id: str,
+    user_id: str,
+    store_card_image_url: str,
+) -> None:
+    from apps.flows.src.container import get_container
+
+    set_context(
+        Context(
+            user=User(user_id=user_id, name="Test"),
+            active_company=Company(company_id=company_id, name="Test Company"),
+            session_id="test",
+            channel="test",
+        )
+    )
+    try:
+        container = get_container()
+        config = await container.flow_repository.get(flow_id)
+        assert config is not None
+        config.store_card_image_url = store_card_image_url
+        await container.flow_repository.set(config)
+    finally:
+        clear_context()
+
+
 @pytest.mark.asyncio
 async def test_flow_interface_profile_session_auth_defaults(
     flows_client: AsyncClient, embed_test_auth
@@ -133,6 +198,7 @@ async def test_flow_interface_profile_session_auth_defaults(
         "voice": True,
     }
     assert isinstance(profile["flow_identity"]["title"], str)
+    assert profile["flow_identity"]["image_url"] is None
 
 
 @pytest.mark.asyncio
@@ -397,3 +463,49 @@ def test_embed_config_has_no_interface_behavior_fields():
         assert field_name not in EmbedConfig.model_fields
         assert field_name not in EmbedInterfaceLook.model_fields
     assert "interface_override" in EmbedConfig.model_fields
+
+
+@pytest.mark.asyncio
+async def test_interface_profile_image_url_from_document_not_store_card(
+    flows_client: AsyncClient, frontend_client: AsyncClient, embed_test_auth
+):
+    auth_headers, flow_id, company_id, user_id = embed_test_auth
+    await _set_store_card_image_url(
+        flow_id=flow_id,
+        company_id=company_id,
+        user_id=user_id,
+        store_card_image_url="https://cdn.example/store-card.png",
+    )
+    store_only = await flows_client.get(
+        f"/flows/api/v1/{flow_id}/interface-profile", headers=auth_headers
+    )
+    assert store_only.status_code == 200
+    assert store_only.json()["flow_identity"]["image_url"] is None
+
+    image_url = "/flows/api/v1/files/download/agent-identity"
+    await _set_agent_identity_image_url(
+        flow_id=flow_id,
+        company_id=company_id,
+        user_id=user_id,
+        image_url=image_url,
+    )
+    session_profile = await flows_client.get(
+        f"/flows/api/v1/{flow_id}/interface-profile", headers=auth_headers
+    )
+    assert session_profile.status_code == 200
+    assert session_profile.json()["flow_identity"]["image_url"] == image_url
+
+    embed_id = await _create_embed(frontend_client, auth_headers, flow_id)
+    embed_token = await _embed_session_token(frontend_client, auth_headers, embed_id)
+    embed_profile = await flows_client.get(
+        f"/flows/api/v1/embed/{embed_id}/interface-profile",
+        headers={
+            "Authorization": f"Bearer {embed_token}",
+            "Origin": "https://larashved.ru",
+        },
+    )
+    assert embed_profile.status_code == 200
+    assert embed_profile.json()["flow_identity"]["image_url"] == image_url
+    await frontend_client.delete(
+        f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers
+    )

@@ -23,6 +23,7 @@ import '../components/office-integration-banner.js';
 import '../components/office-file-toolbar.js';
 import '../components/office-file-details-panel.js';
 import '../components/office-file-actions-menu.js';
+import '../components/office-catalog-actions-menu.js';
 import '../components/office-catalog-semantic-search-results.js';
 
 const VIEW_MODE_STORAGE_KEY = 'documents_explorer_view_mode';
@@ -59,6 +60,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         this._permanentDelete = this.useOp('office/document_permanent_delete');
         this._shareCreate = this.useOp('office/document_share_create');
         this._catalogRagSearch = this.useOp('office/catalog_rag_search');
+        this._move = this.useOp('office/document_move');
         this._lastLoadKey = '';
         this._lastSemanticSearchKey = '';
         this._localeSel = this.select((s) => s.i18n.locale);
@@ -217,12 +219,18 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         if (typeof state.activeCatalogId === 'string' && state.activeCatalogId.length > 0) {
             return state.activeCatalogId;
         }
-        const cats = this._catalogItems();
-        return cats.length > 0 ? cats[0].catalog_id : '';
+        return '';
+    }
+
+    _isNamespaceRoot() {
+        return this._documents.state.explorerView === 'catalog' && this._activeCatalogId().length === 0;
     }
 
     _activeCatalogTitle() {
         const id = this._activeCatalogId();
+        if (!id) {
+            return this.t('nav.allDocuments');
+        }
         const hit = this._catalogItems().find((c) => c.catalog_id === id);
         return hit ? hit.title : this.t('list.catalogUnknown');
     }
@@ -230,14 +238,24 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
     _ensureActiveCatalog() {
         if (this._catalogs.loading) return;
         const cats = this._catalogItems();
-        if (cats.length === 0) return;
         const active = this._documents.state.activeCatalogId;
-        if (typeof active === 'string' && active.length > 0) {
-            const exists = cats.some((c) => c.catalog_id === active);
-            if (exists) return;
+        if (typeof active !== 'string' || active.length === 0) {
+            return;
         }
-        this._documents.setActiveCatalog({ catalogId: cats[0].catalog_id });
-        this._documents.setFilterCatalogs({ catalogIds: [cats[0].catalog_id] });
+        const exists = cats.some((c) => c.catalog_id === active);
+        if (exists) return;
+        this._documents.setActiveCatalog({ catalogId: null });
+        this._documents.setFilterCatalogs({ catalogIds: [] });
+    }
+
+    _listPayloadFor(catalogIds) {
+        const state = this._documents.state;
+        return {
+            catalogIds,
+            q: state.searchQuery,
+            sortKey: state.sortKey,
+            sortDir: state.sortDir,
+        };
     }
 
     _listPayload() {
@@ -245,13 +263,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         if (!catalogId) {
             throw new Error('OfficeDocumentsExplorerPage: active catalog required');
         }
-        const state = this._documents.state;
-        return {
-            catalogIds: [catalogId],
-            q: state.searchQuery,
-            sortKey: state.sortKey,
-            sortDir: state.sortDir,
-        };
+        return this._listPayloadFor([catalogId]);
     }
 
     _childCatalogsAtCurrentLevel() {
@@ -261,6 +273,47 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
             const parentId = typeof catalog.parent_catalog_id === 'string' ? catalog.parent_catalog_id : '';
             return parentId === catalogId;
         });
+    }
+
+    _visibleChildCatalogs() {
+        const children = this._childCatalogsAtCurrentLevel();
+        const rawQuery = this._documents.state.searchQuery;
+        const query = typeof rawQuery === 'string' ? rawQuery.trim().toLowerCase() : '';
+        const matched = query.length === 0
+            ? children
+            : children.filter((catalog) => catalog.title.toLowerCase().includes(query));
+        if (matched.length < 2) {
+            return matched;
+        }
+        const locale = this._localeSel.value;
+        if (typeof locale !== 'string' || locale.length === 0) {
+            throw new Error('OfficeDocumentsExplorerPage: i18n locale required');
+        }
+        const direction = this._documents.state.sortDir === 'asc' ? 1 : -1;
+        return [...matched].sort((left, right) => (
+            direction * left.title.localeCompare(right.title, locale, { sensitivity: 'base' })
+        ));
+    }
+
+    _catalogSizeLabel(catalog) {
+        if (typeof catalog.file_count !== 'number') {
+            throw new Error('OfficeDocumentsExplorerPage: catalog.file_count required');
+        }
+        return this.t('catalogs.fileCount', { count: catalog.file_count });
+    }
+
+    _catalogCanDelete(catalog) {
+        if (catalog.is_owner !== true) {
+            return false;
+        }
+        if (typeof catalog.file_count !== 'number') {
+            throw new Error('OfficeDocumentsExplorerPage: catalog.file_count required');
+        }
+        return catalog.file_count === 0 && this._subcatalogCount(catalog.catalog_id) === 0;
+    }
+
+    _catalogItemKey(catalog) {
+        return `catalog:${catalog.catalog_id}`;
     }
 
     _subcatalogCount(catalogId) {
@@ -291,8 +344,14 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
     _buildBreadcrumbs() {
         if (this._documents.state.explorerView !== 'catalog') return [];
         const catalogId = this._activeCatalogId();
-        if (!catalogId) return [];
-        const crumbs = [];
+        const crumbs = [{
+            id: 'namespace-root',
+            type: 'root',
+            label: this.t('nav.allDocuments'),
+            ariaLabel: this.t('breadcrumbs.root'),
+            catalogId: null,
+            current: catalogId.length === 0,
+        }];
         for (const catalog of this._catalogAncestorChain(catalogId)) {
             crumbs.push({
                 id: catalog.catalog_id,
@@ -302,9 +361,20 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                 current: false,
             });
         }
-        if (crumbs.length === 0) return [];
-        crumbs[crumbs.length - 1].current = true;
+        if (crumbs.length > 1) {
+            crumbs[crumbs.length - 1].current = true;
+            crumbs[0].current = false;
+        }
         return crumbs;
+    }
+
+    _goToNamespaceRoot() {
+        this._documents.setExplorerView({ explorerView: 'catalog' });
+        this._documents.setActiveCatalog({ catalogId: null });
+        this._documents.setFilterCatalogs({ catalogIds: [] });
+        this._documents.clearFileSelection(null);
+        this._lastLoadKey = '';
+        this._maybeReloadDocs();
     }
 
     _maybeReloadDocs() {
@@ -325,16 +395,29 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
             const ids = explorerView === 'recent'
                 ? this._documents.state.recentFileIds
                 : this._documents.state.starredFileIds;
-            const key = `${explorerView}|${(ids || []).join(',')}|${this._documents.state.searchQuery}`;
+            const catalogIds = this._catalogItems()
+                .map((catalog) => catalog.catalog_id)
+                .filter((id) => typeof id === 'string' && id.length > 0);
+            const key = `${explorerView}|${(ids || []).join(',')}|${catalogIds.join(',')}|${this._documents.state.searchQuery}`;
             if (key === this._lastLoadKey) return;
             this._lastLoadKey = key;
-            const catalogId = this._activeCatalogId();
-            if (!catalogId) return;
-            this._documents.run(this._listPayload());
+            if (catalogIds.length === 0) return;
+            this._documents.run(this._listPayloadFor(catalogIds));
             return;
         }
         const catalogId = this._activeCatalogId();
-        if (!catalogId) return;
+        if (!catalogId) {
+            const key = [
+                explorerView,
+                'root',
+                state.searchQuery,
+                state.sortKey,
+                state.sortDir,
+            ].join('|');
+            if (key === this._lastLoadKey) return;
+            this._lastLoadKey = key;
+            return;
+        }
         const key = [
             explorerView,
             catalogId,
@@ -354,6 +437,9 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                 ? this._deleted.lastResult.items
                 : [];
             return deletedItems;
+        }
+        if (this._isNamespaceRoot()) {
+            return [];
         }
         let docs = state.items;
         if (state.explorerView === 'recent') {
@@ -398,6 +484,10 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
     _onBreadcrumbNavigate(e) {
         const crumb = e.detail && e.detail.crumb;
         if (!crumb || typeof crumb !== 'object') return;
+        if (crumb.type === 'root') {
+            this._goToNamespaceRoot();
+            return;
+        }
         if (crumb.type === 'catalog') {
             this._onCatalogSelect({ detail: { catalogId: crumb.catalogId } });
         }
@@ -438,6 +528,9 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         );
         if (ok !== true) return;
         await this._catalogs.remove(catalog.catalog_id);
+        if (this._documents.state.selectedCatalogId === catalog.catalog_id) {
+            this._documents.setSelectedCatalog({ catalogId: null });
+        }
         this._lastLoadKey = '';
         this._ensureActiveCatalog();
         this._maybeReloadDocs();
@@ -498,7 +591,9 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
 
     _openCreateEmpty() {
         const catalogId = this._activeCatalogId();
-        if (!catalogId) return;
+        if (!catalogId) {
+            throw new Error('OfficeDocumentsExplorerPage: catalog required to create a file');
+        }
         this.openModal('office.document_create_empty', {
             catalogId,
             openAfterCreate: true,
@@ -507,7 +602,9 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
 
     _openUploadModal() {
         const catalogId = this._activeCatalogId();
-        if (!catalogId) return;
+        if (!catalogId) {
+            throw new Error('OfficeDocumentsExplorerPage: catalog required to upload a file');
+        }
         this.openModal('office.document_upload', {
             catalogId,
             openAfterUpload: false,
@@ -516,7 +613,12 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
 
     _uploadFile(file, openAfterUpload) {
         const catalogId = this._activeCatalogId();
-        if (!catalogId || !(file instanceof File)) return;
+        if (!catalogId) {
+            throw new Error('OfficeDocumentsExplorerPage: catalog required to upload a file');
+        }
+        if (!(file instanceof File)) {
+            throw new Error('OfficeDocumentsExplorerPage: File required to upload');
+        }
         const localId = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         this.dispatch(
             this._documents.op.events.UPLOAD_JOB_ADD,
@@ -531,7 +633,20 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         e.dataTransfer.effectAllowed = 'move';
     }
 
+    _isOfficeFileDrag(dataTransfer) {
+        if (!dataTransfer || !dataTransfer.types) {
+            return false;
+        }
+        return Array.from(dataTransfer.types).includes('application/x-office-file-id');
+    }
+
     _onDragOver(e) {
+        if (this._isOfficeFileDrag(e.dataTransfer)) {
+            return;
+        }
+        if (this._actionsDisabled()) {
+            return;
+        }
         e.preventDefault();
         this._dragOver = true;
     }
@@ -544,12 +659,25 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
     _onDrop(e) {
         e.preventDefault();
         this._dragOver = false;
+        if (this._isOfficeFileDrag(e.dataTransfer)) {
+            return;
+        }
         const files = e.dataTransfer && e.dataTransfer.files
             ? Array.from(e.dataTransfer.files)
             : [];
         for (const file of files) {
             this._uploadFile(file, false);
         }
+    }
+
+    _onCatalogDrop(e, catalog) {
+        const native = e.detail && e.detail.nativeEvent;
+        const dataTransfer = native && native.dataTransfer ? native.dataTransfer : null;
+        const fileId = dataTransfer ? dataTransfer.getData('application/x-office-file-id') : '';
+        if (typeof fileId !== 'string' || fileId.length === 0) {
+            return;
+        }
+        this._move.run({ fileId, catalogId: catalog.catalog_id });
     }
 
     _docByFileId(fileId) {
@@ -588,6 +716,19 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
 
     _onSelectDocument(fileId) {
         this._documents.setSelectedFile({ fileId });
+    }
+
+    _onSelectCatalog(catalogId) {
+        this._documents.setSelectedCatalog({ catalogId });
+    }
+
+    _selectedCatalog() {
+        const catalogId = this._documents.state.selectedCatalogId;
+        if (typeof catalogId !== 'string' || catalogId.length === 0) {
+            return null;
+        }
+        const catalog = this._catalogById(catalogId);
+        return catalog ? catalog : null;
     }
 
     _onRowSelectToggle(e) {
@@ -640,7 +781,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
             });
         }
         if (this._documents.state.selectedFileId === doc.file_id) {
-            this._documents.setSelectedFile({ fileId: null });
+            this._documents.clearFileSelection(null);
         }
     }
 
@@ -665,6 +806,32 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
             resourceId: catalog.catalog_id,
             resourceTitle: catalog.title,
         });
+    }
+
+    _onCatalogRag(catalog) {
+        if (!catalog) return;
+        this.openModal('office.catalog_rag', {
+            catalogId: catalog.catalog_id,
+            catalogTitle: catalog.title,
+        });
+    }
+
+    _handleCatalogAction(action, catalog) {
+        if (!catalog || typeof action !== 'string') {
+            return;
+        }
+        if (action === 'open') this._onSubcatalogOpen(catalog.catalog_id);
+        if (action === 'edit') this._onCatalogEdit(catalog);
+        if (action === 'access') this._onCatalogAccess(catalog);
+        if (action === 'members') this._onCatalogMembers(catalog);
+        if (action === 'rag') this._onCatalogRag(catalog);
+        if (action === 'create-subcatalog') this._onCatalogCreateSubcatalog(catalog);
+        if (action === 'delete') this._onCatalogDelete(catalog);
+    }
+
+    _onCatalogRowAction(e, catalog) {
+        const action = e.detail && e.detail.action;
+        this._handleCatalogAction(action, catalog);
     }
 
     _onFileAction(e, doc) {
@@ -749,14 +916,8 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
             }
             return;
         }
-        const catalog = this._catalogById(this._activeCatalogId());
-        if (!catalog) return;
-        if (action === 'catalog-edit') this._onCatalogEdit(catalog);
-        if (action === 'catalog-access') this._onCatalogAccess(catalog);
-        if (action === 'catalog-members') this._onCatalogMembers(catalog);
-        if (action === 'catalog-access') this._onCatalogAccess(catalog);
-        if (action === 'catalog-create-subcatalog') this._onCatalogCreateSubcatalog(catalog);
-        if (action === 'catalog-delete') this._onCatalogDelete(catalog);
+        const catalog = this._selectedCatalog() || this._catalogById(this._activeCatalogId());
+        this._handleCatalogAction(action, catalog);
     }
 
     _openMobileCatalogPicker() {
@@ -779,21 +940,62 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         `;
     }
 
-    _renderSubcatalogRows(subcatalogs) {
-        if (!Array.isArray(subcatalogs) || subcatalogs.length === 0) return '';
+    _renderCatalogKebab(catalog) {
         return html`
-            <div class="folder-rows">
-                ${subcatalogs.map((catalog) => html`
-                    <button
-                        class="folder-row"
-                        type="button"
-                        @click=${() => this._onSubcatalogOpen(catalog.catalog_id)}
-                    >
-                        <platform-icon name="folder" size="16"></platform-icon>
-                        <span class="folder-row-label">${catalog.title}</span>
-                    </button>
-                `)}
-            </div>
+            <office-catalog-actions-menu
+                slot="actions"
+                ?is-owner=${catalog.is_owner === true}
+                ?show-members=${catalog.is_owner === true && catalog.company_visible !== true}
+                ?can-delete=${this._catalogCanDelete(catalog)}
+                @action=${(e) => this._onCatalogRowAction(e, catalog)}
+            ></office-catalog-actions-menu>
+        `;
+    }
+
+    _renderCatalogRow(catalog) {
+        const state = this._documents.state;
+        const ragHint = catalog.rag_index_enabled === true;
+        return html`
+            <platform-file-row
+                item-kind="catalog"
+                item-key=${this._catalogItemKey(catalog)}
+                file-name=${catalog.title}
+                size-label=${this._catalogSizeLabel(catalog)}
+                date-label="—"
+                retention-label="—"
+                type-label=${this.t('list.docType.catalog')}
+                author-user-id=${catalog.owner_user_id}
+                hint-icon=${ragHint ? 'search' : ''}
+                hint-icon-label=${ragHint ? this.t('catalog_context_menu.rag') : ''}
+                ?selected=${state.selectedCatalogId === catalog.catalog_id}
+                @open=${() => this._onSelectCatalog(catalog.catalog_id)}
+                @activate=${() => this._onSubcatalogOpen(catalog.catalog_id)}
+                @row-drop=${(e) => this._onCatalogDrop(e, catalog)}
+            >
+                ${this._renderCatalogKebab(catalog)}
+            </platform-file-row>
+        `;
+    }
+
+    _renderCatalogCard(catalog) {
+        const state = this._documents.state;
+        const ragHint = catalog.rag_index_enabled === true;
+        return html`
+            <platform-file-card
+                item-kind="catalog"
+                item-key=${this._catalogItemKey(catalog)}
+                file-name=${catalog.title}
+                size-label=${this._catalogSizeLabel(catalog)}
+                type-label=${this.t('list.docType.catalog')}
+                hint-icon=${ragHint ? 'search' : ''}
+                hint-icon-label=${ragHint ? this.t('catalog_context_menu.rag') : ''}
+                ?selected=${state.selectedCatalogId === catalog.catalog_id}
+                @open=${() => this._onSelectCatalog(catalog.catalog_id)}
+                @activate=${() => this._onSubcatalogOpen(catalog.catalog_id)}
+                @row-drop=${(e) => this._onCatalogDrop(e, catalog)}
+            >
+                ${this._renderCatalogKebab(catalog)}
+            </platform-file-card>
         `;
     }
 
@@ -801,9 +1003,8 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         const state = this._documents.state;
         const selectedIds = new Set(Array.isArray(state.selectedFileIds) ? state.selectedFileIds : []);
         const allSelected = docs.length > 0 && docs.every((d) => selectedIds.has(d.file_id));
-        const childCatalogs = this._childCatalogsAtCurrentLevel();
+        const childCatalogs = this._visibleChildCatalogs();
         return html`
-            ${this._renderSubcatalogRows(childCatalogs)}
             <platform-file-table
                 .columns=${this._tableColumns()}
                 sort-key=${state.sortKey}
@@ -814,6 +1015,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                 @sort-change=${this._onSortChange}
                 @select-all-toggle=${this._onSelectAllToggle}
             >
+                ${repeat(childCatalogs, (catalog) => this._catalogItemKey(catalog), (catalog) => this._renderCatalogRow(catalog))}
                 ${repeat(docs, (doc) => doc.file_id, (doc) => html`
                     <platform-file-row
                         item-key=${doc.file_id}
@@ -846,8 +1048,10 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
 
     _renderGrid(docs) {
         const state = this._documents.state;
+        const childCatalogs = this._visibleChildCatalogs();
         return html`
             <div class="grid" aria-label=${this.t('list.cardsAria')}>
+                ${repeat(childCatalogs, (catalog) => this._catalogItemKey(catalog), (catalog) => this._renderCatalogCard(catalog))}
                 ${repeat(docs, (doc) => doc.file_id, (doc) => html`
                     <platform-file-card
                         item-key=${doc.file_id}
@@ -869,6 +1073,21 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                         ></office-file-actions-menu>
                     </platform-file-card>
                 `)}
+            </div>
+        `;
+    }
+
+    _renderEmptyNamespaceRoot() {
+        return html`
+            <div class="dropzone-panel" role="status" aria-label=${this.t('explorer.rootAria')}>
+                <div class="dropzone-icon"><platform-icon name="folder" size="64"></platform-icon></div>
+                <div class="dropzone-title">${this.t('explorer.rootEmptyTitle')}</div>
+                <div class="dropzone-hint">${this.t('explorer.rootEmptyHint')}</div>
+                <div class="dropzone-actions">
+                    <button class="btn btn-primary" type="button" @click=${() => this.openModal('office.catalog_create')}>
+                        ${this.t('catalogs.create')}
+                    </button>
+                </div>
             </div>
         `;
     }
@@ -948,20 +1167,23 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         const noCatalogs = !this._catalogs.loading && cats.length === 0;
         const state = this._documents.state;
         const docs = this._visibleDocuments();
-        // Spinner только при первой загрузке пустого списка — soft-refresh не прячет таблицу.
-        const docsLoading = state.explorerView === 'deleted'
-            ? (this._deleted.busy && docs.length === 0)
-            : (this._documents.busy && docs.length === 0);
         const actionsDisabled = this._actionsDisabled();
+        // Spinner только при первой загрузке пустого списка — soft-refresh не прячет таблицу.
         const selectedDoc = this._selectedDocument();
+        const selectedCatalog = this._selectedCatalog();
         const selectedCount = Array.isArray(state.selectedFileIds) ? state.selectedFileIds.length : 0;
         const activeCatalog = this._catalogById(this._activeCatalogId());
+        const detailsCatalog = selectedCatalog || activeCatalog;
         const breadcrumbs = this._buildBreadcrumbs();
-        const childCatalogs = this._childCatalogsAtCurrentLevel();
+        const childCatalogs = this._visibleChildCatalogs();
+        const atRoot = this._isNamespaceRoot();
         const showSemanticResults = this._showSemanticResults();
         const semanticSearchAvailable = this._semanticSearchAvailable();
+        const docsLoading = state.explorerView === 'deleted'
+            ? (this._deleted.busy && docs.length === 0)
+            : (this._documents.busy && docs.length === 0 && childCatalogs.length === 0);
         const showEmpty = !showSemanticResults && !docsLoading && docs.length === 0 && childCatalogs.length === 0;
-        const subcatalogCount = activeCatalog ? this._subcatalogCount(activeCatalog.catalog_id) : 0;
+        const subcatalogCount = detailsCatalog ? this._subcatalogCount(detailsCatalog.catalog_id) : 0;
 
         return html`
             <div class="explorer-banner">
@@ -1022,7 +1244,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                                         ></office-catalog-semantic-search-results>
                                     ` : html`
                                         ${docsLoading ? html`<div class="loading"><glass-spinner size="lg"></glass-spinner></div>` : ''}
-                                        ${showEmpty ? this._renderEmptyNoDocuments() : ''}
+                                        ${showEmpty ? (atRoot ? this._renderEmptyNamespaceRoot() : this._renderEmptyNoDocuments()) : ''}
                                         ${!docsLoading && (docs.length > 0 || childCatalogs.length > 0)
                                             ? (state.viewMode === 'grid'
                                                 ? this._renderGrid(docs)
@@ -1033,11 +1255,13 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                                 <office-file-details-panel
                                     .document=${selectedDoc}
                                     .catalog=${activeCatalog}
+                                    .selectedCatalog=${selectedCatalog}
                                     catalog-title=${this._activeCatalogTitle()}
                                     subcatalog-count=${subcatalogCount}
                                     explorer-view=${state.explorerView}
+                                    ?namespace-root=${atRoot && !selectedCatalog}
                                     ?starred=${selectedDoc && (state.starredFileIds || []).includes(selectedDoc.file_id)}
-                                    @close=${() => this._documents.setSelectedFile({ fileId: null })}
+                                    @close=${() => this._documents.clearFileSelection(null)}
                                     @action=${this._onDetailsAction}
                                 ></office-file-details-panel>
                             </div>

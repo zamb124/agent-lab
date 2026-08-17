@@ -91,8 +91,6 @@ export class SyncApp extends PlatformApp {
         branchId: 'sync',
         serviceId: 'sync',
         showLauncher: true,
-        // Composer Send справа снизу — FAB Lara слева, иначе перехватывает pointer events.
-        launcherPosition: 'bottom-left',
     };
 
     constructor() {

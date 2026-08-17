@@ -273,29 +273,22 @@ async def test_catalog_delete_409_when_contains_documents(
 
 
 @pytest.mark.asyncio
-async def test_empty_document_requires_catalog_id_when_multiple_catalogs(
+async def test_empty_document_requires_explicit_catalog_id(
     office_client, auth_headers_system, unique_id
 ):
     a = await office_client.post(
         "/documents/api/v1/catalogs",
         headers=auth_headers_system,
-        json={"title": f"A {unique_id}"},
-    )
-    b = await office_client.post(
-        "/documents/api/v1/catalogs",
-        headers=auth_headers_system,
-        json={"title": f"B {unique_id}"},
+        json={"title": f"Only {unique_id}"},
     )
     assert a.status_code == 200
-    assert b.status_code == 200
 
     r = await office_client.post(
         "/documents/api/v1/documents/empty",
         headers=auth_headers_system,
         json={"title": f"Amb {unique_id}"},
     )
-    assert r.status_code == 400
-    assert "catalog_id" in (r.json().get("detail") or "").lower()
+    assert r.status_code == 422
 
 
 @pytest.mark.asyncio

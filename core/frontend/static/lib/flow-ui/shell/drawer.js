@@ -1,18 +1,53 @@
-import { LitElement, css, html } from '../../lit-shim.js';
+import { LitElement, css, html, nothing } from '../../lit-shim.js';
 import '../components/platform-flow-ui.js';
-import { brandLogoSrc } from './brand-logo.js';
-import { FLOW_UI_TOGGLE_EVENT } from './preferences.js';
+import { resolveAgentIdentityImageSrc } from '../runtime/agent-identity-image.js';
+import {
+    clampCluster,
+    createDefaultGeometry,
+    DRAG_THRESHOLD_PX,
+    gesturesAllowed,
+    MOBILE_MAX_WIDTH_PX,
+    moveCluster,
+    resizeFromSouthEast,
+    VIEWPORT_MARGIN_DESKTOP_PX,
+    VIEWPORT_MARGIN_MOBILE_PX,
+} from './drawer-geometry.js';
+import { FLOW_UI_DRAWER_MOVE_START } from './drawer-move.js';
+import {
+    FLOW_UI_TOGGLE_EVENT,
+    readEmbedDrawerGeometry,
+    readLaraDrawerGeometry,
+    writeEmbedDrawerGeometry,
+    writeLaraDrawerGeometry,
+} from './preferences.js';
+import { flowUIText, resolveFlowUILocale } from '../utils/text.js';
 
 export class FlowUIDrawer extends LitElement {
     static properties = {
         open: { type: Boolean, reflect: true },
         expanded: { type: Boolean, reflect: true },
         config: { attribute: false },
+        _cluster: { state: true },
+        _dragging: { state: true },
+        _identityImageUrl: { state: true },
     };
 
     static styles = css`
-        :host { position: fixed; inset: auto 22px 22px auto; z-index: 2147483000; font-family: system-ui; }
-        :host([data-embed-position="bottom-left"]) { inset: auto auto 22px 22px; }
+        :host {
+            position: fixed;
+            z-index: 2147483000;
+            font-family: system-ui;
+        }
+        :host([data-drawer-gestures='on']) {
+            inset: 0;
+            pointer-events: none;
+        }
+        :host(:not([data-drawer-gestures='on'])) {
+            inset: auto 22px 22px auto;
+        }
+        :host(:not([data-drawer-gestures='on'])[data-embed-position='bottom-left']) {
+            inset: auto auto 22px 22px;
+        }
         .launcher {
             width: 58px; height: 58px; padding: 0; border: 1px solid var(--flow-ui-logo-disc-border, rgba(255, 255, 255, 0.14));
             border-radius: 50%; cursor: pointer; display: grid; place-items: center;
@@ -23,8 +58,16 @@ export class FlowUIDrawer extends LitElement {
                 0 14px 36px rgba(0, 0, 0, 0.45),
                 0 4px 12px rgba(0, 0, 0, 0.3)
             );
-            /* overflow visible: disc shadow must paint outside the launcher. */
             overflow: visible;
+            touch-action: none;
+            pointer-events: auto;
+        }
+        :host([data-drawer-gestures='on']) .launcher {
+            position: absolute;
+        }
+        :host([data-drawer-dragging='move']) .launcher,
+        :host([data-drawer-dragging='move']) .panel {
+            cursor: grabbing;
         }
         .launcher img {
             width: 34px; height: 34px; object-fit: contain; display: block; pointer-events: none;
@@ -36,15 +79,23 @@ export class FlowUIDrawer extends LitElement {
             display: flex;
             flex-direction: column;
             min-height: 0;
-            /* overflow must stay visible: platform-flow-ui owns the soft shadow.
-             * Square overflow:hidden here clipped that shadow into dark corner nicks. */
             overflow: visible;
             border-radius: 22px;
+            pointer-events: auto;
         }
-        :host([data-embed-position="bottom-left"]) .panel { right: auto; left: 0; transform-origin: bottom left; }
+        :host([data-drawer-gestures='on']) .panel {
+            right: auto;
+            bottom: auto;
+            width: var(--drawer-panel-width);
+            height: var(--drawer-panel-height);
+        }
+        :host([data-embed-position='bottom-left']:not([data-drawer-gestures='on'])) .panel {
+            right: auto; left: 0; transform-origin: bottom left;
+        }
         :host(:not([open])) .panel { opacity: 0; transform: translateY(12px) scale(.98); pointer-events: none; }
         :host([expanded][open]) {
             inset: 0;
+            pointer-events: none;
         }
         :host([expanded][open]) .panel {
             position: fixed;
@@ -58,9 +109,14 @@ export class FlowUIDrawer extends LitElement {
             max-height: none;
             border-radius: 0;
             transform: none;
+            pointer-events: auto;
         }
         :host([expanded][open]) platform-flow-ui {
             border-radius: 0;
+        }
+        :host([expanded][open]) .launcher,
+        :host([expanded][open]) .resize-handle {
+            display: none;
         }
         platform-flow-ui {
             flex: 1 1 0;
@@ -69,10 +125,55 @@ export class FlowUIDrawer extends LitElement {
             border: 1px solid var(--flow-ui-border, rgba(149, 163, 194, 0.2));
             border-radius: 22px;
         }
+        .resize-handle {
+            position: absolute;
+            right: 2px;
+            bottom: 2px;
+            width: 18px;
+            height: 18px;
+            padding: 0;
+            border: 0;
+            cursor: nwse-resize;
+            background: transparent;
+            z-index: 2;
+            touch-action: none;
+            pointer-events: auto;
+        }
+        .resize-handle::before {
+            content: '';
+            position: absolute;
+            right: 3px;
+            bottom: 3px;
+            width: 10px;
+            height: 10px;
+            border-right: 2px solid var(--flow-ui-muted, rgba(149, 163, 194, 0.7));
+            border-bottom: 2px solid var(--flow-ui-muted, rgba(149, 163, 194, 0.7));
+            border-radius: 0 0 2px 0;
+        }
+        :host(:not([open])) .resize-handle,
+        :host(:not([data-drawer-gestures='on'])) .resize-handle {
+            display: none;
+        }
         @media (max-width: 520px) {
-            :host { inset: auto 10px 10px 10px; }
-            .panel { position: fixed; inset: 0; width: 100vw; height: 100dvh; }
-            .launcher { margin-left: auto; display: grid; }
+            :host { inset: auto 10px 10px 10px; pointer-events: none; }
+            .panel {
+                position: fixed;
+                inset: 0;
+                width: 100vw;
+                height: 100dvh;
+                left: 0;
+                top: 0;
+                right: 0;
+                bottom: 0;
+                pointer-events: auto;
+            }
+            .launcher {
+                position: relative;
+                margin-left: auto;
+                display: grid;
+                pointer-events: auto;
+            }
+            .resize-handle { display: none; }
         }
         @media (prefers-reduced-motion: reduce) { .panel { transition: none; } }
     `;
@@ -82,7 +183,12 @@ export class FlowUIDrawer extends LitElement {
         this.open = false;
         this.expanded = false;
         this.config = {};
+        this._cluster = null;
+        this._dragging = false;
+        this._identityImageUrl = null;
         this._boundToggleEventName = null;
+        this._loadedPersistKey = null;
+        this._gesture = null;
         this._toggle = (event) => {
             if (event?.detail && Object.prototype.hasOwnProperty.call(event.detail, 'open')) {
                 this.open = event.detail.open === true;
@@ -101,6 +207,29 @@ export class FlowUIDrawer extends LitElement {
         this._onDrawerClose = () => {
             this.open = false;
         };
+        this._onMoveStart = (event) => {
+            this._beginMoveFromDetail(event.detail);
+        };
+        this._onWindowPointerMove = (event) => {
+            this._handlePointerMove(event);
+        };
+        this._onWindowPointerUp = (event) => {
+            this._handlePointerUp(event);
+        };
+        this._onViewportResize = () => {
+            this._reclampToViewport(true);
+        };
+        this._onIdentityChanged = (event) => {
+            const detail = event.detail;
+            if (!detail || typeof detail !== 'object') {
+                throw new Error('flow-ui-drawer: flow-ui-identity-changed detail required');
+            }
+            const imageUrl = detail.image_url;
+            if (imageUrl !== null && typeof imageUrl !== 'string') {
+                throw new Error('flow-ui-drawer: image_url must be string or null');
+            }
+            this._identityImageUrl = imageUrl;
+        };
     }
 
     connectedCallback() {
@@ -108,22 +237,36 @@ export class FlowUIDrawer extends LitElement {
         this._bindToggleListener();
         this.addEventListener('flow-ui-drawer-expand-toggle', this._onExpandToggle);
         this.addEventListener('flow-ui-drawer-close', this._onDrawerClose);
+        this.addEventListener(FLOW_UI_DRAWER_MOVE_START, this._onMoveStart);
+        this.addEventListener('flow-ui-identity-changed', this._onIdentityChanged);
+        globalThis.addEventListener('resize', this._onViewportResize);
+        this._syncGeometryFromStore();
     }
 
     disconnectedCallback() {
         this.removeEventListener('flow-ui-drawer-close', this._onDrawerClose);
         this.removeEventListener('flow-ui-drawer-expand-toggle', this._onExpandToggle);
+        this.removeEventListener(FLOW_UI_DRAWER_MOVE_START, this._onMoveStart);
+        this.removeEventListener('flow-ui-identity-changed', this._onIdentityChanged);
+        globalThis.removeEventListener('resize', this._onViewportResize);
         this._unbindToggleListener();
+        this._detachGestureListeners();
         super.disconnectedCallback();
     }
 
     updated(changedProperties) {
         if (changedProperties.has('config')) {
             this._bindToggleListener();
+            const persistKey = this._persistIdentityKey();
+            if (persistKey !== this._loadedPersistKey) {
+                this._syncGeometryFromStore();
+            }
         }
         if (changedProperties.has('open')) {
             if (this.open !== true) {
                 this.expanded = false;
+            } else if (this._cluster !== null) {
+                this._cluster = clampCluster(this._cluster, this._readViewport());
             }
             this.dispatchEvent(new CustomEvent('flow-ui-drawer-open-changed', {
                 detail: { open: this.open === true },
@@ -132,12 +275,16 @@ export class FlowUIDrawer extends LitElement {
             }));
         }
         if (changedProperties.has('expanded')) {
+            if (this.expanded !== true && this._cluster !== null) {
+                this._cluster = clampCluster(this._cluster, this._readViewport());
+            }
             this.dispatchEvent(new CustomEvent('flow-ui-drawer-expanded-changed', {
                 detail: { expanded: this.expanded === true },
                 bubbles: true,
                 composed: true,
             }));
         }
+        this._syncHostAttributes();
     }
 
     _toggleEventName() {
@@ -179,6 +326,343 @@ export class FlowUIDrawer extends LitElement {
         return config.credentials;
     }
 
+    _launcherPosition() {
+        const position = this.config.launcherPosition;
+        if (position === undefined || position === null || position === '') {
+            return 'bottom-right';
+        }
+        if (position !== 'bottom-left' && position !== 'bottom-right') {
+            throw new Error(
+                `flow-ui-drawer: invalid launcherPosition ${JSON.stringify(position)}`,
+            );
+        }
+        return position;
+    }
+
+    _readViewport() {
+        const width = globalThis.innerWidth;
+        const height = globalThis.innerHeight;
+        if (typeof width !== 'number' || !Number.isFinite(width) || width <= 0) {
+            throw new Error('flow-ui-drawer: window.innerWidth is required');
+        }
+        if (typeof height !== 'number' || !Number.isFinite(height) || height <= 0) {
+            throw new Error('flow-ui-drawer: window.innerHeight is required');
+        }
+        return {
+            width,
+            height,
+            margin: width <= MOBILE_MAX_WIDTH_PX
+                ? VIEWPORT_MARGIN_MOBILE_PX
+                : VIEWPORT_MARGIN_DESKTOP_PX,
+        };
+    }
+
+    _gesturesEnabled() {
+        if (this.expanded === true) {
+            return false;
+        }
+        return gesturesAllowed(this._readViewport());
+    }
+
+    _persistIdentity() {
+        const config = this.config;
+        if (!config || typeof config !== 'object') {
+            return { kind: 'none', id: '' };
+        }
+        const embedId = typeof config.embedId === 'string' ? config.embedId.trim() : '';
+        if (embedId !== '') {
+            return { kind: 'embed', id: embedId };
+        }
+        const branchId = typeof config.branchId === 'string' ? config.branchId.trim() : '';
+        if (branchId !== '') {
+            return { kind: 'lara', id: branchId };
+        }
+        return { kind: 'none', id: '' };
+    }
+
+    _persistIdentityKey() {
+        const identity = this._persistIdentity();
+        return `${identity.kind}:${identity.id}`;
+    }
+
+    _loadStoredGeometry() {
+        const identity = this._persistIdentity();
+        if (identity.kind === 'embed') {
+            return readEmbedDrawerGeometry(identity.id);
+        }
+        if (identity.kind === 'lara') {
+            return readLaraDrawerGeometry(identity.id);
+        }
+        return null;
+    }
+
+    _persistGeometry() {
+        if (this._cluster === null) {
+            throw new Error('flow-ui-drawer: cluster is required to persist');
+        }
+        if (this._gesturesEnabled() !== true) {
+            return;
+        }
+        const identity = this._persistIdentity();
+        if (identity.kind === 'embed') {
+            writeEmbedDrawerGeometry(identity.id, this._cluster);
+            return;
+        }
+        if (identity.kind === 'lara') {
+            writeLaraDrawerGeometry(identity.id, this._cluster);
+        }
+    }
+
+    _syncGeometryFromStore() {
+        const viewport = this._readViewport();
+        let stored = null;
+        try {
+            stored = this._loadStoredGeometry();
+        } catch {
+            stored = null;
+        }
+        if (stored === null) {
+            this._cluster = clampCluster(
+                createDefaultGeometry(this._launcherPosition(), viewport),
+                viewport,
+            );
+        } else {
+            this._cluster = clampCluster(stored, viewport);
+        }
+        this._loadedPersistKey = this._persistIdentityKey();
+    }
+
+    _reclampToViewport(persist) {
+        if (this._cluster === null) {
+            this._syncGeometryFromStore();
+            return;
+        }
+        this._cluster = clampCluster(this._cluster, this._readViewport());
+        if (persist === true && this._gesturesEnabled() === true) {
+            this._persistGeometry();
+        }
+    }
+
+    _syncHostAttributes() {
+        const position = this._launcherPosition();
+        if (this.getAttribute('data-embed-position') !== position) {
+            this.setAttribute('data-embed-position', position);
+        }
+        const gestures = this._gesturesEnabled() === true ? 'on' : 'off';
+        if (this.getAttribute('data-drawer-gestures') !== gestures) {
+            this.setAttribute('data-drawer-gestures', gestures);
+        }
+        if (this._dragging === true) {
+            if (this._gesture === null) {
+                throw new Error('flow-ui-drawer: gesture is required while dragging');
+            }
+            this.setAttribute('data-drawer-dragging', this._gesture.type);
+        } else if (this.hasAttribute('data-drawer-dragging')) {
+            this.removeAttribute('data-drawer-dragging');
+        }
+        this._applyClusterCssVars();
+    }
+
+    _applyClusterCssVars() {
+        const cluster = this._cluster;
+        if (cluster === null) {
+            return;
+        }
+        this.style.setProperty('--drawer-panel-width', `${cluster.panelWidth}px`);
+        this.style.setProperty('--drawer-panel-height', `${cluster.panelHeight}px`);
+    }
+
+    _clusterStyle(kind) {
+        const cluster = this._cluster;
+        if (cluster === null || this._gesturesEnabled() !== true) {
+            return '';
+        }
+        if (kind === 'launcher') {
+            return `left:${cluster.launcherLeft}px;top:${cluster.launcherTop}px`;
+        }
+        return `left:${cluster.panelLeft}px;top:${cluster.panelTop}px;width:${cluster.panelWidth}px;height:${cluster.panelHeight}px`;
+    }
+
+    _attachGestureListeners() {
+        globalThis.addEventListener('pointermove', this._onWindowPointerMove);
+        globalThis.addEventListener('pointerup', this._onWindowPointerUp);
+        globalThis.addEventListener('pointercancel', this._onWindowPointerUp);
+    }
+
+    _detachGestureListeners() {
+        globalThis.removeEventListener('pointermove', this._onWindowPointerMove);
+        globalThis.removeEventListener('pointerup', this._onWindowPointerUp);
+        globalThis.removeEventListener('pointercancel', this._onWindowPointerUp);
+        if (this._gesture !== null && typeof this.releasePointerCapture === 'function') {
+            if (this.hasPointerCapture(this._gesture.pointerId)) {
+                this.releasePointerCapture(this._gesture.pointerId);
+            }
+        }
+        this._gesture = null;
+        this._dragging = false;
+    }
+
+    _capturePointer(pointerId) {
+        if (typeof pointerId !== 'number' || !Number.isFinite(pointerId)) {
+            throw new Error('flow-ui-drawer: pointerId must be a finite number');
+        }
+        if (typeof this.setPointerCapture !== 'function') {
+            return;
+        }
+        this.setPointerCapture(pointerId);
+    }
+
+    _beginGesture(type, event, offsets) {
+        if (offsets === null || typeof offsets !== 'object' || Array.isArray(offsets)) {
+            throw new Error('flow-ui-drawer: gesture offsets are required');
+        }
+        if (typeof offsets.seOffsetX !== 'number' || !Number.isFinite(offsets.seOffsetX)) {
+            throw new Error('flow-ui-drawer: seOffsetX must be a finite number');
+        }
+        if (typeof offsets.seOffsetY !== 'number' || !Number.isFinite(offsets.seOffsetY)) {
+            throw new Error('flow-ui-drawer: seOffsetY must be a finite number');
+        }
+        if (this._cluster === null) {
+            this._syncGeometryFromStore();
+        }
+        this._gesture = {
+            type,
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            startCluster: this._cluster,
+            didMove: false,
+            seOffsetX: offsets.seOffsetX,
+            seOffsetY: offsets.seOffsetY,
+        };
+        this._dragging = true;
+        this._capturePointer(event.pointerId);
+        this._attachGestureListeners();
+    }
+
+    _beginMoveFromDetail(detail) {
+        if (this._gesturesEnabled() !== true) {
+            return;
+        }
+        if (!detail || typeof detail !== 'object') {
+            throw new Error('flow-ui-drawer: move detail is required');
+        }
+        if (typeof detail.clientX !== 'number' || !Number.isFinite(detail.clientX)) {
+            throw new Error('flow-ui-drawer: move detail.clientX must be a finite number');
+        }
+        if (typeof detail.clientY !== 'number' || !Number.isFinite(detail.clientY)) {
+            throw new Error('flow-ui-drawer: move detail.clientY must be a finite number');
+        }
+        if (typeof detail.pointerId !== 'number' || !Number.isFinite(detail.pointerId)) {
+            throw new Error('flow-ui-drawer: move detail.pointerId must be a finite number');
+        }
+        if (this._cluster === null) {
+            this._syncGeometryFromStore();
+        }
+        this._gesture = {
+            type: 'move',
+            pointerId: detail.pointerId,
+            startX: detail.clientX,
+            startY: detail.clientY,
+            startCluster: this._cluster,
+            didMove: false,
+            seOffsetX: 0,
+            seOffsetY: 0,
+        };
+        this._dragging = true;
+        this._capturePointer(detail.pointerId);
+        this._attachGestureListeners();
+    }
+
+    _onLauncherPointerDown(event) {
+        if (event.button !== 0) {
+            return;
+        }
+        if (this._gesturesEnabled() !== true) {
+            this._gesture = {
+                type: 'launcher',
+                pointerId: event.pointerId,
+                startX: event.clientX,
+                startY: event.clientY,
+                startCluster: this._cluster,
+                didMove: false,
+                seOffsetX: 0,
+                seOffsetY: 0,
+            };
+            this._attachGestureListeners();
+            return;
+        }
+        event.preventDefault();
+        this._beginGesture('launcher', event, { seOffsetX: 0, seOffsetY: 0 });
+    }
+
+    _onResizePointerDown(event) {
+        if (event.button !== 0) {
+            return;
+        }
+        if (this._gesturesEnabled() !== true || this.open !== true) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        if (this._cluster === null) {
+            this._syncGeometryFromStore();
+        }
+        const cluster = this._cluster;
+        this._beginGesture('resize', event, {
+            seOffsetX: cluster.panelLeft + cluster.panelWidth - event.clientX,
+            seOffsetY: cluster.panelTop + cluster.panelHeight - event.clientY,
+        });
+    }
+
+    _handlePointerMove(event) {
+        const gesture = this._gesture;
+        if (gesture === null || event.pointerId !== gesture.pointerId) {
+            return;
+        }
+        if (this._gesturesEnabled() !== true) {
+            return;
+        }
+        const dx = event.clientX - gesture.startX;
+        const dy = event.clientY - gesture.startY;
+        if (gesture.didMove !== true && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) {
+            return;
+        }
+        gesture.didMove = true;
+        if (this._gesturesEnabled() !== true) {
+            return;
+        }
+        if (gesture.type === 'resize') {
+            this._cluster = resizeFromSouthEast(
+                gesture.startCluster,
+                event.clientX + gesture.seOffsetX,
+                event.clientY + gesture.seOffsetY,
+                this._readViewport(),
+            );
+        } else {
+            this._cluster = moveCluster(gesture.startCluster, dx, dy, this._readViewport());
+        }
+        this.requestUpdate();
+    }
+
+    _handlePointerUp(event) {
+        const gesture = this._gesture;
+        if (gesture === null || event.pointerId !== gesture.pointerId) {
+            return;
+        }
+        const didMove = gesture.didMove === true;
+        const type = gesture.type;
+        this._detachGestureListeners();
+        this.requestUpdate();
+        if (type === 'launcher' && didMove !== true) {
+            this.open = !this.open;
+            return;
+        }
+        if (didMove === true && this._gesturesEnabled() === true) {
+            this._persistGeometry();
+        }
+    }
+
     render() {
         const c = this.config;
         if (!c || typeof c !== 'object') {
@@ -187,18 +671,23 @@ export class FlowUIDrawer extends LitElement {
         if (typeof c.baseUrl !== 'string' || c.baseUrl.trim() === '') {
             throw new Error('flow-ui-drawer: config.baseUrl is required');
         }
-        const position = c.launcherPosition === 'bottom-left' ? 'bottom-left' : 'bottom-right';
-        if (this.getAttribute('data-embed-position') !== position) {
-            this.setAttribute('data-embed-position', position);
-        }
         const companyId = typeof c.companyId === 'string' ? c.companyId : '';
         const voiceBaseUrl = typeof c.voiceBaseUrl === 'string' ? c.voiceBaseUrl : '';
         const platformUiOrigin = typeof c.platformUiOrigin === 'string' ? c.platformUiOrigin.trim().replace(/\/+$/, '') : '';
         if (platformUiOrigin !== '') {
             this.setAttribute('platform-ui-origin', platformUiOrigin);
         }
-        const logoSrc = brandLogoSrc(platformUiOrigin);
-        return html`<div class="panel"><platform-flow-ui
+        const logoSrc = resolveAgentIdentityImageSrc({
+            imageUrl: this._identityImageUrl,
+            platformUiOrigin,
+        });
+        const locale = resolveFlowUILocale(typeof c.locale === 'string' ? c.locale : 'ru');
+        const cluster = this._cluster;
+        const gesturesOn = this._gesturesEnabled() === true;
+        return html`<div
+            class="panel"
+            style=${gesturesOn && cluster !== null ? this._clusterStyle('panel') : ''}
+        ><platform-flow-ui
             embed-id=${c.embedId || ''}
             flow-id=${c.flowId || ''}
             branch-id=${c.branchId || 'default'}
@@ -216,13 +705,22 @@ export class FlowUIDrawer extends LitElement {
             ?drawer-expanded=${this.expanded === true}
             .getRequestHeaders=${c.getRequestHeaders}
             .getExtraMetadataVariables=${c.getExtraMetadataVariables}
-        ></platform-flow-ui></div>${c.showLauncher === false
+        ></platform-flow-ui>${this.open === true && gesturesOn === true
+            ? html`<button
+                type="button"
+                class="resize-handle"
+                aria-label=${flowUIText(locale, 'resize_aria')}
+                title=${flowUIText(locale, 'resize_aria')}
+                @pointerdown=${this._onResizePointerDown}
+            ></button>`
+            : nothing}</div>${c.showLauncher === false
             ? html``
             : html`<button
                 type="button"
                 class="launcher"
+                style=${gesturesOn && cluster !== null ? this._clusterStyle('launcher') : ''}
                 aria-label=${this.open ? 'Close assistant' : 'Open assistant'}
-                @click=${() => { this.open = !this.open; }}
+                @pointerdown=${this._onLauncherPointerDown}
             ><img src=${logoSrc} alt="" aria-hidden="true"></button>`}`;
     }
 }

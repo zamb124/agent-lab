@@ -84,13 +84,17 @@ export function buildFlowSessionFileCreateSpecJson({ flowId, sessionId, isPublic
     });
 }
 
-export function buildFlowAssetFileCreateSpecJson({ flowId }) {
+export function buildFlowAssetFileCreateSpecJson({ flowId, isPublic = false }) {
     if (typeof flowId !== 'string' || flowId.length === 0) {
         throw new Error('buildFlowAssetFileCreateSpecJson: flowId required');
+    }
+    if (typeof isPublic !== 'boolean') {
+        throw new Error('buildFlowAssetFileCreateSpecJson: isPublic must be boolean');
     }
     return buildFileCreateSpecJson({
         sourceKind: 'flow_asset',
         sourceRef: { flow_id: flowId },
+        postCreate: { is_public: isPublic },
     });
 }
 

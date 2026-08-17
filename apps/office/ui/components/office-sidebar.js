@@ -201,8 +201,14 @@ export class OfficeSidebar extends PlatformElement {
         if (typeof state.activeCatalogId === 'string' && state.activeCatalogId.length > 0) {
             return state.activeCatalogId;
         }
-        const cats = this._catalogItems();
-        return cats.length > 0 ? cats[0].catalog_id : '';
+        return '';
+    }
+
+    _navRailActiveView(state) {
+        if (state.explorerView !== 'catalog') {
+            return state.explorerView;
+        }
+        return this._activeCatalogId().length === 0 ? 'catalog' : '';
     }
 
     _namespaceEnumConfig(items, noNamespaces) {
@@ -270,7 +276,11 @@ export class OfficeSidebar extends PlatformElement {
         const explorerView = e.detail && e.detail.explorerView;
         if (typeof explorerView !== 'string') return;
         this._documents.setExplorerView({ explorerView });
-        this._documents.clearBindingSelection(null);
+        if (explorerView === 'catalog') {
+            this._documents.setActiveCatalog({ catalogId: null });
+            this._documents.setFilterCatalogs({ catalogIds: [] });
+        }
+        this._documents.clearFileSelection(null);
     }
 
     _onCatalogSelect(e) {
@@ -280,7 +290,7 @@ export class OfficeSidebar extends PlatformElement {
         this._documents.setActiveCatalog({ catalogId });
         this._documents.setFilterCatalogs({ catalogIds: [catalogId] });
         this._documents.setCatalogExpanded({ catalogId, expanded: true });
-        this._documents.clearBindingSelection(null);
+        this._documents.clearFileSelection(null);
     }
 
     _onToggleCatalog(e) {
@@ -369,7 +379,7 @@ export class OfficeSidebar extends PlatformElement {
         return html`
             <div class="explorer-shell">
                 <office-explorer-nav-rail
-                    active-view=${state.explorerView}
+                    active-view=${this._navRailActiveView(state)}
                     deleted-enabled
                     @view-change=${this._onExplorerViewChange}
                 ></office-explorer-nav-rail>

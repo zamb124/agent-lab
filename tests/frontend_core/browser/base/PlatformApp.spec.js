@@ -93,6 +93,7 @@ describe('PlatformApp: render', () => {
                 branchId: entry.branchId,
                 showLauncher: true,
             });
+            expect(entry.app.platformAssistant.launcherPosition).to.not.equal('bottom-left');
         }
     });
 

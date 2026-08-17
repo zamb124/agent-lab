@@ -57,7 +57,6 @@ from apps.flows.src.runtime.state_diff import (
     compute_state_diff,
     execution_state_to_diff_json,
     infer_primary_field,
-    top_state_diff_items,
 )
 from apps.flows.src.state.cancellation import FlowCancelled, check_cancellation
 from apps.flows.src.state.interrupt_manager import InterruptManager
@@ -555,9 +554,7 @@ class Flow:
                             raise
                         duration_ms = int((time.perf_counter() - started_at) * 1000)
                         after_json = execution_state_to_diff_json(result_state)
-                        diff_items = top_state_diff_items(
-                            compute_state_diff(before_json, after_json),
-                        )
+                        diff_items = compute_state_diff(before_json, after_json)
                         primary_field = infer_primary_field(after_json, diff_items)
                         preview = build_canvas_result_preview(
                             node_type,

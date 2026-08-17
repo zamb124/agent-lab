@@ -14,6 +14,7 @@ from tests.ui.e2e.office_e2e_helpers import (
     office_e2e_search_documents,
     office_e2e_select_catalog,
     office_e2e_set_view_mode,
+    office_e2e_toolbar,
 )
 from tests.ui.harness import AppUI
 from tests.ui.scenario_doc import ScenarioRecorder
@@ -120,4 +121,88 @@ async def test_office_explorer_search_and_organize(
         "Список обновлён",
         ui_page_system,
         label_en="List refreshed",
+    )
+
+
+@pytest.mark.scenario(
+    service="office",
+    tag="explorer",
+    doc_slug="explorer-nested-catalog-row",
+    title="Office: подкаталог в таблице проводника",
+    title_en="Office: nested catalog in explorer table",
+    description="Подкаталог в текущей папке — строка platform-file-row; двойной клик открывает каталог.",
+    description_en="A nested catalog in the current folder is a platform-file-row; double-click opens it.",
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(240)
+async def test_office_explorer_nested_catalog_in_table(
+    scenario: ScenarioRecorder,
+    office_ui: AppUI,
+    ui_page_system: Page,
+    unique_id: str,
+    auth_token_system: str,
+) -> None:
+    nested_title = f"nested-{unique_id}"
+    namespace = await office_e2e_open_with_namespace(office_ui, ui_page_system, unique_id, suffix="ncat")
+    parent_catalog_id = await office_api_create_catalog(
+        office_ui.origin,
+        auth_token_system,
+        unique_id,
+        namespace=namespace,
+        title_prefix="explorer",
+    )
+    await office_api_create_catalog(
+        office_ui.origin,
+        auth_token_system,
+        unique_id,
+        namespace=namespace,
+        title_prefix="nested",
+        parent_catalog_id=parent_catalog_id,
+    )
+    await ui_page_system.set_viewport_size({"width": 1440, "height": 1024})
+    await ui_page_system.reload(wait_until="domcontentloaded")
+    await expect(office_e2e_explorer(ui_page_system)).to_be_visible(timeout=30_000)
+    await office_e2e_select_catalog(ui_page_system, f"explorer-{unique_id}")
+
+    explorer = office_e2e_explorer(ui_page_system)
+    await expect(explorer.locator(".folder-row")).to_have_count(0)
+    catalog_row = explorer.locator("platform-file-table platform-file-row").filter(has_text=nested_title)
+    await expect(catalog_row).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Подкаталог в таблице как строка файла",
+        ui_page_system,
+        label_en="Nested catalog as file row",
+    )
+
+    await catalog_row.click()
+    details = explorer.locator("office-file-details-panel")
+    await expect(details).to_contain_text(nested_title, timeout=15_000)
+    await scenario.step(
+        "Сведения выбранного каталога",
+        ui_page_system,
+        label_en="Selected catalog details",
+    )
+
+    await office_e2e_set_view_mode(ui_page_system, "grid")
+    await expect(
+        explorer.locator("platform-file-card").filter(has_text=nested_title)
+    ).to_be_visible(timeout=15_000)
+    await ui_page_system.set_viewport_size({"width": 390, "height": 844})
+    await expect(
+        explorer.locator("platform-file-card").filter(has_text=nested_title)
+    ).to_be_visible(timeout=15_000)
+    await ui_page_system.set_viewport_size({"width": 1440, "height": 1024})
+    await office_e2e_set_view_mode(ui_page_system, "list")
+    catalog_row = explorer.locator("platform-file-table platform-file-row").filter(has_text=nested_title)
+    await expect(catalog_row).to_be_visible(timeout=15_000)
+    await catalog_row.dblclick()
+    await expect(office_e2e_toolbar(ui_page_system).locator(".crumb.current")).to_have_text(
+        nested_title,
+        timeout=15_000,
+    )
+    await scenario.step(
+        "Двойной клик открывает подкаталог",
+        ui_page_system,
+        label_en="Double-click opens nested catalog",
     )

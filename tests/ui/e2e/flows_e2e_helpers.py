@@ -930,9 +930,12 @@ async def flows_switch_editor_workspace(page: Page, workspace: str) -> None:
     if workspace not in {"logic", "interface", "run"}:
         raise ValueError(f"workspace must be logic|interface|run, got {workspace!r}")
     label = {"logic": "Logic", "interface": "Interface", "run": "Run"}[workspace]
-    tab = page.locator(
-        "flows-editor-header .row-center platform-segmented-control button.segment"
-    ).get_by_label(label, exact=True)
+    tab = (
+        page.locator("flow-editor-page")
+        .locator("flows-editor-header")
+        .get_by_role("group", name=re.compile(r"Editor mode|Режим редактора"))
+        .get_by_role("button", name=label, exact=True)
+    )
     await expect(tab).to_be_visible(timeout=30_000)
     await tab.click()
     await expect(tab).to_have_attribute("data-active", "true", timeout=10_000)

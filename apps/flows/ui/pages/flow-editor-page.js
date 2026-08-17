@@ -48,6 +48,7 @@ import '../modals/flows-canvas-help-modal.js';
 import '../modals/flows-api-console-modal.js';
 import '../modals/flows-raw-json-modal.js';
 import '../modals/flows-state-modal.js';
+import '../modals/flows-node-run-result-modal.js';
 import { getNodeTypeMeta, getCategoryToken } from '../constants/node-icons.js';
 import { asArray, asObject, isPlainObject } from '../_helpers/flows-resolvers.js';
 import {

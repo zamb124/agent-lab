@@ -5,7 +5,7 @@
  *   acceptMimePrefix — 'image/' | 'application/vnd.sqlite3' | '' (все типы)
  *   uploadOpName, uploadSpec — platform/file_create
  *   catalogsOpName, documentsOpName, searchOpName — browse ops хоста
- *   onSelect(file) — { file_id, original_name, content_type, file_size, file_category? }
+ *   onSelect(file) — { file_id, original_name, content_type, file_size, file_category?, is_public? }
  */
 
 import { html, css, nothing } from 'lit';
@@ -53,6 +53,16 @@ function _isSqliteLocalFile(file) {
         || name.endsWith('.db');
 }
 
+function _optionalIsPublic(source) {
+    if (!Object.prototype.hasOwnProperty.call(source, 'is_public')) {
+        return undefined;
+    }
+    if (typeof source.is_public !== 'boolean') {
+        throw new Error('platform-file-picker: is_public must be boolean when present');
+    }
+    return source.is_public;
+}
+
 function _pickedFromDocument(item) {
     const fileId = _asNonEmptyString(item.file_id);
     if (fileId === '') {
@@ -62,13 +72,18 @@ function _pickedFromDocument(item) {
     const contentType = typeof item.content_type === 'string' ? item.content_type : '';
     const fileCategory = typeof item.file_category === 'string' ? item.file_category : '';
     const fileSize = typeof item.file_size === 'number' ? item.file_size : 0;
-    return {
+    const picked = {
         file_id: fileId,
         original_name: title !== '' ? title : fileId,
         content_type: contentType,
         file_size: fileSize,
         file_category: fileCategory,
     };
+    const isPublic = _optionalIsPublic(item);
+    if (isPublic !== undefined) {
+        picked.is_public = isPublic;
+    }
+    return picked;
 }
 
 function _pickedFromUpload(result) {
@@ -90,6 +105,9 @@ function _pickedFromUpload(result) {
     if (typeof result.file_size !== 'number') {
         throw new Error('platform-file-picker: upload result.file_size required');
     }
+    if (typeof result.is_public !== 'boolean') {
+        throw new Error('platform-file-picker: upload result.is_public required');
+    }
     return {
         file_id: fileId,
         original_name: originalName,
@@ -100,6 +118,7 @@ function _pickedFromUpload(result) {
             : (contentType === DATA_TABLE_CONTENT_TYPE || contentType === DATA_TABLE_CONTENT_TYPE_LEGACY
                 ? DATA_TABLE_CATEGORY
                 : ''),
+        is_public: result.is_public,
     };
 }
 

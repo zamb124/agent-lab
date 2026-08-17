@@ -192,6 +192,47 @@ describe('flows/editor extraReducer', () => {
         expect(s.nodeRunResults.a[0].kind).toBe('ok');
         expect(s.nodeRunResults.a[0].duration_ms).toBe(42);
         expect(s.nodeRunResults.a[0].result_preview).toBe('done');
+        expect(s.nodeRunResults.a[0].diff).toEqual([
+            { path: 'response', old_value: null, new_value: 'done', change_type: 'added' },
+        ]);
+    });
+
+    it('node_completed хранит полный diff и все run_index без обрезки', () => {
+        const { bus, getState } = build();
+        const longText = 'X'.repeat(400);
+        const firstDiff = Array.from({ length: 12 }, (_, index) => ({
+            path: `field_${index}`,
+            old_value: null,
+            new_value: index === 0 ? longText : index,
+            change_type: 'added',
+        }));
+        bus.dispatch('flows/run/node_completed', {
+            node_id: 'loop_node',
+            node_type: 'code',
+            run_index: 0,
+            result_preview: 'first',
+            diff: firstDiff,
+        });
+        bus.dispatch('flows/run/node_completed', {
+            node_id: 'loop_node',
+            node_type: 'code',
+            run_index: 1,
+            result_preview: 'second',
+            diff: [{ path: 'result', old_value: 1, new_value: 2, change_type: 'changed' }],
+        });
+        const runs = getState().flowsEditor.nodeRunResults.loop_node;
+        expect(runs).toHaveLength(2);
+        expect(runs[0].run_index).toBe(0);
+        expect(runs[1].run_index).toBe(1);
+        expect(runs[0].diff).toHaveLength(12);
+        expect(runs[0].diff[0].new_value).toBe(longText);
+        expect(runs[0].diff[11].path).toBe('field_11');
+        expect(runs[1].diff[0]).toEqual({
+            path: 'result',
+            old_value: 1,
+            new_value: 2,
+            change_type: 'changed',
+        });
     });
 
     it('flows/editor/canvas_run_results_toggled переключает showCanvasRunResults', () => {

@@ -31,6 +31,8 @@
 import { html, css, svg, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { resolveUiIconFile } from '@platform/lib/utils/file-icons.js';
+import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-icon.js';
 import { getNodeTypeMeta, getCategoryToken } from '../../constants/node-icons.js';
 import { renderEdgeLabel } from './flows-edge-label.js';
 import './flows-canvas-context-menu.js';
@@ -176,6 +178,7 @@ function attachPathFor(srcX, srcY, dstX, dstY) {
 }
 
 export class FlowsFlowCanvas extends PlatformElement {
+    static i18nNamespace = 'flows';
     static properties = {
         flowId: { type: String },
         branchId: { type: String },
@@ -474,6 +477,18 @@ export class FlowsFlowCanvas extends PlatformElement {
             .node-run-result-pill[data-expanded] {
                 cursor: default;
             }
+            .node-run-result-header {
+                display: flex;
+                align-items: flex-start;
+                gap: 4px;
+            }
+            .node-run-result-header .node-run-result-primary {
+                flex: 1;
+                min-width: 0;
+            }
+            .node-run-result-maximize {
+                flex-shrink: 0;
+            }
             .node-run-result-primary {
                 font-size: 11px;
                 font-weight: var(--font-semibold);
@@ -505,6 +520,34 @@ export class FlowsFlowCanvas extends PlatformElement {
                 font-size: 10px;
                 font-weight: var(--font-semibold);
                 color: var(--text-secondary);
+                cursor: pointer;
+            }
+            .node-run-result-change-label-row {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                min-width: 0;
+            }
+            .node-run-result-type-chip {
+                display: inline-flex;
+                align-items: center;
+                flex-shrink: 0;
+                padding: 0 5px;
+                border-radius: var(--radius-full);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-medium);
+                font-size: 9px;
+                font-weight: var(--font-semibold);
+                color: var(--text-tertiary);
+                text-transform: lowercase;
+            }
+            .node-run-result-more {
+                margin-top: 2px;
+                padding: 2px 0;
+                font-size: 10px;
+                font-weight: var(--font-semibold);
+                color: var(--text-secondary);
+                cursor: pointer;
             }
             .node-run-result-changes {
                 margin: 6px 0 0;
@@ -2297,12 +2340,12 @@ export class FlowsFlowCanvas extends PlatformElement {
         }
         const flowId = typeof this.flowId === 'string' ? this.flowId.trim() : '';
         if (flowId.length === 0) {
-            return;
+            throw new Error('flows-flow-canvas: flowId required for DataTable create');
         }
         const data = this._branchData();
         const resource = asObject(data.resources)[resourceId];
         if (!isPlainObject(resource)) {
-            return;
+            throw new Error(`flows-flow-canvas: DataTable resource not found: ${resourceId}`);
         }
         const cfg = isPlainObject(resource.config) ? resource.config : {};
         if (typeof cfg.file_id === 'string' && cfg.file_id.length > 0) {
@@ -2315,13 +2358,13 @@ export class FlowsFlowCanvas extends PlatformElement {
         try {
             const created = await this._dataTableCreate.run(dataTableCreateRequest(flowId, stem));
             if (!created || typeof created.file_id !== 'string' || created.file_id.length === 0) {
-                return;
+                throw new Error('flows-flow-canvas: DataTable create did not return file_id');
             }
             const latest = this._branchData();
             const resources = { ...asObject(latest.resources) };
             const current = resources[resourceId];
             if (!isPlainObject(current)) {
-                return;
+                throw new Error(`flows-flow-canvas: DataTable resource missing after create: ${resourceId}`);
             }
             const currentCfg = isPlainObject(current.config) ? current.config : {};
             if (typeof currentCfg.file_id === 'string' && currentCfg.file_id.length > 0) {
@@ -2994,6 +3037,16 @@ export class FlowsFlowCanvas extends PlatformElement {
         this._editor.toggleNodeRunResultExpand({ nodeId, runIndex });
     }
 
+    _openNodeRunResultInspector(e, nodeId, runIndex, selectedPath) {
+        e.preventDefault();
+        e.stopPropagation();
+        const props = { nodeId, runIndex };
+        if (typeof selectedPath === 'string' && selectedPath.length > 0) {
+            props.selectedPath = selectedPath;
+        }
+        this.openModal('flows.node_run_result', props);
+    }
+
     _renderNodeRunResult(nodeId, cardHeight, runtimeState) {
         const state = this._state();
         if (!state.showCanvasRunResults) {
@@ -3059,8 +3112,20 @@ export class FlowsFlowCanvas extends PlatformElement {
             }
         }
         const changeRows = expanded && kind === 'ok' ? viewModel.changeRows : [];
+        const omittedCount = expanded ? viewModel.omittedCount : 0;
         const runBadge = results.length > 1
-            ? html`<span class="node-run-result-run-badge">${this.t('canvas_run_result.run_count', { count: String(results.length) })}</span>`
+            ? html`<article
+                class="node-run-result-run-badge"
+                role="button"
+                tabindex="0"
+                data-run-count=${String(results.length)}
+                aria-label=${this.t('canvas_run_result.inspect_runs_aria', { count: String(results.length) })}
+                @click=${(e) => this._openNodeRunResultInspector(e, nodeId, runIndex)}
+                @keydown=${(e) => {
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    this._openNodeRunResultInspector(e, nodeId, runIndex);
+                }}
+            >${this.t('canvas_run_result.run_count', { count: String(results.length) })}</article>`
             : nothing;
         const body = html`
             <div
@@ -3072,7 +3137,20 @@ export class FlowsFlowCanvas extends PlatformElement {
                 @dblclick=${this._onNodeRunResultPointerDown}
                 @click=${(e) => this._onNodeRunResultToggle(e, nodeId, runIndex)}
             >
-                <div class="node-run-result-primary">${viewModel.headline.length > 0 ? viewModel.headline : this.t('canvas_run_result.empty')}</div>
+                <div class="node-run-result-header">
+                    <div class="node-run-result-primary">${viewModel.headline.length > 0 ? viewModel.headline : this.t('canvas_run_result.empty')}</div>
+                    <platform-button
+                        class="node-run-result-maximize"
+                        variant="ghost"
+                        icon-only
+                        density="dense"
+                        title=${this.t('canvas_run_result.maximize')}
+                        aria-label=${this.t('canvas_run_result.maximize_aria')}
+                        @click=${(e) => this._openNodeRunResultInspector(e, nodeId, runIndex)}
+                    >
+                        <platform-icon name="fullscreen" size="14"></platform-icon>
+                    </platform-button>
+                </div>
                 <div class="node-run-result-meta">
                     ${metaParts.map((part) => html`<span>${part}</span>`)}
                     ${runBadge}
@@ -3080,15 +3158,43 @@ export class FlowsFlowCanvas extends PlatformElement {
                 ${changeRows.length > 0 ? html`
                     <ul class="node-run-result-changes">
                         ${changeRows.map((row) => html`
-                            <li class="node-run-result-change" data-change-type=${row.changeType}>
-                                <span class="node-run-result-change-badge" title=${row.badgeLabel} aria-label=${row.badgeLabel}>${row.badge}</span>
-                                <div class="node-run-result-change-body">
-                                    <div class="node-run-result-change-label">${row.label}</div>
-                                    <div class="node-run-result-change-detail">${row.detail}</div>
-                                </div>
+                            <li>
+                                <article
+                                    class="node-run-result-change"
+                                    role="button"
+                                    tabindex="0"
+                                    data-change-type=${row.changeType}
+                                    data-path=${row.path}
+                                    @click=${(e) => this._openNodeRunResultInspector(e, nodeId, runIndex, row.path)}
+                                    @keydown=${(e) => {
+                                        if (e.key !== 'Enter' && e.key !== ' ') return;
+                                        this._openNodeRunResultInspector(e, nodeId, runIndex, row.path);
+                                    }}
+                                >
+                                    <span class="node-run-result-change-badge" title=${row.badgeLabel} aria-label=${row.badgeLabel}>${row.badge}</span>
+                                    <div class="node-run-result-change-body">
+                                        <div class="node-run-result-change-label-row">
+                                            <div class="node-run-result-change-label">${row.label}</div>
+                                            <span class="node-run-result-type-chip">${row.typeLabel}</span>
+                                        </div>
+                                        <div class="node-run-result-change-detail">${row.detail}</div>
+                                    </div>
+                                </article>
                             </li>
                         `)}
                     </ul>
+                ` : nothing}
+                ${omittedCount > 0 ? html`
+                    <article
+                        class="node-run-result-more"
+                        role="button"
+                        tabindex="0"
+                        @click=${(e) => this._openNodeRunResultInspector(e, nodeId, runIndex)}
+                        @keydown=${(e) => {
+                            if (e.key !== 'Enter' && e.key !== ' ') return;
+                            this._openNodeRunResultInspector(e, nodeId, runIndex);
+                        }}
+                    >${this.t('canvas_run_result.more_changes', { count: String(omittedCount) })}</article>
                 ` : nothing}
             </div>
         `;

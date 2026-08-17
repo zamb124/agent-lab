@@ -23,6 +23,18 @@ def platform_auxiliary_upload_spec_json(*, is_public: bool = True) -> str:
     return spec.model_dump_json()
 
 
+def flow_asset_upload_spec_json(*, flow_id: str, is_public: bool) -> str:
+    if flow_id.strip() == "":
+        raise ValueError("flow_asset_upload_spec_json: flow_id required")
+    spec = FileCreateSpec(
+        source_kind=FileSourceKind.FLOW_ASSET,
+        source_ref=FileSourceRef(flow_id=flow_id),
+        retention=default_retention_for_source(FileSourceKind.FLOW_ASSET),
+        post_create=FilePostCreate(is_public=is_public),
+    )
+    return spec.model_dump_json()
+
+
 async def chunked_upload_file(
     client: AsyncClient,
     headers: Mapping[str, str],
@@ -90,5 +102,6 @@ async def chunked_upload_file(
 __all__ = [
     "DEFAULT_FILES_API_PREFIX",
     "chunked_upload_file",
+    "flow_asset_upload_spec_json",
     "platform_auxiliary_upload_spec_json",
 ]

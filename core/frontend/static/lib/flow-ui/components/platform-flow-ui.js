@@ -1,5 +1,5 @@
 import { LitElement, css, html, nothing } from '../../lit-shim.js';
-import { brandLogoSrc } from '../shell/brand-logo.js';
+import { emitDrawerMoveStart } from '../shell/drawer-move.js';
 import { FlowUIController } from '../runtime/flow-ui-controller.js';
 import { createLocalFlowUIProfile } from '../runtime/flow-ui-profile.js';
 import { FlowUIHitlTransport } from '../runtime/hitl-transport.js';
@@ -24,6 +24,7 @@ import './flow-ui-turn-toasts.js';
 import './flow-ui-files-panel.js';
 import { deriveTurnActivityToasts } from '../runtime/turn-activity.js';
 import { flowUIDocumentHasMessageComposer } from '../runtime/document-composer.js';
+import { resolveAgentIdentityImageSrc } from '../runtime/agent-identity-image.js';
 import '../../components/platform-work-item-badge.js';
 
 const FORWARDED_EVENTS = [
@@ -31,6 +32,7 @@ const FORWARDED_EVENTS = [
     'flow-ui-saved', 'flow-ui-conflict', 'flow-ui-submit-start', 'flow-ui-submit-end',
     'flow-ui-preview-submit', 'flow-ui-validation-failed', 'flow-ui-navigation', 'flow-ui-file-progress',
     'flow-ui-files-ready', 'flow-ui-share-created', 'flow-ui-share-revoked',
+    'flow-ui-identity-changed',
 ];
 
 export class PlatformFlowUI extends LitElement {
@@ -175,6 +177,11 @@ export class PlatformFlowUI extends LitElement {
             min-height: 0; justify-content: flex-end; border-bottom: 0; background: transparent;
             position: absolute; inset: 8px 10px auto auto; padding: 0; pointer-events: none;
             z-index: 5;
+        }
+        :host([display='drawer']) .topbar {
+            cursor: grab;
+            touch-action: none;
+            pointer-events: auto;
         }
         .brand { display: flex; align-items: center; gap: 9px; min-width: 0; font-weight: 650; letter-spacing: -.015em; color: var(--flow-ui-heading); }
         .brand-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -514,15 +521,30 @@ export class PlatformFlowUI extends LitElement {
         this._voiceMedia = null;
         this._voiceBridge = null;
         this._onThemeAttribute = () => this.requestUpdate();
+        this._onDrawerTopbarPointerDown = (event) => {
+            if (this.display !== 'drawer') {
+                return;
+            }
+            const path = event.composedPath();
+            const onTopbar = path.some((node) => (
+                node instanceof Element && node.classList.contains('topbar')
+            ));
+            if (!onTopbar) {
+                return;
+            }
+            emitDrawerMoveStart(this, event);
+        };
     }
 
     connectedCallback() {
         super.connectedCallback();
+        this.addEventListener('pointerdown', this._onDrawerTopbarPointerDown);
         this._observePlatformTheme();
         queueMicrotask(() => this._start());
     }
 
     disconnectedCallback() {
+        this.removeEventListener('pointerdown', this._onDrawerTopbarPointerDown);
         this._sessionGeneration += 1;
         this._disconnectThemeObserver();
         this._disposeSession();
@@ -1248,7 +1270,11 @@ export class PlatformFlowUI extends LitElement {
         return html`<div class="shell" data-chrome=${chromeMode}>
             ${showTopbar ? html`<header class="topbar">
                 ${chromeMode === 'full' ? html`<div class="brand">
-                    <span class="mark" aria-hidden="true"><img src=${brandLogoSrc(this.platformUiOrigin)} alt=""></span>
+                    <span class="mark" aria-hidden="true"><img src=${resolveAgentIdentityImageSrc({
+                        document,
+                        profile: this.runtimeState?.profile,
+                        platformUiOrigin: this.platformUiOrigin,
+                    })} alt=""></span>
                     <span class="brand-label">${brandTitle}</span>
                 </div>` : nothing}
                 ${chromeMode === 'full' ? this._navigation(document) : nothing}
@@ -1262,6 +1288,7 @@ export class PlatformFlowUI extends LitElement {
                     .hitlMode=${hitlMode}
                     .platformUiOrigin=${this.platformUiOrigin}
                     .selectedComponentId=${this.selectedComponentId}
+                    ?drawer-move=${this.display === 'drawer'}
                 ></flow-ui-surface>
                 ${this._renderHostComposer(locale, effectiveReadonly, document)}
             </main>

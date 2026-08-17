@@ -208,6 +208,9 @@ export class OfficeFileToolbar extends PlatformElement {
                                 <button
                                     class="crumb ${crumb.current ? 'current' : ''}"
                                     type="button"
+                                    aria-label=${typeof crumb.ariaLabel === 'string' && crumb.ariaLabel.length > 0
+                                        ? crumb.ariaLabel
+                                        : crumb.label}
                                     ?disabled=${crumb.current === true}
                                     @click=${() => this._onBreadcrumbClick(crumb)}
                                 >

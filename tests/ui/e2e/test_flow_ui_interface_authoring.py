@@ -120,3 +120,41 @@ async def test_flow_ui_interface_editor_undo_redo_after_palette_add(
         )
     finally:
         await flows_api_delete_flow(flows_ui.origin, auth_token_system, flow_id)
+
+
+@pytest.mark.timeout(300)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+async def test_flow_ui_interface_agent_identity_inspector_has_image_picker(
+    flows_editor_browser_stack_ready,
+    flows_ui: AppUI,
+    ui_page_system: Page,
+    auth_token_system: str,
+    unique_id: str,
+) -> None:
+    _ = flows_editor_browser_stack_ready
+    page = ui_page_system
+    page.set_default_timeout(45_000)
+    flow_id = flows_doc_flow_id("iface_agent_img", unique_id)
+    await flows_api_create_flow(
+        flows_ui.origin,
+        auth_token_system,
+        flows_graph_payload(flow_id, name=f"Interface Agent Image {unique_id}"),
+    )
+    try:
+        await flows_open_interface_editor_workspace(page, flows_ui, flow_id)
+        editor = page.locator("flows-interface-editor").first
+        await expect(editor).to_be_visible(timeout=30_000)
+        layers = editor.locator("flows-interface-layers-tree").first
+        await expect(layers.get_by_text("AgentIdentity", exact=False).first).to_be_visible(
+            timeout=15_000
+        )
+        await layers.get_by_text("AgentIdentity", exact=False).first.click()
+        inspector = editor.locator("flows-interface-inspector").first
+        await expect(inspector).to_be_visible(timeout=10_000)
+        pick = inspector.locator("platform-button").filter(
+            has_text=re.compile(r"Выбрать изображение|Choose image")
+        ).first
+        await expect(pick).to_be_visible(timeout=10_000)
+    finally:
+        await flows_api_delete_flow(flows_ui.origin, auth_token_system, flow_id)

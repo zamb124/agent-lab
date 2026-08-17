@@ -162,20 +162,30 @@ export class FlowsInterfaceInspector extends PlatformElement {
         return this.select((state) => state.i18n.locale).value === 'ru' ? 'ru' : 'en';
     }
 
-    _openImagePicker(fieldName) {
+    _openImagePicker(fieldName, field) {
         if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
             throw new Error('flows-interface-inspector: flowId required for image upload');
         }
+        if (!field || typeof field !== 'object') {
+            throw new Error('flows-interface-inspector: image field required');
+        }
+        const publicAsset = field.publicAsset === true;
         this.openModal('platform.file_picker', {
             acceptMimePrefix: 'image/',
             uploadOpName: 'platform/file_create',
-            uploadSpec: buildFlowAssetFileCreateSpecJson({ flowId: this.flowId }),
+            uploadSpec: buildFlowAssetFileCreateSpecJson({
+                flowId: this.flowId,
+                isPublic: publicAsset,
+            }),
             catalogsOpName: 'flows/catalogs',
             documentsOpName: 'flows/documents',
             searchOpName: 'flows/documents_search',
             onSelect: (file) => {
                 if (!file || typeof file.file_id !== 'string' || file.file_id.length === 0) {
                     throw new Error('flows-interface-inspector: image file_id required');
+                }
+                if (publicAsset && file.is_public !== true) {
+                    throw new Error('flows-interface-inspector: public image requires is_public file');
                 }
                 this.emit('property-change', {
                     name: fieldName,
@@ -261,7 +271,7 @@ export class FlowsInterfaceInspector extends PlatformElement {
                 <platform-button
                     variant="secondary"
                     density="compact"
-                    @click=${() => this._openImagePicker(field.name)}
+                    @click=${() => this._openImagePicker(field.name, field)}
                 >${this.t(hasSrc ? 'interface_editor.inspector_image_replace' : 'interface_editor.inspector_image_pick')}</platform-button>
                 ${hasSrc ? html`<platform-button
                     variant="ghost"

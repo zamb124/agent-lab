@@ -74,7 +74,8 @@
             "ebook": "E-book",
             "viz": "Visualization",
             "data_table": "Data table",
-            "unknown": "File"
+            "unknown": "File",
+            "catalog": "Catalog"
         },
         "colActions": "Actions",
         "catalogUnknown": "Catalog",
@@ -100,6 +101,9 @@
         "dropOverlay": "Drop file to upload",
         "emptyDropHint": "Drag a file here or use Upload in the toolbar.",
         "catalogPickerTitle": "Select catalog",
+        "rootAria": "Documents namespace root",
+        "rootEmptyTitle": "Open a catalog",
+        "rootEmptyHint": "Files live inside a catalog. Open a catalog or create one.",
         "upload": {
             "uploading": "Uploading…",
             "done": "Done",
@@ -166,7 +170,8 @@
         "no_results": "No results found"
     },
     "breadcrumbs": {
-        "aria": "Catalog path"
+        "aria": "Catalog path",
+        "root": "Documents namespace root"
     },
     "view": {
         "list": "List",
@@ -176,6 +181,8 @@
         "title": "Details",
         "catalog": "Catalog",
         "catalogSettings": "Catalog settings",
+        "rootTitle": "All documents",
+        "rootHint": "Files live inside a catalog. Open a catalog or create one.",
         "fileCount": "Files",
         "subcatalogCount": "Subcatalogs",
         "visibility": "Access",

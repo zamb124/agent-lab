@@ -24,6 +24,7 @@ Access (OpenFGA): sole PDP = `AuthzService`. HTTP get/mutate / A2A / channels �
 - Запрос: `POST /flows/api/v1/{flow_id}` body `{jsonrpc:"2.0", id, method:"SendStreamingMessage", params:{message, metadata?}}`, header `A2A-Version: 1.0`, `Accept: text/event-stream`. Источник — `_handle_streaming` в `apps/flows/src/api/a2a.py`. Канон wire → **`a2a.mdc`**.
 - Cancel: `POST /flows/api/v1/{flow_id}` body `{method:"CancelTask", params:{id: task_id}}`.
 - Ответ: `text/event-stream`, кадры `data: {jsonrpc, id, result: {statusUpdate|artifactUpdate|task|message}}\n\n`. Terminal/interrupted wire states: `TASK_STATE_COMPLETED` / `FAILED` / `CANCELED` / `REJECTED` / `INPUT_REQUIRED` / `AUTH_REQUIRED` (поля `final` нет).
+- Control plane `GET /flows/api/v1/{flow_id}/interface-profile` (и embed-путь) отдаёт `flow_identity.image_url` как проекцию `AgentIdentity.properties.image_url` из effective document (branch + embed override). Не `store_card_image_url`. Document/values/artifacts в профиле запрещены — только A2A.
 
 Клиент — единый `<platform-flow-ui>`. Один ingress reducer применяет snapshot/update через lossless Artifact accumulator и generic/A2UI Part projectors. SPA/editor/embed/Lara/landing/HITL не создают собственные reducers или transport. Ordinary `response`, `reasoning`, `operator_reply`, `operator_files`, tool/node/edge/file artifacts сохраняются и проецируются catalog adapters; неизвестные names отображаются generic projector'ом.
 
@@ -45,6 +46,8 @@ Workspace `run` рендерит тот же canvas-host, что `logic`, и с�
 Виртуальные START/END — канвас-хром, не ноды runtime. `startWireRunState`: `running` на `node_started` entry, `completed`/`failed` на complete/fail entry. `endWireRunStateByNodeId[nodeId]`: `completed`/`failed` на complete/fail sink (нет исходящих рёбер). Реальные рёбра — только `edge_executed` / incoming-complete. Канвас читает `data-run-state` так же, как у обычных `.edge`.
 
 Канон data Part `node_start` / `node_complete` / `node_error` / `edge_executed` → **`streaming.mdc`**.
+
+Test Run pills: один pill на ноду = **последний** прогон (`pickLatestNodeRunResult`); `×N` если `nodeRunResults[nodeId].length > 1`. Клик по pill раскрывает индекс полей (чип типа + семантическое превью, до 8 строк). Maximize / клик по строке / `×N` открывают модалку `flows.node_run_result` (`size='full'`): история всех `run_index`, master-detail всего `diff`, типизированный viewer. Payload `node_complete.diff` полный; лимит 8 — только display на канве.
 
 ## HITL и задачи оператора
 

@@ -16,6 +16,12 @@ describe('flow-ui-drawer expand', () => {
         expect(source).toContain('flow-ui-drawer-expand-toggle');
         expect(source).toContain('flow-ui-drawer-close');
         expect(source).toContain('drawer-expanded');
+        expect(source).toContain('resize-handle');
+        expect(source).toContain('data-drawer-gestures');
+        expect(source).toContain('flow-ui-identity-changed');
+        expect(source).toContain('resolveAgentIdentityImageSrc');
+        expect(source).toContain('@media (max-width: 520px)');
+        expect(source).not.toContain("addEventListener('mousemove'");
         expect(source).toMatch(/100vw|100dvh|inset:\s*0/);
     });
 
@@ -29,6 +35,7 @@ describe('flow-ui-drawer expand', () => {
         expect(source).toContain("this.display === 'drawer'");
         expect(source).toContain('flow-ui-drawer-expand-toggle');
         expect(source).toContain('flow-ui-drawer-close');
+        expect(source).toContain('emitDrawerMoveStart');
         expect(source).toContain('${filesPanel}${readonlyPill}${runControl}${expandControl}${embedMenu}${shareMenu}${closeControl}');
         expect(source).toContain("if (this.display === 'drawer') {\n            return 'minimal';");
     });

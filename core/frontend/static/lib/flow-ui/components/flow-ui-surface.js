@@ -5,6 +5,7 @@ import { resolveBound, unknownExternalComponent, wrapFlowNode } from '../catalog
 import { conversationUserText } from '../catalog/platform/conversation-turn.js';
 import { flowUIText, resolveFlowUILocale } from '../utils/text.js';
 import { copyTextToClipboard } from '../../utils/clipboard.js';
+import { emitDrawerMoveStart } from '../shell/drawer-move.js';
 
 ensureFlowUICatalogRegistered();
 
@@ -18,6 +19,7 @@ export class FlowUISurfaceElement extends LitElement {
         platformUiOrigin: { type: String },
         selectedComponentId: { attribute: false },
         hitlMode: { type: String, attribute: false },
+        drawerMove: { type: Boolean, attribute: 'drawer-move', reflect: true },
         uploadState: { state: true },
         feedJump: { state: true },
         copiedTaskId: { state: true },
@@ -200,6 +202,10 @@ export class FlowUISurfaceElement extends LitElement {
             box-shadow: none;
             padding: var(--space-2, 8px) 0;
             border-radius: 0;
+        }
+        :host([drawer-move]) .section--chat-header {
+            cursor: grab;
+            touch-action: none;
         }
         .field-group--composer {
             border: 1px solid var(--flow-ui-border);
@@ -952,6 +958,7 @@ export class FlowUISurfaceElement extends LitElement {
         this.platformUiOrigin = '';
         this.selectedComponentId = null;
         this.hitlMode = null;
+        this.drawerMove = false;
         this.uploadState = {};
         this.feedJump = false;
         this.copiedTaskId = null;
@@ -965,9 +972,28 @@ export class FlowUISurfaceElement extends LitElement {
             this._feedStick = nearBottom;
             if (this.feedJump === nearBottom) this.feedJump = !nearBottom;
         };
+        this._onDrawerHeaderPointerDown = (event) => {
+            if (this.drawerMove !== true) {
+                return;
+            }
+            const path = event.composedPath();
+            const onHeader = path.some((node) => (
+                node instanceof Element && node.classList.contains('section--chat-header')
+            ));
+            if (!onHeader) {
+                return;
+            }
+            emitDrawerMoveStart(this, event);
+        };
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this.addEventListener('pointerdown', this._onDrawerHeaderPointerDown);
     }
 
     disconnectedCallback() {
+        this.removeEventListener('pointerdown', this._onDrawerHeaderPointerDown);
         this._feedScrollEl?.removeEventListener('scroll', this._onFeedScroll);
         this._feedScrollEl = null;
         clearTimeout(this._copiedTimer);

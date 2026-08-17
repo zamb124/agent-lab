@@ -24,6 +24,10 @@ import {
     evaluateFlowUIChecks,
 } from './flow-ui-checks.js';
 import { applyFlowUIProfileKindOverrides, fetchFlowUIProfile } from './flow-ui-profile.js';
+import {
+    agentIdentityImageUrlFromDocument,
+    agentIdentityImageUrlFromProfile,
+} from './agent-identity-image.js';
 import { runA2aTaskLiveTail } from './a2a-task-live-tail.js';
 import { overlayFlowUILocalValues } from './document-composer.js';
 import { operatorHandoffFromTasks } from './operator-handoff-from-task.js';
@@ -149,6 +153,14 @@ export class FlowUIController extends EventTarget {
         this.dispatchEvent(new CustomEvent(name, { detail: freezeDetail(detail) }));
     }
 
+    _emitIdentityChanged() {
+        const fromDocument = agentIdentityImageUrlFromDocument(this.document);
+        const fromProfile = agentIdentityImageUrlFromProfile(this.profile);
+        this._emit('flow-ui-identity-changed', {
+            image_url: fromDocument !== null ? fromDocument : fromProfile,
+        });
+    }
+
     async connect() {
         this.abortController?.abort();
         this.abortController = new AbortController();
@@ -167,9 +179,11 @@ export class FlowUIController extends EventTarget {
                 profile: applyFlowUIProfileKindOverrides(profile, this.profileKind),
             });
         }
+        this._emitIdentityChanged();
         if (this.initialDocument) {
             this.contextId = this.contextId || `preview:${createProtocolId('context')}`;
             this._commit({ type: 'context.hydrated', contextId: this.contextId, document: clone(this.initialDocument) });
+            this._emitIdentityChanged();
             return this.state;
         }
         await this.bootstrap();
@@ -199,6 +213,7 @@ export class FlowUIController extends EventTarget {
             if (!this.document) throw new Error('Flow UI bootstrap returned no authoritative document');
             await this.hydrateContextTasks();
             this._rebaseRecoveryJournal();
+            this._emitIdentityChanged();
             this._emit('flow-ui-ready', { contextId: this.contextId, document: this.document });
         } catch (error) {
             if (flowUIIsAbortError(error)) throw error;
@@ -752,6 +767,7 @@ export class FlowUIController extends EventTarget {
             contextId,
             document: clone(snapshot.document),
         });
+        this._emitIdentityChanged();
         this._emit('flow-ui-ready', { contextId, document: this.document, hydrated: true });
         return this.state;
     }

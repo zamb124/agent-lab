@@ -84,6 +84,7 @@ from core.middleware.auth.company_resolver import build_service_base_url
 from core.models.embed_models import EmbedInterfaceLook
 from core.models.flow_interface import (
     apply_embed_interface_override,
+    flow_ui_agent_identity_image_url,
     resolve_flow_interface_config,
 )
 from core.models.identity_models import User
@@ -1245,7 +1246,7 @@ async def _interface_profile_internal(
         ),
         flow_identity=InterfaceFlowIdentity(
             title=config.name,
-            image_url=config.store_card_image_url,
+            image_url=flow_ui_agent_identity_image_url(effective_interface.template.document),
         ),
     )
 

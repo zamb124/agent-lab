@@ -20,6 +20,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 from pydantic import Field
 
+from core.app_state import get_request_company_id
 from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
 from core.config import get_settings
@@ -77,10 +78,12 @@ async def _require_company_can_view(request: Request) -> str:
 async def _ensure_file_record_access(request: Request, file_record: FileRecord) -> None:
     if file_record.is_public:
         return
-    active_company = require_active_company()
+    active_company_id = get_request_company_id(request)
+    if active_company_id is None:
+        raise HTTPException(status_code=403, detail="File access denied.")
     if file_record.company_id is None:
         raise HTTPException(status_code=403, detail="File access denied.")
-    if active_company.company_id != file_record.company_id:
+    if active_company_id != file_record.company_id:
         raise HTTPException(status_code=403, detail="File access denied.")
     await _authz_container(request).authz_service.require_can_view(
         AuthzObject.company(file_record.company_id)

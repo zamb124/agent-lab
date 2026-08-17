@@ -1,4 +1,9 @@
+import { platformStorageKey } from '../../utils/storage-keys.js';
+import { parseStoredGeometry, toStoredGeometry } from './drawer-geometry.js';
+
 const PREFIX = 'linnex.flow-ui.preferences.v1';
+const EMBED_GEOMETRY_FIELD = 'geometry';
+const BRANCH_ID_RE = /^[a-z][a-z0-9_]*$/;
 
 function store() {
     try {
@@ -6,6 +11,60 @@ function store() {
     } catch {
         return null;
     }
+}
+
+function requireNonEmptyString(value, label) {
+    if (typeof value !== 'string' || value.trim() === '') {
+        throw new Error(`flow-ui-drawer: ${label} must be a non-empty string`);
+    }
+    return value.trim();
+}
+
+export function drawerGeometryStorageKey(branchId) {
+    const id = requireNonEmptyString(branchId, 'branchId');
+    if (!BRANCH_ID_RE.test(id)) {
+        throw new Error('flow-ui-drawer: branchId must be lowercase snake_case');
+    }
+    return platformStorageKey('core', `assistant.drawer.${id}`);
+}
+
+export function readLaraDrawerGeometry(branchId) {
+    const storage = store();
+    if (storage === null) {
+        return null;
+    }
+    const raw = storage.getItem(drawerGeometryStorageKey(branchId));
+    if (raw === null) {
+        return null;
+    }
+    return parseStoredGeometry(JSON.parse(raw));
+}
+
+export function writeLaraDrawerGeometry(branchId, geometry) {
+    const storage = store();
+    if (storage === null) {
+        throw new Error('flow-ui preferences: localStorage unavailable');
+    }
+    storage.setItem(
+        drawerGeometryStorageKey(branchId),
+        JSON.stringify(toStoredGeometry(geometry)),
+    );
+}
+
+export function readEmbedDrawerGeometry(embedId) {
+    const id = requireNonEmptyString(embedId, 'embedId');
+    const prefs = readFlowUIPreferences(`drawer:${id}`);
+    if (!Object.prototype.hasOwnProperty.call(prefs, EMBED_GEOMETRY_FIELD)) {
+        return null;
+    }
+    return parseStoredGeometry(prefs[EMBED_GEOMETRY_FIELD]);
+}
+
+export function writeEmbedDrawerGeometry(embedId, geometry) {
+    const id = requireNonEmptyString(embedId, 'embedId');
+    writeFlowUIPreferences(`drawer:${id}`, {
+        [EMBED_GEOMETRY_FIELD]: toStoredGeometry(geometry),
+    });
 }
 
 export function readFlowUIPreferences(scope = 'global') {

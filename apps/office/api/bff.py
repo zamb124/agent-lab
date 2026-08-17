@@ -283,48 +283,19 @@ def _http_exception_from_catalog_rag_value_error(exc: ValueError) -> HTTPExcepti
 async def _resolve_catalog_for_create(
     c: OfficeContainer,
     *,
-    company_id: str,
-    namespace: str,
     user_id: str,
     catalog_id: str | None,
 ) -> str:
-    access = c.office_access_service
-    if catalog_id is not None and catalog_id.strip() != "":
-        cid = catalog_id.strip()
-        allowed = await c.authz_service.can_view(AuthzObject.office_catalog(cid), user_id=user_id)
-        if not allowed:
-            raise HTTPException(status_code=403, detail="Нет доступа к каталогу")
-        return cid
-    accessible = await access.list_accessible_catalogs_with_file_counts(
-        company_id=company_id,
-        namespace=namespace,
-        user_id=user_id,
-    )
-    if len(accessible) == 1:
-        return accessible[0][0].catalog_id
-    if len(accessible) == 0:
-        row, created = await c.catalog_repository.get_or_create_default(
-            company_id=company_id,
-            namespace=namespace,
-            owner_user_id=user_id,
+    if catalog_id is None or catalog_id.strip() == "":
+        raise HTTPException(
+            status_code=400,
+            detail="Укажите catalog_id: сначала создайте каталог",
         )
-        if created:
-            try:
-                await access.sync_catalog_created(
-                    row,
-                    owner_user_id=user_id,
-                    company_visible=True,
-                )
-            except Exception:
-                _ = await c.catalog_repository.delete_catalog(row.catalog_id, company_id, namespace)
-                raise
-        else:
-            await access.ensure_catalog_authz(row)
-        return row.catalog_id
-    raise HTTPException(
-        status_code=400,
-        detail="Укажите catalog_id: доступно несколько каталогов",
-    )
+    cid = catalog_id.strip()
+    allowed = await c.authz_service.can_view(AuthzObject.office_catalog(cid), user_id=user_id)
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Нет доступа к каталогу")
+    return cid
 
 
 async def _sync_catalog_created_or_rollback(
@@ -1724,8 +1695,6 @@ async def create_document_from_uploaded_file(
 
     resolved_catalog_id = await _resolve_catalog_for_create(
         container,
-        company_id=ctx.active_company.company_id,
-        namespace=namespace,
         user_id=ctx.user.user_id,
         catalog_id=body.catalog_id,
     )
@@ -1875,8 +1844,6 @@ async def create_empty_document(
     )
     resolved_catalog_id = await _resolve_catalog_for_create(
         container,
-        company_id=ctx.active_company.company_id,
-        namespace=namespace,
         user_id=ctx.user.user_id,
         catalog_id=body.catalog_id,
     )

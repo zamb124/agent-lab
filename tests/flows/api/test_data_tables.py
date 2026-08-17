@@ -6,6 +6,7 @@ import pytest
 
 from core.data_tables.import_tabular import parse_tabular_bytes
 from core.data_tables.models import DATA_TABLE_CONTENT_TYPE
+from core.utils.subdomain import slugify
 from tests.fixtures.s3 import require_s3_configured
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.timeout(120)]
@@ -62,6 +63,39 @@ async def test_flow_asset_data_table_create_office_roundtrip_and_export(
     file_id = created["file_id"]
     assert created["original_name"] == original_name
     assert created["content_type"] == DATA_TABLE_CONTENT_TYPE
+
+    catalogs_response = await office_client.get(
+        "/documents/api/v1/catalogs",
+        headers=auth_headers_system,
+    )
+    assert catalogs_response.status_code == 200, catalogs_response.text
+    catalog_items = catalogs_response.json()["items"]
+    flows_catalog = next(
+        (
+            item
+            for item in catalog_items
+            if item["title"] == "Flows" and not item.get("parent_catalog_id")
+        ),
+        None,
+    )
+    assert flows_catalog is not None
+    flow_catalog = next(
+        (
+            item
+            for item in catalog_items
+            if item["title"] == slugify(flow_id)
+            and item.get("parent_catalog_id") == flows_catalog["catalog_id"]
+        ),
+        None,
+    )
+    assert flow_catalog is not None
+    documents_response = await office_client.get(
+        "/documents/api/v1/documents",
+        params={"catalog_id": flow_catalog["catalog_id"]},
+        headers=auth_headers_system,
+    )
+    assert documents_response.status_code == 200, documents_response.text
+    assert any(item["file_id"] == file_id for item in documents_response.json()["items"])
 
     snapshot = await office_client.get(
         f"/documents/api/v1/data-tables/{file_id}",

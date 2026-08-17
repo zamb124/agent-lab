@@ -71,15 +71,22 @@ export class OfficeCatalogPickerSheet extends PlatformBottomSheet {
         if (typeof state.activeCatalogId === 'string' && state.activeCatalogId.length > 0) {
             return state.activeCatalogId;
         }
-        const items = this._catalogs.items;
-        return items.length > 0 ? items[0].catalog_id : '';
+        return '';
+    }
+
+    _selectRoot() {
+        this._documents.setExplorerView({ explorerView: 'catalog' });
+        this._documents.setActiveCatalog({ catalogId: null });
+        this._documents.setFilterCatalogs({ catalogIds: [] });
+        this._documents.clearFileSelection(null);
+        this._requestClose();
     }
 
     _select(catalogId) {
         if (typeof catalogId !== 'string' || catalogId.length === 0) return;
         this._documents.setActiveCatalog({ catalogId });
         this._documents.setFilterCatalogs({ catalogIds: [catalogId] });
-        this._documents.clearBindingSelection(null);
+        this._documents.clearFileSelection(null);
         this._requestClose();
     }
 
@@ -88,6 +95,13 @@ export class OfficeCatalogPickerSheet extends PlatformBottomSheet {
         const activeId = this._activeCatalogId();
         return html`
             <div class="list">
+                <button
+                    class="item ${activeId.length === 0 ? 'active' : ''}"
+                    type="button"
+                    @click=${() => this._selectRoot()}
+                >
+                    <span>${this.t('nav.allDocuments')}</span>
+                </button>
                 ${items.map((catalog) => html`
                     <button
                         class="item ${catalog.catalog_id === activeId ? 'active' : ''}"

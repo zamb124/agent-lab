@@ -1,6 +1,6 @@
 import { html, nothing } from '../../../lit-shim.js';
-import { brandLogoSrc } from '../../shell/brand-logo.js';
 import { flowUIGlyph } from '../flow-ui-glyph.js';
+import { resolveAgentIdentityImageSrc } from '../../runtime/agent-identity-image.js';
 import {
     labelOfComponent,
     localizedText,
@@ -87,7 +87,12 @@ function renderUserBubble(host, task, text, files) {
 }
 
 function assistantAvatar(host) {
-    return html`<div class="avatar" aria-hidden="true"><img src=${brandLogoSrc(host.platformUiOrigin)} alt=""></div>`;
+    const logoSrc = resolveAgentIdentityImageSrc({
+        surface: host.surface,
+        profile: host.controller?.profile,
+        platformUiOrigin: host.platformUiOrigin,
+    });
+    return html`<div class="avatar" aria-hidden="true"><img src=${logoSrc} alt=""></div>`;
 }
 
 function renderAssistantBubble(host, task, text, { streaming, failed }) {
@@ -252,9 +257,12 @@ export function renderAgentIdentity(host, component) {
         || agent?.name
         || optionalComponentProperty(component, 'title')
         || 'Agent';
-    const logoSrc = typeof agent?.logo_path === 'string' && agent.logo_path.trim() !== ''
-        ? agent.logo_path
-        : brandLogoSrc(host.platformUiOrigin);
+    const logoSrc = resolveAgentIdentityImageSrc({
+        component,
+        surface: host.surface,
+        profile: host.controller?.profile,
+        platformUiOrigin: host.platformUiOrigin,
+    });
     const subtitle = typeof agent?.subtitle === 'string' ? agent.subtitle : '';
     return wrapFlowNode(
         host,

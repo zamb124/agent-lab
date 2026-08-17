@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
-from core.clients.service_client import ServiceClientError
 from core.config import get_settings
 from core.context import require_active_company, require_context
 from core.data_tables.models import DATA_TABLE_CONTENT_TYPE, normalize_data_table_filename
@@ -19,10 +18,7 @@ from core.files.retention_promote import promote_file_retention_record
 from core.files.storage import FileStorage, retention_fields_from_spec
 from core.files.types import FileCategory, ext_to_category
 from core.files.urls import normalize_files_route_segment
-from core.logging import get_logger
 from core.types import JsonObject
-
-logger = get_logger(__name__)
 
 RagIndexHook = Callable[[str, str, JsonObject | None], Awaitable[None]]
 DocsBindHook = Callable[[DocsPlacement], Awaitable[DocsBindResult]]
@@ -213,14 +209,9 @@ class FilesService:
         bound = placement.model_copy(update={"file_id": file_record.file_id})
         try:
             _ = await self.bind(file_record.file_id, bound)
-        except ServiceClientError as exc:
-            # Office peer down/timeout — FileRecord уже durable; bind догонит при следующем open/repair.
-            logger.warning(
-                "docs_bind_after_create_failed",
-                file_id=file_record.file_id,
-                source_kind=_source_kind_metadata_value(spec.source_kind),
-                error=str(exc),
-            )
+        except Exception as bind_error:
+            _ = await self.delete(file_record.file_id)
+            raise bind_error
 
     async def _run_post_create(
         self,

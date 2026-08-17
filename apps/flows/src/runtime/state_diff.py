@@ -48,7 +48,6 @@ STATE_DIFF_SKIP_KEYS: frozenset[str] = frozenset({
     "agent_plan",
 })
 
-CANVAS_DIFF_LIMIT = 8
 CANVAS_PREVIEW_MAX_LEN = 200
 
 _PRIMARY_FIELD_CANDIDATES: tuple[str, ...] = (
@@ -113,13 +112,6 @@ def compute_state_diff(
             )
 
     return diff_items
-
-
-def top_state_diff_items(items: list[DiffItem], limit: int = CANVAS_DIFF_LIMIT) -> list[DiffItem]:
-    """Возвращает первые limit diff-элементов для canvas preview."""
-    if limit <= 0:
-        raise ValueError("top_state_diff_items: limit must be positive")
-    return items[:limit]
 
 
 def infer_primary_field(after: JsonObject, diff_items: list[DiffItem]) -> str:

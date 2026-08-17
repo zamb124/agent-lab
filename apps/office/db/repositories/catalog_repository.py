@@ -21,44 +21,6 @@ class CatalogRepository:
     def __init__(self, db: OfficeDatabase) -> None:
         self._db: OfficeDatabase = db
 
-    async def get_or_create_default(
-        self,
-        *,
-        company_id: str,
-        namespace: str,
-        owner_user_id: str,
-    ) -> tuple[OfficeDocumentCatalog, bool]:
-        """Возвращает (catalog, created). Caller пишет FGA при created=True."""
-        if owner_user_id.strip() == "":
-            raise ValueError("owner_user_id is required")
-        async with self._db.session() as session:
-            result = await session.execute(
-                select(OfficeDocumentCatalog)
-                .where(
-                    OfficeDocumentCatalog.company_id == company_id,
-                    OfficeDocumentCatalog.namespace == namespace,
-                    OfficeDocumentCatalog.parent_catalog_id.is_(None),
-                )
-                .order_by(OfficeDocumentCatalog.created_at.asc())
-                .limit(1)
-            )
-            existing = result.scalar_one_or_none()
-            if existing is not None:
-                return existing, False
-            catalog_id = uuid.uuid4().hex
-            row = OfficeDocumentCatalog(
-                catalog_id=catalog_id,
-                company_id=company_id,
-                namespace=namespace,
-                title="Общие",
-                owner_user_id=owner_user_id,
-                created_at=datetime.now(timezone.utc),
-            )
-            session.add(row)
-            await session.commit()
-            await session.refresh(row)
-            return row, True
-
     async def get(
         self, catalog_id: str, company_id: str, namespace: str
     ) -> OfficeDocumentCatalog | None:
