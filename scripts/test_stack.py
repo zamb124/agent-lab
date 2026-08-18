@@ -57,6 +57,9 @@ from tests.fixtures.test_database_env import (
 STACK_MANIFEST_PATH = Path("/tmp/platform_test_stack.json")
 STACK_LOG_DIR = Path("/tmp/platform_test_stack")
 BASELINE_PYTEST_WORKERS = 10
+# Parallel spawn of granian + TaskIQ: import under ~100 processes takes ~2 min.
+# 90–120 s expire while late processes are still importing.
+STACK_READINESS_TIMEOUT_SEC = 180.0
 
 _TASKIQ_REDIS_URL = "redis://localhost:63792/1"
 _TASKIQ_CONSUMER_GROUP = "taskiq"
@@ -215,41 +218,41 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
         name="secrets",
         app_path="apps.secrets.main:app",
         port=9022,
-        readiness_timeout=90.0,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
         workers=scale_stack_workers(4, pytest_workers),
     ),
     GranianService(
         name="flows",
         app_path="apps.flows.main:app",
         port=9001,
-        readiness_timeout=180.0,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
         workers=scale_stack_workers(14, pytest_workers),
     ),
-    GranianService(name="rag", app_path="apps.rag.main:app", port=9002, readiness_timeout=120.0),
+    GranianService(name="rag", app_path="apps.rag.main:app", port=9002, readiness_timeout=STACK_READINESS_TIMEOUT_SEC),
     GranianService(
         name="crm",
         app_path="apps.crm.main:app",
         port=9003,
-        readiness_timeout=120.0,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
         workers=scale_stack_workers(8, pytest_workers),
     ),
     GranianService(
         name="frontend",
         app_path="apps.frontend.main:app",
         port=9004,
-        readiness_timeout=120.0,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
         env={
             "HOSTNAME": "frontend-e2e-pod",
             "AGENT_LLM_PROXY_USE_MOCK_AUTO": "1",
         },
     ),
-    GranianService(name="sync", app_path="apps.sync.main:app", port=9005, readiness_timeout=150.0),
-    GranianService(name="office", app_path="apps.office.main:app", port=9008, readiness_timeout=120.0),
+    GranianService(name="sync", app_path="apps.sync.main:app", port=9005, readiness_timeout=STACK_READINESS_TIMEOUT_SEC),
+    GranianService(name="office", app_path="apps.office.main:app", port=9008, readiness_timeout=STACK_READINESS_TIMEOUT_SEC),
     GranianService(
         name="search",
         app_path="apps.search.main:app",
         port=9010,
-        readiness_timeout=120.0,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
         workers=scale_stack_workers(2, pytest_workers),
         env={
             "SEARCH__TINYFISH__API_KEY": "",
@@ -277,19 +280,19 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
             "PROVIDER_LITSERVE__INFRA__SQLITE_PATH": "/tmp/platform_test_provider_litserve_registry.db",
         },
     ),
-    GranianService(name="voice", app_path="apps.voice.main:app", port=9015, readiness_timeout=120.0),
+    GranianService(name="voice", app_path="apps.voice.main:app", port=9015, readiness_timeout=STACK_READINESS_TIMEOUT_SEC),
     GranianService(
         name="capability_gateway",
         app_path="apps.capability_gateway.main:app",
         port=9016,
-        readiness_timeout=120.0,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
         workers=scale_stack_workers(6, pytest_workers),
     ),
     GranianService(
         name="code_runner_python",
         app_path="apps.code_runner_python.main:app",
         port=9017,
-        readiness_timeout=120.0,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
         workers=code_runner_workers,
         env={
             "CODE_RUNNER_PYTHON_WORKERS": str(code_runner_workers),
@@ -299,7 +302,7 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
         name="code_runner_node",
         app_path="apps.code_runner_node.main:app",
         port=9018,
-        readiness_timeout=120.0,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
         workers=code_runner_workers,
         env={
             "CODE_RUNNER_NODE_WORKERS": str(code_runner_workers),
@@ -309,7 +312,7 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
         name="code_runner_go",
         app_path="apps.code_runner_go.main:app",
         port=9019,
-        readiness_timeout=120.0,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
         workers=code_runner_workers,
         env={
             "CODE_RUNNER_GO_WORKERS": str(code_runner_workers),
@@ -319,7 +322,7 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
         name="code_runner_csharp",
         app_path="apps.code_runner_csharp.main:app",
         port=9020,
-        readiness_timeout=150.0,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
         workers=code_runner_workers,
         env={
             "CODE_RUNNER_CSHARP_WORKERS": str(code_runner_workers),
@@ -329,13 +332,13 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
         name="worktracker",
         app_path="apps.worktracker.main:app",
         port=9021,
-        readiness_timeout=90.0,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
     ),
     GranianService(
         name="wiki",
         app_path="apps.wiki.main:app",
         port=9023,
-        readiness_timeout=90.0,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
     ),
     )
 
@@ -347,21 +350,21 @@ def build_taskiq_worker_services(pytest_workers: int | None = None) -> tuple[Tas
         worker_module="apps.flows_worker.worker:worker_app",
         stream_name="flows_worker",
         workers=_test_flows_worker_concurrency(pytest_workers),
-        readiness_timeout=120.0,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
     ),
     TaskiqWorkerService(
         name="rag_worker",
         worker_module="apps.rag_worker.worker:worker_app",
         stream_name="rag",
         workers=1,
-        readiness_timeout=120.0,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
     ),
     TaskiqWorkerService(
         name="search_worker",
         worker_module="apps.search_worker.worker:worker_app",
         stream_name="search",
         workers=scale_stack_workers(2, pytest_workers),
-        readiness_timeout=120.0,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
         env={
             "CRAWL__MIN_EXTRACT_CHARS": "50",
             "CRAWL__BOOTSTRAP_TRANCO_ON_EMPTY": "false",
@@ -372,7 +375,7 @@ def build_taskiq_worker_services(pytest_workers: int | None = None) -> tuple[Tas
         worker_module="apps.sync_worker.worker:worker_app",
         stream_name="sync",
         workers=scale_stack_workers(2, pytest_workers),
-        readiness_timeout=120.0,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
         env={
             "SERVER__SYNC_SERVICE_URL": "http://127.0.0.1:9005",
             "CALLS__SPEECH_TO_CHAT__SEGMENT_SECONDS": "2",
@@ -385,21 +388,21 @@ def build_taskiq_worker_services(pytest_workers: int | None = None) -> tuple[Tas
         worker_module="apps.crm_worker.worker:worker_app",
         stream_name="crm",
         workers=scale_stack_workers(16, pytest_workers),
-        readiness_timeout=120.0,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
     ),
     TaskiqWorkerService(
         name="crm_summary_worker",
         worker_module="apps.crm_worker.summary_worker:worker_app",
         stream_name="crm_summary",
         workers=scale_stack_workers(2, pytest_workers),
-        readiness_timeout=120.0,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
     ),
     TaskiqWorkerService(
         name="idle_worker",
         worker_module="apps.idle_worker.worker:worker_app",
         stream_name="idle",
         workers=1,
-        readiness_timeout=120.0,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
     ),
     )
 
@@ -420,7 +423,7 @@ EXTERNAL_READINESS: tuple[ExternalReadiness, ...] = (
     ExternalReadiness(
         name="test-a2a-agent",
         url="http://localhost:18052/health",
-        readiness_timeout=120.0,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
     ),
 )
 
@@ -634,9 +637,10 @@ def _taskiq_stream_ready(client: redis.Redis, stream_name: str) -> bool:
             raise TypeError(f"XINFO GROUPS элемент не dict: {type(group)!r}")
         if str(group.get("name")) != _TASKIQ_CONSUMER_GROUP:
             continue
-        consumers_raw = group.get("consumers", 0)
-        consumers = int(consumers_raw) if isinstance(consumers_raw, int) else 0
-        return consumers >= 1
+        consumers_raw = group.get("consumers")
+        if consumers_raw is None:
+            raise ValueError(f"XINFO GROUPS group {_TASKIQ_CONSUMER_GROUP!r} missing consumers")
+        return int(consumers_raw) >= 1
     return False
 
 
@@ -730,18 +734,21 @@ def _wait_taskiq_ready(
         while time.monotonic() < deadline:
             exit_code = process.poll()
             if exit_code is not None:
-                _, err_path = _log_paths(service.name)
+                log_path, err_path = _log_paths(service.name)
                 return (
                     f"{service.name}: процесс завершился (exit_code={exit_code}) до readiness.\n"
-                    f"stderr tail:\n{_tail_file(err_path)}"
+                    f"stderr tail:\n{_tail_file(err_path)}\n"
+                    f"stdout tail:\n{_tail_file(log_path)}"
                 )
             if _taskiq_stream_ready(client, service.stream_name):
                 return None
             time.sleep(0.25)
-        _, err_path = _log_paths(service.name)
+        log_path, err_path = _log_paths(service.name)
         return (
             f"{service.name}: consumer taskiq не появился в стриме {service.stream_name!r} "
-            f"за {service.readiness_timeout}s.\nstderr tail:\n{_tail_file(err_path)}"
+            f"за {service.readiness_timeout}s.\n"
+            f"stderr tail:\n{_tail_file(err_path)}\n"
+            f"stdout tail:\n{_tail_file(log_path)}"
         )
     finally:
         client.close()

@@ -5,8 +5,9 @@ Source of truth: a2aproject/A2A release tag (default v1.0.0).
 JSON Schema artifact: https://a2a-protocol.org/<tag>/spec/a2a.json
 
 Usage:
-  uv run python scripts/pin_a2a_official_fixtures.py          # download + write
-  uv run python scripts/pin_a2a_official_fixtures.py --check  # verify pin matches remote
+  uv run python scripts/pin_a2a_official_fixtures.py                 # download + write
+  uv run python scripts/pin_a2a_official_fixtures.py --check         # VERSION + sha на диске
+  uv run python scripts/pin_a2a_official_fixtures.py --check-remote  # то же + сверка с GitHub/docs
 """
 
 from __future__ import annotations
@@ -100,6 +101,7 @@ def pin(*, tag: str, commit: str) -> None:
 
 
 def check(*, tag: str, commit: str) -> int:
+    """Целостность pin на диске. Сеть не нужна: commit в VERSION неизменяем."""
     version_path = FIXTURES_DIR / "VERSION"
     proto_path = FIXTURES_DIR / "a2a.proto"
     json_path = FIXTURES_DIR / "a2a.json"
@@ -131,6 +133,21 @@ def check(*, tag: str, commit: str) -> int:
         print("FAIL: VERSION json_sha256 does not match a2a.json on disk", file=sys.stderr)
         return 1
 
+    print(f"OK: A2A fixtures match pin tag={tag} commit={commit}")
+    return 0
+
+
+def check_remote(*, tag: str, commit: str) -> int:
+    """Локальный pin + сверка с official proto/JSON. HTTP-ошибка (включая 429) — FAIL."""
+    local_status = check(tag=tag, commit=commit)
+    if local_status != 0:
+        return local_status
+
+    proto_path = FIXTURES_DIR / "a2a.proto"
+    json_path = FIXTURES_DIR / "a2a.json"
+    local_proto_sha = _sha256(proto_path.read_bytes())
+    local_json_sha = _sha256(json_path.read_bytes())
+
     remote_proto = _http_get(_proto_url(commit))
     remote_json = _http_get(_json_url(tag))
     if _sha256(remote_proto) != local_proto_sha:
@@ -140,18 +157,32 @@ def check(*, tag: str, commit: str) -> int:
         print("FAIL: a2a.json drift vs remote pin", file=sys.stderr)
         return 1
 
-    print(f"OK: A2A fixtures match pin tag={tag} commit={commit}")
+    print(f"OK: A2A fixtures match remote tag={tag} commit={commit}")
     return 0
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true", help="Verify pinned fixtures")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Verify VERSION + sha256 on disk (no network)",
+    )
+    parser.add_argument(
+        "--check-remote",
+        action="store_true",
+        help="Verify local pin and compare with official remote artifacts",
+    )
     parser.add_argument("--tag", default=DEFAULT_TAG)
     parser.add_argument("--commit", default=DEFAULT_COMMIT)
     args = parser.parse_args()
+    if args.check and args.check_remote:
+        print("FAIL: задайте либо --check, либо --check-remote", file=sys.stderr)
+        return 1
     if args.check:
         return check(tag=args.tag, commit=args.commit)
+    if args.check_remote:
+        return check_remote(tag=args.tag, commit=args.commit)
     pin(tag=args.tag, commit=args.commit)
     return 0
 

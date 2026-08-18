@@ -16,7 +16,7 @@ import '../resources/flows-data-table-resource-editor.js';
 /**
  * @param {object} resource — view-model с resource_id, ?type, …
  * @param {(e: CustomEvent) => void} onChange — detail: { resourceId, patch }
- * @param {{ compactHeader?: boolean }} [options] — compactHeader: карточка на resource-ноде без описания/тегов
+ * @param {{ compactHeader?: boolean, flowId?: string, nodeId?: string }} [options]
  */
 export function renderResourceDefinitionEditor(resource, onChange, options = {}) {
     if (!isPlainObject(resource)) {
@@ -38,6 +38,7 @@ export function renderResourceDefinitionEditor(resource, onChange, options = {})
                 @change=${onChange}></flows-llm-context-resource-editor>`;
         case 'rag':
             return html`<flows-rag-resource-editor .resourceId=${id} .resource=${resource}
+                .nodeId=${typeof options.nodeId === 'string' ? options.nodeId : ''}
                 .compactHeader=${compactHeader}
                 @change=${onChange}></flows-rag-resource-editor>`;
         case 'data_table':

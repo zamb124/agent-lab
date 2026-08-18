@@ -143,9 +143,9 @@ async def test_add_document_merges_index_profile_config(
         await r.add_document(
             "fid",
             "hello",
-            metadata={"index_profile_config": {"split": {"strategy": "semantic"}}},
+            metadata={"index_profile_config": {"split": {"strategy": "recursive"}}},
             name="n.txt",
-            index_profile_config={"parsing": {"engine": "unstructured"}},
+            index_profile_config={"lexical": {"enabled": True}},
         )
 
     mock_upload.assert_awaited_once()
@@ -155,8 +155,8 @@ async def test_add_document_merges_index_profile_config(
     assert {k: meta[k] for k in ("document_id",)} == {"document_id": "fid"}
     assert {
         "split": ipc["split"],
-        "parsing": ipc["parsing"],
+        "lexical": ipc["lexical"],
     } == {
-        "split": {"chunk_size": 256, "strategy": "semantic"},
-        "parsing": {"engine": "unstructured"},
+        "split": {"chunk_size": 256, "strategy": "recursive"},
+        "lexical": {"enabled": True},
     }

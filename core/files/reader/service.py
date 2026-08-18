@@ -120,7 +120,9 @@ class _PdfPage(Protocol):
 
 class _PdfDocument(Protocol):
     page_count: int
+    needs_pass: bool
 
+    def authenticate(self, password: str) -> int: ...
     def __getitem__(self, index: int) -> _PdfPage: ...
     def extract_image(self, xref: int) -> _PdfExtractedImage: ...
     def close(self) -> None: ...
@@ -1212,6 +1214,15 @@ def _pdf_page_raster_png(page: _PdfPage, fitz_module: _FitzModule) -> PdfPageIma
     )
 
 
+_PDF_ENCRYPTED_WARNING = "PDF зашифрован; текст недоступен без пароля"
+
+
+def _pdf_is_locked(doc: _PdfDocument) -> bool:
+    if not doc.needs_pass:
+        return False
+    return doc.authenticate("") == 0
+
+
 def pdf_page_count(raw: bytes) -> int:
     fitz = cast(_FitzModule, _as_object(pymupdf))
     doc = fitz.open(stream=raw, filetype="pdf")
@@ -1227,6 +1238,7 @@ def iter_pdf_read_pages(
     *,
     page_indices: set[int] | None = None,
     force_raster: bool = False,
+    warnings: list[str],
 ) -> Iterable[ReadPage]:
     """Внутренний PDF-reader: по одной ReadPage, без накопления всех картинок документа."""
     del file_name
@@ -1234,6 +1246,19 @@ def iter_pdf_read_pages(
     doc = fitz.open(stream=raw, filetype="pdf")
     try:
         page_count = doc.page_count
+        if _pdf_is_locked(doc):
+            warnings.append(_PDF_ENCRYPTED_WARNING)
+            for index in range(page_count):
+                if page_indices is not None and index not in page_indices:
+                    continue
+                yield ReadPage(
+                    index=index,
+                    label=default_page_label(index),
+                    text="",
+                    assets=[],
+                    blocks=[],
+                )
+            return
         for index in range(page_count):
             if page_indices is not None and index not in page_indices:
                 continue
@@ -1282,7 +1307,7 @@ def _read_pdf_sync(
                 msg = str(exc).lower()
                 if "encrypt" in msg or "password" in msg:
                     if not encrypt_pdf_warning:
-                        warnings.append("PDF зашифрован; текст недоступен без пароля")
+                        warnings.append(_PDF_ENCRYPTED_WARNING)
                         encrypt_pdf_warning = True
                     text = ""
                     skip_raster = True

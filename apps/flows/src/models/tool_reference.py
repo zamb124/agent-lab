@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import copy
-from typing import ClassVar, Self, cast
+from typing import ClassVar, Literal, Self, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -20,6 +20,8 @@ from core.models import StrictBaseModel
 from core.types import JsonObject, JsonValue, require_json_object
 
 from .enums import CodeMode, ReactToolRole
+
+ToolIndexMcpFilter = Literal["all", "exclude", "only"]
 
 
 class ToolReference(BaseModel):

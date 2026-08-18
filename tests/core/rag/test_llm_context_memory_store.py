@@ -196,7 +196,7 @@ async def test_rag_memory_store_without_namespace_repository_and_result_coercion
                     "score": 2.0,
                     "document_id": "document-id",
                     "document_name": "doc",
-                    "metadata": {
+                    "attributes": {
                         "memory_id": "memory-from-metadata",
                         "memory_scope": "company",
                         "session_id": "",
@@ -256,7 +256,7 @@ async def test_rag_memory_store_strict_error_paths() -> None:
                         "score": 1.0,
                         "document_id": "document-id",
                         "document_name": "doc",
-                        "metadata": {"memory_scope": "company"},
+                        "attributes": {"memory_scope": "company"},
                         "namespace": "memory-test",
                         "chunk_id": "chunk",
                         "provenance": {},
@@ -267,7 +267,7 @@ async def test_rag_memory_store_strict_error_paths() -> None:
         namespace_service=None,
         namespace_id="memory-test",
     )
-    with pytest.raises(ValueError, match="metadata.memory_id"):
+    with pytest.raises(ValueError, match="attributes.memory_id"):
         await strict_store.recall(LLMContextMemoryRecallRequest(query="q", scope="company"))
 
     invalid_created_at_store = RAGLLMContextMemoryStore(
@@ -279,7 +279,7 @@ async def test_rag_memory_store_strict_error_paths() -> None:
                         "score": 1.0,
                         "document_id": "document-id",
                         "document_name": "doc",
-                        "metadata": {
+                        "attributes": {
                             "memory_id": "memory-id",
                             "memory_scope": "company",
                             "created_at": "not-a-date",
@@ -294,7 +294,7 @@ async def test_rag_memory_store_strict_error_paths() -> None:
         namespace_service=None,
         namespace_id="memory-test",
     )
-    with pytest.raises(ValueError, match="metadata.created_at"):
+    with pytest.raises(ValueError, match="attributes.created_at"):
         await invalid_created_at_store.recall(
             LLMContextMemoryRecallRequest(query="q", scope="company")
         )

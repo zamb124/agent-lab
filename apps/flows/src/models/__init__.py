@@ -125,7 +125,7 @@ from .tool_contracts import (
     ToolResultEnvelope,
     ToolRevision,
 )
-from .tool_reference import ToolListIndexItem, ToolReference
+from .tool_reference import ToolIndexMcpFilter, ToolListIndexItem, ToolReference
 from .trigger_config import (
     CronTriggerConfig,
     EmailTriggerConfig,
@@ -230,6 +230,7 @@ __all__ = [
     "TelegramGetUpdatesResponse",
     "TelegramTriggerConfig",
     "TelegramUpdate",
+    "ToolIndexMcpFilter",
     "ToolListIndexItem",
     "ToolReference",
     "ToolArgumentSource",

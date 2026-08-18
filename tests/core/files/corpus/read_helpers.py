@@ -18,7 +18,7 @@ from core.files.reader.models import (
     ReadLane,
 )
 from core.files.reader.service import FileReader
-from core.files.reader.universal import read_lane_for_kind
+from core.files.reader.universal import page_layout_kind_for_result, read_lane_for_kind
 from tests.core.files.corpus.helpers import corpus_stt_company_id, require_heic_entry_supported
 from tests.core.files.corpus.manifest import CORPUS_DIR, CorpusFile
 
@@ -51,19 +51,21 @@ def assert_extract_read_lane(entry: CorpusFile, extract: FileExtract) -> None:
         else:
             assert extract.read_lane in (ReadLane.TEXT, ReadLane.HYBRID)
         return
+    if entry.expected_kind == FileReadKind.OFFICE:
+        # Слайды/страницы без пригодного текста идут в vision → HYBRID, как у PDF.
+        assert extract.read_lane in (ReadLane.TEXT, ReadLane.HYBRID, ReadLane.VISION)
+        return
     expected = expected_read_lane(entry)
     assert extract.read_lane == expected
 
 
-def expected_layout_kind(extract: FileExtract, file_name: str) -> PageLayoutKind:
+def expected_layout_kind(extract: FileExtract, raw_result: FileReadResult | None) -> PageLayoutKind:
+    """PDF/лист/картинка — native units. Остальное совпадает с keep_reader_pages сырого parse."""
     if extract.kind in (FileReadKind.PDF, FileReadKind.SPREADSHEET, FileReadKind.IMAGE):
         return PageLayoutKind.NATIVE
-    if extract.kind == FileReadKind.OFFICE:
-        if any(page.label.strip() for page in extract.pages):
-            return PageLayoutKind.NATIVE
-        return PageLayoutKind.VIRTUAL
-    _ = file_name
-    return PageLayoutKind.VIRTUAL
+    if raw_result is None:
+        raise ValueError(f"layout для kind={extract.kind.value} требует FileReadResult")
+    return page_layout_kind_for_result(raw_result)
 
 
 async def read_corpus_extract(

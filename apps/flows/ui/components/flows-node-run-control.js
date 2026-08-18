@@ -8,7 +8,7 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
-import { getCodeExecuteRequestClientId } from '../_helpers/flows-code-execute-run-gate.js';
+import { getTestRunRequestClientId } from '../_helpers/flows-test-run-gate.js';
 
 const PORTAL_STYLE_ID = 'flows-node-run-control-portal-styles';
 
@@ -88,7 +88,7 @@ export class FlowsNodeRunControl extends PlatformElement {
     static properties = {
         viewModel: { type: Object },
         busy: { type: Boolean },
-        /** Совпадает с flows-base-node-editor._codeExecuteClientId — чей запрос, тот пузырь. */
+        /** Совпадает с flows-base-node-editor._testRunClientId — чей запрос, тот пузырь. */
         requestClientId: { type: String },
         _bubbleOpen: { state: true },
     };
@@ -134,7 +134,7 @@ export class FlowsNodeRunControl extends PlatformElement {
                 const mayShow =
                     rid.length === 0
                     ? true
-                    : getCodeExecuteRequestClientId() === rid;
+                    : getTestRunRequestClientId() === rid;
                 if (mayShow) {
                     this._bubbleOpen = true;
                 }

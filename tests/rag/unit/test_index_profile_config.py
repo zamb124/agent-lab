@@ -17,7 +17,6 @@ def _indexing_materialization_config_dict(cfg: dict[str, Any]) -> dict[str, Any]
     full = IndexProfileConfig.model_validate(cfg)
     return {
         "split": full.split.model_dump(mode="json"),
-        "parsing": full.parsing.model_dump(mode="json"),
         "lexical": full.lexical.model_dump(mode="json"),
     }
 
@@ -34,12 +33,10 @@ def test_index_profile_config_defaults_roundtrip() -> None:
     assert {
         "restored_eq_cfg": restored == cfg,
         "split_strategy": cfg.split.strategy,
-        "parsing_engine": cfg.parsing.engine,
         "lexical_enabled": cfg.lexical.enabled,
     } == {
         "restored_eq_cfg": True,
-        "split_strategy": "fixed_tokens",
-        "parsing_engine": "unstructured",
+        "split_strategy": "auto",
         "lexical_enabled": False,
     }
 

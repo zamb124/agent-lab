@@ -112,7 +112,9 @@ def test_code_strategy_splits_python() -> None:
             chonkie_code_language="python",
         ),
     )
-    assert len(chunks) >= 1
+    joined = "\n".join(chunks)
+    assert "def a():" in joined
+    assert "def b():" in joined
 
 
 def test_table_strategy_splits_rows() -> None:

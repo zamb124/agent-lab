@@ -195,13 +195,13 @@ def _record_content(metadata: JsonObject, document_content: str) -> str:
 def _memory_scope(value: JsonValue | None) -> LLMContextMemoryScope:
     if isinstance(value, str) and value in _MEMORY_SCOPES:
         return value
-    raise ValueError("LLM context memory metadata.memory_scope должен быть допустимым scope")
+    raise ValueError("LLM context memory attributes.memory_scope должен быть допустимым scope")
 
 
 def _required_metadata_str(metadata: JsonObject, key: str) -> str:
     value = metadata.get(key)
     if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"LLM context memory metadata.{key} must be a non-empty string")
+        raise ValueError(f"LLM context memory attributes.{key} must be a non-empty string")
     return value.strip()
 
 
@@ -210,7 +210,7 @@ def _optional_metadata_str(metadata: JsonObject, key: str) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str):
-        raise ValueError(f"LLM context memory metadata.{key} must be a string")
+        raise ValueError(f"LLM context memory attributes.{key} must be a string")
     text = value.strip()
     return text or None
 
@@ -219,12 +219,12 @@ def _parse_datetime(value: JsonValue | None) -> datetime | None:
     if value is None:
         return None
     if not isinstance(value, str) or not value.strip():
-        raise ValueError("LLM context memory metadata.created_at must be an ISO datetime string")
+        raise ValueError("LLM context memory attributes.created_at must be an ISO datetime string")
     try:
         return datetime.fromisoformat(value)
     except ValueError as exc:
         raise ValueError(
-            "LLM context memory metadata.created_at must be an ISO datetime string"
+            "LLM context memory attributes.created_at must be an ISO datetime string"
         ) from exc
 
 

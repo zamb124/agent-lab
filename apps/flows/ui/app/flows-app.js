@@ -76,6 +76,19 @@ import {
     flowsRagSearchDefaultsOp,
 } from '../events/resources/rag-namespaces.resource.js';
 import {
+    flowsRagDocumentsOp,
+    flowsRagDocumentUploadOp,
+    flowsRagDocumentStatusOp,
+    flowsRagDocumentRemoveOp,
+} from '../events/resources/rag-documents.resource.js';
+import {
+    flowsRagSearchOp,
+    flowsRagNodeTestSlice,
+} from '../events/resources/rag-search.resource.js';
+import { registerNodeTestRunHandler } from '../_helpers/node-test-run-registry.js';
+import { codeExecuteTestRunHandler } from '../_helpers/node-test-run-code-execute.js';
+import { ragSearchTestRunHandler } from '../_helpers/node-test-run-rag-search.js';
+import {
     flowsDataTableCreateOp,
     flowsDataTableSnapshotOp,
 } from '../events/resources/data-tables.resource.js';
@@ -147,6 +160,9 @@ import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/flows-catalog-list.js';
 import '../components/flows-sidebar.js';
+
+registerNodeTestRunHandler(codeExecuteTestRunHandler);
+registerNodeTestRunHandler(ragSearchTestRunHandler);
 
 const FLOWS_ROUTES = [
     { key: 'list',                 path: '',                              titleKey: 'routes.list' },
@@ -286,6 +302,12 @@ export class FlowsApp extends PlatformApp {
         flowsRagNamespacesListOp,
         flowsRagNamespacesCreateOp,
         flowsRagSearchDefaultsOp,
+        flowsRagDocumentsOp,
+        flowsRagDocumentUploadOp,
+        flowsRagDocumentStatusOp,
+        flowsRagDocumentRemoveOp,
+        flowsRagSearchOp,
+        flowsRagNodeTestSlice,
         flowsDataTableCreateOp,
         flowsDataTableSnapshotOp,
         promptRenderOp,

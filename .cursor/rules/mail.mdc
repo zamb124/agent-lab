@@ -68,7 +68,7 @@ Sole PDP — OpenFGA `mailbox_binding` (`owner` / `member` / `manager`) + `compa
 |---|---|
 | Task | `mail_sync_tick` + `mail_sync_binding` + `mail_rag_index` + `mail_idle_supervisor` (`apps/idle_worker/tasks/`) |
 | Schedule | cron `mail_sync` (default `*/1`); IDLE supervisor на том же cron при `idle_enabled` |
-| Context | перед sync/mutations/rag-index — `enter_mail_binding_context` + `build_job_context` (JWT): `MailService._active_user_id` и RAG/files/office; actor/ACL только FGA (`can_view`/`can_edit`/`can_admin` на `mailbox_binding` или `require_company_admin`); нет members → `raise` |
+| Context | перед sync/mutations/rag-index — `enter_mail_binding_context` + `build_job_context` (JWT): `MailService._active_user_id` и RAG/files/office. Recipients (notify/push) = `binding.user_id` + прямые FGA `owner`/`member`/`manager` (не `list_users(can_view)`). Role job-actor: первый существующий recipient в компании, иначе `authz.list_users(mailbox_binding, can_admin, user_filters=[USER])` (TTU `admin from company`); нет actor → `raise` |
 | Fairness | `list_sync_candidates` JOIN по `company_mail_connection_id` + `status=active` — company и personal в одном tick |
 | Folders cache | `mailbox_folders` + `sort_index`; `GET /folders` DB-only `ORDER BY sort_index, folder_name`; **пустой кэш → `needs_sync=true`**; UI → `POST /sync` (IMAP LIST sync) → reload folders; IMAP refresh **сохраняет** известные `sort_index`, новые — в хвост; bootstrap — роль (inbox→sent→drafts→trash→archive→junk→other) затем имя |
 | Messages | `mail_messages` + flags; list/search/thread/get — local; `needs_sync` на list = пустая папка **без** `last_synced_at` (не «пустой inbox навсегда») |
@@ -101,9 +101,9 @@ Wire folder = exact IMAP name; роли только SPECIAL-USE. Ensure: sent/d
 
 ## Provision
 
-- **System**: `reconcile_system` / `ensure_system_*` — company connection + role boxes; members через `ensure_system_user_bindings` (пропуск `flow_employee_*`: Mail для сотрудников — MISSING в `flow_employee.mdc`). Тест skip flow_employee сужает SQL `company.members`, не удаляет FGA tuples остальных членов `system`.
+- **System**: `reconcile_system` / `ensure_system_*` — company connection + role boxes; `ensure_system_user_bindings` итерирует всех `company.members` (включая `flow_employee_*`) без prefix-skip. User-binding, чей `user_id` не в `company.members`, — `unbind_mailbox(acting_as_admin=True)` (personal `scope` не трогать). `list_sync_candidates` не фильтрует employee. Тесты `system.members` не сужают roster до одного user_id: leftover-unbind иначе снимет чужие ящики под xdist.
 - **Prod K8s**: `mail.system.enabled` + hosts/user в `deploy/helm/agent-lab/files/app-conf.k8s-overlay.json`; `authinfo_password` — GitHub Secret `MAIL__SYSTEM__ISPMANAGER__AUTHINFO_PASSWORD` → `platform-secrets` → ENV. Frontend lifespan вызывает `reconcile_system` при `enabled=true`.
-- **Lazy company**: `MailService.get_or_create_user_binding(user_id)`.
+- **Lazy company**: `MailService.get_or_create_user_binding(user_id)`. Живой flow-сотрудник — тот же path из `flow_employee_provisioning` (не `core/identity/flow_employee.py`: цикл `BaseContainer → MailService → flow_employee`). На `company_id=system` mailbox даёт `ensure_system_user_bindings` при reconcile, не get_or_create из provisioning. `deactivate` / delete flow — `unbind_company_user_mailboxes` (company-scope; personal не трогать).
 - **Personal**: `MailService.connect_personal_mailbox` — personal connection + binding, `provision=false`, healthcheck login до save.
 - `bind_mailbox` на существующий email: тот же owner/role → idempotent; иначе admin reassign.
 - `ispmanager` `ensure_mailbox` — create-if-missing.

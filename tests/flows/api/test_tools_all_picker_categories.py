@@ -156,6 +156,46 @@ async def test_picker_flow_item_contains_complete_flow_tool_schema(
 
 
 @pytest.mark.asyncio
+async def test_picker_category_code_total_ignores_mcp_batch(
+    client, app, unique_id, container
+):
+    """Пачка MCP не увеличивает picker_category=code total и не попадает в items."""
+    before = await client.get(
+        f"/flows/api/v1/tools/all?limit={_TOOLS_ALL_PAGE}&offset=0&picker_category=code"
+    )
+    assert before.status_code == 200
+    before_total = before.json()["total"]
+    assert isinstance(before_total, int)
+
+    server_id = f"picker_mcp_bulk_{unique_id}"
+    for index in range(_MCP_OVERFLOW):
+        await _persist_tool(container, _mcp_tool_reference(server_id, f"bulk_tool_{index}"))
+
+    exclude_ids = {
+        row.tool_id
+        for row in await container.tool_repository.list_index(mcp="exclude")
+    }
+    only_ids = {
+        row.tool_id
+        for row in await container.tool_repository.list_index(mcp="only")
+    }
+    mcp_tool_id = mcp_tool_reference_id(server_id, "bulk_tool_0")
+    assert mcp_tool_id in only_ids
+    assert mcp_tool_id not in exclude_ids
+    assert await container.tool_repository.count_index(mcp="exclude") == len(exclude_ids)
+
+    after = await client.get(
+        f"/flows/api/v1/tools/all?limit={_TOOLS_ALL_PAGE}&offset=0&picker_category=code"
+    )
+    assert after.status_code == 200
+    after_body = after.json()
+    assert after_body["total"] == before_total
+    after_ids = {item["tool_id"] for item in after_body["items"]}
+    assert mcp_tool_id not in after_ids
+    assert all(not str(item_id).startswith(f"mcp:{server_id}:") for item_id in after_ids)
+
+
+@pytest.mark.asyncio
 async def test_picker_category_filters_code_and_mcp(client, app, unique_id, container):
     """picker_category=code и picker_category=mcp возвращают непересекающиеся наборы."""
     code_tool_id = f"picker_inline_{unique_id}"

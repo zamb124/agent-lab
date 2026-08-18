@@ -1536,6 +1536,7 @@ class MailService:
         mailbox_binding_id: str,
         *,
         company_id: str | None = None,
+        acting_as_admin: bool = False,
     ) -> None:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
         binding = await self._binding_repository.get(mailbox_binding_id, resolved_company_id)
@@ -1545,22 +1546,23 @@ class MailService:
         is_personal = (
             connection is not None and connection.scope == MailConnectionScope.PERSONAL
         )
-        is_admin = await self._is_company_admin(resolved_company_id)
-        acting_user_id = self._active_user_id()
-        is_owner = (
-            binding.kind == MailboxBindingKind.USER
-            and binding.user_id is not None
-            and binding.user_id == acting_user_id
-        )
-        if is_personal:
-            if not (is_admin or is_owner):
-                raise MailPermissionError(
-                    f"no access to unbind mailbox_binding_id={mailbox_binding_id}"
-                )
-        elif not is_admin:
-            raise MailPermissionError(
-                f"admin required to unbind mailbox_binding_id={mailbox_binding_id}"
+        if not acting_as_admin:
+            is_admin = await self._is_company_admin(resolved_company_id)
+            acting_user_id = self._active_user_id()
+            is_owner = (
+                binding.kind == MailboxBindingKind.USER
+                and binding.user_id is not None
+                and binding.user_id == acting_user_id
             )
+            if is_personal:
+                if not (is_admin or is_owner):
+                    raise MailPermissionError(
+                        f"no access to unbind mailbox_binding_id={mailbox_binding_id}"
+                    )
+            elif not is_admin:
+                raise MailPermissionError(
+                    f"admin required to unbind mailbox_binding_id={mailbox_binding_id}"
+                )
         deleted = await self._binding_repository.delete(mailbox_binding_id, resolved_company_id)
         if not deleted:
             raise MailBindingNotFoundError(mailbox_binding_id)
@@ -1584,6 +1586,26 @@ class MailService:
                     company_id=resolved_company_id,
                     acting_as_admin=True,
                 )
+
+    async def unbind_company_user_mailboxes(
+        self,
+        user_id: str,
+        *,
+        company_id: str | None = None,
+    ) -> None:
+        if not user_id.strip():
+            raise ValueError("user_id is required")
+        resolved_company_id = company_id if company_id is not None else self._active_company_id()
+        bindings = await self._binding_repository.list_by_user(resolved_company_id, user_id)
+        for binding in bindings:
+            connection = await self._connection_for_binding(binding)
+            if connection is not None and connection.scope == MailConnectionScope.PERSONAL:
+                continue
+            await self.unbind_mailbox(
+                binding.mailbox_binding_id,
+                company_id=resolved_company_id,
+                acting_as_admin=True,
+            )
 
     async def list_messages(
         self,
@@ -3800,13 +3822,9 @@ class MailService:
         company = await self._company_repository.get(SYSTEM_COMPANY_ID)
         if company is None:
             raise MailConfigError("system company not found")
+        member_ids = set(company.members)
         ensured: list[str] = []
         for user_id in company.members:
-            # Mail для flow-сотрудников — отдельный эпик (flow_employee.mdc).
-            # Префикс = FLOW_EMPLOYEE_USER_ID_PREFIX; без импорта flow_employee
-            # (цикл BaseContainer → MailService → flow_employee → BaseContainer).
-            if user_id.startswith("flow_employee_"):
-                continue
             existing = await self._binding_repository.get_by_user(SYSTEM_COMPANY_ID, user_id)
             if existing is not None:
                 ensured.append(existing.email_address)
@@ -3821,6 +3839,23 @@ class MailService:
                 company_id=SYSTEM_COMPANY_ID,
             )
             ensured.append(binding.email_address)
+        listed = await self._binding_repository.list_by_company(SYSTEM_COMPANY_ID)
+        for binding in listed:
+            if binding.kind != MailboxBindingKind.USER:
+                continue
+            if binding.user_id is None or binding.user_id in member_ids:
+                continue
+            leftover_connection = await self._connection_for_binding(binding)
+            if (
+                leftover_connection is not None
+                and leftover_connection.scope == MailConnectionScope.PERSONAL
+            ):
+                continue
+            await self.unbind_mailbox(
+                binding.mailbox_binding_id,
+                company_id=SYSTEM_COMPANY_ID,
+                acting_as_admin=True,
+            )
         return ensured
 
     async def reconcile_system(self) -> MailReconcileResult:

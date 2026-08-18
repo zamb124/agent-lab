@@ -19,7 +19,7 @@ Wire-boundary mapping внешней A2A-спеки (ProtoJSON / TaskStatus.stat
 |---|---|
 | Normative proto | `tests/flows/a2a_conformance/fixtures/official/a2a.proto` (pin tag `v1.0.0`) |
 | JSON Schema | `tests/flows/a2a_conformance/fixtures/official/a2a.json` |
-| Pin metadata | `VERSION` + `scripts/pin_a2a_official_fixtures.py` (`make check-a2a-fixtures`) |
+| Pin metadata | `VERSION` + `scripts/pin_a2a_official_fixtures.py` (`make check-a2a-fixtures` — диск; `make check-a2a-fixtures-remote` — GitHub/docs) |
 | SDK | `a2a-sdk>=1.0,<2` (protobuf types в `a2a.types`) |
 | Platform helpers | `core/a2a/` (`methods`, `errors`, `codec`, `task_states`, `artifact_accumulator`, `task_projection`, `extensions`) |
 
@@ -89,7 +89,7 @@ Artifact stream имеет stable непустой `artifactId`: `append=false` 
 - Shared builders: `tests/flows/_a2a_v1.py`.
 - HTTP e2e `SendMessage` для llm_node/tools: `configuration.returnImmediately=true` + `GetTask` poll (как `A2AClient.send_task`). Blocking `SendMessage` занимает flows granian на весь граф; `flows_client_http` без явного timeout = httpx 5 с → `ReadTimeout` под `-n10`.
 - Blocking `SendMessage`/`SendStreamingMessage`: short-circuit «проекция уже parked» только если **этот** send довёл задачу до terminal/interrupt (in-process, Pub/Sub уже дропнут). Если task_id уже был parked/completed до `create_task` (следующий ход той же сессии / resume interrupt) — ждать collect, иначе клиент получает текст прошлого хода.
-- CI: `make check-a2a-fixtures` в `test-static`.
+- CI: `make check-a2a-fixtures` в `test-static` — VERSION + sha256 на диске, без сети. Commit в pin неизменяем; ходить в GitHub на каждый `make test` нельзя (raw.githubusercontent.com 429 валит весь static). Сверка с official proto/JSON: `make check-a2a-fixtures-remote`. HTTP-ошибка (включая 429) — FAIL, не skip.
 
 ## Запреты
 

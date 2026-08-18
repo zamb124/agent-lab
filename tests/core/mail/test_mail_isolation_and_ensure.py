@@ -7,6 +7,7 @@ from typing import cast
 
 import pytest
 
+from core.authz.company_sync import remove_company_member, sync_company_member_roles
 from core.authz.factory import build_authz_service
 from core.config import get_settings
 from core.config.models import (
@@ -34,6 +35,7 @@ from core.mail.repositories import (
     MailboxSyncCursorRepository,
 )
 from core.mail.service import MailService
+from core.models.identity_models import User, UserStatus
 from tests.core.mail.fakes import RecordingMailServerPort
 
 
@@ -147,32 +149,18 @@ async def test_ensure_system_with_fake_port(
     assert again.company_mail_connection_id == connection.company_mail_connection_id
 
 
-@pytest.mark.asyncio
-async def test_ensure_system_user_bindings_skips_flow_employees(
+def _offline_system_mail_service(
+    *,
     mail_connection_repository: CompanyMailConnectionRepository,
     mailbox_binding_repository: MailboxBindingRepository,
     recording_mail_port: RecordingMailServerPort,
     container,
-    unique_id: str,
-) -> None:
-    """flow_employee_* не получают mailbox при reconcile (Mail для сотрудников — MISSING)."""
-    employee_user_id = flow_employee_user_id(f"mailskip_{unique_id}")
-    company = await container.company_repository.get(SYSTEM_COMPANY_ID)
-    assert company is not None
-    previous_members = dict(company.members)
-    from core.authz.company_sync import remove_company_member, sync_company_member_roles
-
-    # SQL roster only: ensure_system_user_bindings iterates company.members.
-    # Do not delete other users' company FGA tuples — shared system under xdist.
-    company.members = {employee_user_id: ["member"]}
-    await container.company_repository.set(company)
-    await sync_company_member_roles(
-        container.authz_service,
-        company_id=SYSTEM_COMPANY_ID,
-        user_id=employee_user_id,
-        roles=["member"],
-    )
-
+    role_mailboxes: list[str] | None = None,
+) -> MailService:
+    shared_url = get_settings().database.shared_url
+    if shared_url is None:
+        raise RuntimeError("DATABASE__SHARED_URL обязателен для mail tests")
+    roles = [] if role_mailboxes is None else role_mailboxes
     mail_config = MailConfig(
         system=MailSystemConfig(
             enabled=True,
@@ -188,8 +176,8 @@ async def test_ensure_system_user_bindings_skips_flow_employees(
                 authinfo_user="admin",
                 authinfo_password="panel-secret",
             ),
-            role_mailboxes=[],
-            protected_local_parts=[],
+            role_mailboxes=roles,
+            protected_local_parts=roles,
         ),
         live_test=MailLiveTestConfig(enabled=False),
         local_dev=MailLocalDevConfig(
@@ -198,10 +186,7 @@ async def test_ensure_system_user_bindings_skips_flow_employees(
             mailbox_passwords={},
         ),
     )
-    shared_url = get_settings().database.shared_url
-    if shared_url is None:
-        raise RuntimeError("DATABASE__SHARED_URL обязателен для mail tests")
-    service = MailService(
+    return MailService(
         connection_repository=mail_connection_repository,
         binding_repository=mailbox_binding_repository,
         sync_cursor_repository=MailboxSyncCursorRepository(db_url=shared_url),
@@ -211,28 +196,136 @@ async def test_ensure_system_user_bindings_skips_flow_employees(
         mail_config=mail_config,
         port_override=cast(MailServerPort, cast(object, recording_mail_port)),
     )
+
+
+@pytest.mark.asyncio
+async def test_ensure_system_user_bindings_creates_flow_employee_mailbox(
+    mail_connection_repository: CompanyMailConnectionRepository,
+    mailbox_binding_repository: MailboxBindingRepository,
+    recording_mail_port: RecordingMailServerPort,
+    container,
+    unique_id: str,
+) -> None:
+    employee_user_id = flow_employee_user_id(f"mailbind_{unique_id}")
+    company = await container.company_repository.get(SYSTEM_COMPANY_ID)
+    assert company is not None
+
+    await container.user_repository.set(
+        User(
+            user_id=employee_user_id,
+            name=f"Mail Emp {unique_id}",
+            status=UserStatus.ACTIVE,
+            emails=[f"{employee_user_id}@linnex.io"],
+            companies={SYSTEM_COMPANY_ID: ["member"]},
+            active_company_id=SYSTEM_COMPANY_ID,
+        )
+    )
+    company.members[employee_user_id] = ["member"]
+    await container.company_repository.set(company)
+    await sync_company_member_roles(
+        container.authz_service,
+        company_id=SYSTEM_COMPANY_ID,
+        user_id=employee_user_id,
+        roles=["member"],
+    )
+
+    service = _offline_system_mail_service(
+        mail_connection_repository=mail_connection_repository,
+        mailbox_binding_repository=mailbox_binding_repository,
+        recording_mail_port=recording_mail_port,
+        container=container,
+    )
     try:
         _ = await service.ensure_system_mail_connection()
         _ = await service.ensure_system_user_bindings()
         employee_binding = await mailbox_binding_repository.get_by_user(
             SYSTEM_COMPANY_ID, employee_user_id
         )
-        assert employee_binding is None
+        assert employee_binding is not None
+        assert employee_binding.kind == MailboxBindingKind.USER
+        assert employee_binding.user_id == employee_user_id
     finally:
-        company.members = previous_members
-        await container.company_repository.set(company)
-        for restored_user_id, roles in previous_members.items():
-            await sync_company_member_roles(
-                container.authz_service,
+        leftover = await mailbox_binding_repository.get_by_user(
+            SYSTEM_COMPANY_ID, employee_user_id
+        )
+        if leftover is not None:
+            await service.unbind_mailbox(
+                leftover.mailbox_binding_id,
                 company_id=SYSTEM_COMPANY_ID,
-                user_id=restored_user_id,
-                roles=roles,
+                acting_as_admin=True,
             )
+        restored = await container.company_repository.get(SYSTEM_COMPANY_ID)
+        if restored is None:
+            raise RuntimeError("system company missing after employee mailbox test")
+        _ = restored.members.pop(employee_user_id, None)
+        await container.company_repository.set(restored)
         await remove_company_member(
             container.authz_service,
             company_id=SYSTEM_COMPANY_ID,
             user_id=employee_user_id,
         )
+        await container.user_repository.delete(employee_user_id)
+
+
+@pytest.mark.asyncio
+async def test_ensure_system_user_bindings_unbinds_leftover_without_membership(
+    mail_connection_repository: CompanyMailConnectionRepository,
+    mailbox_binding_repository: MailboxBindingRepository,
+    recording_mail_port: RecordingMailServerPort,
+    container,
+    unique_id: str,
+) -> None:
+    leftover_user_id = f"mail_leftover_{unique_id}"
+    local_part = f"lf{unique_id.replace('-', '')[:10]}"
+    company = await container.company_repository.get(SYSTEM_COMPANY_ID)
+    assert company is not None
+    assert leftover_user_id not in company.members
+
+    await container.user_repository.set(
+        User(
+            user_id=leftover_user_id,
+            name=f"Leftover {unique_id}",
+            status=UserStatus.INACTIVE,
+            emails=[f"{leftover_user_id}@linnex.io"],
+            companies={},
+            active_company_id=SYSTEM_COMPANY_ID,
+        )
+    )
+    service = _offline_system_mail_service(
+        mail_connection_repository=mail_connection_repository,
+        mailbox_binding_repository=mailbox_binding_repository,
+        recording_mail_port=recording_mail_port,
+        container=container,
+    )
+    try:
+        _ = await service.ensure_system_mail_connection()
+        leftover_binding = await service.bind_mailbox(
+            MailboxBindingCreatePayload(
+                user_id=leftover_user_id,
+                kind=MailboxBindingKind.USER,
+                local_part=local_part,
+                provision=True,
+                sync_enabled=True,
+            ),
+            company_id=SYSTEM_COMPANY_ID,
+        )
+        assert leftover_binding.user_id == leftover_user_id
+        _ = await service.ensure_system_user_bindings()
+        unbound = await mailbox_binding_repository.get_by_user(
+            SYSTEM_COMPANY_ID, leftover_user_id
+        )
+        assert unbound is None
+    finally:
+        still_bound = await mailbox_binding_repository.get_by_user(
+            SYSTEM_COMPANY_ID, leftover_user_id
+        )
+        if still_bound is not None:
+            await service.unbind_mailbox(
+                still_bound.mailbox_binding_id,
+                company_id=SYSTEM_COMPANY_ID,
+                acting_as_admin=True,
+            )
+        await container.user_repository.delete(leftover_user_id)
 
 
 @pytest.mark.asyncio

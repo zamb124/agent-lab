@@ -17,7 +17,7 @@ from apps.flows.src.models import FlowConfig, ToolReference, flow_tool_parameter
 from apps.flows.src.models.enums import CodeMode, ReactToolRole
 from apps.flows.src.models.flow_config import FlowToolPickerItem
 from apps.flows.src.models.tool_contracts import ToolDefinition
-from apps.flows.src.models.tool_reference import ToolListIndexItem
+from apps.flows.src.models.tool_reference import ToolIndexMcpFilter, ToolListIndexItem
 from apps.flows.src.services.agent_toolkit_service import (
     get_toolkit_ids_for_flow,
     get_toolkit_ids_for_tool,
@@ -288,13 +288,15 @@ def _registry_listed_tools(container: ContainerDep) -> list[BaseTool]:
     ]
 
 
-async def _company_tool_picker_index(container: ContainerDep) -> list[ToolListIndexItem]:
-    platform_ids = builtin_tool_ids()
-    return [
-        row
-        for row in await container.tool_repository.list_index()
-        if row.tool_id not in platform_ids
-    ]
+async def _company_tool_picker_index(
+    container: ContainerDep,
+    *,
+    mcp: ToolIndexMcpFilter,
+) -> list[ToolListIndexItem]:
+    return await container.tool_repository.list_index(
+        mcp=mcp,
+        exclude_tool_ids=builtin_tool_ids(),
+    )
 
 
 async def _flow_picker_refs(
@@ -315,6 +317,14 @@ async def _flow_picker_refs(
     return refs
 
 
+def _tool_picker_mcp_filter(*, include_mcp: bool, mcp_only: bool) -> ToolIndexMcpFilter:
+    if mcp_only:
+        return "only"
+    if not include_mcp:
+        return "exclude"
+    return "all"
+
+
 async def _tool_picker_refs(
     container: ContainerDep,
     *,
@@ -323,7 +333,8 @@ async def _tool_picker_refs(
     needle: str | None,
 ) -> list[_PickerRef]:
     refs: list[_PickerRef] = []
-    for row in await _company_tool_picker_index(container):
+    mcp_filter = _tool_picker_mcp_filter(include_mcp=include_mcp, mcp_only=mcp_only)
+    for row in await _company_tool_picker_index(container, mcp=mcp_filter):
         is_mcp = _index_row_is_mcp(row)
         if mcp_only and not is_mcp:
             continue
@@ -439,6 +450,25 @@ async def _hydrate_picker_page(
     return items
 
 
+async def _tool_picker_total(
+    container: ContainerDep,
+    *,
+    mcp: ToolIndexMcpFilter,
+    include_registry: bool,
+    needle: str | None,
+    catalog: list[_PickerRef],
+) -> int:
+    if needle is not None:
+        return len(catalog)
+    total = await container.tool_repository.count_index(
+        mcp=mcp,
+        exclude_tool_ids=builtin_tool_ids(),
+    )
+    if include_registry:
+        total += len(_registry_listed_tools(container))
+    return total
+
+
 async def _list_picker_tools_and_flows(
     container: ContainerDep,
     *,
@@ -458,6 +488,7 @@ async def _list_picker_tools_and_flows(
             limit=limit,
         )
         page_refs = [_PickerRef(item_type="flow", object_id=flow_id) for flow_id in page_ids]
+        total = len(catalog)
     elif picker_category == PickerCategory.MCP:
         catalog = await _tool_picker_refs(
             container, include_mcp=True, mcp_only=True, needle=needle
@@ -470,6 +501,13 @@ async def _list_picker_tools_and_flows(
             limit=limit,
         )
         page_refs = [_PickerRef(item_type="tool", object_id=tool_id) for tool_id in page_ids]
+        total = await _tool_picker_total(
+            container,
+            mcp="only",
+            include_registry=False,
+            needle=needle,
+            catalog=catalog,
+        )
     elif picker_category == PickerCategory.CODE:
         catalog = await _tool_picker_refs(
             container, include_mcp=False, mcp_only=False, needle=needle
@@ -482,6 +520,13 @@ async def _list_picker_tools_and_flows(
             limit=limit,
         )
         page_refs = [_PickerRef(item_type="tool", object_id=tool_id) for tool_id in page_ids]
+        total = await _tool_picker_total(
+            container,
+            mcp="exclude",
+            include_registry=True,
+            needle=needle,
+            catalog=catalog,
+        )
     else:
         catalog = [
             *(await _flow_picker_refs(container, needle=needle)),
@@ -492,9 +537,21 @@ async def _list_picker_tools_and_flows(
         page_refs = await _page_viewable_picker_refs(
             container, catalog, limit=limit, offset=offset
         )
+        if needle is not None:
+            total = len(catalog)
+        else:
+            flow_total = len([ref for ref in catalog if ref.item_type == "flow"])
+            tool_total = await _tool_picker_total(
+                container,
+                mcp="all",
+                include_registry=True,
+                needle=None,
+                catalog=[],
+            )
+            total = flow_total + tool_total
     return OffsetPage[ToolResponse](
         items=await _hydrate_picker_page(container, page_refs),
-        total=len(catalog),
+        total=total,
         limit=limit,
         offset=offset,
     )

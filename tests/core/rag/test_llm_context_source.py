@@ -87,9 +87,9 @@ async def test_rag_context_source_collects_reranked_rag_blocks() -> None:
                     "score": 1.25,
                     "document_id": "doc-1",
                     "document_name": "policy.md",
-                    "metadata": {"chunk_index": 3},
                     "namespace": "kb",
                     "chunk_id": "chunk-3",
+                    "chunk_index": 3,
                     "provenance": {"retriever": "pgvector"},
                 }
             ]

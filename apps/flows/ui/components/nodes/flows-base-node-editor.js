@@ -33,11 +33,15 @@ import '@platform/lib/components/fields/platform-field.js';
 import { fieldPillStyles } from '@platform/lib/styles/shared/field-pill.styles.js';
 import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 import {
-    nextCodeExecuteClientId,
-    setCodeExecuteRequestClientId,
-} from '../../_helpers/flows-code-execute-run-gate.js';
+    nextTestRunClientId,
+} from '../../_helpers/flows-test-run-gate.js';
 import { asObject, asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
-import { formatExecuteViewModel } from '../../_helpers/flows-execute-preview.js';
+import {
+    findNodeTestRunHandlers,
+    listNodeTestRunHandlers,
+    resolveNodeTestRunHandler,
+} from '../../_helpers/node-test-run-registry.js';
+import { uniquePinnedResourceType } from '../../_helpers/flows-branch-resource.js';
 import { buildFlowAssetFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 
 export class FlowsBaseNodeEditor extends PlatformElement {
@@ -411,10 +415,19 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         this._stateDraft = null;
         this._addResourcePick = '';
         this._fileUpload = this.useOp('platform/file_create');
-        this._nodeExecute = this.useOp('flows/code_execute');
+        this._testRunOps = new Map();
+        this._ragNodeTest = null;
+        for (const handler of listNodeTestRunHandlers()) {
+            if (!this._testRunOps.has(handler.opName)) {
+                this._testRunOps.set(handler.opName, this.useOp(handler.opName));
+            }
+        }
+        if (this._testRunOps.has('flows/rag_search')) {
+            this._ragNodeTest = this.useSlice('flows/rag_node_test');
+        }
         this._exceptionAbsorbAllowNamesOp = this.useOp('flows/exception_absorb_allow_names');
         this._executionLimitsOp = this.useOp('flows/execution_limits');
-        this._codeExecuteClientId = nextCodeExecuteClientId();
+        this._testRunClientId = nextTestRunClientId();
         this._resources = this.useResource('flows/resources', { autoload: true });
         this._flowEditor = this.useOp('flows/editor');
         this._nodeRunControlEl = null;
@@ -455,7 +468,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             return this._nodeRunControlEl;
         }
         const el = document.createElement('flows-node-run-control');
-        el.requestClientId = this._codeExecuteClientId;
+        el.requestClientId = this._testRunClientId;
         el.addEventListener('run', this._onNodeRunFired);
         el.addEventListener('open-full', this._onNodeRunOpenFullEvent);
         this._nodeRunControlEl = el;
@@ -491,14 +504,56 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         throw new Error(`flows-base-node-editor: panel header hint only for resource or external_api, got "${this.nodeType}"`);
     }
 
+    _testRunMatchCtx() {
+        const nodeType = typeof this.nodeType === 'string' ? this.nodeType : '';
+        if (nodeType.length === 0) {
+            return null;
+        }
+        const editorState = this._flowEditor.state;
+        const catalogItems = this._resources.items;
+        if (!Array.isArray(catalogItems)) {
+            throw new Error('flows-base-node-editor: resources.items array required');
+        }
+        const resourceType = nodeType === 'resource' && isPlainObject(editorState)
+            ? uniquePinnedResourceType(this.nodeConfig, editorState, catalogItems)
+            : null;
+        return { nodeType, resourceType, editorState, catalogItems };
+    }
+
     _syncNodeRunControlProps() {
         const el = this._nodeRunControlEl;
         if (!el) {
             return;
         }
-        el.requestClientId = this._codeExecuteClientId;
-        el.viewModel = this._executeViewModel();
-        el.busy = this._nodeExecute.busy;
+        el.requestClientId = this._testRunClientId;
+        const matchCtx = this._testRunMatchCtx();
+        if (matchCtx === null) {
+            el.viewModel = null;
+            el.busy = false;
+            return;
+        }
+        const matches = findNodeTestRunHandlers(matchCtx);
+        if (matches.length === 0) {
+            el.viewModel = null;
+            el.busy = false;
+            return;
+        }
+        if (matches.length !== 1) {
+            throw new Error(
+                `flows-base-node-editor: expected 0 or 1 test-run handler, got ${matches.length}`,
+            );
+        }
+        const handler = matches[0];
+        const op = this._testRunOps.get(handler.opName);
+        if (!op) {
+            throw new Error(`flows-base-node-editor: op ${handler.opName} not bound in constructor`);
+        }
+        el.viewModel = handler.formatViewModel({
+            op,
+            nodeId: this.nodeId,
+            t: (key, vars) => this.t(key, vars),
+        });
+        el.busy = handler.busyOf(op);
     }
 
     /**
@@ -637,13 +692,6 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         }
     }
 
-    _executeViewModel() {
-        return formatExecuteViewModel({
-            opError: this._nodeExecute.error,
-            lastResult: this._nodeExecute.lastResult,
-        });
-    }
-
     _nodeConfigForPayload() {
         const cfg = { ...asObject(this.nodeConfig) };
         if (isPlainObject(cfg.llm_override)) {
@@ -654,40 +702,21 @@ export class FlowsBaseNodeEditor extends PlatformElement {
     }
 
     async _runNodeTest() {
-        let state;
-        try {
-            state = JSON.parse(this._stateValue());
-        } catch {
-            this.toast('flows:test_panel.toast_state_invalid', { type: 'error' });
-            return;
+        const matchCtx = this._testRunMatchCtx();
+        if (matchCtx === null) {
+            throw new Error('flows-base-node-editor: nodeType required for test-run');
         }
-        if (state === null || typeof state !== 'object' || Array.isArray(state)) {
-            this.toast('flows:test_panel.toast_state_invalid', { type: 'error' });
-            return;
+        const handler = resolveNodeTestRunHandler(matchCtx);
+        const op = this._testRunOps.get(handler.opName);
+        if (!op) {
+            throw new Error(`flows-base-node-editor: op ${handler.opName} not bound in constructor`);
         }
-        const skill = typeof this.branchId === 'string' && this.branchId.length > 0 ? this.branchId : 'base';
-        setCodeExecuteRequestClientId(this._codeExecuteClientId);
-        const result = await this._nodeExecute.run({
-            node_type: this.nodeType,
-            node_config: this._nodeConfigForPayload(),
-            state,
-            flow_id: this.flowId,
-            branch_id: skill,
+        await handler.run({
+            host: this,
+            op,
+            requestClientId: this._testRunClientId,
+            matchCtx,
         });
-        if (result && typeof result === 'object' && result.success === true) {
-            if (result.output_state && typeof result.output_state === 'object' && !Array.isArray(result.output_state)) {
-                this._flowEditor.setPreviewExecutionState({ snapshot: result.output_state });
-            }
-            this._flowEditor.recordDataflowObservation({
-                nodeId: this.nodeId,
-                observation: {
-                    diff: Array.isArray(result.diff) ? result.diff : [],
-                    output_state: result.output_state && typeof result.output_state === 'object' ? result.output_state : null,
-                    duration_ms: typeof result.duration_ms === 'number' ? result.duration_ms : null,
-                    observed_at: new Date().toISOString(),
-                },
-            });
-        }
     }
 
     _onOpenExecuteFull(e) {
@@ -1214,6 +1243,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                         @change=${this._onTags}
                     ></platform-field>
                 </div>
+                ${this.nodeType === 'resource' ? nothing : html`
                 <div class="field">
                     <div class="field-pill field-pill-file-refs-shell">
                         <div class="field-pill-head">
@@ -1291,6 +1321,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                         </div>
                     </div>
                 </div>
+                `}
                 ${this.nodeType === 'resource' ? nothing : html`
                 <div class="field">
                     <platform-field

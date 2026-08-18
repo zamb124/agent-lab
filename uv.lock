@@ -125,6 +125,7 @@ core = [
     { name = "striprtf" },
     { name = "structlog" },
     { name = "trafilatura" },
+    { name = "tree-sitter-language-pack" },
     { name = "unstructured", extra = ["xlsx"] },
     { name = "yt-dlp" },
 ]
@@ -174,7 +175,6 @@ rag = [
 rag-worker = [
     { name = "beautifulsoup4" },
     { name = "tiktoken" },
-    { name = "tree-sitter-language-pack" },
 ]
 sync = [
     { name = "livekit-api" },
@@ -263,6 +263,7 @@ core = [
     { name = "striprtf", specifier = ">=0.0.27" },
     { name = "structlog", specifier = ">=25.5.0" },
     { name = "trafilatura", specifier = ">=2.0.0" },
+    { name = "tree-sitter-language-pack", specifier = ">=1.5.0" },
     { name = "unstructured", extras = ["xlsx"], specifier = ">=0.16.0" },
     { name = "yt-dlp", specifier = ">=2024.0.0" },
 ]
@@ -308,7 +309,6 @@ rag = [
 rag-worker = [
     { name = "beautifulsoup4", specifier = ">=4.12.0" },
     { name = "tiktoken", specifier = ">=0.9.0" },
-    { name = "tree-sitter-language-pack", specifier = ">=1.5.0" },
 ]
 sync = [
     { name = "livekit-api", specifier = ">=1.1.0" },

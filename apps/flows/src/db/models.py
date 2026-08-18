@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -129,6 +130,19 @@ class Tools(Base):
         Index("ix_tools_key_prefix", "key"),
         Index("ix_tools_updated_at", "updated_at"),
         Index("ix_tools_expired_at", "expired_at"),
+        Index(
+            "ix_tools_key_updated_at",
+            text("key text_pattern_ops"),
+            text("updated_at DESC"),
+        ),
+        Index(
+            "ix_tools_non_mcp_key_updated_at",
+            text("key text_pattern_ops"),
+            text("updated_at DESC"),
+            postgresql_where=text(
+                "COALESCE(value->>'code_mode', '') IS DISTINCT FROM 'mcp_tool'"
+            ),
+        ),
     )
 
     @override

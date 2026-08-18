@@ -59,7 +59,11 @@ from core.files.reader.service import (
     pdf_page_count,
     run_vision_on_image_bytes,
 )
-from core.files.reader.universal import keep_reader_pages, read_lane_for_kind, read_pages_for_layout
+from core.files.reader.universal import (
+    page_layout_kind_for_result,
+    read_lane_for_kind,
+    read_pages_for_layout,
+)
 from core.files.types import ext_to_mime
 from core.logging import get_logger
 
@@ -179,12 +183,14 @@ def cached_extract_is_stale(extract: FileExtract) -> bool:
 
 
 def _lazy_native_indices(pages_total: int, args: ReadFileArgs) -> tuple[set[int], bool]:
-    lazy = pages_total > VISION_FULL_READ_MAX_PAGES
-    if lazy:
-        start = args.page_start
-        end = pages_total - 1 if args.page_end == -1 else min(args.page_end, pages_total - 1)
-        return set(range(start, end + 1)), True
-    return set(range(pages_total)), False
+    """Окно native-страниц. lazy=True только если извлечено не всё (нельзя класть в полный кэш)."""
+    all_indices = set(range(pages_total))
+    if pages_total <= VISION_FULL_READ_MAX_PAGES:
+        return all_indices, False
+    start = args.page_start
+    end = pages_total - 1 if args.page_end == -1 else min(args.page_end, pages_total - 1)
+    target = set(range(start, end + 1))
+    return target, target != all_indices
 
 
 def _merge_page_text(*, base_text: str, image_ocr_blocks: list[str]) -> str:
@@ -423,6 +429,7 @@ async def _extract_document(
                 resolved_name,
                 page_indices=target_indices,
                 force_raster=force_vision,
+                warnings=warnings,
             )
         )
         kind = FileReadKind.PDF
@@ -441,13 +448,14 @@ async def _extract_document(
         source_pages = read_pages_for_layout(result, file_name=file_name)
         kind = result.detected_kind
         mime_type = result.content_type or "application/octet-stream"
-        if keep_reader_pages(result):
+        layout_kind = page_layout_kind_for_result(result)
+        if layout_kind is PageLayoutKind.NATIVE:
             page_layout = PageLayout(
-                kind=PageLayoutKind.NATIVE, pages_total=len(source_pages), page_size=0
+                kind=layout_kind, pages_total=len(source_pages), page_size=0
             )
         else:
             page_layout = PageLayout(
-                kind=PageLayoutKind.VIRTUAL,
+                kind=layout_kind,
                 pages_total=len(source_pages),
                 page_size=DEFAULT_VIRTUAL_PAGE_SIZE,
             )
@@ -493,10 +501,7 @@ async def _extract_document(
     else:
         read_lane = read_lane_for_kind(kind)
 
-    if lazy:
-        content_chars_total = -1
-    else:
-        content_chars_total = sum(len(page.text) for page in universal)
+    content_chars_total = sum(len(page.text) for page in universal)
 
     extract = FileExtract(
         file_id=file_id,
@@ -561,7 +566,7 @@ def _error_file_result(file_ref: FileRef, message: str) -> FileResult:
         read_lane=ReadLane.TEXT,
         page_layout=PageLayout(kind=PageLayoutKind.NATIVE, pages_total=0, page_size=0),
         pages_total=0,
-        content_chars_total=-1,
+        content_chars_total=0,
         page_start=0,
         pages_processed=0,
         complete=False,

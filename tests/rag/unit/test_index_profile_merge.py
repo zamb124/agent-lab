@@ -10,11 +10,11 @@ from core.rag_indexing_schema import IndexProfileConfig
 
 
 def test_deep_merge_dict_nested() -> None:
-    base = {"split": {"strategy": "fixed_tokens", "chunk_size": 512}, "parsing": {"engine": "unstructured"}}
+    base = {"split": {"strategy": "fixed_tokens", "chunk_size": 512}, "lexical": {"enabled": False}}
     override = {"split": {"strategy": "semantic"}}
     assert deep_merge_dict(base, override) == {
         "split": {"strategy": "semantic", "chunk_size": 512},
-        "parsing": {"engine": "unstructured"},
+        "lexical": {"enabled": False},
     }
 
 

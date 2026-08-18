@@ -78,7 +78,6 @@ class InMemoryRAGRepository:
                     "score": 0.91,
                     "document_id": "doc",
                     "document_name": "kb.md",
-                    "metadata": {},
                     "namespace": kwargs["bind"].namespace,
                     "chunk_id": "chunk",
                     "provenance": {},

@@ -103,9 +103,10 @@ def _taskiq_consumer_ready(client: redis.Redis, stream_name: str) -> bool:
             raise TypeError(f"XINFO GROUPS элемент не dict: {type(group)!r}")
         if str(group.get("name")) != _TASKIQ_CONSUMER_GROUP:
             continue
-        consumers_raw = group.get("consumers", 0)
-        consumers = int(consumers_raw) if isinstance(consumers_raw, int) else 0
-        return consumers >= 1
+        consumers_raw = group.get("consumers")
+        if consumers_raw is None:
+            raise ValueError(f"XINFO GROUPS group {_TASKIQ_CONSUMER_GROUP!r} missing consumers")
+        return int(consumers_raw) >= 1
     return False
 
 

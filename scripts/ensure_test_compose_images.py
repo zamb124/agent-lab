@@ -14,9 +14,10 @@ import json
 import os
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import Literal, NoReturn, cast
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = PROJECT_ROOT / ".env.test-compose-images"
@@ -188,21 +189,67 @@ def _docker_login_ghcr_from_gh(gh_path: str, registry_host: str) -> None:
         )
 
 
-def _ghcr_registry_reachable(registry: str) -> bool:
+GhcrProbeStatus = Literal["ok", "unauthorized", "missing", "network"]
+
+_GHCR_PROBE_RETRY_DELAYS_SEC: tuple[float, ...] = (1.0, 2.0, 4.0)
+
+
+def _classify_manifest_inspect(returncode: int, stderr: str, stdout: str) -> GhcrProbeStatus:
+    if returncode == 0:
+        return "ok"
+    text = f"{stderr}\n{stdout}".lower()
+    if "unauthorized" in text or "authentication required" in text or "denied" in text:
+        return "unauthorized"
+    if "manifest unknown" in text or "no such manifest" in text:
+        return "missing"
+    if (
+        "socket is not connected" in text
+        or "connection refused" in text
+        or "connection reset" in text
+        or "i/o timeout" in text
+        or "tls handshake timeout" in text
+        or "network is unreachable" in text
+        or "no route to host" in text
+        or "temporary failure in name resolution" in text
+        or "write tcp" in text
+        or "read tcp" in text
+        or "dial tcp" in text
+        or "broken pipe" in text
+    ):
+        return "network"
+    detail = stderr.strip() or stdout.strip()
+    raise RuntimeError(f"GHCR manifest inspect unexpected failure: {detail}")
+
+
+def _inspect_ghcr_base(registry: str) -> tuple[GhcrProbeStatus, str]:
     probe_ref = _image_ref(registry, "agent-lab-base", "latest")
     result = _run(
         ["docker", "manifest", "inspect", probe_ref],
         check=False,
         capture=True,
     )
-    if result.returncode == 0:
-        return True
-    stderr = result.stderr.lower()
-    if "unauthorized" in stderr or "denied" in stderr:
-        return False
-    probe_detail = result.stderr.strip() or result.stdout.strip()
+    detail = result.stderr.strip() or result.stdout.strip()
+    return _classify_manifest_inspect(result.returncode, result.stderr, result.stdout), detail
+
+
+def _ghcr_probe(registry: str) -> tuple[GhcrProbeStatus, str]:
+    status, detail = _inspect_ghcr_base(registry)
+    if status != "network":
+        return status, detail
+    for wait_seconds in _GHCR_PROBE_RETRY_DELAYS_SEC:
+        print(f"[ensure] GHCR probe transport error, retry in {wait_seconds:.0f}s: {detail}")
+        time.sleep(wait_seconds)
+        status, detail = _inspect_ghcr_base(registry)
+        if status != "network":
+            return status, detail
+    return status, detail
+
+
+def _raise_missing_base_image(registry: str, detail: str) -> NoReturn:
+    probe_ref = _image_ref(registry, "agent-lab-base", "latest")
     raise RuntimeError(
-        f"GHCR probe {probe_ref} failed: {probe_detail}. Убедитесь, что workflow Build Base Image выполнен на main."
+        f"GHCR probe {probe_ref} manifest missing ({detail}). "
+        "Убедитесь, что workflow Build Base Image выполнен на main."
     )
 
 
@@ -211,9 +258,20 @@ def _ensure_ghcr_auth(registry: str) -> None:
         return
 
     registry_host = _registry_host(registry)
-    if _docker_has_ghcr_credentials(registry_host) and _ghcr_registry_reachable(registry):
-        print(f"[ensure] GHCR auth OK ({registry})")
-        return
+    if _docker_has_ghcr_credentials(registry_host):
+        status, detail = _ghcr_probe(registry)
+        if status == "ok":
+            print(f"[ensure] GHCR auth OK ({registry})")
+            return
+        if status == "network":
+            print(
+                f"[ensure] GHCR blob probe failed after retries ({detail}); "
+                "docker credentials present, continuing"
+            )
+            return
+        if status == "missing":
+            _raise_missing_base_image(registry, detail)
+        # unauthorized: re-login below
 
     gh_path = _gh_executable()
     if not _gh_auth_status_ok(gh_path):
@@ -224,11 +282,25 @@ def _ensure_ghcr_auth(registry: str) -> None:
     _gh_ensure_read_packages_scope(gh_path)
     _docker_login_ghcr_from_gh(gh_path, registry_host)
 
-    if not _ghcr_registry_reachable(registry):
+    status, detail = _ghcr_probe(registry)
+    if status == "ok":
+        print(f"[ensure] GHCR auth OK ({registry})")
+        return
+    if status == "unauthorized":
         raise RuntimeError(
-            f"После docker login {registry} недоступен. Проверьте read:packages и доступ к пакетам ghcr.io/zamb124: gh auth refresh -s read:packages"
+            f"После docker login {registry} недоступен. "
+            "Проверьте read:packages и доступ к пакетам ghcr.io/zamb124: "
+            "gh auth refresh -s read:packages"
         )
-    print(f"[ensure] GHCR auth OK ({registry})")
+    if status == "missing":
+        _raise_missing_base_image(registry, detail)
+    if status == "network":
+        print(
+            f"[ensure] docker login OK; GHCR blob probe failed after retries ({detail}); "
+            "continuing (pull-or-build uses local image on miss)"
+        )
+        return
+    raise RuntimeError(f"GHCR probe unexpected status {status!r}: {detail}")
 
 
 def _image_ref(registry: str, suffix: str, tag: str) -> str:

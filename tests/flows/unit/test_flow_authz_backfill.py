@@ -44,7 +44,7 @@ def test_tool_permission_from_payload_ignores_legacy_extra_fields() -> None:
             "tool_id": "mcp:io_github_x:book",
             "permission": [],
             "mock_map": None,
-            "args_schema": {},
+            "parameters_schema": {},
         },
         storage_key="company:system:tool:mcp:io_github_x:book",
         tool_id="mcp:io_github_x:book",

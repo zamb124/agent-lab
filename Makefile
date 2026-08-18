@@ -1,6 +1,6 @@
 .PHONY: help runtime-bootstrap dev dev-up dev-down dev-logs dev-clean dev-minio-restart dev-bootstrap-postgres openfga-backfill stress lint lint-ts lint-file mcp-branding-seed agent agent-ensure agent-release ui ui-doc sync-example-docs
 .PHONY: test-frontend test-rag test-crawl-llm-live
-.PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-platform-events-canon check-core-frontend-canon check-embed-esm check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon check-field-canon check-rag-post-retrieval-rerank check-company-ai check-files-canon check-tool-tags check-taskiq-canon build-i18n
+.PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-platform-events-canon check-core-frontend-canon check-embed-esm check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon check-field-canon check-rag-post-retrieval-rerank check-company-ai check-files-canon check-tool-tags check-taskiq-canon check-a2a-fixtures check-a2a-fixtures-remote build-i18n
 .PHONY: clean-i18n-unused base
 .PHONY: render-helm-app-conf require-image-tag k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-helm-clear-pending k8s-helm-adopt-orphans k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore k8s-decommission-compose k8s-cluster-reset k8s-openfga-bootstrap k8s-openfga-backfill k8s-gpu-sync k8s-gpu-prune
 
@@ -152,6 +152,9 @@ check-no-uvicorn:
 
 check-a2a-fixtures:
 	@uv run python scripts/pin_a2a_official_fixtures.py --check
+
+check-a2a-fixtures-remote:
+	@uv run python scripts/pin_a2a_official_fixtures.py --check-remote
 
 check-ft-wheels:
 	@./scripts/check_ft_wheels.sh

@@ -10,7 +10,7 @@ alwaysApply: false
 Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
 Не плодить parallel DTO/state shapes рядом с каноническим resource/API контрактом. Fail-closed `_normalize*Payload` в factories — валидация границы (throw), не translation между дублями моделей.
 
-Весь UI — на событиях через единый `EventBus`. Доменное состояние — в фабриках (`createAsyncOp`/`createResourceCollection`/`createCursorList`/`createFacets`/`createForm`/`createSlice`). Pages, modals и components получают доступ к фабрикам **только** через helpers базы по строковому имени. Никаких сервисов, store, features, Zustand, BaseStore, ad-hoc HTTP-клиентов и фолбеков.
+Весь UI — на событиях через единый `EventBus`. Доменное состояние — в фабриках (`createAsyncOp`/`createResourceCollection`/`createCursorList`/`createFacets`/`createForm`/`createSlice`). Pages, modals и components получают доступ к фабрикам **только** через helpers базы по строковому имени. Никаких сервисов, store, features, Zustand, BaseStore, ad-hoc HTTP-клиентов и фолбеков. Lookup по типу ноды (Play / test-run) — не фабрика: см. `ui_factories.mdc`.
 
 **ZERO-IMPORT**, **ZERO-FALLBACK**, **ZERO-GUESS** — отклонений нет.
 

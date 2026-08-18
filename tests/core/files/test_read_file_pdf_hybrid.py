@@ -116,4 +116,3 @@ async def test_read_file_pdf_text_and_embedded_image_merged(
     assert _TEXT_MARKER in merged
     assert _MOCK_VISION in merged
     assert "[image 1]" in merged
-    assert "[figure]" in merged

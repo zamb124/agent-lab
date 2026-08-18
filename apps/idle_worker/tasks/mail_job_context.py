@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from apps.idle_worker.container import IdleWorkerContainer
-from apps.idle_worker.tasks.mail_recipients import mailbox_recipient_user_ids
+from apps.idle_worker.tasks.mail_recipients import mailbox_role_job_actor_user
+from core.container.base import BaseContainer
 from core.context import clear_context, get_context, set_context
 from core.context.job_context import build_job_context
 from core.mail.models import MailboxBinding, MailboxBindingKind
@@ -11,7 +11,7 @@ from core.models.context_models import Context
 
 
 async def enter_mail_binding_context(
-    container: IdleWorkerContainer,
+    container: BaseContainer,
     binding: MailboxBinding,
     *,
     channel: str = "mail_sync",
@@ -31,21 +31,7 @@ async def enter_mail_binding_context(
         if user is None:
             raise ValueError(f"user not found for mail job: {binding.user_id}")
     else:
-        user = None
-        binding_member_ids = await mailbox_recipient_user_ids(container, binding)
-        for member_user_id in binding_member_ids:
-            if member_user_id == binding.user_id:
-                continue
-            candidate = await container.user_repository.get(member_user_id)
-            if candidate is not None:
-                user = candidate
-                break
-        if user is None:
-            raise ValueError(
-                "no FGA mailbox member for role mail job: "
-                + f"mailbox_binding_id={binding.mailbox_binding_id} "
-                + f"company_id={binding.company_id}"
-            )
+        user = await mailbox_role_job_actor_user(container, binding)
     _ = set_context(
         build_job_context(
             company=company,

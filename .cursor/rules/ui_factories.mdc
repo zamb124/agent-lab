@@ -49,7 +49,7 @@ ZERO-IMPORT (фабрики только по имени), ZERO-FALLBACK (`||`/`
 | `createForm` | форма (draft/errors/submit) | `FormController` | `this.useForm(name)` |
 | `createSlice` | UI-only state без HTTP/WS | `SliceController` | `this.useSlice(name)` |
 
-Других фабрик не будет. Не подходит — комбинация из имеющихся (например, `form.submitEvent` указывает в `asyncOp.events.REQUESTED`).
+Других фабрик не будет. Не подходит — комбинация из имеющихся (например, `form.submitEvent` указывает в `asyncOp.events.REQUESTED`). Lookup-реестры (test-run хендлер ноды по `nodeType`/`resourceType`) — не седьмая фабрика: без slice/transport; 0 или >1 match на запуск — `throw`.
 
 `createSlice` — только для UI-only / push-only / overlay-state. Запрещены `transport`, `request`, `restMirror`, `wsTimeoutMs`, `effect`. Обязательны `name`, `extraInitial`, `extraReducer`.
 

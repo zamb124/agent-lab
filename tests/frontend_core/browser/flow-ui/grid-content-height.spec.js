@@ -186,10 +186,19 @@ describe('flow-ui grid content height', () => {
         const find = await mount(formDocument());
         const form = find('login-form');
         const inspected = find.inspect('login-form');
-        const surfaceRect = form.querySelector('.flow-grid').getBoundingClientRect();
-        // The card/section/form surface owns the tracks, so cells are measured there.
-        expect(inspected.contentRect.x).to.be.closeTo(surfaceRect.x + 16, 1);
-        expect(inspected.contentRect.width).to.be.closeTo(surfaceRect.width - 32, 1);
+        const grid = form.querySelector('.flow-grid');
+        const surfaceRect = grid.getBoundingClientRect();
+        const gridStyle = getComputedStyle(grid);
+        const paddingLeft = Number.parseFloat(gridStyle.paddingLeft);
+        const paddingRight = Number.parseFloat(gridStyle.paddingRight);
+        const borderLeft = Number.parseFloat(gridStyle.borderLeftWidth);
+        const borderRight = Number.parseFloat(gridStyle.borderRightWidth);
+        // Tracks live in the CSS content box of the form surface, not the border box.
+        expect(inspected.contentRect.x).to.be.closeTo(surfaceRect.x + borderLeft + paddingLeft, 1);
+        expect(inspected.contentRect.width).to.be.closeTo(
+            surfaceRect.width - borderLeft - borderRight - paddingLeft - paddingRight,
+            1,
+        );
         expect(inspected.rowGap).to.equal(16);
         expect(inspected.rowTracks.length).to.equal(3);
     });

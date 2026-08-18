@@ -1838,6 +1838,7 @@ async def flows_open_node_editor(page: Page, node_id: str) -> Locator:
         "flows-external-api-editor, "
         "flows-mcp-node-editor, "
         "flows-hitl-node-editor, "
+        "flows-resource-node-editor, "
         "flows-base-node-editor"
     ).first
     if await floating.count() > 0 and await floating.is_visible() and await node_editor.count() > 0:

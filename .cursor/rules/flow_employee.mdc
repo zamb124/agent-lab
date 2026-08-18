@@ -16,7 +16,7 @@ alwaysApply: false
 
 - Хелперы: `core/identity/flow_employee.py` (`ensure_flow_employee`, `deactivate_flow_employee`, `curator_user_ids` ≥1).
 - Конфиг: `FlowEmployeeConfig` (`enabled`, `roles`, `curator_user_ids`, `display_name`, `avatar_url`) на `FlowConfig.employee`.
-- Sync на create/update/delete: `apps/flows/src/services/flow_employee_provisioning.py` → двустороннее членство `user.companies` + `company.members` (team API, Sync `company_members`, @mention).
+- Sync на create/update/delete: `apps/flows/src/services/flow_employee_provisioning.py` → двустороннее членство `user.companies` + `company.members` (team API, Sync `company_members`, @mention). Если у компании есть company mail connection и это не `system` — `mail_service.get_or_create_user_binding`. На `system` mailbox сотрудника создаёт `ensure_system_user_bindings` при reconcile. При deactivate/delete — `unbind_company_user_mailboxes` (personal не трогать).
 - Execution: `apps/flows/src/services/execution_identity.resolve_execution_context` минтит SESSION JWT сотрудника; `ExecutionState.initiator_user_id` — кто запустил (уведомления / `ask_user` / prompt `user_*`); identity/memory/tools — от актора-сотрудника.
 - Act-as куратора: `POST /{svc}/api/team/employees/{user_id}/act-as` (+ stop); `impersonated_by` в JWT metadata.
 
@@ -63,7 +63,7 @@ alwaysApply: false
 |---|---|---|---|
 | Identity + provisioning | **DONE** | ensure/deactivate, curators | — |
 | Execution identity | **DONE** | JWT сотрудника, initiator отдельно | — |
-| Employee inbox | **DONE** | шина `platform:events` → consumer `flows` → sync + work_item | mail/CRM/прочие sources |
+| Employee inbox | **DONE** | шина `platform:events` → consumer `flows` → sync + work_item | inbound mail / CRM / прочие sources |
 | Team badge + act-as | **PARTIAL** | team API/UI, act-as | — |
 | Enable employee в flows editor | **DONE** | modal + header chip + sidebar badge | — |
 | WorkItem → run | **DONE** | событие assigned → inbox + write-back (link + комментарий) | — |
@@ -76,7 +76,8 @@ alwaysApply: false
 | HITL operator | **N/A** | HITL = люди/очереди | employee не оператор HITL |
 | CRM (NetWorkle) | **READY** (employee tool parity) | `networkle` → entities/notes/graph/ops + `work-items`; ServiceClient→CRM REST | CRM→inbox, AmoCRM/grants/type-admin, graph 3d chrome |
 | Documents (Office) | **READY** (chat/file parity) | `documents-*` / `document-workspace` / `diagrams-viz` / `knowledge-rag` | OnlyOffice DS UI, anonymous viewer — OOS |
-| Mail / Calendar / Voice | **MISSING** | — | mailbox, inbound→inbox, meeting semantics |
+| Mail (mailbox + sync) | **DONE** | `get_or_create_user_binding` при enable (не `system`); `ensure_system_user_bindings` без skip employee; `unbind_company_user_mailboxes` при deactivate | inbound `mail/message/upserted` → EmployeeInbox |
+| Calendar / Voice | **MISSING** | — | meeting semantics, voice |
 
 ### Планки продукта
 

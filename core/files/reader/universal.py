@@ -1,8 +1,9 @@
 """Нормализация FileReadResult в Universal Pages (единый постраничный слой для всех типов).
 
 Native units (страницы PDF, листы XLS, слайды PPTX, главы EPUB) сохраняются как есть.
-Сплошной контент (txt/csv/json/html/docx-one-blob/аудио-транскрипт) нарезается на
+Сплошной контент (txt/csv/json/html/office-blob без blocks/assets) нарезается на
 virtual pages окном page_size; для CSV/TSV — по границам строк, не разрывая запись.
+Office с blocks/assets у reader'а (в том числе .doc/.p7s) остаётся NATIVE — `keep_reader_pages`.
 """
 
 from __future__ import annotations
@@ -66,6 +67,11 @@ def keep_reader_pages(result: FileReadResult) -> bool:
     if _is_natively_paginated(result):
         return True
     return any(page.blocks or page.assets for page in result.pages)
+
+
+def page_layout_kind_for_result(result: FileReadResult) -> PageLayoutKind:
+    """NATIVE, если reader уже отдал units/структуру; иначе VIRTUAL-окна."""
+    return PageLayoutKind.NATIVE if keep_reader_pages(result) else PageLayoutKind.VIRTUAL
 
 
 def read_pages_for_layout(
@@ -136,9 +142,8 @@ def build_file_extract(
     mime_type = result.content_type or "application/octet-stream"
 
     source_pages = read_pages_for_layout(result, file_name=file_name, page_size=page_size)
-    keep_native = keep_reader_pages(result)
-    layout_kind = PageLayoutKind.NATIVE if keep_native else PageLayoutKind.VIRTUAL
-    effective_page_size = 0 if keep_native else page_size
+    layout_kind = page_layout_kind_for_result(result)
+    effective_page_size = 0 if layout_kind is PageLayoutKind.NATIVE else page_size
     pages: list[UniversalPage] = []
     for page in source_pages:
         pages.append(

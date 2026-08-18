@@ -88,9 +88,9 @@ async def test_add_document_merges_index_profile_config(
     await r.add_document(
         "fid",
         "hello " * 20,
-        metadata={"index_profile_config": {"split": {"strategy": "semantic"}}},
+        metadata={"index_profile_config": {"split": {"strategy": "recursive"}}},
         name="n.txt",
-        index_profile_config={"parsing": {"engine": "unstructured"}},
+        index_profile_config={"lexical": {"enabled": True}},
     )
 
     prov = flow_container_for_rag.rag_repository.provider
@@ -98,5 +98,5 @@ async def test_add_document_merges_index_profile_config(
     assert stored is not None
     ir = stored.metadata["indexing_runtime"]
     assert ir["split"]["chunk_size"] == 256
-    assert ir["split"]["strategy"] == "semantic"
-    assert ir["parsing"]["engine"] == "unstructured"
+    assert ir["split"]["strategy"] == "recursive"
+    assert ir["lexical"]["enabled"] is True

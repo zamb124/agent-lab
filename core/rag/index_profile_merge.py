@@ -14,7 +14,7 @@ def merge_index_profile_config(base: IndexProfileConfig, override: JsonObject) -
     Частичное переопределение профиля индексации (например только ``split.strategy``).
 
     ``override`` — JSON-объект с теми же ключами верхнего уровня, что у ``IndexProfileConfig``;
-    вложенные объекты (``split``, ``parsing``) сливаются с базой.
+    вложенные объекты (``split``, ``lexical``, ``search_defaults``) сливаются с базой.
     """
     base_payload = require_json_object(base.model_dump(mode="json"), "index_profile.base")
     merged = deep_merge_dict(base_payload, override)

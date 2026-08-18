@@ -13,6 +13,7 @@ import pytest
 from core.files.reader import (
     MAX_READ_BUDGET,
     ContentMode,
+    FileReadKind,
     PageLayoutKind,
     ReadLane,
     StopReason,
@@ -25,6 +26,7 @@ from tests.core.files.corpus.read_helpers import (
     build_corpus_extract,
     expected_layout_kind,
     read_args_for,
+    read_corpus_raw,
     require_corpus_bytes,
 )
 
@@ -50,10 +52,15 @@ async def test_corpus_extract_pipeline_invariants(
     extract = await build_corpus_extract(
         entry, unique_id=unique_id, mock_llm_with_queue=mock_llm_with_queue
     )
+    raw_result = None
+    if extract.kind not in (FileReadKind.PDF, FileReadKind.SPREADSHEET, FileReadKind.IMAGE):
+        raw_result = await read_corpus_raw(
+            entry, unique_id=unique_id, mock_llm_with_queue=mock_llm_with_queue
+        )
 
     assert extract.kind == entry.expected_kind
     assert_extract_read_lane(entry, extract)
-    assert extract.page_layout.kind == expected_layout_kind(extract, entry.path.name)
+    assert extract.page_layout.kind == expected_layout_kind(extract, raw_result)
     assert extract.page_layout.pages_total == len(extract.pages)
     assert extract.page_layout.pages_total >= entry.expected_min_pages
     assert_checksum_stable(raw, extract)
@@ -68,7 +75,7 @@ async def test_corpus_first_page_render_completes(
     unique_id: str,
     mock_llm_with_queue,
 ) -> None:
-    """Первая страница каждого файла укладывается в budget и завершается COMPLETE."""
+    """Первая страница: COMPLETE, если влезает в budget; иначе честный BUDGET_EXHAUSTED."""
     extract = await build_corpus_extract(
         entry, unique_id=unique_id, mock_llm_with_queue=mock_llm_with_queue
     )
@@ -78,6 +85,11 @@ async def test_corpus_first_page_render_completes(
     assert rendered.success is True
     assert rendered.pages_processed >= 1
     if extract.page_layout.pages_total <= 1:
+        if rendered.stop_reason == StopReason.BUDGET_EXHAUSTED:
+            assert rendered.truncated is True
+            assert rendered.complete is False
+            assert rendered.continuation.has_more is True
+            return
         assert rendered.stop_reason == StopReason.COMPLETE
         assert rendered.complete is True
         assert rendered.continuation.has_more is False

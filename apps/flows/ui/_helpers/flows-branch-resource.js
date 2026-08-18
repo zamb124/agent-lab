@@ -90,3 +90,51 @@ export function resolveResourceForPanel(selectedId, editorState, catalogItems) {
     }
     return null;
 }
+
+export function pinnedResourceIds(nodeConfig) {
+    if (!isPlainObject(nodeConfig)) {
+        return [];
+    }
+    const raw = nodeConfig.resources;
+    if (!isPlainObject(raw)) {
+        return [];
+    }
+    const out = [];
+    const seen = new Set();
+    for (const [k, ref] of Object.entries(raw)) {
+        if (!isPlainObject(ref)) {
+            continue;
+        }
+        const rid = typeof ref.resource_id === 'string' && ref.resource_id.length > 0 ? ref.resource_id : k;
+        if (typeof rid !== 'string' || rid.length === 0) {
+            continue;
+        }
+        if (seen.has(rid)) {
+            continue;
+        }
+        seen.add(rid);
+        out.push(rid);
+    }
+    return out;
+}
+
+export function uniquePinnedResourceType(nodeConfig, editorState, catalogItems) {
+    const ids = pinnedResourceIds(nodeConfig);
+    const types = [];
+    for (const id of ids) {
+        const resolved = resolveResourceForPanel(id, editorState, catalogItems);
+        if (resolved === null) {
+            return null;
+        }
+        const resourceType = resolved.resource.type;
+        if (typeof resourceType !== 'string' || resourceType.length === 0) {
+            return null;
+        }
+        types.push(resourceType);
+    }
+    const unique = [...new Set(types)];
+    if (unique.length !== 1) {
+        return null;
+    }
+    return unique[0];
+}

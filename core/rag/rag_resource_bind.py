@@ -52,7 +52,7 @@ class RagResourceBindParams(StrictBaseModel):
     index_profile_config: JsonObject | None = Field(
         default=None,
         description=(
-            "Частичный профиль индексации (как у IndexProfileConfig): split, parsing, lexical, "
+            "Частичный профиль индексации (как у IndexProfileConfig): split, lexical, "
             "опционально search_defaults. Сливается с rag.document_indexing при записи документа."
         ),
     )

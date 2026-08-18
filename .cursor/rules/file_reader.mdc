@@ -45,6 +45,8 @@ reader → ReadPage (text + blocks + ReadAsset)
 - `_read_raw`, `_get_or_extract`, `build_file_extract` — не вызывать из `apps/` и `core/rag/`.
 - Persist ассетов: `FileReader.configure_asset_persist(files_service)` при старте rag и rag_worker. `ReadFileArgs.persist_assets_namespace` пишет `FileRef` на figure-блоки (`FileSourceKind.RAG_DOCUMENT` + Documents bind, без `post_create.rag_index_namespace` — индексируется родительский документ); без namespace `files=[]`.
 - Label страницы: свой (slide/sheet/chapter) или `page_{index+1}` (`default_page_label` / `resolved_page_label`). VIRTUAL-окна и unstructured без `page_number` не оставляют пустой label.
+- Layout OFFICE: `keep_reader_pages` / `page_layout_kind_for_result` — NATIVE если reader уже отдал несколько units, blocks или assets; иначе VIRTUAL-окна. Расширение (.doc/.eml/.p7s) само по себе layout не задаёт.
+- Зашифрованный PDF без пароля: `FileReader.read` завершается успешно, страницы с пустым текстом и warning «PDF зашифрован; текст недоступен без пароля». Сырой `ValueError: document closed or encrypted` из pymupdf на каноническом пути запрещён. `content_chars_total` всегда `>= 0` (сумма извлечённого текста; ошибка render — `0`).
 
 ## Call sites (одинаково)
 

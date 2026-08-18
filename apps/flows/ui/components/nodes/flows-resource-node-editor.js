@@ -255,7 +255,7 @@ export class FlowsResourceNodeEditor extends PlatformElement {
                             ${renderResourceDefinitionEditor(
                                 resolved.resource,
                                 (ev) => this._onResourceDefinitionChange(ev),
-                                { compactHeader: true, flowId: this.flowId },
+                                { compactHeader: true, flowId: this.flowId, nodeId: this.nodeId },
                             )}
                         </div>
                     `;

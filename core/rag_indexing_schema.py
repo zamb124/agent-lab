@@ -55,7 +55,7 @@ class IndexProfileSplitConfig(BaseModel):
     chunk_overlap: int = Field(default=50, ge=0)
     chonkie_code_language: str = Field(
         default="auto",
-        description="Язык для CodeChunker (auto | python | javascript | ...).",
+        description="Язык tree-sitter для strategy=code (auto | python | javascript | ...).",
     )
 
 

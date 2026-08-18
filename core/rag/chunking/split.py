@@ -7,7 +7,6 @@ from typing import Protocol
 
 import tiktoken
 from chonkie import (
-    CodeChunker,
     RecursiveChunker,
     SemanticChunker,
     SentenceChunker,
@@ -26,6 +25,7 @@ from core.files.reader.models import (
     UniversalPage,
     resolved_page_label,
 )
+from core.rag.chunking.code_split import split_code_text
 from core.rag.models import RAGChunk
 from core.rag_indexing_schema import IndexProfileConfig, IndexProfileSplitConfig
 
@@ -137,7 +137,12 @@ def _split_units(extract: FileExtract, split_config: IndexProfileSplitConfig) ->
     return _split_pages_with_text_strategy(extract, split_config)
 
 
-def _texts_for_strategy(text: str, split_config: IndexProfileSplitConfig) -> list[str]:
+def _texts_for_strategy(
+    text: str,
+    split_config: IndexProfileSplitConfig,
+    *,
+    file_name: str,
+) -> list[str]:
     raw = text
     if not raw.strip():
         return []
@@ -173,19 +178,7 @@ def _texts_for_strategy(text: str, split_config: IndexProfileSplitConfig) -> lis
         )
         return _chunker_to_texts(chunker, raw)
     if strategy == "code":
-        try:
-            chunker = CodeChunker(
-                tokenizer=_ENCODING_NAME,
-                chunk_size=split_config.chunk_size,
-                language=split_config.chonkie_code_language,
-            )
-        except ImportError as exc:
-            message = (
-                "split.strategy=code: CodeChunker требует tree-sitter-language-pack "
-                + "(dependency-groups rag-worker). Установите зависимости и повторите индексацию."
-            )
-            raise ValueError(message) from exc
-        return _chunker_to_texts(chunker, raw)
+        return split_code_text(raw, split_config, file_name=file_name)
     if strategy == "table":
         chunker = TableChunker(tokenizer="row", chunk_size=split_config.chunk_size)
         return _chunker_to_texts(chunker, raw)
@@ -211,7 +204,9 @@ def _split_pages_with_text_strategy(
                     )
                 )
             continue
-        for fragment in _texts_for_strategy(page.text, split_config):
+        for fragment in _texts_for_strategy(
+            page.text, split_config, file_name=extract.file_name
+        ):
             units.append(
                 _SplitUnit(
                     content=fragment,
