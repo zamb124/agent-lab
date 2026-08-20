@@ -88,3 +88,34 @@ export function cookieConsentDecisionIsCurrent(params) {
     if (params.analyticsConfigured && !params.analyticsOffered) return false;
     return true;
 }
+
+/**
+ * Можно ли из `updated()` дернуть GET site-bundle.
+ * REQUESTED обновляет slice → Lit снова зовёт `updated()`. Без busy/error/lastResult
+ * это бесконечный шторм fetch.
+ *
+ * @param {{
+ *   busy: boolean,
+ *   error: string | null,
+ *   lastResult: object | null,
+ * }} opState
+ * @returns {boolean}
+ */
+export function shouldFetchPublicSiteBundle(opState) {
+    if (!opState || typeof opState !== 'object') {
+        throw new Error('shouldFetchPublicSiteBundle: opState required');
+    }
+    if (typeof opState.busy !== 'boolean') {
+        throw new Error('shouldFetchPublicSiteBundle: busy boolean required');
+    }
+    if (opState.error !== null && typeof opState.error !== 'string') {
+        throw new Error('shouldFetchPublicSiteBundle: error must be null or string');
+    }
+    if (opState.lastResult !== null && typeof opState.lastResult !== 'object') {
+        throw new Error('shouldFetchPublicSiteBundle: lastResult must be object or null');
+    }
+    if (opState.busy) return false;
+    if (opState.error !== null) return false;
+    if (opState.lastResult !== null) return false;
+    return true;
+}

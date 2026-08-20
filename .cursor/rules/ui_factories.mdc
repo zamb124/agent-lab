@@ -111,6 +111,7 @@ createAsyncOp({
 - `request({payload, ctx, event}) -> Promise` — обязателен для `'http'`. Для `'ws'` опционален (фабрика сама шлёт `wsRequest` и ждёт reply).
 - Ровно одно: `silent: true` **либо** оба `successToastKey`+`errorToastKey` (формат `'<ns>:<key>'`). Смешивание = `throw`.
 - Для `'ws'`: `wsTimeoutMs` (>0) + `restMirror`.
+- `OpController.run()` из `updated()`/`render()` без `busy`/`error`/`lastResult` запрещён: `REQUESTED` ре-рендерит host. Канон → **`frontend.mdc`**.
 
 ### `createResourceCollection`
 - `name`, `baseUrl` (без `/`), `idField`.

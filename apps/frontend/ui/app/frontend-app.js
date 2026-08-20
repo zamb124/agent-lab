@@ -158,7 +158,7 @@ import {
 } from '../events/resources/cookie-consent.resource.js';
 import { applyPublicDocumentMeta } from '../utils/public-document-meta.js';
 import { buildFrontendAssistantContext } from '../_helpers/platform-assistant-context.js';
-import { canInjectPublicAnalytics } from '../_helpers/cookie-consent-analytics.js';
+import { canInjectPublicAnalytics, shouldFetchPublicSiteBundle } from '../_helpers/cookie-consent-analytics.js';
 
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/frontend-sidebar.js';
@@ -748,9 +748,16 @@ export class FrontendApp extends PlatformApp {
         if (!routeKey || !LANDING_ROUTE_KEYS.has(routeKey)) return;
 
         const consent = this._cookieConsentSel.value;
+        if (shouldFetchPublicSiteBundle({
+            busy: this._publicSiteBundle.busy,
+            error: this._publicSiteBundle.error,
+            lastResult: this._publicSiteBundle.lastResult,
+        })) {
+            void this._publicSiteBundle.run();
+            return;
+        }
         const bundleRes = this._publicSiteBundle.lastResult;
         if (!bundleRes || typeof bundleRes !== 'object') {
-            void this._publicSiteBundle.run();
             return;
         }
         const version = bundleRes.cookie_consent_text_version;

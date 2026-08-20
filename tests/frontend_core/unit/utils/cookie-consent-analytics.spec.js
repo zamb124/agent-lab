@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     canInjectPublicAnalytics,
     cookieConsentDecisionIsCurrent,
+    shouldFetchPublicSiteBundle,
 } from '../../../../apps/frontend/ui/_helpers/cookie-consent-analytics.js';
 
 const BASE_INJECT = {
@@ -71,6 +72,29 @@ describe('cookieConsentDecisionIsCurrent', () => {
             decision: 'necessary_only',
             analyticsOffered: false,
             analyticsConfigured: true,
+        })).toBe(false);
+    });
+});
+
+describe('shouldFetchPublicSiteBundle', () => {
+    const idle = { busy: false, error: null, lastResult: null };
+
+    it('запрашивает только когда slice пустой и не busy', () => {
+        expect(shouldFetchPublicSiteBundle(idle)).toBe(true);
+    });
+
+    it('не запрашивает пока идёт REQUESTED — иначе updated() штормит fetch', () => {
+        expect(shouldFetchPublicSiteBundle({ ...idle, busy: true })).toBe(false);
+    });
+
+    it('не ретраит после FAILED', () => {
+        expect(shouldFetchPublicSiteBundle({ ...idle, error: 'http 500' })).toBe(false);
+    });
+
+    it('не запрашивает когда lastResult уже есть', () => {
+        expect(shouldFetchPublicSiteBundle({
+            ...idle,
+            lastResult: { cookie_consent_text_version: '2026-08-20.1' },
         })).toBe(false);
     });
 });
