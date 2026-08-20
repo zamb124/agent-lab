@@ -60,7 +60,6 @@ from apps.frontend.api.services import router as services_router
 from apps.frontend.api.settings import router as settings_router
 from apps.frontend.api.team import router as team_router
 from apps.frontend.api.voice_providers_catalog import router as voice_providers_catalog_router
-from apps.frontend.api.yoomoney_oauth import router as yoomoney_oauth_router
 from apps.frontend.config import (
     FrontendSettings,
     get_frontend_settings,
@@ -329,7 +328,6 @@ async def on_startup(app: FastAPI, container: FrontendContainer, settings: Front
     logger.info("Биллинг: правила settlement проверены/записаны для компаний: %s", n)
 
     PaymentProviderFactory.initialize()
-    await PaymentProviderFactory.seed_access_tokens(container.shared_storage)
     logger.info("Платежные провайдеры инициализированы")
     schedule_docs_assistant_bootstrap(
         app,
@@ -386,7 +384,6 @@ app = create_service_app(
         platform_billing_router,
         platform_llm_model_scores_router,
         payments_webhook_router,
-        yoomoney_oauth_router,
     ],
     title="Platform Management",
     description="Управление платформой: авторизация, компании, биллинг",
@@ -398,7 +395,7 @@ app = create_service_app(
     cors_allow_origin_regex=_frontend_cors_regex,
 )
 
-# YooMoney и другие провайдеры часто настроены на URL без префикса сервиса (`/api/v1/payments/...`).
+# Т-Банк шлёт уведомления на URL без префикса сервиса (`/api/v1/payments/...`).
 # Иначе POST попадает на SPA `GET /{full_path:path}` и даёт 405.
 app.include_router(payments_webhook_router, tags=["payments-webhook-root"])
 app.include_router(public_site_router)

@@ -68,6 +68,7 @@ LEGAL__COMPANY_NAME_RU=...
 
 `llm.models.<model>.context_length` — опциональное знание платформы о реальном окне модели. Если задано, LLM context layer использует его для hard clamp prompt budget; это не лимит ответа (`max_tokens`) и не должно подменяться эвристикой в call-site.
 | **`billing`** | См. ниже. |
+| **`payment_providers`** | Интернет-эквайринг Т-Банка (`tinkoff_main`). `terminal_key`/`password` — секреты ENV/Helm, не git. Чек 54-ФЗ: `receipt_enabled`, `taxation`. Канон протокола → **`billing.mdc`**. |
 | **`provider_litserve`** | LitServe OpenAI-совместимый API (`api.base_url` корнем `…/v1`, процесс `apps/provider_litserve/main`). Для RAG-клиентов — `infra.gateway_port`. |
 | **`rag`** | `embedding`/`reranker` — `provider` + вложенный `api`. Локальные веса — `provider: provider_litserve`. `providers.agentset` — `api_key`, `base_url`, опц. `embedding_api_key`. См. `rag.mdc`. |
 | **`legal`** | Публичные реквизиты оператора для `/policy`/`/terms` и футера лендинга. Поля: `company_name_ru/en`, `legal_form_ru/en`, `inn`, `kpp`, `ogrn`, `legal_address_ru/en`, `contact_email`, `support_email`, `dpo_email`, `phone`, `min_age`, `retention_*`, `cloud_provider`, `cloud_region`, `analytics_tools`, `billing_provider`, банк (`bank_name_ru/en`, `bank_account`, `bank_bik`, `bank_correspondent_account`, `bank_inn`, `bank_address_ru/en`). Per-brand — `platform_brands.<apex>.legal` (юрлицо одно, email бренда свои). Прод-значения через ENV `LEGAL__*` или `conf.local.json`. |
@@ -91,6 +92,22 @@ LEGAL__COMPANY_NAME_RU=...
 - **`balance_enforcement_enabled`**: pre-flight перед операциями с `pending_settlement` (`billing.mdc`).
 - **`balance_enforcement_exempt_company_ids`**: список без проверки баланса (дефолт включает `system`).
 - В `conf.json` внутри `billing` допустим массив `_docs_ru` (текст для разработчиков, `json.load`/Pydantic игнорируют).
+
+## `payment_providers`
+
+Единственный провайдер — Т-Банк nonPCI (`provider_type: tinkoff`), ключ реестра `tinkoff_main`.
+
+| Поле | Назначение |
+|---|---|
+| `default_provider` | `tinkoff_main` |
+| `sync_enabled` / `sync_cron` | Сверка pending через `POST /v2/CheckOrder` (`payment_sync_tick`) |
+| `providers.tinkoff_main.terminal_key` | TerminalKey терминала (не Merchant_id / Terminal_id) |
+| `password` | Пароль терминала для Token |
+| `api_url` | Дефолт `https://securepay.tinkoff.ru/v2` (DEMO тоже сюда) |
+| `receipt_enabled` | Передавать `Receipt` в Init и в Cancel (нужна онлайн-касса) |
+| `taxation` | СНО чека; АУСН доходы минус расходы — `usn_income_outcome` |
+
+Секреты не коммитить: ENV `PAYMENT_PROVIDERS__PROVIDERS__TINKOFF_MAIN__TERMINAL_KEY` / `__PASSWORD` (Helm `tinkoff-terminal-key` / `tinkoff-terminal-password`, GitHub `TINKOFF_TERMINAL_KEY` / `TINKOFF_TERMINAL_PASSWORD`). Плейсхолдеры в `conf.json`: `YOUR_TINKOFF_TERMINAL_KEY` / `YOUR_TINKOFF_TERMINAL_PASSWORD`. Протокол пополнения — **`billing.mdc`**.
 
 ## Инфраструктурные настройки
 

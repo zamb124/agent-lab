@@ -129,7 +129,7 @@ Reg.ru API принимает запросы **только с whitelist IP**. �
 | `VOICE__TTS__YANDEX__API_KEY` / `VOICE__TTS__YANDEX__FOLDER_ID` |
 | `VOICE__TTS__SBER__CLIENT_ID` / `VOICE__TTS__SBER__CLIENT_SECRET` |
 | `RAG_EMBEDDING_API_KEY` |
-| `YOOMONEY_ACCOUNT_NUMBER` / `YOOMONEY_NOTIFICATION_SECRET` / `YOOMONEY_CLIENT_ID` / `YOOMONEY_CLIENT_SECRET` / `YOOMONEY_ACCESS_TOKEN` |
+| `TINKOFF_TERMINAL_KEY` / `TINKOFF_TERMINAL_PASSWORD` | (опционально) интернет-эквайринг Т-Банка: TerminalKey и пароль терминала. Helm `tinkoff-terminal-key` / `tinkoff-terminal-password` → Pod env `PAYMENT_PROVIDERS__PROVIDERS__TINKOFF_MAIN__TERMINAL_KEY` / `__PASSWORD`. |
 | `PROXY__ENABLED` / `PROXY__PROXIES` | (опционально) исходящий HTTP(S) прокси платформы: `PROXY__ENABLED` — `true` / `false`; `PROXY__PROXIES` — **одна строка**, JSON-массив URL, например `["http://user:pass@host:3128"]`. Попадает в Kubernetes `platform-secrets` и в Pod env как `PROXY__ENABLED` / `PROXY__PROXIES` (см. `settings.proxy`). |
 | `SEARCH__TINYFISH__API_KEY` / `SEARCH__LINKUP__API_KEY` / `SEARCH__SERPER__API_KEY` / `SEARCH__TAVILY__API_KEY` | (опционально) ключи провайдеров Search MCP. Без ключа конкретный provider возвращает typed provider error; provider policy пробует следующий доступный provider. |
 | `MAIL__SYSTEM__ISPMANAGER__AUTHINFO_PASSWORD` | (опционально) ISPmanager authinfo для `mail.system` на company `system`. Hosts/user — в `app-conf.k8s-overlay.json`. |

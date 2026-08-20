@@ -22,7 +22,7 @@
     },
     "payment_provider": {
       "title": "Payment Provider",
-      "description": "Payment system used (yoomoney, yukassa)"
+      "description": "Payment system used (tinkoff, grant)"
     },
     "external_payment_id": {
       "title": "External Payment ID",

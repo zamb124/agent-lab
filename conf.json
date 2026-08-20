@@ -174,7 +174,7 @@
     "cloud_provider": "Yandex Cloud",
     "cloud_region": "Russian Federation",
     "analytics_tools": "Internal monitoring and product analytics",
-    "billing_provider": "YooMoney",
+    "billing_provider": "T-Bank",
     "bank_name_ru": "АО «ТБанк»",
     "bank_name_en": "TBank JSC",
     "bank_account": "40702810010002289174",
@@ -221,7 +221,7 @@
         "cloud_provider": "Yandex Cloud",
         "cloud_region": "Russian Federation",
         "analytics_tools": "Internal monitoring and product analytics",
-        "billing_provider": "YooMoney",
+        "billing_provider": "T-Bank",
         "bank_name_ru": "АО «ТБанк»",
         "bank_name_en": "TBank JSC",
         "bank_account": "40702810010002289174",
@@ -270,7 +270,7 @@
         "cloud_provider": "Yandex Cloud",
         "cloud_region": "Russian Federation",
         "analytics_tools": "Internal monitoring and product analytics",
-        "billing_provider": "YooMoney",
+        "billing_provider": "T-Bank",
         "bank_name_ru": "АО «ТБанк»",
         "bank_name_en": "TBank JSC",
         "bank_account": "40702810010002289174",
@@ -317,7 +317,7 @@
         "cloud_provider": "Yandex Cloud",
         "cloud_region": "Russian Federation",
         "analytics_tools": "Internal monitoring and product analytics",
-        "billing_provider": "YooMoney",
+        "billing_provider": "T-Bank",
         "bank_name_ru": "АО «ТБанк»",
         "bank_name_en": "TBank JSC",
         "bank_account": "40702810010002289174",
@@ -860,19 +860,18 @@
     "timeout": 60
   },
   "payment_providers": {
-    "default_provider": "yoomoney_main",
+    "default_provider": "tinkoff_main",
     "sync_enabled": true,
     "sync_cron": "*/30 * * * *",
     "providers": {
-      "yoomoney_main": {
-        "provider_type": "yoomoney",
+      "tinkoff_main": {
+        "provider_type": "tinkoff",
         "enabled": true,
-        "account_number": "YOUR_YOOMONEY_ACCOUNT_NUMBER",
-        "notification_secret": "YOUR_YOOMONEY_NOTIFICATION_SECRET",
-        "quickpay_url": "https://yoomoney.ru/quickpay/confirm.xml",
-        "client_id": "YOUR_YOOMONEY_CLIENT_ID",
-        "client_secret": "YOUR_YOOMONEY_CLIENT_SECRET",
-        "access_token": "YOUR_YOOMONEY_ACCESS_TOKEN"
+        "terminal_key": "YOUR_TINKOFF_TERMINAL_KEY",
+        "password": "YOUR_TINKOFF_TERMINAL_PASSWORD",
+        "api_url": "https://securepay.tinkoff.ru/v2",
+        "receipt_enabled": true,
+        "taxation": "usn_income_outcome"
       }
     }
   },

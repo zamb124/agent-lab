@@ -151,3 +151,48 @@ Pre-flight **не заменяет settlement**: джоба пишет usage б�
 Биллинг TTS (`tts:<provider>` за `char_count`) считается на **пост-pipeline** тексте — после применения `TtsTextPipeline.transform` в `PronunciationAwareTTSClient`. Это справедливо: нормализация числа/дат/аббревиатур увеличивает длину (`123` → `сто двадцать три`), и провайдер получает именно этот расширенный текст.
 
 Observability: `traced_operation("voice.tts.pronunciation.transform")` — без биллингового settlement (информационный span). Атрибуты: `tts.provider`, `tts.voice`, `tts.language`, `tts.pronunciation.original_len`, `tts.pronunciation.transformed_len`. Span записывается только если текст изменился (`transformed != original`).
+
+## Пополнение баланса (Т-Банк nonPCI)
+
+Единственный платёжный провайдер — интернет-эквайринг Т-Банка, платёжная форма банка (`core/clients/payment/tinkoff_provider.py`). PCI-данные карты на платформу не приходят.
+
+Протокол:
+
+1. UI `POST /frontend/api/billing/topup` → `PaymentService.create_payment` → `POST {api_url}/Init`.
+2. `Amount` — **копейки**. `PayType=O` (одностадийный). `DATA.OperationInitiatorType=0`.
+3. `OrderId` ≤ 50 символов: `{company_id}:{hex12}` (`new_payment_transaction_id`). `company_id` из id до первого `:`.
+4. Token запроса и HTTP-уведомления: корневые скаляры без `Token`/`DATA`/`Receipt` + `Password` → сортировка ключей → конкатенация значений → SHA-256 hex (`compute_tinkoff_token`). Bool в нотификации — `true`/`false`.
+5. Ответ Init: `PaymentId` + `PaymentURL`. Нет URL / `Success=false` → **raise**.
+6. UI редиректит на `PaymentURL`. Success/Fail URL — `{subdomain}.{PRIMARY_DOMAIN}/billing?payment=...` (локально `*.localhost`).
+7. `NotificationURL` — `{platform_public_base_url}/api/v1/payments/webhook/{registry_name}` (стабильный HTTPS, не company-subdomain). Локально банк до `*.localhost` не достучится — сверка через `POST /v2/CheckOrder` в `payment_sync_tick`.
+8. Webhook: JSON POST, ответ **HTTP 200 тело ровно `OK`**. Неверный Token → 200 `OK` без зачисления.
+9. Зачисление баланса **только** на `Status=CONFIRMED`. `AUTHORIZED` (и прочие pending) баланс не трогают. `REJECTED` / `AUTH_FAIL` / `DEADLINE_EXPIRED` / `CANCELED` → `failed`.
+10. Неизвестный `OrderId` и неверный Token на webhook → HTTP **200** тело `OK`, без зачисления. Иначе банк ретраит час/сутки/месяц. Не-JSON → не 200. Неизвестный `provider_name` → 404.
+11. Полная отмена: `TinkoffProvider.cancel_payment` → `POST /v2/Cancel` (`TerminalKey`, `PaymentId`, `Token`). Если `receipt_enabled` — тот же объект `Receipt`, что в Init (email обязателен). Нет `Success` / ошибка банка / нет email при чеке → **raise**.
+
+Три URL из `PaymentService.create_payment`:
+
+| URL | Кто ходит | Значение |
+|---|---|---|
+| **NotificationURL** | серверы Т-Банка | `{platform_public_base_url}/api/v1/payments/webhook/{registry_name}` |
+| **SuccessURL** | браузер покупателя | `{subdomain}.{PRIMARY_DOMAIN}/billing?payment=success&transaction_id=…` (локально `*.localhost`) |
+| **FailURL** | браузер покупателя | то же с `payment=fail` |
+
+Банк не подтверждает платёж через SuccessURL. Деньги: HTTP-уведомление (`CONFIRMED`) или сверка `CheckOrder` в `payment_sync_tick`.
+
+Чек 54-ФЗ: в Init объект `Receipt`, если `receipt_enabled`. СНО АУСН доходы минус расходы → `taxation=usn_income_outcome`, НДС позиции `none`, `PaymentMethod=full_prepayment`, `PaymentObject=service`, Name «Пополнение баланса». Нет email покупателя при включённом чеке → raise. Живая DEMO-сюита (Тест 7) требует `receipt_enabled=true` и онлайн-кассу на терминале; Init без кассы падает текстом банка. Placeholder `YOUR_TINKOFF_*` в live-тестах → `pytest.skip`.
+
+TLS `securepay.tinkoff.ru` подписан НУЦ Минцифры (`Russian Trusted Root CA`). `certifi`/Mozilla этот корень не содержат. `TinkoffProvider` проверяет цепочку через `certifi` + официальный `core/clients/payment/certs/russian_trusted_root_ca.pem` (SHA-256 DER `d26d2d0231b7c39f92cc738512ba54103519e4405d68b5bd703e9788ca8ecf31`, источник `gu-st.ru`). Нет файла / другой отпечаток → raise. `verify=False` запрещён. Playwright Chromium тот же корень не знает и extra server-CA не принимает — контекст формы банка `ignore_https_errors`; зачисление по-прежнему только `GetState`/`CheckOrder`.
+
+DEMO-карты (только терминал с `DEMO` в TerminalKey, боевой `https://securepay.tinkoff.ru/v2`, не `rest-api-test`):
+
+- `4300000000000777` / `12/30` / `111` — успешная оплата на форме банка (Тест 1)
+- `5000000000000009` / `12/30` / `111` — кабинетный Тест 2 (отказ), баланс не зачисляется
+- `4000000000000101` / `12/30` / `111` — кабинетный Тест 7 (чек), Init обязан содержать `Receipt`
+- `5000000000000108` / `12/30` / `111` — Тест 3/8: оплата + `Cancel` с `Receipt`
+
+Живые тесты: `tests/frontend/api/test_payments_tinkoff_live.py`, маркер `network`, timeout 180–240 с, в дефолтный `make test` не входят. Запуск: `uv run pytest tests/frontend/api/test_payments_tinkoff_live.py -m network` или `make test-network`. PCI `FinishAuthorize`/`CardData` запрещены: карта только на форме банка через Playwright. Нет `monkeypatch` HTTP к банку.
+
+Идентификаторы кабинета Merchant_id / Terminal_id / Sbp_merchant_id в API **не** передаются. В Init только **TerminalKey**. DEMO-терминал ходит на боевой `https://securepay.tinkoff.ru/v2`.
+
+Секреты: `conf.json` — плейсхолдеры; реальные `terminal_key`/`password` — `conf.local.json` и Helm `tinkoff-terminal-key` / `tinkoff-terminal-password` → ENV `PAYMENT_PROVIDERS__PROVIDERS__TINKOFF_MAIN__TERMINAL_KEY` / `__PASSWORD`.

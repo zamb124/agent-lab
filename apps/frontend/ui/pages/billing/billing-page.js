@@ -293,18 +293,15 @@ export class FrontendBillingPage extends PlatformPage {
     _historyProviderLabel(p) {
         const key = p.payment_provider;
         if (typeof key !== 'string' || key === '') {
-            return '—';
+            throw new Error('payment_provider is required');
         }
-        if (key === 'yoomoney') {
-            return this.t('history_table.provider_yoomoney');
-        }
-        if (key === 'yukassa') {
-            return this.t('history_table.provider_yukassa');
+        if (key === 'tinkoff') {
+            return this.t('history_table.provider_tinkoff');
         }
         if (key === 'grant') {
             return this.t('history_table.provider_grant');
         }
-        return key;
+        throw new Error(`unknown payment_provider: ${key}`);
     }
 
     _historyNote(p) {

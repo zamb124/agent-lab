@@ -23,11 +23,6 @@ Primary deployment apex — **linnex.io**; humanitec.ru остаётся legacy 
 - Service ID / Return URLs для `app.linnex.io` (отдельно от `app.humanitec.ru`)
 - Associated Domains: `linnex.io`, `*.linnex.io`
 
-## YooMoney (billing)
-
-- `https://humanitec.ru/frontend/api/billing/yoomoney/callback`
-- `https://linnex.io/frontend/api/billing/yoomoney/callback`
-
 ## amoCRM (если используется)
 
 - Redirect URI на обоих apex по тому же шаблону, что и Yandex.

@@ -6,43 +6,63 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import ClassVar
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from core.models.base import StrictBaseModel
 from core.types import JsonObject
 
 
 class PaymentStatus(str, Enum):
     """Статус транзакции пополнения"""
 
-    PENDING = "pending"  # Ожидает оплаты
-    SUCCESS = "success"  # Успешно оплачено
-    FAILED = "failed"  # Ошибка оплаты
-    CANCELLED = "cancelled"  # Отменено пользователем
-    REFUNDED = "refunded"  # Возвращено
+    PENDING = "pending"
+    SUCCESS = "success"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    REFUNDED = "refunded"
 
 
 class PaymentProviderType(str, Enum):
-    """Типы источника пополнения: платёжные провайдеры или начисление гранта из админки platform."""
+    """Типы источника пополнения: платёжный провайдер или грант из админки platform."""
 
-    YOOMONEY = "yoomoney"
-    YUKASSA = "yukassa"
+    TINKOFF = "tinkoff"
     GRANT = "grant"
 
 
-class YooMoneyWebhookPayload(StrictBaseModel):
-    """HTTP-уведомление YooMoney P2P incoming."""
+class TinkoffNotificationPayload(BaseModel):
+    """HTTP-уведомление Т-Банка NotificationPayment (внешняя спека, PascalCase)."""
 
-    notification_type: str
-    operation_id: str
-    amount: str
-    currency: str
-    datetime: str
-    sender: str
-    codepro: str
-    sha1_hash: str
-    label: str
-    test_notification: str | None = None
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
+
+    TerminalKey: str
+    OrderId: str
+    Success: bool
+    Status: str
+    PaymentId: str
+    ErrorCode: str
+    Amount: int
+    Token: str
+
+    @field_validator("PaymentId", "ErrorCode", mode="before")
+    @classmethod
+    def _coerce_str(cls, value: object) -> str:
+        if isinstance(value, bool):
+            raise ValueError("boolean is not a valid Tinkoff id/code")
+        if isinstance(value, int):
+            return str(value)
+        if isinstance(value, str):
+            return value
+        raise ValueError("Tinkoff id/code must be string or int")
+
+    @field_validator("Amount", mode="before")
+    @classmethod
+    def _coerce_amount(cls, value: object) -> int:
+        if isinstance(value, bool):
+            raise ValueError("boolean is not a valid Amount")
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str) and value.strip() != "":
+            return int(value)
+        raise ValueError("Tinkoff Amount must be integer kopecks")
 
 
 class Transaction(BaseModel):
@@ -174,7 +194,9 @@ class PaymentNotification(BaseModel):
         default=None, title="ID транзакции", description="ID транзакции в нашей системе"
     )
     external_payment_id: str | None = Field(default=None, title="ID платежа у провайдера")
-    raw_data: YooMoneyWebhookPayload = Field(title="Сырые данные", description="Полные данные webhook")
+    raw_data: TinkoffNotificationPayload = Field(
+        title="Сырые данные", description="Полные данные webhook"
+    )
     processed: bool = Field(
         default=False, title="Обработано", description="Было ли обработано это уведомление"
     )

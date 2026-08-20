@@ -73,11 +73,8 @@ jq -n \
   --arg ttsSberClientId "${TTS_SBER_CLIENT_ID:-}" \
   --arg ttsSberClientSecret "${TTS_SBER_CLIENT_SECRET:-}" \
   --arg ragEmbeddingApiKey "${RAG_EMBEDDING_API_KEY:-}" \
-  --arg yoomoneyAccountNumber "${YOOMONEY_ACCOUNT_NUMBER:-}" \
-  --arg yoomoneyNotificationSecret "${YOOMONEY_NOTIFICATION_SECRET:-}" \
-  --arg yoomoneyClientId "${YOOMONEY_CLIENT_ID:-}" \
-  --arg yoomoneyClientSecret "${YOOMONEY_CLIENT_SECRET:-}" \
-  --arg yoomoneyAccessToken "${YOOMONEY_ACCESS_TOKEN:-}" \
+  --arg tinkoffTerminalKey "${TINKOFF_TERMINAL_KEY:-}" \
+  --arg tinkoffTerminalPassword "${TINKOFF_TERMINAL_PASSWORD:-}" \
   --arg proxyEnabled "$PROXY_ENABLED" \
   --arg proxyProxies "$PROXY_PROXIES" \
   --arg searchTinyfishApiKey "${SEARCH__TINYFISH__API_KEY:-}" \
@@ -145,11 +142,8 @@ jq -n \
     ttsSberClientId: $ttsSberClientId,
     ttsSberClientSecret: $ttsSberClientSecret,
     ragEmbeddingApiKey: $ragEmbeddingApiKey,
-    yoomoneyAccountNumber: $yoomoneyAccountNumber,
-    yoomoneyNotificationSecret: $yoomoneyNotificationSecret,
-    yoomoneyClientId: $yoomoneyClientId,
-    yoomoneyClientSecret: $yoomoneyClientSecret,
-    yoomoneyAccessToken: $yoomoneyAccessToken,
+    tinkoffTerminalKey: $tinkoffTerminalKey,
+    tinkoffTerminalPassword: $tinkoffTerminalPassword,
     proxyEnabled: $proxyEnabled,
     proxyProxies: $proxyProxies,
     searchTinyfishApiKey: $searchTinyfishApiKey,

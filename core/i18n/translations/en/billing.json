@@ -63,8 +63,7 @@
         "status": "Status",
         "provider": "Source",
         "comment": "Note",
-        "provider_yoomoney": "YooMoney",
-        "provider_yukassa": "YooKassa",
+        "provider_tinkoff": "T-Bank",
         "provider_grant": "Grant (no payment)"
     },
     "frontend_console": {

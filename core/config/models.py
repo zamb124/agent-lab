@@ -850,17 +850,15 @@ class PaymentProviderConfigEntry(BaseModel):
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    provider_type: Literal["yoomoney", "yukassa"]
+    provider_type: Literal["tinkoff"]
     enabled: bool = True
-    account_number: str | None = None
-    notification_secret: str | None = None
-    quickpay_url: str = "https://yoomoney.ru/quickpay/confirm.xml"
-    client_id: str | None = None
-    client_secret: str | None = None
-    access_token: str | None = None
-    api_url: str | None = None
-    shop_id: str | None = None
-    secret_key: str | None = None
+    terminal_key: str
+    password: str
+    api_url: str = "https://securepay.tinkoff.ru/v2"
+    receipt_enabled: bool = True
+    taxation: Literal["osn", "usn_income", "usn_income_outcome", "esn", "patent"] = (
+        "usn_income_outcome"
+    )
 
 
 class PaymentProvidersConfig(BaseModel):
@@ -874,7 +872,7 @@ class PaymentProvidersConfig(BaseModel):
         default="*/30 * * * *", description="Cron-расписание для сверки транзакций"
     )
     providers: dict[str, PaymentProviderConfigEntry] = Field(
-        default_factory=dict, description="Платежные провайдеры (yoomoney_main, yukassa_main, etc.)"
+        default_factory=dict, description="Платежные провайдеры (tinkoff_main)"
     )
 
 
@@ -2322,7 +2320,7 @@ class LegalConfig(BaseModel):
     cloud_provider: str = "Yandex Cloud"
     cloud_region: str = "Russian Federation"
     analytics_tools: str = "Internal monitoring and product analytics"
-    billing_provider: str = "YooMoney"
+    billing_provider: str = "T-Bank"
     bank_name_ru: str = "АО «ТБанк»"
     bank_name_en: str = "TBank JSC"
     bank_account: str = "40702810010002289174"

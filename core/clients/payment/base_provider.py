@@ -11,7 +11,6 @@ from core.db.storage import Storage
 from core.models.payment_models import (
     PaymentSyncCandidate,
     PaymentSyncOperation,
-    YooMoneyWebhookPayload,
 )
 from core.types import JsonObject
 
@@ -32,12 +31,18 @@ class PaymentProviderConfig(BaseModel, Generic[ProviderTypeT]):
 
 class PaymentRequest(BaseModel):
     """Запрос на создание платежа"""
+
     amount: float = Field(ge=0.01, description="Сумма платежа")
     company_id: str = Field(description="ID компании")
     user_id: str = Field(description="ID пользователя")
     transaction_id: str = Field(description="ID транзакции в нашей системе")
     success_url: str = Field(description="URL успешного платежа")
     fail_url: str = Field(description="URL неудачного платежа")
+    notification_url: str = Field(description="URL HTTP-уведомлений провайдера")
+    customer_email: str | None = Field(
+        default=None, description="Email покупателя для чека 54-ФЗ"
+    )
+    language: str = Field(default="ru", description="Язык платёжной формы")
     metadata: JsonObject = Field(default_factory=dict, description="Дополнительные данные")
 
 
@@ -69,6 +74,7 @@ class BasePaymentProvider(ABC, Generic[ProviderConfigT]):
     def __init__(self, config: ProviderConfigT):
         self.config: ProviderConfigT = config
         self.provider_name: str = config.provider_type
+        self.registry_name: str = config.provider_type
 
     @abstractmethod
     async def create_payment(self, request: PaymentRequest) -> PaymentResponse:
@@ -76,7 +82,7 @@ class BasePaymentProvider(ABC, Generic[ProviderConfigT]):
         pass
 
     @abstractmethod
-    async def verify_webhook(self, webhook_data: YooMoneyWebhookPayload) -> WebhookVerificationResult:
+    async def verify_webhook(self, webhook_data: JsonObject) -> WebhookVerificationResult:
         """Проверяет подпись webhook и извлекает данные"""
         pass
 

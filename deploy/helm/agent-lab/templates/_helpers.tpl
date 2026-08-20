@@ -522,35 +522,17 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
       key: onlyoffice-jwt-secret
 - name: OFFICE__CALLBACK_PUBLIC_BASE_URL
   value: https://{{ .Values.domain }}
-- name: PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__ACCOUNT_NUMBER
+- name: PAYMENT_PROVIDERS__PROVIDERS__TINKOFF_MAIN__TERMINAL_KEY
   valueFrom:
     secretKeyRef:
       name: {{ .Values.platformSecretName }}
-      key: yoomoney-account-number
+      key: tinkoff-terminal-key
       optional: true
-- name: PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__NOTIFICATION_SECRET
+- name: PAYMENT_PROVIDERS__PROVIDERS__TINKOFF_MAIN__PASSWORD
   valueFrom:
     secretKeyRef:
       name: {{ .Values.platformSecretName }}
-      key: yoomoney-notification-secret
-      optional: true
-- name: PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__CLIENT_ID
-  valueFrom:
-    secretKeyRef:
-      name: {{ .Values.platformSecretName }}
-      key: yoomoney-client-id
-      optional: true
-- name: PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__CLIENT_SECRET
-  valueFrom:
-    secretKeyRef:
-      name: {{ .Values.platformSecretName }}
-      key: yoomoney-client-secret
-      optional: true
-- name: PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__ACCESS_TOKEN
-  valueFrom:
-    secretKeyRef:
-      name: {{ .Values.platformSecretName }}
-      key: yoomoney-access-token
+      key: tinkoff-terminal-password
       optional: true
 - name: PROXY__ENABLED
   valueFrom:

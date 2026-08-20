@@ -168,7 +168,7 @@ kubectl delete secret platform-secrets -n platform
 | `PUSH_VAPID_PUBLIC_KEY` / `PUSH_VAPID_PRIVATE_KEY` | (опционально) Web Push VAPID |
 | `PUSH_APNS_PRIVATE_KEY` | (опционально) APNs .p8 |
 | `PUSH_FCM_CREDENTIALS_JSON` / `PUSH_FCM_PROJECT_ID` | (опционально) FCM service account |
-| `YOOMONEY_*` | (опционально) платежи YooMoney |
+| `TINKOFF_TERMINAL_KEY` / `TINKOFF_TERMINAL_PASSWORD` | (опционально) интернет-эквайринг Т-Банка |
 | `PROXY__ENABLED` / `PROXY__PROXIES` | (опционально) исходящий HTTP(S) прокси (`settings.proxy`): `PROXY__PROXIES` — JSON-массив строк URL, одной строкой в секрете, например `["http://user:pass@host:3128"]` |
 
 Эти переменные задаются в GitHub Actions как env и передаются в Helm одним `--set-json platformSecrets=...` через `deploy/scripts/helm_platform_secrets_json.sh` (jq экранирует многострочные секреты).

@@ -1,5 +1,5 @@
 """
-Payment - клиенты для платежных провайдеров.
+Клиенты платежных провайдеров.
 """
 
 from core.clients.payment.base_provider import (
@@ -10,8 +10,7 @@ from core.clients.payment.base_provider import (
     WebhookVerificationResult,
 )
 from core.clients.payment.factory import PaymentProviderFactory
-from core.clients.payment.yoomoney_provider import YooMoneyConfig, YooMoneyProvider
-from core.clients.payment.yukassa_provider import YuKassaConfig, YuKassaProvider
+from core.clients.payment.tinkoff_provider import TinkoffConfig, TinkoffProvider
 
 __all__ = [
     "BasePaymentProvider",
@@ -19,22 +18,7 @@ __all__ = [
     "PaymentRequest",
     "PaymentResponse",
     "WebhookVerificationResult",
-    "YooMoneyProvider",
-    "YooMoneyConfig",
-    "YuKassaProvider",
-    "YuKassaConfig",
+    "TinkoffProvider",
+    "TinkoffConfig",
     "PaymentProviderFactory",
 ]
-
-
-
-
-
-
-
-
-
-
-
-
-

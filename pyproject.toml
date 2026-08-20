@@ -44,6 +44,7 @@ packages = ["apps", "core"]
 [tool.hatch.build.targets.wheel.force-include]
 "core/files/writer/fonts/NotoSans-Regular.ttf" = "core/files/writer/fonts/NotoSans-Regular.ttf"
 "core/files/writer/fonts/OFL.txt" = "core/files/writer/fonts/OFL.txt"
+"core/clients/payment/certs/russian_trusted_root_ca.pem" = "core/clients/payment/certs/russian_trusted_root_ca.pem"
 
 [tool.ruff]
 line-length = 100

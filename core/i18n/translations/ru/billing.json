@@ -63,8 +63,7 @@
         "status": "Статус",
         "provider": "Источник",
         "comment": "Примечание",
-        "provider_yoomoney": "YooMoney",
-        "provider_yukassa": "YooKassa",
+        "provider_tinkoff": "Т-Банк",
         "provider_grant": "Грант (без оплаты)"
     },
     "frontend_console": {

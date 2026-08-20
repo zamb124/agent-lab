@@ -14,6 +14,10 @@ from core.clients.payment.base_provider import (
     PaymentRequest,
     WebhookVerificationResult,
 )
+from core.clients.payment.tinkoff_token import (
+    TINKOFF_ORDER_ID_MAX_LEN,
+    TINKOFF_TRANSACTION_SUFFIX_HEX_LEN,
+)
 from core.config import get_settings
 from core.db.storage import Storage
 from core.logging import get_logger
@@ -25,9 +29,10 @@ from core.models.payment_models import (
     PaymentNotification,
     PaymentProviderType,
     PaymentStatus,
+    TinkoffNotificationPayload,
     Transaction,
-    YooMoneyWebhookPayload,
 )
+from core.short_links.service import require_platform_public_base_url
 from core.types import JsonObject
 from core.utils.domain import PRIMARY_DOMAIN
 
@@ -37,11 +42,33 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def new_payment_transaction_id(company_id: str) -> str:
+    clean_company_id = company_id.strip()
+    if clean_company_id == "":
+        raise ValueError("company_id is required")
+    if ":" in clean_company_id:
+        raise ValueError("company_id must not contain ':'")
+    suffix_len = TINKOFF_TRANSACTION_SUFFIX_HEX_LEN
+    max_suffix = TINKOFF_ORDER_ID_MAX_LEN - len(clean_company_id) - 1
+    if max_suffix < 8:
+        raise ValueError(
+            f"company_id too long for Tinkoff OrderId limit {TINKOFF_ORDER_ID_MAX_LEN}: "
+            + clean_company_id
+        )
+    if suffix_len > max_suffix:
+        suffix_len = max_suffix
+    transaction_id = f"{clean_company_id}:{uuid.uuid4().hex[:suffix_len]}"
+    if len(transaction_id) > TINKOFF_ORDER_ID_MAX_LEN:
+        raise ValueError(
+            f"transaction_id length {len(transaction_id)} exceeds Tinkoff OrderId limit "
+            + str(TINKOFF_ORDER_ID_MAX_LEN)
+        )
+    return transaction_id
+
+
 def _payment_provider_type(provider_name: str) -> PaymentProviderType:
-    if provider_name in ("yoomoney", "yoomoney_main"):
-        return PaymentProviderType.YOOMONEY
-    if provider_name in ("yukassa", "yukassa_main"):
-        return PaymentProviderType.YUKASSA
+    if provider_name in ("tinkoff", "tinkoff_main"):
+        return PaymentProviderType.TINKOFF
     if provider_name == "grant":
         return PaymentProviderType.GRANT
     raise ValueError(f"Неизвестный провайдер: {provider_name}")
@@ -69,6 +96,15 @@ def _external_payment_key(
     return f"payment_external:{payment_provider.value}:{external_payment_id}"
 
 
+def _customer_email(user: User) -> str | None:
+    if not user.emails:
+        return None
+    email = user.emails[0].strip()
+    if email == "":
+        raise ValueError("user email must be a non-empty string")
+    return email
+
+
 class PaymentService:
     """Сервис для работы с платежами"""
 
@@ -83,20 +119,7 @@ class PaymentService:
         amount: float,
         provider: BasePaymentProvider[PaymentProviderConfig[str]],
     ) -> CreatePaymentResponse:
-        """
-        Создает транзакцию и генерирует URL для оплаты.
-
-        Аргументы:
-            company: Компания, которая пополняет баланс
-            user: Пользователь, который инициировал пополнение
-            amount: Сумма пополнения
-            provider: Платежный провайдер
-
-        Возвращает:
-            Данные созданной платёжной транзакции.
-        """
-
-        transaction_id = f"{company.company_id}:txn_{uuid.uuid4().hex[:16]}"
+        transaction_id = new_payment_transaction_id(company.company_id)
 
         logger.info(
             "payments.create_requested",
@@ -106,18 +129,23 @@ class PaymentService:
             provider=provider.provider_name,
         )
 
-        # Формируем абсолютные URL для редиректов
         settings = get_settings()
 
-        # Определяем базовый URL
         if settings.server.env == "local":
+            if company.subdomain is None or company.subdomain.strip() == "":
+                raise ValueError("company.subdomain is required for payment redirects")
             base_url = f"http://{company.subdomain}.localhost:{settings.server.port}"
         else:
-            # Для production используем PRIMARY_DOMAIN для единообразия payment callbacks
+            if company.subdomain is None or company.subdomain.strip() == "":
+                raise ValueError("company.subdomain is required for payment redirects")
             base_url = f"https://{company.subdomain}.{PRIMARY_DOMAIN}"
 
         success_url = f"{base_url}/billing?payment=success&transaction_id={transaction_id}"
         fail_url = f"{base_url}/billing?payment=fail&transaction_id={transaction_id}"
+        public_base = require_platform_public_base_url()
+        notification_url = (
+            f"{public_base}/api/v1/payments/webhook/{provider.registry_name}"
+        )
 
         payment_request = PaymentRequest(
             amount=amount,
@@ -126,6 +154,9 @@ class PaymentService:
             transaction_id=transaction_id,
             success_url=success_url,
             fail_url=fail_url,
+            notification_url=notification_url,
+            customer_email=_customer_email(user),
+            language="ru",
             metadata={
                 "company_name": company.name,
                 "user_name": user.name,
@@ -177,7 +208,7 @@ class PaymentService:
         if amount < 0.01:
             raise ValueError("amount must be at least 0.01")
         now = datetime.now(timezone.utc)
-        transaction_id = f"{company_id}:txn_{uuid.uuid4().hex[:16]}"
+        transaction_id = new_payment_transaction_id(company_id)
         meta: JsonObject = {
             "granted_by_user_id": grantor_user_id,
         }
@@ -201,11 +232,11 @@ class PaymentService:
         if not company:
             raise ValueError(f"Company {company_id} not found after grant")
         logger.info(
-            "Грант баланса: company=%s amount=%.2f RUB by=%s txn=%s",
-            company_id,
-            amount,
-            grantor_user_id,
-            transaction_id,
+            "payments.balance_grant_applied",
+            company_id=company_id,
+            amount=round(amount, 2),
+            grantor_user_id=grantor_user_id,
+            transaction_id=transaction_id,
         )
         return BalanceGrantResult(
             transaction_id=transaction_id,
@@ -218,61 +249,69 @@ class PaymentService:
         self,
         verification_result: WebhookVerificationResult,
         provider_name: str,
-        raw_data: YooMoneyWebhookPayload,
+        raw_data: TinkoffNotificationPayload,
     ) -> None:
-        """
-        Обрабатывает webhook от платежного провайдера.
-
-        Аргументы:
-            verification_result: Результат проверки webhook
-            provider_name: Имя провайдера
-            raw_data: Сырые данные webhook
-        """
-
         logger.info(
             "payments.webhook_processing",
             provider=provider_name,
             transaction_id=verification_result.transaction_id,
             amount=verification_result.amount,
+            status=verification_result.status,
         )
 
         notification_id = f"notif_{uuid.uuid4().hex[:16]}"
-
         provider_type = _payment_provider_type(provider_name)
-
         notification = PaymentNotification(
             notification_id=notification_id,
             provider=provider_type,
             transaction_id=verification_result.transaction_id,
             external_payment_id=verification_result.external_payment_id,
             raw_data=raw_data,
-            processed=False
+            processed=False,
         )
-
-        # Если это тестовое уведомление - просто логируем и выходим
-        if verification_result.status == "test":
-            logger.info("payments.test_notification_ok")
-            notification.processed = True
-            await self._save_notification(notification)
-            return
 
         transaction_id = verification_result.transaction_id
         amount = verification_result.amount
+        status = verification_result.status
         if transaction_id is None or transaction_id == "":
             raise ValueError("Payment webhook missing transaction_id")
         if amount is None:
             raise ValueError("Payment webhook missing amount")
+        if status is None or status == "":
+            raise ValueError("Payment webhook missing status")
 
         await self._save_notification(notification)
 
-        transaction = await self.get_transaction(transaction_id)
-
-        if not transaction:
-            logger.error(
-                "payments.transaction_not_found",
+        if ":" not in transaction_id:
+            logger.warning(
+                "payments.webhook_unknown_order_id",
                 transaction_id=transaction_id,
             )
-            raise ValueError(f"Transaction {transaction_id} not found")
+            notification.processed = True
+            await self._save_notification(notification)
+            return
+
+        transaction = await self.get_transaction(transaction_id)
+
+        if transaction is None:
+            logger.warning(
+                "payments.webhook_unknown_order_id",
+                transaction_id=transaction_id,
+            )
+            notification.processed = True
+            await self._save_notification(notification)
+            return
+
+        if abs(transaction.amount - amount) > 0.001:
+            raise ValueError(
+                "Payment webhook amount mismatch: "
+                + f"transaction={transaction.amount} webhook={amount}"
+            )
+
+        if status == PaymentStatus.PENDING.value:
+            notification.processed = True
+            await self._save_notification(notification)
+            return
 
         if transaction.status != PaymentStatus.PENDING:
             logger.warning(
@@ -284,10 +323,27 @@ class PaymentService:
             await self._save_notification(notification)
             return
 
-        transaction.status = PaymentStatus.SUCCESS
         transaction.external_payment_id = verification_result.external_payment_id
         transaction.completed_at = datetime.now(timezone.utc)
 
+        if status == PaymentStatus.FAILED.value:
+            transaction.status = PaymentStatus.FAILED
+            await self._save_transaction(transaction)
+            notification.processed = True
+            await self._save_notification(notification)
+            return
+
+        if status == PaymentStatus.REFUNDED.value:
+            transaction.status = PaymentStatus.REFUNDED
+            await self._save_transaction(transaction)
+            notification.processed = True
+            await self._save_notification(notification)
+            return
+
+        if status != PaymentStatus.SUCCESS.value:
+            raise ValueError(f"Unexpected payment webhook status: {status}")
+
+        transaction.status = PaymentStatus.SUCCESS
         balance_updated = await self.finalize_successful_payment(transaction)
 
         notification.processed = True
@@ -330,16 +386,6 @@ class PaymentService:
         offset: int = 0,
         provider_name: str | None = None
     ) -> list[Transaction]:
-        """
-        Получает список транзакций компании.
-
-        Аргументы:
-            company_id: ID компании
-            limit: Максимальное количество результатов
-            offset: Смещение для пагинации
-            provider_name: Опционально - фильтр по провайдеру
-        """
-
         if provider_name:
             prefix = f"payment:{company_id}:{provider_name}:"
         else:
@@ -360,13 +406,6 @@ class PaymentService:
         return transactions[offset : offset + limit]
 
     async def _save_transaction(self, transaction: Transaction) -> None:
-        """
-        Сохраняет транзакцию с составным ключом.
-        Формат: payment:{company_id}:{provider}:{transaction_id}
-
-        ВАЖНО: transaction_id уже содержит company_id в формате {company_id}:txn_{uuid},
-        поэтому используем его полностью в ключе.
-        """
         key = _transaction_key(transaction)
 
         logger.debug(f"Сохраняем транзакцию по ключу: {key}")
