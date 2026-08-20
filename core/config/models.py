@@ -2294,28 +2294,43 @@ class PublicSiteConfig(BaseModel):
 
 
 class LegalConfig(BaseModel):
-    """Конфигурация юридической информации компании"""
+    """Публичные реквизиты оператора платформы (ООО «ЛАЙНЕКС»)."""
 
-    company_name_ru: str = "ООО «Энжилабс»"
-    company_name_en: str = "Angilabs LLC"
+    company_name_ru: str = "ООО «ЛАЙНЕКС»"
+    company_name_en: str = 'OBSCHESTVO S OGRANICHENNOI OTVETSTVENNOSTYU "LAINEKS"'
     legal_form_ru: str = "Общество с ограниченной ответственностью"
     legal_form_en: str = "Limited Liability Company"
-    inn: str | None = None
-    ogrn: str | None = None
-    legal_address_ru: str | None = None
-    legal_address_en: str | None = None
-    contact_email: str = "info@angilabs.ru"
-    support_email: str = "support@angilabs.ru"
-    dpo_email: str = "dpo@angilabs.ru"
-    phone: str | None = None
+    inn: str = "9717194941"
+    kpp: str = "771701001"
+    ogrn: str = "1267700280132"
+    legal_address_ru: str = (
+        "129515, Россия, г. Москва, вн.тер.г. муниципальный округ Останкинский, "
+        "б-р Звёздный, д. 12, к. 1, кв. 48"
+    )
+    legal_address_en: str = (
+        "129515, ROSSIYA, G.MOSKVA, VN.TER.G. MUNITSIPALNYI OKRUG OSTANKINSKII, "
+        "B-R ZVEZDNYI, D. 12, K. 1, KV. 48"
+    )
+    contact_email: str = "legal@linnex.io"
+    support_email: str = "support@linnex.io"
+    dpo_email: str = "privacy@linnex.io"
+    phone: str = "+7 (953) 477-10-94"
     min_age: int = 18
-    retention_logs: str = "30 дней / 30 days"
-    retention_messages: str = "1 год / 1 year"
-    retention_accounts: str = "3 года после последней активности / 3 years after last activity"
-    cloud_provider: str = "AWS/Yandex Cloud"
-    cloud_region: str = "EU/RU"
-    analytics_tools: str = "Internal analytics"
-    billing_provider: str | None = None
+    retention_logs: str = "12 months"
+    retention_messages: str = "24 months"
+    retention_accounts: str = "5 years after account closure"
+    cloud_provider: str = "Yandex Cloud"
+    cloud_region: str = "Russian Federation"
+    analytics_tools: str = "Internal monitoring and product analytics"
+    billing_provider: str = "YooMoney"
+    bank_name_ru: str = "АО «ТБанк»"
+    bank_name_en: str = "TBank JSC"
+    bank_account: str = "40702810010002289174"
+    bank_bik: str = "044525974"
+    bank_correspondent_account: str = "30101810145250000974"
+    bank_inn: str = "7710140679"
+    bank_address_ru: str = "127287, г. Москва, ул. 2-я Хуторская, д. 38А, стр. 26"
+    bank_address_en: str = "38A 2-ya Khutorskaya ul., Bld. 26, Moscow 127287, Russia"
 
 
 class PlatformBrandConfig(BaseModel):
@@ -2347,6 +2362,11 @@ def _default_humanitec_platform_brand() -> PlatformBrandConfig:
         voice_product_name="Humanitec Voice",
         llms_display_label="Humanitec LLMs",
         flows_product_label="Humanitec Flows",
+        legal=LegalConfig(
+            contact_email="legal@humanitec.ru",
+            support_email="helpme@humanitec.ru",
+            dpo_email="dpo@humanitec.ru",
+        ),
     )
 
 

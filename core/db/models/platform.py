@@ -25,7 +25,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.db.models.base import Base
-from core.types import JsonObject, PushSubscriptionKeys
+from core.types import JsonObject, JsonValue, PushSubscriptionKeys
 
 _TableArgs: TypeAlias = tuple[CheckConstraint | Index | UniqueConstraint, ...]
 
@@ -830,4 +830,89 @@ class MailMessageRecord(Base):
             "folder",
             "date_at",
         ),
+    )
+
+
+class DatasourceConnectorRecord(Base):
+    """Company-stamped datasource connector (mcp/flow). Platform specs live in code."""
+
+    __tablename__: str = "datasource_connectors"
+
+    company_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    connector_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    executor: Mapped[str] = mapped_column(String(32), nullable=False)
+    icon: Mapped[str] = mapped_column(String(64), nullable=False)
+    credential_schema: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
+    operations: Mapped[JsonValue] = mapped_column(JSONB, nullable=False)
+    mcp_server_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    mcp_introspect_tool: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    mcp_query_tool: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    mcp_execute_tool: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    flow_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    flow_branch_id: Mapped[str] = mapped_column(String(255), nullable=False, default="default")
+    owner_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__: _TableArgs = (
+        CheckConstraint(
+            "executor IN ('mcp','flow')",
+            name="datasource_connectors_executor_check",
+        ),
+        Index("ix_datasource_connectors_company_id", "company_id"),
+    )
+
+
+class DatasourceConnectionRecord(Base):
+    """Company connection to an external database or stamped connector."""
+
+    __tablename__: str = "datasource_connections"
+
+    datasource_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    connector_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    host: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    database_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    password_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ssl_mode: Mapped[str] = mapped_column(String(32), nullable=False)
+    allowed_operations: Mapped[JsonValue] = mapped_column(JSONB, nullable=False)
+    statement_timeout_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_rows: Mapped[int] = mapped_column(Integer, nullable=False)
+    mcp_server_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    flow_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    flow_branch_id: Mapped[str] = mapped_column(String(255), nullable=False, default="default")
+    owner_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__: _TableArgs = (
+        UniqueConstraint(
+            "company_id",
+            "name",
+            name="uq_datasource_connections_company_name",
+        ),
+        CheckConstraint(
+            "ssl_mode IN ('disable','require','verify-full')",
+            name="datasource_connections_ssl_mode_check",
+        ),
+        Index("ix_datasource_connections_company_connector", "company_id", "connector_id"),
     )

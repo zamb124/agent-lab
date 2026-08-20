@@ -9,7 +9,8 @@
 import { fixture, fixtureCleanup, html, expect, elementUpdated, aTimeout, waitUntil, oneEvent } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { installFetchMock } from '../helpers/fake-fetch.js';
-import { registerFactory, collectFactories } from '@platform/lib/events/index.js';
+import { registerFactory, collectFactories, getPlatformBus, CoreEvents } from '@platform/lib/events/index.js';
+import flowsEn from '../../../../core/i18n/translations/en/flows.json' with { type: 'json' };
 
 import { editorResource, editorBulkDeleteOp } from '../../../../apps/flows/ui/events/resources/editor.resource.js';
 import { resourcesBundleResource, resourceUpdateOp } from '../../../../apps/flows/ui/events/resources/resources-bundle.resource.js';
@@ -33,12 +34,20 @@ import {
 import { llmContextResolveParentOp } from '../../../../apps/flows/ui/events/resources/llm-context.resource.js';
 import { exceptionAbsorbAllowNamesOp, executionLimitsOp } from '../../../../apps/flows/ui/events/resources/metadata.resource.js';
 import { workQueuesResource } from '../../../../apps/flows/ui/events/resources/work-queues.resource.js';
+import {
+    datasourcesResource,
+    datasourceTestOp,
+    datasourceIntrospectOp,
+    datasourceQueryOp,
+    datasourceExecuteOp,
+} from '../../../../apps/flows/ui/events/resources/datasources.resource.js';
 
 import '../../../../apps/flows/ui/components/nodes/flows-base-node-editor.js';
 import '../../../../apps/flows/ui/components/nodes/flows-llm-node-editor.js';
 import '../../../../apps/flows/ui/components/nodes/flows-code-node-editor.js';
 import '../../../../apps/flows/ui/components/nodes/flows-channel-node-editor.js';
 import '../../../../apps/flows/ui/components/nodes/flows-hitl-node-editor.js';
+import '../../../../apps/flows/ui/components/nodes/flows-datasource-node-editor.js';
 import '../../../../apps/flows/ui/components/nodes/flows-external-api-editor.js';
 import '../../../../apps/flows/ui/components/nodes/flows-mcp-node-editor.js';
 import '../../../../apps/flows/ui/components/nodes/flows-flow-node-editor.js';
@@ -64,6 +73,11 @@ const FACTORIES = [
     exceptionAbsorbAllowNamesOp,
     executionLimitsOp,
     workQueuesResource,
+    datasourcesResource,
+    datasourceTestOp,
+    datasourceIntrospectOp,
+    datasourceQueryOp,
+    datasourceExecuteOp,
 ];
 
 function bootstrap() {
@@ -73,8 +87,19 @@ function bootstrap() {
         effect.__factoryName === 'flows/code_validate'
         || effect.__factoryName === 'flows/code_editor_state'
         || effect.__factoryName === 'flows/work_queues'
+        || effect.__factoryName === 'flows/datasources'
+        || effect.__factoryName === 'flows/datasource_test'
+        || effect.__factoryName === 'flows/datasource_introspect'
     ));
-    return bootstrapTestBus({ slices: collected.slices, effects });
+    const bus = bootstrapTestBus({ slices: collected.slices, effects });
+    const locale = bus.getState().i18n.locale;
+    const previous = bus.getState().i18n.translations[locale] || {};
+    bus.dispatch(
+        CoreEvents.I18N_LOCALE_LOADED,
+        { locale, bundle: { ...previous, flows: flowsEn } },
+        { source: 'system' },
+    );
+    return bus;
 }
 
 function segmentedSegments(control) {
@@ -105,6 +130,14 @@ function codeEditorToolbarControls(workbench) {
     return codeEditor ? [...codeEditor.querySelectorAll('platform-segmented-control')] : [];
 }
 
+function clickPlatformButton(buttonEl) {
+    const inner = buttonEl.shadowRoot.querySelector('button');
+    if (inner === null) {
+        throw new Error('platform-button inner button required');
+    }
+    inner.click();
+}
+
 describe('node editors — top-level NodeConfig contract', () => {
     let fetchMock;
     beforeEach(() => {
@@ -126,6 +159,26 @@ describe('node editors — top-level NodeConfig contract', () => {
                     work_queue_slug: 'support',
                     name: 'Support',
                     description: null,
+                },
+            ],
+            total: 1,
+            limit: 200,
+            offset: 0,
+        });
+        fetchMock.respondJson('GET', (url) => /\/flows\/api\/v1\/datasources(\?|$)/.test(url), {
+            items: [
+                {
+                    datasource_id: 'ds_orders',
+                    connector_id: 'postgres',
+                    name: 'Orders',
+                    host: 'localhost',
+                    port: 5432,
+                    database_name: 'orders',
+                    username: 'app',
+                    ssl_mode: 'disable',
+                    allowed_operations: ['select'],
+                    statement_timeout_ms: 15000,
+                    max_rows: 1000,
                 },
             ],
             total: 1,
@@ -837,6 +890,398 @@ describe('node editors — top-level NodeConfig contract', () => {
         expect(el._showCreate).to.equal(false);
         el._onQueueCreate({ detail: { query: '' } });
         expect(el._showCreate).to.equal(true);
+    });
+
+    it('flows-datasource-node-editor — datasource_id и createLabel', async () => {
+        const node = {
+            node_id: 'a',
+            type: 'datasource',
+            name: 'Orders',
+            connector_id: 'postgres',
+            datasource_operation: 'query',
+        };
+        const el = await fixture(html`
+            <flows-datasource-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'datasource'} .flowVariables=${{}}>
+            </flows-datasource-node-editor>
+        `);
+        await elementUpdated(el);
+        await waitUntil(() => Array.isArray(el._datasources.items) && el._datasources.items.length > 0);
+        let last = null;
+        el.addEventListener('change', (e) => {
+            if (e.detail && Object.prototype.hasOwnProperty.call(e.detail, 'patch')) {
+                last = e.detail;
+            }
+        });
+        const base = el.shadowRoot.querySelector('flows-base-node-editor');
+        const combobox = base.querySelector('platform-searchable-combobox');
+        expect(combobox, 'datasource combobox').to.exist;
+        expect(combobox.createLabel, 'createLabel for connection create').to.be.a('string').and.not.empty;
+        combobox.dispatchEvent(new CustomEvent('change', {
+            detail: { value: 'ds_orders' },
+            bubbles: true,
+            composed: true,
+        }));
+        expect(last, 'editor change event').to.exist;
+        expect(last.patch).to.deep.equal({ datasource_id: 'ds_orders' });
+        const options = el._connectionOptions();
+        expect(options[0].label).to.equal('Orders · localhost:5432');
+        const actionButtons = [...base.querySelectorAll('.connection-actions platform-button')];
+        expect(actionButtons.length, 'test and schema buttons').to.equal(2);
+    });
+
+    it('flows-datasource-node-editor — create из combobox открывает форму', async () => {
+        const node = {
+            node_id: 'a',
+            type: 'datasource',
+            name: 'Orders',
+            connector_id: 'postgres',
+            datasource_operation: 'query',
+        };
+        const el = await fixture(html`
+            <flows-datasource-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'datasource'} .flowVariables=${{}}>
+            </flows-datasource-node-editor>
+        `);
+        await elementUpdated(el);
+        expect(el._showCreate).to.equal(false);
+        el._onConnectionCreate({ detail: { query: '' } });
+        expect(el._showCreate).to.equal(true);
+        expect(el._createPort).to.equal(5432);
+        expect(el._createSslMode).to.equal('require');
+    });
+
+    it('flows-datasource-node-editor — Test и Schema заполняют панель', async () => {
+        fetchMock.respondJson('POST', (url) => url.includes('/flows/api/v1/datasources/ds_orders/test'), {
+            ok: true,
+            latency_ms: 12,
+            server_version: 'PostgreSQL 16',
+        });
+        fetchMock.respondJson('POST', (url) => url.includes('/flows/api/v1/datasources/ds_orders/introspect'), {
+            tables: [
+                {
+                    table_name: 'public.items',
+                    columns: [
+                        { name: 'id', data_type: 'integer' },
+                        { name: 'name', data_type: 'text' },
+                    ],
+                },
+            ],
+        });
+        const node = {
+            node_id: 'a',
+            type: 'datasource',
+            name: 'Orders',
+            connector_id: 'postgres',
+            datasource_id: 'ds_orders',
+            datasource_operation: 'query',
+        };
+        const el = await fixture(html`
+            <flows-datasource-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'datasource'} .flowVariables=${{}}>
+            </flows-datasource-node-editor>
+        `);
+        await elementUpdated(el);
+        await waitUntil(() => Array.isArray(el._datasources.items) && el._datasources.items.length > 0);
+        const base = el.shadowRoot.querySelector('flows-base-node-editor');
+        const actionButtons = [...base.querySelectorAll('.connection-actions platform-button')];
+        expect(actionButtons.length, 'test and schema buttons').to.equal(2);
+        clickPlatformButton(actionButtons[0]);
+        await waitUntil(() => el._testSummary !== null, 'test summary');
+        expect(el._testSummary).to.deep.equal({
+            ok: true,
+            latencyMs: 12,
+            serverVersion: 'PostgreSQL 16',
+        });
+        await elementUpdated(el);
+        expect(base.querySelector('.test-line'), 'test summary line').to.exist;
+        clickPlatformButton(actionButtons[1]);
+        await waitUntil(() => Array.isArray(el._schemaTables) && el._schemaTables.length === 1, 'schema tables');
+        expect(el._schemaTables).to.deep.equal([
+            {
+                tableName: 'public.items',
+                columns: [
+                    { name: 'id', dataType: 'integer' },
+                    { name: 'name', dataType: 'text' },
+                ],
+            },
+        ]);
+        await elementUpdated(el);
+        const schemaHeading = [...base.querySelectorAll('.test-line')].at(-1);
+        expect(schemaHeading, 'schema tables heading').to.exist;
+        expect(schemaHeading.textContent.trim()).to.equal('Tables: 1');
+        const schemaItem = base.querySelector('.schema-list li');
+        expect(schemaItem, 'schema table row').to.exist;
+        expect(schemaItem.textContent).to.include('public.items');
+        expect(schemaItem.textContent).to.include('id:integer');
+        expect(schemaItem.textContent).to.include('name:text');
+        const testCall = fetchMock.calls.find((call) => call.method === 'POST' && call.url.includes('/datasources/ds_orders/test'));
+        const schemaCall = fetchMock.calls.find((call) => call.method === 'POST' && call.url.includes('/datasources/ds_orders/introspect'));
+        expect(testCall, 'POST test').to.exist;
+        expect(schemaCall, 'POST introspect').to.exist;
+    });
+
+    it('flows-datasource-node-editor — submit create патчит datasource_id', async () => {
+        fetchMock.respondJson('POST', (url) => /\/flows\/api\/v1\/datasources\/?(\?|$)/.test(url), {
+            datasource_id: 'ds_created',
+            connector_id: 'postgres',
+            name: 'Warehouse',
+            host: 'db.example',
+            port: 5432,
+            database_name: 'orders',
+            username: 'app',
+            ssl_mode: 'disable',
+            allowed_operations: ['select'],
+            statement_timeout_ms: 15000,
+            max_rows: 1000,
+        });
+        const node = {
+            node_id: 'a',
+            type: 'datasource',
+            name: 'Orders',
+            connector_id: 'postgres',
+            datasource_operation: 'query',
+        };
+        const el = await fixture(html`
+            <flows-datasource-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'datasource'} .flowVariables=${{}}>
+            </flows-datasource-node-editor>
+        `);
+        await elementUpdated(el);
+        el._onConnectionCreate({ detail: { query: 'Warehouse' } });
+        await elementUpdated(el);
+        expect(el._showCreate).to.equal(true);
+        expect(el._createName).to.equal('Warehouse');
+        el._createHost = 'db.example';
+        el._createDatabaseName = 'orders';
+        el._createUsername = 'app';
+        el._createPassword = 'secret';
+        el._createSslMode = 'disable';
+        await elementUpdated(el);
+        let last = null;
+        el.addEventListener('change', (e) => {
+            if (e.detail && Object.prototype.hasOwnProperty.call(e.detail, 'patch')) {
+                last = e.detail;
+            }
+        });
+        const base = el.shadowRoot.querySelector('flows-base-node-editor');
+        const createButtons = [...base.querySelectorAll('.create-actions platform-button')];
+        expect(createButtons.length, 'cancel and submit').to.equal(2);
+        clickPlatformButton(createButtons[1]);
+        await waitUntil(() => last !== null && last.patch && last.patch.datasource_id === 'ds_created', 'create patch');
+        expect(last.patch).to.deep.equal({ datasource_id: 'ds_created' });
+        expect(el._showCreate).to.equal(false);
+        const createCall = fetchMock.calls.find((call) => (
+            call.method === 'POST' && /\/flows\/api\/v1\/datasources\/?(\?|$)/.test(call.url)
+        ));
+        expect(createCall, 'POST create').to.exist;
+        const body = JSON.parse(createCall.init.body);
+        expect(body.connector_id).to.equal('postgres');
+        expect(body.name).to.equal('Warehouse');
+        expect(body.host).to.equal('db.example');
+        expect(body.port).to.equal(5432);
+        expect(body.database_name).to.equal('orders');
+        expect(body.username).to.equal('app');
+        expect(body.password).to.equal('secret');
+        expect(body.ssl_mode).to.equal('disable');
+        expect(body.allowed_operations).to.deep.equal(['select']);
+    });
+
+    it('flows-datasource-node-editor — empty datasource_id показывает warning', async () => {
+        const node = {
+            node_id: 'a',
+            type: 'datasource',
+            name: 'Orders',
+            connector_id: 'postgres',
+            datasource_operation: 'query',
+        };
+        const el = await fixture(html`
+            <flows-datasource-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'datasource'} .flowVariables=${{}}>
+            </flows-datasource-node-editor>
+        `);
+        await elementUpdated(el);
+        const base = el.shadowRoot.querySelector('flows-base-node-editor');
+        const warning = base.querySelector('.empty-warning');
+        expect(warning, 'empty connection warning').to.exist;
+        expect(warning.textContent.trim().length).to.be.greaterThan(0);
+    });
+
+    it('flows-datasource-node-editor — edit PATCH полей', async () => {
+        fetchMock.respondJson('PATCH', (url) => url.includes('/flows/api/v1/datasources/ds_orders'), {
+            datasource_id: 'ds_orders',
+            connector_id: 'postgres',
+            name: 'Orders',
+            host: 'db.internal',
+            port: 5432,
+            database_name: 'orders',
+            username: 'app',
+            ssl_mode: 'disable',
+            allowed_operations: ['select'],
+            statement_timeout_ms: 20000,
+            max_rows: 50,
+        });
+        const node = {
+            node_id: 'a',
+            type: 'datasource',
+            name: 'Orders',
+            connector_id: 'postgres',
+            datasource_id: 'ds_orders',
+            datasource_operation: 'query',
+        };
+        const el = await fixture(html`
+            <flows-datasource-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'datasource'} .flowVariables=${{}}>
+            </flows-datasource-node-editor>
+        `);
+        await elementUpdated(el);
+        await waitUntil(() => Array.isArray(el._datasources.items) && el._datasources.items.length > 0);
+        await waitUntil(() => el._editHydrated === true, 'edit hydrated');
+        const base = el.shadowRoot.querySelector('flows-base-node-editor');
+        const sslHint = base.querySelector('.ssl-hint');
+        expect(sslHint, 'ssl localhost hint on edit').to.exist;
+        el._editHost = 'db.internal';
+        el._editStatementTimeoutMs = 20000;
+        el._editMaxRows = 50;
+        await elementUpdated(el);
+        const editButtons = [...base.querySelectorAll('[data-connection-edit] .create-actions platform-button')];
+        expect(editButtons.length, 'delete and save').to.equal(2);
+        clickPlatformButton(editButtons[1]);
+        await waitUntil(() => fetchMock.calls.some((call) => call.method === 'PATCH'), 'PATCH save');
+        const patchCall = fetchMock.calls.find((call) => call.method === 'PATCH');
+        expect(patchCall, 'PATCH connection').to.exist;
+        const body = JSON.parse(patchCall.init.body);
+        expect(body.host).to.equal('db.internal');
+        expect(body.statement_timeout_ms).to.equal(20000);
+        expect(body.max_rows).to.equal(50);
+        expect(body.password).to.equal(undefined);
+    });
+
+    it('flows-datasource-node-editor — Test fail рисует error line', async () => {
+        fetchMock.respondJson('POST', (url) => url.includes('/flows/api/v1/datasources/ds_orders/test'), {
+            detail: 'connection refused',
+        }, 400);
+        const node = {
+            node_id: 'a',
+            type: 'datasource',
+            name: 'Orders',
+            connector_id: 'postgres',
+            datasource_id: 'ds_orders',
+            datasource_operation: 'query',
+        };
+        const el = await fixture(html`
+            <flows-datasource-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'datasource'} .flowVariables=${{}}>
+            </flows-datasource-node-editor>
+        `);
+        await elementUpdated(el);
+        await waitUntil(() => Array.isArray(el._datasources.items) && el._datasources.items.length > 0);
+        const base = el.shadowRoot.querySelector('flows-base-node-editor');
+        const actionButtons = [...base.querySelectorAll('.connection-actions platform-button')];
+        clickPlatformButton(actionButtons[0]);
+        await waitUntil(() => el._testError !== null, 'test error');
+        await elementUpdated(el);
+        const errorLine = base.querySelector('.test-line.test-error');
+        expect(errorLine, 'test error line').to.exist;
+        expect(errorLine.textContent).to.include('connection refused');
+    });
+
+    it('flows-datasource-node-editor — клик таблицы подставляет sql', async () => {
+        fetchMock.respondJson('POST', (url) => url.includes('/flows/api/v1/datasources/ds_orders/introspect'), {
+            tables: [
+                {
+                    table_name: 'public.items',
+                    columns: [
+                        { name: 'id', data_type: 'integer' },
+                        { name: 'name', data_type: 'text' },
+                    ],
+                },
+            ],
+        });
+        const node = {
+            node_id: 'a',
+            type: 'datasource',
+            name: 'Orders',
+            connector_id: 'postgres',
+            datasource_id: 'ds_orders',
+            datasource_operation: 'query',
+            sql: '',
+        };
+        const el = await fixture(html`
+            <flows-datasource-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'datasource'} .flowVariables=${{}}>
+            </flows-datasource-node-editor>
+        `);
+        await elementUpdated(el);
+        await waitUntil(() => Array.isArray(el._datasources.items) && el._datasources.items.length > 0);
+        let last = null;
+        el.addEventListener('change', (e) => {
+            if (e.detail && Object.prototype.hasOwnProperty.call(e.detail, 'patch')) {
+                last = e.detail;
+            }
+        });
+        const base = el.shadowRoot.querySelector('flows-base-node-editor');
+        const actionButtons = [...base.querySelectorAll('.connection-actions platform-button')];
+        clickPlatformButton(actionButtons[1]);
+        await waitUntil(() => Array.isArray(el._schemaTables) && el._schemaTables.length === 1, 'schema tables');
+        await elementUpdated(el);
+        const tableBtn = base.querySelector('.schema-list > li > platform-button');
+        expect(tableBtn, 'schema table button').to.exist;
+        clickPlatformButton(tableBtn);
+        expect(last, 'sql patch from table').to.exist;
+        expect(last.patch).to.deep.equal({ sql: 'SELECT * FROM public.items LIMIT 50' });
+    });
+
+    it('flows-datasource-node-editor — execute спрашивает confirm', async () => {
+        const node = {
+            node_id: 'a',
+            type: 'datasource',
+            name: 'Orders',
+            connector_id: 'postgres',
+            datasource_id: 'ds_orders',
+            datasource_operation: 'query',
+        };
+        const el = await fixture(html`
+            <flows-datasource-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'datasource'} .flowVariables=${{}}>
+            </flows-datasource-node-editor>
+        `);
+        await elementUpdated(el);
+        let last = null;
+        el.addEventListener('change', (e) => {
+            if (e.detail && Object.prototype.hasOwnProperty.call(e.detail, 'patch')) {
+                last = e.detail;
+            }
+        });
+        const pending = el._onOperation({ detail: { value: 'execute' } });
+        await waitUntil(() => {
+            const modal = document.querySelector('platform-confirm-modal');
+            return modal !== null && modal.open === true
+                && modal.shadowRoot.querySelector('.btn-secondary') !== null;
+        }, 'confirm modal');
+        const modal = document.querySelector('platform-confirm-modal');
+        const cancel = modal.shadowRoot.querySelector('.btn-secondary');
+        expect(cancel, 'confirm cancel').to.exist;
+        cancel.click();
+        await pending;
+        await waitUntil(() => {
+            const closed = document.querySelector('platform-confirm-modal');
+            return closed === null || closed.open !== true;
+        }, 'confirm closed');
+        expect(last).to.equal(null);
+        const confirmPending = el._onOperation({ detail: { value: 'execute' } });
+        await waitUntil(() => {
+            const open = document.querySelector('platform-confirm-modal');
+            return open !== null && open.open === true
+                && open.shadowRoot.querySelector('.confirm-actions .btn:last-child') !== null;
+        }, 'confirm modal again');
+        const confirmModal = document.querySelector('platform-confirm-modal');
+        const confirmBtn = confirmModal.shadowRoot.querySelector('.confirm-actions .btn:last-child');
+        expect(confirmBtn, 'confirm button').to.exist;
+        confirmBtn.click();
+        await confirmPending;
+        expect(last).to.exist;
+        expect(last.patch).to.deep.equal({ datasource_operation: 'execute' });
     });
 
     it('flows-external-api-editor — смена HTTP-метода эмитит patch', async () => {

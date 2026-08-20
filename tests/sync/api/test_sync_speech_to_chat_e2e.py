@@ -154,5 +154,44 @@ async def test_speech_to_chat_posts_audio_segment_to_channel_feed(
         "Сообщение публикуется от лица participant_identity (publisher)."
     )
 
+    message_id = speech_message.get("message_id")
+    assert isinstance(message_id, str) and message_id != ""
+    stt_deadline = asyncio.get_event_loop().time() + 60.0
+    speech_text: dict[str, object] | None = None
+    async with httpx.AsyncClient(
+        base_url="http://127.0.0.1:9005",
+        timeout=10.0,
+        headers={"Authorization": f"Bearer {sync_auth_token}"},
+    ) as stt_http:
+        while asyncio.get_event_loop().time() < stt_deadline:
+            listed = await stt_http.get(
+                f"/sync/api/v1/channels/{channel_id}/messages?limit=50"
+            )
+            if listed.status_code != 200:
+                await asyncio.sleep(1.0)
+                continue
+            for msg in listed.json()["items"]:
+                if msg.get("message_id") != message_id:
+                    continue
+                for content in msg.get("contents", []):
+                    if content.get("type") != "text/plain":
+                        continue
+                    data = content.get("data")
+                    if not isinstance(data, dict):
+                        continue
+                    if data.get("origin") == "speech" and isinstance(data.get("body"), str):
+                        if data["body"].strip() != "":
+                            speech_text = data
+                            break
+            if speech_text is not None:
+                break
+            await asyncio.sleep(1.0)
+    assert speech_text is not None, (
+        "После STT у speech-to-chat сегмента должен появиться text/plain origin=speech"
+    )
+    body_text = speech_text.get("body")
+    assert isinstance(body_text, str)
+    assert "Тестовая транскрипция" in body_text
+
     async with http_owner(sync_auth_token) as http:
         await http.post(f"/sync/api/v1/calls/{call['call_id']}/hangup")

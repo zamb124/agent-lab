@@ -57,6 +57,12 @@ export class SyncChatList extends PlatformElement {
                 --sidebar-nav-inline: var(--space-1);
             }
 
+            :host([mode='sidebar']) {
+                flex: 1;
+                min-height: 0;
+                overflow: hidden;
+            }
+
             :host([mode='page']) {
                 flex: 1;
                 min-height: 0;
@@ -75,12 +81,6 @@ export class SyncChatList extends PlatformElement {
                 padding-bottom: var(--space-2);
                 margin-bottom: var(--space-2);
                 flex-shrink: 0;
-            }
-
-            :host([mode='sidebar']) .header {
-                position: sticky;
-                top: 0;
-                z-index: 2;
             }
 
             :host([mode='page']) .header {
@@ -185,6 +185,23 @@ export class SyncChatList extends PlatformElement {
                 min-height: 0;
                 width: 100%;
                 box-sizing: border-box;
+            }
+
+            :host([mode='sidebar']) .body {
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+            }
+
+            :host([mode='sidebar']) .section {
+                margin-bottom: 0;
+            }
+
+            :host([mode='sidebar']) .section-content {
+                overflow-y: auto;
+                overscroll-behavior: contain;
+                -webkit-overflow-scrolling: touch;
+                padding-bottom: var(--space-2);
             }
 
             :host([mode='page']) .body {

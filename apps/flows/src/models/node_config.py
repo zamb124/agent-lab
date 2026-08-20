@@ -7,6 +7,7 @@ Zero-Guess Architecture:
 - Input/Output схемы для валидации data flow
 """
 
+from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
 from typing import ClassVar, Literal, cast
@@ -18,6 +19,7 @@ from apps.flows.src.constants.execution_limits import (
     get_node_execution_wall_time_cap_seconds,
 )
 from core.ai.llm_config import LLMCallConfig, validate_fallback_model_configs
+from core.datasources.models import DatasourceOperation
 from core.files.file_ref import FileRef
 from core.llm_context import LLMContextPatch
 from core.models import StrictBaseModel
@@ -47,6 +49,36 @@ def _parse_config_int(value: JsonValue, field_name: str) -> int:
         except ValueError as exc:
             raise ValueError(f"{field_name}: ожидается целое число, получено {value!r}") from exc
     raise ValueError(f"{field_name}: ожидается целое число, получено {type(value).__name__}")
+
+
+def _assert_datasource_node_surface(
+    *,
+    connector_id: str | None,
+    prompt: str | None,
+    tools: Sequence[object],
+    agent_skills: Sequence[str],
+    react: object | None,
+    structured_output: bool,
+    llm: object | None,
+    llm_context: object | None,
+    llm_context_resource_key: str | None,
+) -> None:
+    if connector_id is None or not connector_id.strip():
+        raise ValueError("datasource node: connector_id is required")
+    if prompt is not None and str(prompt).strip():
+        raise ValueError("datasource node: prompt must be empty")
+    if tools:
+        raise ValueError("datasource node: tools must be empty")
+    if agent_skills:
+        raise ValueError("datasource node: agent_skills must be empty")
+    if react is not None:
+        raise ValueError("datasource node: react is not allowed")
+    if structured_output:
+        raise ValueError("datasource node: structured_output must be False")
+    if llm is not None:
+        raise ValueError("datasource node: llm is not allowed")
+    if llm_context is not None or llm_context_resource_key is not None:
+        raise ValueError("datasource node: llm_context is not allowed")
 
 
 class ReactLoopMode(str, Enum):
@@ -151,6 +183,7 @@ class NodeConfig(StrictBaseModel):
     - NodeType.REMOTE_FLOW: внешний flow по A2A
     - NodeType.EXTERNAL_API: вызов HTTP API
     - NodeType.MCP: MCP tool
+    - NodeType.DATASOURCE: живая БД (DatasourceProtocol)
     - NodeType.HITL_NODE: пауза до оператора очереди
     - NodeType.REFLECTION: typed critic / test-time compute gate
     - NodeType.RESOURCE: нода-ресурс на графе (привязка resources; рантайм pass-through)
@@ -380,6 +413,22 @@ class NodeConfig(StrictBaseModel):
         default=None,
         description="MCP tool name",
     )
+    connector_id: str | None = Field(
+        default=None,
+        description="Datasource connector_id (палитра Источники)",
+    )
+    datasource_id: str | None = Field(
+        default=None,
+        description="DatasourceConnection id; runtime падает если пуст",
+    )
+    datasource_operation: DatasourceOperation | None = Field(
+        default=None,
+        description="DatasourceProtocol: introspect / query / execute",
+    )
+    sql: str | None = Field(
+        default=None,
+        description="SQL для query/execute (named :params)",
+    )
 
     # Для channel-ноды
     channel: ChannelType | None = Field(default=None, description="Тип канала")
@@ -526,6 +575,20 @@ class NodeConfig(StrictBaseModel):
                 raise ValueError("reflection node: structured_output must be False")
             return self
 
+        if self.type == NodeType.DATASOURCE:
+            _assert_datasource_node_surface(
+                connector_id=self.connector_id,
+                prompt=self.prompt,
+                tools=list(self.tools),
+                agent_skills=self.agent_skills,
+                react=self.react,
+                structured_output=self.structured_output,
+                llm=self.llm,
+                llm_context=self.llm_context,
+                llm_context_resource_key=self.llm_context_resource_key,
+            )
+            return self
+
         if self.type != NodeType.RESOURCE:
             if self.agent_skills and self.type != NodeType.LLM_NODE:
                 raise ValueError("agent_skills are only allowed on llm_node")
@@ -625,6 +688,10 @@ class GraphNodeConfig(StrictBaseModel):
     state_mapping: dict[str, str] = Field(default_factory=dict)
     server_id: str | None = Field(default=None)
     tool_name: str | None = Field(default=None)
+    connector_id: str | None = Field(default=None)
+    datasource_id: str | None = Field(default=None)
+    datasource_operation: DatasourceOperation | None = Field(default=None)
+    sql: str | None = Field(default=None)
 
     channel: ChannelType | None = Field(default=None)
     action: str | None = Field(default=None)
@@ -701,6 +768,20 @@ class GraphNodeConfig(StrictBaseModel):
                 raise ValueError("reflection node: react is not allowed")
             if self.structured_output:
                 raise ValueError("reflection node: structured_output must be False")
+            return self
+
+        if self.type == NodeType.DATASOURCE:
+            _assert_datasource_node_surface(
+                connector_id=self.connector_id,
+                prompt=self.prompt,
+                tools=list(self.tools),
+                agent_skills=self.agent_skills,
+                react=self.react,
+                structured_output=self.structured_output,
+                llm=self.llm,
+                llm_context=self.llm_context,
+                llm_context_resource_key=self.llm_context_resource_key,
+            )
             return self
 
         if self.type != NodeType.RESOURCE:

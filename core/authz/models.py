@@ -117,6 +117,13 @@ class AuthzObject:
     def agent_device(cls, device_id: str) -> "AuthzObject":
         return cls(AuthzObjectType.AGENT_DEVICE, device_id)
 
+    @classmethod
+    def datasource(cls, datasource_id: str, *, company_id: str) -> "AuthzObject":
+        return cls(
+            AuthzObjectType.DATASOURCE,
+            format_namespace_key(company_id, datasource_id),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class AuthzSubject:

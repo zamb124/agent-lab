@@ -554,7 +554,15 @@ def _infer_result_keys(node: JsonObject, observation: JsonValue = None) -> list[
     node_type = str(node.get("type") or "")
     if node_type in {"llm_node", "flow", "remote_flow", "hitl_node"}:
         keys.add("response")
-    if node_type in {"code", "external_api", "mcp", "channel", "flow", "remote_flow"}:
+    if node_type in {
+        "code",
+        "external_api",
+        "mcp",
+        "datasource",
+        "channel",
+        "flow",
+        "remote_flow",
+    }:
         keys.add("result")
     return sorted(keys)
 
@@ -1139,6 +1147,18 @@ def _infer_node_writes(
                 add(state_field, "string", source="state_mapping", confidence="declared")
         add("mcp_result", "string", source="mcp.result")
         add("result", "string", source="mcp.result")
+    elif node_type == "datasource":
+        raw_state_mapping = node.get("state_mapping")
+        state_mapping = (
+            require_json_object(raw_state_mapping, "state_mapping")
+            if isinstance(raw_state_mapping, dict)
+            else {}
+        )
+        for _response_field, state_field in state_mapping.items():
+            if isinstance(state_field, str):
+                add(state_field, "any", source="state_mapping", confidence="declared")
+        add("datasource_result", "any", source="datasource.result")
+        add("result", "any", source="datasource.result")
     elif node_type == "channel":
         add("channel_result", "any", source="channel.result")
         add("result", "any", source="channel.result")

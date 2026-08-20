@@ -1,7 +1,7 @@
 {
   "title": "Privacy Policy",
   "updated": "Last updated",
-  "updated_at": "March 29, 2026",
+  "updated_at": "August 20, 2026",
   "section_1": {
     "title": "1. Controller and scope",
     "p1": "{{company_name_en}} ({{legal_form_en}}) acts as the controller for personal data described in this Privacy Policy.",
@@ -98,10 +98,14 @@
     "list": [
       "Company: {{company_name_en}} ({{legal_form_en}}).",
       "Legal address: {{legal_address_en}}.",
+      "INN {{inn}}, KPP {{kpp}}, OGRN {{ogrn}}.",
+      "Bank: {{bank_name_en}}, bank INN {{bank_inn}}.",
+      "Beneficiary account: {{bank_account}}.",
+      "BIC {{bank_bik}}, correspondent account {{bank_correspondent_account}}.",
+      "Bank address: {{bank_address_en}}.",
       "General contact: {{contact_email}}.",
       "Support: {{support_email}}.",
-      "Data protection contact: {{dpo_email}}.",
-      "Company identifiers (if applicable): INN {{inn}}, OGRN {{ogrn}}."
+      "Data protection contact: {{dpo_email}}."
     ]
   }
 }

@@ -3,7 +3,7 @@
  *
  * Источники:
  *   - useOp('flows/node_types').lastResult — runtime-ноды с category
- *     (`core` | `tools` | `integrations` | `channels`).
+ *     (`core` | `tools` | `sources` | `integrations` | `channels`).
  *   - useOp('flows/resource_types').lastResult — ресурсные типы (раздел «Ресурсы»).
  *   - useOp('flows/triggers_list').run({ flow_id }) — триггеры flow для
  *     отдельной секции в шапке сайдбара.
@@ -13,7 +13,8 @@
  * Поиск фильтрует все категории + ресурсы (по name / description / type),
  * категории без совпадений скрываются.
  *
- * Перетаскивание: dataTransfer `application/x-flow-node-type` для нод и
+ * Перетаскивание: dataTransfer `application/x-flow-node-type` для нод,
+ * `application/x-flow-connector-id` для datasource, и
  * `application/x-flow-resource-type` для ресурсов.
  *
  * Тип ноды `resource` в палитре не показываем: нода-ресурс на канве создаётся
@@ -36,11 +37,12 @@ import { getTriggerTypeRowVisual } from '../../constants/trigger-types.js';
 import { asArray, asString } from '../../_helpers/flows-resolvers.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 
-const NODE_CATEGORY_ORDER = Object.freeze(['core', 'tools', 'integrations', 'channels']);
+const NODE_CATEGORY_ORDER = Object.freeze(['core', 'tools', 'sources', 'integrations', 'channels']);
 
 const CATEGORY_TO_TOKEN_KEY = Object.freeze({
     core: 'core',
     tools: 'core',
+    sources: 'sources',
     integrations: 'integrations',
     channels: 'flow',
     resources: 'flow',
@@ -291,17 +293,41 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
 
     _filterItems(items) {
         if (this._query.length === 0) return items;
-        return items.filter((it) => this._matchQuery(it.name) || this._matchQuery(it.description) || this._matchQuery(it.type));
+        return items.filter(
+            (it) => this._matchQuery(it.name)
+                || this._matchQuery(it.description)
+                || this._matchQuery(it.type)
+                || this._matchQuery(it.connector_id),
+        );
     }
 
-    _onDragNodeType(e, type) {
-        if (typeof type !== 'string' || type === '') return;
+    _onDragNodeType(e, item) {
+        if (item === null || typeof item !== 'object') {
+            throw new Error('FlowsNodeTypesSidebar._onDragNodeType: item object required');
+        }
+        const type = asString(item.type);
+        if (type.length === 0) {
+            throw new Error('FlowsNodeTypesSidebar._onDragNodeType: item.type required');
+        }
         e.dataTransfer.setData('application/x-flow-node-type', type);
+        if (type === 'datasource') {
+            const connectorId = asString(item.connector_id);
+            if (connectorId.length === 0) {
+                throw new Error('FlowsNodeTypesSidebar._onDragNodeType: connector_id required for datasource');
+            }
+            e.dataTransfer.setData('application/x-flow-connector-id', connectorId);
+        }
         e.dataTransfer.effectAllowed = 'copy';
     }
 
-    _onDragResourceType(e, type) {
-        if (typeof type !== 'string' || type === '') return;
+    _onDragResourceType(e, item) {
+        if (item === null || typeof item !== 'object') {
+            throw new Error('FlowsNodeTypesSidebar._onDragResourceType: item object required');
+        }
+        const type = asString(item.type);
+        if (type.length === 0) {
+            throw new Error('FlowsNodeTypesSidebar._onDragResourceType: item.type required');
+        }
         e.dataTransfer.setData('application/x-flow-resource-type', type);
         e.dataTransfer.effectAllowed = 'copy';
     }
@@ -530,7 +556,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                                 draggable="true"
                                 title=${it.description || it.name || it.type}
                                 aria-label=${it.name || it.type}
-                                @dragstart=${(e) => dragHandler.call(this, e, it.type)}
+                                @dragstart=${(e) => dragHandler.call(this, e, it)}
                             >
                                 <div class="node-icon" style=${style}>
                                     <platform-icon name=${iconName} size="16"></platform-icon>

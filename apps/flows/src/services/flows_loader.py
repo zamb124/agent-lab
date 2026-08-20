@@ -62,6 +62,7 @@ _INLINE_SELF_CONTAINED_TOOL_TYPES = frozenset(
         "channel",
         "flow",
         "mcp",
+        "datasource",
         "external_api",
         "remote_flow",
         "code",

@@ -32,11 +32,26 @@ export const codeExecuteTestRunHandler = {
             host.toast('flows:test_panel.toast_state_invalid', { type: 'error' });
             return;
         }
+        const nodeConfig = host._nodeConfigForPayload();
+        if (host.nodeType === 'datasource' && nodeConfig.datasource_operation === 'execute') {
+            const { platformConfirm } = await import('@platform/lib/components/platform-confirm-modal.js');
+            const confirmed = await platformConfirm(
+                host.t('datasource_node_editor.execute_confirm_body'),
+                {
+                    title: host.t('datasource_node_editor.execute_confirm_title'),
+                    variant: 'danger',
+                    confirmVariant: 'danger',
+                },
+            );
+            if (!confirmed) {
+                return;
+            }
+        }
         const skill = typeof host.branchId === 'string' && host.branchId.length > 0 ? host.branchId : 'base';
         setTestRunRequestClientId(requestClientId);
         const result = await op.run({
             node_type: host.nodeType,
-            node_config: host._nodeConfigForPayload(),
+            node_config: nodeConfig,
             state,
             flow_id: host.flowId,
             branch_id: skill,

@@ -8795,12 +8795,12 @@
           "company_name_ru": {
             "type": "string",
             "title": "Company Name Ru",
-            "default": "ООО «Энжилабс»"
+            "default": "ООО «ЛАЙНЕКС»"
           },
           "company_name_en": {
             "type": "string",
             "title": "Company Name En",
-            "default": "Angilabs LLC"
+            "default": "OBSCHESTVO S OGRANICHENNOI OTVETSTVENNOSTYU \"LAINEKS\""
           },
           "legal_form_ru": {
             "type": "string",
@@ -8813,74 +8813,49 @@
             "default": "Limited Liability Company"
           },
           "inn": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Inn"
+            "type": "string",
+            "title": "Inn",
+            "default": "9717194941"
+          },
+          "kpp": {
+            "type": "string",
+            "title": "Kpp",
+            "default": "771701001"
           },
           "ogrn": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ogrn"
+            "type": "string",
+            "title": "Ogrn",
+            "default": "1267700280132"
           },
           "legal_address_ru": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Legal Address Ru"
+            "type": "string",
+            "title": "Legal Address Ru",
+            "default": "129515, Россия, г. Москва, вн.тер.г. муниципальный округ Останкинский, б-р Звёздный, д. 12, к. 1, кв. 48"
           },
           "legal_address_en": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Legal Address En"
+            "type": "string",
+            "title": "Legal Address En",
+            "default": "129515, ROSSIYA, G.MOSKVA, VN.TER.G. MUNITSIPALNYI OKRUG OSTANKINSKII, B-R ZVEZDNYI, D. 12, K. 1, KV. 48"
           },
           "contact_email": {
             "type": "string",
             "title": "Contact Email",
-            "default": "info@angilabs.ru"
+            "default": "legal@linnex.io"
           },
           "support_email": {
             "type": "string",
             "title": "Support Email",
-            "default": "support@angilabs.ru"
+            "default": "support@linnex.io"
           },
           "dpo_email": {
             "type": "string",
             "title": "Dpo Email",
-            "default": "dpo@angilabs.ru"
+            "default": "privacy@linnex.io"
           },
           "phone": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Phone"
+            "type": "string",
+            "title": "Phone",
+            "default": "+7 (953) 477-10-94"
           },
           "min_age": {
             "type": "integer",
@@ -8890,48 +8865,82 @@
           "retention_logs": {
             "type": "string",
             "title": "Retention Logs",
-            "default": "30 дней / 30 days"
+            "default": "12 months"
           },
           "retention_messages": {
             "type": "string",
             "title": "Retention Messages",
-            "default": "1 год / 1 year"
+            "default": "24 months"
           },
           "retention_accounts": {
             "type": "string",
             "title": "Retention Accounts",
-            "default": "3 года после последней активности / 3 years after last activity"
+            "default": "5 years after account closure"
           },
           "cloud_provider": {
             "type": "string",
             "title": "Cloud Provider",
-            "default": "AWS/Yandex Cloud"
+            "default": "Yandex Cloud"
           },
           "cloud_region": {
             "type": "string",
             "title": "Cloud Region",
-            "default": "EU/RU"
+            "default": "Russian Federation"
           },
           "analytics_tools": {
             "type": "string",
             "title": "Analytics Tools",
-            "default": "Internal analytics"
+            "default": "Internal monitoring and product analytics"
           },
           "billing_provider": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Billing Provider"
+            "type": "string",
+            "title": "Billing Provider",
+            "default": "YooMoney"
+          },
+          "bank_name_ru": {
+            "type": "string",
+            "title": "Bank Name Ru",
+            "default": "АО «ТБанк»"
+          },
+          "bank_name_en": {
+            "type": "string",
+            "title": "Bank Name En",
+            "default": "TBank JSC"
+          },
+          "bank_account": {
+            "type": "string",
+            "title": "Bank Account",
+            "default": "40702810010002289174"
+          },
+          "bank_bik": {
+            "type": "string",
+            "title": "Bank Bik",
+            "default": "044525974"
+          },
+          "bank_correspondent_account": {
+            "type": "string",
+            "title": "Bank Correspondent Account",
+            "default": "30101810145250000974"
+          },
+          "bank_inn": {
+            "type": "string",
+            "title": "Bank Inn",
+            "default": "7710140679"
+          },
+          "bank_address_ru": {
+            "type": "string",
+            "title": "Bank Address Ru",
+            "default": "127287, г. Москва, ул. 2-я Хуторская, д. 38А, стр. 26"
+          },
+          "bank_address_en": {
+            "type": "string",
+            "title": "Bank Address En",
+            "default": "38A 2-ya Khutorskaya ul., Bld. 26, Moscow 127287, Russia"
           }
         },
         "type": "object",
         "title": "LegalConfig",
-        "description": "Конфигурация юридической информации компании"
+        "description": "Публичные реквизиты оператора платформы (ООО «ЛАЙНЕКС»)."
       },
       "ListResponse_CalendarIntegrationPublic_": {
         "properties": {

@@ -175,6 +175,7 @@ alwaysApply: true
 | File | `file_id`, `FileRecord`, `FileResponse`, `FileReadResult`, `FileWriteResult` | `original_name`, `content_type`, `file_size`, `checksum`, `storage_url`, `company_id`; `mime_type` допустим только на границе внешних SDK/STT/MIME registry, не в платформенных file-моделях/API. Не `document_id` для платформенного файла. `FileCategory.VIZ` / `.viz` / MIME `application/vnd.platform.viz+json` — visualization document (JSON `VizDocument`); открытие через Office handler `viz`, канонический id — `file_id` (не `viz_id`). `FileCategory.DATA_TABLE` / `.sqlite` (загрузка `.db` нормализуется в `.sqlite`) / MIME `application/vnd.sqlite3` — табличная SQLite-база как обычный Documents-файл; открытие через Office handler `data_table`; публичный id — `file_id` (запрещены `data_table_id` / `table_id` / `datatable_id`). Scope = `FileSourceKind.flow_asset` \| `flow_session` \| `office_document`. |
 | FileRef / state file | `FileRef`, `state.files[]` | `file_id`, `original_name`, `url`, `content_type`, `file_size`, `capabilities`; A2A wire — `Part.raw` / `Part.url` (`filename`/`mediaType`); browser `File.name/type/size` мапятся на границе. В runtime state/API/UI запрещены `name`, `path`, `mime_type`, `size`, `type` для файлов. |
 | RAG document | `document_id`, `VectorDocument`, `DocumentProcessingStatus` | `namespace_id`, `document_name`, `chunk_index`, `metadata`; не `file_id`, если запись уже в индексе. |
+| Datasource | `datasource_id`, `connector_id`, `DatasourceConnection`, `DatasourceConnectorSpec`, `NodeType.DATASOURCE` | Живая БД как шаг графа `{connector_id, datasource_id, datasource_operation, sql}`. Пароль — `password_encrypted`. Не `connection_id`, не `database_id`, не `ResourceType.DATASOURCE`. Детали → **`datasources.mdc`**. |
 | Calendar event | `event_id`, `CalendarEvent` | `source`, `source_id`, `namespace`, `start_at`, `end_at`, `external_refs`, `mailbox_binding_id`; `source` — происхождение, не provider. |
 | Calendar integration | `integration_id`, `CalendarIntegration` | `provider`, `mailbox_binding_id` (nullable: `null` = интеграция уровня пользователя, иначе один календарь на ящик), `settings.caldav_base_url`, `settings.default_calendar_id`; sync/disconnect — по `integration_id`, не по `provider`. Итог авто-привязки — `CalendarAutolinkStatus` на `MailboxBinding.calendar_autolink_status`. Детали → **`mail.mdc`**. |
 | Company mail connection | `company_mail_connection_id`, `CompanyMailConnection` | `company_id`, `mail_domain`, `provider` (`ispmanager`/`generic_imap_smtp`), IMAP/SMTP endpoints, `supports_provision`; web `company.subdomain` ≠ `mail_domain`. Детали → **`mail.mdc`**. |
@@ -399,6 +400,7 @@ Cursor — `base64url(json({"ts": "<created_at.isoformat()>", "id": "<entity_id>
 | RAG | `rag.mdc` |
 | Sync (чат, каналы, Git) | `sync.mdc` |
 | Почта (company connection, mailbox bindings, ISPmanager) | `mail.mdc` |
+| Datasource (живые БД как NodeType.DATASOURCE) | `datasources.mdc` |
 | Platform Namespace (kind, personal ensure, RAG id) | `namespace.mdc` |
 | WorkItem (ядро задач, канбан, HITL, очереди) | `worktracker.mdc` |
 | Agent Skills (llm_node procedure packs) | `agent_skills.mdc` |

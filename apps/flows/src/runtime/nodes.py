@@ -11,6 +11,7 @@
 - RemoteFlowNode - внешний flow по A2A протоколу
 - ExternalAPINode - вызов внешнего HTTP API
 - MCPNode - вызов MCP tool
+- DatasourceNode - живая БД (DatasourceProtocol)
 - ReflectionNode - typed critic / test-time compute gate
 - ResourceNode - нода-ресурс на графе (identity / pass-through)
 """
@@ -86,6 +87,7 @@ from core.clients.llm.mock_control import (
     resolve_entity_node_mock_result,
 )
 from core.context import get_context as get_request_context
+from core.datasources.models import DatasourceOperation
 from core.errors import NodeWallClockTimeoutError
 from core.integrations.mcp import mcp_tool_reference_id
 from core.llm_context import (
@@ -149,6 +151,7 @@ DURABLE_CONTEXT_NODE_TYPES: frozenset[NodeType] = frozenset(
         NodeType.REMOTE_FLOW,
         NodeType.EXTERNAL_API,
         NodeType.MCP,
+        NodeType.DATASOURCE,
         NodeType.CHANNEL,
         NodeType.HITL_NODE,
         NodeType.REFLECTION,
@@ -2426,6 +2429,100 @@ class MCPNode(BaseNode):
         )
 
 
+class DatasourceNode(BaseNode):
+    """Шаг графа: introspect/query/execute к DatasourceConnection."""
+
+    node_type: ClassVar[NodeType | None] = NodeType.DATASOURCE
+
+    def __init__(
+        self,
+        node_id: str,
+        config: JsonObject | None = None,
+        *,
+        container: FlowRuntimeContainer,
+    ):
+        super().__init__(node_id, config, container=container)
+        cfg = self.config
+        self.connector_id: str | None = _config_optional_string(cfg, "connector_id")
+        self.datasource_id: str | None = _config_optional_string(cfg, "datasource_id")
+        raw_operation = cfg.get("datasource_operation")
+        if not isinstance(raw_operation, str) or not raw_operation.strip():
+            raise ValueError(
+                f"DatasourceNode '{self.node_id}': datasource_operation is required"
+            )
+        self.datasource_operation: DatasourceOperation = DatasourceOperation(raw_operation)
+        self.sql: str | None = _config_optional_string(cfg, "sql")
+        self.state_mapping: dict[str, str] = _config_string_map_default(cfg, "state_mapping")
+
+    @override
+    async def _run_impl(self, state: ExecutionState, inputs: NodeInputs) -> NodeRunResult:
+        if self.connector_id is None or not self.connector_id.strip():
+            raise ValueError(f"DatasourceNode '{self.node_id}': connector_id is required")
+        if self.datasource_id is None or not self.datasource_id.strip():
+            raise ValueError(f"DatasourceNode '{self.node_id}': datasource_id is required")
+        datasource_id = self.datasource_id
+        operation = self.datasource_operation
+        sql = self.sql
+        params = inputs
+        service = self.container.datasource_service
+        variables = require_json_object(state.variables, "state.variables")
+        input_payload = require_json_object(
+            {
+                "node_id": self.node_id,
+                "connector_id": self.connector_id,
+                "datasource_id": datasource_id,
+                "datasource_operation": operation.value,
+                "sql": sql,
+                "inputs": inputs,
+                "variables_hash": hash_state_json(variables),
+                "state_hash": self._state_hash_for_activity(state),
+            },
+            "datasource.activity_input",
+        )
+
+        async def invoke() -> NodeRunResult:
+            if operation is DatasourceOperation.INTROSPECT:
+                protocol_result = await service.introspect(datasource_id)
+            elif operation is DatasourceOperation.QUERY:
+                if sql is None or not sql.strip():
+                    raise ValueError(
+                        f"DatasourceNode '{self.node_id}': sql is required for query"
+                    )
+                protocol_result = await service.query(datasource_id, sql, params)
+            elif operation is DatasourceOperation.EXECUTE:
+                if sql is None or not sql.strip():
+                    raise ValueError(
+                        f"DatasourceNode '{self.node_id}': sql is required for execute"
+                    )
+                protocol_result = await service.execute(datasource_id, sql, params)
+            else:
+                raise ValueError(
+                    f"DatasourceNode '{self.node_id}': unsupported operation {operation}"
+                )
+            dumped = require_json_object(
+                protocol_result.model_dump(mode="json"),
+                "datasource.protocol_result",
+            )
+            for _field, state_field in self.state_mapping.items():
+                state[state_field] = dumped
+            state["datasource_result"] = dumped
+            state["result"] = dumped
+            return dumped
+
+        side_effect = (
+            SideEffectPolicy.non_idempotent
+            if operation is DatasourceOperation.EXECUTE
+            else SideEffectPolicy.idempotent
+        )
+        return await self._run_durable_activity(
+            state,
+            activity_type="datasource",
+            input_payload=input_payload,
+            side_effect_policy=side_effect,
+            invoke=invoke,
+        )
+
+
 class ChannelNode(BaseNode):
     """
     Универсальная нода отправки сообщений в каналы.
@@ -3060,6 +3157,7 @@ RUNTIME_NODE_CLASSES: Mapping[NodeType, type[BaseNode]] = {
     NodeType.REMOTE_FLOW: RemoteFlowNode,
     NodeType.EXTERNAL_API: ExternalAPINode,
     NodeType.MCP: MCPNode,
+    NodeType.DATASOURCE: DatasourceNode,
     NodeType.CHANNEL: ChannelNode,
     NodeType.HITL_NODE: HitlNode,
     NodeType.REFLECTION: ReflectionNode,

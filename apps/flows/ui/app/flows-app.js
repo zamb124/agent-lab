@@ -30,6 +30,13 @@ import {
 } from '../events/resources/agent-skills.resource.js';
 import { resourcesBundleResource, resourceUpdateOp } from '../events/resources/resources-bundle.resource.js';
 import { mcpServersResource, mcpServersListOp, mcpServerUpdateOp, mcpServerSyncOp, mcpServerTestOp, mcpServerResetCatalogDefaultsOp, mcpBrandingLoadOp, mcpBrandingSlugSuggestOp, mcpBrandingUpsertOp, mcpBrandingRemoveOp, mcpCatalogStoreLoadOp, mcpCatalogInstallOp, mcpCatalogUninstallOp } from '../events/resources/mcp.resource.js';
+import {
+    datasourcesResource,
+    datasourceTestOp,
+    datasourceIntrospectOp,
+    datasourceQueryOp,
+    datasourceExecuteOp,
+} from '../events/resources/datasources.resource.js';
 import { triggersListOp, triggerGetOp, triggerCreateOp, triggerUpdateOp,
          triggerRemoveOp, triggerVerifyOp, triggerReregisterOp, triggerTestOp,
          platformEventsCatalogOp } from '../events/resources/triggers.resource.js';
@@ -250,6 +257,11 @@ export class FlowsApp extends PlatformApp {
         mcpCatalogStoreLoadOp,
         mcpCatalogInstallOp,
         mcpCatalogUninstallOp,
+        datasourcesResource,
+        datasourceTestOp,
+        datasourceIntrospectOp,
+        datasourceQueryOp,
+        datasourceExecuteOp,
         triggersListOp,
         triggerGetOp,
         triggerCreateOp,

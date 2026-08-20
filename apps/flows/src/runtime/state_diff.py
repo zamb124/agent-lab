@@ -213,6 +213,14 @@ def build_canvas_result_preview(
         if mcp_result is not None:
             return summarize_canvas_value(mcp_result)
 
+    if node_type == "datasource":
+        datasource_result = after.get("datasource_result")
+        if datasource_result is not None:
+            return summarize_canvas_value(datasource_result)
+        result_value = after.get("result")
+        if result_value is not None:
+            return summarize_canvas_value(result_value)
+
     if node_type == "code":
         result_value = after.get("result")
         if result_value is not None:

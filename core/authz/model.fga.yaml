@@ -131,6 +131,27 @@ tuples:
   - user: platform:global
     relation: platform
     object: flow:acme/flow-public
+  - user: company:acme
+    relation: company
+    object: datasource:acme/ds1
+  - user: user:anne
+    relation: owner
+    object: datasource:acme/ds1
+  - user: platform:global
+    relation: platform
+    object: datasource:acme/ds1
+  - user: company:acme#member
+    relation: viewer
+    object: datasource:acme/ds-public
+  - user: company:acme
+    relation: company
+    object: datasource:acme/ds-public
+  - user: user:anne
+    relation: owner
+    object: datasource:acme/ds-public
+  - user: platform:global
+    relation: platform
+    object: datasource:acme/ds-public
   - user: flow:acme/flow1
     relation: flow
     object: flow_branch:acme/flow1/main
@@ -350,6 +371,34 @@ tests:
           can_edit: false
       - user: user:anne
         object: flow_ui_share:share1
+        assertions:
+          can_view: true
+          can_edit: true
+
+  - name: datasource-owner-and-company-visible
+    check:
+      - user: user:anne
+        object: datasource:acme/ds1
+        assertions:
+          can_view: true
+          can_edit: true
+          can_admin: true
+      - user: user:bob
+        object: datasource:acme/ds1
+        assertions:
+          can_view: false
+          can_edit: false
+      - user: user:bob
+        object: datasource:acme/ds-public
+        assertions:
+          can_view: true
+          can_edit: false
+      - user: user:stranger
+        object: datasource:acme/ds1
+        assertions:
+          can_view: false
+      - user: user:root
+        object: datasource:acme/ds1
         assertions:
           can_view: true
           can_edit: true

@@ -1910,3 +1910,126 @@ async def run(args, state):
         data = response.json()
         assert_execute_response(data, expected_success=True)
         assert "route" in data["output_state"] or "response" in data["output_state"]
+
+
+class TestDatasourceNode:
+    """Play /code/execute for NodeType.datasource against live customer Postgres."""
+
+    @pytest.mark.asyncio
+    async def test_introspect(
+        self,
+        client,
+        customer_datasource,
+    ) -> None:
+        response = await client.post(
+            "/flows/api/v1/code/execute",
+            json={
+                "node_type": "datasource",
+                "node_config": {
+                    "type": "datasource",
+                    "connector_id": "postgres",
+                    "datasource_id": customer_datasource.datasource_id,
+                    "datasource_operation": "introspect",
+                },
+                "state": {},
+            },
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert_execute_response(data, expected_success=True)
+        result = data["output_state"]["datasource_result"]
+        table_names = {table["table_name"] for table in result["tables"]}
+        assert customer_datasource.qualified_table in table_names
+        diff_by_path = {item["path"]: item for item in data["diff"]}
+        assert "datasource_result" in diff_by_path
+
+    @pytest.mark.asyncio
+    async def test_query(
+        self,
+        client,
+        customer_datasource,
+    ) -> None:
+        response = await client.post(
+            "/flows/api/v1/code/execute",
+            json={
+                "node_type": "datasource",
+                "node_config": {
+                    "type": "datasource",
+                    "connector_id": "postgres",
+                    "datasource_id": customer_datasource.datasource_id,
+                    "datasource_operation": "query",
+                    "sql": customer_datasource.query_by_id_sql,
+                    "input_mapping": {"id": "@state:item_id"},
+                },
+                "state": {"item_id": customer_datasource.seed_id},
+            },
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert_execute_response(data, expected_success=True)
+        result = data["output_state"]["datasource_result"]
+        assert result["rows"] == [
+            {"id": customer_datasource.seed_id, "name": customer_datasource.seed_name}
+        ]
+        diff_by_path = {item["path"]: item for item in data["diff"]}
+        assert "datasource_result" in diff_by_path
+
+    @pytest.mark.asyncio
+    async def test_execute(
+        self,
+        client,
+        customer_datasource,
+        unique_id: str,
+    ) -> None:
+        inserted_id = customer_datasource.seed_id + 30
+        inserted_name = f"play-{unique_id}"
+        response = await client.post(
+            "/flows/api/v1/code/execute",
+            json={
+                "node_type": "datasource",
+                "node_config": {
+                    "type": "datasource",
+                    "connector_id": "postgres",
+                    "datasource_id": customer_datasource.datasource_id,
+                    "datasource_operation": "execute",
+                    "sql": customer_datasource.insert_sql,
+                    "input_mapping": {
+                        "id": "@state:insert_id",
+                        "name": "@state:insert_name",
+                    },
+                },
+                "state": {
+                    "insert_id": inserted_id,
+                    "insert_name": inserted_name,
+                },
+            },
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert_execute_response(data, expected_success=True)
+        result = data["output_state"]["datasource_result"]
+        assert result["rowcount"] == 1
+        diff_by_path = {item["path"]: item for item in data["diff"]}
+        assert "datasource_result" in diff_by_path
+
+    @pytest.mark.asyncio
+    async def test_empty_datasource_id(self, client) -> None:
+        response = await client.post(
+            "/flows/api/v1/code/execute",
+            json={
+                "node_type": "datasource",
+                "node_config": {
+                    "type": "datasource",
+                    "connector_id": "postgres",
+                    "datasource_id": "",
+                    "datasource_operation": "query",
+                    "sql": "SELECT 1",
+                },
+                "state": {},
+            },
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert_execute_response(
+            data, expected_success=False, expected_error="datasource_id"
+        )

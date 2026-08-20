@@ -24,6 +24,11 @@ from apps.capability_gateway.services.crm_capabilities import (
     crm_capability_definitions,
     invoke_crm_client,
 )
+from apps.capability_gateway.services.db_capabilities import (
+    DB_CAPABILITY_SPECS,
+    db_capability_definitions,
+    invoke_db_client,
+)
 from apps.capability_gateway.services.documents_capabilities import (
     DOCUMENTS_CAPABILITY_SPECS,
     documents_capability_definitions,
@@ -610,6 +615,8 @@ class CapabilityRegistry:
             self._handlers[f"worktracker.{method}"] = self._make_worktracker_handler(method)
         for method, _title, _description, _args_model in TABLES_CAPABILITY_SPECS:
             self._handlers[f"tables.{method}"] = self._make_tables_handler(method)
+        for method, _title, _description, _args_model in DB_CAPABILITY_SPECS:
+            self._handlers[f"db.{method}"] = self._make_db_handler(method)
         definition_names = set(self._static_definitions)
         handler_names = set(self._handlers)
         if not definition_names.issubset(handler_names):
@@ -644,7 +651,7 @@ class CapabilityRegistry:
             "User code calls platform SDK namespaces generated from the same manifest: "
             + "`tools`, `files`, `http`, `text`, `voice`, `flow_state`, `log`, `trace`, "
             + "`platform`, `channel`, `flow`, `wiki`, `documents`, `crm`, `sync`, "
-            + "`worktracker`, `rag`, `ui`.",
+            + "`worktracker`, `rag`, `tables`, `db`, `ui`.",
             "The structured `capabilities` and `namespaces` fields in this response are the backend source for editor autocomplete.",
             "If `entrypoint` is omitted, the runner executes the first function declared in the source. "
             + "Node/tool configs may set any valid language function name via `entrypoint`.",
@@ -1496,6 +1503,7 @@ class CapabilityRegistry:
         definitions.update(rag_capability_definitions())
         definitions.update(worktracker_capability_definitions())
         definitions.update(tables_capability_definitions())
+        definitions.update(db_capability_definitions())
         definitions.update(
             {
                 "channel.send": CapabilityDefinition(
@@ -1885,6 +1893,15 @@ class CapabilityRegistry:
                 return await invoke_tables_client(
                     method, request.kwargs, self._container.data_table_service
                 )
+
+        return _handler
+
+    def _make_db_handler(self, method: str) -> CapabilityHandler:
+        async def _handler(request: CapabilityCallRequest) -> JsonValue:
+            self._reject_positional_args(request)
+            context = await self._context_service.build_context(request.context)
+            with self._context_service.activate(context):
+                return await invoke_db_client(method, request.kwargs)
 
         return _handler
 

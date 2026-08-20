@@ -119,6 +119,7 @@ class ToolRegistry:
             NodeType.REMOTE_FLOW,
             NodeType.EXTERNAL_API,
             NodeType.MCP,
+            NodeType.DATASOURCE,
             NodeType.CHANNEL,
             NodeType.HITL_NODE,
         }:

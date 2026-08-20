@@ -10,8 +10,7 @@
  * в CRM / frontend console.
  *
  * Слоты `<platform-service-sidebar>`:
- *   - header: header из <sync-chat-list> (через slot 'header' внутри sync-chat-list).
- *   - default (nav): body из <sync-chat-list>.
+ *   - default (nav): <sync-chat-list mode="sidebar"> (поиск, секция «Чаты», лента).
  *   - footer: <platform-user block>.
  */
 
@@ -47,6 +46,11 @@ export class SyncSidebar extends PlatformElement {
                 display: block;
                 height: 100%;
                 --sidebar-nav-inline: var(--space-1);
+            }
+
+            sync-chat-list {
+                flex: 1;
+                min-height: 0;
             }
 
             platform-service-sidebar {

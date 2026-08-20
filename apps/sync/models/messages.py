@@ -56,6 +56,10 @@ class TextPlainContent(BaseModel):
         default=None,
         description="Идентификаторы упомянутых участников канала (user_id).",
     )
+    origin: Literal["typed", "speech"] = Field(
+        default="typed",
+        description="typed — набор в композере; speech — текст из STT того же сообщения.",
+    )
 
 
 class CodeBlockContent(BaseModel):

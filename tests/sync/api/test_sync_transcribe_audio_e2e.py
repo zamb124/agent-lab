@@ -146,6 +146,12 @@ async def test_transcribe_audio_rest_marks_done_via_worker(
     text = audio_done["data"].get("transcription_text")
     assert isinstance(text, str) and text.strip() != ""
     assert "Тестовая транскрипция" in text
+    speech_plain = next(
+        c
+        for c in done_frame["payload"]["contents"]
+        if c["type"] == "text/plain" and c.get("data", {}).get("origin") == "speech"
+    )
+    assert "Тестовая транскрипция" in speech_plain["data"]["body"]
 
 
 @pytest.mark.asyncio
@@ -198,3 +204,9 @@ async def test_transcribe_audio_via_ws_command_succeeds(
     audio_done = next(c for c in done["payload"]["contents"] if c["type"] == "file/audio")
     text = audio_done["data"].get("transcription_text")
     assert isinstance(text, str) and text.strip() != ""
+    speech_plain = next(
+        c
+        for c in done["payload"]["contents"]
+        if c["type"] == "text/plain" and c.get("data", {}).get("origin") == "speech"
+    )
+    assert "Тестовая транскрипция" in speech_plain["data"]["body"]

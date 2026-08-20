@@ -19,6 +19,9 @@ def guest_display_name_from_sender_id(sender_user_id: str) -> str | None:
     return "guest"
 
 
+UNKNOWN_SPEAKER_DISPLAY_NAME = "guest"
+
+
 async def sender_brief_for_message(
     user_repository: UserRepository | None,
     sender_user_id: str,
@@ -26,11 +29,14 @@ async def sender_brief_for_message(
     guest_name = guest_display_name_from_sender_id(sender_user_id)
     if guest_name is not None:
         return UserBrief(user_id=sender_user_id, display_name=guest_name, avatar_url=None)
-    display_name = sender_user_id
-    avatar_url = None
+    if sender_user_id.strip() == "":
+        raise ValueError("sender_user_id пустой.")
     if user_repository is not None:
         u = await user_repository.get(sender_user_id)
         if u is not None:
-            display_name = u.name
-            avatar_url = u.avatar_url
-    return UserBrief(user_id=sender_user_id, display_name=display_name, avatar_url=avatar_url)
+            return UserBrief(user_id=sender_user_id, display_name=u.name, avatar_url=u.avatar_url)
+    return UserBrief(
+        user_id=sender_user_id,
+        display_name=UNKNOWN_SPEAKER_DISPLAY_NAME,
+        avatar_url=None,
+    )

@@ -12,6 +12,36 @@ import '../components/landing/landing-footer.js';
 const PRIVACY_SECTIONS = 14;
 const TERMS_SECTIONS = 13;
 const PARAGRAPH_KEYS = ['p1', 'p2', 'p3'];
+const LEGAL_I18N_STRING_KEYS = [
+    'company_name_ru',
+    'company_name_en',
+    'legal_form_ru',
+    'legal_form_en',
+    'inn',
+    'kpp',
+    'ogrn',
+    'legal_address_ru',
+    'legal_address_en',
+    'contact_email',
+    'support_email',
+    'dpo_email',
+    'phone',
+    'retention_logs',
+    'retention_messages',
+    'retention_accounts',
+    'cloud_provider',
+    'cloud_region',
+    'analytics_tools',
+    'billing_provider',
+    'bank_name_ru',
+    'bank_name_en',
+    'bank_account',
+    'bank_bik',
+    'bank_correspondent_account',
+    'bank_inn',
+    'bank_address_ru',
+    'bank_address_en',
+];
 
 export class LegalPage extends PlatformPage {
     static properties = {
@@ -71,17 +101,19 @@ export class LegalPage extends PlatformPage {
         if (!legal) {
             return {};
         }
-        return {
-            company_name_ru: legal.company_name_ru,
-            company_name_en: legal.company_name_en,
-            legal_form_ru: legal.legal_form_ru,
-            legal_form_en: legal.legal_form_en,
-            contact_email: legal.contact_email,
-            support_email: legal.support_email,
-            dpo_email: legal.dpo_email,
-            legal_address_ru: legal.legal_address_ru,
-            legal_address_en: legal.legal_address_en,
-        };
+        const vars = {};
+        for (const key of LEGAL_I18N_STRING_KEYS) {
+            const value = legal[key];
+            if (typeof value !== 'string' || value === '') {
+                throw new Error(`legal-page: legal.${key} required`);
+            }
+            vars[key] = value;
+        }
+        if (typeof legal.min_age !== 'number') {
+            throw new Error('legal-page: legal.min_age required');
+        }
+        vars.min_age = legal.min_age;
+        return vars;
     }
 
     _lt(key, vars, ns) {

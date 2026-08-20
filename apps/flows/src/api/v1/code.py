@@ -1228,6 +1228,14 @@ def _validate_node_config(config: JsonObject) -> None:
         if not config.get("tool_name"):
             raise ValueError("tool_name обязателен для mcp")
 
+    elif node_type == "datasource":
+        if not config.get("connector_id"):
+            raise ValueError("connector_id обязателен для datasource")
+        if not config.get("datasource_id"):
+            raise ValueError("datasource_id обязателен для datasource")
+        if not config.get("datasource_operation"):
+            raise ValueError("datasource_operation обязателен для datasource")
+
 
 def _graph_node_config_allowed_keys() -> frozenset[str]:
     """Имена полей GraphNodeConfig и их alias'ы (editor/API JSON)."""

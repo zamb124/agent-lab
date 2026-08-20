@@ -102,6 +102,7 @@ def create_default_node_registry() -> NodeRegistry:
         NodeType.REMOTE_FLOW: "Внешний A2A flow",
         NodeType.EXTERNAL_API: "HTTP API вызов",
         NodeType.MCP: "MCP tool",
+        NodeType.DATASOURCE: "Живая БД (DatasourceProtocol)",
         NodeType.CHANNEL: "Отправка в канал (Telegram, Email, Webhook)",
         NodeType.HITL_NODE: "Оператор очереди (пауза до специалиста)",
         NodeType.REFLECTION: "Типизированный critic / test-time compute gate",

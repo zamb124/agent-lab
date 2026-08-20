@@ -5,7 +5,8 @@ from fastapi import APIRouter
 from apps.flows.config import get_settings
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.exception_absorb_allow import list_exception_absorb_allow_values
-from core.types import JsonObject
+from core.datasources.models import DatasourceConnectorSpec
+from core.types import JsonObject, require_json_object
 
 router = APIRouter(tags=["metadata"])
 
@@ -123,14 +124,14 @@ _RESOURCE_TYPES: list[JsonObject] = [
     {"type": "llm", "name": "LLM", "icon": "bot", "description": "LLM модель", "color": "#ec4899"},
     {
         "type": "rag",
-        "name": "RAG",
+        "name": "База знаний",
         "icon": "database",
         "description": "База знаний (Namespace) для context layer и тулов rag_*",
         "color": "#14b8a6",
     },
     {
         "type": "data_table",
-        "name": "Data table",
+        "name": "Таблица",
         "icon": "table",
         "description": "SQLite-таблица в Documents (file_id), тулы tables_*",
         "color": "#f59e0b",
@@ -138,11 +139,30 @@ _RESOURCE_TYPES: list[JsonObject] = [
 ]
 
 
+def _datasource_palette_card(spec: DatasourceConnectorSpec) -> JsonObject:
+    return require_json_object(
+        {
+            "category": "sources",
+            "type": "datasource",
+            "connector_id": spec.connector_id,
+            "name": spec.name,
+            "icon": spec.icon,
+            "description": spec.description,
+            "color": "#14b8a6",
+            "inputs": 1,
+            "outputs": 1,
+        },
+        f"datasource.palette.{spec.connector_id}",
+    )
+
+
 @router.get("/node-types")
 async def get_node_types(container: ContainerDep) -> list[JsonObject]:
     """Список доступных runtime-типов нод для палитры редактора."""
-    _ = container
-    return _NODE_TYPES
+    cards = list(_NODE_TYPES)
+    for spec in await container.datasource_service.list_connectors():
+        cards.append(_datasource_palette_card(spec))
+    return cards
 
 
 @router.get("/resource-types")

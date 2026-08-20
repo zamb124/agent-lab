@@ -386,7 +386,12 @@
         "telegram": "Telegram",
         "legal_heading": "Реквизиты",
         "inn_label": "ИНН",
+        "kpp_label": "КПП",
         "ogrn_label": "ОГРН",
+        "bank_label": "Банк",
+        "bank_account_label": "Счёт",
+        "bank_bik_label": "БИК",
+        "bank_correspondent_account_label": "Корр. счёт",
         "copyright": "© {{year}} {platformName}"
     },
     "blog_page": {

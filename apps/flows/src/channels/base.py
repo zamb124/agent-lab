@@ -2129,6 +2129,8 @@ class BaseChannel(ABC):
                     description = "Ресурс на графе"
                 elif node_type == NodeType.HITL_NODE.value:
                     description = "Оператор очереди"
+                elif node_type == NodeType.DATASOURCE.value:
+                    description = "Живая БД (datasource)"
 
                 tools_info.append(
                     {

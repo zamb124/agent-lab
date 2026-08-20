@@ -46,6 +46,14 @@ def _minimal_node(node_type: str) -> dict[str, object]:
         return {"type": node_type, "flow_id": "nested"}
     if node_type == "mcp":
         return {"type": node_type, "server_id": "srv", "tool_name": "tool"}
+    if node_type == "datasource":
+        return {
+            "type": node_type,
+            "connector_id": "postgres",
+            "datasource_id": "ds1",
+            "datasource_operation": "query",
+            "sql": "SELECT 1",
+        }
     return {"type": node_type}
 
 

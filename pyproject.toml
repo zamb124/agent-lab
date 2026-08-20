@@ -19,6 +19,8 @@ dependencies = [
     "markdown-it-py>=4.2.0",
     "mdit-py-plugins>=0.6.1",
     "linkify-it-py>=2.1.0",
+    "asyncmy>=0.2.14",
+    "clickhouse-connect>=1.7.1",
 ]
 [tool.uv]
 default-groups = [

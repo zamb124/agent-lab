@@ -1,7 +1,7 @@
 {
   "title": "Terms of Service",
   "updated": "Last updated",
-  "updated_at": "March 29, 2026",
+  "updated_at": "August 20, 2026",
   "section_1": {
     "title": "1. Parties and acceptance",
     "p1": "These Terms of Service form a legally binding agreement between {{company_name_en}} ({{legal_form_en}}) and the user of {platformName} services.",
@@ -94,9 +94,13 @@
     "list": [
       "Company: {{company_name_en}} ({{legal_form_en}}).",
       "Legal address: {{legal_address_en}}.",
+      "INN {{inn}}, KPP {{kpp}}, OGRN {{ogrn}}.",
+      "Bank: {{bank_name_en}}, bank INN {{bank_inn}}.",
+      "Beneficiary account: {{bank_account}}.",
+      "BIC {{bank_bik}}, correspondent account {{bank_correspondent_account}}.",
+      "Bank address: {{bank_address_en}}.",
       "General contact: {{contact_email}}.",
-      "Support: {{support_email}}.",
-      "Company identifiers (if applicable): INN {{inn}}, OGRN {{ogrn}}."
+      "Support: {{support_email}}."
     ]
   }
 }

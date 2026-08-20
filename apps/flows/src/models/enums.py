@@ -39,6 +39,7 @@ class NodeType(str, Enum):
     REMOTE_FLOW = "remote_flow"   # Внешний flow по A2A протоколу
     EXTERNAL_API = "external_api"   # Вызов внешнего HTTP API
     MCP = "mcp"                     # MCP Tool как нода
+    DATASOURCE = "datasource"       # Живая БД (DatasourceProtocol)
     CHANNEL = "channel"             # Отправка сообщений в каналы (Telegram, Email)
     HITL_NODE = "hitl_node"         # Передача диалога оператору очереди (operator_task)
     REFLECTION = "reflection"       # Typed critic/test-time compute gate

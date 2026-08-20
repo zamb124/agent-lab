@@ -180,6 +180,7 @@
     "bubble": {
         "profile_title": "Profile",
         "profile_aria": "Profile: {{name}}",
+        "speech_origin": "From audio",
         "download_title": "Download",
         "file_missing": "File unavailable ({{id}})",
         "file_fallback": "File",

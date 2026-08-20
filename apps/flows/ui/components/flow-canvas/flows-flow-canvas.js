@@ -17,7 +17,8 @@
  * UX:
  *   - drag нод pointermove с snap-to-guide;
  *   - drag-create узла из <flows-node-types-sidebar>:
- *     `application/x-flow-node-type` для нод, `application/x-flow-resource-type` для ресурсов
+ *     `application/x-flow-node-type` для нод (для datasource ещё
+ *     `application/x-flow-connector-id`), `application/x-flow-resource-type` для ресурсов
  *     (drop на канву / порт / тело ноды; ресурс на ноде — flow resource + ссылка в node.resources;
  *      ресурс на пустой канве — flow resource + нода type `resource` с привязкой);
  *   - draw edges с output-порта на input-порт;
@@ -2209,26 +2210,28 @@ export class FlowsFlowCanvas extends PlatformElement {
         }
         const nodeType = e.dataTransfer.getData('application/x-flow-node-type');
         const resourceType = e.dataTransfer.getData('application/x-flow-resource-type');
+        const connectorId = e.dataTransfer.getData('application/x-flow-connector-id');
         if (!nodeType && !resourceType) return;
         e.preventDefault();
         e.stopPropagation();
         this._clearPaletteDndVisual();
         const local = this._localPoint(e.clientX, e.clientY);
-        this._applyPaletteDrop({ local, nodeType, resourceType, htmlTargetNodeId: nodeId });
+        this._applyPaletteDrop({ local, nodeType, resourceType, connectorId, htmlTargetNodeId: nodeId });
     }
 
     _onDrop(e) {
         const nodeType = e.dataTransfer.getData('application/x-flow-node-type');
         const resourceType = e.dataTransfer.getData('application/x-flow-resource-type');
+        const connectorId = e.dataTransfer.getData('application/x-flow-connector-id');
         if (!nodeType && !resourceType) return;
         e.preventDefault();
         this._clearPaletteDndVisual();
         const local = this._localPoint(e.clientX, e.clientY);
-        this._applyPaletteDrop({ local, nodeType, resourceType, htmlTargetNodeId: null });
+        this._applyPaletteDrop({ local, nodeType, resourceType, connectorId, htmlTargetNodeId: null });
     }
 
     _applyPaletteDrop(ctx) {
-        const { local, nodeType, resourceType, htmlTargetNodeId } = ctx;
+        const { local, nodeType, resourceType, connectorId, htmlTargetNodeId } = ctx;
         const data = this._branchData();
         if (nodeType) {
             if (nodeType === 'code') {
@@ -2245,6 +2248,27 @@ export class FlowsFlowCanvas extends PlatformElement {
             }
             if (nodeType === 'reflection') {
                 this._placeReflectionNode({ nodeId: genId('n'), local });
+                return;
+            }
+            if (nodeType === 'datasource') {
+                if (typeof connectorId !== 'string' || connectorId.trim().length === 0) {
+                    throw new Error('flows-flow-canvas: datasource drop requires connector_id');
+                }
+                const id = genId('n');
+                const newNode = {
+                    type: 'datasource',
+                    name: connectorId.trim(),
+                    connector_id: connectorId.trim(),
+                    datasource_operation: 'query',
+                    pos_x: local.x - NODE_W / 2,
+                    pos_y: local.y - NODE_H / 2,
+                };
+                const nodes = { ...asObject(data.nodes), [id]: newNode };
+                const next = { ...data, nodes };
+                this._editor.updateBranchData({ data: next });
+                this._editor.pushHistory({ snapshot: next });
+                this._editor.setDirty({ dirty: true });
+                this._editor.selectNode({ nodeId: id });
                 return;
             }
             const id = genId('n');

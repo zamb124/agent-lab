@@ -206,6 +206,16 @@ _MUTATORS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         "core/identity/company_membership.py",
         ("sync_company_member_roles",),
     ),
+    (
+        "create_connection",
+        "core/datasources/service.py",
+        ("datasource_owner_tuple", "authz.write"),
+    ),
+    (
+        "delete_connection",
+        "core/datasources/service.py",
+        ("authz.delete",),
+    ),
 )
 
 # Create-path files must compensate (except + rollback) when FGA write fails.
@@ -299,6 +309,11 @@ _CREATE_COMPENSATE: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         "create_page",
         "apps/wiki/services/wiki_service.py",
         ("except Exception", "hard_delete_page"),
+    ),
+    (
+        "create_connection",
+        "core/datasources/service.py",
+        ("except Exception", "_connections.delete"),
     ),
 )
 

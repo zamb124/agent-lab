@@ -162,3 +162,14 @@ type agent_device
     define can_view: owner or admin from company
     define can_edit: owner or admin from company
     define can_admin: owner or admin from company
+
+type datasource
+  relations
+    define company: [company]
+    define platform: [platform]
+    define owner: [user]
+    define viewer: [user, company#member, group#member]
+    define editor: [user, group#member] or owner
+    define can_view: viewer or editor or owner or admin from platform
+    define can_edit: editor or owner or admin from platform
+    define can_admin: owner or admin from company

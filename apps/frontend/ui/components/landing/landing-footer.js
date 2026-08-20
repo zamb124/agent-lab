@@ -230,17 +230,32 @@ export class LandingFooter extends PlatformElement {
         throw new Error('landing-footer: i18n.locale must be ru or en');
     }
 
+    _requireLegalString(legal, key) {
+        const value = legal[key];
+        if (typeof value !== 'string' || value === '') {
+            throw new Error(`landing-footer: legal.${key} required`);
+        }
+        return value;
+    }
+
     _companyName(legal) {
         const locale = this._localeSel.value;
-        if (locale === 'ru') return legal.company_name_ru;
-        if (locale === 'en') return legal.company_name_en;
+        if (locale === 'ru') return this._requireLegalString(legal, 'company_name_ru');
+        if (locale === 'en') return this._requireLegalString(legal, 'company_name_en');
         throw new Error('landing-footer: i18n.locale must be ru or en');
     }
 
     _legalAddress(legal) {
         const locale = this._localeSel.value;
-        if (locale === 'ru') return legal.legal_address_ru;
-        if (locale === 'en') return legal.legal_address_en;
+        if (locale === 'ru') return this._requireLegalString(legal, 'legal_address_ru');
+        if (locale === 'en') return this._requireLegalString(legal, 'legal_address_en');
+        throw new Error('landing-footer: i18n.locale must be ru or en');
+    }
+
+    _bankName(legal) {
+        const locale = this._localeSel.value;
+        if (locale === 'ru') return this._requireLegalString(legal, 'bank_name_ru');
+        if (locale === 'en') return this._requireLegalString(legal, 'bank_name_en');
         throw new Error('landing-footer: i18n.locale must be ru or en');
     }
 
@@ -282,9 +297,14 @@ export class LandingFooter extends PlatformElement {
                                   <div class="footer-requisites">
                                       <h3>${t('footer.legal_heading')}</h3>
                                       <p>${this._companyName(legal)}</p>
-                                      <p>${t('footer.inn_label')} ${legal.inn}</p>
-                                      <p>${t('footer.ogrn_label')} ${legal.ogrn}</p>
+                                      <p>${t('footer.inn_label')} ${this._requireLegalString(legal, 'inn')}</p>
+                                      <p>${t('footer.kpp_label')} ${this._requireLegalString(legal, 'kpp')}</p>
+                                      <p>${t('footer.ogrn_label')} ${this._requireLegalString(legal, 'ogrn')}</p>
                                       <p>${this._legalAddress(legal)}</p>
+                                      <p>${t('footer.bank_label')} ${this._bankName(legal)}</p>
+                                      <p>${t('footer.bank_account_label')} ${this._requireLegalString(legal, 'bank_account')}</p>
+                                      <p>${t('footer.bank_bik_label')} ${this._requireLegalString(legal, 'bank_bik')}</p>
+                                      <p>${t('footer.bank_correspondent_account_label')} ${this._requireLegalString(legal, 'bank_correspondent_account')}</p>
                                   </div>
                               `
                             : null}

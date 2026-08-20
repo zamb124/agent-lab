@@ -35,3 +35,14 @@ def test_resource_node_rejects_llm_context_surface() -> None:
             name="Resource",
             llm_context=LLMContextPatch(profile="compact"),
         )
+
+
+def test_datasource_node_rejects_llm_context_surface() -> None:
+    with pytest.raises(ValueError, match="llm_context"):
+        NodeConfig(
+            node_id="ds",
+            type=NodeType.DATASOURCE,
+            name="Postgres",
+            connector_id="postgres",
+            llm_context=LLMContextPatch(profile="compact"),
+        )

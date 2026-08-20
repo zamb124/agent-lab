@@ -487,6 +487,34 @@
         }
       }
     },
+    "datasource_node_helper": {
+      "name": "Datasource Node Helper",
+      "description": "Lara entry: Datasource Node Helper; full platform skills attached",
+      "tags": [
+        "flows",
+        "datasource",
+        "lara"
+      ],
+      "permission": [],
+      "nodes_mode": "merge",
+      "nodes": {
+        "main": {
+          "name": "Datasource Node Helper",
+          "prompt": "prompts/datasource_node_helper.md",
+          "llm": {
+            "model": "auto",
+            "temperature": 0.15,
+            "provider": "humanitec_llm"
+          },
+          "output_key": "response",
+          "tools": [
+            "ask_user",
+            "device_tools_list",
+            "device_tools_call"
+          ]
+        }
+      }
+    },
     "channel_node_helper": {
       "name": "Channel Node Helper",
       "description": "Lara entry: Channel Node Helper; full platform skills attached",

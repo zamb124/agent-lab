@@ -1,6 +1,16 @@
 # Linnex: что заполнить в App Store Connect
 
-Черновики текстов согласованы с лендингом и [`IOS_CAPACITOR.md`](IOS_CAPACITOR.md). Primary brand — **Linnex** (`linnex.io`). Подставьте **реальные URL** поддержки и политики; юридические формулировки проверьте у себя.
+Черновики текстов согласованы с лендингом и [`IOS_CAPACITOR.md`](IOS_CAPACITOR.md). Primary brand — **Linnex** (`linnex.io`). Privacy Policy URL: `https://linnex.io/policy`. Support URL: `https://linnex.io/support`.
+
+Юрлицо оператора (для Acccount Holder / Tax / Agreements в App Store Connect):
+
+| Поле | Значение |
+|------|----------|
+| Название | ООО «ЛАЙНЕКС» |
+| ИНН | 9717194941 |
+| КПП | 771701001 |
+| ОГРН | 1267700280132 |
+| Адрес | 129515, Россия, г. Москва, вн.тер.г. муниципальный округ Останкинский, б-р Звёздный, д. 12, к. 1, кв. 48 |
 
 ---
 

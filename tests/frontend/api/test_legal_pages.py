@@ -41,14 +41,29 @@ async def test_public_legal_endpoint_is_available_without_auth(frontend_client) 
         "company_name_en",
         "legal_form_ru",
         "legal_form_en",
+        "inn",
+        "kpp",
+        "ogrn",
         "contact_email",
         "support_email",
         "dpo_email",
         "legal_address_ru",
         "legal_address_en",
         "min_age",
+        "bank_name_ru",
+        "bank_name_en",
+        "bank_account",
+        "bank_bik",
+        "bank_correspondent_account",
+        "bank_inn",
+        "bank_address_ru",
+        "bank_address_en",
     }
     assert required_fields.issubset(payload.keys())
+    assert payload["company_name_ru"] == "ООО «ЛАЙНЕКС»"
+    assert payload["inn"] == "9717194941"
+    assert payload["kpp"] == "771701001"
+    assert payload["ogrn"] == "1267700280132"
 
 
 @pytest.mark.asyncio

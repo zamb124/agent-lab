@@ -164,6 +164,7 @@ def sdk_stable_capability_names_from_manifest(manifest: Mapping[str, object]) ->
         or name.startswith("rag.")
         or name.startswith("worktracker.")
         or name.startswith("tables.")
+        or name.startswith("db.")
         or (name.startswith("tools.") and not is_ephemeral_tool_capability_name(name))
     }
 
@@ -1231,6 +1232,7 @@ async def assert_language_runs_static_platform_capabilities(
     rag_static = {name for name in static_names if name.startswith("rag.")}
     worktracker_static = {name for name in static_names if name.startswith("worktracker.")}
     tables_static = {name for name in static_names if name.startswith("tables.")}
+    db_static = {name for name in static_names if name.startswith("db.")}
     assert core_static <= static_names
     assert static_names == (
         core_static
@@ -1241,6 +1243,7 @@ async def assert_language_runs_static_platform_capabilities(
         | rag_static
         | worktracker_static
         | tables_static
+        | db_static
     )
     assert wiki_static  # wiki.* SDK namespace registered for eval/code_node
     assert documents_static  # documents.* SDK namespace registered for eval/code_node
@@ -1249,6 +1252,7 @@ async def assert_language_runs_static_platform_capabilities(
     assert rag_static  # rag.* SDK namespace registered for eval/code_node
     assert worktracker_static  # worktracker.* SDK namespace registered for eval/code_node
     assert tables_static  # tables.* SDK namespace registered for eval/code_node
+    assert db_static  # db.* SDK namespace registered for eval/code_node
 
     response = await flows_client_http.post(
         "/flows/api/v1/code/execute",

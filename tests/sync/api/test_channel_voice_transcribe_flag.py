@@ -156,3 +156,15 @@ async def test_voice_message_with_channel_flag_processing_then_done_via_worker(
     assert done_text is not None
     assert done_text.strip() != ""
     assert "Тестовая транскрипция" in done_text
+    listed = await sync_client.get(
+        f"/sync/api/v1/channels/{channel_id}/messages",
+        headers=sync_auth_headers,
+    )
+    assert listed.status_code == 200
+    done_msg = next(m for m in listed.json()["items"] if m["message_id"] == message_id)
+    speech_plain = next(
+        c
+        for c in done_msg["contents"]
+        if c["type"] == "text/plain" and c.get("data", {}).get("origin") == "speech"
+    )
+    assert "Тестовая транскрипция" in speech_plain["data"]["body"]

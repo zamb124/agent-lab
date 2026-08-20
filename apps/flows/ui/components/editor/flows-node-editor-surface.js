@@ -11,6 +11,7 @@ import '../nodes/flows-builtin-tool-editor.js';
 import '../nodes/flows-channel-node-editor.js';
 import '../nodes/flows-flow-node-editor.js';
 import '../nodes/flows-mcp-node-editor.js';
+import '../nodes/flows-datasource-node-editor.js';
 import '../nodes/flows-hitl-node-editor.js';
 import '../nodes/flows-reflection-node-editor.js';
 import '../nodes/flows-external-api-editor.js';
@@ -148,6 +149,17 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}
             ></flows-mcp-node-editor>`;
+        case 'datasource':
+            return html`<flows-datasource-node-editor
+                .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
+                .nodeConfig=${node} .nodeType=${node.type}
+                .flowVariables=${flowVariables} .graphNodes=${graphNodes}
+                .previewExecutionState=${preview}
+                .dataflowNode=${dataflowNode}
+                ?embedded=${embedded}
+                @change=${onChange}
+                @delete-node=${onDelete} @duplicate-node=${onDuplicate}
+            ></flows-datasource-node-editor>`;
         case 'hitl_node':
             return html`<flows-hitl-node-editor
                 .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}

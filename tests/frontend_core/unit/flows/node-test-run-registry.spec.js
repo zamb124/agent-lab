@@ -59,6 +59,12 @@ describe('node test-run registry', () => {
         expect(handler.opName).toBe('flows/code_execute');
     });
 
+    it('resolves code_execute for datasource nodes', () => {
+        const handler = resolveNodeTestRunHandler({ nodeType: 'datasource', resourceType: null });
+        expect(handler.id).toBe('code_execute');
+        expect(handler.opName).toBe('flows/code_execute');
+    });
+
     it('resolves rag_search for resource + rag', () => {
         const handler = resolveNodeTestRunHandler({ nodeType: 'resource', resourceType: 'rag' });
         expect(handler.id).toBe('rag_search');

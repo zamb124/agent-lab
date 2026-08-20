@@ -21,6 +21,7 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
         transcriptionStatus: { type: String, attribute: 'transcription-status' },
         transcriptionText: { type: String, attribute: 'transcription-text' },
         transcriptionError: { type: String, attribute: 'transcription-error' },
+        hideTranscription: { type: Boolean, attribute: 'hide-transcription' },
         _isPlaying: { state: true },
         _currentTime: { state: true },
         _resolvedDuration: { state: true },
@@ -373,18 +374,17 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
         if (this.transcriptionStatus === 'processing') {
             return html`<div class="transcription">${this.t('audio_player.transcribe_processing')}</div>`;
         }
+        if (this.transcriptionStatus === 'failed') {
+            return html`<div class="transcription error">${this.t('audio_player.transcribe_failed')}</div>`;
+        }
+        if (this.hideTranscription) {
+            return '';
+        }
         if (this.transcriptionStatus === 'done') {
             if (this._hasTranscriptionToShow()) {
                 return html`<div class="transcription">${this._transcriptionForDisplay()}</div>`;
             }
             return html`<div class="transcription muted">${this.t('audio_player.no_speech')}</div>`;
-        }
-        if (
-            this.transcriptionStatus === 'failed'
-            && typeof this.transcriptionError === 'string'
-            && this.transcriptionError.trim() !== ''
-        ) {
-            return html`<div class="transcription error">${this.transcriptionError.trimEnd()}</div>`;
         }
         return '';
     }

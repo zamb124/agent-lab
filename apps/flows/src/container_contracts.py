@@ -67,6 +67,7 @@ if TYPE_CHECKING:
     from core.clients.tempo_client import TempoClient
     from core.compiler import GraphCompiler
     from core.data_tables.service import DataTableService
+    from core.datasources.service import DatasourceService
     from core.db.repositories.company_repository import CompanyRepository
     from core.db.repositories.embed_config_repository import EmbedConfigRepository
     from core.db.repositories.embed_mapping_repository import EmbedMappingRepository
@@ -395,6 +396,9 @@ class FlowRuntimeContainer(Protocol):
 
     @property
     def data_table_service(self) -> DataTableService: ...
+
+    @property
+    def datasource_service(self) -> DatasourceService: ...
 
     @property
     def base_tool_class(self) -> type[BaseTool]: ...

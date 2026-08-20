@@ -51,6 +51,7 @@ from core.config import get_settings
 from core.files.media.audio_extract import extract_audio_from_video
 from core.files.media.chunked_stt import transcribe_audio_with_chunking
 from core.files.models import (
+    STT_FAILED_ERROR_CODE,
     AudioAttachmentContent,
     AudioTranscriptionStatus,
     FileRecord,
@@ -300,6 +301,14 @@ async def _load_message_read(container: SyncContainer, *, message_id: str, compa
     return message_read_from_entity(m=message_entity, contents=contents, sender=sender)
 
 
+def _is_speech_origin_text(block: MessageContentModel) -> bool:
+    if block.type != MessageContentType.TEXT_PLAIN:
+        return False
+    if not isinstance(block.data, TextPlainContent):
+        raise ValueError("text/plain: ожидается TextPlainContent.")
+    return block.data.origin == "speech"
+
+
 def _replace_audio_transcription(
     *,
     contents: list[MessageContentModel],
@@ -307,17 +316,26 @@ def _replace_audio_transcription(
     transcription_text: str | None,
     transcription_error: str | None,
 ) -> list[MessageContentModel]:
+    transcript = (transcription_text or "").strip()
+    include_speech_text = status == AudioTranscriptionStatus.DONE and transcript != ""
     replaced = False
     next_contents: list[MessageContentModel] = []
     for block in contents:
-        if block.type != MessageContentType.FILE_AUDIO:
-            next_contents.append(block)
+        if _is_speech_origin_text(block):
             continue
-        if replaced:
+        if block.type != MessageContentType.FILE_AUDIO or replaced:
             next_contents.append(block)
             continue
         if not isinstance(block.data, AudioAttachmentContent):
             raise ValueError("file/audio: ожидается AudioAttachmentContent.")
+        if include_speech_text:
+            next_contents.append(
+                MessageContentModel(
+                    type=MessageContentType.TEXT_PLAIN,
+                    data=TextPlainContent(body=transcript, mentions=None, origin="speech"),
+                    order=0,
+                )
+            )
         next_contents.append(
             MessageContentModel(
                 type=block.type,
@@ -333,13 +351,16 @@ def _replace_audio_transcription(
                     transcription_error=transcription_error,
                     source_speech_to_chat=block.data.source_speech_to_chat,
                 ),
-                order=block.order,
+                order=0,
             )
         )
         replaced = True
     if not replaced:
         raise ValueError("Сообщение не содержит file/audio.")
-    return next_contents
+    return [
+        MessageContentModel(type=block.type, data=block.data, order=index)
+        for index, block in enumerate(next_contents)
+    ]
 
 
 def _extract_audio_info(contents: list[MessageContentModel]) -> AudioAttachmentContent:
@@ -753,7 +774,7 @@ async def transcribe_audio_message_core(
                 contents=source_contents,
                 status=AudioTranscriptionStatus.FAILED,
                 transcription_text=None,
-                transcription_error=str(exc),
+                transcription_error=STT_FAILED_ERROR_CODE,
             )
             await container.message_repository.replace_message_contents(
                 message_id=message_id,

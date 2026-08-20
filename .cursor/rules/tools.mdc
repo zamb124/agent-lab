@@ -69,7 +69,7 @@ CI `scripts/check_tool_contracts.py`: в `apps/flows/tools/*.py` запреще�
 - `code_mode=mcp_tool` → `MCPTool`.
 - Builtin tool без inline `code` → process `FunctionTool`.
 - Inline `code` → `CodeTool` → `RemoteCodeRunner`.
-- Нода как tool (`llm_node`, `flow`, `external_api`, `mcp`, `channel`, `hitl_node`) → NodeAsTool wrapper.
+- Нода как tool (`llm_node`, `flow`, `external_api`, `mcp`, `datasource`, `channel`, `hitl_node`) → NodeAsTool wrapper.
 
 `CodeTool` и `CodeNode` имеют единый entrypoint contract: первая функция в source вызывается как `(args, state)`, либо явно заданный `entrypoint`.
 
@@ -82,6 +82,7 @@ Builtin specs — `apps/flows/tools/builtin_specs.py`. Runtime gate — `ToolAut
 - Files: `read_file`, `create_file`, `fill_docx_template` — tag `files`; `create_file`/`read_file` = `FileWriter`/`FileReader` (как caps `files.create`/`files.read`).
 - Documents (Office) mutate/open + catalog: `documents_*` — tag `documents`; тонкие обёртки над `DocumentsClient`. Eval SDK: `await documents.*`.
 - DataTable (SQLite file): `tables_create` / `tables_list` / `tables_schema` / `tables_query` / `tables_insert` / `tables_update` / `tables_delete_rows` — tag `tables`; тонкие обёртки над `DataTableClient` → office `/documents/api/v1/data-tables`. Eval SDK: `import tables` / `await tables.*`. Публичный id = `file_id`.
+- Datasource (живая БД): `db_schema` / `db_query` / `db_execute` — tag `datasources`; тонкие обёртки над `DatasourceClient` → flows `/flows/api/v1/datasources`. Eval SDK: `import db` / `await db.*`. Публичный id = `datasource_id`. Не путать с tag `tables`.
 - Wiki: `wiki_*` — tag `wiki`; тонкие обёртки над `WikiClient`. Eval SDK: `await wiki.*`. Write tools несут `effects`/`confirmation_floor` на `@tool()`.
 - Viz (`.viz`): `create_viz`, `update_viz`, `export_viz`, `viz_open_file` — tag `viz`. Persistence = `FileRecord` (`application/vnd.platform.viz+json`).
 - Text: `summarize_text`, `format_text_markdown` — tag `text`; через `TextClient`; sandbox caps `text.summarize` / `text.format_markdown` — `invoke_text_*` над `TextTransformService`.

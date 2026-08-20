@@ -81,10 +81,10 @@ async def run(args, state):
 
 Python sandbox — привычный `import`, не DSL:
 
-- `import wiki` / `from files import read` / `import crm` / `import rag` / `import worktracker` / `import tables` работают на тех же SDK-объектах, что и globals.
+- `import wiki` / `from files import read` / `import crm` / `import rag` / `import worktracker` / `import tables` / `import db` работают на тех же SDK-объектах, что и globals.
 - Stdlib ETL: `csv`, `json`, `pathlib`, `io`, `copy`, `dataclasses`, `enum`, `urllib.parse`, `zoneinfo`, `hmac`, `secrets`, `contextlib`, `tomllib`, `struct`, `zipfile` (поверх `BytesIO`), `xml.etree.ElementTree`, `email.message`, …
 - Builtins: `frozenset`, `hash`, `slice` (нет `getattr`/`hasattr`/`open`).
-- Third-party в отдельном sandbox site-packages: `pandas`, `numpy`, `dateutil`, `yaml`, `openpyxl`, `bs4`, `defusedxml`. Не в корневом `pyproject.toml`. `sqlite3` в sandbox **нет** — табличные файлы платформы только через `tables.*` / `DataTableService`.
+- Third-party в отдельном sandbox site-packages: `pandas`, `numpy`, `dateutil`, `yaml`, `openpyxl`, `bs4`, `defusedxml`. Не в корневом `pyproject.toml`. `sqlite3` в sandbox **нет** — табличные файлы платформы только через `tables.*` / `DataTableService`. TCP к живым БД в sandbox **нет** — только `db.*` → capability-gateway → `DatasourceClient`.
 - HTTP только `await http.get(url=...)`. `requests` / `httpx` / `urllib.request` запрещены.
 - `pathlib.Path` — path math; `Path.read_text()` / `open()` запрещены, файлы платформы — `files.*`.
 - `raise FlowInterrupt(question="...")` — sandbox builtin без `from apps.flows...`.
@@ -151,7 +151,7 @@ async Task<object?> run(Dictionary<string, object?> args, Dictionary<string, obj
 4. Не добавлять language-specific SDK вручную: SDK namespace строится из manifest в каждом runner.
 5. Обновить tests для manifest/docs и выполнения через каждый runner (или dedicated smoke, если namespace не входит в multi-language static suite).
 
-SDK namespaces (as-is): `tools`, `files`, `http`, `text`, `voice`, `flow_state`, `log`, `trace`, `platform`, `channel`, `flow`, `wiki`, `documents`, `crm`, `sync`, `worktracker`, `rag`, `tables`, `ui`.
+SDK namespaces (as-is): `tools`, `files`, `http`, `text`, `voice`, `flow_state`, `log`, `trace`, `platform`, `channel`, `flow`, `wiki`, `documents`, `crm`, `sync`, `worktracker`, `rag`, `tables`, `db`, `ui`.
 
 ## Трассировка и ошибки
 

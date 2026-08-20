@@ -8,6 +8,7 @@
     "audio_player": {
         "transcribe_aria": "Transcribe",
         "transcribe_processing": "Transcribing…",
+        "transcribe_failed": "Could not transcribe this audio",
         "no_speech": "No speech in this audio"
     },
     "menu": {

@@ -11,6 +11,7 @@ export const LARA_NODE_HELPER_BRANCH_BY_TYPE = Object.freeze({
     remote_flow: 'remote_flow_node_helper',
     external_api: 'external_api_node_helper',
     mcp: 'mcp_node_helper',
+    datasource: 'datasource_node_helper',
     channel: 'channel_node_helper',
     hitl_node: 'hitl_node_helper',
     reflection: 'reflection_node_helper',

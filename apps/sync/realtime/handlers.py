@@ -379,7 +379,7 @@ async def _normalize_message_create_mentions(
         d = c.data
         if not isinstance(d, TextPlainContent):
             raise ValueError("text/plain: ожидается TextPlainContent.")
-        new_tp = TextPlainContent(body=d.body, mentions=None)
+        new_tp = TextPlainContent(body=d.body, mentions=None, origin=d.origin)
         new_contents: list[MessageContentModel] = []
         for i, x in enumerate(body.contents):
             if i == first_text_idx:
@@ -404,7 +404,7 @@ async def _normalize_message_create_mentions(
         if d.mentions is None or len(d.mentions) == 0:
             return body
         mids = validate_mention_ids(list(d.mentions))
-        new_tp = TextPlainContent(body=d.body, mentions=mids)
+        new_tp = TextPlainContent(body=d.body, mentions=mids, origin=d.origin)
         new_contents = []
         for i, x in enumerate(body.contents):
             if i == first_text_idx:
@@ -426,7 +426,7 @@ async def _normalize_message_create_mentions(
     d = c.data
     if not isinstance(d, TextPlainContent):
         raise ValueError("text/plain: ожидается TextPlainContent.")
-    new_tp = TextPlainContent(body=d.body, mentions=mids)
+    new_tp = TextPlainContent(body=d.body, mentions=mids, origin=d.origin)
     new_contents = []
     for i, x in enumerate(body.contents):
         if i == first_text_idx:
@@ -526,6 +526,17 @@ def set_video_transcription_state(
     return next_contents
 
 
+def _contents_include_speech_to_chat_audio(contents: list[MessageContentModel]) -> bool:
+    for block in contents:
+        if block.type != MessageContentType.FILE_AUDIO:
+            continue
+        if not isinstance(block.data, AudioAttachmentContent):
+            raise ValueError("file/audio: ожидается AudioAttachmentContent.")
+        if block.data.source_speech_to_chat:
+            return True
+    return False
+
+
 async def _ensure_actor_may_send_to_channel(
     *,
     channel_id: str,
@@ -535,6 +546,16 @@ async def _ensure_actor_may_send_to_channel(
     authz: AuthzService,
     calls: CallRepository | None,
 ) -> None:
+    if _contents_include_speech_to_chat_audio(body.contents):
+        if body.call_id is None:
+            raise PermissionError("speech-to-chat: нужен call_id в сообщении.")
+        if calls is None:
+            raise RuntimeError("CallRepository обязателен для speech-to-chat.")
+        call = await calls.get_call(body.call_id, company_id)
+        if call.channel_id != channel_id:
+            raise ValueError("call_id не относится к этому каналу.")
+        return
+
     # guest:* — не OpenFGA user id (`user:guest:...` invalid); доступ только через call.
     if actor_user_id.startswith("guest:"):
         if body.call_id is None:
@@ -874,50 +895,53 @@ async def send_message_with_side_effects(
     if body.local_id is not None and body.local_id != "":
         created_event.payload["local_id"] = body.local_id
     events: list[RealtimeEvent] = [created_event]
-    if channel_entity.transcribe_voice_messages:
-        audio_idx = _find_first_audio_content_index(normalized_body.contents)
-        if audio_idx is not None:
-            block = normalized_body.contents[audio_idx]
-            if isinstance(block.data, AudioAttachmentContent):
-                if (
-                    block.data.transcription_status == AudioTranscriptionStatus.IDLE
-                    and not block.data.source_speech_to_chat
-                ):
-                    processing_contents = set_audio_transcription_state(
-                        list(message.contents),
-                        status=AudioTranscriptionStatus.PROCESSING,
-                        transcription_text=None,
-                        transcription_error=None,
+    audio_idx = _find_first_audio_content_index(normalized_body.contents)
+    if audio_idx is not None:
+        block = normalized_body.contents[audio_idx]
+        if isinstance(block.data, AudioAttachmentContent):
+            enqueue_stt = (
+                block.data.transcription_status == AudioTranscriptionStatus.IDLE
+                and (
+                    block.data.source_speech_to_chat
+                    or channel_entity.transcribe_voice_messages
+                )
+            )
+            if enqueue_stt:
+                processing_contents = set_audio_transcription_state(
+                    list(message.contents),
+                    status=AudioTranscriptionStatus.PROCESSING,
+                    transcription_text=None,
+                    transcription_error=None,
+                )
+                edited_at = datetime.now(tz=UTC)
+                await container.message_repository.replace_message_contents(
+                    message.message_id, processing_contents, edited_at
+                )
+                proc_entity = await container.message_repository.get_by_id_for_company(
+                    message.message_id, company_id
+                )
+                if proc_entity is None:
+                    raise WsCommandError(
+                        "internal", "Сообщение пропало после запуска авто-транскрипции."
                     )
-                    edited_at = datetime.now(tz=UTC)
-                    await container.message_repository.replace_message_contents(
-                        message.message_id, processing_contents, edited_at
-                    )
-                    proc_entity = await container.message_repository.get_by_id_for_company(
-                        message.message_id, company_id
-                    )
-                    if proc_entity is None:
-                        raise WsCommandError(
-                            "internal", "Сообщение пропало после запуска авто-транскрипции."
-                        )
-                    message = await message_read_from_db(
-                        proc_entity, container.message_repository, container.user_repository
-                    )
-                    events.append(
-                        event_message_updated(
-                            message,
-                            company_id=company_id,
-                            recipient_user_ids=recipients,
-                        ),
-                    )
-                    _ = await enqueue(
-                        SYNC_TRANSCRIBE_AUDIO_MESSAGE,
-                        channel_id=channel_id,
-                        message_id=message.message_id,
+                message = await message_read_from_db(
+                    proc_entity, container.message_repository, container.user_repository
+                )
+                events.append(
+                    event_message_updated(
+                        message,
                         company_id=company_id,
-                        actor_user_id=user.user_id,
-                        background_kind="sync_transcribe",
-                    )
+                        recipient_user_ids=recipients,
+                    ),
+                )
+                _ = await enqueue(
+                    SYNC_TRANSCRIBE_AUDIO_MESSAGE,
+                    channel_id=channel_id,
+                    message_id=message.message_id,
+                    company_id=company_id,
+                    actor_user_id=user.user_id,
+                    background_kind="sync_transcribe",
+                )
     await publish_realtime_events(events)
     return message
 

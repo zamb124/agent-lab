@@ -175,7 +175,7 @@ await authz.write([crm_entity_owner_tuple(entity_id, owner_user_id)])
 - `enabled=true` без `store_id`/`authorization_model_id` → `AuthzConfigError` в `build_authz_service` (старт, не тихий 503)
 - Deploy: Helm `openfga.storeId` / `authorizationModelId` → `OPENFGA__STORE_ID` / `OPENFGA__AUTHORIZATION_MODEL_ID`; `OPENFGA__ENABLED=true` только если оба ids заданы (иначе false, чтобы первый deploy не CrashLoop до bootstrap). Cache flags `checkQueryCacheEnabled` / `cacheControllerEnabled` (default off)
 - CI: `scripts/check_authz_canon.py` (forbid `openfga_sdk` вне `core/authz`, legacy symbols, `enabled_object_types` / env hatch, `except AuthzDenied: pass`, roster-admin PDP, UI JWT admin gate, test membership without sync, wire `viewer|editor`, non-canonical `AuthzRelation`), `scripts/check_authz_dual_write.py`, `scripts/check_authz_model.py` (`fga model test` via Docker)
-- Живые types: `company`, `group`, `platform`, `platform_namespace`, `crm_*`, `wiki_page`, `office_*`, `sync_channel`, `work_queue`, `mailbox_binding`, `flow`, `flow_branch`, `tool`, `flow_ui_share`, `agent_device`
+- Живые types: `company`, `group`, `platform`, `platform_namespace`, `crm_*`, `wiki_page`, `office_*`, `sync_channel`, `work_queue`, `mailbox_binding`, `flow`, `flow_branch`, `tool`, `flow_ui_share`, `agent_device`, `datasource`
 
 ### Company
 
@@ -224,6 +224,7 @@ await authz.write([crm_entity_owner_tuple(entity_id, owner_user_id)])
 | `flow` / `tool` | всегда | `permission: []` → `company#member` viewer; named groups → `group:{company}/{name}#member` |
 | `sync_channel` / `work_queue` | всегда | viewer на `company#member` **не** пишется |
 | `mailbox_binding` | всегда | `admin from company` → can_* (ось «company admin управляет ящиками») |
+| `datasource` | всегда | `company#member` as `viewer`; `admin from platform` на can_view/edit |
 | `agent_device` | всегда | `admin from company` на can_* |
 
 Не вешать `admin from platform` на `company`. Files/secrets — без своего FGA type: parent / `company` Check.
@@ -241,6 +242,15 @@ await authz.write([crm_entity_owner_tuple(entity_id, owner_user_id)])
 - HITL demo operators: `authz.list_users(company, CAN_ADMIN)` — не roster
 - Backfill: `uv run python -m apps.flows.authz`. `flow_owner` — FGA-only (нет SQL owner); recovery = OpenFGA store backup. Seed `platform:global#admin` — `core.authz.platform_sync.ensure_platform_global_admin` (также при `sync_user_groups` если в groups есть `admin`)
 - Запрещены: `PermissionChecker`, `core/auth/permissions.py`, флаг `permissions_enabled`, JWT/group intersection как PDP, Python bypass `is_platform_admin`
+
+### Datasource
+
+- Type: `datasource` (скелет как `flow`: `company`, `platform`, `owner`, `viewer`/`editor`; `can_view`/`can_edit` включают `admin from platform`)
+- Object key: `datasource:{company}/{datasource_id}` (`format_namespace_key`)
+- Dual-write: `DatasourceService.create_connection` / `delete_connection` → `core/datasources/authz/tuples.py`; FGA fail на create → compensate SQL delete; delete → FGA-first `authz.delete` затем SQL delete, SQL fail → `authz.write` тех же tuples и `raise`
+- Check: introspect/query = `can_view`; execute = `can_edit`; list = SQL ∩ `batch_check`
+- HTTP: `apps/flows/src/api/v1/datasources.py`. Канон → **`datasources.mdc`**
+- Backfill: `uv run python -m core.datasources.authz.backfill`
 
 ### Agent devices
 

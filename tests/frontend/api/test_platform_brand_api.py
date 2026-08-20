@@ -91,8 +91,30 @@ async def test_public_legal_linnex(frontend_client) -> None:
     )
     assert response.status_code == 200
     legal = response.json()
-    assert legal["company_name_ru"] == "Linnex"
+    assert legal["company_name_ru"] == "ООО «ЛАЙНЕКС»"
+    assert legal["company_name_en"] == 'OBSCHESTVO S OGRANICHENNOI OTVETSTVENNOSTYU "LAINEKS"'
+    assert legal["inn"] == "9717194941"
+    assert legal["kpp"] == "771701001"
+    assert legal["ogrn"] == "1267700280132"
     assert legal["contact_email"] == "legal@linnex.io"
+    assert legal["bank_bik"] == "044525974"
+    assert legal["bank_account"] == "40702810010002289174"
+
+
+@pytest.mark.asyncio
+async def test_public_legal_humanitec_same_operator(frontend_client) -> None:
+    response = await frontend_client.get(
+        "/frontend/api/public/legal",
+        headers={"Host": "humanitec.ru"},
+    )
+    assert response.status_code == 200
+    legal = response.json()
+    assert legal["company_name_ru"] == "ООО «ЛАЙНЕКС»"
+    assert legal["inn"] == "9717194941"
+    assert legal["kpp"] == "771701001"
+    assert legal["contact_email"] == "legal@humanitec.ru"
+    assert legal["support_email"] == "helpme@humanitec.ru"
+    assert legal["dpo_email"] == "dpo@humanitec.ru"
 
 
 @pytest.mark.asyncio
@@ -103,7 +125,9 @@ async def test_public_site_bundle_linnex(frontend_client) -> None:
     )
     assert response.status_code == 200
     payload = response.json()
-    assert payload["legal"]["company_name_ru"] == "Linnex"
+    assert payload["legal"]["company_name_ru"] == "ООО «ЛАЙНЕКС»"
+    assert payload["legal"]["inn"] == "9717194941"
+    assert payload["legal"]["kpp"] == "771701001"
     assert payload["marketing"]["telegram_community_url"] is None
 
 

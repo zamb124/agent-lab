@@ -1,6 +1,16 @@
 # Linnex: что заполнить в Google Play Console
 
-Черновики текстов согласованы с лендингом и [`PLAY_MANUAL.md`](PLAY_MANUAL.md). Primary brand — **Linnex** (`linnex.io`). Подставьте **реальные URL** поддержки и политики; юридические формулировки проверьте у себя.
+Черновики текстов согласованы с лендингом и [`PLAY_MANUAL.md`](PLAY_MANUAL.md). Primary brand — **Linnex** (`linnex.io`). Privacy Policy URL: `https://linnex.io/policy`. Website: `https://linnex.io`.
+
+Юрлицо оператора (для Developer account / Payments profile):
+
+| Поле | Значение |
+|------|----------|
+| Название | ООО «ЛАЙНЕКС» |
+| ИНН | 9717194941 |
+| КПП | 771701001 |
+| ОГРН | 1267700280132 |
+| Адрес | 129515, Россия, г. Москва, вн.тер.г. муниципальный округ Останкинский, б-р Звёздный, д. 12, к. 1, кв. 48 |
 
 ---
 

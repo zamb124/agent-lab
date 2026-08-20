@@ -1001,6 +1001,10 @@ class TestNodeAsToolWrapperBasics:
             elif node_type == NodeType.MCP:
                 config["server_id"] = "test"
                 config["tool_name"] = "test"
+            elif node_type == NodeType.DATASOURCE:
+                config["connector_id"] = "postgres"
+                config["datasource_id"] = "ds1"
+                config["datasource_operation"] = "query"
             elif node_type == NodeType.CHANNEL:
                 config["channel"] = "webhook"
                 config["action"] = "send"

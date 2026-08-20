@@ -131,6 +131,13 @@ MINIMAL_NODE_CONFIGS: dict[str, dict[str, object]] = {
     },
     NodeType.EXTERNAL_API.value: {"type": "external_api", "url": "https://example.test", "method": "GET"},
     NodeType.MCP.value: {"type": "mcp", "server_id": "srv", "tool_name": "tool"},
+    NodeType.DATASOURCE.value: {
+        "type": "datasource",
+        "connector_id": "postgres",
+        "datasource_id": "ds1",
+        "datasource_operation": "query",
+        "sql": "SELECT 1",
+    },
     NodeType.CHANNEL.value: {"type": "channel", "channel": "telegram", "action": "send"},
     NodeType.HITL_NODE.value: {"type": "hitl_node", "work_queue_slug": "ops"},
     NodeType.REFLECTION.value: {

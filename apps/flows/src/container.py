@@ -40,6 +40,7 @@ from apps.flows.src.registry.nodes import NodeRegistry, create_default_node_regi
 from apps.flows.src.runners.remote import RemoteCodeRunner
 from apps.flows.src.services.agent_skill_service import AgentSkillService
 from apps.flows.src.services.code_lsp_service import CodeLspService
+from apps.flows.src.services.datasources import DatasourceFlowExecutor, DatasourceMcpExecutor
 from apps.flows.src.services.employee_inbox_service import EmployeeInboxService
 from apps.flows.src.services.flow_access_service import FlowAccessService
 from apps.flows.src.services.flow_discovery import FlowDiscoveryService
@@ -88,6 +89,7 @@ from core.config.testing import is_testing
 from core.container import BaseContainer, lazy
 from core.context import require_active_company
 from core.data_tables.service import DataTableService
+from core.datasources.service import DatasourceService
 from core.db.repositories.embed_config_repository import EmbedConfigRepository
 from core.db.repositories.embed_mapping_repository import EmbedMappingRepository
 from core.logging import get_logger
@@ -209,6 +211,17 @@ class FlowContainer(BaseContainer):
         return DataTableService(
             files_service=self.files_service,
             redis_client=self.redis_client,
+        )
+
+    @lazy
+    def datasource_service(self) -> DatasourceService:
+        runtime = self._runtime_contract()
+        return DatasourceService(
+            connections=self.datasource_connection_repository,
+            connectors=self.datasource_connector_repository,
+            authz=self.authz_service,
+            mcp_executor=DatasourceMcpExecutor(runtime),
+            flow_executor=DatasourceFlowExecutor(runtime),
         )
 
     @lazy

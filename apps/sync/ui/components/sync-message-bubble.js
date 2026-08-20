@@ -32,6 +32,7 @@ import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import { buildPlatformFileDownloadUrl } from '@platform/lib/utils/platform-files-url.js';
 import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
+import { isSpeechOriginText, messageHasSpeechOriginText } from '../_helpers/sync-speech-origin.js';
 
 const LONG_PRESS_MS = 450;
 
@@ -58,6 +59,8 @@ function _reactionsGroupedByEmoji(raw) {
 
 
 export class SyncMessageBubble extends PlatformElement {
+    static i18nNamespace = 'sync';
+
     static properties = {
         message: { type: Object },
         myUserId: { type: String, attribute: 'my-user-id' },
@@ -246,6 +249,19 @@ export class SyncMessageBubble extends PlatformElement {
             overflow-wrap: anywhere;
             font-size: var(--text-base, 16px);
             line-height: 1.5;
+        }
+        .body--speech {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .speech-origin {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: var(--text-xs, 12px);
+            line-height: 1.2;
+            opacity: 0.72;
         }
         .tail-row {
             display: flex;
@@ -820,9 +836,19 @@ export class SyncMessageBubble extends PlatformElement {
         const text = data && (typeof data.body === 'string' ? data.body : (typeof data.text === 'string' ? data.text : ''));
         if (typeof text !== 'string' || text === '') return '';
         const segments = parseMentionsToSegments(text, this.members);
-        return html`<div class="body">${segments.map((s) => s.kind === 'mention'
+        const speechOrigin = isSpeechOriginText(content);
+        const bodyClass = speechOrigin ? 'body body--speech' : 'body';
+        return html`<div class=${bodyClass}>
+            ${speechOrigin
+                ? html`<span class="speech-origin">
+                    <platform-icon name="mic" size="12"></platform-icon>
+                    ${this.t('bubble.speech_origin')}
+                </span>`
+                : ''}
+            ${segments.map((s) => s.kind === 'mention'
             ? html`<span class="mention" @click=${(e) => { e.stopPropagation(); this._onMentionClick(s.userId); }}>${s.value}</span>`
-            : s.value)}</div>`;
+            : s.value)}
+        </div>`;
     }
 
     _renderCodeBlock(content) {
@@ -921,6 +947,10 @@ export class SyncMessageBubble extends PlatformElement {
         const waveform = hasWaveform ? data.waveform : null;
         const transcriptionText = data && typeof data.transcription_text === 'string' ? data.transcription_text : '';
         const transcriptionError = data && typeof data.transcription_error === 'string' ? data.transcription_error : '';
+        if (!this.message || !Array.isArray(this.message.contents)) {
+            throw new Error('message.contents обязателен для file/audio');
+        }
+        const hideTranscription = messageHasSpeechOriginText(this.message.contents);
         return html`
             <div class="audio-attachment">
                 <platform-audio-message-player
@@ -928,8 +958,9 @@ export class SyncMessageBubble extends PlatformElement {
                     duration-ms=${durationMs}
                     .waveform=${waveform}
                     transcription-status=${status}
-                    .transcriptionText=${transcriptionText}
+                    .transcriptionText=${hideTranscription ? '' : transcriptionText}
                     .transcriptionError=${transcriptionError}
+                    ?hide-transcription=${hideTranscription}
                     @request-transcription=${this._onTranscribeAudio}
                 ></platform-audio-message-player>
             </div>

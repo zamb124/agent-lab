@@ -43,6 +43,11 @@ from core.clients.secrets_client import SecretsClient
 from core.clients.service_client import ServiceClient
 from core.config import get_settings
 from core.context import get_context
+from core.datasources.repository import (
+    DatasourceConnectionRepository,
+    DatasourceConnectorRepository,
+)
+from core.datasources.service import DatasourceService
 from core.db.base_repository import BaseRepository
 from core.db.repositories.api_key_repository import ApiKeyRepository
 from core.db.repositories.auth_session_repository import AuthSessionRepository
@@ -567,6 +572,22 @@ class BaseContainer:
             mail_sync_backfill_batch_size=mail_sync.backfill_batch_size,
             mail_sync_reconcile_every_n=mail_sync.reconcile_every_n_syncs,
             calendar_bridge=self.calendar_service,
+        )
+
+    @lazy
+    def datasource_connection_repository(self) -> DatasourceConnectionRepository:
+        return DatasourceConnectionRepository(db_url=self.required_shared_db_url)
+
+    @lazy
+    def datasource_connector_repository(self) -> DatasourceConnectorRepository:
+        return DatasourceConnectorRepository(db_url=self.required_shared_db_url)
+
+    @lazy
+    def datasource_service(self) -> DatasourceService:
+        return DatasourceService(
+            connections=self.datasource_connection_repository,
+            connectors=self.datasource_connector_repository,
+            authz=self.authz_service,
         )
 
     @lazy

@@ -336,6 +336,7 @@ i18n namespace: `platform` (`work_item_badge.*`, `work_item_preview.*`, `work_it
 - Закрыть: `dispatch(CoreEvents.UI_SIDEBAR_CLOSE_REQUESTED, null)`.
 - `platform-sidebar` сам диспатчит `UI_SIDEBAR_COLLAPSE_CHANGED`/`UI_SIDEBAR_MOBILE_CHANGED`; читать состояние селектором `state.ui.sidebar`.
 - Мобильный `page-header` кнопкой «меню» делает `dispatch(UI_SIDEBAR_OPEN_REQUESTED)`, берёт `mobileOpen` из `state.ui.sidebar.mobileOpen`.
+- Длинный список в default-слоте (Sync `sync-chat-list`, Flows `flows-catalog-list`) — flex-item `.sidebar-nav`: `flex: 1; min-height: 0; overflow: hidden`. Скролл только у внутренней ленты (`overflow-y: auto`). Sticky-хром с прозрачным фоном поверх той же ленты запрещён: карточки с `position: relative` наезжают на поиск и заголовок секции.
 
 ### `platform-sidebar-nav-tree`
 

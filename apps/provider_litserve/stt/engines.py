@@ -359,6 +359,28 @@ class _BaseSTTAdapter(Generic[ModelT], ABC):
         raise NotImplementedError
 
 
+GIGAAM_SHORTFORM_MAX_SECONDS = 25.0
+GIGAAM_WINDOW_SECONDS = 24.0
+
+
+def _gigaam_wav_sample_rate(sample_rate: int) -> int:
+    if sample_rate in (8000, 16000):
+        return sample_rate
+    return 16000
+
+
+def _transcribe_gigaam_wav(model_obj: GigaAMModel, floats: list[float], sample_rate: int) -> str:
+    wav_path = _write_temp_wav(floats, sample_rate)
+    try:
+        text = model_obj.transcribe(wav_path)
+    finally:
+        try:
+            os.unlink(wav_path)
+        except OSError:
+            pass
+    return str(text).strip()
+
+
 class _GigaAMAdapter(_BaseSTTAdapter[GigaAMModel]):
     backend: ClassVar[STTBackend] = "gigaam"
 
@@ -384,16 +406,27 @@ class _GigaAMAdapter(_BaseSTTAdapter[GigaAMModel]):
     @override
     def transcribe(self, model_obj: GigaAMModel, audio_bytes: bytes, language: str | None) -> str:
         _ = language
-        floats, sr = _decode_audio_to_floats(audio_bytes)
-        wav_path = _write_temp_wav(floats, sr if sr in (8000, 16000) else 16000)
-        try:
-            text = model_obj.transcribe(wav_path)
-        finally:
-            try:
-                os.unlink(wav_path)
-            except OSError:
-                pass
-        return str(text).strip()
+        floats, decoded_sample_rate = _decode_audio_to_floats(audio_bytes)
+        if len(floats) == 0:
+            raise ValueError("STT: пустые аудио-данные")
+        sample_rate = _gigaam_wav_sample_rate(decoded_sample_rate)
+        duration_seconds = len(floats) / float(sample_rate)
+        if duration_seconds <= GIGAAM_SHORTFORM_MAX_SECONDS:
+            return _transcribe_gigaam_wav(model_obj, floats, sample_rate)
+        window_samples = int(GIGAAM_WINDOW_SECONDS * sample_rate)
+        if window_samples <= 0:
+            raise ValueError("GigaAM: размер окна должен быть > 0")
+        pieces: list[str] = []
+        offset = 0
+        while offset < len(floats):
+            chunk = floats[offset : offset + window_samples]
+            if len(chunk) == 0:
+                raise ValueError("GigaAM: пустое окно PCM")
+            piece = _transcribe_gigaam_wav(model_obj, chunk, sample_rate)
+            if piece != "":
+                pieces.append(piece)
+            offset += window_samples
+        return " ".join(pieces)
 
 
 class _HuggingfaceCTCAdapter(_BaseSTTAdapter[CTCBundle]):

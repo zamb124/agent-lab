@@ -8,6 +8,7 @@
     "audio_player": {
         "transcribe_aria": "Расшифровать",
         "transcribe_processing": "Расшифровка…",
+        "transcribe_failed": "Не удалось расшифровать аудио",
         "no_speech": "В аудио нет речи"
     },
     "menu": {

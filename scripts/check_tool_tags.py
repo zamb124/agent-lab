@@ -23,6 +23,7 @@ TOOL_TAG_WHITELIST: frozenset[str] = frozenset(
         "google_sheets",
         "viz",
         "tables",
+        "datasources",
         "flows",
         "device",
         "text",

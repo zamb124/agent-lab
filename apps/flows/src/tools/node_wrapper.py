@@ -29,6 +29,7 @@ from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.runtime.nodes import (
     ChannelNode,
     CodeNode,
+    DatasourceNode,
     ExternalAPINode,
     FlowNode,
     LlmNode,
@@ -71,6 +72,8 @@ def _infer_node_type_for_tool(node: BaseNode) -> NodeType:
         return NodeType.EXTERNAL_API
     if isinstance(node, MCPNode):
         return NodeType.MCP
+    if isinstance(node, DatasourceNode):
+        return NodeType.DATASOURCE
     if isinstance(node, ChannelNode):
         return NodeType.CHANNEL
     if isinstance(node, ResourceNode):
@@ -150,15 +153,27 @@ class NodeAsToolWrapper(BaseTool):
         Один канон с реестром: та же обёртка, что и для inline-нод, с привязкой к уже созданному экземпляру.
         """
         node_type = _infer_node_type_for_tool(node)
-        wrapper = cls(
-            NodeConfig(
+        if isinstance(node, DatasourceNode):
+            node_config = NodeConfig(
+                node_id=node.node_id,
+                type=NodeType.DATASOURCE,
+                name=tool_name or node.node_id,
+                description=tool_description or node.description or f"Вызов ноды {node.node_id}",
+                parameters_schema=cls._DEFAULT_LLM_TOOL_PARAMETERS_SCHEMA,
+                connector_id=node.connector_id,
+                datasource_id=node.datasource_id,
+                datasource_operation=node.datasource_operation,
+                sql=node.sql,
+            )
+        else:
+            node_config = NodeConfig(
                 node_id=node.node_id,
                 type=node_type,
                 name=tool_name or node.node_id,
                 description=tool_description or node.description or f"Вызов ноды {node.node_id}",
                 parameters_schema=cls._DEFAULT_LLM_TOOL_PARAMETERS_SCHEMA,
             )
-        )
+        wrapper = cls(node_config)
         wrapper._bound_node = node
         wrapper.container = node.container
         wrapper.name = sanitize_tool_name(tool_name or node.node_id)

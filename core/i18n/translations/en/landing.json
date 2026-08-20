@@ -386,7 +386,12 @@
         "telegram": "Telegram",
         "legal_heading": "Legal information",
         "inn_label": "INN",
+        "kpp_label": "KPP",
         "ogrn_label": "OGRN",
+        "bank_label": "Bank",
+        "bank_account_label": "Account",
+        "bank_bik_label": "BIC",
+        "bank_correspondent_account_label": "Correspondent account",
         "copyright": "© {{year}} {platformName}"
     },
     "blog_page": {

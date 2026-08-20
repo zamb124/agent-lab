@@ -66,6 +66,7 @@ openfga-backfill:
 	uv run python -m apps.sync.authz && \
 	uv run python -m apps.worktracker.authz && \
 	uv run python -m core.mail.authz && \
+	uv run python -m core.datasources.authz.backfill && \
 	uv run python -m apps.agent.authz
 
 dev-down:

@@ -32,6 +32,9 @@ class AudioTranscriptionStatus(str, Enum):
     FAILED = "failed"
 
 
+STT_FAILED_ERROR_CODE = "stt_failed"
+
+
 class FileRecord(BaseModel):
     """
     Запись о файле в системе (shared модель).
