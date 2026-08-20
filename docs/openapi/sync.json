@@ -4162,17 +4162,17 @@
           "contact_email": {
             "type": "string",
             "title": "Contact Email",
-            "default": "legal@linnex.io"
+            "default": "info@linnex.io"
           },
           "support_email": {
             "type": "string",
             "title": "Support Email",
-            "default": "support@linnex.io"
+            "default": "info@linnex.io"
           },
           "dpo_email": {
             "type": "string",
             "title": "Dpo Email",
-            "default": "privacy@linnex.io"
+            "default": "info@linnex.io"
           },
           "phone": {
             "type": "string",

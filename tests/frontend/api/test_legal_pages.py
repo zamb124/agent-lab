@@ -20,6 +20,17 @@ async def test_policy_and_terms_pages_are_public(frontend_client) -> None:
 
 
 @pytest.mark.asyncio
+async def test_cookies_legal_pages_are_public(frontend_client) -> None:
+    cookies_response = await frontend_client.get("/cookies")
+    consent_response = await frontend_client.get("/consent/cookies")
+
+    assert cookies_response.status_code == 200
+    assert consent_response.status_code == 200
+    assert "<!DOCTYPE html>" in cookies_response.text
+    assert "<!DOCTYPE html>" in consent_response.text
+
+
+@pytest.mark.asyncio
 async def test_policy_and_terms_accept_ru_query(frontend_client) -> None:
     """Юридические страницы корректно открываются с ?lang=ru."""
     policy_response = await frontend_client.get("/policy?lang=ru")
@@ -85,8 +96,12 @@ async def test_i18n_en_contains_legal_namespaces(frontend_client) -> None:
     payload = response.json()
     assert "privacy" in payload
     assert "terms" in payload
+    assert "cookies" in payload
+    assert "cookie_consent" in payload
     assert payload["privacy"]["title"] == "Privacy Policy"
     assert payload["terms"]["title"] == "Terms of Service"
+    assert payload["cookies"]["title"] == "Cookie Policy"
+    assert payload["cookie_consent"]["title"].startswith("Consent")
     assert "updated_at" in payload["privacy"]
     assert "updated_at" in payload["terms"]
     assert "section_1" in payload["privacy"]
@@ -102,8 +117,11 @@ async def test_i18n_ru_contains_legal_namespaces(frontend_client) -> None:
     payload = response.json()
     assert "privacy" in payload
     assert "terms" in payload
+    assert "cookies" in payload
+    assert "cookie_consent" in payload
     assert payload["privacy"]["title"] == "Политика конфиденциальности"
     assert payload["terms"]["title"] == "Пользовательское соглашение"
+    assert payload["cookies"]["title"] == "Политика cookie"
     assert "updated_at" in payload["privacy"]
     assert "updated_at" in payload["terms"]
     assert "section_1" in payload["privacy"]
@@ -114,7 +132,7 @@ def test_route_matcher_marks_legal_pages_as_anonymous() -> None:
     """Auth route config не требует авторизацию для policy/terms."""
     matcher = RouteMatcher()
 
-    for path in ("/policy", "/terms"):
+    for path in ("/policy", "/terms", "/cookies", "/consent/cookies"):
         rule = matcher.match(path)
         assert rule is not None, f"No route rule for {path}"
         assert rule.context_type == "anonymous"

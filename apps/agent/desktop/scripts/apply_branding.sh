@@ -872,7 +872,7 @@ forge_replacements: list[tuple[str, str, tuple[str, ...]]] = [
         (
             "maintainer: 'AAIF (Agentic AI Foundation)'",
             "maintainer: 'Humanitec <support@humanitec.ru>'",
-            "maintainer: 'Linnex <support@linnex.io>'",
+            "maintainer: 'Linnex <info@linnex.io>'",
         ),
     ),
     (

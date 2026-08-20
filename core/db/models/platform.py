@@ -916,3 +916,37 @@ class DatasourceConnectionRecord(Base):
         ),
         Index("ix_datasource_connections_company_connector", "company_id", "connector_id"),
     )
+
+
+class CookieConsentSqlRecord(Base):
+    """Append-only журнал согласия на аналитические cookie (152-ФЗ ст. 9)."""
+
+    __tablename__: str = "cookie_consents"
+
+    cookie_consent_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    brand_host: Mapped[str] = mapped_column(String(255), nullable=False)
+    apex_domain: Mapped[str] = mapped_column(String(255), nullable=False)
+    decision: Mapped[str] = mapped_column(String(32), nullable=False)
+    analytics_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    consent_text_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    locale: Mapped[str] = mapped_column(String(8), nullable=False)
+    request_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    user_agent: Mapped[str] = mapped_column(String(512), nullable=False)
+    ip_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    supersedes_cookie_consent_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+    __table_args__: _TableArgs = (
+        CheckConstraint(
+            "decision IN ('accept_all','necessary_only','custom')",
+            name="cookie_consents_decision_check",
+        ),
+        CheckConstraint(
+            "locale IN ('ru','en')",
+            name="cookie_consents_locale_check",
+        ),
+        Index("ix_cookie_consents_created_at", "created_at"),
+        Index("ix_cookie_consents_apex_domain_created_at", "apex_domain", "created_at"),
+    )

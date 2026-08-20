@@ -1,0 +1,51 @@
+{
+  "title": "Consent to personal data processing for analytics cookies",
+  "updated": "Last updated",
+  "updated_at": "August 20, 2026",
+  "section_1": {
+    "title": "1. Separate consent document",
+    "p1": "This document is a separate consent of the data subject to personal data processing related to analytics cookies and similar technologies. It is issued separately from the Terms of Service and the Privacy Policy (Article 9(1) of Federal Law No. 152-FZ of 27 July 2006).",
+    "p2": "Consent is given freely, of your own will and in your interest by pressing “Accept all” or by saving category settings in the banner. “Necessary only” means you refuse analytics."
+  },
+  "section_2": {
+    "title": "2. Controller receiving the consent",
+    "list": [
+      "Controller: {{company_name_en}} ({{legal_form_en}}).",
+      "INN {{inn}}, KPP {{kpp}}, OGRN {{ogrn}}.",
+      "Legal address: {{legal_address_en}}.",
+      "Data protection contact: {{dpo_email}}.",
+      "Phone: {{phone}}."
+    ]
+  },
+  "section_3": {
+    "title": "3. Purpose of processing",
+    "p1": "Understanding how visitors use the public {platformName} site: pages viewed, navigation, bounce, and interface usability (including Yandex Metrica Webvisor if Metrica is configured)."
+  },
+  "section_4": {
+    "title": "4. Personal data categories",
+    "list": [
+      "Cookie identifiers and similar browser identifiers (including _ym_uid, Yandex Metrica ClientID, Google Analytics _ga — if the respective tool is enabled).",
+      "Page-view, click-event and browser technical data collected by the selected analytics service.",
+      "Session recording (Webvisor) if Yandex Metrica is enabled.",
+      "Technical data the controller stores in the consent journal: IP address hash, user-agent, request id, selected categories, consent text version, host."
+    ]
+  },
+  "section_5": {
+    "title": "5. Processing operations",
+    "p1": "Collection, recording, organization, storage, use, transfer (provision, access) to the analytics services listed below, and erasure after the retention period or after withdrawal of analytics consent."
+  },
+  "section_6": {
+    "title": "6. Recipients and cross-border transfer",
+    "p1": "If Yandex Metrica is enabled, data is transferred to Yandex. If Google Analytics is enabled, data is transferred to Google LLC (United States). Cross-border transfer to the United States happens only if a Google Analytics id is configured and you consented to analytics.",
+    "p2": "Necessary cookies for sign-in and the interface are outside this consent: they are processed to perform the service contract."
+  },
+  "section_7": {
+    "title": "7. Consent period",
+    "p1": "This consent remains in force until withdrawn or until the consent text version changes (the banner is shown again). The consent journal record is kept for {{retention_logs}}."
+  },
+  "section_8": {
+    "title": "8. Withdrawal",
+    "p1": "You may withdraw consent via “Cookie settings” in the site footer by choosing “Necessary only”, or by writing to {{dpo_email}}.",
+    "p2": "Withdrawal does not affect the lawfulness of processing carried out before withdrawal and does not disable necessary cookies required to provide the service."
+  }
+}

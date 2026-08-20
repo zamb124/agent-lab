@@ -83,7 +83,8 @@
   },
   "section_11": {
     "title": "11. Cookies and similar technologies",
-    "p1": "We use essential cookies and similar technologies required for core functionality. Additional analytics/marketing cookies are used only where permitted by law and applicable consent settings."
+    "p1": "Necessary cookies and browser storage (auth_token session, language, theme, stored consent choice) are used to provide the service and do not require a separate consent.",
+    "p2": "Analytics cookies (Yandex Metrica, including Webvisor, and Google Analytics if configured) run only after a separate consent. Consent text: /consent/cookies. Technology description: Cookie Policy (/cookies). You can withdraw consent via “Cookie settings” in the site footer."
   },
   "section_12": {
     "title": "12. Children",

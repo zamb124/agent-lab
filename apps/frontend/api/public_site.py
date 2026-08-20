@@ -8,13 +8,17 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from apps.frontend.cookie_consent import COOKIE_CONSENT_TEXT_VERSION
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.models import (
+    CookieConsentCreateBody,
+    CookieConsentRecord,
     PublicBlogListResponse,
     PublicBlogPost,
     PublicSiteBundle,
     PublicStartupCard,
 )
+from apps.frontend.services.cookie_consent_service import analytics_configured
 from core.platform_brand.resolver import resolve_brand, resolve_public_base_url
 
 router = APIRouter(prefix="/api/public", tags=["public-site"])
@@ -77,7 +81,25 @@ async def get_site_bundle(request: Request, container: ContainerDep) -> PublicSi
     if host is None or not str(host).strip():
         raise HTTPException(status_code=400, detail="Host header is required")
     brand = resolve_brand(str(host).strip())
-    return PublicSiteBundle(legal=brand.legal, marketing=brand.public_site)
+    return PublicSiteBundle(
+        legal=brand.legal,
+        marketing=brand.public_site,
+        cookie_consent_text_version=COOKIE_CONSENT_TEXT_VERSION,
+        analytics_configured=analytics_configured(brand.public_site),
+    )
+
+
+@router.post("/cookie-consent", response_model=CookieConsentRecord, tags=["public-site", "public"])
+async def record_cookie_consent(
+    request: Request,
+    body: CookieConsentCreateBody,
+    container: ContainerDep,
+) -> CookieConsentRecord:
+    host = request.headers.get("host")
+    if host is None or not str(host).strip():
+        raise HTTPException(status_code=400, detail="Host header is required")
+    brand = resolve_brand(str(host).strip())
+    return await container.cookie_consent_service.record(body, request=request, brand=brand)
 
 
 @router.get("/blog", response_model=PublicBlogListResponse)

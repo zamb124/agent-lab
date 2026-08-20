@@ -2311,9 +2311,9 @@ class LegalConfig(BaseModel):
         "129515, ROSSIYA, G.MOSKVA, VN.TER.G. MUNITSIPALNYI OKRUG OSTANKINSKII, "
         "B-R ZVEZDNYI, D. 12, K. 1, KV. 48"
     )
-    contact_email: str = "legal@linnex.io"
-    support_email: str = "support@linnex.io"
-    dpo_email: str = "privacy@linnex.io"
+    contact_email: str = "info@linnex.io"
+    support_email: str = "info@linnex.io"
+    dpo_email: str = "info@linnex.io"
     phone: str = "+7 (953) 477-10-94"
     min_age: int = 18
     retention_logs: str = "12 months"
@@ -2373,7 +2373,7 @@ def _default_humanitec_platform_brand() -> PlatformBrandConfig:
 def _default_linnex_platform_brand() -> PlatformBrandConfig:
     return PlatformBrandConfig(
         platform_name="Linnex",
-        support_email="support@linnex.io",
+        support_email="info@linnex.io",
         agent_product_name="LinnexAgent",
         models_product_name="Linnex Models",
         voice_product_name="Linnex Voice",

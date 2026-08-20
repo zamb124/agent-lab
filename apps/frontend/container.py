@@ -5,6 +5,8 @@ Dependency Injection контейнер для Frontend
 from apps.flows.src.db.flow_repository import FlowRepository
 from apps.frontend.services.authz_explorer_hydrate import AuthzExplorerHydrator
 from apps.frontend.services.authz_explorer_service import AuthzExplorerService
+from apps.frontend.services.cookie_consent_repository import CookieConsentRepository
+from apps.frontend.services.cookie_consent_service import CookieConsentService
 from apps.search.db.base import SearchDatabase
 from apps.search.db.crawl_repositories import (
     CrawlDomainRepository,
@@ -118,6 +120,14 @@ class FrontendContainer(BaseContainer):
     @lazy
     def search_client(self) -> SearchClient:
         return SearchClient(self.service_client)
+
+    @lazy
+    def cookie_consent_repository(self) -> CookieConsentRepository:
+        return CookieConsentRepository(db_url=self.required_shared_db_url)
+
+    @lazy
+    def cookie_consent_service(self) -> CookieConsentService:
+        return CookieConsentService(repository=self.cookie_consent_repository)
 
 
 def _create_frontend_container() -> FrontendContainer:

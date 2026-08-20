@@ -31,7 +31,7 @@ async def test_platform_brand_linnex(frontend_client) -> None:
     payload = response.json()
     assert payload["base_domain"] == "linnex.io"
     assert payload["platform_name"] == "Linnex"
-    assert payload["support_email"] == "support@linnex.io"
+    assert payload["support_email"] == "info@linnex.io"
     assert payload["apex_origin"] == "https://linnex.io/"
 
 
@@ -96,7 +96,9 @@ async def test_public_legal_linnex(frontend_client) -> None:
     assert legal["inn"] == "9717194941"
     assert legal["kpp"] == "771701001"
     assert legal["ogrn"] == "1267700280132"
-    assert legal["contact_email"] == "legal@linnex.io"
+    assert legal["contact_email"] == "info@linnex.io"
+    assert legal["support_email"] == "info@linnex.io"
+    assert legal["dpo_email"] == "info@linnex.io"
     assert legal["bank_bik"] == "044525974"
     assert legal["bank_account"] == "40702810010002289174"
 

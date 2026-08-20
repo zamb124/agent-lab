@@ -127,6 +127,16 @@ export class LandingFooter extends PlatformElement {
                 text-decoration: underline;
                 transition: color 0.3s;
             }
+
+            button.footer-legal-link {
+                display: inline;
+                margin: 0;
+                padding: 0;
+                border: 0;
+                background: transparent;
+                cursor: pointer;
+                text-align: left;
+            }
             
             .footer-legal-link:hover {
                 color: var(--accent);
@@ -207,6 +217,7 @@ export class LandingFooter extends PlatformElement {
     constructor() {
         super();
         this._bundle = this.useOp('frontend/public_site_bundle');
+        this._cookieConsent = this.useSlice('frontend/cookie_consent');
         this._localeSel = this.select((s) => s.i18n.locale);
     }
 
@@ -217,6 +228,10 @@ export class LandingFooter extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback();
+    }
+
+    _openCookieSettings() {
+        this._cookieConsent.openSettings();
     }
 
     _legalUrl(pathname) {
@@ -330,6 +345,12 @@ export class LandingFooter extends PlatformElement {
                         <a href=${this._legalUrl('/terms')} class="footer-legal-link">
                             ${t('footer.terms')}
                         </a>
+                        <a href=${this._legalUrl('/cookies')} class="footer-legal-link">
+                            ${t('footer.cookies')}
+                        </a>
+                        <button type="button" class="footer-legal-link" @click=${this._openCookieSettings}>
+                            ${t('footer.cookie_settings')}
+                        </button>
                     </div>
                 </div>
             </footer>

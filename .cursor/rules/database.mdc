@@ -29,7 +29,7 @@ alwaysApply: false
 | `DATABASE__SECRETS_URL` | `platform_secrets` | `core/secrets/db_models.py` |
 | `DATABASE__REDIS_URL` | Redis | — |
 
-Таблицы из `core/db/models/platform.py` (`users`, `usage`, `push_subscriptions`, …) живут только в **shared**. Legacy `variables` в shared удалена миграцией `20260628_0016`; версионируемые переменные компании — в **secrets** (`platform_secrets`, `SecretsRepository`).
+Таблицы из `core/db/models/platform.py` (`users`, `usage`, `push_subscriptions`, `cookie_consents`, …) живут только в **shared**. Legacy `variables` в shared удалена миграцией `20260628_0016`; версионируемые переменные компании — в **secrets** (`platform_secrets`, `SecretsRepository`). Журнал cookie consent — SQL `cookie_consents` (не KV), пишет `CookieConsentRepository` во frontend.
 
 CLI миграций — `scripts/db_migrate.py` (argparse). Подробности — `migrations.mdc`.
 

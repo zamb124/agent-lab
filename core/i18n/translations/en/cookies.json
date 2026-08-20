@@ -1,0 +1,75 @@
+{
+  "title": "Cookie Policy",
+  "updated": "Last updated",
+  "updated_at": "August 20, 2026",
+  "section_1": {
+    "title": "1. Cookies and similar technologies",
+    "p1": "Cookies are small pieces of data a site stores in the browser. Similar technologies (localStorage, sessionStorage, pixels) can also store device or session identifiers.",
+    "p2": "This document describes which technologies {platformName} uses, for what purposes, and on what basis. It is an information policy, not a consent to personal data processing."
+  },
+  "section_2": {
+    "title": "2. Controller",
+    "p1": "Controller: {{company_name_en}} ({{legal_form_en}}).",
+    "p2": "INN {{inn}}, KPP {{kpp}}, OGRN {{ogrn}}. Legal address: {{legal_address_en}}.",
+    "p3": "Data protection contact: {{dpo_email}}."
+  },
+  "section_3": {
+    "title": "3. Necessary cookies and browser storage",
+    "p1": "Necessary technologies are required to provide the service (sign-in session, interface language, theme, remembering your cookie choice). They run without a separate consent and cannot be turned off in the banner, otherwise the service would stop working.",
+    "list": [
+      "auth_token — {platformName} sign-in session.",
+      "language — selected interface language (ru or en).",
+      "platform_theme — light or dark console theme.",
+      "platform:frontend:cookie_consent — stored consent choice so this browser is not asked again."
+    ]
+  },
+  "section_4": {
+    "title": "4. Analytics cookies",
+    "p1": "Analytics run only after a separate consent on /consent/cookies. Yandex Metrica and Google Analytics scripts are not loaded before consent.",
+    "p2": "If a Yandex Metrica id is configured, Metrica loads after consent, including Webvisor (session recording to study site usability). Metrica cookie identifiers (_ym_uid and related) and ClientID are treated as personal data under Roskomnadzor practice.",
+    "p3": "If a Google Analytics id is configured, the Google tag loads after consent (_ga and related cookies). Transfer to Google LLC is a cross-border processing. The controller notifies Roskomnadzor of the cross-border transfer when this tool is enabled."
+  },
+  "section_5": {
+    "title": "5. Recipients",
+    "list": [
+      "Yandex (Yandex Metrica / Webvisor) — if a Metrica id is configured.",
+      "Google LLC (Google Analytics) — if a GA id is configured.",
+      "Other processors listed in the Privacy Policy: {{cloud_provider}}, {{billing_provider}}."
+    ]
+  },
+  "section_6": {
+    "title": "6. Retention",
+    "p1": "Necessary cookies last for the session or until you clear the browser. Analytics cookie lifetime is set by the respective provider.",
+    "p2": "The controller keeps the consent journal record for {{retention_logs}} to prove that consent was obtained (Article 9 of Federal Law No. 152-FZ)."
+  },
+  "section_7": {
+    "title": "7. How to change or withdraw your choice",
+    "p1": "Use “Cookie settings” in the site footer. You can keep necessary technologies only or allow analytics again.",
+    "p2": "Withdrawing analytics consent stops analytics for this browser: the page reloads and analytics scripts are not attached. Necessary cookies required to sign in are not affected."
+  },
+  "section_8": {
+    "title": "8. Contacts",
+    "list": [
+      "General contact: {{contact_email}}.",
+      "Support: {{support_email}}.",
+      "Personal data: {{dpo_email}}.",
+      "Phone: {{phone}}."
+    ]
+  },
+  "banner": {
+    "title": "Cookies",
+    "body": "We use necessary cookies so the site works. Analytics cookies (Yandex Metrica, including Webvisor, and Google Analytics if configured) run only with your consent. This is a separate consent, not part of the terms of service.",
+    "body_necessary_only": "We use only necessary cookies and browser storage: session, language, theme, and remembering this notice. Analytics scripts are not configured now.",
+    "accept_all": "Accept all",
+    "necessary_only": "Necessary only",
+    "understood": "OK",
+    "settings": "Settings",
+    "save": "Save",
+    "link_policy": "Cookie Policy",
+    "link_consent": "Consent text",
+    "category_necessary": "Necessary",
+    "category_necessary_hint": "Session, language, theme, stored choice. Always on.",
+    "category_analytics": "Analytics",
+    "category_analytics_hint": "Yandex Metrica (including Webvisor) and Google Analytics if configured on the site. You can turn this off."
+  }
+}

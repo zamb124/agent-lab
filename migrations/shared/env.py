@@ -22,6 +22,7 @@ from core.db.models.platform import (  # noqa: F401 — регистрируют
     CalendarEventRecord,
     CalendarIntegrationRecord,
     CompanyMailConnectionRecord,
+    CookieConsentSqlRecord,
     DatasourceConnectionRecord,
     DatasourceConnectorRecord,
     IntegrationCredentialRecord,
@@ -50,6 +51,7 @@ MANAGED_TABLES = {
     "scheduler_tasks", "platform_short_links", "api_keys",
     "company_mail_connections", "mailbox_bindings", "mailbox_sync_cursors", "mail_messages",
     "datasource_connections", "datasource_connectors",
+    "cookie_consents",
 }
 
 

@@ -1,5 +1,5 @@
 /**
- * Страница legal — Privacy Policy или Terms of Service по атрибуту kind.
+ * Страница legal — policy / terms / cookies / cookie_consent по атрибуту kind.
  */
 import { html } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
@@ -9,9 +9,13 @@ import { applyPublicDocumentMeta } from '../utils/public-document-meta.js';
 import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
 
-const PRIVACY_SECTIONS = 14;
-const TERMS_SECTIONS = 13;
 const PARAGRAPH_KEYS = ['p1', 'p2', 'p3'];
+const LEGAL_KINDS = Object.freeze({
+    policy: Object.freeze({ ns: 'privacy', path: '/policy', sections: 14 }),
+    terms: Object.freeze({ ns: 'terms', path: '/terms', sections: 13 }),
+    cookies: Object.freeze({ ns: 'cookies', path: '/cookies', sections: 8 }),
+    cookie_consent: Object.freeze({ ns: 'cookie_consent', path: '/consent/cookies', sections: 8 }),
+});
 const LEGAL_I18N_STRING_KEYS = [
     'company_name_ru',
     'company_name_en',
@@ -64,24 +68,24 @@ export class LegalPage extends PlatformPage {
         queueMicrotask(() => this._syncDocumentMeta());
     }
 
+    _spec() {
+        const spec = LEGAL_KINDS[this.kind];
+        if (!spec) {
+            throw new Error(`legal-page: unknown kind ${this.kind}`);
+        }
+        return spec;
+    }
+
     _syncDocumentMeta() {
         if (typeof window === 'undefined') return;
+        const spec = this._spec();
         const origin = window.location.origin;
-        const path = this.kind === 'terms' ? '/terms' : '/policy';
         applyPublicDocumentMeta({
-            title: this._lt('title', undefined, this._ns()),
-            description: this._lt('updated', undefined, this._ns()),
-            canonicalUrl: `${origin}${path}`,
+            title: this._lt('title', undefined, spec.ns),
+            description: this._lt('updated', undefined, spec.ns),
+            canonicalUrl: `${origin}${spec.path}`,
             ogImageUrl: `${origin}/static/frontend/assets/images/main_img.png`,
         });
-    }
-
-    _ns() {
-        return this.kind === 'terms' ? 'terms' : 'privacy';
-    }
-
-    _sectionsCount() {
-        return this.kind === 'terms' ? TERMS_SECTIONS : PRIVACY_SECTIONS;
     }
 
     _legalRecord() {
@@ -121,14 +125,16 @@ export class LegalPage extends PlatformPage {
     }
 
     _bundleSection(index) {
-        const ns = this._ns();
+        const ns = this._spec().ns;
         const bundle = this._bundleSel.value;
         if (!bundle || !bundle[ns]) return null;
-        return bundle[ns][`section_${index}`] || null;
+        const section = bundle[ns][`section_${index}`];
+        if (!section) return null;
+        return section;
     }
 
     _renderSection(index) {
-        const ns = this._ns();
+        const ns = this._spec().ns;
         const data = this._bundleSection(index);
         if (!data) return null;
         return html`
@@ -143,7 +149,7 @@ export class LegalPage extends PlatformPage {
                     ? html`<ul>
                           ${data.list.map(
                               (_item, listIndex) =>
-                                  html`<li>${this._lt(`section_${index}.list.${listIndex}`, undefined, ns) || data.list[listIndex]}</li>`,
+                                  html`<li>${this._lt(`section_${index}.list.${listIndex}`, undefined, ns)}</li>`,
                           )}
                       </ul>`
                     : null}
@@ -152,8 +158,9 @@ export class LegalPage extends PlatformPage {
     }
 
     render() {
-        const ns = this._ns();
-        const total = this._sectionsCount();
+        const spec = this._spec();
+        const ns = spec.ns;
+        const total = spec.sections;
         const indices = Array.from({ length: total }, (_value, index) => index + 1);
         return html`
             <landing-header></landing-header>

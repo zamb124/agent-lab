@@ -7,6 +7,7 @@ from typing import ClassVar, Literal, Self, override
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from apps.frontend.cookie_consent import CookieConsentDecision, CookieConsentLocale
 from core.ai.company_settings import CapabilityLiteral
 from core.ai.llm_config import LLMCallConfig
 from core.billing.settlement_rules import SettlementRulesDocument
@@ -190,6 +191,48 @@ class PublicSiteBundle(BaseModel):
 
     legal: LegalConfig
     marketing: PublicSiteConfig
+    cookie_consent_text_version: str
+    analytics_configured: bool
+
+
+class CookieConsentCreateBody(BaseModel):
+    """Тело публичной записи согласия на аналитические cookie."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    decision: CookieConsentDecision
+    analytics_allowed: bool
+    consent_text_version: str = Field(min_length=1)
+    locale: CookieConsentLocale
+    supersedes_cookie_consent_id: str | None = None
+
+    @field_validator("supersedes_cookie_consent_id")
+    @classmethod
+    def supersedes_id_non_empty(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if value.strip() == "":
+            raise ValueError("supersedes_cookie_consent_id must be non-empty when set")
+        return value.strip()
+
+
+class CookieConsentRecord(BaseModel):
+    """Запись журнала согласия на cookie (доказательство ст. 9 152-ФЗ)."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    cookie_consent_id: str
+    created_at: datetime
+    brand_host: str
+    apex_domain: str
+    decision: CookieConsentDecision
+    analytics_allowed: bool
+    consent_text_version: str
+    locale: CookieConsentLocale
+    request_id: str
+    user_agent: str
+    ip_hash: str
+    supersedes_cookie_consent_id: str | None = None
 
 
 class PublicBlogCard(BaseModel):

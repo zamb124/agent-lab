@@ -8840,17 +8840,17 @@
           "contact_email": {
             "type": "string",
             "title": "Contact Email",
-            "default": "legal@linnex.io"
+            "default": "info@linnex.io"
           },
           "support_email": {
             "type": "string",
             "title": "Support Email",
-            "default": "support@linnex.io"
+            "default": "info@linnex.io"
           },
           "dpo_email": {
             "type": "string",
             "title": "Dpo Email",
-            "default": "privacy@linnex.io"
+            "default": "info@linnex.io"
           },
           "phone": {
             "type": "string",
@@ -13899,13 +13899,23 @@
           },
           "marketing": {
             "$ref": "#/components/schemas/PublicSiteConfig"
+          },
+          "cookie_consent_text_version": {
+            "type": "string",
+            "title": "Cookie Consent Text Version"
+          },
+          "analytics_configured": {
+            "type": "boolean",
+            "title": "Analytics Configured"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
           "legal",
-          "marketing"
+          "marketing",
+          "cookie_consent_text_version",
+          "analytics_configured"
         ],
         "title": "PublicSiteBundle",
         "description": "Публичная конфигурация лендинга."

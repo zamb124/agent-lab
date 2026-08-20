@@ -104,7 +104,7 @@ Learn more: https://linnex.io
 | Поле | Черновик |
 |------|----------|
 | **Website** | `https://linnex.io` |
-| **Email** | `support@linnex.io` (или ваш контакт поддержки) |
+| **Email** | `info@linnex.io` (или ваш контакт поддержки) |
 | **Phone** | По желанию |
 | **Privacy Policy** | URL вашей страницы политики (тот же, что в App Store Connect и в Setup → App content) |
 
@@ -122,7 +122,7 @@ Learn more: https://linnex.io
 - **App info and performance**: crash logs, diagnostics
 - **Device or other IDs**: FCM registration token (для push)
 
-Все категории — **Collected**, **Linked to user**, **Encrypted in transit** (HTTPS), **User can request deletion** (через `support@linnex.io` или `/settings`).
+Все категории — **Collected**, **Linked to user**, **Encrypted in transit** (HTTPS), **User can request deletion** (через `info@linnex.io` или `/settings`).
 
 ---
 

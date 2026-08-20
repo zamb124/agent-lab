@@ -69,7 +69,7 @@ def test_rebrand_legacy_product_names_replaces_humanitec_before_goose() -> None:
             "platform_mcp_path": "/flows/api/v1/agent/platform-mcp",
             "default_frontend_base_url": "https://linnex.io",
             "homepage": "https://linnex.io",
-            "maintainer": "Linnex <support@linnex.io>",
+            "maintainer": "Linnex <info@linnex.io>",
             "default_extensions": ["developer"],
         }
     )

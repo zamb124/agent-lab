@@ -17,6 +17,9 @@ async def test_public_site_bundle_contains_legal_and_marketing(frontend_client) 
     assert "telegram_community_url" in payload["marketing"]
     assert "yandex_metrika_id" in payload["marketing"]
     assert "google_analytics_measurement_id" in payload["marketing"]
+    assert isinstance(payload["cookie_consent_text_version"], str)
+    assert payload["cookie_consent_text_version"]
+    assert isinstance(payload["analytics_configured"], bool)
 
 
 @pytest.mark.asyncio
@@ -89,3 +92,5 @@ async def test_sitemap_contains_image_namespace_and_preview_urls(frontend_client
     assert 'xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"' in text
     assert "<image:loc>" in text
     assert "/static/frontend/assets/images/main_img.png" in text
+    assert "/cookies" in text
+    assert "/consent/cookies" in text

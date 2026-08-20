@@ -13,9 +13,11 @@ _SKIP_ROOT = frozenset({"misc"})
 _SCAN_EXCLUDED_RES: tuple[re.Pattern[str], ...] = (
     re.compile(r"^shell\."),
     re.compile(r"\.toast\."),
-    re.compile(r"^(terms|privacy)\.section_\d+"),
+    re.compile(r"^(terms|privacy|cookies|cookie_consent)\.section_\d+"),
     re.compile(r"^privacy\.(title|updated|updated_at)$"),
     re.compile(r"^terms\.(title|updated|updated_at)$"),
+    re.compile(r"^cookies\.(title|updated|updated_at)$"),
+    re.compile(r"^cookie_consent\.(title|updated|updated_at)$"),
     re.compile(r"^billing\.tariff_plans\."),
     re.compile(r"^billing\.status\."),
     re.compile(r"^landing\.faq\.slot"),

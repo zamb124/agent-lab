@@ -152,8 +152,13 @@ import {
     publicBlogListOp,
     publicBlogPostOp,
 } from '../events/resources/public-site.resource.js';
+import {
+    cookieConsentRecordOp,
+    cookieConsentSlice,
+} from '../events/resources/cookie-consent.resource.js';
 import { applyPublicDocumentMeta } from '../utils/public-document-meta.js';
 import { buildFrontendAssistantContext } from '../_helpers/platform-assistant-context.js';
+import { canInjectPublicAnalytics } from '../_helpers/cookie-consent-analytics.js';
 
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/frontend-sidebar.js';
@@ -166,6 +171,7 @@ import '../pages/products/product-sync-page.js';
 import '../pages/products/product-documents-page.js';
 import '../pages/agent-download-page.js';
 import '../pages/legal-page.js';
+import '../components/landing/cookie-consent-banner.js';
 import '../pages/support-page.js';
 import '../pages/landing-digital-workers-page.js';
 import '../pages/blog-list-page.js';
@@ -203,6 +209,8 @@ const FRONTEND_ROUTES = [
     { key: 'agent-download',          path: 'agent',                    parent: 'landing',     titleKey: 'routes.agent-download' },
     { key: 'policy',                  path: 'policy',                   parent: 'landing',     titleKey: 'routes.policy' },
     { key: 'terms',                   path: 'terms',                    parent: 'landing',     titleKey: 'routes.terms' },
+    { key: 'cookies',                 path: 'cookies',                  parent: 'landing',     titleKey: 'routes.cookies' },
+    { key: 'cookie-consent',          path: 'consent/cookies',          parent: 'landing',     titleKey: 'routes.cookie-consent' },
     { key: 'support',                 path: 'support',                  parent: 'landing',     titleKey: 'routes.support' },
     { key: 'digital-workers',         path: 'demo/digital-workers',     parent: 'landing',     titleKey: 'routes.digital-workers' },
     { key: 'blog',                    path: 'blog',                     parent: 'landing',     titleKey: 'routes.blog' },
@@ -235,7 +243,7 @@ const PUBLIC_ROUTE_KEYS = new Set([
     'search',
     'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
     'agent-download',
-    'policy', 'terms', 'support',
+    'policy', 'terms', 'cookies', 'cookie-consent', 'support',
     'digital-workers',
     'blog', 'blog-post', 'about', 'roadmap',
     'login', 'join', 'select-company',
@@ -246,7 +254,7 @@ const LANDING_ROUTE_KEYS = new Set([
     'search',
     'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
     'agent-download',
-    'policy', 'terms', 'support',
+    'policy', 'terms', 'cookies', 'cookie-consent', 'support',
     'digital-workers',
     'blog', 'blog-post', 'about', 'roadmap',
 ]);
@@ -280,7 +288,7 @@ const FRONTEND_BOTTOM_NAV_HIDE_ON_ROUTES = [
     'search',
     'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
     'agent-download',
-    'policy', 'terms', 'support',
+    'policy', 'terms', 'cookies', 'cookie-consent', 'support',
     'digital-workers',
     'blog', 'blog-post', 'about', 'roadmap',
     'login', 'join', 'select-company',
@@ -410,6 +418,8 @@ export class FrontendApp extends PlatformApp {
         publicSiteBundleOp,
         publicBlogListOp,
         publicBlogPostOp,
+        cookieConsentRecordOp,
+        cookieConsentSlice,
         platformFileCreateOp,
         platformVoiceDictationOp,
     ];
@@ -418,8 +428,8 @@ export class FrontendApp extends PlatformApp {
         super();
         this._deferredAuthMeRequested = false;
         this._lastPublicMetaSig = '';
-        this._publicAnalyticsStarted = false;
         this._publicSiteBundle = this.useOp('frontend/public_site_bundle');
+        this._cookieConsentSel = this.select((s) => s.frontendCookieConsent);
         this._companiesSel = this.select((s) => s.companies.list);
         this._companiesLoadingSel = this.select((s) => s.companies.loading);
         // Реактивность document.title: ждём полный GET /api/i18n/{locale}.
@@ -537,6 +547,7 @@ export class FrontendApp extends PlatformApp {
         if (/^\/demo\/digital-workers(\/|$)/.test(path)) return false;
         if (path.startsWith('/products/')) return false;
         if (path === '/policy' || path === '/terms' || path === '/support') return false;
+        if (path === '/cookies' || path === '/consent/cookies') return false;
         if (path === '/blog' || path.startsWith('/blog/')) return false;
         if (path === '/about' || path === '/roadmap') return false;
         return true;
@@ -696,6 +707,18 @@ export class FrontendApp extends PlatformApp {
                 titleNs = 'terms';
                 descriptionNs = 'landing';
                 break;
+            case 'cookies':
+                titleKey = 'title';
+                descriptionKey = 'meta.cookies_description';
+                titleNs = 'cookies';
+                descriptionNs = 'landing';
+                break;
+            case 'cookie-consent':
+                titleKey = 'title';
+                descriptionKey = 'meta.cookie_consent_description';
+                titleNs = 'cookie_consent';
+                descriptionNs = 'landing';
+                break;
             default:
                 return;
         }
@@ -719,84 +742,109 @@ export class FrontendApp extends PlatformApp {
 
     _maybeBootstrapPublicAnalytics() {
         if (typeof window === 'undefined') return;
-        if (this._publicAnalyticsStarted) return;
+        if (window.__humanitecAnalyticsInjected) return;
         const route = this._routerSelect ? this._routerSelect.value : null;
         const routeKey = route ? route.routeKey : null;
         if (!routeKey || !LANDING_ROUTE_KEYS.has(routeKey)) return;
-        this._publicAnalyticsStarted = true;
 
-        void (async () => {
-            const res = await this._publicSiteBundle.run();
-            if (!res || typeof res !== 'object') return;
-            const marketing = res.marketing;
-            if (!marketing || typeof marketing !== 'object') return;
-            if (window.__humanitecAnalyticsInjected) return;
+        const consent = this._cookieConsentSel.value;
+        const bundleRes = this._publicSiteBundle.lastResult;
+        if (!bundleRes || typeof bundleRes !== 'object') {
+            void this._publicSiteBundle.run();
+            return;
+        }
+        const version = bundleRes.cookie_consent_text_version;
+        if (typeof version !== 'string' || version === '') {
+            throw new Error('FrontendApp: cookie_consent_text_version required');
+        }
+        if (typeof bundleRes.analytics_configured !== 'boolean') {
+            throw new Error('FrontendApp: analytics_configured boolean required');
+        }
+        if (!canInjectPublicAnalytics({
+            routeKey,
+            isLandingRoute: true,
+            hydrated: consent.hydrated,
+            analyticsAllowed: consent.analyticsAllowed,
+            consentTextVersion: consent.consentTextVersion,
+            bundleVersion: version,
+            analyticsConfigured: bundleRes.analytics_configured,
+        })) {
+            return;
+        }
 
-            const ymId = marketing.yandex_metrika_id;
-            const gaId = marketing.google_analytics_measurement_id;
+        const marketing = bundleRes.marketing;
+        if (!marketing || typeof marketing !== 'object') {
+            throw new Error('FrontendApp: marketing required');
+        }
 
-            let injected = false;
-            if (typeof ymId === 'string' && ymId !== '') {
-                const s = document.createElement('script');
-                s.textContent = [
-                    '(function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};',
-                    'm[i].l=1*new Date();',
-                    'for (var j = 0; j < document.scripts.length; j++) { if (document.scripts[j].src === r) { return; } }',
-                    'k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)}',
-                    '(window, document, "script", "https://mc.yandex.ru/metrika/tag.js", "ym");',
-                    `ym(${JSON.stringify(ymId)}, "init", { clickmap:true, trackLinks:true, accurateTrackBounce:true, webvisor:true });`,
-                ].join('');
-                document.head.appendChild(s);
-                injected = true;
-            }
+        const ymId = marketing.yandex_metrika_id;
+        const gaId = marketing.google_analytics_measurement_id;
 
-            if (typeof gaId === 'string' && gaId !== '') {
-                const gtagSrc = document.createElement('script');
-                gtagSrc.async = true;
-                gtagSrc.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(gaId)}`;
-                document.head.appendChild(gtagSrc);
-                const inline = document.createElement('script');
-                inline.textContent = [
-                    'window.dataLayer = window.dataLayer || [];',
-                    'function gtag(){dataLayer.push(arguments);}',
-                    "gtag('js', new Date());",
-                    `gtag('config', ${JSON.stringify(gaId)});`,
-                ].join('');
-                document.head.appendChild(inline);
-                injected = true;
-            }
+        let injected = false;
+        if (typeof ymId === 'string' && ymId !== '') {
+            const s = document.createElement('script');
+            s.textContent = [
+                '(function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};',
+                'm[i].l=1*new Date();',
+                'for (var j = 0; j < document.scripts.length; j++) { if (document.scripts[j].src === r) { return; } }',
+                'k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)}',
+                '(window, document, "script", "https://mc.yandex.ru/metrika/tag.js", "ym");',
+                `ym(${JSON.stringify(ymId)}, "init", { clickmap:true, trackLinks:true, accurateTrackBounce:true, webvisor:true });`,
+            ].join('');
+            document.head.appendChild(s);
+            injected = true;
+        }
 
-            if (injected) {
-                window.__humanitecAnalyticsInjected = true;
-            }
-        })();
+        if (typeof gaId === 'string' && gaId !== '') {
+            const gtagSrc = document.createElement('script');
+            gtagSrc.async = true;
+            gtagSrc.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(gaId)}`;
+            document.head.appendChild(gtagSrc);
+            const inline = document.createElement('script');
+            inline.textContent = [
+                'window.dataLayer = window.dataLayer || [];',
+                'function gtag(){dataLayer.push(arguments);}',
+                "gtag('js', new Date());",
+                `gtag('config', ${JSON.stringify(gaId)});`,
+            ].join('');
+            document.head.appendChild(inline);
+            injected = true;
+        }
+
+        if (injected) {
+            window.__humanitecAnalyticsInjected = true;
+        }
     }
 
     _renderPublic(routeKey, params) {
         const p = params && typeof params === 'object' ? params : {};
         const slug = typeof p.slug === 'string' ? p.slug : '';
+        let page;
         switch (routeKey) {
-            case 'landing':            return html`<landing-page></landing-page>`;
-            case 'search':             return html`<public-search-page></public-search-page>`;
-            case 'product-agents':     return html`<product-agents-page></product-agents-page>`;
-            case 'product-rag':        return html`<product-rag-page></product-rag-page>`;
-            case 'product-crm':        return html`<product-crm-page></product-crm-page>`;
-            case 'product-sync':       return html`<product-sync-page></product-sync-page>`;
-            case 'product-documents':  return html`<product-documents-page></product-documents-page>`;
-            case 'agent-download':     return html`<agent-download-page></agent-download-page>`;
-            case 'policy':             return html`<legal-page kind="policy"></legal-page>`;
-            case 'terms':              return html`<legal-page kind="terms"></legal-page>`;
-            case 'support':            return html`<support-page></support-page>`;
-            case 'digital-workers':    return html`<landing-digital-workers-page></landing-digital-workers-page>`;
-            case 'blog':               return html`<blog-list-page></blog-list-page>`;
-            case 'blog-post':          return html`<blog-post-page .slug=${slug}></blog-post-page>`;
-            case 'about':              return html`<about-page></about-page>`;
-            case 'roadmap':            return html`<roadmap-page></roadmap-page>`;
-            case 'login':              return html`<login-page></login-page>`;
-            case 'join':               return html`<join-page></join-page>`;
-            case 'select-company':     return html`<select-company-page></select-company-page>`;
-            default:                   return html`<landing-page></landing-page>`;
+            case 'landing':            page = html`<landing-page></landing-page>`; break;
+            case 'search':             page = html`<public-search-page></public-search-page>`; break;
+            case 'product-agents':     page = html`<product-agents-page></product-agents-page>`; break;
+            case 'product-rag':        page = html`<product-rag-page></product-rag-page>`; break;
+            case 'product-crm':        page = html`<product-crm-page></product-crm-page>`; break;
+            case 'product-sync':       page = html`<product-sync-page></product-sync-page>`; break;
+            case 'product-documents':  page = html`<product-documents-page></product-documents-page>`; break;
+            case 'agent-download':     page = html`<agent-download-page></agent-download-page>`; break;
+            case 'policy':             page = html`<legal-page kind="policy"></legal-page>`; break;
+            case 'terms':              page = html`<legal-page kind="terms"></legal-page>`; break;
+            case 'cookies':            page = html`<legal-page kind="cookies"></legal-page>`; break;
+            case 'cookie-consent':     page = html`<legal-page kind="cookie_consent"></legal-page>`; break;
+            case 'support':            page = html`<support-page></support-page>`; break;
+            case 'digital-workers':    page = html`<landing-digital-workers-page></landing-digital-workers-page>`; break;
+            case 'blog':               page = html`<blog-list-page></blog-list-page>`; break;
+            case 'blog-post':          page = html`<blog-post-page .slug=${slug}></blog-post-page>`; break;
+            case 'about':              page = html`<about-page></about-page>`; break;
+            case 'roadmap':            page = html`<roadmap-page></roadmap-page>`; break;
+            case 'login':              page = html`<login-page></login-page>`; break;
+            case 'join':               page = html`<join-page></join-page>`; break;
+            case 'select-company':     page = html`<select-company-page></select-company-page>`; break;
+            default:                   page = html`<landing-page></landing-page>`; break;
         }
+        return html`${page}<cookie-consent-banner></cookie-consent-banner>`;
     }
 
     _renderConsole(routeKey) {

@@ -403,6 +403,16 @@ WS-эффект форвардит фрейм, фронт диспатчит к�
 
 Анонимные HTTP-эндпоинты `GET /frontend/api/public/landing-agents` и `POST /frontend/api/public/landing-agents/session` (`apps/frontend/api/public_landing_agents.py`). В выдачу — только виджеты компании **`system`** с `landing_visible` и непустым `landing_card_image_url`. UI: маршрут `digital-workers` (`/demo/digital-workers`), страница `apps/frontend/ui/pages/landing-digital-workers-page.js`, фабрики `frontend/landing_agents_load` и `frontend/landing_demo_session` в `landing-demo.resource.js`; demo монтирует `<platform-flow-ui surface="drawer">` с embed-safe guest render context и JWT из POST session. Лимит Submit-turns гостя — `EmbedConfig.guest_max_user_messages` (A2A `SendMessage`/`SendStreamingMessage` при непустом `contextId`).
 
+## Cookie consent (152-ФЗ)
+
+Публичный баннер на всех `PUBLIC_ROUTE_KEYS` (`<cookie-consent-banner>` в `frontend-app.js`). Opt-in: равнозначные кнопки «Принять все» / «Только необходимые», настройки категорий, отзыв через «Настройки cookie» в футере. Согласие — отдельный документ `/consent/cookies` (`kind=cookie_consent`); политика cookie — `/cookies` (`kind=cookies`). Не внутри оферты и не внутри `/policy`.
+
+- Slice `frontend/cookie_consent` + persist `platformStorageKey('frontend', 'cookie_consent')` (`STORAGE_*`). Журнал — `createAsyncOp` `frontend/cookie_consent_record`, REST-зеркало `POST /frontend/api/public/cookie-consent` (и `/api/public/cookie-consent`).
+- Версия текста — `COOKIE_CONSENT_TEXT_VERSION` на бэкенде, в `PublicSiteBundle.cookie_consent_text_version`. Смена версии снова показывает баннер.
+- Яндекс.Метрика (включая Вебвизор) и Google Analytics инжектятся только после `analytics_allowed` и совпадения версии (`canInjectPublicAnalytics`). Запрещено вызывать `_maybeBootstrapPublicAnalytics` / вешать YM/GA на landing до согласия. Отзыв после уже загруженных скриптов — `reload`.
+- Необходимые cookie (сессия, локаль, тема, сохранённый выбор) без opt-in и без выключателя. Маркетинговых пикселей нет.
+- Журнал `cookie_consents` (shared): append-only, `ip_hash` SHA-256, не сырой IP. Админки журнала нет.
+
 ## Universal Flow UI
 
 `<platform-flow-ui>` (`core/frontend/static/lib/flow-ui/`) — единственный A2A interface runtime. Один protocol accumulator, reducer/store, catalog registry, layout resolver и production frame обслуживают page/panel/drawer/embed/shared/editor. Host не интерпретирует A2A frames и не реализует grid CSS.

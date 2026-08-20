@@ -109,6 +109,8 @@ INDEXABLE_PUBLIC_PATHS: tuple[str, ...] = (
     "/",
     "/documentation/",
     "/support",
+    "/cookies",
+    "/consent/cookies",
     "/products/agents",
     "/products/rag",
     "/products/crm",
@@ -399,6 +401,7 @@ app = create_service_app(
 # YooMoney и другие провайдеры часто настроены на URL без префикса сервиса (`/api/v1/payments/...`).
 # Иначе POST попадает на SPA `GET /{full_path:path}` и даёт 405.
 app.include_router(payments_webhook_router, tags=["payments-webhook-root"])
+app.include_router(public_site_router)
 
 # Монтирование core/frontend (общая библиотека) - СНАЧАЛА монтируем статику!
 core_frontend_path = Path(__file__).parent.parent.parent / "core" / "frontend" / "static"
