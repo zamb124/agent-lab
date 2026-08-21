@@ -2,8 +2,6 @@
 Сервис синхронизации транзакций с платежными провайдерами.
 """
 
-from datetime import datetime, timezone
-
 from core.clients.payment.factory import PaymentProviderFactory
 from core.db.storage import Storage
 from core.logging import get_logger
@@ -113,21 +111,15 @@ class PaymentSyncService:
                     logger.warning(f"Транзакция {transaction_id} не найдена при синхронизации")
                     continue
 
-                if op.status == PaymentStatus.SUCCESS and transaction.status == PaymentStatus.PENDING:
-                    transaction.status = PaymentStatus.SUCCESS
-                    transaction.external_payment_id = op.operation_id
-                    transaction.completed_at = datetime.now(timezone.utc)
-
-                    balance_updated = await self._payment_service.finalize_successful_payment(transaction)
-
-                    if balance_updated:
-                        updated += 1
-
+                applied = await self._payment_service.apply_sync_operation(transaction, op)
+                if applied:
+                    updated += 1
                     logger.info(
                         "payments.transaction_synced",
                         transaction_id=transaction_id,
                         operation_id=op.operation_id,
                         amount=op.amount,
+                        status=op.status.value,
                     )
 
         logger.info(

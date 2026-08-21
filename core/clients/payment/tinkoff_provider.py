@@ -115,6 +115,32 @@ def _platform_status(bank_status: str) -> str:
     raise ValueError(f"unknown Tinkoff payment status: {bank_status}")
 
 
+def _check_order_terminal_operations(
+    *,
+    transaction_id: str,
+    payments: list[JsonValue],
+) -> list[PaymentSyncOperation]:
+    found: list[PaymentSyncOperation] = []
+    for payment in payments:
+        payment_object = require_json_object(payment, "Tinkoff CheckOrder payment")
+        bank_status = _require_str(payment_object["Status"], "Payments.Status")
+        platform_status = PaymentStatus(_platform_status(bank_status))
+        if platform_status == PaymentStatus.PENDING:
+            continue
+        payment_id = _require_str(payment_object["PaymentId"], "Payments.PaymentId")
+        amount_kopecks = _require_int(payment_object["Amount"], "Payments.Amount")
+        found.append(
+            PaymentSyncOperation(
+                transaction_id=transaction_id,
+                status=platform_status,
+                operation_id=payment_id,
+                amount=kopecks_to_rubles(amount_kopecks),
+            )
+        )
+        break
+    return found
+
+
 class TinkoffProvider(BasePaymentProvider[TinkoffConfig]):
     def __init__(self, config: TinkoffConfig):
         super().__init__(config)
@@ -364,20 +390,10 @@ class TinkoffProvider(BasePaymentProvider[TinkoffConfig]):
                 continue
             if not isinstance(payments_value, list):
                 raise ValueError("Tinkoff CheckOrder Payments must be a list")
-            for payment in payments_value:
-                payment_object = require_json_object(payment, "Tinkoff CheckOrder payment")
-                bank_status = _require_str(payment_object["Status"], "Payments.Status")
-                if bank_status != TINKOFF_CONFIRMED:
-                    continue
-                payment_id = _require_str(payment_object["PaymentId"], "Payments.PaymentId")
-                amount_kopecks = _require_int(payment_object["Amount"], "Payments.Amount")
-                found.append(
-                    PaymentSyncOperation(
-                        transaction_id=transaction_id,
-                        status=PaymentStatus.SUCCESS,
-                        operation_id=payment_id,
-                        amount=kopecks_to_rubles(amount_kopecks),
-                    )
+            found.extend(
+                _check_order_terminal_operations(
+                    transaction_id=transaction_id,
+                    payments=payments_value,
                 )
-                break
+            )
         return found

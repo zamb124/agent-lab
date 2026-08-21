@@ -7,13 +7,19 @@ from httpx import AsyncClient
 from pydantic import ValidationError
 
 from core.clients.payment.factory import PaymentProviderFactory
-from core.clients.payment.tinkoff_provider import TinkoffProvider
+from core.clients.payment.tinkoff_provider import (
+    TinkoffProvider,
+    _check_order_terminal_operations,
+    _platform_status,
+)
 from core.clients.payment.tinkoff_token import compute_tinkoff_token
 from core.config.models import PaymentProviderConfigEntry
+from core.models.identity_models import Company
 from core.models.payment_models import (
     CreatePaymentRequest,
     PaymentProviderType,
     PaymentStatus,
+    PaymentSyncOperation,
     Transaction,
 )
 from core.payments.service import new_payment_transaction_id, payment_browser_return_url
@@ -241,3 +247,155 @@ class TestPaymentProviderFactory:
 
     def test_get_provider_returns_none_for_missing(self) -> None:
         assert PaymentProviderFactory.get_provider("unknown_tinkoff_name") is None
+
+
+class TestTinkoffCheckOrderStatus:
+    def test_rejected_becomes_failed_operation(self) -> None:
+        ops = _check_order_terminal_operations(
+            transaction_id="co1:abc123def456",
+            payments=[{"PaymentId": "91", "Status": "REJECTED", "Amount": 10000}],
+        )
+        assert len(ops) == 1
+        assert ops[0].status == PaymentStatus.FAILED
+        assert ops[0].operation_id == "91"
+        assert ops[0].amount == 100.0
+
+    def test_refunded_becomes_refunded_operation(self) -> None:
+        ops = _check_order_terminal_operations(
+            transaction_id="co1:abc123def456",
+            payments=[{"PaymentId": "92", "Status": "REFUNDED", "Amount": 10000}],
+        )
+        assert len(ops) == 1
+        assert ops[0].status == PaymentStatus.REFUNDED
+        assert ops[0].operation_id == "92"
+
+    def test_new_does_not_emit_operation(self) -> None:
+        ops = _check_order_terminal_operations(
+            transaction_id="co1:abc123def456",
+            payments=[{"PaymentId": "93", "Status": "NEW", "Amount": 10000}],
+        )
+        assert ops == []
+
+    def test_confirmed_becomes_success_operation(self) -> None:
+        ops = _check_order_terminal_operations(
+            transaction_id="co1:abc123def456",
+            payments=[{"PaymentId": "94", "Status": "CONFIRMED", "Amount": 10000}],
+        )
+        assert len(ops) == 1
+        assert ops[0].status == PaymentStatus.SUCCESS
+        assert _platform_status("CONFIRMED") == PaymentStatus.SUCCESS.value
+
+    def test_skips_pending_then_takes_confirmed(self) -> None:
+        ops = _check_order_terminal_operations(
+            transaction_id="co1:abc123def456",
+            payments=[
+                {"PaymentId": "1", "Status": "NEW", "Amount": 10000},
+                {"PaymentId": "2", "Status": "CONFIRMED", "Amount": 10000},
+            ],
+        )
+        assert len(ops) == 1
+        assert ops[0].operation_id == "2"
+        assert ops[0].status == PaymentStatus.SUCCESS
+
+    def test_unknown_bank_status_raises(self) -> None:
+        with pytest.raises(ValueError, match="unknown Tinkoff payment status"):
+            _check_order_terminal_operations(
+                transaction_id="co1:abc123def456",
+                payments=[{"PaymentId": "95", "Status": "WEIRD", "Amount": 10000}],
+            )
+
+
+@pytest.mark.asyncio
+class TestPaymentSyncApply:
+    async def test_rejected_sync_does_not_credit_balance(
+        self,
+        frontend_container,
+        unique_id: str,
+        system_user_id: str,
+    ) -> None:
+        cid = f"co_psync_{unique_id}"
+        company = Company(
+            company_id=cid,
+            name=f"Payment sync {unique_id}",
+            owner_user_id=system_user_id,
+            members={system_user_id: ["owner"]},
+            balance=10.0,
+        )
+        await frontend_container.company_repository.set(company)
+        payment_service = frontend_container.payment_service
+        txn_id = new_payment_transaction_id(cid)
+        txn = Transaction(
+            transaction_id=txn_id,
+            company_id=cid,
+            user_id=system_user_id,
+            amount=100.0,
+            status=PaymentStatus.PENDING,
+            payment_provider=PaymentProviderType.TINKOFF,
+        )
+        await payment_service._save_transaction(txn)
+        try:
+            applied = await payment_service.apply_sync_operation(
+                txn,
+                PaymentSyncOperation(
+                    transaction_id=txn_id,
+                    status=PaymentStatus.FAILED,
+                    operation_id="pay_rej",
+                    amount=100.0,
+                ),
+            )
+            assert applied is True
+            stored = await payment_service.get_transaction(txn_id)
+            assert stored is not None
+            assert stored.status == PaymentStatus.FAILED
+            assert stored.external_payment_id == "pay_rej"
+            co = await frontend_container.company_repository.get(cid)
+            assert co is not None
+            assert co.balance == 10.0
+        finally:
+            await frontend_container.company_repository.delete(cid)
+
+    async def test_refunded_sync_does_not_credit_balance(
+        self,
+        frontend_container,
+        unique_id: str,
+        system_user_id: str,
+    ) -> None:
+        cid = f"co_prefund_{unique_id}"
+        company = Company(
+            company_id=cid,
+            name=f"Payment refund {unique_id}",
+            owner_user_id=system_user_id,
+            members={system_user_id: ["owner"]},
+            balance=10.0,
+        )
+        await frontend_container.company_repository.set(company)
+        payment_service = frontend_container.payment_service
+        txn_id = new_payment_transaction_id(cid)
+        txn = Transaction(
+            transaction_id=txn_id,
+            company_id=cid,
+            user_id=system_user_id,
+            amount=100.0,
+            status=PaymentStatus.PENDING,
+            payment_provider=PaymentProviderType.TINKOFF,
+        )
+        await payment_service._save_transaction(txn)
+        try:
+            applied = await payment_service.apply_sync_operation(
+                txn,
+                PaymentSyncOperation(
+                    transaction_id=txn_id,
+                    status=PaymentStatus.REFUNDED,
+                    operation_id="pay_rf",
+                    amount=100.0,
+                ),
+            )
+            assert applied is True
+            stored = await payment_service.get_transaction(txn_id)
+            assert stored is not None
+            assert stored.status == PaymentStatus.REFUNDED
+            co = await frontend_container.company_repository.get(cid)
+            assert co is not None
+            assert co.balance == 10.0
+        finally:
+            await frontend_container.company_repository.delete(cid)

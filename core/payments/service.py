@@ -28,6 +28,7 @@ from core.models.payment_models import (
     PaymentNotification,
     PaymentProviderType,
     PaymentStatus,
+    PaymentSyncOperation,
     TinkoffNotificationPayload,
     Transaction,
 )
@@ -354,14 +355,14 @@ class PaymentService:
 
         if status == PaymentStatus.FAILED.value:
             transaction.status = PaymentStatus.FAILED
-            await self._save_transaction(transaction)
+            await self.close_unsuccessful_payment(transaction)
             notification.processed = True
             await self._save_notification(notification)
             return
 
         if status == PaymentStatus.REFUNDED.value:
             transaction.status = PaymentStatus.REFUNDED
-            await self._save_transaction(transaction)
+            await self.close_unsuccessful_payment(transaction)
             notification.processed = True
             await self._save_notification(notification)
             return
@@ -430,6 +431,40 @@ class PaymentService:
         transactions.sort(key=lambda t: t.created_at, reverse=True)
 
         return transactions[offset : offset + limit]
+
+    async def close_unsuccessful_payment(self, transaction: Transaction) -> None:
+        if transaction.status not in {PaymentStatus.FAILED, PaymentStatus.REFUNDED}:
+            raise ValueError(
+                "close_unsuccessful_payment requires failed or refunded, got "
+                + transaction.status.value
+            )
+        await self._save_transaction(transaction)
+
+    async def apply_sync_operation(
+        self,
+        transaction: Transaction,
+        operation: PaymentSyncOperation,
+    ) -> bool:
+        if transaction.status != PaymentStatus.PENDING:
+            logger.warning(
+                "payments.transaction_already_processed",
+                transaction_id=transaction.transaction_id,
+                status=transaction.status,
+            )
+            return False
+        operation_id = operation.operation_id
+        if operation_id is None or operation_id.strip() == "":
+            raise ValueError("payment sync operation_id is required")
+        transaction.external_payment_id = operation_id
+        transaction.completed_at = datetime.now(timezone.utc)
+        if operation.status == PaymentStatus.SUCCESS:
+            transaction.status = PaymentStatus.SUCCESS
+            return await self.finalize_successful_payment(transaction)
+        if operation.status in {PaymentStatus.FAILED, PaymentStatus.REFUNDED}:
+            transaction.status = operation.status
+            await self.close_unsuccessful_payment(transaction)
+            return True
+        raise ValueError(f"unexpected payment sync status: {operation.status.value}")
 
     async def _save_transaction(self, transaction: Transaction) -> None:
         key = _transaction_key(transaction)

@@ -180,7 +180,7 @@ Observability: `traced_operation("voice.tts.pronunciation.transform")` — бе�
 
 Страница `/billing` читает `payment` + `transaction_id` из `router.search` и показывает toast (`toast_payment_success` / `toast_payment_fail`), затем `replace` на `/billing` без query. Банковский редирект — сигнал для UI, не зачисление.
 
-Банк не подтверждает платёж через SuccessURL. Деньги: HTTP-уведомление (`CONFIRMED`) или сверка `CheckOrder` в `payment_sync_tick`.
+Банк не подтверждает платёж через SuccessURL. Деньги: HTTP-уведомление (`CONFIRMED`) или сверка `CheckOrder` в `payment_sync_tick`. Сверка зовёт тот же `_platform_status`, что webhook: `CONFIRMED` → `success` и зачисление; `REJECTED` / `AUTH_FAIL` / `DEADLINE_EXPIRED` / `CANCELED` → `failed` без баланса; `REFUNDED` / `REVERSED` / … → `refunded` без баланса; `NEW` / `FORM_SHOWED` / `AUTHORIZED` остаются `pending`.
 
 `GET /history` и `payment_sync_tick` читают все ключи `payment:{company_id}:*`. В Storage лежат архивные `yoomoney` — `PaymentProviderType` обязан их валидировать, иначе список и сверка падают на первой старой записи. Новый Init создаёт только `tinkoff` / `grant`.
 
