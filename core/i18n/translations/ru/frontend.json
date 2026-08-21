@@ -1384,14 +1384,16 @@
     },
     "topup_modal": {
         "header": "Пополнение баланса",
-        "label_amount": "Сумма пополнения (Р)",
+        "label_amount": "Сумма",
         "amount_hint": "Минимальная сумма: 100 Р",
+        "presets_label": "Быстрый выбор суммы",
         "err_amount_required": "Укажите сумму",
         "err_amount_invalid": "Сумма должна быть положительным числом",
         "err_amount_min": "Минимальная сумма пополнения — 100 Р",
         "cancel": "Отмена",
         "submit": "Перейти к оплате",
-        "submitting": "Создание платежа..."
+        "submitting": "Создание платежа...",
+        "toast_redirect": "Переходим к оплате..."
     },
     "support_page": {
         "back_home": "На главную",

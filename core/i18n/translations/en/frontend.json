@@ -1384,14 +1384,16 @@
     },
     "topup_modal": {
         "header": "Top up balance",
-        "label_amount": "Top up amount (RUB)",
+        "label_amount": "Amount",
         "amount_hint": "Minimum amount: 100 RUB",
+        "presets_label": "Quick amount",
         "err_amount_required": "Enter amount",
         "err_amount_invalid": "Amount must be a positive number",
         "err_amount_min": "Minimum top up amount is 100 RUB",
         "cancel": "Cancel",
         "submit": "Proceed to payment",
-        "submitting": "Creating payment..."
+        "submitting": "Creating payment...",
+        "toast_redirect": "Redirecting to payment..."
     },
     "support_page": {
         "back_home": "Back to home",

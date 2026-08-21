@@ -4,13 +4,50 @@
  * Сабмит вызывает `billingTopupOp` через useOp; effect редиректит на
  * payment_url, поэтому модалка просто закрывается после dispatch.
  */
-import { html } from 'lit';
+import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import { formatPlatformCurrencyRub } from '@platform/lib/utils/format-platform-number.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/platform-button.js';
+
+const AMOUNT_MIN = 100;
+const AMOUNT_PRESETS = Object.freeze([100, 500, 1000, 5000]);
 
 export class FrontendTopupModal extends PlatformFormModal {
     static modalKind = 'frontend.billing_topup';
+    static i18nNamespace = 'frontend';
+
+    static styles = [
+        ...PlatformFormModal.styles,
+        css`
+            :host {
+                --modal-body-min-block-size: 0px;
+            }
+
+            :host .fullscreen-btn {
+                display: none !important;
+            }
+
+            form {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-4);
+            }
+
+            .presets {
+                display: grid;
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+                gap: var(--space-2);
+            }
+
+            @media (max-width: 480px) {
+                .presets {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
+            }
+        `,
+    ];
 
     static properties = {
         ...PlatformFormModal.properties,
@@ -19,14 +56,25 @@ export class FrontendTopupModal extends PlatformFormModal {
 
     constructor() {
         super();
-        this._amount = null;
+        this._amount = AMOUNT_MIN;
         this.size = 'sm';
         this._topup = this.useOp('frontend/billing_topup');
+        this._locale = this.select((s) => {
+            const locale = s.i18n.locale;
+            if (typeof locale !== 'string' || locale.length === 0) {
+                throw new Error('FrontendTopupModal: i18n.locale is required');
+            }
+            return locale;
+        });
     }
 
     willUpdate(changed) {
         super.willUpdate(changed);
         this.title = this.t('topup_modal.header');
+    }
+
+    renderSaveHeaderButton() {
+        return html``;
     }
 
     validateForm() {
@@ -39,7 +87,7 @@ export class FrontendTopupModal extends PlatformFormModal {
         }
         if (amount <= 0) {
             errors.amount = this.t('topup_modal.err_amount_invalid');
-        } else if (amount < 100) {
+        } else if (amount < AMOUNT_MIN) {
             errors.amount = this.t('topup_modal.err_amount_min');
         }
         return errors;
@@ -53,40 +101,61 @@ export class FrontendTopupModal extends PlatformFormModal {
         this.closeAfterSave();
     }
 
+    _setAmount(amount) {
+        this._amount = amount;
+        this.isDirty = true;
+    }
+
     renderBody() {
         const amountNum = typeof this._amount === 'number' && Number.isFinite(this._amount) ? this._amount : null;
+        const locale = this._locale.value;
         return html`
             <form @submit=${this._onSubmit} @input=${() => { this.isDirty = true; }}>
-                <div class="form-group">
-                    <platform-field
-                        type="number"
-                        mode="edit"
-                        label=${this.t('topup_modal.label_amount')}
-                        .value=${amountNum}
-                        @change=${(e) => {
-                            if (!e.detail) {
-                                throw new Error('topup modal: amount change expects detail');
-                            }
-                            const v = e.detail.value;
-                            if (v !== null && typeof v !== 'number') {
-                                throw new Error('topup modal: amount expects numeric detail.value or null');
-                            }
-                            this._amount = v;
-                        }}
-                    ></platform-field>
-                    <small>${this.t('topup_modal.amount_hint')}</small>
-                    ${this.renderFieldError('amount')}
+                <platform-field
+                    type="number"
+                    mode="edit"
+                    .label=${this.t('topup_modal.label_amount')}
+                    .hint=${this.t('topup_modal.amount_hint')}
+                    .value=${amountNum}
+                    @change=${(e) => {
+                        if (!e.detail) {
+                            throw new Error('topup modal: amount change expects detail');
+                        }
+                        const v = e.detail.value;
+                        if (v !== null && typeof v !== 'number') {
+                            throw new Error('topup modal: amount expects numeric detail.value or null');
+                        }
+                        this._setAmount(v);
+                    }}
+                ></platform-field>
+                <div class="presets" role="group" aria-label=${this.t('topup_modal.presets_label')}>
+                    ${AMOUNT_PRESETS.map((preset) => html`
+                        <platform-button
+                            block
+                            density="compact"
+                            variant=${amountNum === preset ? 'primary' : 'ghost'}
+                            type="button"
+                            @click=${() => this._setAmount(preset)}
+                        >
+                            ${formatPlatformCurrencyRub(preset, locale, {
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 0,
+                            })}
+                        </platform-button>
+                    `)}
                 </div>
+                ${this.renderFieldError('amount')}
             </form>
         `;
     }
 
     renderFooter() {
+        const busy = this.loading || this._topup.busy;
         const canSubmit =
             typeof this._amount === 'number'
             && Number.isFinite(this._amount)
-            && this._amount >= 100
-            && !this.loading;
+            && this._amount >= AMOUNT_MIN
+            && !busy;
         return html`
             <div class="form-actions">
                 <button type="button" class="btn btn-secondary" @click=${() => this.close()}>
@@ -98,7 +167,7 @@ export class FrontendTopupModal extends PlatformFormModal {
                     ?disabled=${!canSubmit}
                     @click=${() => this._performSave()}
                 >
-                    ${this.loading
+                    ${busy
                         ? this.t('topup_modal.submitting')
                         : this.t('topup_modal.submit')}
                 </button>
