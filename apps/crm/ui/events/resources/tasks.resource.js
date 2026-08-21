@@ -22,10 +22,66 @@
 import {
     createResourceCollection,
     createAsyncOp,
+    CoreEvents,
 } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
 
 const CRM_TASK_UPDATED = 'crm/task/updated';
+
+/**
+ * Строка `detail` из HTTP-ошибки платформы (не объект `{code, message}`).
+ * @param {object} err
+ * @returns {string | null}
+ */
+function _httpErrorDetailText(err) {
+    if (!err || typeof err !== 'object') {
+        return null;
+    }
+    const body = err.body;
+    if (!body || typeof body !== 'object') {
+        return null;
+    }
+    const detail = body.detail;
+    if (typeof detail === 'string' && detail.length > 0) {
+        return detail;
+    }
+    return null;
+}
+
+/**
+ * 409 active_task_exists — задача уже идёт;
+ * строковый detail — текст с бэка; иначе generic fail.
+ * @param {object} ctx
+ * @param {object} err
+ * @param {object} event
+ * @param {string} alreadyRunningKey
+ * @param {string} failedKey
+ */
+function _toastOnActiveTaskConflict(ctx, err, event, alreadyRunningKey, failedKey) {
+    const code = err && err.body && err.body.detail && err.body.detail.code;
+    if (err && err.status === 409 && code === 'active_task_exists') {
+        ctx.dispatch(
+            CoreEvents.UI_TOAST_SHOW,
+            { type: 'warning', i18n_key: alreadyRunningKey },
+            { causation_id: event.id },
+        );
+        return;
+    }
+    const detailText = _httpErrorDetailText(err);
+    if (detailText !== null) {
+        ctx.dispatch(
+            CoreEvents.UI_TOAST_SHOW,
+            { type: 'error', message: detailText },
+            { causation_id: event.id },
+        );
+        return;
+    }
+    ctx.dispatch(
+        CoreEvents.UI_TOAST_SHOW,
+        { type: 'error', i18n_key: failedKey },
+        { causation_id: event.id },
+    );
+}
 
 /**
  * @param {object} state
@@ -133,8 +189,7 @@ export const taskCreatedEntitiesOp = createAsyncOp({
 
 export const taskKnowledgeImportStartOp = createAsyncOp({
     name: 'crm/task_knowledge_import_start',
-    successToastKey: 'crm:toast.task.knowledge_import_started',
-    errorToastKey: 'crm:toast.task.knowledge_import_start_failed',
+    silent: true,
     restMirror: { method: 'POST', path: '/crm/api/v1/tasks/knowledge-import' },
     request: async ({ payload }) => {
         if (!payload || typeof payload !== 'object') {
@@ -146,12 +201,27 @@ export const taskKnowledgeImportStartOp = createAsyncOp({
             body: payload,
         });
     },
+    onSuccess: (ctx, _result, event) => {
+        ctx.dispatch(
+            CoreEvents.UI_TOAST_SHOW,
+            { type: 'success', i18n_key: 'crm:toast.task.knowledge_import_started' },
+            { causation_id: event.id },
+        );
+    },
+    onFailure: (ctx, err, event) => {
+        _toastOnActiveTaskConflict(
+            ctx,
+            err,
+            event,
+            'crm:toast.task.knowledge_import_already_running',
+            'crm:toast.task.knowledge_import_start_failed',
+        );
+    },
 });
 
 export const taskDailySummaryStartOp = createAsyncOp({
     name: 'crm/task_daily_summary_start',
-    successToastKey: 'crm:toast.task.daily_summary_started',
-    errorToastKey: 'crm:toast.task.daily_summary_start_failed',
+    silent: true,
     restMirror: { method: 'POST', path: '/crm/api/v1/tasks/daily-summary' },
     request: async ({ payload }) => {
         if (!payload || typeof payload !== 'object') {
@@ -163,12 +233,27 @@ export const taskDailySummaryStartOp = createAsyncOp({
             body: payload,
         });
     },
+    onSuccess: (ctx, _result, event) => {
+        ctx.dispatch(
+            CoreEvents.UI_TOAST_SHOW,
+            { type: 'success', i18n_key: 'crm:toast.task.daily_summary_started' },
+            { causation_id: event.id },
+        );
+    },
+    onFailure: (ctx, err, event) => {
+        _toastOnActiveTaskConflict(
+            ctx,
+            err,
+            event,
+            'crm:toast.task.daily_summary_already_running',
+            'crm:toast.task.daily_summary_start_failed',
+        );
+    },
 });
 
 export const taskPeriodSummaryStartOp = createAsyncOp({
     name: 'crm/task_period_summary_start',
-    successToastKey: 'crm:toast.task.period_summary_started',
-    errorToastKey: 'crm:toast.task.period_summary_start_failed',
+    silent: true,
     restMirror: { method: 'POST', path: '/crm/api/v1/tasks/period-summary' },
     request: async ({ payload }) => {
         if (!payload || typeof payload !== 'object') {
@@ -179,6 +264,22 @@ export const taskPeriodSummaryStartOp = createAsyncOp({
             url: '/crm/api/v1/tasks/period-summary',
             body: payload,
         });
+    },
+    onSuccess: (ctx, _result, event) => {
+        ctx.dispatch(
+            CoreEvents.UI_TOAST_SHOW,
+            { type: 'success', i18n_key: 'crm:toast.task.period_summary_started' },
+            { causation_id: event.id },
+        );
+    },
+    onFailure: (ctx, err, event) => {
+        _toastOnActiveTaskConflict(
+            ctx,
+            err,
+            event,
+            'crm:toast.task.period_summary_already_running',
+            'crm:toast.task.period_summary_start_failed',
+        );
     },
 });
 
@@ -235,8 +336,7 @@ export const taskRollbackOp = createAsyncOp({
 
 export const taskRetryOp = createAsyncOp({
     name: 'crm/task_retry',
-    successToastKey: 'crm:toast.task.retried',
-    errorToastKey: 'crm:toast.task.retry_failed',
+    silent: true,
     restMirror: { method: 'POST', path: '/crm/api/v1/tasks/:task_id/retry' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.task_id !== 'string') {
@@ -247,5 +347,21 @@ export const taskRetryOp = createAsyncOp({
             url: `/crm/api/v1/tasks/${encodeURIComponent(payload.task_id)}/retry`,
         });
     },
-    onSuccess: _dispatchLocalTaskUpdated,
+    onSuccess: (ctx, result, event) => {
+        _dispatchLocalTaskUpdated(ctx, result, event);
+        ctx.dispatch(
+            CoreEvents.UI_TOAST_SHOW,
+            { type: 'success', i18n_key: 'crm:toast.task.retried' },
+            { causation_id: event.id },
+        );
+    },
+    onFailure: (ctx, err, event) => {
+        _toastOnActiveTaskConflict(
+            ctx,
+            err,
+            event,
+            'crm:toast.task.retry_already_running',
+            'crm:toast.task.retry_failed',
+        );
+    },
 });

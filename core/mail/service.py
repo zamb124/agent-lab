@@ -46,6 +46,7 @@ from core.mail.exceptions import (
     MailUidNotFoundError,
 )
 from core.mail.factory import build_mail_server_port
+from core.mail.html_text import looks_like_html, mail_snippet, mail_visible_text
 from core.mail.imip import calendar_upsert_payload_from_imip, extract_imip_ics
 from core.mail.models import (
     CompanyMailConnection,
@@ -235,10 +236,8 @@ def to_public_binding(
 
 
 def to_message_list_item(message: InboundMailMessage) -> MailMessageListItem:
-    snippet: str | None = None
-    if message.body_text is not None and message.body_text.strip():
-        text = " ".join(message.body_text.split())
-        snippet = text if len(text) <= 160 else f"{text[:157]}..."
+    clipped = mail_snippet(body_text=message.body_text, body_html=message.body_html)
+    snippet: str | None = clipped if clipped else None
     return MailMessageListItem(
         uid=message.uid,
         message_id=message.message_id,
@@ -257,13 +256,16 @@ def to_message_list_item(message: InboundMailMessage) -> MailMessageListItem:
 
 
 def stored_to_list_item(stored: StoredMailMessage) -> MailMessageListItem:
+    snippet_raw = stored.snippet
+    if snippet_raw.strip() and looks_like_html(snippet_raw):
+        snippet_raw = mail_snippet(body_text=None, body_html=snippet_raw)
     return MailMessageListItem(
         uid=str(stored.uid),
         message_id=stored.message_id,
         subject=stored.subject if stored.subject.strip() else None,
         from_address=stored.from_address if stored.from_address.strip() else None,
         to_addresses=list(stored.to_addresses),
-        snippet=stored.snippet if stored.snippet.strip() else None,
+        snippet=snippet_raw if snippet_raw.strip() else None,
         attachment_count=len(stored.attachments) if stored.attachments else (
             1 if stored.has_attachments else 0
         ),
@@ -1863,6 +1865,7 @@ class MailService:
                     available=ref.available and ref.file_id is not None,
                     parse_error=ref.parse_error,
                     file_id=ref.file_id,
+                    content_id=ref.content_id,
                 )
             )
         return InboundMailMessagePublic(
@@ -2719,8 +2722,7 @@ class MailService:
             or 1
         )
         now = _utcnow()
-        snippet_src = " ".join(payload.body_text.split()) if payload.body_text.strip() else ""
-        snippet = snippet_src if len(snippet_src) <= 160 else f"{snippet_src[:157]}..."
+        snippet = mail_snippet(body_text=payload.body_text, body_html=payload.body_html)
         inbound = InboundMailMessage(
             uid=str(temp_uid),
             message_id=message_id,
@@ -3357,7 +3359,9 @@ class MailService:
         """Догружает body для header-only UID batch (RAG ingest)."""
         hydrated: list[InboundMailMessage] = []
         for message in messages:
-            needs_body = message.body_text is None or not message.body_text.strip()
+            has_text = message.body_text is not None and bool(message.body_text.strip())
+            has_html = message.body_html is not None and bool(message.body_html.strip())
+            needs_body = not has_text and not has_html
             if not needs_body:
                 hydrated.append(message)
                 continue
@@ -3453,12 +3457,10 @@ class MailService:
                         file_id=file_id,
                         available=attachment.available and file_id is not None,
                         parse_error=attachment.parse_error,
+                        content_id=attachment.content_id,
                     )
                 )
-            snippet = ""
-            if message.body_text is not None and message.body_text.strip():
-                text = " ".join(message.body_text.split())
-                snippet = text if len(text) <= 160 else f"{text[:157]}..."
+            snippet = mail_snippet(body_text=message.body_text, body_html=message.body_html)
             mail_message_id = str(
                 uuid.uuid5(
                     uuid.NAMESPACE_URL,
@@ -3471,8 +3473,12 @@ class MailService:
                 rag_text_parts.append(f"Subject: {message.subject.strip()}")
             if message.from_address is not None and message.from_address.strip():
                 rag_text_parts.append(f"From: {message.from_address.strip()}")
-            if message.body_text is not None and message.body_text.strip():
-                rag_text_parts.append(message.body_text.strip())
+            visible_body = mail_visible_text(
+                body_text=message.body_text,
+                body_html=message.body_html,
+            )
+            if visible_body:
+                rag_text_parts.append(visible_body)
             if attachment_names:
                 rag_text_parts.append(
                     "Attachments: " + ", ".join(attachment_names)
@@ -3559,8 +3565,12 @@ class MailService:
             parts.append(f"Subject: {stored.subject.strip()}")
         if stored.from_address.strip():
             parts.append(f"From: {stored.from_address.strip()}")
-        if stored.body_text is not None and stored.body_text.strip():
-            parts.append(stored.body_text.strip())
+        visible_body = mail_visible_text(
+            body_text=stored.body_text,
+            body_html=stored.body_html,
+        )
+        if visible_body:
+            parts.append(visible_body)
         attachment_names = [
             ref.filename for ref in stored.attachments if ref.filename.strip()
         ]

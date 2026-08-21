@@ -1,35 +1,14 @@
 /**
  * platform-voice-dictation — единый UI voice→text на всю платформу.
- * MediaRecorder → platform/voice_dictation → POST /voice/api/v1/transcribe.
+ * VoiceMediaSession STT-only: PCM → WS /voice/api/ws/session/{id} → VAD → transcript final.
  * Событие `transcribed` detail: { text, provider }.
  */
 import { html, css } from '../../assets/js/lit/lit.min.js';
 import { PlatformElement } from '../platform-element/index.js';
-import {
-    getUserMediaCompat,
-    hasGetUserMediaApi,
-    pickVoiceMimeType,
-} from '../utils/voice-recording.js';
+import { hasGetUserMediaApi } from '../utils/voice-recording.js';
+import { VoiceMediaSession } from '../voice/voice-media-session.js';
+import { resolveVoiceHttpOrigin } from '../voice/voice-http-origin.js';
 import './platform-icon.js';
-
-const OP_NAME = 'platform/voice_dictation';
-
-/**
- * @param {string} mimeType
- * @returns {string}
- */
-function fileNameForMime(mimeType) {
-    if (typeof mimeType !== 'string' || mimeType.length === 0) {
-        return 'voice-input.webm';
-    }
-    if (mimeType.includes('mp4')) {
-        return 'voice-input.m4a';
-    }
-    if (mimeType.includes('ogg')) {
-        return 'voice-input.ogg';
-    }
-    return 'voice-input.webm';
-}
 
 export class PlatformVoiceDictation extends PlatformElement {
     static i18nNamespace = 'platform';
@@ -37,6 +16,7 @@ export class PlatformVoiceDictation extends PlatformElement {
     static properties = {
         disabled: { type: Boolean, reflect: true },
         language: { type: String },
+        companyId: { type: String, attribute: 'company-id' },
         density: { type: String, reflect: true },
         _phase: { state: true },
     };
@@ -96,44 +76,45 @@ export class PlatformVoiceDictation extends PlatformElement {
         super();
         this.disabled = false;
         this.language = '';
+        this.companyId = '';
         this.density = 'compact';
         this._phase = 'idle';
-        /** @type {MediaRecorder | null} */
-        this._mediaRecorder = null;
-        /** @type {Blob[]} */
-        this._audioChunks = [];
-        this._voice = this.useOp(OP_NAME);
-        this.useEvent(this._voice.op.events.SUCCEEDED, (event) => {
-            this._phase = 'idle';
-            this._mediaRecorder = null;
-            this._audioChunks = [];
-            const result = event && event.payload && event.payload.result;
-            if (!result || typeof result !== 'object') {
-                this.toast('toast.voice_dictation.empty', { type: 'warning' });
-                return;
-            }
-            const text = typeof result.text === 'string' ? result.text.trim() : '';
-            if (text.length === 0) {
-                this.toast('toast.voice_dictation.empty', { type: 'warning' });
-                return;
-            }
-            const provider = typeof result.provider === 'string' ? result.provider : '';
-            this.emit('transcribed', { text, provider });
-        });
-        this.useEvent(this._voice.op.events.FAILED, () => {
-            this._phase = 'idle';
-            this._mediaRecorder = null;
-            this._audioChunks = [];
-        });
+        this._heardFinalText = false;
+        /** @type {VoiceMediaSession | null} */
+        this._media = null;
+        this._companyIdSel = this.select((s) => s.auth.activeCompanyId);
+        this._onTranscriptBound = (event) => this._onMediaTranscript(event);
+        this._onErrorBound = (event) => this._onMediaError(event);
     }
 
     disconnectedCallback() {
-        if (this._mediaRecorder !== null && this._mediaRecorder.state === 'recording') {
-            this._mediaRecorder.stop();
-        }
-        this._mediaRecorder = null;
-        this._audioChunks = [];
+        this._teardownMedia();
+        this._phase = 'idle';
         super.disconnectedCallback();
+    }
+
+    /**
+     * @returns {string}
+     */
+    _resolveCompanyId() {
+        if (typeof this.companyId === 'string' && this.companyId.trim() !== '') {
+            return this.companyId.trim();
+        }
+        const fromAuth = this._companyIdSel.value;
+        if (typeof fromAuth === 'string' && fromAuth.trim() !== '') {
+            return fromAuth.trim();
+        }
+        throw new Error('platform-voice-dictation: company_id required');
+    }
+
+    /**
+     * @returns {Record<string, string>}
+     */
+    _sessionQuery() {
+        if (typeof this.language !== 'string' || this.language.trim() === '') {
+            return {};
+        }
+        return { language: this.language.trim() };
     }
 
     /**
@@ -149,55 +130,101 @@ export class PlatformVoiceDictation extends PlatformElement {
         return this.t('voice_dictation.start');
     }
 
+    /**
+     * @param {Event} event
+     */
+    _onMediaTranscript(event) {
+        if (!(event instanceof Event)) {
+            throw new Error('platform-voice-dictation: transcript event required');
+        }
+        const detail = 'detail' in event ? event.detail : null;
+        if (!detail || typeof detail !== 'object') {
+            throw new Error('platform-voice-dictation: transcript detail required');
+        }
+        if (detail.final !== true) {
+            return;
+        }
+        const text = typeof detail.text === 'string' ? detail.text.trim() : '';
+        if (text.length === 0) {
+            return;
+        }
+        this._heardFinalText = true;
+        this.emit('transcribed', { text, provider: 'voice' });
+    }
+
+    _onMediaError() {
+        this._teardownMedia();
+        this._phase = 'idle';
+        this.toast('toast.voice_dictation.failed', { type: 'error' });
+    }
+
+    _teardownMedia() {
+        if (this._media === null) {
+            return;
+        }
+        this._media.removeEventListener('transcript', this._onTranscriptBound);
+        this._media.removeEventListener('error', this._onErrorBound);
+        this._media.close();
+        this._media = null;
+    }
+
+    async _startSession() {
+        if (typeof window === 'undefined' || !window.isSecureContext) {
+            this.toast('toast.voice_dictation.unavailable_https', { type: 'warning' });
+            return;
+        }
+        if (!hasGetUserMediaApi()) {
+            this.toast('toast.voice_dictation.unavailable_recorder', { type: 'warning' });
+            return;
+        }
+        const companyId = this._resolveCompanyId();
+        const media = new VoiceMediaSession({
+            baseUrl: resolveVoiceHttpOrigin(),
+            sessionId: crypto.randomUUID(),
+            companyId,
+            query: this._sessionQuery(),
+            autoRecord: true,
+        });
+        this._heardFinalText = false;
+        this._media = media;
+        media.addEventListener('transcript', this._onTranscriptBound);
+        this._phase = 'recording';
+        try {
+            await media.connect();
+        } catch (err) {
+            this._teardownMedia();
+            this._phase = 'idle';
+            this.toast('toast.voice_dictation.failed', { type: 'error' });
+            throw err;
+        }
+        media.addEventListener('error', this._onErrorBound);
+    }
+
+    async _stopSession() {
+        this._phase = 'processing';
+        const media = this._media;
+        if (media !== null && media.isConnected === true) {
+            await media.awaitRecordingFinalized(8000);
+        }
+        this._teardownMedia();
+        if (!this._heardFinalText) {
+            this.toast('toast.voice_dictation.empty', { type: 'warning' });
+        }
+        this._phase = 'idle';
+    }
+
     async _onToggle() {
         if (this.disabled || this._phase === 'processing') {
             return;
         }
         if (this._phase === 'recording') {
-            if (this._mediaRecorder !== null && this._mediaRecorder.state === 'recording') {
-                this._mediaRecorder.stop();
-            }
+            await this._stopSession();
             return;
         }
         if (this._phase !== 'idle') {
             return;
         }
-        if (typeof window === 'undefined' || !window.isSecureContext) {
-            this.toast('toast.voice_dictation.unavailable_https', { type: 'warning' });
-            return;
-        }
-        if (!hasGetUserMediaApi() || typeof MediaRecorder === 'undefined') {
-            this.toast('toast.voice_dictation.unavailable_recorder', { type: 'warning' });
-            return;
-        }
-
-        const stream = await getUserMediaCompat({ audio: true });
-        const mimeType = pickVoiceMimeType();
-        this._mediaRecorder = mimeType
-            ? new MediaRecorder(stream, { mimeType })
-            : new MediaRecorder(stream);
-        this._audioChunks = [];
-        const resolvedMime = this._mediaRecorder.mimeType || mimeType || 'audio/webm';
-        this._mediaRecorder.ondataavailable = (e) => {
-            if (e.data.size > 0) {
-                this._audioChunks.push(e.data);
-            }
-        };
-        this._mediaRecorder.onstop = () => {
-            stream.getTracks().forEach((track) => track.stop());
-            this._phase = 'processing';
-            const blob = new Blob(this._audioChunks, { type: resolvedMime });
-            const payload = {
-                audio: blob,
-                file_name: fileNameForMime(resolvedMime),
-            };
-            if (typeof this.language === 'string' && this.language.length > 0) {
-                payload.language = this.language;
-            }
-            this._voice.run(payload);
-        };
-        this._mediaRecorder.start();
-        this._phase = 'recording';
+        await this._startSession();
     }
 
     render() {

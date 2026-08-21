@@ -169,13 +169,17 @@ kubectl exec -n platform deployment/alloy -c alloy -- env | grep OTEL
 
 ## 9. Helm
 
-### 9.1 Первый install: `invalid ownership metadata` у Secret `platform-secrets`
+### 9.1 `invalid ownership metadata` у Secret `platform-secrets`
 
-**Симптомы:** `Release "agent-lab" does not exist. Installing...` затем ошибка про отсутствие `app.kubernetes.io/managed-by: Helm` и аннотаций `meta.helm.sh/release-name` у существующего Secret.
+**Симптомы:** helm upgrade/install падает: нет `app.kubernetes.io/managed-by: Helm` и `meta.helm.sh/release-name` у Secret.
 
-**Причина:** в namespace **`platform`** уже есть **`platform-secrets`**, созданный не через Helm (kubectl, сторонний скрипт), а деплой включает **`platformSecrets.create: true`**.
+**Причина:** **`platform-secrets`** создан не Helm (kubectl apply / импорт при переезде), а чарт включает **`platformSecrets.create: true`**. Precheck раньше пропускал случай «релиз уже есть».
 
-**Решение:** при необходимости сохранить ключи, затем `kubectl delete secret platform-secrets -n platform` и повторить деплой. В GitHub Actions включите вход **`replace_orphan_platform_secret`** в workflow Deploy (удаление секрета перед install). Префлайт: **`deploy/scripts/helm_precheck_install_secret_conflict.sh`**. Подробнее — **`deploy/README.md`** (раздел про первый install).
+**Решение:**
+- Релиз есть: `make k8s-helm-adopt-orphans ORPHANS="secret/platform-secrets"` (CI precheck делает то же сам).
+- Релиза нет: `kubectl delete secret platform-secrets -n platform` или Deploy с **`replace_orphan_platform_secret`**.
+
+Префлайт: **`deploy/scripts/helm_precheck_install_secret_conflict.sh`**.
 
 ### 9.2 `helm upgrade` завис / timeout
 

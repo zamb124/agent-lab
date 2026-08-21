@@ -166,5 +166,8 @@
   },
   "compose": {
     "reply_to": "Ответ на {author}"
-  }
+  },
+  "load_images": "Показать изображения",
+  "images_blocked_hint": "Изображения из письма скрыты",
+  "html_frame_title": "Содержимое письма"
 }

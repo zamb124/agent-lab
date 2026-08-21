@@ -93,6 +93,7 @@ class StoredMailAttachmentRef(StrictBaseModel):
     file_id: str | None = None
     available: bool = True
     parse_error: str | None = None
+    content_id: str | None = None
 
 
 class IspmanagerProvisionConfig(StrictBaseModel):
@@ -388,6 +389,7 @@ class MailAttachmentPublic(StrictBaseModel):
     available: bool = True
     parse_error: str | None = None
     file_id: str | None = None
+    content_id: str | None = None
 
 
 class InboundMailMessagePublic(StrictBaseModel):
@@ -477,6 +479,7 @@ class MailAttachment(StrictBaseModel):
     available: bool = True
     parse_error: str | None = None
     file_id: str | None = None
+    content_id: str | None = None
 
     @model_validator(mode="after")
     def _content_xor_file_id(self) -> MailAttachment:

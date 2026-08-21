@@ -49,7 +49,6 @@ import { callTokenOp, callStatusOp, callTurnOp, callRecordingsListOp,
 import { callPrefsSlice } from '../events/resources/call-prefs.resource.js';
 import { fileUploadCompletedOp } from '../events/resources/files.resource.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
-import { platformVoiceDictationOp } from '@platform/lib/events/factories/platform-voice-dictation.js';
 import { gitResourceUpsertOp, gitResourceGetOp } from '../events/resources/git-resources.resource.js';
 import { chatUiResource } from '../events/resources/chat-ui.resource.js';
 import { createSyncPersistEffect } from '../events/sync-persist.effect.js';
@@ -288,7 +287,6 @@ export class SyncApp extends PlatformApp {
         callPrefsSlice,
         channelCreateAdhocCallOp,
         platformFileCreateOp,
-        platformVoiceDictationOp,
         fileUploadCompletedOp,
         gitResourceUpsertOp,
         gitResourceGetOp,

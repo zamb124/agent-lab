@@ -19,7 +19,6 @@ import {
     workItemCreateForm,
 } from '../events/resources/work-items.resource.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
-import { platformVoiceDictationOp } from '@platform/lib/events/factories/platform-voice-dictation.js';
 import { boardsResource, boardCreateForm } from '../events/resources/boards.resource.js';
 import {
     workQueuesResource,
@@ -85,7 +84,6 @@ export class WorktrackerApp extends PlatformApp {
         workItemCommentsListOp,
         workItemCreateForm,
         platformFileCreateOp,
-        platformVoiceDictationOp,
         boardCreateForm,
         boardsResource,
         workQueuesResource,

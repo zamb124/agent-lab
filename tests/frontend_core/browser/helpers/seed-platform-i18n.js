@@ -6,14 +6,11 @@
 import { waitUntil } from '../helpers/render.js';
 import { getPlatformBus, CoreEvents } from '@platform/lib/events/index.js';
 import { translate } from '@platform/lib/events/effects/i18n.effect.js';
-import { platformVoiceDictationOp } from '@platform/lib/events/factories/platform-voice-dictation.js';
 import platformEn from '../../../../core/i18n/translations/en/platform.json' with { type: 'json' };
-
-export { platformVoiceDictationOp };
 
 /**
  * Wait for bootstrap i18n to settle, then install/pin platform bundle (en).
- * Call after bootstrapTestBus({ factories: [platformVoiceDictationOp] }).
+ * Call after bootstrapTestBus().
  */
 export async function seedPlatformMarkdownEditorI18n() {
     const bus = getPlatformBus();

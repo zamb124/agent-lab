@@ -1,7 +1,8 @@
 """Batch-транскрипция аудиофайла через voice service.
 
-REST-зеркало: POST /voice/api/v1/transcribe (audio/* multipart/form-data,
-поле `file`). Используется CRM/Sync для batch-сценариев. Клиент
+REST: POST /voice/api/v1/transcribe (audio/* multipart/form-data,
+поле `file`). Batch-сценарии (sync, capabilities, файлы). UI-диктовка
+идёт через VoiceMediaSession (WS), не через этот POST. Клиент
 выбирается через `core.ai.runtime.transcribe_audio_bytes(*, company_id,
 override)` — один и тот же tier-резолв, что и для real-time WS.
 """
@@ -20,6 +21,7 @@ from core.authz.models import AuthzObject
 from core.clients.speech_override import SpeechOverride, SpeechProviderName
 from core.context import get_context, require_context
 from core.files.audio_probe import probe_audio_duration_seconds_from_upload
+from core.files.media.ffmpeg_wav import transcode_audio_bytes_to_wav_pcm16_mono
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -49,8 +51,9 @@ class TranscribeResponse(BaseModel):
     summary="Транскрибировать аудиофайл",
     description=(
         "Принимает аудиофайл (multipart/form-data, поле `file`), "
-        "возвращает распознанный текст. Используется для batch-транскрипции "
-        "из CRM и других сервисов платформы. Выбор провайдера — через "
+        "нормализует в WAV 16 kHz mono и возвращает распознанный текст. "
+        "Только batch (sync, capabilities, файлы). UI-диктовка идёт через "
+        "VoiceMediaSession (WS), не через этот POST. Выбор провайдера — через "
         "core.ai.runtime (tier-резолв override -> per-company -> deployment-default)."
     ),
 )
@@ -93,11 +96,26 @@ async def transcribe_audio(
         company_id=company_id,
     )
 
+    try:
+        wav_bytes = transcode_audio_bytes_to_wav_pcm16_mono(
+            audio_bytes=audio_bytes,
+            file_name=filename,
+            content_type=content_type,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+    wav_file_name = "voice-input.wav"
+    wav_content_type = "audio/wav"
+
     result = await transcribe_audio_bytes(
         company_id=company_id,
-        audio_bytes=audio_bytes,
-        file_name=filename,
-        content_type=content_type,
+        audio_bytes=wav_bytes,
+        file_name=wav_file_name,
+        content_type=wav_content_type,
         override=override,
         language=language,
     )
@@ -111,7 +129,7 @@ async def transcribe_audio(
 
     try:
         audio_seconds = await probe_audio_duration_seconds_from_upload(
-            data=audio_bytes, file_name=filename
+            data=wav_bytes, file_name=wav_file_name
         )
     except ValueError as exc:
         logger.warning(

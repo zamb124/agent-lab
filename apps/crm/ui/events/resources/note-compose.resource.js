@@ -1,0 +1,31 @@
+/**
+ * Черновик новой заметки: распознанный текст диктовки до открытия note-page.
+ */
+
+import { createSlice } from '@platform/lib/events/index.js';
+
+export const noteComposeSlice = createSlice({
+    name: 'crm/note_compose',
+    extraInitial: {
+        description: '',
+    },
+    extraEvents: {
+        DESCRIPTION_SET: 'description_set',
+    },
+    actions: {
+        setDescription: 'description_set',
+    },
+    extraReducer: (state, event) => {
+        switch (event.type) {
+            case 'crm/note_compose/description_set': {
+                const payload = event.payload;
+                if (!payload || typeof payload.description !== 'string') {
+                    return state;
+                }
+                return { ...state, description: payload.description };
+            }
+            default:
+                return state;
+        }
+    },
+});

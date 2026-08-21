@@ -166,5 +166,8 @@
   },
   "compose": {
     "reply_to": "Reply to {author}"
-  }
+  },
+  "load_images": "Show images",
+  "images_blocked_hint": "Images in this message are hidden",
+  "html_frame_title": "Message body"
 }

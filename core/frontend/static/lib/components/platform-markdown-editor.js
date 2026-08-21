@@ -817,7 +817,7 @@ export class PlatformMarkdownEditor extends PlatformElement {
         showFormatToggle: { type: Boolean, attribute: 'show-format-toggle' },
         /** Document H2/B/list/code (+ variable inserts). Независимо от showHeader. */
         showFormatToolbar: { type: Boolean, attribute: 'show-format-toolbar' },
-        /** Встроенный <platform-voice-dictation> (batch STT). Независимо от showHeader. */
+        /** Встроенный <platform-voice-dictation> (STT-only WS). Независимо от showHeader. */
         enableVoiceDictation: { type: Boolean, attribute: 'enable-voice-dictation' },
         primaryDisabled: { type: Boolean, attribute: 'primary-disabled' },
         enableVariables: { type: Boolean, attribute: 'enable-variables' },
@@ -1595,11 +1595,13 @@ export class PlatformMarkdownEditor extends PlatformElement {
     }
 
     insertTextAtCursor(text) {
-        if (!text) {
-            return;
+        if (typeof text !== 'string' || text.length === 0) {
+            throw new Error('platform-markdown-editor: insertTextAtCursor text required');
         }
         if (this._isComposeSurface()) {
-            if (!this._editorEl) return;
+            if (!this._editorEl) {
+                throw new Error('platform-markdown-editor: compose editor is not ready');
+            }
             this._editorEl.focus();
             const ok = document.execCommand('insertText', false, text);
             if (!ok) {
@@ -1609,7 +1611,7 @@ export class PlatformMarkdownEditor extends PlatformElement {
             return;
         }
         if (!this._editorView) {
-            return;
+            throw new Error('platform-markdown-editor: editor view is not ready');
         }
         const { from, to } = this._editorView.state.selection.main;
         this._editorView.dispatch({

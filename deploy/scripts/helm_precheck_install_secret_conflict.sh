@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
-# Перед helm upgrade --install с созданием platform-secrets: если релиза ещё нет,
-# а Secret platform-secrets уже есть (kubectl apply / ручной импорт), Helm падает с
-# «invalid ownership metadata». Скрипт выходит с кодом 1 и подсказкой.
+# Перед helm upgrade --install с созданием platform-secrets.
+# Secret без меток Helm (kubectl apply / импорт при переезде) ломает и первый
+# install, и upgrade: «invalid ownership metadata».
 #
-# HELM_DELETE_ORPHAN_PLATFORM_SECRET=1 — удалить такой Secret и выйти с 0 (CI: input replace_orphan_platform_secret).
+# Релиз уже есть — adopt в Helm (значения Secret не трогаем).
+# Релиза нет + HELM_DELETE_ORPHAN_PLATFORM_SECRET=1 — удалить Secret.
+# Релиза нет без флага — exit 1 с подсказкой.
 #
-# Задайте HELM_WILL_CREATE_PLATFORM_SECRET=1 только когда в релиз входит
-# templates/01-platform-secrets.yaml (platformSecrets.create=true), например CI и
-# make k8s-deploy с POSTGRES_PASSWORD.
+# HELM_WILL_CREATE_PLATFORM_SECRET=1 только когда в релиз входит
+# templates/01-platform-secrets.yaml (CI и make k8s-deploy с POSTGRES_PASSWORD).
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 SECRET_NAME="${PLATFORM_SECRET_NAME:-platform-secrets}"
 RELEASE="${HELM_RELEASE:-agent-lab}"
@@ -18,11 +21,20 @@ if [[ "${HELM_WILL_CREATE_PLATFORM_SECRET:-0}" != "1" ]]; then
   exit 0
 fi
 
-if helm status "$RELEASE" -n "$NS" >/dev/null 2>&1; then
+if ! kubectl get secret "$SECRET_NAME" -n "$NS" >/dev/null 2>&1; then
   exit 0
 fi
 
-if ! kubectl get secret "$SECRET_NAME" -n "$NS" >/dev/null 2>&1; then
+managed="$(kubectl get secret "$SECRET_NAME" -n "$NS" -o jsonpath='{.metadata.labels.app\.kubernetes\.io/managed-by}' 2>/dev/null || true)"
+release_name="$(kubectl get secret "$SECRET_NAME" -n "$NS" -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null || true)"
+if [[ "$managed" == "Helm" && "$release_name" == "$RELEASE" ]]; then
+  exit 0
+fi
+
+if helm status "$RELEASE" -n "$NS" >/dev/null 2>&1; then
+  echo "::notice title=Adopt orphan platform-secrets::Secret «${SECRET_NAME}» есть, но без Helm-меток — adopt в релиз «${RELEASE}»." >&2
+  HELM_NAMESPACE="$NS" HELM_RELEASE="$RELEASE" \
+    bash "$SCRIPT_DIR/helm_adopt_orphan_resources.sh" "secret/${SECRET_NAME}"
   exit 0
 fi
 

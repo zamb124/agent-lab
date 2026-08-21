@@ -14,12 +14,12 @@ import {
 } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { setDefaultI18nNamespace } from '@platform/lib/utils/i18n-namespace.js';
-import { seedPlatformMarkdownEditorI18n, platformEn, platformVoiceDictationOp } from '../helpers/seed-platform-i18n.js';
+import { seedPlatformMarkdownEditorI18n, platformEn } from '../helpers/seed-platform-i18n.js';
 import '@platform/lib/components/platform-markdown-editor.js';
 
 async function prepare() {
     resetPlatformState();
-    bootstrapTestBus({ factories: [platformVoiceDictationOp] });
+    bootstrapTestBus();
     setDefaultI18nNamespace('platform');
     await seedPlatformMarkdownEditorI18n();
 }
@@ -124,9 +124,11 @@ describe('platform-markdown-editor document API', () => {
         expect(editor.getValue()).to.equal('hello **world**');
     });
 
-    it('insertTextAtCursor with empty string is a no-op', async () => {
+    it('insertTextAtCursor with empty string throws', async () => {
         const editor = await mountDocument({ value: 'keep' });
-        editor.insertTextAtCursor('');
+        expect(() => editor.insertTextAtCursor('')).to.throw(
+            'platform-markdown-editor: insertTextAtCursor text required',
+        );
         expect(editor.getValue()).to.equal('keep');
     });
 

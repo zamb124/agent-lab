@@ -1,6 +1,6 @@
 /**
  * Утилиты записи голоса через MediaRecorder.
- * Общие для platform-voice-dictation и Sync (message-composer).
+ * Sync message-composer (голосовые сообщения).
  */
 
 /**

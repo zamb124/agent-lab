@@ -83,22 +83,27 @@ require_command "${KCTL%% *}"
 log_section "Helm adopt orphan resources в ${NS} (release=${REL})"
 
 # 1) Удаление legacy
-for ref in "${TO_DELETE[@]}"; do
-  kind="${ref%/*}"
-  name="${ref#*/}"
-  if ! eval "${KCTL} get ${kind} ${name} -n ${NS}" >/dev/null 2>&1; then
-    log_skip "delete legacy ${kind}/${name} (не существует)"
-    continue
-  fi
-  log_do "Удаляю legacy ${kind}/${name}"
-  if ! eval "${KCTL} delete ${kind} ${name} -n ${NS} --ignore-not-found=true" >/dev/null 2>&1; then
-    log_error "Не удалось удалить ${kind}/${name}"
-    exit 1
-  fi
-  log_ok "delete legacy ${kind}/${name}"
-done
+if [ "${#TO_DELETE[@]}" -gt 0 ]; then
+  for ref in "${TO_DELETE[@]}"; do
+    kind="${ref%/*}"
+    name="${ref#*/}"
+    if ! eval "${KCTL} get ${kind} ${name} -n ${NS}" >/dev/null 2>&1; then
+      log_skip "delete legacy ${kind}/${name} (не существует)"
+      continue
+    fi
+    log_do "Удаляю legacy ${kind}/${name}"
+    if ! eval "${KCTL} delete ${kind} ${name} -n ${NS} --ignore-not-found=true" >/dev/null 2>&1; then
+      log_error "Не удалось удалить ${kind}/${name}"
+      exit 1
+    fi
+    log_ok "delete legacy ${kind}/${name}"
+  done
+fi
 
 # 2) Adopt orphans
+if [ "${#TO_ADOPT[@]}" -eq 0 ]; then
+  log_skip "нет ресурсов для adopt"
+else
 for ref in "${TO_ADOPT[@]}"; do
   kind="${ref%/*}"
   name="${ref#*/}"
@@ -120,5 +125,6 @@ for ref in "${TO_ADOPT[@]}"; do
   eval "${KCTL} label ${kind} ${name} -n ${NS} app.kubernetes.io/managed-by=Helm --overwrite" >/dev/null
   log_ok "adopt ${kind}/${name}"
 done
+fi
 
 print_summary

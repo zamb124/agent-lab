@@ -1,106 +1,82 @@
 /**
- * platform-voice-dictation — mic UI + platform/voice_dictation op → transcribed event.
+ * platform-voice-dictation — mic UI + VoiceMediaSession STT-only (VAD final → transcribed).
  */
-
 import {
     fixture,
     fixtureCleanup,
     html,
     expect,
-    elementUpdated,
     oneEvent,
+    elementUpdated,
 } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
-import { setDefaultI18nNamespace } from '@platform/lib/utils/i18n-namespace.js';
-import { getPlatformBus } from '@platform/lib/events/index.js';
-import { seedPlatformMarkdownEditorI18n, platformVoiceDictationOp } from '../helpers/seed-platform-i18n.js';
+import { seedPlatformMarkdownEditorI18n } from '../helpers/seed-platform-i18n.js';
 import '@platform/lib/components/platform-voice-dictation.js';
 
-async function prepare() {
+beforeEach(async () => {
     resetPlatformState();
-    bootstrapTestBus({ factories: [platformVoiceDictationOp] });
-    setDefaultI18nNamespace('platform');
+    bootstrapTestBus();
     await seedPlatformMarkdownEditorI18n();
-}
+});
+
+afterEach(() => {
+    fixtureCleanup();
+});
 
 describe('platform-voice-dictation', () => {
-    beforeEach(async function prepareHook() {
-        this.timeout(20_000);
-        await prepare();
-    });
-
-    afterEach(() => {
-        fixtureCleanup();
-    });
-
-    it('registers custom element and renders idle mic button', async () => {
+    it('registers custom element and starts idle', async () => {
         expect(customElements.get('platform-voice-dictation')).to.exist;
         const el = await fixture(html`<platform-voice-dictation></platform-voice-dictation>`);
-        await elementUpdated(el);
+        expect(el._phase).to.equal('idle');
         const btn = el.shadowRoot.querySelector('button');
         expect(btn).to.exist;
         expect(btn.disabled).to.equal(false);
-        expect(btn.classList.contains('recording')).to.equal(false);
-        expect(btn.classList.contains('processing')).to.equal(false);
+        expect(btn.querySelector('platform-icon').name).to.equal('mic');
     });
 
-    it('disabled reflects to button', async () => {
+    it('disabled attribute disables the button', async () => {
         const el = await fixture(html`<platform-voice-dictation .disabled=${true}></platform-voice-dictation>`);
-        await elementUpdated(el);
-        expect(el.shadowRoot.querySelector('button').disabled).to.equal(true);
+        const btn = el.shadowRoot.querySelector('button');
+        expect(btn.disabled).to.equal(true);
     });
 
-    it('emits transcribed on op succeeded', async () => {
+    it('emits transcribed on VAD final transcript', async () => {
         const el = await fixture(html`<platform-voice-dictation></platform-voice-dictation>`);
-        await elementUpdated(el);
-        const transcribedPromise = oneEvent(el, 'transcribed');
-        getPlatformBus().dispatch(
-            platformVoiceDictationOp.events.SUCCEEDED,
-            {
-                result: { text: '  hello voice  ', provider: 'mock_stt' },
-                request_id: 'test-req-1',
-            },
-            { source: 'system' },
-        );
-        const event = await transcribedPromise;
-        expect(event.detail).to.deep.equal({ text: 'hello voice', provider: 'mock_stt' });
-        expect(el._phase).to.equal('idle');
+        const transcribedP = oneEvent(el, 'transcribed');
+        el._onMediaTranscript(new CustomEvent('transcript', {
+            detail: { text: 'hello world', final: true },
+        }));
+        const event = await transcribedP;
+        expect(event.detail.text).to.equal('hello world');
+        expect(event.detail.provider).to.equal('voice');
+        expect(el._heardFinalText).to.equal(true);
     });
 
-    it('does not emit transcribed on empty text', async () => {
+    it('does not emit transcribed when STT text is empty', async () => {
         const el = await fixture(html`<platform-voice-dictation></platform-voice-dictation>`);
-        await elementUpdated(el);
-        let fired = false;
+        let emitted = false;
         el.addEventListener('transcribed', () => {
-            fired = true;
+            emitted = true;
         });
-        getPlatformBus().dispatch(
-            platformVoiceDictationOp.events.SUCCEEDED,
-            {
-                result: { text: '   ', provider: 'mock_stt' },
-                request_id: 'test-req-2',
-            },
-            { source: 'system' },
-        );
+        el._onMediaTranscript(new CustomEvent('transcript', {
+            detail: { text: '   ', final: true },
+        }));
         await elementUpdated(el);
-        expect(fired).to.equal(false);
-        expect(el._phase).to.equal('idle');
+        expect(emitted).to.equal(false);
+        expect(el._heardFinalText).to.equal(false);
     });
 
-    it('resets phase on op failed', async () => {
+    it('ignores partial transcript frames', async () => {
         const el = await fixture(html`<platform-voice-dictation></platform-voice-dictation>`);
-        el._phase = 'processing';
+        let emitted = false;
+        el.addEventListener('transcribed', () => {
+            emitted = true;
+        });
+        el._onMediaTranscript(new CustomEvent('transcript', {
+            detail: { text: 'partial', final: false },
+        }));
         await elementUpdated(el);
-        getPlatformBus().dispatch(
-            platformVoiceDictationOp.events.FAILED,
-            {
-                error: 'boom',
-                message: 'boom',
-                request_id: 'test-req-3',
-            },
-            { source: 'system' },
-        );
-        await elementUpdated(el);
-        expect(el._phase).to.equal('idle');
+        expect(emitted).to.equal(false);
+        expect(el._heardFinalText).to.equal(false);
     });
 });

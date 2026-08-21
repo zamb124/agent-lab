@@ -84,7 +84,7 @@ MicroK8s (одна нода)
 
 ### Первый `helm install`: «invalid ownership metadata» у Secret `platform-secrets`
 
-Если релиза **`agent-lab`** ещё нет, а в **`platform`** уже есть **`platform-secrets`** (ручной `kubectl`, не Helm), первый деплой с **`platformSecrets.create: true`** падает: Helm не может заявить ресурс без меток **`app.kubernetes.io/managed-by: Helm`** и аннотаций **`meta.helm.sh/release-*`**.
+Если в **`platform`** уже есть **`platform-secrets`** без меток Helm (ручной `kubectl` / импорт при переезде), `helm upgrade --install` с **`platformSecrets.create: true`** падает: нет **`app.kubernetes.io/managed-by: Helm`** и **`meta.helm.sh/release-*`**. Релиз уже стоит — precheck делает adopt. Релиза нет — удалить Secret или галочка **`replace_orphan_platform_secret`**.
 
 Удалите сиротский секрет и повторите деплой (значения возьмутся из GitHub Secrets):
 

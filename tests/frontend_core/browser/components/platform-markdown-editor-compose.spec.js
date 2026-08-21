@@ -17,12 +17,12 @@ import { getPlatformBus, CoreEvents } from '@platform/lib/events/index.js';
 import {
     MARKDOWN_EDITOR_MAX_ATTACHMENT_BYTES,
 } from '@platform/lib/utils/markdown-html.js';
-import { seedPlatformMarkdownEditorI18n, platformEn, platformVoiceDictationOp } from '../helpers/seed-platform-i18n.js';
+import { seedPlatformMarkdownEditorI18n, platformEn } from '../helpers/seed-platform-i18n.js';
 import '@platform/lib/components/platform-markdown-editor.js';
 
 async function prepare() {
     resetPlatformState();
-    bootstrapTestBus({ factories: [platformVoiceDictationOp] });
+    bootstrapTestBus();
     setDefaultI18nNamespace('platform');
     await seedPlatformMarkdownEditorI18n();
 }

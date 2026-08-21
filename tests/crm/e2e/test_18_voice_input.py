@@ -1,7 +1,7 @@
 """
 Тесты batch-транскрипции voice service (platform voice→text).
 
-UI использует `platform/voice_dictation` → POST /voice/api/v1/transcribe.
+UI-диктовка идёт через VoiceMediaSession (WS), не через этот POST.
 Контекст ``company2``: у ``system`` в тестовой БД часто есть ``company_voice_providers``
 (STT litserve), что сильнее deployment-default и даёт ConnectError без поднятого litserve.
 """
@@ -87,3 +87,21 @@ class TestVoiceTranscribe:
         result = _http_json(response)
         transcription = object_str(result.get("text"), field="text")
         assert len(transcription) > 0
+
+    @pytest.mark.asyncio
+    async def test_transcribe_unknown_webm_returns_422(
+        self,
+        voice_client: AsyncClient,
+        unique_id: str,
+        auth_headers_company2: dict[str, str],
+    ) -> None:
+        """Битый WebM не уходит в STT как raw PCM — 422."""
+        _ = unique_id
+        garbage = b"\x1a\x45\xdf\xa3" + b"not-a-webm-payload"
+        files = {"file": ("speech.webm", garbage, "audio/webm")}
+        response = await voice_client.post(
+            "/voice/api/v1/transcribe",
+            files=files,
+            headers=auth_headers_company2,
+        )
+        assert response.status_code == 422

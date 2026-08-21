@@ -251,6 +251,11 @@ components:
   status: backlog
   tier: T0
   deadline: 2026-Q3
+- component: platform-mail-html-body
+  doc_slug: platform-mail-html-body
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
 - component: platform-mail-modal
   doc_slug: platform-mail-modal
   status: backlog

@@ -22,6 +22,61 @@ import {
 } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
 
+/**
+ * Строка `detail` из HTTP-ошибки платформы (не объект `{code, message}`).
+ * @param {object} err
+ * @returns {string | null}
+ */
+function _httpErrorDetailText(err) {
+    if (!err || typeof err !== 'object') {
+        return null;
+    }
+    const body = err.body;
+    if (!body || typeof body !== 'object') {
+        return null;
+    }
+    const detail = body.detail;
+    if (typeof detail === 'string' && detail.length > 0) {
+        return detail;
+    }
+    return null;
+}
+
+/**
+ * 409 active_task_exists — задача уже идёт;
+ * строковый detail — текст с бэка; иначе generic fail.
+ * @param {object} ctx
+ * @param {object} err
+ * @param {object} event
+ * @param {string} alreadyRunningKey
+ * @param {string} failedKey
+ */
+function _toastOnActiveTaskConflict(ctx, err, event, alreadyRunningKey, failedKey) {
+    const code = err && err.body && err.body.detail && err.body.detail.code;
+    if (err && err.status === 409 && code === 'active_task_exists') {
+        ctx.dispatch(
+            CoreEvents.UI_TOAST_SHOW,
+            { type: 'warning', i18n_key: alreadyRunningKey },
+            { causation_id: event.id },
+        );
+        return;
+    }
+    const detailText = _httpErrorDetailText(err);
+    if (detailText !== null) {
+        ctx.dispatch(
+            CoreEvents.UI_TOAST_SHOW,
+            { type: 'error', message: detailText },
+            { causation_id: event.id },
+        );
+        return;
+    }
+    ctx.dispatch(
+        CoreEvents.UI_TOAST_SHOW,
+        { type: 'error', i18n_key: failedKey },
+        { causation_id: event.id },
+    );
+}
+
 function _buildNoteDateFilter(filters) {
     const leaves = [];
     if (typeof filters.date_from === 'string' && filters.date_from.length > 0) {
@@ -244,19 +299,12 @@ export const noteAnalysisDraftRepairOp = createAsyncOp({
         );
     },
     onFailure: (ctx, err, event) => {
-        const code = err && err.body && err.body.detail && err.body.detail.code;
-        if (err && err.status === 409 && code === 'active_task_exists') {
-            ctx.dispatch(
-                CoreEvents.UI_TOAST_SHOW,
-                { type: 'warning', i18n_key: 'crm:toast.note.draft_repair_already_running' },
-                { causation_id: event.id },
-            );
-            return;
-        }
-        ctx.dispatch(
-            CoreEvents.UI_TOAST_SHOW,
-            { type: 'error', i18n_key: 'crm:toast.note.draft_repair_queue_failed' },
-            { causation_id: event.id },
+        _toastOnActiveTaskConflict(
+            ctx,
+            err,
+            event,
+            'crm:toast.note.draft_repair_already_running',
+            'crm:toast.note.draft_repair_queue_failed',
         );
     },
 });
@@ -339,19 +387,12 @@ export const noteAnalyzeStartOp = createAsyncOp({
         );
     },
     onFailure: (ctx, err, event) => {
-        const code = err && err.body && err.body.detail && err.body.detail.code;
-        if (err && err.status === 409 && code === 'active_task_exists') {
-            ctx.dispatch(
-                CoreEvents.UI_TOAST_SHOW,
-                { type: 'warning', i18n_key: 'crm:toast.note.analyze_already_running' },
-                { causation_id: event.id },
-            );
-            return;
-        }
-        ctx.dispatch(
-            CoreEvents.UI_TOAST_SHOW,
-            { type: 'error', i18n_key: 'crm:toast.note.analyze_start_failed' },
-            { causation_id: event.id },
+        _toastOnActiveTaskConflict(
+            ctx,
+            err,
+            event,
+            'crm:toast.note.analyze_already_running',
+            'crm:toast.note.analyze_start_failed',
         );
     },
 });
@@ -376,11 +417,13 @@ export const noteMarkdownFormatOp = createAsyncOp({
             { causation_id: event.id },
         );
     },
-    onFailure: (ctx, _err, event) => {
-        ctx.dispatch(
-            CoreEvents.UI_TOAST_SHOW,
-            { type: 'error', i18n_key: 'crm:toast.note.markdown_format_failed' },
-            { causation_id: event.id },
+    onFailure: (ctx, err, event) => {
+        _toastOnActiveTaskConflict(
+            ctx,
+            err,
+            event,
+            'crm:toast.note.markdown_format_already_running',
+            'crm:toast.note.markdown_format_failed',
         );
     },
 });

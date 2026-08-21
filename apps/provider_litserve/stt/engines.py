@@ -303,28 +303,23 @@ def parse_stt_body(
 
 
 def _decode_audio_to_floats(audio_bytes: bytes) -> tuple[list[float], int]:
-    """Универсальный декод: пробуем soundfile (mp3/wav/ogg/flac), иначе PCM-16 16kHz.
+    """Декод контейнера через soundfile (wav/mp3/ogg/flac). Неизвестный контейнер — ошибка.
 
     ``soundfile`` лежит в группе ``rag`` и является обязательной зависимостью
-    provider_litserve.
+    provider_litserve. Сырой PCM без заголовка не принимается.
     """
+    if not audio_bytes:
+        raise ValueError("STT: пустые аудио-данные")
     try:
         buf = io.BytesIO(audio_bytes)
         data, sr = sf.read(buf, dtype="float32", always_2d=False)
-        if data.ndim == 2:
-            data = data.mean(axis=1)
-        return [float(sample) for sample in data], int(sr)
-    except (RuntimeError, ValueError):
-        pass
-
-    n_samples = len(audio_bytes) // 2
-    if n_samples == 0:
-        raise ValueError("STT: пустые аудио-данные")
-    floats = [
-        int.from_bytes(audio_bytes[offset : offset + 2], "little", signed=True) / 32768.0
-        for offset in range(0, n_samples * 2, 2)
-    ]
-    return floats, 16000
+    except (RuntimeError, ValueError) as exc:
+        raise ValueError(
+            "STT: контейнер не распознан (нужен WAV/FLAC/OGG/MP3)."
+        ) from exc
+    if data.ndim == 2:
+        data = data.mean(axis=1)
+    return [float(sample) for sample in data], int(sr)
 
 
 def _write_temp_wav(floats: list[float], sample_rate: int) -> str:

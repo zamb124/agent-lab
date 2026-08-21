@@ -56,12 +56,45 @@ def _to_addresses(parsed: Message) -> list[str]:
     return [item.strip() for item in to_header.split(",") if item.strip()]
 
 
+def _part_content_id(part: Message) -> str | None:
+    raw = part.get("Content-ID")
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if text == "":
+        return None
+    if text.startswith("<") and text.endswith(">"):
+        text = text[1:-1].strip()
+    if text == "":
+        return None
+    return text.lower()
+
+
 def _is_attachment_part(part: Message) -> bool:
     disposition = str(part.get_content_disposition() or "").lower()
     if disposition == "attachment":
         return True
     filename = part.get_filename()
-    return filename is not None and str(filename).strip() != ""
+    if filename is not None and str(filename).strip() != "":
+        return True
+    content_id = _part_content_id(part)
+    if content_id is None:
+        return False
+    content_type = part.get_content_type()
+    return content_type not in ("text/plain", "text/html")
+
+
+def _filename_for_part(part: Message, content_id: str | None) -> str:
+    filename_raw = part.get_filename()
+    filename = str(filename_raw).strip() if filename_raw is not None else ""
+    if filename != "":
+        return filename
+    if content_id is not None:
+        safe = "".join(ch if ch.isalnum() or ch in ".-_" else "-" for ch in content_id)
+        if safe.strip("-") == "":
+            return "inline"
+        return f"inline-{safe}"
+    return "attachment"
 
 
 def _decode_text_payload(part: Message) -> str | None:
@@ -83,10 +116,8 @@ def _decode_text_payload(part: Message) -> str | None:
 
 
 def _extract_attachment(part: Message) -> MailAttachment:
-    filename_raw = part.get_filename()
-    filename = str(filename_raw).strip() if filename_raw is not None else ""
-    if filename == "":
-        filename = "attachment"
+    content_id = _part_content_id(part)
+    filename = _filename_for_part(part, content_id)
     content_type = part.get_content_type()
     if not content_type or content_type.strip() == "":
         content_type = "application/octet-stream"
@@ -105,6 +136,7 @@ def _extract_attachment(part: Message) -> MailAttachment:
             size=0,
             available=False,
             parse_error=f"payload_decode_failed:{type(exc).__name__}",
+            content_id=content_id,
         )
     if not isinstance(payload, bytes):
         return MailAttachment(
@@ -114,6 +146,7 @@ def _extract_attachment(part: Message) -> MailAttachment:
             size=0,
             available=False,
             parse_error="payload_not_bytes",
+            content_id=content_id,
         )
     if len(payload) == 0:
         return MailAttachment(
@@ -123,6 +156,7 @@ def _extract_attachment(part: Message) -> MailAttachment:
             size=0,
             available=False,
             parse_error="empty_payload",
+            content_id=content_id,
         )
     return MailAttachment(
         filename=filename,
@@ -131,6 +165,7 @@ def _extract_attachment(part: Message) -> MailAttachment:
         size=len(payload),
         available=True,
         parse_error=None,
+        content_id=content_id,
     )
 
 
@@ -161,6 +196,7 @@ def _walk_body_and_attachments(
                             size=0,
                             available=False,
                             parse_error=f"extract_failed:{type(exc).__name__}",
+                            content_id=_part_content_id(part),
                         )
                     )
                 continue
@@ -174,8 +210,6 @@ def _walk_body_and_attachments(
             body_html = _decode_text_payload(parsed)
         else:
             body_text = _decode_text_payload(parsed)
-    if body_text is None and body_html is not None:
-        body_text = body_html
     return body_text, body_html, attachments
 
 
@@ -253,6 +287,7 @@ def strip_attachment_payloads(message: InboundMailMessage) -> InboundMailMessage
                 size=item.size if item.size > 0 else len(item.content),
                 available=False,
                 parse_error=item.parse_error if item.parse_error is not None else "list_meta_only",
+                content_id=item.content_id,
             )
         )
     return message.model_copy(update={"attachments": stripped, "body_text": message.body_text})

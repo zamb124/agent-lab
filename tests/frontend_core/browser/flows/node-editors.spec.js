@@ -15,7 +15,6 @@ import flowsEn from '../../../../core/i18n/translations/en/flows.json' with { ty
 import { editorResource, editorBulkDeleteOp } from '../../../../apps/flows/ui/events/resources/editor.resource.js';
 import { resourcesBundleResource, resourceUpdateOp } from '../../../../apps/flows/ui/events/resources/resources-bundle.resource.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
-import { platformVoiceDictationOp } from '@platform/lib/events/factories/platform-voice-dictation.js';
 import { flowValidateOp, flowsResource } from '../../../../apps/flows/ui/events/resources/flows.resource.js';
 import { modelsListOp } from '../../../../apps/flows/ui/events/resources/models.resource.js';
 import { providersListOp } from '../../../../apps/flows/ui/events/resources/providers.resource.js';
@@ -57,7 +56,6 @@ const FACTORIES = [
     editorResource, editorBulkDeleteOp,
     resourcesBundleResource, resourceUpdateOp,
     platformFileCreateOp,
-    platformVoiceDictationOp,
     flowValidateOp, flowsResource,
     modelsListOp,
     providersListOp,

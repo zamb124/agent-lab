@@ -1,0 +1,13 @@
+component: platform-mail-html-body
+doc_slug: platform-mail-html-body
+tier: T0
+title_ru: Mail HTML Body
+title_en: Mail HTML Body
+import: "@platform/lib/components/platform-mail-html-body.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

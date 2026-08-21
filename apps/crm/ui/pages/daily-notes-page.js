@@ -8,7 +8,7 @@
  *   - useOp('crm/daily_summary')        — AI-сводка одного дня
  *   - useOp('crm/period_summary')       — AI-сводка диапазона
  *   - useOp('crm/task_daily_summary_start') / 'crm/task_period_summary_start' — пересчёт сводки
- *   - <platform-voice-dictation> — STT (запись голоса → создание заметки)
+ *   - <platform-voice-dictation> — STT-only WS (VAD final → создание заметки)
  *   - useOp('crm/note_analyze_start')   — старт AI-анализа заметки
  *   - useOp('crm/entity_cards_bulk')    — batch-загрузка карточек связанных entity
  *
@@ -23,8 +23,9 @@
  *
  * Открытие заметки: страница навигирует на роут `note` (`/crm/notes/:itemId`),
  * редактирование живёт на `note-page`, отдельной модалки нет. Создание новой
- * заметки и распознавание голоса передают `itemId='new'`/`itemId='draft-<ts>'`,
- * `note-page` отвечает за edit-режим.
+ * Создание новой заметки передаёт `itemId='new'`/`itemId='draft-<ts>'`.
+ * Диктовка с тулбара пишет текст в `crm/note_compose.description`, затем
+ * тот же `itemId='new'`; `note-page` / `note-card-view` забирает seed.
  *
  * Открытие связанной entity (chip / related): пока entity-page не реализован,
  * страница показывает информационный toast и не пытается открыть несуществующую
@@ -785,6 +786,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
     constructor() {
         super();
         this._dailyNotesUi = this.useSlice('crm/daily_notes_ui');
+        this._noteCompose = this.useSlice('crm/note_compose');
         this._query = '';
         this._searchMode = 'hybrid';
         this._summaryOpen = false;
@@ -1120,6 +1122,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             this.toast('toast.note.voice_empty', { type: 'warning' });
             return;
         }
+        this._noteCompose.setDescription({ description: detail.text.trim() });
         this.navigate('note', { itemId: 'new' });
     }
 

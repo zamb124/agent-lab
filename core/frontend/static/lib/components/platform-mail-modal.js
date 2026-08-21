@@ -3,7 +3,6 @@
  * modalKind: platform.mail
  */
 import { html, css, nothing } from 'lit';
-import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformModal } from './glass-modal.js';
 import { buttonStyles } from '../styles/shared/button.styles.js';
 import './platform-icon.js';
@@ -14,9 +13,9 @@ import './fields/platform-field.js';
 import './platform-user-chip.js';
 import './platform-markdown-editor.js';
 import './platform-mail-calendar-rail.js';
+import './platform-mail-html-body.js';
 import './platform-palette-color-picker.js';
 import { sanitizeMarkdownEditorHtml } from './platform-markdown-editor.js';
-import { flowsChatMarkdownToHtml } from '../flow-ui/utils/markdown.js';
 import { registerModalKind } from '../utils/modal-registry.js';
 import { platformConfirm } from './platform-confirm-modal.js';
 import { MAIL_EVENTS } from '../events/reducers/mail.js';
@@ -41,6 +40,11 @@ import {
 } from '../utils/mail-threads.js';
 import { reorderByInsertIndex } from '../utils/reorder-by-insert-index.js';
 import { decodeImapModifiedUtf7 } from '../utils/imap-utf7.js';
+import { buildPlatformFileDownloadUrl } from '../utils/platform-files-url.js';
+import {
+    attachmentsWithoutInlineCid,
+    buildCidFileMap,
+} from '../utils/mail-html.js';
 
 const MAIL_FOLDER_INDEX_MIME = 'application/x-platform-mail-folder-index';
 
@@ -155,6 +159,7 @@ export class PlatformMailModal extends PlatformModal {
         _folderInsertIndex: { state: true },
         _editingMailboxBindingId: { state: true },
         _editDraft: { state: true },
+        _cidMaps: { state: true },
     };
 
     static styles = [
@@ -794,9 +799,12 @@ export class PlatformMailModal extends PlatformModal {
                 min-width: 0;
                 max-width: min(720px, 100%);
             }
-            .chat-bubble-row.mine {
-                align-self: flex-end;
-                flex-direction: row-reverse;
+            .chat-bubble-row.has-html {
+                max-width: 100%;
+                align-self: stretch;
+            }
+            .chat-bubble-row.has-html .chat-bubble {
+                width: 100%;
             }
             .chat-bubble-row.theirs {
                 align-self: flex-start;
@@ -904,6 +912,11 @@ export class PlatformMailModal extends PlatformModal {
             .chat-bubble .thread-body-text {
                 padding: 0;
                 max-width: none;
+            }
+            .chat-bubble .thread-body-html {
+                padding: 0;
+                max-width: none;
+                width: 100%;
             }
             .chat-bubble .thread-attachments {
                 padding: var(--space-3) 0 0;
@@ -1634,6 +1647,9 @@ export class PlatformMailModal extends PlatformModal {
         this._folderInsertIndex = -1;
         this._editingMailboxBindingId = null;
         this._editDraft = null;
+        this._cidMaps = {};
+        this._cidInFlight = new Set();
+        this._cidThreadId = null;
         this._searchDebounceTimer = null;
         this._draftSaveTimer = null;
         this._onMailKeydown = (event) => this._handleMailKeydown(event);
@@ -1724,6 +1740,12 @@ export class PlatformMailModal extends PlatformModal {
     willUpdate(changedProperties) {
         super.willUpdate(changedProperties);
         this.title = this.t('title');
+        const threadId = this._mailSelect.value.selectedThreadId;
+        if (this._cidThreadId !== threadId) {
+            this._cidThreadId = threadId;
+            this._cidMaps = {};
+            this._cidInFlight = new Set();
+        }
         if (changedProperties.has('open')) {
             if (this.open) {
                 this._onModalOpened();
@@ -1732,6 +1754,13 @@ export class PlatformMailModal extends PlatformModal {
                 this._listQuery = '';
                 this._expandedThreadIds = [];
             }
+        }
+    }
+
+    updated(changedProperties) {
+        super.updated(changedProperties);
+        if (this.open) {
+            this._hydrateCidMaps();
         }
     }
 
@@ -3380,6 +3409,71 @@ export class PlatformMailModal extends PlatformModal {
         `;
     }
 
+    async _fileIdToDataUrl(fileId) {
+        if (typeof fileId !== 'string' || !fileId) {
+            throw new Error('platform-mail-modal: file_id required for cid data URL');
+        }
+        const url = buildPlatformFileDownloadUrl(fileId);
+        const response = await fetch(url, { credentials: 'include' });
+        if (!response.ok) {
+            throw new Error(
+                `platform-mail-modal: cid download failed file_id=${fileId} status=${response.status}`,
+            );
+        }
+        const blob = await response.blob();
+        return await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                if (typeof reader.result !== 'string') {
+                    reject(new Error('platform-mail-modal: cid data URL missing'));
+                    return;
+                }
+                resolve(reader.result);
+            };
+            reader.onerror = () => {
+                reject(new Error('platform-mail-modal: cid FileReader failed'));
+            };
+            reader.readAsDataURL(blob);
+        });
+    }
+
+    async _ensureCidMap(message) {
+        const uid = typeof message.uid === 'string' ? message.uid : '';
+        if (!uid) {
+            throw new Error('platform-mail-modal: message.uid required for cid map');
+        }
+        if (Object.hasOwn(this._cidMaps, uid) || this._cidInFlight.has(uid)) {
+            return;
+        }
+        const bodyHtml = typeof message.body_html === 'string' ? message.body_html : '';
+        const attachments = Array.isArray(message.attachments) ? message.attachments : [];
+        const fileMap = buildCidFileMap(attachments, bodyHtml);
+        if (Object.keys(fileMap).length === 0) {
+            this._cidMaps = { ...this._cidMaps, [uid]: {} };
+            return;
+        }
+        this._cidInFlight.add(uid);
+        const cidMap = {};
+        try {
+            for (const [contentId, fileId] of Object.entries(fileMap)) {
+                cidMap[contentId] = await this._fileIdToDataUrl(fileId);
+            }
+        } finally {
+            this._cidInFlight.delete(uid);
+        }
+        this._cidMaps = { ...this._cidMaps, [uid]: cidMap };
+    }
+
+    _hydrateCidMaps() {
+        const messages = this._mailSelect.value.selectedThreadMessages;
+        if (!Array.isArray(messages) || messages.length === 0) {
+            return;
+        }
+        for (const message of messages) {
+            this._ensureCidMap(message);
+        }
+    }
+
     _renderThreadAttachments(attachments) {
         if (!Array.isArray(attachments) || attachments.length === 0) {
             return nothing;
@@ -3406,12 +3500,24 @@ export class PlatformMailModal extends PlatformModal {
         `;
     }
 
-    _renderMessageBody(bodyText) {
-        if (typeof bodyText !== 'string' || bodyText.length === 0) {
+    _renderMessageBody(message) {
+        const bodyHtml = typeof message.body_html === 'string' ? message.body_html : '';
+        const bodyText = typeof message.body_text === 'string' ? message.body_text : '';
+        if (bodyHtml.length === 0 && bodyText.length === 0) {
             return nothing;
         }
-        const rendered = flowsChatMarkdownToHtml(bodyText, { streaming: false });
-        return html`<div class="thread-body-text">${unsafeHTML(rendered)}</div>`;
+        const uid = typeof message.uid === 'string' ? message.uid : '';
+        const cidMap = uid && Object.hasOwn(this._cidMaps, uid) ? this._cidMaps[uid] : {};
+        const wrapperClass = bodyHtml.length > 0 ? 'thread-body-html' : 'thread-body-text';
+        return html`
+            <div class=${wrapperClass}>
+                <platform-mail-html-body
+                    .html=${bodyHtml}
+                    .text=${bodyText}
+                    .cidMap=${cidMap}
+                ></platform-mail-html-body>
+            </div>
+        `;
     }
 
     _upcomingEvents() {
@@ -3753,16 +3859,18 @@ export class PlatformMailModal extends PlatformModal {
         const fromLabel = parsed.display.length > 0 ? parsed.display : this.t('empty_sender');
         const hue = hueFromString(parsed.seed);
         const mine = this._isMineMessage(message, mail);
-        const bodyText = typeof message.body_text === 'string' ? message.body_text : '';
+        const bodyHtml = typeof message.body_html === 'string' ? message.body_html : '';
         const timeLabel = message.date
             ? formatPlatformDateTime(message.date, this._localeTag())
             : '';
         const attachments = Array.isArray(message.attachments) ? message.attachments : [];
+        const visibleAttachments = attachmentsWithoutInlineCid(attachments, bodyHtml);
         const uid = typeof message.uid === 'string' ? message.uid : '';
         const messageId = typeof message.message_id === 'string' ? message.message_id : '';
+        const hasHtml = bodyHtml.length > 0;
         return html`
             <div
-                class="chat-bubble-row ${mine ? 'mine' : 'theirs'}"
+                class="chat-bubble-row ${mine ? 'mine' : 'theirs'}${hasHtml ? ' has-html' : ''}"
                 data-uid=${uid}
                 data-message-id=${messageId}
             >
@@ -3792,8 +3900,8 @@ export class PlatformMailModal extends PlatformModal {
                         </platform-button>
                     </div>
                     ${this._renderReplyQuote(message, mail)}
-                    ${this._renderMessageBody(bodyText)}
-                    ${this._renderThreadAttachments(attachments)}
+                    ${this._renderMessageBody(message)}
+                    ${this._renderThreadAttachments(visibleAttachments)}
                 </div>
             </div>
         `;

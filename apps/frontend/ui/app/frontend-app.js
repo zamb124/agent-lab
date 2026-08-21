@@ -16,7 +16,6 @@ import { CoreAuthEvents } from '@platform/lib/events/effects/auth.effect.js';
 import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
-import { platformVoiceDictationOp } from '@platform/lib/events/factories/platform-voice-dictation.js';
 
 import { apiKeysResource } from '../events/resources/api-keys.resource.js';
 import { secretsVariablesResource } from '@platform/lib/events/resources/secrets-variables.resource.js';
@@ -421,7 +420,6 @@ export class FrontendApp extends PlatformApp {
         cookieConsentRecordOp,
         cookieConsentSlice,
         platformFileCreateOp,
-        platformVoiceDictationOp,
     ];
 
     constructor() {

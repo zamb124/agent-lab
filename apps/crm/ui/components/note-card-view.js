@@ -1482,6 +1482,8 @@ export class CRMNoteCardView extends PlatformElement {
         this._attachmentDelete = this.useOp(ATTACHMENT_DELETE_OP);
         this._entitySearch = this.useOp(ENTITY_SEARCH_OP);
         this._graphView = this.useSlice('crm/graph_view');
+        this._noteCompose = this.useSlice('crm/note_compose');
+        this._draftEditHydrated = false;
         this._uploadTargetMode = 'edit';
 
         this._crmSidebarDefaultNsSel = this.select(selectCrmSidebarOrDefaultNamespace);
@@ -1921,11 +1923,28 @@ export class CRMNoteCardView extends PlatformElement {
             this._contextSearchQuery = ctxLabel;
         }
     }
+    _takeComposeDescription() {
+        const slice = this._noteCompose.value;
+        if (!slice || typeof slice.description !== 'string') {
+            throw new Error('crm-note-card-view: crm/note_compose.description must be string');
+        }
+        const seed = slice.description;
+        if (seed.length === 0) {
+            return '';
+        }
+        this._noteCompose.setDescription({ description: '' });
+        return seed;
+    }
+
     _hydrateEditFromNote() {
         const note = this.note;
         if (note === null) {
+            if (this._draftEditHydrated) {
+                return;
+            }
+            this._draftEditHydrated = true;
             this._editName = '';
-            this._editDescription = '';
+            this._editDescription = this._takeComposeDescription();
             this._editDate = '';
             this._editTags = [];
             this._editAttachmentIds = [];
@@ -1947,6 +1966,7 @@ export class CRMNoteCardView extends PlatformElement {
             this._contextSearchFilteredNoMatch = false;
             return;
         }
+        this._draftEditHydrated = false;
         this._editName = typeof note.name === 'string' ? note.name : '';
         this._editDescription = typeof note.description === 'string' ? note.description : '';
         const dateAttr = note.attributes && typeof note.attributes === 'object'

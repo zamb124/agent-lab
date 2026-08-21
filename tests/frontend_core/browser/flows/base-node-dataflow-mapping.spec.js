@@ -5,7 +5,6 @@ import { registerFactory, collectFactories } from '@platform/lib/events/index.js
 import { editorResource } from '../../../../apps/flows/ui/events/resources/editor.resource.js';
 import { resourcesBundleResource } from '../../../../apps/flows/ui/events/resources/resources-bundle.resource.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
-import { platformVoiceDictationOp } from '@platform/lib/events/factories/platform-voice-dictation.js';
 import {
     codeLspSessionOp,
     codeDocumentationOp,
@@ -25,7 +24,6 @@ const FACTORIES = [
     editorResource,
     resourcesBundleResource,
     platformFileCreateOp,
-    platformVoiceDictationOp,
     codeLspSessionOp,
     codeDocumentationOp,
     codeTemplatesOp,

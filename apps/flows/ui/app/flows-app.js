@@ -113,7 +113,6 @@ import {
     flowsDocumentsOp,
     flowsDocumentsSearchOp,
 } from '../events/resources/documents-browse.resource.js';
-import { platformVoiceDictationOp } from '@platform/lib/events/factories/platform-voice-dictation.js';
 import { apiConsoleRunOp } from '../events/resources/api-console.resource.js';
 import { editorResource, editorBulkDeleteOp, stickyNoteUpsertOp } from '../events/resources/editor.resource.js';
 import { executionUiSlice } from '../events/resources/execution-ui.resource.js';
@@ -333,7 +332,6 @@ export class FlowsApp extends PlatformApp {
         flowsCatalogsOp,
         flowsDocumentsOp,
         flowsDocumentsSearchOp,
-        platformVoiceDictationOp,
         apiConsoleRunOp,
         editorResource,
         editorBulkDeleteOp,

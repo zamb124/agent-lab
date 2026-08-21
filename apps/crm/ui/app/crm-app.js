@@ -118,7 +118,6 @@ import {
     attachmentDeleteOp,
 } from '../events/resources/attachments.resource.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
-import { platformVoiceDictationOp } from '@platform/lib/events/factories/platform-voice-dictation.js';
 
 import '../components/crm-sidebar.js';
 import '../components/sheets/crm-workspace-picker-sheet.js';
@@ -154,6 +153,7 @@ import '../modals/activity-task-create-modal.js';
 import { graphUiSlice } from '../events/resources/graph-ui.resource.js';
 import { graphViewSlice } from '../events/resources/graph-view.resource.js';
 import { dailyNotesUiSlice } from '../events/resources/daily-notes-ui.resource.js';
+import { noteComposeSlice } from '../events/resources/note-compose.resource.js';
 import { createCrmPersistEffect } from '../events/crm-persist.effect.js';
 import { createCrmGraphLegacyRoutesEffect } from '../events/crm-graph-legacy-routes.effect.js';
 import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
@@ -335,10 +335,10 @@ export class CRMApp extends PlatformApp {
         attachmentUploadOp,
         attachmentDeleteOp,
         platformFileCreateOp,
-        platformVoiceDictationOp,
         graphUiSlice,
         graphViewSlice,
         dailyNotesUiSlice,
+        noteComposeSlice,
     ];
 
     static styles = [

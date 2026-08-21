@@ -27,8 +27,8 @@ export async function fetchFlowUIProfile({ target, headers = {}, credentials = '
 
 export function createLocalFlowUIProfile(kind = 'editor_test') {
     if (!FLOW_UI_PROFILE_KINDS.includes(kind)) throw new Error(`Unknown Flow UI profile ${kind}`);
-    // editor_test runs in production iframe without PlatformApp factories —
-    // voice chrome requires platform/voice_dictation and must stay off.
+    // editor_test runs in production iframe without PlatformApp —
+    // voice chrome requires a platform EventBus and must stay off.
     const voice = kind !== 'editor_test';
     return Object.freeze({
         viewer: Object.freeze({

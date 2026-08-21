@@ -123,6 +123,7 @@ Reading:
 - triage: star / archive / trash / delete forever; shortcuts E / # / S;
 - `rag_index_status`: pending = пульс-молния; failed = молния → `MESSAGE_RAG_INDEX_REQUESTED`;
 - drafts folder open → compose; compose autosave draft.
+- **Тело письма:** только `<platform-mail-html-body>`. Непустой `body_html` → sandboxed iframe (`srcdoc`, DOMPurify, CSP `script-src 'none'`, sandbox без `allow-scripts` кроме WebKit srcdoc). Plaintext → `pre-wrap` + autolink, не markdown. Remote `http(s)` картинки выкл. до «Показать изображения» на экземпляр. `cid:` → `data:` URL по `content_id` + `file_id`. Inline CID не дублировать в скрепках. `body_text` и `body_html` независимы: MIME не копирует HTML в plaintext; snippet/RAG — `html_to_visible_text` если нет `text/plain`.
 
 Settings:
 - **Мои ящики**: цвет, default; personal **Edit** (раскрываемая карточка: hosts/ports/ssl/password + Check login + Save); форма «Подключить свой ящик» (presets Gmail/Yandex/Mail.ru/Custom + healthcheck); personal unbind;

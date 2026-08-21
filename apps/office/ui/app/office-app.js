@@ -74,7 +74,6 @@ import { documentEditorConfigOp } from '../events/resources/editor.resource.js';
 import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 import { buildOfficeAssistantContext } from '../_helpers/platform-assistant-context.js';
-import { platformVoiceDictationOp } from '@platform/lib/events/factories/platform-voice-dictation.js';
 
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/office-sidebar.js';
@@ -137,7 +136,6 @@ export class OfficeApp extends PlatformApp {
     }
 
     static factories = [
-        platformVoiceDictationOp,
         integrationStatusOp,
         namespacesResource,
         namespaceCreateForm,

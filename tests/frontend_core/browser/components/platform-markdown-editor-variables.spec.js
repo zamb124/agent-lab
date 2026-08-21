@@ -12,12 +12,12 @@ import {
 } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { setDefaultI18nNamespace } from '@platform/lib/utils/i18n-namespace.js';
-import { seedPlatformMarkdownEditorI18n, platformEn, platformVoiceDictationOp } from '../helpers/seed-platform-i18n.js';
+import { seedPlatformMarkdownEditorI18n, platformEn } from '../helpers/seed-platform-i18n.js';
 import '@platform/lib/components/platform-markdown-editor.js';
 
 async function prepare() {
     resetPlatformState();
-    bootstrapTestBus({ factories: [platformVoiceDictationOp] });
+    bootstrapTestBus();
     setDefaultI18nNamespace('platform');
     await seedPlatformMarkdownEditorI18n();
 }

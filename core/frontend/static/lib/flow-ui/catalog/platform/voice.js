@@ -4,7 +4,6 @@
  */
 
 import { html } from '../../../lit-shim.js';
-import { hasFactory } from '../../../events/factory-registry.js';
 import { hasPlatformBus } from '../../../events/bus-singleton.js';
 import '../../../components/platform-voice-dictation.js';
 import { flowUIGlyph } from '../flow-ui-glyph.js';
@@ -16,7 +15,7 @@ import {
 import { flowUIText } from '../../utils/text.js';
 
 export function voiceCapabilityAllowed(host) {
-    if (!hasPlatformBus() || !hasFactory('platform/voice_dictation')) {
+    if (!hasPlatformBus()) {
         return false;
     }
     const policy = host.controller?.document?.policy;
@@ -102,6 +101,7 @@ function renderDictationControl(host, component, textArea, dense) {
         component,
         html`<platform-voice-dictation
             density=${dense ? 'dense' : 'default'}
+            company-id=${typeof host.companyId === 'string' ? host.companyId : ''}
             ?disabled=${!interactive}
             @transcribed=${(event) => {
                 appendSpokenText(host, textArea, event.detail?.text);

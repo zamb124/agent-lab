@@ -64,4 +64,3 @@ import './modals/flows-preview-share-modal.js';
 import './modals/flows-interface-template-modal.js';
 
 export { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
-export { platformVoiceDictationOp } from '@platform/lib/events/factories/platform-voice-dictation.js';

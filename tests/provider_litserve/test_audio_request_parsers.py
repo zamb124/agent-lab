@@ -172,12 +172,16 @@ def test_parse_vad_body_missing_audio_raises_value_error(unique_id):
     assert exc_info.value.status_code == 422
 
 
-def test_decode_audio_to_floats_falls_back_to_raw_pcm16():
+def test_decode_audio_to_floats_rejects_raw_pcm16():
     pcm = struct.pack("<10h", *([16384] * 10))
-    floats, sr = _decode_audio_to_floats(pcm)
-    assert sr == 16000
-    assert len(floats) == 10
-    assert all(abs(v - 0.5) < 0.01 for v in floats)
+    with pytest.raises(ValueError, match="контейнер не распознан"):
+        _decode_audio_to_floats(pcm)
+
+
+def test_decode_audio_to_floats_rejects_webm_magic():
+    webm = b"\x1a\x45\xdf\xa3" + b"\x00" * 64
+    with pytest.raises(ValueError, match="контейнер не распознан"):
+        _decode_audio_to_floats(webm)
 
 
 def test_decode_audio_to_floats_decodes_real_wav_via_soundfile():

@@ -193,11 +193,12 @@ Capabilities `voice.transcribe_audio` / `voice.synthesize_speech` для isolate
 ## Batch-транскрипция
 
 `POST /voice/api/v1/transcribe` (multipart `file`):
+- Перед STT контейнер нормализуется в WAV PCM s16le mono 16 kHz через ffmpeg (`core/files/media/ffmpeg_wav.py`). Неизвестный/битый контейнер → **422**, не «успех» с пустым текстом.
 - `voice_resolver.get_stt_client(company_id=ctx.company.company_id)` → `stt.transcribe_audio(...)`.
-- Длительность через `probe_audio_duration_seconds_from_upload` (ffprobe). Если недоступна — usage пропускается с предупреждением `voice.transcribe.stt_usage_skipped` (запись расходов не пишется).
+- Длительность через `probe_audio_duration_seconds_from_upload` (ffprobe) по нормализованному WAV. Если недоступна — usage пропускается с предупреждением `voice.transcribe.stt_usage_skipped` (запись расходов не пишется).
 - Ответ: `TranscribeResponse(text: str, provider: str)`.
 
-**UI dictation (браузер):** единственный канон — `<platform-voice-dictation>` + factory `platform/voice_dictation` → тот же `POST /voice/api/v1/transcribe`. PME встраивает компонент по умолчанию (`enableVoiceDictation`). Сервисные прокси (`/crm/api/v1/entities/voice-input` и аналоги) и локальные MediaRecorder+op в `apps/**` запрещены.
+**UI dictation (браузер):** единственный канон — `<platform-voice-dictation>` → `VoiceMediaSession` STT-only (PCM 16 kHz → WS `/voice/api/ws/session/{id}` → серверный VAD → `transcript` `final=true` → событие `transcribed`). Без `VoiceAgentBridge` / A2A / TTS. PME встраивает компонент по умолчанию (`enableVoiceDictation`). Сервисные прокси (`/crm/api/v1/entities/voice-input` и аналоги) и локальные MediaRecorder+HTTP-op в `apps/**` запрещены. `POST /voice/api/v1/transcribe` — только файл/batch (sync, capabilities), не UI-кнопка «Диктовать».
 
 Любой **backend**-сервис кроме `apps/sync` обращается **только через** `ServiceClient("voice", "/voice/api/v1/transcribe")`. Прямой вызов `MediaTranscriber` из HTTP-хендлеров вне `sync` — запрещён.
 
@@ -218,8 +219,8 @@ Capabilities `voice.transcribe_audio` / `voice.synthesize_speech` для isolate
 | Условие | Кнопка микрофона | Технология |
 |---|---|---|
 | `VoiceInput` `mode=session`, `capabilities.voice`, готова инфраструктура voice + A2A | переключение эфира | `VoiceMediaSession` + `VoiceAgentBridge`, WS `/voice/api/ws/session/{id}` |
-| `VoiceInput` `mode=session`, инфраструктура неполная (при разрешённом voice) | диктовка в textarea | `<platform-voice-dictation>` → `POST /voice/api/v1/transcribe` |
-| `VoiceInput` `mode=dictation`, `capabilities.voice` | диктовка в bound field | `<platform-voice-dictation>` |
+| `VoiceInput` `mode=session`, инфраструктура неполная (при разрешённом voice) | диктовка в textarea | `<platform-voice-dictation>` → `VoiceMediaSession` STT-only |
+| `VoiceInput` `mode=dictation`, `capabilities.voice` | диктовка в bound field | `<platform-voice-dictation>` → `VoiceMediaSession` STT-only |
 | нет `VoiceInput` в document | нет mic | — |
 
 Потоковая озвучка ответа (`feedStreamTtsFromA2aResult` → WS `speak`): при видимой surface и включённом pref `platform:voice:tts_output_enabled` universal runtime держит tts-only `VoiceMediaSession`; duplex переносит target на свою сессию. Команды буферизуются до `OPEN`, длинный text режется по `VOICE_WS_SPEAK_TEXT_CHUNK_MAX`. Artifact projection сохраняет wire order и не озвучивает data/raw/url или hidden reasoning без policy.

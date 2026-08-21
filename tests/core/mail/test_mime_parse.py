@@ -73,3 +73,49 @@ def test_strip_attachment_payloads_clears_bytes_keeps_meta() -> None:
     assert stripped.attachments[0].content == b""
     assert stripped.attachments[0].size == len(b"payload-bytes")
     assert stripped.attachments[0].available is False
+
+
+def test_parse_html_only_does_not_copy_into_body_text() -> None:
+    raw = (
+        b"From: a@example.com\r\n"
+        b"To: b@example.com\r\n"
+        b"Subject: html-only\r\n"
+        b"MIME-Version: 1.0\r\n"
+        b'Content-Type: text/html; charset="utf-8"\r\n'
+        b"\r\n"
+        b"<html><body><p>T-Bank receipt</p></body></html>\r\n"
+    )
+    message = parse_inbound_rfc822("11", raw)
+    assert message.body_html is not None
+    assert "T-Bank receipt" in message.body_html
+    assert message.body_text is None
+
+
+def test_parse_inline_cid_image_sets_content_id() -> None:
+    raw = (
+        b"From: a@example.com\r\n"
+        b"Subject: cid\r\n"
+        b"MIME-Version: 1.0\r\n"
+        b'Content-Type: multipart/related; boundary="b1"\r\n'
+        b"\r\n"
+        b"--b1\r\n"
+        b"Content-Type: text/html; charset=utf-8\r\n"
+        b"\r\n"
+        b'<html><body><img src="cid:logo@tbank"></body></html>\r\n'
+        b"--b1\r\n"
+        b"Content-Type: image/png\r\n"
+        b"Content-ID: <logo@tbank>\r\n"
+        b"Content-Transfer-Encoding: base64\r\n"
+        b"\r\n"
+        b"aW5saW5l\r\n"
+        b"--b1--\r\n"
+    )
+    message = parse_inbound_rfc822("12", raw)
+    assert message.body_html is not None
+    assert "cid:logo@tbank" in message.body_html
+    assert message.body_text is None
+    assert len(message.attachments) == 1
+    assert message.attachments[0].content_id == "logo@tbank"
+    assert message.attachments[0].available is True
+    assert message.attachments[0].content == b"inline"
+
