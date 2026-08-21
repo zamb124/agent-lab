@@ -9,22 +9,23 @@ alwaysApply: false
 См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
 Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
 
-Платформа разворачивается единым **Helm-чартом** в **MicroK8s** кластере из двух нод. Один источник правды — `deploy/helm/agent-lab/`. Никаких Docker Compose в проде, никаких ручных `ufw`-правил, никаких отдельных bootstrap-скриптов на нодах.
+Платформа разворачивается единым **Helm-чартом** в **MicroK8s** на одной ноде. Один источник правды — `deploy/helm/agent-lab/`. Никаких Docker Compose в проде, никаких ручных `ufw`-правил.
 
 ## Кластер
 
 | Роль | IP | Лейблы | Что бежит |
 |---|---|---|---|
-| Master | `84.38.184.105` | `kubernetes.io/hostname=master` | Postgres, Redis, Loki, Tempo, Grafana, все приложения и воркеры, LiveKit, Coturn, OnlyOffice, ingress-nginx |
-| GPU Worker | `77.91.94.165` | `accelerator=nvidia-gpu` | только `provider_litserve`. `voice` — на master: GPU тянет GHCR ~1 час на 5 GiB, helm `--wait` иначе висит. Новый GPU-образ: `make k8s-gpu-sync` + Deploy `roll_litserve=true`. |
+| Master + GPU | `31.192.111.33` | `kubernetes.io/hostname=master`, `accelerator=nvidia-gpu` | Postgres, Redis, Loki, Tempo, Grafana, все приложения и воркеры, LiveKit, Coturn, OnlyOffice, ingress, `provider_litserve`, NVIDIA device plugin |
 
-Связь между нодами — через Calico/Flannel CNI. Postgres и Redis доступны из любой ноды по ClusterIP `postgres.platform.svc.cluster.local:5432` / `redis.platform.svc.cluster.local:6379` — без проброса портов на хост и `ufw allow`.
+Taint `dedicated=gpu` не ставится. `ytai.tech` живёт на `84.38.184.105`, не namespace `platform`, не трогать.
+
+Связь внутри кластера — через CNI. Postgres и Redis — ClusterIP `postgres.platform.svc.cluster.local:5432` / `redis.platform.svc.cluster.local:6379`.
 
 **OpenFGA:** deploy/config (store, model, API URL, credentials) — **`authorization.mdc`** + Helm/`conf.json` секция `openfga`. Не дублировать ACL-логику в приложении.
 
-Домены apex (multi-brand): **primary** `linnex.io`, **legacy** `humanitec.ru` (и другие из `platform_brands`). DNS `@` и `*` на оба apex → `84.38.184.105`. Smoke: [`deploy/docs/multi-brand-prod-smoke.md`](../../deploy/docs/multi-brand-prod-smoke.md).
+Домены apex (multi-brand): **primary** `linnex.io`, **legacy** `humanitec.ru` (и другие из `platform_brands`). DNS `@` и `*` на оба apex → `31.192.111.33`. Smoke: [`deploy/docs/multi-brand-prod-smoke.md`](../../deploy/docs/multi-brand-prod-smoke.md).
 
-Одноразовая настройка нод — `deploy/cluster-setup.md` (установка MicroK8s, `microk8s add-node`/`join`, `microk8s enable gpu`, лейбл `accelerator=nvidia-gpu`).
+Одноразовая настройка ноды — `deploy/cluster-setup.md` (`bootstrap-master.sh` + `bootstrap-nvidia.sh`, лейбл `accelerator=nvidia-gpu`).
 
 ## Helm-чарт
 
@@ -157,11 +158,11 @@ PWA-маршруты (`/manifest.json`, `/sw.js`, `/offline.html`, `/.well-known
 
 ## DNS
 
-A-записи у регистратора на `84.38.184.105` для каждого apex: `@`, `*` (и отдельные `livekit`, `onlyoffice`, `grafana`, `cdn`, `api` при multi-brand setup). Скрипт: `deploy/scripts/setup-brand-dns.sh`. Primary apex — `linnex.io`; `humanitec.ru` — legacy regression.
+A-записи у регистратора на `31.192.111.33` для каждого apex: `@`, `*` (и отдельные `livekit`, `onlyoffice`, `grafana`, `cdn`, `api` при multi-brand setup). Скрипт: `deploy/scripts/setup-brand-dns.sh`. Primary apex — `linnex.io`; `humanitec.ru` — legacy regression.
 
-## GPU-нода (provider_litserve)
+## GPU (provider_litserve на master)
 
-LitServe — единственный под на GPU-ноде через `nodeSelector: accelerator=nvidia-gpu` + `tolerations: nvidia.com/gpu`. Манифест: `templates/50-gpu/litserve.yaml`.
+LitServe на `master` через `litserve.nodeName: master` + `gpuNodeNames: [master]` → `nvidia.com/gpu: 1`. Манифест: `templates/50-gpu/litserve.yaml`. Taint `dedicated=gpu` не используется.
 
 - Образ: **отдельный** `ghcr.io/zamb124/agent-lab-gpu:<image.tag>` (Python 3.14 GIL — `Dockerfile.gpu` + `Dockerfile.base.gpu`). Не общий 3.14t-стек, так как `torchaudio` (через `silero_vad`) не имеет cp314t wheels — см. секцию "HTTP-сервер и Python runtime". Helm подключает через `litserve.image`, deploy workflow передаёт `--set litserve.image="${IMAGE_GPU}:${tag}"`. Command: `granian --interface asgi apps.provider_litserve.main:app ...` (см. `templates/50-gpu/litserve.yaml`).
 - ENV: `PROVIDER_LITSERVE__INFRA__BACKEND=flagllm`, `PROVIDER_LITSERVE__INFRA__ACCELERATOR=cuda`, `MODEL_ID=Qwen/Qwen3-Reranker-0.6B`, `EMBEDDING_MODEL_ID=Qwen/Qwen3-Embedding-0.6B`, `HF_TOKEN` из `platform-secrets`.
@@ -171,12 +172,12 @@ LitServe — единственный под на GPU-ноде через `nodeS
 - Доступ от других сервисов: ClusterIP `provider-litserve.platform.svc.cluster.local:8014` (env `PROVIDER_LITSERVE__API__BASE_URL=http://provider-litserve:8014/v1` — задано в `agentlab.appEnv`).
 - Внешний URL: `https://linnex.io/litserve/*` (primary); `https://humanitec.ru/litserve/*` (legacy).
 
-NVIDIA driver и `nvidia-container-toolkit` ставятся на GPU-ноду один раз (`microk8s enable gpu` или скрипт из `deploy/cluster-setup.md`). На уровне Pod больше ничего настраивать не нужно — Device Plugin сам пробрасывает `/dev/nvidia*` при request `nvidia.com/gpu`.
+NVIDIA driver и `nvidia-container-toolkit` ставит `deploy/scripts/bootstrap-nvidia.sh` (из `bootstrap-master.sh`). Device Plugin пробрасывает `/dev/nvidia*` при request `nvidia.com/gpu`.
 
 ### Smoke-тест GPU
 
 ```bash
-kubectl get pods -n platform -o wide | grep provider-litserve   # должен быть на GPU-ноде
+kubectl get pods -n platform -o wide | grep provider-litserve   # на master
 kubectl exec -n platform deployment/provider-litserve -- nvidia-smi
 curl -fsS https://linnex.io/litserve/health
 # legacy regression:
@@ -191,7 +192,7 @@ CI (`.github/workflows/deploy.yml`, `workflow_dispatch` или push в `main`):
 2. `deploy` job: `helm upgrade --install agent-lab ./deploy/helm/agent-lab --namespace platform --create-namespace --set image.tag=<sha> ...`; секреты из GitHub Actions передаются через `deploy/scripts/helm_platform_secrets_json.sh` и `--set-json platformSecrets=...` (`create: true` внутри JSON).
 3. Verification: `kubectl get pods -n platform`.
 
-Никаких SSH/SCP/`docker compose` в CI. Доступ к кластеру — секрет `KUBECONFIG_B64` (base64 от `~/.kube/config` master).
+Никаких SSH/SCP/`docker compose` в CI. Доступ к кластеру — секрет `KUBECONFIG_B64` из `deploy/scripts/kubeconfig-for-github-actions.sh` (`https://31.192.111.33:16443`, не `127.0.0.1` из `microk8s config`).
 
 Локально: `make k8s-lint`, `make k8s-template`, `make k8s-deploy IMAGE_TAG=<sha>`, `make k8s-status`, `make k8s-logs SVC=frontend`, `make k8s-rollback`, `make k8s-uninstall` (PVC сохраняются). Полный список секретов и переменных — `deploy/README.md`.
 
@@ -237,18 +238,15 @@ make app             # все Python сервисы локально через 
 
 Тесты — `docker-compose-test.yaml` (`make test`, `make test-up/down`).
 
-## Что не покрывает чарт (одноразовая ручная настройка)
+## Что не покрывает чарт (одноразовая настройка)
 
-- Установка MicroK8s (`snap install microk8s`).
-- `microk8s enable dns ingress cert-manager hostpath-storage gpu`.
-- `microk8s add-node` на master, `microk8s join` на GPU.
-- `kubectl label node <gpu-node> accelerator=nvidia-gpu`.
-- DNS-01 webhook для wildcard `*.linnex.io` и `*.humanitec.ru` (cert-manager-webhook-regru или аналог).
-- A-записи у регистратора домена.
-- Создание секрета `KUBECONFIG_B64` в GitHub Settings.
+- SSH: pubkey в `/root/.ssh/authorized_keys`, затем `deploy/scripts/harden-ssh.sh` (из `bootstrap-master.sh`).
+- `bootstrap-master.sh`: NVIDIA, MicroK8s, аддоны `dns hostpath-storage ingress cert-manager`, лейбл `accelerator=nvidia-gpu`. Device plugin — в чарте, не addon `gpu`. Второй ноды нет (`join-cluster.sh` не в happy path).
+- Whitelist Reg.ru API = `31.192.111.33`. DNS и TLS: `setup-brand-dns.sh` / `setup-wildcard-tls.sh` (в CI — с egress master).
+- `KUBECONFIG_B64`: `bash deploy/scripts/kubeconfig-for-github-actions.sh` + `gh secret set`.
 
 Все шаги — `deploy/cluster-setup.md`.
 
 ## Параллельный сервис
 
-На master также крутится отдельный проект `ytai.tech` (порт 8000, отдельный ingress) — не трогать, живёт вне `platform` namespace.
+`ytai.tech` живёт на `84.38.184.105`, не namespace `platform`, не трогать.

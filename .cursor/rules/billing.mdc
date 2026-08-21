@@ -163,7 +163,7 @@ Observability: `traced_operation("voice.tts.pronunciation.transform")` — бе�
 3. `OrderId` ≤ 50 символов: `{company_id}:{hex12}` (`new_payment_transaction_id`). `company_id` из id до первого `:`.
 4. Token запроса и HTTP-уведомления: корневые скаляры без `Token`/`DATA`/`Receipt` + `Password` → сортировка ключей → конкатенация значений → SHA-256 hex (`compute_tinkoff_token`). Bool в нотификации — `true`/`false`.
 5. Ответ Init: `PaymentId` + `PaymentURL`. Нет URL / `Success=false` → **raise**.
-6. UI редиректит на `PaymentURL`. Success/Fail URL — `{subdomain}.{PRIMARY_DOMAIN}/billing?payment=...` (локально `*.localhost`).
+6. UI редиректит на `PaymentURL`. Success/Fail URL — `{subdomain}.{apex Host}/billing?payment=...` (`payment_browser_return_url` по `Context.host`, не `PRIMARY_DOMAIN`).
 7. `NotificationURL` — `{platform_public_base_url}/api/v1/payments/webhook/{registry_name}` (стабильный HTTPS, не company-subdomain). Локально банк до `*.localhost` не достучится — сверка через `POST /v2/CheckOrder` в `payment_sync_tick`.
 8. Webhook: JSON POST, ответ **HTTP 200 тело ровно `OK`**. Неверный Token → 200 `OK` без зачисления.
 9. Зачисление баланса **только** на `Status=CONFIRMED`. `AUTHORIZED` (и прочие pending) баланс не трогают. `REJECTED` / `AUTH_FAIL` / `DEADLINE_EXPIRED` / `CANCELED` → `failed`.
@@ -175,7 +175,7 @@ Observability: `traced_operation("voice.tts.pronunciation.transform")` — бе�
 | URL | Кто ходит | Значение |
 |---|---|---|
 | **NotificationURL** | серверы Т-Банка | `{platform_public_base_url}/api/v1/payments/webhook/{registry_name}` |
-| **SuccessURL** | браузер покупателя | `{subdomain}.{PRIMARY_DOMAIN}/billing?payment=success&transaction_id=…` (локально `*.localhost`) |
+| **SuccessURL** | браузер покупателя | `{subdomain}.{apex Host}/billing?payment=success&transaction_id=…` (`linnex.io` / `humanitec.ru` / `*.localhost`) |
 | **FailURL** | браузер покупателя | то же с `payment=fail` |
 
 Банк не подтверждает платёж через SuccessURL. Деньги: HTTP-уведомление (`CONFIRMED`) или сверка `CheckOrder` в `payment_sync_tick`.

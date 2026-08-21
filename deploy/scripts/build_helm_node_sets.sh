@@ -7,7 +7,7 @@
 #   DATA_NODE      — нода для StatefulSets (postgres/redis/loki/tempo/grafana)
 #   PUBLIC_NODE    — нода для hostNetwork-сервисов (livekit/livekitEgress/coturn/onlyoffice)
 #   LITSERVE_NODE  — нода для litserve
-#   SERVICE_OVERRIDES — CSV точечных override, например: flows=gpu-worker,redis=master,rag=auto
+#   SERVICE_OVERRIDES — CSV точечных override, например: flows=master,redis=master,rag=auto
 #
 # Значение "unchanged" или пустая строка → ключ не добавляется (берётся из values.yaml).
 #

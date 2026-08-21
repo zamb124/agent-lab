@@ -18,7 +18,6 @@ from core.clients.payment.tinkoff_token import (
     TINKOFF_ORDER_ID_MAX_LEN,
     TINKOFF_TRANSACTION_SUFFIX_HEX_LEN,
 )
-from core.config import get_settings
 from core.db.storage import Storage
 from core.logging import get_logger
 from core.models.identity_models import Company, User
@@ -34,7 +33,7 @@ from core.models.payment_models import (
 )
 from core.short_links.service import require_platform_public_base_url
 from core.types import JsonObject
-from core.utils.domain import PRIMARY_DOMAIN
+from core.utils.domain import build_company_subdomain_absolute_url, get_protocol
 
 if TYPE_CHECKING:
     from core.db.repositories.company_repository import CompanyRepository
@@ -105,6 +104,30 @@ def _customer_email(user: User) -> str | None:
     return email
 
 
+def payment_browser_return_url(
+    *,
+    host: str,
+    company_subdomain: str,
+    payment_result: str,
+    transaction_id: str,
+) -> str:
+    if host.strip() == "":
+        raise ValueError("host is required for payment redirects")
+    if company_subdomain.strip() == "":
+        raise ValueError("company.subdomain is required for payment redirects")
+    if payment_result not in ("success", "fail"):
+        raise ValueError(f"unsupported payment_result: {payment_result}")
+    if transaction_id.strip() == "":
+        raise ValueError("transaction_id is required for payment redirects")
+    return build_company_subdomain_absolute_url(
+        host_header=host,
+        url_scheme=get_protocol(host),
+        path="/billing",
+        query=f"payment={payment_result}&transaction_id={transaction_id}",
+        company_subdomain=company_subdomain,
+    )
+
+
 class PaymentService:
     """Сервис для работы с платежами"""
 
@@ -118,6 +141,8 @@ class PaymentService:
         user: User,
         amount: float,
         provider: BasePaymentProvider[PaymentProviderConfig[str]],
+        *,
+        host: str,
     ) -> CreatePaymentResponse:
         transaction_id = new_payment_transaction_id(company.company_id)
 
@@ -129,19 +154,20 @@ class PaymentService:
             provider=provider.provider_name,
         )
 
-        settings = get_settings()
-
-        if settings.server.env == "local":
-            if company.subdomain is None or company.subdomain.strip() == "":
-                raise ValueError("company.subdomain is required for payment redirects")
-            base_url = f"http://{company.subdomain}.localhost:{settings.server.port}"
-        else:
-            if company.subdomain is None or company.subdomain.strip() == "":
-                raise ValueError("company.subdomain is required for payment redirects")
-            base_url = f"https://{company.subdomain}.{PRIMARY_DOMAIN}"
-
-        success_url = f"{base_url}/billing?payment=success&transaction_id={transaction_id}"
-        fail_url = f"{base_url}/billing?payment=fail&transaction_id={transaction_id}"
+        if company.subdomain is None:
+            raise ValueError("company.subdomain is required for payment redirects")
+        success_url = payment_browser_return_url(
+            host=host,
+            company_subdomain=company.subdomain,
+            payment_result="success",
+            transaction_id=transaction_id,
+        )
+        fail_url = payment_browser_return_url(
+            host=host,
+            company_subdomain=company.subdomain,
+            payment_result="fail",
+            transaction_id=transaction_id,
+        )
         public_base = require_platform_public_base_url()
         notification_url = (
             f"{public_base}/api/v1/payments/webhook/{provider.registry_name}"

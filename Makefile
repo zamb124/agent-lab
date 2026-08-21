@@ -307,13 +307,13 @@ k8s-deploy: render-helm-app-conf require-image-tag
 	'
 	@PLATFORM_NS=$(K8S_NAMESPACE) bash deploy/scripts/helm_cleanup_stale_ingress.sh
 
-# Образы master → gpu-worker по LAN (не GHCR с GPU: ~1 час на 5 GiB).
+# Опционально: LAN-копия образов на вторую GPU-ноду (канон — одна нода, не нужно).
 k8s-gpu-sync: require-image-tag
 	IMAGE_APP=ghcr.io/zamb124/agent-lab:$(IMAGE_TAG) \
 	IMAGE_GPU=ghcr.io/zamb124/agent-lab-gpu:$(IMAGE_TAG) \
 	bash deploy/scripts/gpu_sync_release_images.sh
 
-# Старые agent-lab{,-gpu} теги на gpu-worker (оставляет in-use + 3 последних).
+# Старые agent-lab{,-gpu} теги на master (оставляет in-use + 3 последних).
 k8s-gpu-prune:
 	bash deploy/scripts/gpu_prune_release_images.sh
 
@@ -383,7 +383,7 @@ k8s-decommission-compose:
 
 # Идемпотентный полный reset кластера: helm uninstall + namespace delete + snap remove microk8s --purge.
 # По умолчанию — dry-run. Реальный reset: CONFIRM=1 make k8s-cluster-reset.
-# После — bootstrap-master.sh + bootstrap-gpu-worker.sh + join-cluster.sh + make k8s-deploy.
+# После — bootstrap-master.sh + make k8s-deploy.
 k8s-cluster-reset:
 	@K8S_NAMESPACE=$(K8S_NAMESPACE) K8S_RELEASE=$(K8S_RELEASE) bash deploy/scripts/cluster-reset.sh
 
@@ -501,8 +501,7 @@ help:
 	@echo "  make k8s-helm-clear-pending - снять pending-upgrade/install/rollback у Helm (не откат Pod)"
 	@echo "  make k8s-secrets-sync    - Обновить Secret platform-secrets через helm (--reuse-values)"
 	@echo "  make k8s-uninstall       - helm uninstall (PVC сохраняются)"
-	@echo "  make k8s-gpu-sync IMAGE_TAG=<sha> - образы master→gpu-worker по LAN (до roll_litserve)"
-	@echo "  make k8s-gpu-prune         - старые agent-lab теги на gpu-worker (диск <85%)"
+	@echo "  make k8s-gpu-prune         - старые agent-lab теги на master (диск <85%)"
 	@echo "  make k8s-openfga-bootstrap [APPLY=0] - Bootstrap OpenFGA (default APPLY=1: Secret openfga-ids + helm pin)"
 	@echo "  make k8s-openfga-backfill - SQL/KV roster → OpenFGA tuples в поде (после wipe store / смены ключей)"
 	@echo "  make k8s-health          - Полная проверка кластера (deploy/scripts/cluster-health.sh)"

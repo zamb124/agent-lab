@@ -267,7 +267,7 @@ Per-process default — `settings.voice` (`SpeechProvidersConfig`), ENV-преф
 - `voice.diagnostics.uplink_dump_dir: str | None = None` — dev-only директория для дампа сырого uplink PCM как WAV (`voice_uplink_<session>_<ts>.wav`). По умолчанию выкл.
 - `voice.diagnostics.uplink_dump_max_mb: int = 50` — лимит размера дампа.
 
-`voice` под планируется на `gpu-worker` (`values.yaml: voice.nodeName`) для co-location с `provider-litserve`. Дефолтные `api_model_id` для litserve — Helm: `litserve.{stt,tts,vad}DefaultApiModelId` → ENV `PROVIDER_LITSERVE__INFRA__*_DEFAULT_API_MODEL_ID`.
+`voice` на `master`. Дефолтные `api_model_id` для litserve — Helm: `litserve.{stt,tts,vad}DefaultApiModelId` → ENV `PROVIDER_LITSERVE__INFRA__*_DEFAULT_API_MODEL_ID`.
 
 **LitServe `LitAPI` (`apps/provider_litserve/stt|tts|vad/api.py`):** в `decode_request` нужен параметр `request: Request` (`from fastapi import Request`). В этом же файле **нельзя** `from __future__ import annotations`: при отложенных аннотациях `inspect.signature` видит строку `'Request'`, LitServe не совпадает с классом `Request`, тело не парсится через `await request.json()`, в multiprocessing-queue попадает сырой ASGI-`Request` → pickle падает (`Can't get local object 'FastAPI.setup.<locals>.openapi'`), клиент видит **500**.
 

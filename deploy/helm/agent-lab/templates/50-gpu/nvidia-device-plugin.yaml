@@ -1,7 +1,7 @@
 {{- if .Values.nvidiaDevicePlugin.enabled }}
 # NVIDIA k8s-device-plugin DaemonSet публикует nvidia.com/gpu в Allocatable
 # на нодах с лейблом {{ .Values.gpuNodeSelectorKey }}={{ .Values.gpuNodeSelectorValue }}.
-# Host-драйвер и containerd drop-in ставит deploy/scripts/bootstrap-gpu-worker.sh.
+# Host-драйвер и containerd drop-in ставит deploy/scripts/bootstrap-nvidia.sh.
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:

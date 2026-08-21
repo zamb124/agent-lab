@@ -16,7 +16,7 @@
 #   ONLYOFFICE_HOST=onlyoffice.humanitec.ru
 #   LIVEKIT_HOST=livekit.humanitec.ru
 #   CHECK_PUBLIC=1                      — проверить https://… через curl (требует DNS); 0 = только in-cluster
-#   PLATFORM_PUBLIC_IP=84.38.184.105     — ожидаемый A-record для apex/subdomain brand DNS (CHECK_PUBLIC=1)
+#   PLATFORM_PUBLIC_IP=31.192.111.33     — ожидаемый A-record для apex/subdomain brand DNS (CHECK_PUBLIC=1)
 
 set -uo pipefail
 
@@ -36,7 +36,7 @@ GRAFANA_HOST="${GRAFANA_HOST:-grafana.humanitec.ru}"
 ONLYOFFICE_HOST="${ONLYOFFICE_HOST:-onlyoffice.humanitec.ru}"
 LIVEKIT_HOST="${LIVEKIT_HOST:-livekit.humanitec.ru}"
 CHECK_PUBLIC="${CHECK_PUBLIC:-1}"
-PLATFORM_PUBLIC_IP="${PLATFORM_PUBLIC_IP:-84.38.184.105}"
+PLATFORM_PUBLIC_IP="${PLATFORM_PUBLIC_IP:-31.192.111.33}"
 
 if [ "$CHECK_PUBLIC" = "1" ]; then
   if ! command -v curl >/dev/null 2>&1; then
@@ -72,16 +72,16 @@ else
   log_error "не Ready: $NODES_READY"
 fi
 
-# 2. GPU на gpu-worker (если LitServe размещён на ноде из gpuNodeNames через nodeName)
+# 2. GPU на ноде LitServe
 log_section "2) GPU"
 LITSERVE_HOST=$($K get deploy provider-litserve -n "$PLATFORM_NS" \
   -o jsonpath='{.spec.template.spec.nodeSelector.kubernetes\.io/hostname}' 2>/dev/null || true)
-if [ "$LITSERVE_HOST" = "$GPU_NODE_NAME" ]; then
+if [ -n "$LITSERVE_HOST" ]; then
   check_step \
-    "node $GPU_NODE_NAME имеет nvidia.com/gpu в Allocatable" \
-    "$K get node $GPU_NODE_NAME -o jsonpath='{.status.allocatable.nvidia\\.com/gpu}' | grep -qE '^[1-9]'"
+    "node $LITSERVE_HOST имеет nvidia.com/gpu в Allocatable" \
+    "$K get node $LITSERVE_HOST -o jsonpath='{.status.allocatable.nvidia\\.com/gpu}' | grep -qE '^[1-9]'"
 else
-  log_info "LitServe на ноде '${LITSERVE_HOST:-auto}' (не $GPU_NODE_NAME) — проверка GPU пропущена"
+  log_info "LitServe без nodeSelector — проверка GPU по hostname пропущена"
 fi
 
 # 3. Поды Running / Completed / Terminating (старое поколение при rollout — не сбой)

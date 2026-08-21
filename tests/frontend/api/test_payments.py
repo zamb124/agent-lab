@@ -16,7 +16,7 @@ from core.models.payment_models import (
     PaymentStatus,
     Transaction,
 )
-from core.payments.service import new_payment_transaction_id
+from core.payments.service import new_payment_transaction_id, payment_browser_return_url
 
 
 def _require_configured_provider() -> TinkoffProvider:
@@ -164,6 +164,48 @@ class TestPaymentModels:
         transaction_id = new_payment_transaction_id(f"co{unique_id}")
         assert ":" in transaction_id
         assert len(transaction_id) <= 50
+
+    def test_return_url_follows_linnex_host(self) -> None:
+        url = payment_browser_return_url(
+            host="acme.linnex.io",
+            company_subdomain="acme",
+            payment_result="success",
+            transaction_id="co1:abc123def456",
+        )
+        assert url == (
+            "https://acme.linnex.io/billing?payment=success&transaction_id=co1:abc123def456"
+        )
+
+    def test_return_url_follows_humanitec_host(self) -> None:
+        url = payment_browser_return_url(
+            host="acme.humanitec.ru",
+            company_subdomain="acme",
+            payment_result="fail",
+            transaction_id="co1:abc123def456",
+        )
+        assert url == (
+            "https://acme.humanitec.ru/billing?payment=fail&transaction_id=co1:abc123def456"
+        )
+
+    def test_return_url_localhost_keeps_port(self) -> None:
+        url = payment_browser_return_url(
+            host="acme.localhost:8002",
+            company_subdomain="acme",
+            payment_result="success",
+            transaction_id="co1:abc123def456",
+        )
+        assert url == (
+            "http://acme.localhost:8002/billing?payment=success&transaction_id=co1:abc123def456"
+        )
+
+    def test_return_url_empty_host_raises(self) -> None:
+        with pytest.raises(ValueError, match="host is required"):
+            payment_browser_return_url(
+                host="  ",
+                company_subdomain="acme",
+                payment_result="success",
+                transaction_id="co1:abc123def456",
+            )
 
 
 class TestPaymentProviderFactory:

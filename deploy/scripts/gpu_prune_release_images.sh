@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Снести старые ghcr.io/zamb124/agent-lab{,-gpu}:* на gpu-worker.
+# Снести старые ghcr.io/zamb124/agent-lab{,-gpu}:* на master.
 # kubelet image GC при usage>=85% удаляет слои во время pull и дедлочит деплой.
 #
-# Оставляет образы Running/Pending подов на gpu-worker и KEEP_TAGS последних тегов.
+# Оставляет образы Running/Pending подов и KEEP_TAGS последних тегов.
 #
 #   bash deploy/scripts/gpu_prune_release_images.sh
 #   make k8s-gpu-prune
@@ -15,7 +15,7 @@ require_command ssh
 require_command kubectl
 
 KEEP_TAGS="${GPU_PRUNE_KEEP_TAGS:-3}"
-GPU_SSH="${GPU_SSH:-${SSH_USER}@${GPU_HOST_IP}}"
+GPU_SSH="${GPU_SSH:-${SSH_USER}@${MASTER_HOST_IP}}"
 NS="${PLATFORM_NS:-platform}"
 K="$KUBECTL"
 KEEP_REMOTE="/tmp/gpu-prune-keep.txt"

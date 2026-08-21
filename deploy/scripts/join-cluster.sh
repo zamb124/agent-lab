@@ -4,8 +4,10 @@
 # не control-plane), ждём Ready, label accelerator=nvidia-gpu.
 # nvidia-device-plugin DaemonSet ставит Helm-чарт agent-lab.
 #
+# Не входит в канон (кластер — одна нода). Только если явно добавляете вторую GPU-ноду.
+#
 # ENV:
-#   GPU_WORKER_HOST = root@77.91.94.165 (по умолчанию SSH_USER@GPU_HOST_IP из _common.sh)
+#   GPU_WORKER_HOST — обязательно (например root@<ip>)
 #   GPU_NODE_NAME / GPU_NODE_LABEL_* / JOIN_TIMEOUT
 
 set -uo pipefail
@@ -17,7 +19,10 @@ source "$SCRIPT_DIR/_common.sh"
 require_command microk8s || exit 1
 require_command ssh || exit 1
 
-GPU_WORKER_HOST="${GPU_WORKER_HOST:-${SSH_USER}@${GPU_HOST_IP}}"
+if [ -z "${GPU_WORKER_HOST:-}" ]; then
+  log_error "Задайте GPU_WORKER_HOST. Канон — одна нода, join не нужен."
+  exit 1
+fi
 JOIN_TIMEOUT="${JOIN_TIMEOUT:-180}"
 
 log_section "Join $GPU_NODE_NAME → cluster ($GPU_WORKER_HOST)"

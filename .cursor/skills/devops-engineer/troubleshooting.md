@@ -25,22 +25,18 @@ kubectl logs -n platform $POD --tail=200
 **Команды:**
 ```bash
 kubectl describe pod -n platform $POD | grep -A5 Events
-kubectl get pods -n platform -o wide | awk 'NR==1 || /gpu-worker|Init|Pending|ContainerCreating/'
-ssh root@77.91.94.165 'journalctl -u snap.microk8s.daemon-containerd --since "2 hours ago" | grep PullImage'
+kubectl get pods -n platform -o wide | awk 'NR==1 || /Init|Pending|ContainerCreating/'
+ssh root@31.192.111.33 'journalctl -u snap.microk8s.daemon-containerd --since "2 hours ago" | grep PullImage'
 ```
 
 **Причины:**
 - Тэг не существует в GHCR → проверить `https://github.com/<owner>/agent-lab/pkgs/container/agent-lab`.
 - Нет access от MicroK8s к ghcr.io → `kubectl get nodes -o wide` (есть ли интернет на ноде), `ssh root@<node> 'docker pull ghcr.io/<owner>/agent-lab:<tag>'`.
 - Приватный образ без imagePullSecret → нужен imagePullSecret (для public образа не требуется).
-- **gpu-worker тянет GHCR ~1 час на 5 GiB** (containerd: `Pulled ... in 1h0m16s`). Pod в `Init:1/2` / `ContainerCreating` **без Events**. helm `--wait` 60m упирается в `voice` (если он на GPU) и `provider-litserve`.
-- kubelet image GC при диске ≥85% сносит слои во время этого pull (`image_gc_manager.go`).
-- Второй `helm upgrade --wait` из `openfga_bootstrap_cluster.sh` снова катит GPU-поды, если pin уже стоит — скрипт это skip'ает.
+- kubelet image GC при диске ≥85% сносит слои во время pull (`image_gc_manager.go`).
 
 **Решение:**
-- `voice` только на master (`values.yaml`). Обычный Deploy **не** меняет `litserve.image` (`roll_litserve=false`).
-- Новый GPU-образ: `make k8s-gpu-sync IMAGE_TAG=<sha>` (LAN master→GPU), затем Deploy `roll_litserve=true`.
-- Диск GPU: `make k8s-gpu-prune`. `/etc/hosts` обязан содержать `gpu-worker` (`bootstrap-gpu-worker.sh`).
+- Диск: `make k8s-gpu-prune`. `/etc/hosts` содержит `master`.
 - Перебилдить с правильным тэгом: `make k8s-deploy IMAGE_TAG=<correct-tag>`.
 
 ## 3. Certificate `Issuing` уже > 5 минут
@@ -80,11 +76,11 @@ kubectl get events -n platform --sort-by='.lastTimestamp' | tail -30
 **Причины:**
 - PVC не Bound → проверить `kubectl get sc` (StorageClass `microk8s-hostpath` есть?).
 - nodeSelector `kubernetes.io/hostname: master` не матчится → проверить `kubectl get node` (есть ли нода с таким hostname).
-- Диск на ноде кончился → `ssh root@84.38.184.105 df -h /var/snap/microk8s/common/default-storage`.
+- Диск на ноде кончился → `ssh root@31.192.111.33 df -h /var/snap/microk8s/common/default-storage`.
 - init.sql упал → `kubectl logs postgres-0 -n platform`. Часто из-за прав на ConfigMap или дубликата в init.sql.
 
 **Решение:**
-- При нехватке места: cleanup старых snap revisions: `ssh root@84.38.184.105 'snap set system refresh.retain=2 && snap refresh'`.
+- При нехватке места: cleanup старых snap revisions: `ssh root@31.192.111.33 'snap set system refresh.retain=2 && snap refresh'`.
 - При проблемах с init.sql: правка `deploy/helm/agent-lab/files/postgres-init.sql` + `make k8s-deploy`. Если PVC уже инициализирован старой версией — init.sql НЕ перезапустится. Решение: `kubectl exec postgres-0 -- psql ...` для миграции вручную или пересоздание PVC (с потерей данных — нужен backup).
 
 ## 5. LitServe не стартует на GPU / без GPU
@@ -94,14 +90,14 @@ kubectl get events -n platform --sort-by='.lastTimestamp' | tail -30
 **Команды:**
 ```bash
 kubectl get pods -n platform -o wide | grep provider-litserve
-kubectl describe node gpu-worker | grep -A3 Allocatable
+kubectl describe node master | grep -A3 Allocatable
 kubectl describe pod -n platform <litserve-pod>
 kubectl logs -n platform deployment/provider-litserve --tail=200
 kubectl get pods -n kube-system -l app.kubernetes.io/name=nvidia-device-plugin
 kubectl logs -n kube-system daemonset/nvidia-device-plugin-daemonset --tail=200
 
-# На gpu-worker:
-ssh root@77.91.94.165
+# На master:
+ssh root@31.192.111.33
 nvidia-smi
 microk8s ctr --address /var/snap/microk8s/common/run/containerd.sock plugins ls | grep cri
 ```
@@ -109,12 +105,12 @@ microk8s ctr --address /var/snap/microk8s/common/run/containerd.sock plugins ls 
 **Причины:**
 - `nvidia-device-plugin-daemonset` (kube-system) не запустился — без него `nvidia.com/gpu` нет в Allocatable.
 - Driver сломался после обновления ядра → `nvidia-smi` падает → переустановить driver (см. runbook 7).
-- Лейбл `accelerator=nvidia-gpu` не проставлен → `kubectl label node gpu-worker accelerator=nvidia-gpu --overwrite`.
+- Лейбл `accelerator=nvidia-gpu` не проставлен → `kubectl label node master accelerator=nvidia-gpu --overwrite`.
 - Containerd drop-in `99-nvidia.toml` отсутствует или содержит `disabled_plugins` (`cri`) → CRI plugin не загружается, kubelet падает с `Unimplemented runtime.v1.RuntimeService`.
 
 **Решение:**
-- `bash deploy/scripts/join-cluster.sh` (переставит label).
-- `bash deploy/scripts/bootstrap-gpu-worker.sh` (восстановит containerd drop-in и imports в template).
+- `kubectl label node master accelerator=nvidia-gpu --overwrite`
+- `bash deploy/scripts/bootstrap-nvidia.sh` (восстановит containerd drop-in и imports в template).
 - При полном провале driver: runbook 7.
 
 ## 6. Ingress отдаёт 502 / 503 / 504
@@ -225,13 +221,10 @@ kubectl get secrets -n platform -l owner=helm,name=agent-lab -o custom-columns=N
 
 **Симптомы:** CI шаг "Configure kubeconfig" падает с `error: not a valid x509 certificate`.
 
-**Решение:**
-```bash
-# На master:
-ssh root@84.38.184.105
-microk8s config | base64
+**Решение:** `microk8s config` указывает на `127.0.0.1` — CI с GitHub runner туда не попадёт. Только публичный IP:
 
-# Скопировать вывод полностью (без переноса строк) и обновить GitHub Secret KUBECONFIG_B64.
+```bash
+gh secret set KUBECONFIG_B64 --body "$(bash deploy/scripts/kubeconfig-for-github-actions.sh)"
 ```
 
 ## 11. PVC не расширяется
@@ -248,19 +241,18 @@ kubectl get sc microk8s-hostpath -o yaml | grep allowVolumeExpansion
 **Решение:**
 - Backup → удалить PVC → пересоздать с большим размером → restore.
 
-## 12. Под на gpu-worker не шедулится
+## 12. LitServe не шедулится на master
 
 **Команды:**
 ```bash
 kubectl describe pod <pod> -n platform | grep -A5 Events
-# обычно: 0/2 nodes available: 1 node(s) didn't match Pod's node affinity
-kubectl describe node gpu-worker | grep -A3 Labels
-kubectl describe node gpu-worker | grep -A5 Taints
+kubectl describe node master | grep -A3 Labels
+kubectl describe node master | grep -A5 Taints
 ```
 
 **Причины:**
-- Лейбл слетел → `kubectl label node gpu-worker accelerator=nvidia-gpu --overwrite`.
-- Taint без матча toleration → проверить `tolerations` в `templates/50-gpu/litserve.yaml`.
+- Лейбл слетел → `kubectl label node master accelerator=nvidia-gpu --overwrite`.
+- На master не должно быть taint `dedicated=gpu`.
 
 ## 13. Worker Deployment не обрабатывает задачи
 
@@ -295,7 +287,7 @@ kubectl get events -n platform --sort-by='.lastTimestamp' | tail -50
 
 **Команды:**
 ```bash
-ssh root@84.38.184.105
+ssh root@31.192.111.33
 df -h
 du -sh /var/snap/microk8s/common/default-storage/* | sort -h | tail
 du -sh /var/lib/snapd/* | sort -h | tail

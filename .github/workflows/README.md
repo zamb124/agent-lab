@@ -2,7 +2,7 @@
 
 | Workflow | Триггер | Описание |
 |---|---|---|
-| [`deploy.yml`](deploy.yml) | `workflow_dispatch` | Build → push GHCR → `helm upgrade --install` в MicroK8s; inputs: **`litserve_node`** (`gpu` \| `cpu`), **`replace_orphan_platform_secret`** (удалить сиротский `platform-secrets` перед первым install) |
+| [`deploy.yml`](deploy.yml) | `workflow_dispatch` | Build → push GHCR → `helm upgrade --install` в MicroK8s; input **`replace_orphan_platform_secret`** |
 | [`mobile-android-build.yml`](mobile-android-build.yml) | manual / по тегу | Сборка Android-приложения |
 | [`mobile-pwa-lighthouse.yml`](mobile-pwa-lighthouse.yml) | по расписанию / manual | Lighthouse аудит PWA (`PWA_LIGHTHOUSE_URL`) |
 
@@ -22,16 +22,12 @@ GitHub Actions (Run workflow)
               --namespace platform --create-namespace \
               --values values.yaml --values values-prod.yaml \
               --set image.tag=<sha> \
-              --set litserve.scheduleOnGpuNode=<true|false из input litserve_node> \
-              --wait --timeout 30m
+              --wait --timeout 60m
           bash deploy/scripts/cluster-health.sh (CHECK_PUBLIC=1)
 
-MicroK8s cluster
-├── master (84.38.184.105)         hostname=master
-│   └── Postgres, Redis, all apps + workers, observability, ingress
-│       (и provider-litserve при litserve_node=cpu)
-└── gpu-worker (188.246.224.228)   accelerator=nvidia-gpu
-    └── provider-litserve при litserve_node=gpu (nodeSelector + nvidia.com/gpu: 1)
+MicroK8s
+└── master (31.192.111.33)         hostname=master, accelerator=nvidia-gpu
+    └── Postgres, Redis, apps, workers, observability, ingress, provider-litserve
 ```
 
 ## Конфигурация и секреты

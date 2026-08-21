@@ -17,11 +17,10 @@ domain: humanitec.ru
 gpuNodeSelectorKey: accelerator
 gpuNodeSelectorValue: nvidia-gpu
 
-# Имена GPU-нод кластера (kubernetes.io/hostname). Поды с nodeName из этого списка автоматически
-# получают toleration dedicated=gpu:NoSchedule и nvidia.com/gpu resource (для litserve).
-# Добавить вторую GPU-ноду: дописать имя в массив без правки шаблонов.
+# hostname нод с GPU. LitServe на имени из списка получает nvidia.com/gpu.
+# Одна нода master: GPU на той же машине, без taint dedicated=gpu.
 gpuNodeNames:
-  - gpu-worker
+  - master
 
 storageClassName: microk8s-hostpath
 
@@ -398,9 +397,7 @@ applications:
         cpu: "1"
         memory: 1Gi
   voice:
-    # Voice GPU не использует. На gpu-worker pull ghcr.io ~1 час на 5 GiB
-    # (master тянет минуты) — любой релиз с voice на GPU вешает helm --wait.
-    # RTT до litserve идёт через ClusterIP; backend silero_local — в litserve.
+    # GPU не использует. STT/TTS/VAD — ClusterIP provider-litserve на этой же ноде.
     nodeName: master
     enabled: true
     port: 8015
@@ -800,9 +797,8 @@ litserve:
   # Главный image платформы остаётся на 3.14t. См. .cursor/rules/infrastructure.mdc
   # раздел "ML GIL resurrection" и Dockerfile.gpu / Dockerfile.base.gpu.
   image: ""  # переопределяется в .github/workflows/deploy.yml через --set litserve.image=...
-  # Целевая нода. gpu-worker → toleration dedicated=gpu:NoSchedule + nvidia.com/gpu resource.
-  # master → CPU-режим (без GPU resource). auto → шедулер сам выбирает.
-  nodeName: gpu-worker
+  # Имя из gpuNodeNames → nvidia.com/gpu. Сейчас GPU на master.
+  nodeName: master
   port: 8014
   serviceName: provider-litserve
   # PVC под HF cache: GigaAM v3 (~3 Gi), Silero TTS v5 (~150 Mi), Silero VAD (~50 Mi),
@@ -820,7 +816,6 @@ litserve:
   # Отключить: embeddingUseBf16: "false"
   embeddingUseBf16: "true"
   resources:
-    # Фактический RSS ~3.4 Gi на gpu-worker (32 Gi allocatable). requests должны влезать в ноду.
     requests:
       cpu: "2"
       memory: 20Gi
@@ -829,7 +824,7 @@ litserve:
       memory: 28Gi
 
 # NVIDIA k8s-device-plugin DaemonSet публикует nvidia.com/gpu в Allocatable.
-# Host-драйвер и containerd drop-in ставит deploy/scripts/bootstrap-gpu-worker.sh.
+# Host-драйвер и containerd drop-in ставит deploy/scripts/bootstrap-nvidia.sh.
 nvidiaDevicePlugin:
   enabled: true
   image: nvcr.io/nvidia/k8s-device-plugin

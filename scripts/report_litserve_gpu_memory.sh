@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Снимок памяти GPU для планирования ёмкости LitServe (speech + Qwen RAG на одной карте).
-# Запускайте на gpu-worker при нагрузке: параллельно STT/TTS, ingest (embedding) и search (rerank).
+# Запускайте на master при нагрузке: параллельно STT/TTS, ingest (embedding) и search (rerank).
 #
 # Рекомендация: сравните idle, пик под смешанной нагрузкой и после прогрева моделей.
 

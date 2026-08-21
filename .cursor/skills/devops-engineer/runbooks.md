@@ -7,35 +7,26 @@
 См. полный гайд в [`deploy/cluster-setup.md`](mdc:deploy/cluster-setup.md). Краткая выжимка:
 
 ```bash
-# 1. DNS A-записи у регистратора (primary: linnex.io @/* + livekit/onlyoffice/grafana/cdn/api; legacy: humanitec.ru — те же субдомены → 84.38.184.105)
+# 1. DNS: setup-brand-dns.sh → 31.192.111.33 (оба apex). Whitelist Reg.ru API = этот IP.
 
-# 2. На master:
-ssh root@84.38.184.105
+# 2. На BM:
+ssh root@31.192.111.33
 git clone https://github.com/<owner>/agent-lab.git /root/agent-lab-deploy && cd /root/agent-lab-deploy
 bash deploy/scripts/bootstrap-master.sh
+# exit 10 — reboot и повторить
 
-# 3. На gpu-worker:
-ssh root@77.91.94.165
-git clone https://github.com/<owner>/agent-lab.git /root/agent-lab-deploy && cd /root/agent-lab-deploy
-bash deploy/scripts/bootstrap-gpu-worker.sh
-# Если exit 10 — reboot и повторить
-
-# 4. На master:
-bash deploy/scripts/join-cluster.sh
-
-# 5. Wildcard TLS (с любой машины с kubectl + helm):
+# 3. Wildcard TLS (kubectl на новый кластер):
 export REGRU_USERNAME=... REGRU_PASSWORD=...
 bash deploy/scripts/setup-wildcard-tls.sh
 
-# 6. KUBECONFIG_B64 в GitHub:
-ssh root@84.38.184.105 microk8s config | base64
-# → GitHub Settings → Secrets → KUBECONFIG_B64
+# 4. KUBECONFIG_B64 в GitHub (server 31.192.111.33, не 127.0.0.1; не печатать в чат):
+gh secret set KUBECONFIG_B64 --body "$(bash deploy/scripts/kubeconfig-for-github-actions.sh)"
 
-# 7. Заполнить остальные GitHub Secrets (см. deploy/README.md)
+# 5. Заполнить остальные GitHub Secrets (см. deploy/README.md)
 
-# 8. Первый деплой через CI или вручную:
+# 6. Первый деплой:
 make k8s-secrets-sync
-make k8s-deploy IMAGE_TAG=latest
+make k8s-deploy IMAGE_TAG=<sha>
 
 # 9. Проверка:
 make k8s-health
@@ -133,53 +124,23 @@ kubectl logs -n cert-manager deployment/cert-manager -f
 kubectl logs -n cert-manager deployment/cert-manager-webhook-regru -f
 ```
 
-## 7. Обновление NVIDIA driver на GPU-ноде
+## 7. Обновление NVIDIA driver
 
 ```bash
-# 1. На master: scale provider-litserve до 0
 kubectl -n platform scale deployment provider-litserve --replicas=0
-
-# 2. SSH на gpu-worker:
-ssh root@77.91.94.165
+ssh root@31.192.111.33
 cd /root/agent-lab-deploy
-git pull   # получить актуальный bootstrap скрипт
-
-# 3. Обновить driver (idempotent — проверит, нужно ли)
-apt update && apt upgrade -y
-ubuntu-drivers autoinstall
-reboot   # если был upgrade
-
-# 4. После reboot повторно:
-bash deploy/scripts/bootstrap-gpu-worker.sh
-nvidia-smi   # должен показать новый driver
-
-# 5. На master: scale обратно
+git pull
+bash deploy/scripts/bootstrap-nvidia.sh
+# exit 10 — reboot, затем снова bootstrap-nvidia.sh / bootstrap-master.sh
+nvidia-smi
 kubectl -n platform scale deployment provider-litserve --replicas=1
 make k8s-health
 ```
 
-## 8. Добавление новой ноды в кластер
+## 8. Добавление второй ноды (не канон)
 
-```bash
-# 1. На новой ноде (Ubuntu 22.04+):
-ssh root@<NEW_IP>
-git clone https://github.com/<owner>/agent-lab.git /root/agent-lab-deploy && cd /root/agent-lab-deploy
-
-# GPU-нода:
-bash deploy/scripts/bootstrap-gpu-worker.sh
-# CPU-нода: скопировать bootstrap-gpu-worker.sh и убрать NVIDIA-часть (snap install, join-cluster вызовет join --worker).
-
-# 2. На master:
-GPU_HOST_IP=<NEW_IP> GPU_NODE_NAME=<имя> bash deploy/scripts/join-cluster.sh
-# join-cluster.sh автоматически: add-node, SSH join --worker, label accelerator=nvidia-gpu (GPU),
-# taint dedicated=gpu:NoSchedule (GPU).
-
-# 3. Обновить values.yaml: добавить имя новой CPU-ноды в nodeNames-комментарий.
-#    Для GPU-ноды добавить имя в gpuNodeNames[].
-# 4. Переназначить любой сервис на новую ноду через deploy.yml inputs или:
-kubectl label node <имя> accelerator=nvidia-gpu   # GPU
-# Затем CI deploy с service_overrides="rag=<имя>,flows-worker=<имя>" (или нужный enum input)
-```
+Канон — одна нода. Если нужна вторая: `GPU_WORKER_HOST=root@<ip> bash deploy/scripts/join-cluster.sh` и добавить имя в `gpuNodeNames`. Taint `dedicated=gpu` только на **дополнительной** GPU-ноде, не на master.
 
 ## 8a. Перенос сервиса на другую ноду
 
@@ -191,7 +152,7 @@ kubectl label node <имя> accelerator=nvidia-gpu   # GPU
 # Или вручную:
 helm upgrade --install agent-lab ./deploy/helm/agent-lab \
   --namespace platform --reuse-values \
-  --set "applications.rag.nodeName=gpu-worker" \
+  --set "applications.rag.nodeName=master" \
   --wait --timeout 15m
 kubectl get pods -n platform -o wide   # проверить ноду
 ```
@@ -202,7 +163,7 @@ kubectl get pods -n platform -o wide   # проверить ноду
 
 ```bash
 # Переносит с backup → helm upgrade → пересоздание PVC → restore:
-bash deploy/scripts/migrate-pvc.sh postgres gpu-worker
+bash deploy/scripts/migrate-pvc.sh postgres master
 # Прогресс сохраняется: повторный запуск безопасен (backup за 5 мин — skip).
 # Финальная проверка:
 bash deploy/scripts/cluster-health.sh
@@ -215,7 +176,7 @@ bash deploy/scripts/cluster-health.sh
 ```bash
 # Обновляет DNS через Reg.ru API, затем helm upgrade:
 REGRU_USERNAME=... REGRU_PASSWORD=... \
-bash deploy/scripts/rebind-public-node.sh master 84.38.184.105
+bash deploy/scripts/rebind-public-node.sh master 31.192.111.33
 # Ждёт DNS_TTL=300s, после чего helm upgrade и cluster-health.sh.
 ```
 
@@ -310,14 +271,9 @@ microk8s kubectl version --short
 # Server == Client
 
 # 3. Drain noдev (kubectl drain не работает в MicroK8s так же — лучше snap refresh с маленьким channel-bump)
-ssh root@84.38.184.105 'snap refresh microk8s --channel=1.31/stable'
-# Подождать рестарта, потом то же на gpu-worker:
-ssh root@77.91.94.165 'snap refresh microk8s --channel=1.31/stable'
-
-# 4. После обновления:
+ssh root@31.192.111.33 'snap refresh microk8s --channel=1.35/stable'
 make k8s-health
-# Если что-то сломалось — snap revert:
-ssh root@84.38.184.105 'snap revert microk8s'
+ssh root@31.192.111.33 'snap revert microk8s'
 ```
 
 ## 13. Изменение OAuth провайдера / секрета

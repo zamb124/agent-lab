@@ -108,11 +108,16 @@ async def create_topup_payment(
     if provider is None:
         raise HTTPException(status_code=503, detail="Платежный провайдер не настроен")
 
+    host = require_context().host.strip()
+    if host == "":
+        raise ValueError("request host is required for payment redirects")
+
     return await container.payment_service.create_payment(
         company=company,
         user=user,
         amount=payment_request.amount,
         provider=provider,
+        host=host,
     )
 
 

@@ -194,13 +194,11 @@ PLATFORM_NS="${PLATFORM_NS:-platform}"
 
 # Имена нод по умолчанию (могут быть переопределены через ENV).
 MASTER_NODE_NAME="${MASTER_NODE_NAME:-master}"
-GPU_NODE_NAME="${GPU_NODE_NAME:-gpu-worker}"
+GPU_NODE_NAME="${GPU_NODE_NAME:-master}"
 GPU_NODE_LABEL_KEY="${GPU_NODE_LABEL_KEY:-accelerator}"
 GPU_NODE_LABEL_VALUE="${GPU_NODE_LABEL_VALUE:-nvidia-gpu}"
 
-# IP-адреса нод (для join и SSH). Можно переопределить ENV.
-MASTER_HOST_IP="${MASTER_HOST_IP:-84.38.184.105}"
-GPU_HOST_IP="${GPU_HOST_IP:-77.91.94.165}"
+MASTER_HOST_IP="${MASTER_HOST_IP:-31.192.111.33}"
 SSH_USER="${SSH_USER:-root}"
 
 # disable_host_firewall — идемпотентно отключает UFW; сетевые политики держим в CNI.

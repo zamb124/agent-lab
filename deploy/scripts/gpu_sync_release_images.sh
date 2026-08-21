@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# Перенос release-образов master → gpu-worker по LAN.
-#
-# gpu-worker тянет ghcr.io ~1 час на 5 GiB (containerd log: Pulled ... in 1h0m16s).
-# master тянет минуты; scp+import по LAN — минуты. Helm --wait не должен ждать GHCR с GPU.
+# Опционально: LAN-копия образов на вторую GPU-ноду. Канон — одна нода, скрипт выходит с ошибкой без GPU_HOST_IP.
 #
 # Запуск (SSH на master обязателен):
 #   IMAGE_APP=ghcr.io/zamb124/agent-lab:<tag> \
@@ -24,7 +21,7 @@ NS="${PLATFORM_NS:-platform}"
 IMAGE_APP="${IMAGE_APP:-}"
 IMAGE_GPU="${IMAGE_GPU:-}"
 MASTER_SSH="${MASTER_SSH:-${SSH_USER}@${MASTER_HOST_IP}}"
-GPU_SSH_FROM_MASTER="${GPU_SSH_FROM_MASTER:-${SSH_USER}@${GPU_HOST_IP}}"
+GPU_SSH_FROM_MASTER="${GPU_SSH_FROM_MASTER:-}"
 PULL_SECRET="${GPU_SYNC_PULL_SECRET:-ghcr-agent-lab-pull}"
 PULL_TIMEOUT_SEC="${GPU_SYNC_PULL_TIMEOUT_SEC:-600}"
 
@@ -32,6 +29,14 @@ if [ -z "${IMAGE_APP}" ] || [ -z "${IMAGE_GPU}" ]; then
   log_error "Нужны IMAGE_APP и IMAGE_GPU (ghcr.io/...:<immutable-tag>)"
   print_summary
   exit 1
+fi
+if [ -z "${GPU_HOST_IP:-}" ] && [ -z "${GPU_SSH_FROM_MASTER}" ]; then
+  log_error "Канон — одна нода, gpu_sync не нужен. Для второй GPU-ноды задайте GPU_HOST_IP."
+  print_summary
+  exit 1
+fi
+if [ -z "${GPU_SSH_FROM_MASTER}" ]; then
+  GPU_SSH_FROM_MASTER="${SSH_USER}@${GPU_HOST_IP}"
 fi
 
 K="$KUBECTL"

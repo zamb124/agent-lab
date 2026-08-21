@@ -1,6 +1,6 @@
 # Деплой Платформы
 
-Платформа разворачивается единым **Helm-чартом** в **MicroK8s** кластере (master + GPU worker нода). Всё, что нужно для деплоя, лежит в [`deploy/helm/agent-lab/`](helm/agent-lab/).
+Платформа разворачивается единым **Helm-чартом** в **MicroK8s** на одной ноде `master` (`31.192.111.33`). GPU (LitServe) на той же машине. Всё для деплоя — [`deploy/helm/agent-lab/`](helm/agent-lab/).
 
 См. также:
 - [`cluster-setup.md`](cluster-setup.md) — одноразовая настройка нод кластера (MicroK8s install, GPU, лейблы).
@@ -11,33 +11,25 @@
 ## Архитектура
 
 ```
-MicroK8s cluster
-├── master (84.38.184.105)         hostname=master
-│   ├── postgres StatefulSet (PVC 50Gi)
-│   ├── redis StatefulSet (PVC 10Gi)
-│   ├── 11 application Deployments (flows, frontend, crm, rag, sync, worktracker, scheduler-api, office, voice, browser, search)
-│   ├── 6 worker Deployments (flows-worker x2, scheduler, rag-worker, sync-worker, crm-worker, idle-worker)
-│   ├── livekit + livekit-egress + coturn DaemonSet (hostNetwork)
-│   ├── onlyoffice Deployment
-│   ├── observability: loki StatefulSet, tempo StatefulSet, grafana Deployment
-│   ├── alloy DaemonSet (на каждой ноде)
-│   ├── traefik (ingressClassName=public) + cert-manager + portainer (community-аддон, NodePort 30777/30779)
-│   └── 4 Ingress: platform, livekit, onlyoffice, grafana
-└── gpu-worker (77.91.94.165)      accelerator=nvidia-gpu
-    ├── provider-litserve Deployment (по умолчанию: nodeSelector GPU + `nvidia.com/gpu: 1`)
-    ├── nvidia-device-plugin DaemonSet (публикует nvidia.com/gpu в Allocatable)
-    └── alloy DaemonSet
+MicroK8s (одна нода)
+└── master (31.192.111.33)         hostname=master, accelerator=nvidia-gpu
+    ├── postgres StatefulSet (PVC 50Gi)
+    ├── redis StatefulSet (PVC 10Gi)
+    ├── application Deployments (flows, frontend, crm, rag, sync, worktracker, scheduler-api, office, voice, browser, search)
+    ├── worker Deployments (flows-worker x2, scheduler, rag-worker, sync-worker, crm-worker, idle-worker)
+    ├── provider-litserve (nvidia.com/gpu: 1) + nvidia-device-plugin DaemonSet
+    ├── livekit + livekit-egress + coturn DaemonSet (hostNetwork)
+    ├── onlyoffice Deployment
+    ├── observability: loki, tempo, grafana, alloy
+    ├── traefik (ingressClassName=public) + cert-manager
+    └── Ingress: platform, livekit, onlyoffice, grafana
 ```
 
-### LitServe: GPU-нода или CPU на master
+`ytai.tech` — отдельный хост `84.38.184.105`, не namespace `platform`.
 
-В [`values.yaml`](helm/agent-lab/values.yaml) — `litserve.scheduleOnGpuNode` (по умолчанию `true`).
+### LitServe на master
 
-- **`true`** — под только на ноде с лейблом `accelerator=nvidia-gpu`, CUDA, лимит GPU 1.
-- **`false`** — под на master (`kubernetes.io/hostname` = `masterNodeName`), `PROVIDER_LITSERVE__INFRA__ACCELERATOR=cpu` (медленнее, без выделенной GPU).
-
-Переключение: правка values / `--set litserve.scheduleOnGpuNode=false`, затем `make k8s-deploy`.
-Скрипт [`cluster-health.sh`](scripts/cluster-health.sh) проверяет `nvidia.com/gpu` на worker только если у Deployment всё ещё есть `nodeSelector.accelerator=nvidia-gpu`.
+В [`values.yaml`](helm/agent-lab/values.yaml): `litserve.nodeName: master`, `gpuNodeNames: [master]`. Под получает `nvidia.com/gpu: 1`. Taint `dedicated=gpu` не используется.
 
 ## CI/CD
 
@@ -57,20 +49,17 @@ MicroK8s cluster
 | `workers_node` | Нода для всех 6 workers. `unchanged` = дефолт (master). |
 | `data_node` | Нода для StatefulSets (postgres/redis/loki/tempo/grafana). `unchanged` = master. **ВНИМАНИЕ:** переезд требует `migrate-pvc.sh`. |
 | `public_node` | Нода для hostNetwork-сервисов (livekit/coturn/onlyoffice). `unchanged` = master. **ВНИМАНИЕ:** переезд требует `rebind-public-node.sh`. |
-| `litserve_node` | Нода для provider-litserve. `unchanged` = дефолт (gpu-worker). |
-| `service_overrides` | CSV точечных override: `flows=gpu-worker,redis=master,rag=auto`. Применяются поверх category. |
+| `litserve_node` | Нода для provider-litserve. `unchanged` = `master`. |
+| `service_overrides` | CSV точечных override: `flows=master,redis=master,rag=auto`. |
 | `replace_orphan_platform_secret` | `true` один раз: удалить существующий `platform-secrets` без Helm перед первым install. |
-| `roll_litserve` | `true`: поставить `agent-lab-gpu:<sha>` (сначала `make k8s-gpu-sync IMAGE_TAG=<sha>`). По умолчанию `false` — оставить текущий GPU-образ: pull GHCR с gpu-worker ~1 час на 5 GiB. |
 
 Логика подстановки нод: [`deploy/scripts/build_helm_node_sets.sh`](scripts/build_helm_node_sets.sh) собирает `--set <path>.nodeName=<value>` из ENV и передаёт в `helm upgrade`.
 
 **Локальный `make k8s-deploy`** с **`values-prod.yaml`** не создаёт docker-registry Secret: перед установкой выполните ту же команду, что в workflow (**`kubectl create secret docker-registry ghcr-agent-lab-pull ...`**), или задайте свой список **`image.pullSecrets`** и имя секрета в кластере.
 
-Обычный релиз (JS/apps, не LitServe): Deploy без `roll_litserve` — helm ждёт только master (минуты). `voice` на master. OpenFGA pin уже на frontend — `openfga_bootstrap_cluster.sh` **не** делает второй `helm --wait`.
+Обычный релиз: Deploy ставит `agent-lab` и `agent-lab-gpu` с одним `image.tag`. Образ LitServe тянется на master с NVMe. Диск ≥85% включает image GC — **`make k8s-gpu-prune`**.
 
-Новый GPU-образ LitServe: **`make k8s-gpu-sync IMAGE_TAG=<sha>`** (LAN master→gpu-worker), затем Deploy `roll_litserve=true`. Прямой GHCR pull на GPU ~1 час на 5 GiB; диск ≥85% включает image GC и срывает pull — **`make k8s-gpu-prune`**.
-
-Никакого `docker compose`. Один helm-релиз, единый артефакт. В CI **`helm --wait --timeout 60m`**. Ошибка **`context deadline exceeded`**: проверить **`kubectl get pods -n platform -o wide`** (поды на `gpu-worker` в `Init`/`ContainerCreating` без Events = медленный GHCR). Ошибка **`another operation ... is in progress`**: **`make k8s-helm-clear-pending`**. **`concurrency`** ставит второй деплой в очередь (**`cancel-in-progress: false`**).
+Никакого `docker compose`. Один helm-релиз. В CI **`helm --wait --timeout 60m`**. Ошибка **`another operation ... is in progress`**: **`make k8s-helm-clear-pending`**. **`concurrency`** ставит второй деплой в очередь (**`cancel-in-progress: false`**).
 
 ## Конфигурация платформы для Helm (ConfigMap)
 
@@ -112,9 +101,9 @@ kubectl delete secret platform-secrets -n platform
 
 | Скрипт | Где запускать | Назначение |
 |---|---|---|
-| [`bootstrap-master.sh`](scripts/bootstrap-master.sh) | master нода под root | MicroK8s, core-аддоны (dns, hostpath-storage, ingress=traefik, cert-manager) и community-аддон portainer |
-| [`bootstrap-gpu-worker.sh`](scripts/bootstrap-gpu-worker.sh) | gpu-worker под root | NVIDIA driver + nvidia-container-toolkit + MicroK8s + containerd drop-in для NVIDIA runtime |
-| [`join-cluster.sh`](scripts/join-cluster.sh) | master root | `add-node` → SSH `microk8s join --worker` + label `accelerator=nvidia-gpu` |
+| [`bootstrap-master.sh`](scripts/bootstrap-master.sh) | master под root | hostname, harden-ssh, NVIDIA (`bootstrap-nvidia.sh`), MicroK8s, аддоны, лейбл GPU |
+| [`kubeconfig-for-github-actions.sh`](scripts/kubeconfig-for-github-actions.sh) | локально / master | base64 kubeconfig с `https://31.192.111.33:16443` для `KUBECONFIG_B64` |
+| [`bootstrap-nvidia.sh`](scripts/bootstrap-nvidia.sh) | master под root | NVIDIA driver + toolkit + containerd drop-in (exit 10 = reboot) |
 | [`setup-wildcard-tls.sh`](scripts/setup-wildcard-tls.sh) | локально / master / CI | `cert-manager-webhook-regru` + ClusterIssuer `letsencrypt-prod-dns01` + Certificate `platform-tls` |
 | [`cluster-health.sh`](scripts/cluster-health.sh) | локально / master / CI | Полная проверка: ноды, GPU, поды, PVC, Ingress, Certificate, Postgres, Redis, Loki/Tempo, public health |
 | [`backup-postgres.sh`](scripts/backup-postgres.sh) | локально / master | `pg_dumpall` через `kubectl exec`, опционально `--s3` в Selectel |
@@ -123,11 +112,10 @@ kubectl delete secret platform-secrets -n platform
 | [`helm_precheck_install_secret_conflict.sh`](scripts/helm_precheck_install_secret_conflict.sh) | CI / `make k8s-deploy` с секретами | Перед первым install: коллизия с `platform-secrets` без Helm → ошибка или удаление при `HELM_DELETE_ORPHAN_PLATFORM_SECRET=1` (в CI — галочка `replace_orphan_platform_secret`) |
 | [`helm_clear_pending_release.sh`](scripts/helm_clear_pending_release.sh) | локально / CI / master при наличии `kubectl` | Удалить Helm Secret с `status=pending-*` (разблокировать **`another operation is in progress`** без **`helm rollback`**) |
 | [`decommission-compose.sh`](scripts/decommission-compose.sh) | локально (SSH на хост) | Полный снос legacy docker compose стека; dry-run по default, `CONFIRM=1` — реально |
-| [`cluster-reset.sh`](scripts/cluster-reset.sh) | локально (SSH на обе ноды) | Полный reset MicroK8s (helm uninstall, namespace delete, snap purge); `CONFIRM=1` — реально |
-| [`gpu_sync_release_images.sh`](scripts/gpu_sync_release_images.sh) | локально (SSH master) | Pull на master + export/scp/import на gpu-worker. `make k8s-gpu-sync IMAGE_TAG=<sha>` |
-| [`gpu_prune_release_images.sh`](scripts/gpu_prune_release_images.sh) | локально (SSH gpu-worker) | Снести старые `agent-lab{,-gpu}` теги, оставить in-use + 3 последних. `make k8s-gpu-prune` |
+| [`cluster-reset.sh`](scripts/cluster-reset.sh) | локально (SSH master) | Полный reset MicroK8s; `CONFIRM=1` — реально. Не запускать на `84.38.184.105` (ytai). |
+| [`gpu_prune_release_images.sh`](scripts/gpu_prune_release_images.sh) | локально (SSH master) | Снести старые `agent-lab{,-gpu}` теги. `make k8s-gpu-prune` |
 
-Обёртки в Makefile: `make k8s-deploy` / `k8s-health` / `k8s-gpu-sync` / `k8s-gpu-prune` / `k8s-backup` / `k8s-restore` / `k8s-rollback` / `k8s-uninstall`.
+Обёртки в Makefile: `make k8s-deploy` / `k8s-health` / `k8s-gpu-prune` / `k8s-backup` / `k8s-restore` / `k8s-rollback` / `k8s-uninstall`.
 
 ## GitHub Secrets
 
@@ -137,7 +125,7 @@ kubectl delete secret platform-secrets -n platform
 
 | Секрет | Что туда положить |
 |---|---|
-| `KUBECONFIG_B64` | На master: **`microk8s config \| base64 -w0`** (Linux) или **`microk8s config \| base64 \| tr -d '\n'`** (macOS). Один **repository secret** (Settings → Secrets → Actions). Job деплоя **без** GitHub Environment, чтобы секрет не затенялся пустым Environment-secret с тем же именем. |
+| `KUBECONFIG_B64` | `bash deploy/scripts/kubeconfig-for-github-actions.sh` (server `https://31.192.111.33:16443`, не `127.0.0.1` из `microk8s config`). `gh secret set KUBECONFIG_B64 --body "$(bash deploy/scripts/kubeconfig-for-github-actions.sh)"`. Job деплоя **без** GitHub Environment, чтобы секрет не затенялся пустым Environment-secret с тем же именем. |
 
 ### Платформа (передаются в Secret `platform-secrets`)
 
@@ -187,11 +175,10 @@ Pin store/model **автоматический** после helm: `openfga_boots
 Нужны **kubectl**, **helm**, **jq** (`brew install jq` / `apt install jq`) — jq собирает JSON секретов для `helm --set-json`.
 
 ```bash
-# 1. KUBECONFIG настроен (kubectl get nodes показывает обе ноды)
+# 1. KUBECONFIG настроен (kubectl get nodes показывает одну ноду master)
 kubectl get nodes
 # NAME         STATUS   ROLES           AGE
 # master       Ready    control-plane   ...
-# gpu-worker   Ready    <none>          ...
 
 # 2. Экспорт секретов и установка релиза (namespace создаётся `helm --create-namespace`, Secret — шаблон чарта при переданных platformSecrets):
 export POSTGRES_PASSWORD=...

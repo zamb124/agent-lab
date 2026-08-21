@@ -9,7 +9,7 @@ name: Build Base Image
 #   - auto: push в main с изменениями pyproject.toml / uv.lock / Dockerfile.base
 #   - manual: workflow_dispatch из UI (Actions → Build Base Image → Run workflow)
 #
-# Платформа: linux/amd64 (наш k8s кластер целиком amd64 — master + gpu-worker).
+# Платформа: linux/amd64 (k8s кластер amd64, одна нода master).
 # arm64 wheels (torch CUDA, nvidia-cu*) часто отсутствуют, мульти-арч ломает резолв.
 
 concurrency:
