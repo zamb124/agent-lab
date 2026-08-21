@@ -22,7 +22,7 @@
     },
     "payment_provider": {
       "title": "Платежный провайдер",
-      "description": "Через какой провайдер производится оплата"
+      "description": "Через какой провайдер производится оплата (tinkoff, grant, yoomoney)"
     },
     "external_payment_id": {
       "title": "ID платежа у провайдера",

@@ -130,6 +130,7 @@ export class FrontendBillingPage extends PlatformPage {
         this._history = this.useOp('frontend/billing_history');
         this._planChange = this.useOp('frontend/billing_plan_change');
         this._locale = this.select((s) => typeof s.i18n.locale === 'string' && s.i18n.locale.length > 0 ? s.i18n.locale : 'en');
+        this._routerSearch = this.select((s) => s.router.search);
         this._loaded = false;
     }
 
@@ -145,12 +146,41 @@ export class FrontendBillingPage extends PlatformPage {
     }
 
     updated() {
+        this._notifyPaymentReturn();
         if (!this._loaded) {
             this._loaded = true;
             this._subscription.run();
             this._usage.run();
             this._history.run();
         }
+    }
+
+    _notifyPaymentReturn() {
+        const search = this._routerSearch.value;
+        if (typeof search !== 'string') {
+            throw new Error('router.search must be a string');
+        }
+        if (search === '') {
+            return;
+        }
+        const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
+        const payment = params.get('payment');
+        if (payment === null) {
+            return;
+        }
+        if (payment !== 'success' && payment !== 'fail') {
+            throw new Error(`unsupported payment return: ${payment}`);
+        }
+        const transactionId = params.get('transaction_id');
+        if (transactionId === null || transactionId.trim() === '') {
+            throw new Error('payment return requires transaction_id');
+        }
+        if (payment === 'fail') {
+            this.toast('toast_payment_fail', { type: 'error' });
+        } else {
+            this.toast('toast_payment_success', { type: 'success' });
+        }
+        this.navigate('billing', {}, { replace: true, search: '' });
     }
 
     _topup() {
@@ -300,6 +330,9 @@ export class FrontendBillingPage extends PlatformPage {
         }
         if (key === 'grant') {
             return this.t('history_table.provider_grant');
+        }
+        if (key === 'yoomoney') {
+            return this.t('history_table.provider_yoomoney');
         }
         throw new Error(`unknown payment_provider: ${key}`);
     }

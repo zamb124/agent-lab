@@ -64,8 +64,11 @@
         "provider": "Source",
         "comment": "Note",
         "provider_tinkoff": "T-Bank",
-        "provider_grant": "Grant (no payment)"
+        "provider_grant": "Grant (no payment)",
+        "provider_yoomoney": "YooMoney"
     },
+    "toast_payment_success": "Payment succeeded. Balance updates after the bank confirms.",
+    "toast_payment_fail": "Payment failed. Funds were not added.",
     "frontend_console": {
         "page_title": "Billing",
         "balance_available": "Available on account",

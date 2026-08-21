@@ -64,8 +64,11 @@
         "provider": "Источник",
         "comment": "Примечание",
         "provider_tinkoff": "Т-Банк",
-        "provider_grant": "Грант (без оплаты)"
+        "provider_grant": "Грант (без оплаты)",
+        "provider_yoomoney": "ЮMoney"
     },
+    "toast_payment_success": "Оплата прошла. Баланс обновится после подтверждения банка.",
+    "toast_payment_fail": "Оплата не прошла. Средства не зачислены.",
     "frontend_console": {
         "page_title": "Биллинг",
         "balance_available": "Доступно на счете",

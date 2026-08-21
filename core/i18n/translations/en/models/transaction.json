@@ -22,7 +22,7 @@
     },
     "payment_provider": {
       "title": "Payment Provider",
-      "description": "Payment system used (tinkoff, grant)"
+      "description": "Payment system used (tinkoff, grant, yoomoney)"
     },
     "external_payment_id": {
       "title": "External Payment ID",

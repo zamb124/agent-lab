@@ -178,7 +178,11 @@ Observability: `traced_operation("voice.tts.pronunciation.transform")` — бе�
 | **SuccessURL** | браузер покупателя | `{subdomain}.{apex Host}/billing?payment=success&transaction_id=…` (`linnex.io` / `humanitec.ru` / `*.localhost`) |
 | **FailURL** | браузер покупателя | то же с `payment=fail` |
 
+Страница `/billing` читает `payment` + `transaction_id` из `router.search` и показывает toast (`toast_payment_success` / `toast_payment_fail`), затем `replace` на `/billing` без query. Банковский редирект — сигнал для UI, не зачисление.
+
 Банк не подтверждает платёж через SuccessURL. Деньги: HTTP-уведомление (`CONFIRMED`) или сверка `CheckOrder` в `payment_sync_tick`.
+
+`GET /history` и `payment_sync_tick` читают все ключи `payment:{company_id}:*`. В Storage лежат архивные `yoomoney` — `PaymentProviderType` обязан их валидировать, иначе список и сверка падают на первой старой записи. Новый Init создаёт только `tinkoff` / `grant`.
 
 Чек 54-ФЗ: в Init объект `Receipt`, если `receipt_enabled`. СНО АУСН доходы минус расходы → `taxation=usn_income_outcome`, НДС позиции `none`, `PaymentMethod=full_prepayment`, `PaymentObject=service`, Name «Пополнение баланса». Нет email покупателя при включённом чеке → raise. Живая DEMO-сюита (Тест 7) требует `receipt_enabled=true` и онлайн-кассу на терминале; Init без кассы падает текстом банка. Placeholder `YOUR_TINKOFF_*` в live-тестах → `pytest.skip`.
 

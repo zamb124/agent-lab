@@ -149,6 +149,19 @@ class TestPaymentModels:
         req = CreatePaymentRequest(amount=500.0)
         assert req.amount == 500.0
 
+    def test_transaction_accepts_stored_yoomoney(self) -> None:
+        txn = Transaction.model_validate(
+            {
+                "transaction_id": "system:txn_legacy",
+                "company_id": "system",
+                "user_id": "user_1",
+                "amount": 100.0,
+                "status": "success",
+                "payment_provider": "yoomoney",
+            }
+        )
+        assert txn.payment_provider == PaymentProviderType.YOOMONEY
+
     def test_transaction_default_status_pending(self) -> None:
         txn = Transaction(
             transaction_id="test:txn_1",

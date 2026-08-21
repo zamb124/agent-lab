@@ -22,10 +22,11 @@ class PaymentStatus(str, Enum):
 
 
 class PaymentProviderType(str, Enum):
-    """Типы источника пополнения: платёжный провайдер или грант из админки platform."""
+    """Источник пополнения в хранимой Transaction. Новые Init — только tinkoff/grant."""
 
     TINKOFF = "tinkoff"
     GRANT = "grant"
+    YOOMONEY = "yoomoney"
 
 
 class TinkoffNotificationPayload(BaseModel):
