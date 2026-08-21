@@ -52,7 +52,7 @@ LEGAL__COMPANY_NAME_RU=...
 | Секция | Что |
 |---|---|
 | **`database`** | `shared_url`, `flows_url`, `crm_url`, `sync_url`, `rag_url`, `office_url`, `worktracker_url`, `tracing_url`, `redis_url`. Не дублировать в `services.*`. `DATABASE__OFFICE_URL` → `platform_office`; `DATABASE__WORKTRACKER_URL` → `platform_worktracker` (ядро задач WorkItem, см. `worktracker.mdc`); `DATABASE__TRACING_URL` → `platform_tracing` (см. `migrations.mdc`, `tracing.mdc`). `.env` и `DATABASE__*` в окружении **перекрывают** JSON. |
-| **`server`** | Плоские URL межсервисных вызовов (`flows_service_url`, `crm_service_url`, …). `voice` локально — `http://localhost:8015`. Вложенного `server.services.*` нет. **`platform_public_base_url`** — публичный origin без слэша на конце (дефолт primary apex). **`deployment_version`** — метка релиза в JSON `health` (PWA при смене чистит Cache Storage). |
+| **`server`** | Плоские URL межсервисных вызовов (`flows_service_url`, `crm_service_url`, …). `voice` локально — `http://localhost:8015`. Вложенного `server.services.*` нет. **`platform_public_base_url`** — публичный origin без слэша на конце (дефолт primary apex, прод Helm `publicBaseHost` → `SERVER__PLATFORM_PUBLIC_BASE_URL`, не `.Values.domain`). **`deployment_version`** — метка релиза в JSON `health` (PWA при смене чистит Cache Storage). |
 | **`primary_platform_domain`** | Primary registrable apex (`linnex.io`). Используется для дефолтных публичных URL, OAuth primary callbacks, smoke. |
 | **`platform_brands`** | Per-apex бренд: `platform_name`, `support_email`, `agent_product_name` (LinnexAgent / HumanitecAgent), `models_product_name`, `legal`, `embed_*`, `auth_apple_client_id`, `vapid_email`. Ключ — registrable apex (`linnex.io`, `humanitec.ru`, …). Runtime: `core/platform_brand/resolver.py` (`resolve_brand`, `resolve_brand_domain`). **Не хардкодить** один домен/бренд в сервисах — резолвить по `Host`. |
 | **`calendar_sync`** | Фоновая синхронизация (`CalendarSyncConfig`), в т.ч. `sync_meeting_reminder_*` — напоминания о встречах Sync за ~15 минут. |
@@ -100,7 +100,9 @@ LEGAL__COMPANY_NAME_RU=...
 | Поле | Назначение |
 |---|---|
 | `default_provider` | `tinkoff_main` |
-| `sync_enabled` / `sync_cron` | Сверка pending через `POST /v2/CheckOrder` (`payment_sync_tick`) |
+| `sync_enabled` / `sync_cron` | Запасная сверка pending через `POST /v2/CheckOrder` (`payment_sync_tick`) |
+| `sync_pending_max_age_hours` | Окно возраста pending для CheckOrder (дефолт 24). Старше окна — один CheckOrder, затем `failed` |
+| `sync_check_order_limit` | Потолок CheckOrder за один тик (дефолт 50) |
 | `providers.tinkoff_main.terminal_key` | TerminalKey терминала (не Merchant_id / Terminal_id) |
 | `password` | Пароль терминала для Token |
 | `api_url` | Дефолт `https://securepay.tinkoff.ru/v2` (DEMO тоже сюда) |

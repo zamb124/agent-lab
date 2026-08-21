@@ -44,6 +44,7 @@ import { buildPlatformFileDownloadUrl } from '../utils/platform-files-url.js';
 import {
     attachmentsWithoutInlineCid,
     buildCidFileMap,
+    isMailDocumentHtml,
 } from '../utils/mail-html.js';
 
 const MAIL_FOLDER_INDEX_MIME = 'application/x-platform-mail-folder-index';
@@ -801,10 +802,16 @@ export class PlatformMailModal extends PlatformModal {
             }
             .chat-bubble-row.has-html {
                 max-width: 100%;
+            }
+            .chat-bubble-row.has-html.theirs {
                 align-self: stretch;
             }
             .chat-bubble-row.has-html .chat-bubble {
                 width: 100%;
+            }
+            .chat-bubble-row.mine {
+                align-self: flex-end;
+                flex-direction: row-reverse;
             }
             .chat-bubble-row.theirs {
                 align-self: flex-start;
@@ -3500,20 +3507,34 @@ export class PlatformMailModal extends PlatformModal {
         `;
     }
 
-    _renderMessageBody(message) {
+    _threadBodyView(message) {
         const bodyHtml = typeof message.body_html === 'string' ? message.body_html : '';
         const bodyText = typeof message.body_text === 'string' ? message.body_text : '';
         if (bodyHtml.length === 0 && bodyText.length === 0) {
+            return null;
+        }
+        if (isMailDocumentHtml(bodyHtml)) {
+            return { html: bodyHtml, text: bodyText, documentHtml: true };
+        }
+        if (bodyText.length > 0) {
+            return { html: '', text: bodyText, documentHtml: false };
+        }
+        return { html: bodyHtml, text: '', documentHtml: false };
+    }
+
+    _renderMessageBody(message) {
+        const bodyView = this._threadBodyView(message);
+        if (bodyView === null) {
             return nothing;
         }
         const uid = typeof message.uid === 'string' ? message.uid : '';
         const cidMap = uid && Object.hasOwn(this._cidMaps, uid) ? this._cidMaps[uid] : {};
-        const wrapperClass = bodyHtml.length > 0 ? 'thread-body-html' : 'thread-body-text';
+        const wrapperClass = bodyView.html.length > 0 ? 'thread-body-html' : 'thread-body-text';
         return html`
             <div class=${wrapperClass}>
                 <platform-mail-html-body
-                    .html=${bodyHtml}
-                    .text=${bodyText}
+                    .html=${bodyView.html}
+                    .text=${bodyView.text}
                     .cidMap=${cidMap}
                 ></platform-mail-html-body>
             </div>
@@ -3867,10 +3888,11 @@ export class PlatformMailModal extends PlatformModal {
         const visibleAttachments = attachmentsWithoutInlineCid(attachments, bodyHtml);
         const uid = typeof message.uid === 'string' ? message.uid : '';
         const messageId = typeof message.message_id === 'string' ? message.message_id : '';
-        const hasHtml = bodyHtml.length > 0;
+        const bodyView = this._threadBodyView(message);
+        const documentHtml = bodyView !== null && bodyView.documentHtml;
         return html`
             <div
-                class="chat-bubble-row ${mine ? 'mine' : 'theirs'}${hasHtml ? ' has-html' : ''}"
+                class="chat-bubble-row ${mine ? 'mine' : 'theirs'}${documentHtml ? ' has-html' : ''}"
                 data-uid=${uid}
                 data-message-id=${messageId}
             >

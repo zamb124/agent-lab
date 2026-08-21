@@ -155,7 +155,7 @@ hasFactory(name)
 clearFactoryRegistry()          // только тесты
 ```
 
-Регистрация — один раз при boot'е через `PlatformApp.static factories = [...]`. Любая коллизия `sliceKey` или повторная регистрация = `throw` сразу.
+Регистрация — один раз при boot'е через `PlatformApp.static factories = [...]`. Любая коллизия `sliceKey` или повторная регистрация = `throw` сразу. CI `scripts/check_ui_factories.py`: фабрика из `apps/<svc>/ui/events/**`, на которую ссылается `useOp`/`useResource`/`useForm`/`useCursorList`/`useFacets`/`useSlice` в UI сервиса, обязана быть в этом массиве. Иначе модалка падает в `getFactory: not registered`.
 
 ## PlatformApp
 

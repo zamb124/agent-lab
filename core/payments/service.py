@@ -170,9 +170,7 @@ class PaymentService:
             transaction_id=transaction_id,
         )
         public_base = require_platform_public_base_url()
-        notification_url = (
-            f"{public_base}/api/v1/payments/webhook/{provider.registry_name}"
-        )
+        notification_url = f"{public_base}/api/v1/payments/webhook/{provider.registry_name}"
 
         payment_request = PaymentRequest(
             amount=amount,
@@ -407,11 +405,7 @@ class PaymentService:
         return None
 
     async def get_company_transactions(
-        self,
-        company_id: str,
-        limit: int = 50,
-        offset: int = 0,
-        provider_name: str | None = None
+        self, company_id: str, limit: int = 50, offset: int = 0, provider_name: str | None = None
     ) -> list[Transaction]:
         if provider_name:
             prefix = f"payment:{company_id}:{provider_name}:"
@@ -431,6 +425,45 @@ class PaymentService:
         transactions.sort(key=lambda t: t.created_at, reverse=True)
 
         return transactions[offset : offset + limit]
+
+    async def list_pending_transactions(
+        self,
+        *,
+        prefix: str,
+        limit: int,
+        newest_first: bool,
+        created_after: datetime | None = None,
+        created_before: datetime | None = None,
+    ) -> list[Transaction]:
+        if not prefix.startswith("payment:"):
+            raise ValueError("prefix must start with 'payment:'")
+        payloads = await self._storage.list_by_prefix_json_text_equals(
+            prefix,
+            field="status",
+            equals=PaymentStatus.PENDING.value,
+            limit=limit,
+            newest_first=newest_first,
+            created_after=created_after,
+            created_before=created_before,
+            force_global=True,
+        )
+        return [Transaction.model_validate_json(payload) for payload in payloads]
+
+    async def expire_unpaid_pending(self, transaction: Transaction) -> bool:
+        stored = await self.get_transaction(transaction.transaction_id)
+        if stored is None:
+            return False
+        if stored.status != PaymentStatus.PENDING:
+            return False
+        stored.status = PaymentStatus.FAILED
+        stored.completed_at = datetime.now(timezone.utc)
+        await self.close_unsuccessful_payment(stored)
+        logger.info(
+            "payments.pending_expired",
+            transaction_id=stored.transaction_id,
+            company_id=stored.company_id,
+        )
+        return True
 
     async def close_unsuccessful_payment(self, transaction: Transaction) -> None:
         if transaction.status not in {PaymentStatus.FAILED, PaymentStatus.REFUNDED}:
@@ -471,11 +504,7 @@ class PaymentService:
 
         logger.debug(f"Сохраняем транзакцию по ключу: {key}")
 
-        success = await self._storage.set(
-            key,
-            transaction.model_dump_json(),
-            force_global=True
-        )
+        success = await self._storage.set(key, transaction.model_dump_json(), force_global=True)
 
         logger.debug(f"Результат сохранения транзакции: {success}")
 
@@ -486,7 +515,7 @@ class PaymentService:
         _ = await self._storage.set(
             f"payment_notification:{notification.notification_id}",
             notification.model_dump_json(),
-            force_global=True
+            force_global=True,
         )
 
     async def _get_transaction_in_session(

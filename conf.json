@@ -863,6 +863,8 @@
     "default_provider": "tinkoff_main",
     "sync_enabled": true,
     "sync_cron": "*/30 * * * *",
+    "sync_pending_max_age_hours": 24,
+    "sync_check_order_limit": 50,
     "providers": {
       "tinkoff_main": {
         "provider_type": "tinkoff",

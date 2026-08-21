@@ -234,6 +234,7 @@ class TinkoffProvider(BasePaymentProvider[TinkoffConfig]):
             company_id=request.company_id,
             transaction_id=request.transaction_id,
             amount_kopecks=amount_kopecks,
+            notification_url=request.notification_url,
         )
         data = await self._post_json("Init", body)
         success = _require_bool(data["Success"], "Init.Success")
@@ -332,9 +333,7 @@ class TinkoffProvider(BasePaymentProvider[TinkoffConfig]):
         }
         if self.config.receipt_enabled:
             if customer_email is None:
-                raise ValueError(
-                    "customer_email is required when Tinkoff receipt_enabled is true"
-                )
+                raise ValueError("customer_email is required when Tinkoff receipt_enabled is true")
             fields["Receipt"] = self._receipt(
                 amount_kopecks=amount_kopecks,
                 customer_email=customer_email,

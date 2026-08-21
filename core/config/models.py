@@ -318,8 +318,11 @@ class ServerConfig(BaseModel):
     code_runner_go_service_url: str | None = None
     code_runner_csharp_service_url: str | None = None
     platform_public_base_url: str | None = Field(
-        default="https://humanitec.ru",
-        description="Публичный origin без завершающего слэша для deep link (календарь, Sync join).",
+        default="https://linnex.io",
+        description=(
+            "Публичный origin без завершающего слэша (primary apex): "
+            "NotificationURL Т-Банка, short links, календарь, Sync join."
+        ),
     )
     document_server_dev_upstream_url: str | None = Field(
         default=None,
@@ -434,6 +437,7 @@ class ServerConfig(BaseModel):
             if trimmed:
                 return f"{trimmed.rstrip('/')}/flows"
         return self.get_flows_service_url().rstrip("/")
+
 
 class WorkerConfig(BaseModel):
     """Конфигурация воркеров"""
@@ -871,6 +875,19 @@ class PaymentProvidersConfig(BaseModel):
     sync_cron: str = Field(
         default="*/30 * * * *", description="Cron-расписание для сверки транзакций"
     )
+    sync_pending_max_age_hours: int = Field(
+        default=24,
+        ge=1,
+        description=(
+            "Окно возраста pending для CheckOrder. Старше окна — один CheckOrder; "
+            "если банк всё ещё не терминальный — failed."
+        ),
+    )
+    sync_check_order_limit: int = Field(
+        default=50,
+        ge=1,
+        description="Потолок CheckOrder (и истечения stale pending) за один payment_sync_tick",
+    )
     providers: dict[str, PaymentProviderConfigEntry] = Field(
         default_factory=dict, description="Платежные провайдеры (tinkoff_main)"
     )
@@ -916,6 +933,7 @@ class EmbeddingConfig(BaseModel):
     @classmethod
     def _provider_supports_embedding(cls, value: str) -> str:
         return validate_platform_provider_for_capability(value, AICapability.EMBEDDING)
+
 
 class RAGProviderConfig(BaseModel):
     """Конфигурация одного RAG провайдера"""
@@ -1754,15 +1772,9 @@ class GoogleWorkspaceApiBases(BaseModel):
 class GoogleWorkspaceConfig(BaseModel):
     """Google Workspace connector settings (credentials table, no extra schema)."""
 
-    system: GoogleWorkspaceSystemConfig = Field(
-        default_factory=GoogleWorkspaceSystemConfig
-    )
-    live_test: GoogleWorkspaceLiveTestConfig = Field(
-        default_factory=GoogleWorkspaceLiveTestConfig
-    )
-    api_bases: GoogleWorkspaceApiBases = Field(
-        default_factory=GoogleWorkspaceApiBases
-    )
+    system: GoogleWorkspaceSystemConfig = Field(default_factory=GoogleWorkspaceSystemConfig)
+    live_test: GoogleWorkspaceLiveTestConfig = Field(default_factory=GoogleWorkspaceLiveTestConfig)
+    api_bases: GoogleWorkspaceApiBases = Field(default_factory=GoogleWorkspaceApiBases)
 
 
 class OpenAIProviderConfig(BaseModel):
@@ -2015,6 +2027,7 @@ class PlatformFreePoolConfig(BaseModel):
                 "llm.platform_free_pool.cache_ttl_seconds должен быть больше refresh_interval_seconds"
             )
         return self
+
 
 class LLMConfig(BaseModel):
     """Конфигурация LLM с поддержкой нескольких провайдеров"""

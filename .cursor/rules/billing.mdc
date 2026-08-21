@@ -164,7 +164,7 @@ Observability: `traced_operation("voice.tts.pronunciation.transform")` — бе�
 4. Token запроса и HTTP-уведомления: корневые скаляры без `Token`/`DATA`/`Receipt` + `Password` → сортировка ключей → конкатенация значений → SHA-256 hex (`compute_tinkoff_token`). Bool в нотификации — `true`/`false`.
 5. Ответ Init: `PaymentId` + `PaymentURL`. Нет URL / `Success=false` → **raise**.
 6. UI редиректит на `PaymentURL`. Success/Fail URL — `{subdomain}.{apex Host}/billing?payment=...` (`payment_browser_return_url` по `Context.host`, не `PRIMARY_DOMAIN`).
-7. `NotificationURL` — `{platform_public_base_url}/api/v1/payments/webhook/{registry_name}` (стабильный HTTPS, не company-subdomain). Локально банк до `*.localhost` не достучится — сверка через `POST /v2/CheckOrder` в `payment_sync_tick`.
+7. `NotificationURL` — `{platform_public_base_url}/api/v1/payments/webhook/{registry_name}` (стабильный HTTPS, не company-subdomain). Канон продакшена: `https://linnex.io/api/v1/payments/webhook/tinkoff_main` (`SERVER__PLATFORM_PUBLIC_BASE_URL` = `https://{{ .Values.publicBaseHost }}`, не `.Values.domain`). В кабинете Т-Банка: канал HTTP(S) и тот же URL. Локально банк до `*.localhost` не достучится — запасная сверка `payment_sync_tick`.
 8. Webhook: JSON POST, ответ **HTTP 200 тело ровно `OK`**. Неверный Token → 200 `OK` без зачисления.
 9. Зачисление баланса **только** на `Status=CONFIRMED`. `AUTHORIZED` (и прочие pending) баланс не трогают. `REJECTED` / `AUTH_FAIL` / `DEADLINE_EXPIRED` / `CANCELED` → `failed`.
 10. Неизвестный `OrderId` и неверный Token на webhook → HTTP **200** тело `OK`, без зачисления. Иначе банк ретраит час/сутки/месяц. Не-JSON → не 200. Неизвестный `provider_name` → 404.
@@ -174,19 +174,19 @@ Observability: `traced_operation("voice.tts.pronunciation.transform")` — бе�
 
 | URL | Кто ходит | Значение |
 |---|---|---|
-| **NotificationURL** | серверы Т-Банка | `{platform_public_base_url}/api/v1/payments/webhook/{registry_name}` |
+| **NotificationURL** | серверы Т-Банка | `{platform_public_base_url}/api/v1/payments/webhook/{registry_name}` (прод: `https://linnex.io/api/v1/payments/webhook/tinkoff_main`) |
 | **SuccessURL** | браузер покупателя | `{subdomain}.{apex Host}/billing?payment=success&transaction_id=…` (`linnex.io` / `humanitec.ru` / `*.localhost`) |
 | **FailURL** | браузер покупателя | то же с `payment=fail` |
 
 Страница `/billing` читает `payment` + `transaction_id` из `router.search` и показывает toast (`toast_payment_success` / `toast_payment_fail`), затем `replace` на `/billing` без query. Банковский редирект — сигнал для UI, не зачисление.
 
-Банк не подтверждает платёж через SuccessURL. Деньги: HTTP-уведомление (`CONFIRMED`) или сверка `CheckOrder` в `payment_sync_tick`. Сверка зовёт тот же `_platform_status`, что webhook: `CONFIRMED` → `success` и зачисление; `REJECTED` / `AUTH_FAIL` / `DEADLINE_EXPIRED` / `CANCELED` → `failed` без баланса; `REFUNDED` / `REVERSED` / … → `refunded` без баланса; `NEW` / `FORM_SHOWED` / `AUTHORIZED` остаются `pending`.
+Банк не подтверждает платёж через SuccessURL. Зачисление: HTTP-уведомление `CONFIRMED` (основной канал) или запасная сверка `CheckOrder` в `payment_sync_tick`. Тик не обходит компании и не читает историю: один SQL `key LIKE 'payment:%' AND value->>'status' = 'pending'`, окно `sync_pending_max_age_hours` (24) и потолок `sync_check_order_limit` (50) CheckOrder за тик. Компании без pending тик не трогает. Старше окна — один CheckOrder; если банк всё ещё не терминальный → `failed`. Тот же `_platform_status`, что webhook: `CONFIRMED` → `success` и зачисление; `REJECTED` / `AUTH_FAIL` / `DEADLINE_EXPIRED` / `CANCELED` → `failed` без баланса; `REFUNDED` / `REVERSED` / … → `refunded` без баланса; `NEW` / `FORM_SHOWED` / `AUTHORIZED` остаются `pending`.
 
-`GET /history` и `payment_sync_tick` читают все ключи `payment:{company_id}:*`. В Storage лежат архивные `yoomoney` — `PaymentProviderType` обязан их валидировать, иначе список и сверка падают на первой старой записи. Новый Init создаёт только `tinkoff` / `grant`.
+`GET /history` читает ключи `payment:{company_id}:*` (лимит страницы). `payment_sync_tick` историю не сканирует. В Storage лежат архивные `yoomoney` — `PaymentProviderType` обязан их валидировать, иначе список падает на первой старой записи. Новый Init создаёт только `tinkoff` / `grant`.
 
 Чек 54-ФЗ: в Init объект `Receipt`, если `receipt_enabled`. СНО АУСН доходы минус расходы → `taxation=usn_income_outcome`, НДС позиции `none`, `PaymentMethod=full_prepayment`, `PaymentObject=service`, Name «Пополнение баланса». Нет email покупателя при включённом чеке → raise. Живая DEMO-сюита (Тест 7) требует `receipt_enabled=true` и онлайн-кассу на терминале; Init без кассы падает текстом банка. Placeholder `YOUR_TINKOFF_*` в live-тестах → `pytest.skip`.
 
-TLS `securepay.tinkoff.ru` подписан НУЦ Минцифры (`Russian Trusted Root CA`). `certifi`/Mozilla этот корень не содержат. `TinkoffProvider` проверяет цепочку через `certifi` + официальный `core/clients/payment/certs/russian_trusted_root_ca.pem` (SHA-256 DER `d26d2d0231b7c39f92cc738512ba54103519e4405d68b5bd703e9788ca8ecf31`, источник `gu-st.ru`). Нет файла / другой отпечаток → raise. `verify=False` запрещён. Playwright Chromium тот же корень не знает и extra server-CA не принимает — контекст формы банка `ignore_https_errors`; зачисление по-прежнему только `GetState`/`CheckOrder`.
+TLS `securepay.tinkoff.ru` после отзыва GlobalSign подписан НУЦ Минцифры (`Russian Trusted Root CA` + промежуточный `Russian Trusted Sub CA`). `certifi`/Mozilla эти CA не содержат. `TinkoffProvider` проверяет цепочку через `certifi` + официальные PEM в `core/clients/payment/certs/`: `russian_trusted_root_ca.pem` (SHA-256 DER `d26d2d0231b7c39f92cc738512ba54103519e4405d68b5bd703e9788ca8ecf31`) и `russian_trusted_sub_ca.pem` (SHA-256 DER `bbbde2103e790b999ec62bd03cf625a5a2e7c316e10afe6a490eedead8b3fd9b`), источник `gu-st.ru` / Госуслуги. Нет файла / другой отпечаток → raise. `verify=False` запрещён. Глобальные `SSL_CERT_FILE` / `REQUESTS_CA_BUNDLE` не используются: extra-CA только у Tinkoff-клиента. Trust Asia на переходный период — из `certifi`. Проверочный хост банка `https://mddc.tbank.ru/` (`tests/core/clients/test_tinkoff_ssl.py`, маркер `network`). Playwright Chromium корень Минцифры не знает и extra server-CA не принимает — контекст формы банка `ignore_https_errors`; зачисление по-прежнему только `GetState`/`CheckOrder`.
 
 DEMO-карты (только терминал с `DEMO` в TerminalKey, боевой `https://securepay.tinkoff.ru/v2`, не `rest-api-test`):
 

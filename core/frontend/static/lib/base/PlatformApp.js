@@ -39,7 +39,7 @@ import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { bootstrapPlatformBus, completeBootstrap, getPlatformBus, hasPlatformBus } from '../events/index.js';
 import { CoreEvents } from '../events/contract.js';
-import { translate } from '../events/effects/i18n.effect.js';
+import { isI18nBundleReady, translate } from '../events/effects/i18n.effect.js';
 import { mergePlatformI18nVars } from '../utils/platform-i18n-vars.js';
 import { CoreAuthEvents } from '../events/effects/auth.effect.js';
 import { redirectToLogin } from '../utils/auth-redirect.js';
@@ -180,6 +180,7 @@ export class PlatformApp extends PlatformElement {
         this._activeRouteTransition = null;
 
         this._toastsSelect = this.select((s) => s.notify.toasts);
+        this._i18nReadySelect = this.select((s) => isI18nBundleReady(s.i18n));
         this._authSelect = this.select((s) => ({
             status: s.auth.status,
             user: s.auth.user,
@@ -361,6 +362,9 @@ export class PlatformApp extends PlatformElement {
     }
 
     _renderToasts() {
+        if (!this._i18nReadySelect || !this._i18nReadySelect.value) {
+            return;
+        }
         const toasts = this._toastsSelect ? this._toastsSelect.value || [] : [];
         for (const t of toasts) {
             if (this._renderedToastIds.has(t.id)) continue;

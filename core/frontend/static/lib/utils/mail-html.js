@@ -69,6 +69,32 @@ const MAIL_BODY_CSS = [
     'details.mail-quote>summary{cursor:pointer;color:#888888;font-size:13px;list-style:none;}',
 ].join('');
 
+const DOCUMENT_HTML_HEAD_RE = /^\s*(?:<!doctype\s+html|<html[\s>]|<head[\s>]|<body[\s>])/i;
+const DOCUMENT_HTML_OUTLOOK_RE = /xmlns:[vo]=|urn:schemas-microsoft-com|mso-/i;
+const DOCUMENT_HTML_LAYOUT_TABLE_RE = /<table\b[^>]*(?:\bwidth\s*=|\brole\s*=\s*['"]presentation['"]|\bcellpadding\s*=|\bcellspacing\s*=)/i;
+
+/**
+ * Документное HTML-письмо (Outlook/табличная вёрстка), не фрагмент compose/Gmail.
+ * @param {string} html
+ * @returns {boolean}
+ */
+export function isMailDocumentHtml(html) {
+    if (typeof html !== 'string') {
+        throw new Error('isMailDocumentHtml: html string required');
+    }
+    const trimmed = html.trim();
+    if (trimmed.length === 0) {
+        return false;
+    }
+    if (DOCUMENT_HTML_HEAD_RE.test(trimmed)) {
+        return true;
+    }
+    if (DOCUMENT_HTML_OUTLOOK_RE.test(trimmed)) {
+        return true;
+    }
+    return DOCUMENT_HTML_LAYOUT_TABLE_RE.test(trimmed);
+}
+
 /**
  * @param {string} raw
  * @returns {string}

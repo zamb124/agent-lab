@@ -16,6 +16,10 @@ createFacets / createForm) во всех `apps/<svc>/ui/events/resources/**/*.js
      в `core/i18n/translations/{ru,en}/<ns>.json`.
   5. `idField` присутствует, если `operations` включают `update` / `remove` /
      `get` (без идентификатора эти операции невозможны).
+  6. Фабрика из `apps/<svc>/ui/events/**`, на которую ссылается
+     `useOp`/`useResource`/`useForm`/`useCursorList`/`useFacets`/`useSlice`
+     в UI сервиса, обязана быть в `static factories` соответствующего `*-app.js`.
+     Иначе модалка/страница падает в `getFactory: not registered`.
 
 Скрипт парсит JS как текст: AST не строим, обходим по регуляркам и читаем
 плоские словари. Для динамических значений (`name: SOMETHING`,
@@ -31,6 +35,7 @@ import argparse
 import json
 import re
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -135,6 +140,13 @@ def _flatten(obj, prefix: str, out: set[str]) -> None:
 
 EXTRA_INITIAL_RE = re.compile(r"\bextraInitial\s*:\s*\{", re.M)
 EXTRA_REDUCER_RE = re.compile(r"\bextraReducer\s*:\s*(?:function|\()", re.M)
+EXPORT_IDENT_RE = re.compile(
+    r"export\s+const\s+(?P<ident>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*$"
+)
+STATIC_FACTORIES_RE = re.compile(r"static\s+factories\s*=\s*\[")
+USE_HELPER_RE = re.compile(
+    r"""this\.use(?:Op|Resource|Form|CursorList|Facets|Slice)\(\s*['\"]([^'\"]+)['\"]"""
+)
 
 
 def _parse_factories(path: Path) -> list[dict]:
@@ -151,9 +163,12 @@ def _parse_factories(path: Path) -> list[dict]:
             continue
         block = text[match.end(): end]
         line_no = text.count("\n", 0, match.start()) + 1
+        prefix = text[: match.start()].rstrip()
+        ident_match = EXPORT_IDENT_RE.search(prefix[-200:])
         rec: dict = {
             "kind": match.group("kind"),
             "line": line_no,
+            "ident": ident_match.group("ident") if ident_match else None,
             "name": None,
             "baseUrl": None,
             "idField": None,
@@ -194,6 +209,88 @@ def _parse_factories(path: Path) -> list[dict]:
     return factories
 
 
+def _parse_static_factory_idents(app_path: Path) -> set[str] | None:
+    """Идентификаторы из `static factories = [...]`. Нет массива — None."""
+    text = app_path.read_text(encoding="utf-8")
+    match = STATIC_FACTORIES_RE.search(text)
+    if not match:
+        return None
+    start = match.end() - 1
+    depth = 0
+    end = -1
+    i = start
+    while i < len(text):
+        char = text[i]
+        if char == "[":
+            depth += 1
+        elif char == "]":
+            depth -= 1
+            if depth == 0:
+                end = i
+                break
+        elif char in ("'", '"', "`"):
+            quote = char
+            i += 1
+            while i < len(text) and text[i] != quote:
+                if text[i] == "\\":
+                    i += 1
+                i += 1
+        i += 1
+    if end < 0:
+        return None
+    block = text[start + 1 : end]
+    block = re.sub(r"/\*.*?\*/", "", block, flags=re.S)
+    block = re.sub(r"//[^\n]*", "", block)
+    return set(re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\b", block))
+
+
+def _collect_used_factory_names(svc_ui: Path) -> set[str]:
+    names: set[str] = set()
+    for folder in ("pages", "modals", "components", "app"):
+        root = svc_ui / folder
+        if not root.exists():
+            continue
+        for path in root.rglob("*.js"):
+            names.update(USE_HELPER_RE.findall(path.read_text(encoding="utf-8")))
+    return names
+
+
+def _check_app_registration(
+    svc_name: str,
+    svc_dir: Path,
+    factories: list[dict],
+    errors: list[str],
+) -> None:
+    app_dir = svc_dir / "ui" / "app"
+    if not app_dir.exists():
+        return
+    app_files = sorted(app_dir.glob("*-app.js"))
+    if not app_files:
+        return
+    app_path = app_files[0]
+    registered = _parse_static_factory_idents(app_path)
+    if registered is None:
+        return
+    app_rel = app_path.relative_to(ROOT)
+    name_to_rec: dict[str, dict] = {}
+    for rec in factories:
+        ident = rec.get("ident")
+        name = rec.get("name")
+        if ident and name:
+            name_to_rec[name] = rec
+    used_names = _collect_used_factory_names(svc_dir / "ui")
+    for used in sorted(used_names):
+        rec = name_to_rec.get(used)
+        if rec is None:
+            continue
+        ident = rec["ident"]
+        if ident not in registered:
+            errors.append(
+                f"{rec['path']}:{rec['line']}: фабрика {ident} "
+                f"(name '{used}') используется в UI, но нет в static factories {app_rel}"
+            )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", help="ограничить одним сервисом (frontend/sync/...)")
@@ -226,12 +323,15 @@ def main() -> int:
     warnings: list[str] = []
     seen_names: dict[str, Path] = {}
     factories_total = 0
+    factories_by_svc: dict[str, list[dict]] = defaultdict(list)
 
     for path in targets:
         rel = path.relative_to(ROOT)
         svc_name = path.relative_to(APPS).parts[0]
         for rec in _parse_factories(path):
             factories_total += 1
+            rec["path"] = rel
+            factories_by_svc[svc_name].append(rec)
             kind = rec["kind"]
             name = rec["name"]
             line = rec["line"]
@@ -337,6 +437,9 @@ def main() -> int:
                         errors.append(
                             f"{prefix}: toast-ключ '{toast_key}' нет в '{locale}/{ns}.json'"
                         )
+
+    for svc_name, svc_factories in factories_by_svc.items():
+        _check_app_registration(svc_name, APPS / svc_name, svc_factories, errors)
 
     print(
         f"check_ui_factories: фабрик найдено {factories_total} в {len(targets)} файлах"

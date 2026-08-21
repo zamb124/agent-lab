@@ -180,7 +180,7 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
   value: http://{{ .Values.litserve.serviceName }}:{{ .Values.litserve.port }}
 {{- end }}
 - name: SERVER__PLATFORM_PUBLIC_BASE_URL
-  value: https://{{ .Values.domain }}
+  value: https://{{ required "publicBaseHost is required" .Values.publicBaseHost }}
 - name: AUTH__JWT_SECRET
   valueFrom:
     secretKeyRef:

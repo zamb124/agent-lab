@@ -16,6 +16,7 @@ from types import TracebackType
 from typing import TypedDict, cast
 
 from sqlalchemy import Column, DateTime, MetaData, String, Table, delete, select, text
+from sqlalchemy import cast as sa_cast
 from sqlalchemy import func as sa_func
 from sqlalchemy.dialects.postgresql import JSONB, insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -242,13 +243,17 @@ class Storage:
             return memo.value
 
         if db_session:
-            resolved = await self._get_with_session(final_key, table_name, db_session, for_update=for_update)
+            resolved = await self._get_with_session(
+                final_key, table_name, db_session, for_update=for_update
+            )
             if not for_update and resolved is not None:
                 set_memoized(table_name, final_key, resolved)
             return resolved
 
         async with self.get_session() as session:
-            resolved = await self._get_with_session(final_key, table_name, session, for_update=for_update)
+            resolved = await self._get_with_session(
+                final_key, table_name, session, for_update=for_update
+            )
             if not for_update and resolved is not None:
                 set_memoized(table_name, final_key, resolved)
             return resolved
@@ -290,10 +295,14 @@ class Storage:
         table_name = self._get_table_name(key, company_id)
 
         if db_session is not None:
-            return await self._insert_once_with_session(final_key, value, ttl, table_name, db_session)
+            return await self._insert_once_with_session(
+                final_key, value, ttl, table_name, db_session
+            )
 
         async with self.get_session() as session:
-            created = await self._insert_once_with_session(final_key, value, ttl, table_name, session)
+            created = await self._insert_once_with_session(
+                final_key, value, ttl, table_name, session
+            )
             await session.commit()
             await session.flush()
             return created
@@ -516,6 +525,55 @@ class Storage:
                 data[key] = _encode_storage_value(cast(JsonValue, row[1]))
 
             return data
+
+    async def list_by_prefix_json_text_equals(
+        self,
+        prefix: str,
+        *,
+        field: str,
+        equals: str,
+        limit: int,
+        newest_first: bool,
+        created_after: datetime | None = None,
+        created_before: datetime | None = None,
+        force_global: bool = False,
+    ) -> list[str]:
+        """JSONB-фильтр по top-level text-полю и окну created_at внутри value."""
+        if prefix.strip() == "":
+            raise ValueError("prefix is required")
+        if field.strip() == "":
+            raise ValueError("field is required")
+        if equals.strip() == "":
+            raise ValueError("equals is required")
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
+
+        final_prefix, company_id = self._get_company_key(prefix, force_global)
+        table_name = self._get_table_name(prefix, company_id)
+
+        async with self.get_session() as session:
+            table = self._get_table(table_name)
+            value_col = cast(ColumnElement[JsonObject], table.c["value"])
+            field_col = jsonb_text(value_col, field)
+            created_ts = sa_cast(jsonb_text(value_col, "created_at"), DateTime(timezone=True))
+            stmt = (
+                select(table.c["value"])
+                .where(table.c["key"].like(f"{final_prefix}%"))
+                .where(field_col == equals)
+            )
+            if created_after is not None:
+                stmt = stmt.where(created_ts >= created_after)
+            if created_before is not None:
+                stmt = stmt.where(created_ts < created_before)
+            if newest_first:
+                stmt = stmt.order_by(created_ts.desc())
+            else:
+                stmt = stmt.order_by(created_ts.asc())
+            result = await session.execute(stmt.limit(limit))
+            payloads: list[str] = []
+            for row in result:
+                payloads.append(_encode_storage_value(cast(JsonValue, row[0])))
+            return payloads
 
     async def get_many(self, keys: list[str], force_global: bool = False) -> dict[str, str]:
         """

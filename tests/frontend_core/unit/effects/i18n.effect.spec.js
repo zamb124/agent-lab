@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createI18nEffect, translate } from '@platform/lib/events/effects/i18n.effect.js';
+import { createI18nEffect, isI18nBundleReady, translate } from '@platform/lib/events/effects/i18n.effect.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import { installFakeStorage } from '../../helpers/fake-storage.js';
 import { installFetchMock } from '../../helpers/mock-fetch.js';
@@ -119,5 +119,36 @@ describe('translate', () => {
 
     it('не найдено → возвращает key', () => {
         expect(translate(stateWith(null), 'missing.key')).toBe('missing.key');
+    });
+});
+
+describe('isI18nBundleReady', () => {
+    it('bootstrap stub только с common — не готов', () => {
+        expect(isI18nBundleReady({
+            loading: false,
+            locale: 'ru',
+            translations: { ru: { common: { loading: 'Загрузка...' } } },
+        })).toBe(false);
+    });
+
+    it('loading — не готов', () => {
+        expect(isI18nBundleReady({
+            loading: true,
+            locale: 'ru',
+            translations: { ru: { billing: { toast_payment_fail: 'Оплата не прошла' } } },
+        })).toBe(false);
+    });
+
+    it('полный бандл с billing — готов', () => {
+        expect(isI18nBundleReady({
+            loading: false,
+            locale: 'ru',
+            translations: {
+                ru: {
+                    common: { loading: 'Загрузка...' },
+                    billing: { toast_payment_fail: 'Оплата не прошла. Средства не зачислены.' },
+                },
+            },
+        })).toBe(true);
     });
 });

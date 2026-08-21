@@ -29,6 +29,7 @@ import {
 } from '../events/resources/pages.resource.js';
 import {
     wikiAccessReadOp,
+    wikiCompanyVisibleOp,
     wikiMemberAddOp,
     wikiMemberRemoveOp,
     wikiPublicLinkOp,
@@ -120,6 +121,7 @@ export class WikiApp extends PlatformApp {
         wikiPageMarkdownCreateOp,
         wikiMarkdownParseOp,
         wikiAccessReadOp,
+        wikiCompanyVisibleOp,
         wikiMemberAddOp,
         wikiMemberRemoveOp,
         wikiPublicLinkOp,

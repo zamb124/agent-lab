@@ -169,7 +169,7 @@ class PaymentSyncStats(BaseModel):
 
 
 class PaymentSyncAllCompaniesStats(BaseModel):
-    """Статистика сверки pending-транзакций по всем компаниям."""
+    """Статистика сверки: только pending из storage, без обхода компаний."""
 
     companies_checked: int = 0
     total_pending: int = 0

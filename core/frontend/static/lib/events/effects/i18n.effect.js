@@ -100,6 +100,32 @@ function _lookupPath(root, path) {
     return typeof cur === 'string' ? cur : undefined;
 }
 
+/**
+ * Полный GET /api/i18n/{locale} уже в state. До этого translations[locale]
+ * — bootstrap stub { common.loading }; toast/t() тогда возвращают сырой ключ.
+ */
+export function isI18nBundleReady(i18nState) {
+    if (!i18nState || typeof i18nState !== 'object' || Array.isArray(i18nState)) {
+        return false;
+    }
+    if (i18nState.loading) {
+        return false;
+    }
+    const locale = i18nState.locale;
+    if (typeof locale !== 'string' || locale.length === 0) {
+        return false;
+    }
+    const translations = i18nState.translations;
+    if (!translations || typeof translations !== 'object' || Array.isArray(translations)) {
+        return false;
+    }
+    const bundle = translations[locale];
+    if (!bundle || typeof bundle !== 'object' || Array.isArray(bundle)) {
+        return false;
+    }
+    return Object.keys(bundle).some((namespace) => namespace !== 'common');
+}
+
 export function translate(i18nState, key, vars, namespace) {
     if (!key || typeof key !== 'string') return '';
     const bundle = i18nState.translations[i18nState.locale];

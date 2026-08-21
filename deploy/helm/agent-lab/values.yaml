@@ -10,8 +10,12 @@ image:
   pullPolicy: IfNotPresent
   pullSecrets: []
 
-# Публичный domain для Ingress + сервисных URL платформы.
+# Публичный domain для Ingress + сервисных URL платформы (TURN, office callback, VAPID).
 domain: humanitec.ru
+
+# Primary apex для SERVER__PLATFORM_PUBLIC_BASE_URL (NotificationURL Т-Банка, short links).
+# Не подменять domain: от domain зависят CALLS__TURN_HOST / OFFICE callback / PUSH__VAPID_EMAIL.
+publicBaseHost: linnex.io
 
 # Лейбл, которым размечается GPU-нода (kubectl label node <name> accelerator=nvidia-gpu).
 gpuNodeSelectorKey: accelerator

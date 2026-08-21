@@ -5,6 +5,7 @@ import {
     buildCidFileMap,
     findCidRefs,
     hasRemoteImages,
+    isMailDocumentHtml,
     mailDocumentCsp,
     mailIframeSandbox,
     normalizeContentId,
@@ -83,5 +84,18 @@ describe('mail-html', () => {
     it('mailIframeSandbox never allows scripts outside WebKit', () => {
         expect(mailIframeSandbox()).toContain('allow-same-origin');
         expect(mailIframeSandbox()).toContain('allow-popups');
+    });
+
+    it('isMailDocumentHtml accepts Outlook and layout tables', () => {
+        expect(isMailDocumentHtml('<!DOCTYPE html><html><body>hi</body></html>')).toBe(true);
+        expect(isMailDocumentHtml('<html xmlns:v="urn:schemas-microsoft-com:vml"><body>x</body></html>')).toBe(true);
+        expect(isMailDocumentHtml('<table width="600" role="presentation"><tr><td>bill</td></tr></table>')).toBe(true);
+    });
+
+    it('isMailDocumentHtml rejects compose and Gmail fragments', () => {
+        expect(isMailDocumentHtml('')).toBe(false);
+        expect(isMailDocumentHtml('<p>нуну</p>')).toBe(false);
+        expect(isMailDocumentHtml('<div dir="ltr">ок</div>')).toBe(false);
+        expect(isMailDocumentHtml('<p>reply</p><blockquote>quoted</blockquote>')).toBe(false);
     });
 });

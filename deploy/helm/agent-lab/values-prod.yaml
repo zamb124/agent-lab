@@ -2,6 +2,7 @@
 # Применяется поверх values.yaml: helm upgrade ... --values values.yaml --values values-prod.yaml
 
 domain: humanitec.ru
+publicBaseHost: linnex.io
 
 image:
   pullSecrets:

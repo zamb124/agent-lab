@@ -96,6 +96,27 @@ describe('wiki ui', () => {
             'wiki/documents_search',
         ]);
     });
+
+    it('операции доступа зарегистрированы приложением', () => {
+        const names = WikiApp.factories.map((factory) => factory.name);
+        expect(names).to.include.members([
+            'wiki/access_read',
+            'wiki/company_visible',
+            'wiki/member_add',
+            'wiki/member_remove',
+            'wiki/public_link',
+        ]);
+    });
+
+    it('модалка доступа создаётся при зарегистрированных фабриках', () => {
+        resetPlatformState();
+        bootstrapTestBus({ factories: WikiApp.factories });
+        const modal = document.createElement('wiki-page-access-modal');
+        expect(customElements.get('wiki-page-access-modal')).to.exist;
+        expect(modal.useOp).to.be.a('function');
+        expect(modal._companyVisible).to.exist;
+        expect(modal._access).to.exist;
+    });
 });
 
 describe('wiki sidebar recent collapse', () => {

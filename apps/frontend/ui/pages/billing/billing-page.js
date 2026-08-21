@@ -17,6 +17,7 @@ import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-user-chip.js';
+import { isI18nBundleReady } from '@platform/lib/events/effects/i18n.effect.js';
 import { formatPlatformNumber } from '@platform/lib/utils/format-platform-number.js';
 import { FrontendTopupModal } from '../../modals/topup-modal.js';
 
@@ -131,6 +132,7 @@ export class FrontendBillingPage extends PlatformPage {
         this._planChange = this.useOp('frontend/billing_plan_change');
         this._locale = this.select((s) => typeof s.i18n.locale === 'string' && s.i18n.locale.length > 0 ? s.i18n.locale : 'en');
         this._routerSearch = this.select((s) => s.router.search);
+        this._i18nReady = this.select((s) => isI18nBundleReady(s.i18n));
         this._loaded = false;
     }
 
@@ -156,6 +158,9 @@ export class FrontendBillingPage extends PlatformPage {
     }
 
     _notifyPaymentReturn() {
+        if (!this._i18nReady.value) {
+            return;
+        }
         const search = this._routerSearch.value;
         if (typeof search !== 'string') {
             throw new Error('router.search must be a string');
