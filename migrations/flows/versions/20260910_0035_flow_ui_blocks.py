@@ -655,7 +655,7 @@ def _leaf(context: _SurfaceContext, component_id: str, component: JsonObject) ->
             "voice_input",
             {"placeholder": _text_property(context, component, "placeholder")},
         )
-    if component_type == "Table":
+    if component_type in {"Table", "DataTable"}:
         rows_pointer = bindings.get("rows")
         columns_raw = properties.get("columns")
         columns: JsonArray = []
@@ -668,8 +668,12 @@ def _leaf(context: _SurfaceContext, component_id: str, component: JsonObject) ->
         block = {"type": "data_table", "block_id": new_id(), "columns": columns}
         if rows_pointer is not None:
             block["rows"] = _pointer_to_state_path(rows_pointer)
-        else:
-            block["file_id"] = _text_property(context, component, "file_id")
+            return block
+        file_id = _text_property(context, component, "file_id")
+        if file_id != "":
+            block["file_id"] = file_id
+            return block
+        block["rows"] = "rows"
         return block
     if component_type == "JsonInspector":
         pointer = bindings.get("data")

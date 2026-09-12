@@ -33,7 +33,7 @@ runtime ↑     A2A Message (ROLE_USER, contextId, taskId?)
 
 `core/flow_ui/document.py` — единственная спецификация. `GET /flows/api/v1/flow-ui/schema` = `FlowUIDocument.model_json_schema()` + `x-flow-ui-frozen-state-fields` (`apps/flows/src/api/v1/flow_ui.py::flow_ui_schema`); палитра, инспектор, LLM structured output читают только её. Захардкоженные списки типов/иконок/групп во frontend запрещены (`blockCatalog(schema)`).
 
-- `FlowUIDocument{start_page_id, pages[]}`, `FlowUIPage{page_id, title, blocks[]}`; `block_id` уникален на странице (`assert_unique_block_ids`).
+- `FlowUIDocument{start_page_id, pages[]}`, `FlowUIPage{page_id, title, show_title=True, blocks[]}`; `block_id` уникален на странице (`assert_unique_block_ids`). `show_title=false` скрывает заголовок на холсте, имя во вкладках редактора остаётся.
 - `FlowUIBlockBase{block_id, visible_when: FlowUICondition{path, equals}|None}`; `type` — Literal, discriminator union `FlowUIBlock`.
 - Метаданные палитры — `block_schema(group, icon)` → `x-flow-ui-block {group, icon}`; `group ∈ layout|content|input|action|data|platform|custom`, `icon` — имя SVG из `core/frontend/static/assets/icons/` (46 иконок, все существуют).
 - Ввод: `FlowUIInputBase{field: FlowUIStatePath, label, required, error_message, action: FlowUIActionSpec|None}` → `text_input`, `number_input`, `select`, `checkbox`, `switch`, `slider`, `date_input`, `datetime_input`, `file_upload`, `voice_input`. `field` — обычный top-level путь state; frozen-поля (`FROZEN_STATE_FIELDS`) запрещены (publish gate `frozen_path`).
