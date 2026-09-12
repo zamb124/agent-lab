@@ -7,7 +7,9 @@ structured output тулов ``llm_node`` и для code-node SDK.
 Строковые свойства, помеченные :class:`FlowUIText`, — текстовые шаблоны
 платформенной грамматики (``{email}``, ``{customer.name}``, ``{?path}``), той же,
 что и в промптах ``llm_node``. Свойства :class:`FlowUIStatePath` — путь к полю
-``ExecutionState``. Адресное пространство одно на всю платформу.
+``ExecutionState``. Адресное пространство одно на всю платформу. Свойства
+с маркером ``x-flow-ui: image_url`` — URL изображения; инспектор показывает
+загрузку файла, не текстовое поле.
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ PAGE_ID_PATTERN = r"^[a-z][a-z0-9_-]*$"
 ACTION_NAME_PATTERN = r"^[a-z][a-z0-9_]*$"
 
 FlowUIBlockGroup = Literal["layout", "content", "input", "action", "data", "platform", "custom"]
+FlowUIAlign = Literal["start", "center", "end"]
 
 
 class FlowUITemplateText:
@@ -51,10 +54,22 @@ class FlowUIStatePathMarker:
         return json_schema
 
 
+class FlowUIImageUrlMarker:
+    """Маркер Annotated: строка — URL изображения; инспектор — загрузка файла."""
+
+    def __get_pydantic_json_schema__(
+        self, schema: core_schema.CoreSchema, handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:
+        json_schema = handler(schema)
+        json_schema["x-flow-ui"] = "image_url"
+        return json_schema
+
+
 FlowUIText = Annotated[str, FlowUITemplateText()]
 FlowUIStatePath = Annotated[
     str, StringConstraints(pattern=STATE_PATH_PATTERN), FlowUIStatePathMarker()
 ]
+FlowUIImageUrl = Annotated[str, StringConstraints(max_length=2000), FlowUIImageUrlMarker()]
 FlowUIBlockId = Annotated[
     str, StringConstraints(min_length=1, max_length=64, pattern=BLOCK_ID_PATTERN)
 ]
@@ -90,6 +105,9 @@ class FlowUIActionSpec(StrictBaseModel):
 class FlowUIBlockBase(StrictBaseModel):
     block_id: FlowUIBlockId
     visible_when: FlowUICondition | None = None
+    span: int = Field(default=12, ge=1, le=12)
+    align: FlowUIAlign = "start"
+    valign: FlowUIAlign = "start"
 
 
 # --- Раскладка -----------------------------------------------------------------
@@ -351,8 +369,19 @@ class FlowUIButton(FlowUIBlockBase):
 
     type: Literal["button"] = "button"
     label: FlowUIText
-    action: FlowUIActionSpec
+    action: FlowUIActionSpec | None = None
+    page_id: FlowUIPageId | None = None
+    url: FlowUIText = ""
     variant: Literal["primary", "secondary", "ghost", "danger"] = "primary"
+
+    @model_validator(mode="after")
+    def validate_click(self) -> FlowUIButton:
+        targets = (self.action is not None, self.page_id is not None, self.url != "")
+        if sum(targets) != 1:
+            raise ValueError(
+                f"button {self.block_id!r}: exactly one of action, page_id or url is required"
+            )
+        return self
 
 
 class FlowUILink(FlowUIBlockBase):
@@ -482,7 +511,7 @@ class FlowUIAgentIdentity(FlowUIBlockBase):
 
     type: Literal["agent_identity"] = "agent_identity"
     title: FlowUIText = ""
-    image_url: str = Field(default="", max_length=2000)
+    image_url: FlowUIImageUrl = ""
 
 
 class FlowUIAvatar(FlowUIBlockBase):
@@ -755,6 +784,7 @@ def assert_unique_block_ids(blocks: list[FlowUIBlockModel], *, scope: str) -> No
 class FlowUIPage(StrictBaseModel):
     page_id: FlowUIPageId
     title: FlowUIText = ""
+    show_title: bool = True
     blocks: list[FlowUIBlock] = Field(default_factory=list)
 
     @model_validator(mode="after")

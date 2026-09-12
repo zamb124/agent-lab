@@ -8,10 +8,17 @@ export const ACTION_BLOCKS = Object.freeze({
     button(block, ctx) {
         const label = text(ctx, block.label);
         if (label === null) return nothing;
+        const pageId = block.page_id;
+        const url = (pageId || block.action) ? null : blockUrl(ctx, block.url);
         return html`<button type="button" class="fu-button" data-variant=${block.variant}
-            data-action=${block.action.name}
+            data-action=${block.action?.name ?? nothing}
+            data-page-id=${pageId ?? nothing}
             ?disabled=${ctx.readonly || ctx.pending}
-            @click=${() => ctx.onAction(block, block.action)}>${label}</button>`;
+            @click=${() => {
+                if (pageId) ctx.onNavigate(pageId);
+                else if (url) ctx.onOpenUrl(url);
+                else if (block.action) ctx.onAction(block, block.action);
+            }}>${label}</button>`;
     },
 
     link(block, ctx) {

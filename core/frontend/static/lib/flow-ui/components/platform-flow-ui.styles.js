@@ -176,8 +176,9 @@ export const platformFlowUIStyles = css`
         :host([editing]) .shell,
         :host([editing]) .viewport {
             height: auto;
-            min-height: 320px;
+            min-height: 0;
             overflow: visible;
+            flex: none;
         }
         .topbar {
             min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: var(--flow-ui-space-3);
@@ -330,6 +331,24 @@ export const platformFlowUIStyles = css`
         :host([display="inline"]) .shell {
             border-radius: inherit;
             overflow: hidden;
+        }
+        /*
+         * Editing canvas: chrome none/minimal otherwise forces .viewport to height 100%
+         * and clips the page to the visible card. Grow with the document; .canvas scrolls.
+         */
+        :host([editing][data-chrome="none"]) .shell,
+        :host([editing][data-chrome="minimal"]) .shell,
+        :host([editing][data-chrome="none"]) .viewport,
+        :host([editing][data-chrome="minimal"]) .viewport {
+            height: auto;
+            min-height: 0;
+            overflow: visible;
+            flex: none;
+        }
+        :host([editing]) flow-ui-page {
+            flex: none;
+            height: auto;
+            min-height: 0;
         }
         @media (prefers-reduced-motion: reduce) { .shimmer { animation: none; } nav button, .hitl-host-composer, .hitl-host-send { transition: none; } }
         @media (max-width: 680px) { nav { order: 3; width: 100%; } .topbar { flex-wrap: wrap; padding-block: 6px; } .readonly-pill { display: none; } }

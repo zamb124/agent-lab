@@ -86,6 +86,41 @@ describe('flow-ui conversation surface', () => {
         expect(root.querySelector('textarea[data-canon="composer"]')).to.not.equal(null);
         expect(root.querySelector('button.icon-btn.send').getAttribute('aria-label')).to.equal('Send');
         expect(root.querySelector('button.composer-voice-session')).to.not.equal(null);
+        expect(conversation.hasAttribute('editing')).to.equal(true);
+        expect(getComputedStyle(root.querySelector('.task-feed')).overflow).to.equal('visible');
+        expect(conversation.scrollHeight).to.be.at.most(conversation.clientHeight + 2);
+        const convBox = conversation.getBoundingClientRect();
+        const markBox = root.querySelector('.greeting-mark').getBoundingClientRect();
+        const composerBox = root.querySelector('.composer').getBoundingClientRect();
+        expect(markBox.height).to.be.at.least(48);
+        expect(markBox.top).to.be.at.least(convBox.top - 1);
+        expect(markBox.bottom).to.be.at.most(convBox.bottom + 1);
+        expect(composerBox.height).to.be.greaterThan(24);
+        expect(composerBox.bottom).to.be.at.most(convBox.bottom + 1);
+    });
+
+    it('keeps video, identity and conversation stacked without clipping on the editing canvas', async () => {
+        const document = {
+            ...CHAT_DOCUMENT,
+            pages: [{
+                ...CHAT_DOCUMENT.pages[0],
+                blocks: [
+                    CHAT_DOCUMENT.pages[0].blocks[0],
+                    { block_id: 'intro', type: 'video', visible_when: null, url: 'https://example.com/intro.mp4' },
+                    CHAT_DOCUMENT.pages[0].blocks[1],
+                ],
+            }],
+        };
+        const element = await fixture(html`<platform-flow-ui editing locale="en" .initialDocument=${document}></platform-flow-ui>`);
+        await waitUntil(() => conversationEl(element)?.shadowRoot?.querySelector('.composer') !== null, 'conversation did not render');
+        const identity = blockElement(element, 'agent-identity');
+        const video = blockElement(element, 'intro');
+        const conversation = blockElement(element, 'conversation');
+        expect(identity.getBoundingClientRect().bottom).to.be.at.most(video.getBoundingClientRect().top + 1);
+        expect(video.getBoundingClientRect().bottom).to.be.at.most(conversation.getBoundingClientRect().top + 1);
+        const feed = conversationEl(element).shadowRoot.querySelector('.task-feed');
+        expect(getComputedStyle(feed).overflow).to.equal('visible');
+        expect(conversation.scrollHeight).to.be.at.most(conversation.clientHeight + 2);
     });
 
     it('keeps the user bubble on the right after a local pending turn', async () => {

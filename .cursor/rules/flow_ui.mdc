@@ -41,7 +41,7 @@ runtime ↑     A2A Message (ROLE_USER, contextId, taskId?)
 - Раскладка: `section`, `columns`, `tabs`; контент/данные/платформенные — см. страницу протокола; `slot` — именованная цель `ui_render`; `conversation` — лента с `FlowUIConversationSettings` (`greeting`, `suggested_prompts`, `placeholder`, `show_reasoning`, `tool_calls`, `show_activity`, `show_skill_loads`, `show_reflection`, `errors`, `show_run_trace`, `show_trace_actions`, `show_browser_previews`, `show_files_panel`, `allow_cancel`, `allow_voice`).
 - `html`: `source`, `height: int | "auto"`, `fields` (≤ 64 путей), опциональное `field`; связанные пути из разметки — `core/flow_ui/html_bindings.py::html_bound_paths` (`data-bind` / `data-show`).
 
-Шаблоны текста: `{path}`, `{?path}`, `{path|default}`, `\{` — одна грамматика в Python (`VariableResolver.render_template`, подмножество) и JS (`runtime/templating.js`); паритет — `tests/fixtures/flow_ui/templating.json`. Обязательный `{path}` без значения = блок не рендерится; в редакторе (`designText`) неизвестные пути остаются как `{path}`.
+Шаблоны текста: `{path}`, `{?path}`, `{path|default}`, `\{` — одна грамматика в Python (`VariableResolver.render_template`, подмножество) и JS (`runtime/templating.js`); паритет — `tests/fixtures/flow_ui/templating.json`. Обязательный `{path}` без значения = блок не рендерится; в редакторе (`designText`) неизвестные пути остаются как `{path}`. Маркер `x-flow-ui: image_url` (`agent_identity.image_url`) — URL иконки; инспектор показывает загрузку файла, не строковое поле.
 
 ## Runtime backend
 

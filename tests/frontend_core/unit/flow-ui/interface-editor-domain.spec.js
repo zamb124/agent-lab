@@ -25,6 +25,7 @@ import {
     insertBlock,
     insertPage,
     moveBlock,
+    paletteInsertTarget,
     redoHistory,
     removeBlock,
     removePage,
@@ -77,6 +78,16 @@ describe('interface editor catalog', () => {
         expect(catalogEntry(catalog, 'heading').properties.find((property) => property.name === 'text').kind).toBe('template');
         expect(catalogEntry(catalog, 'columns').properties.find((property) => property.name === 'columns').kind).toBe('columns');
         expect(catalogEntry(catalog, 'html').properties.find((property) => property.name === 'height').kind).toBe('height');
+        expect(catalogEntry(catalog, 'agent_identity').properties.find((property) => property.name === 'image_url').kind).toBe('image_url');
+        expect(catalogEntry(catalog, 'heading').properties.find((property) => property.name === 'span')).toMatchObject({
+            kind: 'integer', minimum: 1, maximum: 12, default: 12,
+        });
+        expect(catalogEntry(catalog, 'heading').properties.find((property) => property.name === 'align')).toMatchObject({
+            kind: 'enum', enum: ['start', 'center', 'end'], default: 'start',
+        });
+        expect(catalogEntry(catalog, 'heading').properties.find((property) => property.name === 'valign')).toMatchObject({
+            kind: 'enum', enum: ['start', 'center', 'end'], default: 'start',
+        });
         expect(() => catalogEntry(catalog, 'grid')).toThrow(/unknown block type/);
     });
 
@@ -128,21 +139,77 @@ describe('interface editor commands', () => {
         expect(blockIds(renamed)).toEqual(['title', 'b']);
         expect(setBlockProperty(document, 'main', 'a', 'text', 'x').pages[0].blocks[0].text).toBe('x');
         expect(document.pages[0].blocks[0].text).toBe('Заголовок');
+        const button = defaultBlock(catalogEntry(catalog, 'button'), 'go', labels);
+        const patched = setBlockProperty(documentWith([button]), 'main', 'go', 'click_target', {
+            action: null, page_id: 'done', url: '',
+        });
+        expect(patched.pages[0].blocks[0]).toMatchObject({ action: null, page_id: 'done', url: '' });
     });
 
     it('manages pages and keeps start page and link targets consistent', () => {
         let document = insertPage(EMPTY_DOCUMENT, { page_id: uniquePageId(EMPTY_DOCUMENT), title: 'Вторая', blocks: [] });
         expect(document.pages.map((page) => page.page_id)).toEqual(['main', 'page-2']);
         const link = { ...defaultBlock(catalogEntry(catalog, 'link'), 'go', labels), url: '', page_id: 'page-2' };
+        const button = { ...defaultBlock(catalogEntry(catalog, 'button'), 'next', labels), action: null, page_id: 'page-2', url: '' };
         document = insertBlock(document, 'main', 'page', 0, link);
+        document = insertBlock(document, 'main', 'page', 1, button);
         document = setPageProperty(document, 'page-2', 'page_id', 'done');
         expect(document.pages[0].blocks[0].page_id).toBe('done');
+        expect(document.pages[0].blocks[1].page_id).toBe('done');
         document = setPageProperty(document, 'main', 'page_id', 'start');
         expect(document.start_page_id).toBe('start');
         expect(() => setPageProperty(document, 'done', 'page_id', 'start')).toThrow(/already used/);
         document = removePage(document, 'start');
         expect(document.start_page_id).toBe('done');
         expect(() => removePage(document, 'done')).toThrow(/at least one page/);
+    });
+});
+
+describe('paletteInsertTarget', () => {
+    it('inserts into the selected container, after a leaf, or at the end of the page', () => {
+        const page = {
+            page_id: 'main',
+            title: '',
+            blocks: [
+                heading('top'),
+                {
+                    type: 'columns',
+                    block_id: 'cols',
+                    columns: [
+                        { width: 6, blocks: [heading('in-col')] },
+                        { width: 6, blocks: [] },
+                    ],
+                },
+                { type: 'section', block_id: 'box', title: '', blocks: [heading('in-box')] },
+                {
+                    type: 'tabs',
+                    block_id: 'tabs',
+                    tabs: [
+                        { title: '1', blocks: [heading('in-tab')] },
+                        { title: '2', blocks: [] },
+                    ],
+                },
+            ],
+        };
+        expect(paletteInsertTarget(page, '')).toEqual({ containerKey: 'page', index: 4 });
+        expect(paletteInsertTarget(page, 'top')).toEqual({ containerKey: 'page', index: 1 });
+        expect(paletteInsertTarget(page, 'cols')).toEqual({ containerKey: 'cols/1', index: 0 });
+        expect(paletteInsertTarget(page, 'in-col')).toEqual({ containerKey: 'cols/0', index: 1 });
+        expect(paletteInsertTarget(page, 'box')).toEqual({ containerKey: 'box', index: 1 });
+        expect(paletteInsertTarget(page, 'tabs')).toEqual({ containerKey: 'tabs/1', index: 0 });
+        const filled = {
+            page_id: 'main',
+            title: '',
+            blocks: [{
+                type: 'columns',
+                block_id: 'cols',
+                columns: [
+                    { width: 6, blocks: [heading('a')] },
+                    { width: 6, blocks: [heading('b')] },
+                ],
+            }],
+        };
+        expect(paletteInsertTarget(filled, 'cols')).toEqual({ containerKey: 'cols/0', index: 1 });
     });
 });
 

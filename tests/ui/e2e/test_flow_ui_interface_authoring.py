@@ -148,9 +148,15 @@ async def test_flow_ui_interface_agent_card_properties_expose_image_url(
         await expect(properties.locator(".head .type")).to_have_text(
             re.compile(r"Agent card|Карточка агента"), timeout=10_000
         )
-        image_field = properties.locator("platform-field").filter(
-            has_text=re.compile(r"^\s*(Image|Изображение)\s*$")
+        image_field = properties.locator(".image-field").first
+        await expect(image_field).to_be_visible(timeout=10_000)
+        await expect(image_field.locator(".sub-title")).to_have_text(
+            re.compile(r"Image|Изображение")
         )
-        await expect(image_field.first).to_be_visible(timeout=10_000)
+        await expect(image_field.locator("input[type='file'][accept='image/*']")).to_have_count(1)
+        await expect(
+            image_field.get_by_role("button", name=re.compile(r"Upload image|Загрузить"))
+        ).to_be_visible()
+        await expect(image_field.locator("platform-field")).to_have_count(0)
     finally:
         await flows_api_delete_flow(flows_ui.origin, auth_token_system, flow_id)

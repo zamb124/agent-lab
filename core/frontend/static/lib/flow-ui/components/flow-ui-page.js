@@ -39,9 +39,15 @@ export class FlowUIPage extends LitElement {
             display: none;
         }
         .content { display: grid; gap: var(--flow-ui-space-4); max-width: var(--flow-ui-content-medium, 960px); margin: 0 auto; width: 100%; box-sizing: border-box; }
-        :host([editing]), :host([editing]) .page { height: auto; overflow: visible; flex: none; }
+        :host([editing]), :host([editing]) .page { height: auto; min-height: 0; overflow: visible; flex: none; }
         :host([editing]) .content { min-height: 120px; }
-        :host([editing]) .page[data-fill='true'] .fu-block[data-block-type='conversation'] { flex: none; min-height: 420px; }
+        :host([editing]) .page[data-fill='true'] { overflow: visible; }
+        :host([editing]) .page[data-fill='true'] > .content {
+            flex: none; min-height: auto; gap: 16px; padding: 8px 16px 20px;
+        }
+        :host([editing]) .page[data-fill='true'] .fu-block[data-block-type='conversation'] {
+            flex: none; min-height: 0; height: auto;
+        }
         :host([editing]) .page[data-fill='true'] .fu-block[data-block-type='agent_identity'] { position: relative; }
         h1.page-title { margin: 0 0 8px; font-size: var(--flow-ui-font-size-hero, 22px); font-weight: 650; letter-spacing: -.02em; color: var(--flow-ui-heading); }
     `];
@@ -80,7 +86,7 @@ export class FlowUIPage extends LitElement {
         if (!this.host || !this.page) return nothing;
         const ctx = this.host.blockContext();
         const fill = pageFillsViewport(this.page);
-        const title = this.showTitle ? (blockText(ctx, this.page.title) ?? '') : '';
+        const title = this.showTitle && this.page.show_title !== false ? (blockText(ctx, this.page.title) ?? '') : '';
         return html`<div class="page" data-page-id=${this.page.page_id} data-fill=${fill ? 'true' : 'false'}>
             <div class="content" data-container-key="page">
                 ${title !== '' ? html`<h1 class="page-title">${title}</h1>` : ''}

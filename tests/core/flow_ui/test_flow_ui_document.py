@@ -126,6 +126,9 @@ class TestBlockCatalog:
         dumped = block.model_dump(mode="json")
         assert dumped["type"] == block_type
         assert dumped["visible_when"] is None
+        assert dumped["span"] == 12
+        assert dumped["align"] == "start"
+        assert dumped["valign"] == "start"
         for key, value in MINIMAL_BLOCKS[block_type].items():
             if isinstance(value, dict | list):
                 continue
@@ -137,13 +140,27 @@ class TestBlockCatalog:
         with pytest.raises(ValidationError, match="extra_forbidden|Extra inputs"):
             _block({**MINIMAL_BLOCKS[block_type], "unexpected": 1})
 
+    def test_span_align_valign_bounds(self) -> None:
+        block = _block({**MINIMAL_BLOCKS["heading"], "span": 6, "align": "center", "valign": "end"})
+        assert block.span == 6 and block.align == "center" and block.valign == "end"
+        with pytest.raises(ValidationError):
+            _block({**MINIMAL_BLOCKS["heading"], "span": 0})
+        with pytest.raises(ValidationError):
+            _block({**MINIMAL_BLOCKS["heading"], "span": 13})
+        with pytest.raises(ValidationError):
+            _block({**MINIMAL_BLOCKS["heading"], "align": "left"})
+        with pytest.raises(ValidationError):
+            _block({**MINIMAL_BLOCKS["heading"], "valign": "middle"})
+
     @pytest.mark.parametrize("block_type", sorted(INPUT_BLOCK_TYPES))
     def test_input_blocks_share_field_contract(self, block_type: str) -> None:
         block = _block(MINIMAL_BLOCKS[block_type])
         assert isinstance(block, FlowUIInputBase)
         assert block.required is False and block.label == "" and block.action is None
         with pytest.raises(ValidationError):
-            _block({key: value for key, value in MINIMAL_BLOCKS[block_type].items() if key != "field"})
+            _block(
+                {key: value for key, value in MINIMAL_BLOCKS[block_type].items() if key != "field"}
+            )
 
     def test_input_field_type_name_matches_value_written_by_the_client(self) -> None:
         expected = {
@@ -216,14 +233,19 @@ class TestBlockInvariants:
             _block({**MINIMAL_BLOCKS["slider"], "min": 5, "max": 5})
         with pytest.raises(ValidationError, match="max must be greater than min"):
             _block({**MINIMAL_BLOCKS["slider"], "min": 10, "max": 1})
-        assert _block({**MINIMAL_BLOCKS["slider"], "min": -1, "max": 1, "step": 0.5}).type == "slider"
+        assert (
+            _block({**MINIMAL_BLOCKS["slider"], "min": -1, "max": 1, "step": 0.5}).type == "slider"
+        )
         with pytest.raises(ValidationError):
             _block({**MINIMAL_BLOCKS["slider"], "step": 0})
 
     def test_number_input_step_must_be_positive(self) -> None:
         with pytest.raises(ValidationError):
             _block({**MINIMAL_BLOCKS["number_input"], "step": -1})
-        assert _block({**MINIMAL_BLOCKS["number_input"], "min": 1, "max": 2, "default": 1.5}).type == "number_input"
+        assert (
+            _block({**MINIMAL_BLOCKS["number_input"], "min": 1, "max": 2, "default": 1.5}).type
+            == "number_input"
+        )
 
     def test_link_needs_exactly_one_target(self) -> None:
         assert _block({**MINIMAL_BLOCKS["link"], "url": "", "page_id": "next"}).page_id == "next"
@@ -232,8 +254,19 @@ class TestBlockInvariants:
         with pytest.raises(ValidationError, match="exactly one of page_id or url"):
             _block({**MINIMAL_BLOCKS["link"], "page_id": "next"})
 
+    def test_button_needs_exactly_one_click_target(self) -> None:
+        assert _block({**MINIMAL_BLOCKS["button"], "action": None, "page_id": "next"}).page_id == "next"
+        assert _block({**MINIMAL_BLOCKS["button"], "action": None, "url": "https://x"}).url == "https://x"
+        with pytest.raises(ValidationError, match="exactly one of action, page_id or url"):
+            _block({**MINIMAL_BLOCKS["button"], "action": None})
+        with pytest.raises(ValidationError, match="exactly one of action, page_id or url"):
+            _block({**MINIMAL_BLOCKS["button"], "page_id": "next"})
+
     def test_data_table_needs_exactly_one_source(self) -> None:
-        assert _block({"type": "data_table", "block_id": "t", "file_id": "{file_id}"}).file_id == "{file_id}"
+        assert (
+            _block({"type": "data_table", "block_id": "t", "file_id": "{file_id}"}).file_id
+            == "{file_id}"
+        )
         with pytest.raises(ValidationError, match="exactly one of rows or file_id"):
             _block({"type": "data_table", "block_id": "t"})
         with pytest.raises(ValidationError, match="exactly one of rows or file_id"):
@@ -260,7 +293,10 @@ class TestBlockInvariants:
             _block({**MINIMAL_BLOCKS["html"], "source": ""})
         block = _block({**MINIMAL_BLOCKS["html"], "fields": ["a", "b.c"], "field": "comment"})
         assert block.fields == ["a", "b.c"] and block.field == "comment"  # pyright: ignore[reportAttributeAccessIssue]
-        assert _block({**MINIMAL_BLOCKS["html"], "fields": [f"f{i}" for i in range(64)]}).type == "html"
+        assert (
+            _block({**MINIMAL_BLOCKS["html"], "fields": [f"f{i}" for i in range(64)]}).type
+            == "html"
+        )
         with pytest.raises(ValidationError):
             _block({**MINIMAL_BLOCKS["html"], "fields": [f"f{i}" for i in range(65)]})
         with pytest.raises(ValidationError):
@@ -402,6 +438,13 @@ class TestTree:
         ]
         assert page.render_target_ids() == ["left", "chat"]
 
+    def test_page_show_title_defaults_true(self) -> None:
+        page = FlowUIPage.model_validate({"page_id": "main"})
+        assert page.show_title is True
+        assert page.title == ""
+        hidden = FlowUIPage.model_validate({"page_id": "main", "show_title": False, "title": "Hi"})
+        assert hidden.show_title is False and hidden.title == "Hi"
+
     def test_duplicate_block_id_is_rejected_at_any_depth(self) -> None:
         with pytest.raises(ValidationError, match="duplicate block_id 'deep'"):
             FlowUIPage.model_validate(
@@ -499,16 +542,23 @@ class TestDocument:
         assert _document([]).conversation_settings() == FlowUIConversationSettings()
         document = _document(
             [
-                {"type": "section", "block_id": "s", "blocks": [
-                    {"type": "conversation", "block_id": "c1", "settings": {"greeting": "one"}},
-                ]},
+                {
+                    "type": "section",
+                    "block_id": "s",
+                    "blocks": [
+                        {"type": "conversation", "block_id": "c1", "settings": {"greeting": "one"}},
+                    ],
+                },
                 {"type": "conversation", "block_id": "c2", "settings": {"greeting": "two"}},
             ]
         )
         assert document.conversation_settings().greeting == "one"
 
     def test_agent_identity_image_url_skips_empty(self) -> None:
-        assert _document([{"type": "agent_identity", "block_id": "a"}]).agent_identity_image_url() is None
+        assert (
+            _document([{"type": "agent_identity", "block_id": "a"}]).agent_identity_image_url()
+            is None
+        )
         document = _document(
             [
                 {"type": "agent_identity", "block_id": "a"},
@@ -539,7 +589,9 @@ class TestDocument:
                                 "columns": [
                                     {
                                         "width": 12,
-                                        "blocks": [{"type": "conversation", "block_id": "in-column"}],
+                                        "blocks": [
+                                            {"type": "conversation", "block_id": "in-column"}
+                                        ],
                                     }
                                 ],
                             },
@@ -590,7 +642,7 @@ class TestJsonSchema:
         assert html["fields"]["items"]["x-flow-ui"] == "state_path"
         assert "x-flow-ui" not in html["source"]
         identity = cast(dict[str, JsonObject], definitions["FlowUIAgentIdentity"]["properties"])
-        assert "x-flow-ui" not in identity["image_url"]
+        assert identity["image_url"]["x-flow-ui"] == "image_url"
 
     def test_every_block_declares_group_and_icon(self) -> None:
         schema = FlowUIDocument.model_json_schema()

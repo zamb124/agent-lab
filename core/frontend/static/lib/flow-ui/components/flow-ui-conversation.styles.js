@@ -7,16 +7,21 @@ import { css } from '../../lit-shim.js';
 
 export const conversationStyles = css`
     :host { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+    :host([editing]) { height: auto; min-height: 280px; }
     .task-feed {
         flex: 1 1 0; min-height: 0; overflow: auto; scroll-behavior: smooth;
         display: flex; flex-direction: column; gap: 22px;
         padding: 20px max(16px, calc((100% - var(--flow-ui-feed-width, 760px)) / 2)) 12px;
         scrollbar-gutter: stable;
     }
+    :host([editing]) .task-feed {
+        flex: 1 1 auto; min-height: 160px; overflow: visible; scrollbar-gutter: auto;
+    }
     .greeting {
         display: grid; justify-items: center; text-align: center; gap: 14px;
         margin: auto 0; padding: 28px 12px 36px; color: var(--flow-ui-text);
     }
+    :host([editing]) .greeting { margin: 12px 0 20px; }
     .greeting-mark {
         width: var(--flow-ui-hero-mark, 64px); height: var(--flow-ui-hero-mark, 64px);
         border-radius: 50%; object-fit: contain; display: block;

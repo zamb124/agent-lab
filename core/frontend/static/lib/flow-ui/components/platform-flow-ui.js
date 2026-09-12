@@ -72,6 +72,7 @@ export class PlatformFlowUI extends LitElement {
         assistantTitle: { type: String, attribute: 'assistant-title' },
         editing: { type: Boolean, reflect: true },
         selectedBlockId: { type: String, attribute: 'selected-block-id' },
+        pageId: { type: String, attribute: 'page-id' },
         sampleState: { attribute: false },
         voiceSessionActive: { state: true },
         _status: { state: true },
@@ -106,6 +107,7 @@ export class PlatformFlowUI extends LitElement {
         this.assistantTitle = '';
         this.editing = false;
         this.selectedBlockId = '';
+        this.pageId = '';
         this.sampleState = null;
         this.voiceSessionActive = false;
         this.store = new FlowUIStore();
@@ -151,6 +153,7 @@ export class PlatformFlowUI extends LitElement {
         if (this.editing) {
             if (changed.has('initialDocument') && this.initialDocument !== null) this.store.setDocument(this.initialDocument);
             if (changed.has('sampleState')) this.store.setState(this.sampleState ?? {});
+            this._syncEditingPage();
             return;
         }
         if (!this.client) return;
@@ -198,10 +201,19 @@ export class PlatformFlowUI extends LitElement {
         if (this.initialDocument === null) throw new Error('platform-flow-ui: editing requires initialDocument');
         this.store.setState(this.sampleState ?? {});
         this.store.setDocument(this.initialDocument);
+        this._syncEditingPage();
         this._status = 'ready';
     }
 
+    /** Вкладка страницы редактора — после setDocument: store ещё может держать предыдущий pageId. */
+    _syncEditingPage() {
+        if (!this.editing || this.pageId === '' || this.store.document === null) return;
+        if (this.store.pageId === this.pageId || !this.store.page(this.pageId)) return;
+        this.store.navigate(this.pageId);
+    }
+
     async _start() {
+        await this.updateComplete;
         if (!this.isConnected || this.client) return;
         if (this.editing) {
             this._startEditing();
@@ -209,28 +221,28 @@ export class PlatformFlowUI extends LitElement {
         }
         const generation = this._generation;
         const hitl = this.profile === 'operator_handoff';
-        if (hitl) {
-            this._assertHitlConfig();
-            const conversation = this.interactionPolicy.conversation;
-            this.flowId = conversation.flow_id;
-            this.contextId = conversation.context_id;
-            if (typeof conversation.branch_id === 'string' && conversation.branch_id.trim() !== '') this.branchId = conversation.branch_id;
-        }
-        const client = new FlowUIClient({
-            baseUrl: this.baseUrl,
-            flowId: this.flowId,
-            embedId: this.embedId,
-            branchId: this.branchId,
-            credentials: this.credentials,
-            getHeaders: () => (typeof this.getRequestHeaders === 'function' ? this.getRequestHeaders() : {}),
-            getVariables: () => (typeof this.getExtraMetadataVariables === 'function' ? this.getExtraMetadataVariables() : null),
-            store: this.store,
-        });
-        client.on('frame', (frame) => this._emit('flow-ui-a2a-frame', { contextId: client.contextId, frame }));
-        client.on('error', (error) => this._emit('flow-ui-error', { error }));
-        this.client = client;
-        this._status = 'loading';
         try {
+            if (hitl) {
+                this._assertHitlConfig();
+                const conversation = this.interactionPolicy.conversation;
+                this.flowId = conversation.flow_id;
+                this.contextId = conversation.context_id;
+                if (typeof conversation.branch_id === 'string' && conversation.branch_id.trim() !== '') this.branchId = conversation.branch_id;
+            }
+            const client = new FlowUIClient({
+                baseUrl: this.baseUrl,
+                flowId: this.flowId,
+                embedId: this.embedId,
+                branchId: this.branchId,
+                credentials: this.credentials,
+                getHeaders: () => (typeof this.getRequestHeaders === 'function' ? this.getRequestHeaders() : {}),
+                getVariables: () => (typeof this.getExtraMetadataVariables === 'function' ? this.getExtraMetadataVariables() : null),
+                store: this.store,
+            });
+            client.on('frame', (frame) => this._emit('flow-ui-a2a-frame', { contextId: client.contextId, frame }));
+            client.on('error', (error) => this._emit('flow-ui-error', { error }));
+            this.client = client;
+            this._status = 'loading';
             if (hitl) {
                 this._hitl = new FlowUIHitlTransport({
                     workItemId: this.workItemId,
@@ -244,19 +256,18 @@ export class PlatformFlowUI extends LitElement {
             } else {
                 await client.open({ contextId: this.contextId.trim() || null, document: this.initialDocument });
             }
-        } catch (error) {
             if (generation !== this._generation || this.client !== client) return;
+            this.contextId = client.contextId;
+            this._status = 'ready';
+            this._emit('flow-ui-ready', { contextId: client.contextId });
+            this._emit('flow-ui-identity-changed', { image_url: this._identityImageUrl() });
+        } catch (error) {
+            if (generation !== this._generation) return;
             if (flowUIIsAbortError(error)) return;
             this._error = error;
             this._status = 'error';
             this._emit('flow-ui-error', { error });
-            return;
         }
-        if (generation !== this._generation || this.client !== client) return;
-        this.contextId = client.contextId;
-        this._status = 'ready';
-        this._emit('flow-ui-ready', { contextId: client.contextId });
-        this._emit('flow-ui-identity-changed', { image_url: this._identityImageUrl() });
     }
 
     _assertHitlConfig() {

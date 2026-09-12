@@ -49,6 +49,7 @@ export class FlowsInterfacePagesTabs extends PlatformElement {
     _menuItems(page) {
         return [
             { id: 'rename', label: this.t('interface_editor.page_rename'), icon: 'edit' },
+            { id: 'show_title', label: this.t(page.show_title === false ? 'interface_editor.page_show_title' : 'interface_editor.page_hide_title'), icon: 'eye' },
             { id: 'start', label: this.t('interface_editor.page_make_start'), icon: 'star', disabled: this.document.start_page_id === page.page_id },
             { id: 'remove', label: this.t('interface_editor.page_remove'), icon: 'trash', danger: true, disabled: this.document.pages.length === 1 },
         ];
@@ -59,6 +60,10 @@ export class FlowsInterfacePagesTabs extends PlatformElement {
             this._menuPageId = '';
             this._renamePageId = page.page_id;
             this.updateComplete.then(() => { const field = this.renderRoot.querySelector('.tab input'); if (field) { field.focus(); field.select(); } });
+            return;
+        }
+        if (id === 'show_title') {
+            this._command('set', page.page_id, 'show_title', page.show_title === false);
             return;
         }
         this._command(id, page.page_id);

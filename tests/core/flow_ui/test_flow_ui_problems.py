@@ -188,6 +188,37 @@ class TestBlockLevelRules:
             _document([{"type": "link", "block_id": "l", "label": "Docs", "url": "https://x"}]), LIMITS
         ) == []
 
+    def test_button_page_must_exist(self) -> None:
+        assert _codes(
+            flow_ui_problems(
+                _document(
+                    [
+                        {
+                            "type": "button",
+                            "block_id": "go",
+                            "label": "Next",
+                            "action": None,
+                            "page_id": "nope",
+                        }
+                    ]
+                ),
+                LIMITS,
+            )
+        ) == [("unknown_page", "main", "go")]
+        ok = _document(
+            [
+                {
+                    "type": "button",
+                    "block_id": "go",
+                    "label": "Next",
+                    "action": None,
+                    "page_id": "second",
+                }
+            ],
+            {"page_id": "second"},
+        )
+        assert flow_ui_problems(ok, LIMITS) == []
+
     def test_html_source_size_limit_counts_utf8_bytes(self) -> None:
         limits = FlowUILimits(max_html_source_bytes=1024)
         cyrillic = "я" * 600

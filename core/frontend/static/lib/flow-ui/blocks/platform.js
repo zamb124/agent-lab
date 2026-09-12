@@ -29,7 +29,7 @@ function statusTone(status) {
 
 export const PLATFORM_BLOCKS = Object.freeze({
     conversation(block, ctx) {
-        return html`<flow-ui-conversation .host=${ctx.host} .settings=${block.settings} .blockId=${block.block_id}></flow-ui-conversation>`;
+        return html`<flow-ui-conversation ?editing=${ctx.editing === true} .host=${ctx.host} .settings=${block.settings} .blockId=${block.block_id}></flow-ui-conversation>`;
     },
 
     slot(block, ctx) {

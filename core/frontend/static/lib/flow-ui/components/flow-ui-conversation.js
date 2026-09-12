@@ -23,6 +23,7 @@ export class FlowUIConversation extends LitElement {
         host: { attribute: false },
         settings: { attribute: false },
         blockId: { attribute: false },
+        editing: { type: Boolean, reflect: true },
         _text: { state: true },
         _files: { state: true },
         _copiedTaskId: { state: true },
@@ -35,6 +36,7 @@ export class FlowUIConversation extends LitElement {
         this.host = null;
         this.settings = {};
         this.blockId = '';
+        this.editing = false;
         this._text = '';
         this._files = [];
         this._copiedTaskId = '';

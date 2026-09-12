@@ -130,6 +130,7 @@ describe('interface editor domain rare schemas', () => {
         expect(propertyKind('value', { anyOf: [{ type: 'number' }, { type: 'integer' }, { type: 'null' }] })).toBe('number');
         expect(propertyKind('default', { anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }] })).toBe('select_default');
         expect(propertyKind('blocks', {})).toBe('blocks');
+        expect(propertyKind('image_url', { type: 'string', 'x-flow-ui': 'image_url' })).toBe('image_url');
         expect(() => propertyKind('weird', { anyOf: [{ type: 'string' }, { type: 'boolean' }] })).toThrow(/unsupported property schema for weird/);
     });
 

@@ -34,6 +34,7 @@ export function propertyKind(name, schema) {
     if (single !== null && 'const' in single) return 'const';
     if (single !== null && single['x-flow-ui'] === 'template') return 'template';
     if (single !== null && single['x-flow-ui'] === 'state_path') return 'state_path';
+    if (single !== null && single['x-flow-ui'] === 'image_url') return 'image_url';
     if (variants.length === 2 && variants.some((variant) => variant.const === 'auto')) return 'height';
     if (single !== null) {
         const ref = refName(single);
@@ -175,6 +176,24 @@ export function containerBlocks(page, containerKey) {
     return container.blocks;
 }
 
+/** Куда вставлять блок из палитры: в выбранный контейнер, иначе после выделенного блока или в конец страницы. */
+export function paletteInsertTarget(page, selectedBlockId) {
+    if (typeof selectedBlockId !== 'string' || selectedBlockId === '') {
+        return { containerKey: 'page', index: page.blocks.length };
+    }
+    const { block, containerKey, index } = locateBlock(page, selectedBlockId);
+    if (block.type === 'section') return { containerKey: block.block_id, index: block.blocks.length };
+    if (block.type === 'columns') {
+        const columnIndex = Math.max(0, block.columns.findIndex((column) => column.blocks.length === 0));
+        return { containerKey: `${block.block_id}/${columnIndex}`, index: block.columns[columnIndex].blocks.length };
+    }
+    if (block.type === 'tabs') {
+        const tabIndex = Math.max(0, block.tabs.findIndex((tab) => tab.blocks.length === 0));
+        return { containerKey: `${block.block_id}/${tabIndex}`, index: block.tabs[tabIndex].blocks.length };
+    }
+    return { containerKey, index: index + 1 };
+}
+
 function isDescendantContainer(page, containerKey, blockId) {
     if (containerKey === 'page') return false;
     const ownerId = containerKey.split('/')[0];
@@ -232,6 +251,7 @@ export function defaultBlock(entry, blockId, labels) {
         block[property.name] = requiredDefault(entry.type, property, blockId, labels);
     }
     if (entry.type === 'link') block.url = 'https://';
+    if (entry.type === 'button') block.action = { name: 'submit', payload: {} };
     if (entry.type === 'data_table') block.rows = 'rows';
     if (entry.type === 'file_card') block.file = 'file';
     if (entry.type === 'html') {
@@ -327,6 +347,10 @@ export function setBlockProperty(document, pageId, blockId, property, value) {
             throw new Error(`interface editor: block id ${JSON.stringify(value)} is already used on this page`);
         }
     }
+    if (property === 'click_target' && value !== null && typeof value === 'object' && !Array.isArray(value)) {
+        Object.assign(block, value);
+        return next;
+    }
     block[property] = value;
     return next;
 }
@@ -344,7 +368,7 @@ export function wrapInSection(document, pageId, blockId) {
     const next = structuredClone(document);
     const page = findPage(next, pageId);
     const { block, containerKey, index } = locateBlock(page, blockId);
-    const section = { type: 'section', block_id: uniqueBlockId(page, 'section'), title: '', visible_when: null, blocks: [block] };
+    const section = { type: 'section', block_id: uniqueBlockId(page, 'section'), title: '', visible_when: null, span: 12, align: 'start', valign: 'start', blocks: [block] };
     containerBlocks(page, containerKey).splice(index, 1, section);
     return next;
 }
@@ -370,7 +394,9 @@ export function setPageProperty(document, pageId, property, value) {
         }
         if (next.start_page_id === pageId) next.start_page_id = value;
         for (const entry of next.pages.flatMap(walkPage)) {
-            if (entry.block.type === 'link' && entry.block.page_id === pageId) entry.block.page_id = value;
+            if (entry.block.type === 'link' || entry.block.type === 'button') {
+                if (entry.block.page_id === pageId) entry.block.page_id = value;
+            }
         }
     }
     page[property] = value;
@@ -482,6 +508,13 @@ export function documentProblems(document, catalog, frozen) {
             }
             if (block.type === 'link' && block.page_id !== null && !pageIds.has(block.page_id)) report('link_page_missing', 'error', block.block_id, 'page_id', { value: block.page_id });
             if (block.type === 'link' && (block.page_id === null) === (block.url === '')) report('link_target', 'error', block.block_id, 'url', {});
+            if (block.type === 'button') {
+                const hasAction = block.action !== null && block.action !== undefined;
+                const hasPage = typeof block.page_id === 'string' && block.page_id !== '';
+                const hasUrl = typeof block.url === 'string' && block.url !== '';
+                if ((hasAction ? 1 : 0) + (hasPage ? 1 : 0) + (hasUrl ? 1 : 0) !== 1) report('button_target', 'error', block.block_id, 'action', {});
+                if (hasPage && !pageIds.has(block.page_id)) report('link_page_missing', 'error', block.block_id, 'page_id', { value: block.page_id });
+            }
             if (block.type === 'data_table' && (block.rows === null) === (block.file_id === '')) report('data_table_source', 'error', block.block_id, 'rows', {});
             if (block.type === 'file_card' && (block.file === null) === (block.file_id === '')) report('file_card_source', 'error', block.block_id, 'file', {});
             if (block.type === 'columns' && block.columns.reduce((sum, column) => sum + column.width, 0) > 12) report('columns_overflow', 'warning', block.block_id, 'columns', {});

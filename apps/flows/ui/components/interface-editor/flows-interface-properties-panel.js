@@ -3,7 +3,8 @@
  * (шаблоны с автодополнением ``{path}``, пути state с подсказками, действия, условия, опции),
  * проблемы блока и превью контракта страницы (что уйдёт во flow при действии).
  *
- * События: ``property-change {blockId, property, value}``, ``block-action {blockId, action}``.
+ * События: ``property-change {blockId, property, value}``, ``page-property-change {property, value}``,
+ * ``block-action {blockId, action}``, ``image-upload {blockId, property, file}`` — файл иконки; хост грузит и пишет URL.
  */
 
 import { css, html, nothing } from 'lit';
@@ -62,6 +63,51 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
         .html-source { display: grid; gap: 6px; }
         .html-source platform-code-editor { --code-editor-min-height: 160px; border: 1px solid var(--border-subtle); border-radius: 10px; overflow: hidden; }
         .hint { font-size: 11px; color: var(--text-tertiary); }
+        .image-field { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--glass-solid-subtle); }
+        .image-row { display: flex; align-items: center; gap: 10px; }
+        .image-preview {
+            width: 56px; height: 56px; flex: 0 0 auto; padding: 0; border-radius: 50%;
+            border: 1px solid var(--border-subtle); background: var(--bg-primary);
+            display: grid; place-items: center; cursor: pointer; overflow: hidden; color: var(--text-tertiary);
+        }
+        .image-preview:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+        .image-preview img { width: 100%; height: 100%; object-fit: contain; }
+        .image-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+        .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
+        .align-field { display: grid; gap: 6px; }
+        .align-label { font-size: 12px; font-weight: 550; color: var(--text-secondary); }
+        .align-picker {
+            display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px; padding: 3px;
+            border-radius: 999px; border: 1px solid var(--border-subtle); background: var(--glass-solid-subtle);
+        }
+        .align-picker button {
+            display: grid; place-items: center; min-height: 32px; margin: 0; padding: 0; border: 0; border-radius: 999px;
+            background: transparent; color: var(--text-secondary); cursor: pointer;
+        }
+        .align-picker button:hover { color: var(--text-primary); background: var(--glass-solid-medium); }
+        .align-picker button[aria-pressed='true'] {
+            background: var(--accent-subtle); color: var(--accent);
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
+        }
+        .align-picker button:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent); }
+        .align-glyph { width: 16px; height: 14px; display: grid; gap: 2px; pointer-events: none; }
+        .align-glyph i { display: block; background: currentColor; border-radius: 1px; }
+        .align-glyph[data-axis='align'] { align-content: center; }
+        .align-glyph[data-axis='align'] i { height: 2px; }
+        .align-glyph[data-axis='align'] i:nth-child(1) { width: 100%; }
+        .align-glyph[data-axis='align'] i:nth-child(2) { width: 62%; }
+        .align-glyph[data-axis='align'] i:nth-child(3) { width: 80%; }
+        .align-glyph[data-axis='align'][data-value='start'] i { justify-self: start; }
+        .align-glyph[data-axis='align'][data-value='center'] i { justify-self: center; }
+        .align-glyph[data-axis='align'][data-value='end'] i { justify-self: end; }
+        .align-glyph[data-axis='valign'] { display: flex; justify-content: center; gap: 2px; width: 16px; height: 16px; }
+        .align-glyph[data-axis='valign'] i { width: 3px; }
+        .align-glyph[data-axis='valign'] i:nth-child(1) { height: 16px; }
+        .align-glyph[data-axis='valign'] i:nth-child(2) { height: 10px; }
+        .align-glyph[data-axis='valign'] i:nth-child(3) { height: 13px; }
+        .align-glyph[data-axis='valign'][data-value='start'] { align-items: start; }
+        .align-glyph[data-axis='valign'][data-value='center'] { align-items: center; }
+        .align-glyph[data-axis='valign'][data-value='end'] { align-items: end; }
     `];
 
     constructor() {
@@ -79,6 +125,10 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
 
     _change(property, value) {
         this.emit('property-change', { blockId: this.block.block_id, property, value });
+    }
+
+    _pageChange(property, value) {
+        this.emit('page-property-change', { property, value });
     }
 
     _label(name) {
@@ -132,6 +182,76 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
                 <platform-field mode="edit" type="object" .label=${this.t('interface_editor.action_payload')} .value=${value.payload}
                     @change=${(event) => this._change(name, { ...value, payload: event.detail.value })}></platform-field>
             ` : nothing}
+        </div>`;
+    }
+
+    _clickKind() {
+        if (typeof this.block.page_id === 'string' && this.block.page_id !== '') return 'page';
+        if (typeof this.block.url === 'string' && this.block.url !== '') return 'url';
+        return 'action';
+    }
+
+    _pageOptions() {
+        const pages = this.document?.pages ?? [];
+        const options = pages.map((page) => ({
+            value: page.page_id,
+            label: page.title !== '' ? page.title : page.page_id,
+        }));
+        const current = this.block.page_id;
+        if (typeof current === 'string' && current !== '' && !options.some((item) => item.value === current)) {
+            options.push({ value: current, label: current });
+        }
+        return options;
+    }
+
+    _defaultPageId() {
+        const current = this.page?.page_id;
+        const other = (this.document?.pages ?? []).find((page) => page.page_id !== current);
+        return other?.page_id ?? current ?? '';
+    }
+
+    _setClickKind(kind) {
+        if (kind === 'page') {
+            this._change('click_target', { action: null, page_id: this.block.page_id || this._defaultPageId(), url: '' });
+            return;
+        }
+        if (kind === 'url') {
+            this._change('click_target', { action: null, page_id: null, url: this.block.url || 'https://' });
+            return;
+        }
+        this._change('click_target', { action: this.block.action ?? { name: 'submit', payload: {} }, page_id: null, url: '' });
+    }
+
+    _clickTarget() {
+        const isButton = this.block.type === 'button';
+        const kind = this._clickKind();
+        const kinds = (isButton ? ['action', 'page', 'url'] : ['page', 'url']).map((value) => ({
+            value,
+            label: this.t(`interface_editor.click_${value}`),
+        }));
+        const pages = this._pageOptions();
+        return html`<div class="sub" data-click-target=${kind}>
+            <platform-field mode="edit" type="enum" .label=${this.t('interface_editor.click_target')}
+                .value=${kinds.some((item) => item.value === kind) ? kind : kinds[0].value}
+                .config=${{ values: kinds }}
+                @change=${(event) => this._setClickKind(event.detail.value)}></platform-field>
+            ${kind === 'action' ? html`
+                <platform-field mode="edit" type="string" .label=${this.t('interface_editor.action_name')} .value=${this.block.action?.name ?? ''} .placeholder=${'submit'} .hint=${this.t('interface_editor.action_name_hint')}
+                    @change=${(event) => this._change('click_target', { action: { name: event.detail.value, payload: this.block.action?.payload ?? {} }, page_id: null, url: '' })}></platform-field>
+                <platform-field mode="edit" type="object" .label=${this.t('interface_editor.action_payload')} .value=${this.block.action?.payload ?? {}}
+                    @change=${(event) => this._change('click_target', { action: { name: this.block.action?.name ?? 'submit', payload: event.detail.value }, page_id: null, url: '' })}></platform-field>
+            ` : nothing}
+            ${kind === 'page' ? html`
+                <platform-field mode="edit" type="enum" .label=${this._label('page_id')} .value=${this.block.page_id ?? ''}
+                    .config=${{ values: pages }} .hint=${pages.length < 2 ? this.t('interface_editor.click_page_add') : this.t('interface_editor.click_page_hint')}
+                    @change=${(event) => this._change('click_target', { action: null, page_id: event.detail.value, url: '' })}></platform-field>
+            ` : nothing}
+            ${kind === 'url' ? html`
+                <platform-variable-input syntax="brace" .label=${this._label('url')} .value=${this.block.url ?? ''}
+                    .statePreview=${this._statePreview()} .statePaths=${this._pathSuggestions()} .placeholder=${'https://'}
+                    @change=${(event) => this._change('click_target', { action: null, page_id: null, url: event.detail.value })}></platform-variable-input>
+            ` : nothing}
+            ${this._problemsFor('action')}${this._problemsFor('page_id')}${this._problemsFor('url')}
         </div>`;
     }
 
@@ -219,6 +339,43 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
         </div>`;
     }
 
+    _pickImage() {
+        const input = this.renderRoot.querySelector('[data-image-input]');
+        if (input instanceof HTMLInputElement) input.click();
+    }
+
+    _onImageFile(name, event) {
+        const input = event.currentTarget;
+        const file = input.files && input.files[0];
+        input.value = '';
+        if (!file) return;
+        if (typeof file.type !== 'string' || !file.type.startsWith('image/')) {
+            this.toast('interface_editor.toast_image_type', { type: 'error' });
+            return;
+        }
+        this.emit('image-upload', { blockId: this.block.block_id, property: name, file });
+    }
+
+    _imageUrl(name, value) {
+        const url = typeof value === 'string' ? value.trim() : '';
+        return html`<div class="image-field">
+            <div class="sub-title"><span>${this._label(name)}</span></div>
+            <div class="image-row">
+                <button type="button" class="image-preview" aria-label=${this.t('interface_editor.image_upload')} @click=${() => this._pickImage()}>
+                    ${url !== '' ? html`<img src=${url} alt="">` : html`<platform-icon name="image" size="22"></platform-icon>`}
+                </button>
+                <div class="image-actions">
+                    <input type="file" accept="image/*" class="visually-hidden" data-image-input @change=${(event) => this._onImageFile(name, event)}>
+                    <platform-button secondary density="compact" @click=${() => this._pickImage()}>
+                        <platform-icon name="image" size="13"></platform-icon>${this.t('interface_editor.image_upload')}
+                    </platform-button>
+                    ${url !== '' ? html`<platform-button ghost density="compact" @click=${() => this._change(name, '')}>${this.t('interface_editor.image_clear')}</platform-button>` : nothing}
+                </div>
+            </div>
+            <div class="hint">${this.t('interface_editor.image_hint')}</div>
+        </div>`;
+    }
+
     _htmlSource(value) {
         return html`<div class="html-source">
             <div class="sub-title"><span>${this._label('source')}</span>
@@ -232,13 +389,38 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
         </div>`;
     }
 
+    _alignPicker(property) {
+        const axis = property.name;
+        const current = this.block[axis] === 'center' || this.block[axis] === 'end' ? this.block[axis] : 'start';
+        const items = ['start', 'center', 'end'].map((value) => ({
+            value,
+            title: this.t(`interface_editor.${axis}_${value}`),
+        }));
+        return html`<div class="align-field" data-align-axis=${axis}>
+            <div class="align-label">${this._label(axis)}</div>
+            <div class="align-picker" role="group" aria-label=${this._label(axis)}>
+                ${items.map((item) => html`<button type="button" data-value=${item.value}
+                    aria-pressed=${current === item.value ? 'true' : 'false'}
+                    aria-label=${item.title} title=${item.title}
+                    @click=${() => this._change(axis, item.value)}>
+                    <span class="align-glyph" data-axis=${axis} data-value=${item.value}><i></i><i></i><i></i></span>
+                </button>`)}
+            </div>
+            ${axis === 'valign' ? html`<div class="hint">${this.t('interface_editor.prop_valign_hint')}</div>` : nothing}
+        </div>`;
+    }
+
     _editor(property) {
         const { name, kind } = property;
         const value = this.block[name];
         const isInput = INPUT_BLOCK_TYPES.has(this.block.type);
+        if (name === 'align' || name === 'valign') return this._alignPicker(property);
+        if ((this.block.type === 'button' && name === 'action') || (this.block.type === 'link' && name === 'page_id')) return this._clickTarget();
+        if ((this.block.type === 'button' && (name === 'page_id' || name === 'url')) || (this.block.type === 'link' && name === 'url')) return nothing;
         switch (kind) {
             case 'const': case 'blocks': return nothing;
             case 'template': return this._template(name, value);
+            case 'image_url': return this._imageUrl(name, value);
             case 'string': return this.block.type === 'html' && name === 'source' ? this._htmlSource(value)
                 : html`<platform-field mode="edit" type="string" .label=${this._label(name)} .value=${typeof value === 'string' ? value : ''} @change=${(event) => this._change(name, event.detail.value)}></platform-field>`;
             case 'state_path': return this._statePath(name, value, property.required, isInput && name === 'field');
@@ -262,6 +444,21 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
         }
     }
 
+    _renderPage() {
+        const shown = this.page.show_title !== false;
+        return html`
+            <div class="head"><platform-icon name="layers" size="16"></platform-icon><span class="type">${this.t('interface_editor.page_properties')}</span></div>
+            <div class="fields">
+                <platform-variable-input syntax="brace" .label=${this.t('interface_editor.page_title')} .value=${this.page.title ?? ''}
+                    .statePreview=${this._statePreview()} .statePaths=${this._pathSuggestions()} .placeholder=${this.t('interface_editor.template_placeholder')}
+                    @change=${(event) => this._pageChange('title', event.detail.value)}></platform-variable-input>
+                <platform-field mode="edit" type="boolean" .label=${this.t('interface_editor.page_show_title')} .value=${shown}
+                    @change=${(event) => this._pageChange('show_title', event.detail.value)}></platform-field>
+                <div class="hint">${this.t('interface_editor.page_show_title_hint')}</div>
+            </div>
+        `;
+    }
+
     _renderContract() {
         const inputs = walkPage(this.page).filter(({ block }) => INPUT_BLOCK_TYPES.has(block.type));
         const actions = [...new Set(walkPage(this.page).flatMap(({ block }) => [block.action, block.row_action].filter((action) => action && typeof action.name === 'string').map((action) => action.name)))];
@@ -275,7 +472,9 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
     }
 
     render() {
-        if (this.block === null || this.page === null || this.schema === null) return html`<div class="empty">${this.t('interface_editor.properties_empty')}</div>${this.page === null ? nothing : this._renderContract()}`;
+        if (this.page === null) return html`<div class="empty">${this.t('interface_editor.properties_empty')}</div>`;
+        if (this.block === null) return html`${this._renderPage()}${this._renderContract()}`;
+        if (this.schema === null) return html`<div class="empty">${this.t('interface_editor.properties_empty')}</div>`;
         const entry = catalogEntry(this.catalog, this.block.type);
         return html`
             <div class="head"><platform-icon name=${entry.icon} size="16"></platform-icon><span class="type">${this.t(`interface_editor.block_${this.block.type}`)}</span></div>

@@ -57,10 +57,17 @@ export function renderBlock(block, ctx) {
         if (!ctx.editing) return nothing;
         content = html`<div class="fu-block-empty">${flowUIText(ctx.locale, 'block_empty', { type: block.type })}</div>`;
     }
+    const span = Number.isInteger(block.span) && block.span >= 1 && block.span <= 12 ? block.span : 12;
+    const align = block.align === 'center' || block.align === 'end' ? block.align : 'start';
+    const valign = block.valign === 'center' || block.valign === 'end' ? block.valign : 'start';
     return html`<div
         class="fu-block"
+        style=${`--fu-span:${span}`}
         data-block-id=${block.block_id}
         data-block-type=${block.type}
+        data-span=${span}
+        data-align=${align}
+        data-valign=${valign}
         data-selected=${ctx.selectedBlockId === block.block_id ? 'true' : nothing}
         data-render-error=${renderError !== null ? 'true' : nothing}
     >${content}</div>`;

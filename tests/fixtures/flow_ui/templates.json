@@ -8,13 +8,17 @@
           {
             "blocks": [
               {
+                "align": "start",
                 "block_id": "agent-identity",
                 "image_url": "",
+                "span": 12,
                 "title": "",
                 "type": "agent_identity",
+                "valign": "start",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "conversation",
                 "settings": {
                   "allow_cancel": true,
@@ -36,11 +40,14 @@
                   ],
                   "tool_calls": "compact"
                 },
+                "span": 12,
                 "type": "conversation",
+                "valign": "start",
                 "visible_when": null
               }
             ],
             "page_id": "main",
+            "show_title": true,
             "title": "Conversation"
           }
         ],
@@ -58,33 +65,46 @@
           {
             "blocks": [
               {
+                "align": "start",
                 "block_id": "agent-identity",
                 "image_url": "",
+                "span": 12,
                 "title": "",
                 "type": "agent_identity",
+                "valign": "start",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "context",
                 "blocks": [
                   {
+                    "align": "start",
                     "block_id": "context-text",
                     "markdown": "Task: {?task_title|not selected}",
+                    "span": 12,
                     "type": "text",
+                    "valign": "start",
                     "visible_when": null
                   },
                   {
+                    "align": "start",
                     "block_id": "context-slot",
+                    "span": 12,
                     "title": "",
                     "type": "slot",
+                    "valign": "start",
                     "visible_when": null
                   }
                 ],
+                "span": 12,
                 "title": "Context",
                 "type": "section",
+                "valign": "start",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "conversation",
                 "settings": {
                   "allow_cancel": true,
@@ -103,11 +123,14 @@
                   "suggested_prompts": [],
                   "tool_calls": "compact"
                 },
+                "span": 12,
                 "type": "conversation",
+                "valign": "start",
                 "visible_when": null
               }
             ],
             "page_id": "main",
+            "show_title": true,
             "title": "Assistant"
           }
         ],
@@ -125,20 +148,27 @@
           {
             "blocks": [
               {
+                "align": "start",
                 "block_id": "title",
                 "level": 1,
+                "span": 12,
                 "text": "How can we help?",
                 "type": "heading",
+                "valign": "start",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "subtitle",
                 "markdown": "Leave a request and the agent will reply in this interface.",
+                "span": 12,
                 "type": "text",
+                "valign": "start",
                 "visible_when": null
               },
               {
                 "action": null,
+                "align": "start",
                 "block_id": "name",
                 "default": "",
                 "error_message": "",
@@ -149,11 +179,14 @@
                 "placeholder": "",
                 "required": true,
                 "secret": false,
+                "span": 12,
                 "type": "text_input",
+                "valign": "start",
                 "visible_when": null
               },
               {
                 "action": null,
+                "align": "start",
                 "block_id": "email",
                 "default": "",
                 "error_message": "Enter a valid email",
@@ -164,11 +197,14 @@
                 "placeholder": "",
                 "required": true,
                 "secret": false,
+                "span": 12,
                 "type": "text_input",
+                "valign": "start",
                 "visible_when": null
               },
               {
                 "action": null,
+                "align": "start",
                 "block_id": "message",
                 "default": "",
                 "error_message": "",
@@ -179,7 +215,9 @@
                 "placeholder": "",
                 "required": false,
                 "secret": false,
+                "span": 12,
                 "type": "text_input",
+                "valign": "start",
                 "visible_when": null
               },
               {
@@ -187,14 +225,20 @@
                   "name": "submit",
                   "payload": {}
                 },
+                "align": "start",
                 "block_id": "submit",
                 "label": "Send request",
+                "page_id": null,
+                "span": 12,
                 "type": "button",
+                "url": "",
+                "valign": "start",
                 "variant": "primary",
                 "visible_when": null
               }
             ],
             "page_id": "main",
+            "show_title": true,
             "title": "Request"
           }
         ],
@@ -212,14 +256,18 @@
           {
             "blocks": [
               {
+                "align": "start",
                 "block_id": "title",
                 "level": 1,
+                "span": 12,
                 "text": "Sign in",
                 "type": "heading",
+                "valign": "start",
                 "visible_when": null
               },
               {
                 "action": null,
+                "align": "start",
                 "block_id": "email",
                 "default": "",
                 "error_message": "",
@@ -230,11 +278,14 @@
                 "placeholder": "",
                 "required": true,
                 "secret": false,
+                "span": 12,
                 "type": "text_input",
+                "valign": "start",
                 "visible_when": null
               },
               {
                 "action": null,
+                "align": "start",
                 "block_id": "password",
                 "default": "",
                 "error_message": "",
@@ -245,7 +296,9 @@
                 "placeholder": "",
                 "required": true,
                 "secret": true,
+                "span": 12,
                 "type": "text_input",
+                "valign": "start",
                 "visible_when": null
               },
               {
@@ -253,14 +306,20 @@
                   "name": "login",
                   "payload": {}
                 },
+                "align": "start",
                 "block_id": "submit",
                 "label": "Sign in",
+                "page_id": null,
+                "span": 12,
                 "type": "button",
+                "url": "",
+                "valign": "start",
                 "variant": "primary",
                 "visible_when": null
               }
             ],
             "page_id": "main",
+            "show_title": true,
             "title": "Sign in"
           }
         ],
@@ -278,27 +337,37 @@
           {
             "blocks": [
               {
+                "align": "start",
                 "block_id": "avatar",
                 "image_url": "{?contact.image_url}",
                 "name": "{?contact.name|Support}",
+                "span": 12,
                 "type": "avatar",
+                "valign": "start",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "title",
                 "level": 2,
+                "span": 12,
                 "text": "{?contact.name|Support}",
                 "type": "heading",
+                "valign": "start",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "role",
                 "markdown": "{?contact.role}",
+                "span": 12,
                 "type": "text",
+                "valign": "start",
                 "visible_when": null
               },
               {
                 "action": null,
+                "align": "start",
                 "block_id": "message",
                 "default": "",
                 "error_message": "",
@@ -309,7 +378,9 @@
                 "placeholder": "",
                 "required": true,
                 "secret": false,
+                "span": 12,
                 "type": "text_input",
+                "valign": "start",
                 "visible_when": null
               },
               {
@@ -317,14 +388,20 @@
                   "name": "send_message",
                   "payload": {}
                 },
+                "align": "start",
                 "block_id": "send",
                 "label": "Send",
+                "page_id": null,
+                "span": 12,
                 "type": "button",
+                "url": "",
+                "valign": "start",
                 "variant": "primary",
                 "visible_when": null
               }
             ],
             "page_id": "main",
+            "show_title": true,
             "title": "Contact"
           }
         ],
@@ -342,19 +419,24 @@
           {
             "blocks": [
               {
+                "align": "start",
                 "block_id": "title",
                 "level": 1,
+                "span": 12,
                 "text": "Registration",
                 "type": "heading",
+                "valign": "start",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "name-row",
                 "columns": [
                   {
                     "blocks": [
                       {
                         "action": null,
+                        "align": "start",
                         "block_id": "first-name",
                         "default": "",
                         "error_message": "",
@@ -365,7 +447,9 @@
                         "placeholder": "",
                         "required": true,
                         "secret": false,
+                        "span": 12,
                         "type": "text_input",
+                        "valign": "start",
                         "visible_when": null
                       }
                     ],
@@ -375,6 +459,7 @@
                     "blocks": [
                       {
                         "action": null,
+                        "align": "start",
                         "block_id": "last-name",
                         "default": "",
                         "error_message": "",
@@ -385,18 +470,23 @@
                         "placeholder": "",
                         "required": true,
                         "secret": false,
+                        "span": 12,
                         "type": "text_input",
+                        "valign": "start",
                         "visible_when": null
                       }
                     ],
                     "width": 6
                   }
                 ],
+                "span": 12,
                 "type": "columns",
+                "valign": "start",
                 "visible_when": null
               },
               {
                 "action": null,
+                "align": "start",
                 "block_id": "phone",
                 "default": "",
                 "error_message": "Enter a phone number",
@@ -407,11 +497,14 @@
                 "placeholder": "",
                 "required": false,
                 "secret": false,
+                "span": 12,
                 "type": "text_input",
+                "valign": "start",
                 "visible_when": null
               },
               {
                 "action": null,
+                "align": "start",
                 "block_id": "plan",
                 "default": "free",
                 "error_message": "",
@@ -434,18 +527,23 @@
                 ],
                 "placeholder": "",
                 "required": false,
+                "span": 12,
                 "type": "select",
+                "valign": "start",
                 "visible_when": null
               },
               {
                 "action": null,
+                "align": "start",
                 "block_id": "consent",
                 "default": false,
                 "error_message": "",
                 "field": "consent",
                 "label": "I agree to the terms",
                 "required": true,
+                "span": 12,
                 "type": "checkbox",
+                "valign": "start",
                 "visible_when": null
               },
               {
@@ -453,14 +551,20 @@
                   "name": "register",
                   "payload": {}
                 },
+                "align": "start",
                 "block_id": "submit",
                 "label": "Register",
+                "page_id": null,
+                "span": 12,
                 "type": "button",
+                "url": "",
+                "valign": "start",
                 "variant": "primary",
                 "visible_when": null
               }
             ],
             "page_id": "main",
+            "show_title": true,
             "title": "Form"
           }
         ],
@@ -478,22 +582,29 @@
           {
             "blocks": [
               {
+                "align": "start",
                 "block_id": "title",
                 "level": 1,
+                "span": 12,
                 "text": "Overview",
                 "type": "heading",
+                "valign": "start",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "metrics",
                 "columns": [
                   {
                     "blocks": [
                       {
+                        "align": "start",
                         "block_id": "revenue",
                         "hint": "",
                         "label": "Revenue",
+                        "span": 12,
                         "type": "metric",
+                        "valign": "start",
                         "value": "{?metrics.revenue|0}",
                         "visible_when": null
                       }
@@ -503,10 +614,13 @@
                   {
                     "blocks": [
                       {
+                        "align": "start",
                         "block_id": "orders",
                         "hint": "",
                         "label": "Orders",
+                        "span": 12,
                         "type": "metric",
+                        "valign": "start",
                         "value": "{?metrics.orders|0}",
                         "visible_when": null
                       }
@@ -516,10 +630,13 @@
                   {
                     "blocks": [
                       {
+                        "align": "start",
                         "block_id": "customers",
                         "hint": "",
                         "label": "Customers",
+                        "span": 12,
                         "type": "metric",
+                        "valign": "start",
                         "value": "{?metrics.customers|0}",
                         "visible_when": null
                       }
@@ -527,15 +644,20 @@
                     "width": 4
                   }
                 ],
+                "span": 12,
                 "type": "columns",
+                "valign": "start",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "chart",
                 "data": "metrics.series",
                 "kind": "line",
+                "span": 12,
                 "title": "Trend",
                 "type": "chart",
+                "valign": "start",
                 "visible_when": null,
                 "x": "date",
                 "y": [
@@ -543,6 +665,7 @@
                 ]
               },
               {
+                "align": "start",
                 "block_id": "table",
                 "columns": [],
                 "file_id": "",
@@ -551,10 +674,13 @@
                   "payload": {}
                 },
                 "rows": "metrics.rows",
+                "span": 12,
                 "type": "data_table",
+                "valign": "start",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "conversation",
                 "settings": {
                   "allow_cancel": true,
@@ -573,11 +699,14 @@
                   "suggested_prompts": [],
                   "tool_calls": "compact"
                 },
+                "span": 12,
                 "type": "conversation",
+                "valign": "start",
                 "visible_when": null
               }
             ],
             "page_id": "main",
+            "show_title": true,
             "title": "Dashboard"
           }
         ],
@@ -595,37 +724,50 @@
           {
             "blocks": [
               {
+                "align": "start",
                 "block_id": "title",
                 "level": 1,
+                "span": 12,
                 "text": "Statistics",
                 "type": "heading",
+                "valign": "start",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "status",
                 "label": "{?stats.status|ok}",
+                "span": 12,
                 "tone": "success",
                 "type": "status",
+                "valign": "start",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "progress",
                 "label": "Completed",
                 "max": 100.0,
+                "span": 12,
                 "type": "progress",
+                "valign": "start",
                 "value": "{?stats.progress|0}",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "cards",
                 "columns": [
                   {
                     "blocks": [
                       {
+                        "align": "start",
                         "block_id": "active",
                         "hint": "",
                         "label": "Active",
+                        "span": 12,
                         "type": "metric",
+                        "valign": "start",
                         "value": "{?stats.active|0}",
                         "visible_when": null
                       }
@@ -635,10 +777,13 @@
                   {
                     "blocks": [
                       {
+                        "align": "start",
                         "block_id": "done",
                         "hint": "",
                         "label": "Done",
+                        "span": 12,
                         "type": "metric",
+                        "valign": "start",
                         "value": "{?stats.done|0}",
                         "visible_when": null
                       }
@@ -646,7 +791,9 @@
                     "width": 6
                   }
                 ],
+                "span": 12,
                 "type": "columns",
+                "valign": "start",
                 "visible_when": null
               },
               {
@@ -654,14 +801,20 @@
                   "name": "refresh",
                   "payload": {}
                 },
+                "align": "start",
                 "block_id": "refresh",
                 "label": "Refresh",
+                "page_id": null,
+                "span": 12,
                 "type": "button",
+                "url": "",
+                "valign": "start",
                 "variant": "secondary",
                 "visible_when": null
               }
             ],
             "page_id": "main",
+            "show_title": true,
             "title": "Statistics"
           }
         ],
@@ -679,41 +832,56 @@
           {
             "blocks": [
               {
+                "align": "start",
                 "block_id": "title",
                 "level": 1,
+                "span": 12,
                 "text": "Order {?order.number} status",
                 "type": "heading",
+                "valign": "start",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "status",
                 "label": "{?order.status|pending}",
+                "span": 12,
                 "tone": "info",
                 "type": "status",
+                "valign": "start",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "progress",
                 "label": "",
                 "max": 100.0,
+                "span": 12,
                 "type": "progress",
+                "valign": "start",
                 "value": "{?order.progress|0}",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "activity",
                 "detail": "",
+                "span": 12,
                 "status": "running",
                 "title": "{?order.stage|Processing}",
                 "type": "activity",
+                "valign": "start",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "delivered",
                 "message": "Order delivered",
+                "span": 12,
                 "title": "",
                 "tone": "success",
                 "type": "alert",
+                "valign": "start",
                 "visible_when": {
                   "equals": "delivered",
                   "path": "order.status"
@@ -724,14 +892,20 @@
                   "name": "refresh",
                   "payload": {}
                 },
+                "align": "start",
                 "block_id": "refresh",
                 "label": "Refresh",
+                "page_id": null,
+                "span": 12,
                 "type": "button",
+                "url": "",
+                "valign": "start",
                 "variant": "secondary",
                 "visible_when": null
               }
             ],
             "page_id": "main",
+            "show_title": true,
             "title": "Status"
           }
         ],
@@ -749,23 +923,30 @@
           {
             "blocks": [
               {
+                "align": "start",
                 "block_id": "title",
                 "level": 1,
+                "span": 12,
                 "text": "Tasks",
                 "type": "heading",
+                "valign": "start",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "empty",
                 "message": "No tasks yet",
+                "span": 12,
                 "title": "",
                 "type": "empty_state",
+                "valign": "start",
                 "visible_when": {
                   "equals": null,
                   "path": "tasks_empty"
                 }
               },
               {
+                "align": "start",
                 "block_id": "tasks",
                 "columns": [
                   {
@@ -783,11 +964,14 @@
                   "payload": {}
                 },
                 "rows": "tasks",
+                "span": 12,
                 "type": "data_table",
+                "valign": "start",
                 "visible_when": null
               },
               {
                 "action": null,
+                "align": "start",
                 "block_id": "new-task",
                 "default": "",
                 "error_message": "",
@@ -798,7 +982,9 @@
                 "placeholder": "",
                 "required": true,
                 "secret": false,
+                "span": 12,
                 "type": "text_input",
+                "valign": "start",
                 "visible_when": null
               },
               {
@@ -806,14 +992,20 @@
                   "name": "add_task",
                   "payload": {}
                 },
+                "align": "start",
                 "block_id": "add",
                 "label": "Add",
+                "page_id": null,
+                "span": 12,
                 "type": "button",
+                "url": "",
+                "valign": "start",
                 "variant": "primary",
                 "visible_when": null
               }
             ],
             "page_id": "main",
+            "show_title": true,
             "title": "Tasks"
           }
         ],
@@ -831,15 +1023,19 @@
           {
             "blocks": [
               {
+                "align": "start",
                 "block_id": "layout",
                 "columns": [
                   {
                     "blocks": [
                       {
+                        "align": "start",
                         "alt": "{?product.title}",
                         "block_id": "photo",
+                        "span": 12,
                         "type": "image",
                         "url": "{?product.image_url}",
+                        "valign": "start",
                         "visible_when": null
                       }
                     ],
@@ -848,28 +1044,38 @@
                   {
                     "blocks": [
                       {
+                        "align": "start",
                         "block_id": "title",
                         "level": 1,
+                        "span": 12,
                         "text": "{?product.title|Product}",
                         "type": "heading",
+                        "valign": "start",
                         "visible_when": null
                       },
                       {
+                        "align": "start",
                         "block_id": "description",
                         "markdown": "{?product.description}",
+                        "span": 12,
                         "type": "text",
+                        "valign": "start",
                         "visible_when": null
                       },
                       {
+                        "align": "start",
                         "block_id": "price",
                         "hint": "",
                         "label": "Price",
+                        "span": 12,
                         "type": "metric",
+                        "valign": "start",
                         "value": "{?product.price|—}",
                         "visible_when": null
                       },
                       {
                         "action": null,
+                        "align": "start",
                         "block_id": "quantity",
                         "default": 1.0,
                         "error_message": "",
@@ -879,8 +1085,10 @@
                         "min": 1.0,
                         "placeholder": "",
                         "required": false,
+                        "span": 12,
                         "step": 1.0,
                         "type": "number_input",
+                        "valign": "start",
                         "visible_when": null
                       },
                       {
@@ -888,9 +1096,14 @@
                           "name": "buy",
                           "payload": {}
                         },
+                        "align": "start",
                         "block_id": "buy",
                         "label": "Buy",
+                        "page_id": null,
+                        "span": 12,
                         "type": "button",
+                        "url": "",
+                        "valign": "start",
                         "variant": "primary",
                         "visible_when": null
                       }
@@ -898,11 +1111,14 @@
                     "width": 7
                   }
                 ],
+                "span": 12,
                 "type": "columns",
+                "valign": "start",
                 "visible_when": null
               }
             ],
             "page_id": "main",
+            "show_title": true,
             "title": "Product"
           }
         ],
@@ -920,25 +1136,34 @@
           {
             "blocks": [
               {
+                "align": "start",
                 "block_id": "done",
                 "message": "Order number: {?order.number}",
+                "span": 12,
                 "title": "Thank you for your purchase!",
                 "tone": "success",
                 "type": "alert",
+                "valign": "start",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "total",
                 "hint": "",
                 "label": "Total",
+                "span": 12,
                 "type": "metric",
+                "valign": "start",
                 "value": "{?order.total|0}",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "receipts",
                 "files": "files",
+                "span": 12,
                 "type": "file_list",
+                "valign": "start",
                 "visible_when": null
               },
               {
@@ -946,14 +1171,20 @@
                   "name": "new_order",
                   "payload": {}
                 },
+                "align": "start",
                 "block_id": "again",
                 "label": "New order",
+                "page_id": null,
+                "span": 12,
                 "type": "button",
+                "url": "",
+                "valign": "start",
                 "variant": "secondary",
                 "visible_when": null
               }
             ],
             "page_id": "main",
+            "show_title": true,
             "title": "Done"
           }
         ],
@@ -971,21 +1202,28 @@
           {
             "blocks": [
               {
+                "align": "start",
                 "block_id": "avatar",
                 "image_url": "{?profile.image_url}",
                 "name": "{?profile.name|User}",
+                "span": 12,
                 "type": "avatar",
+                "valign": "start",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "title",
                 "level": 1,
+                "span": 12,
                 "text": "Profile",
                 "type": "heading",
+                "valign": "start",
                 "visible_when": null
               },
               {
                 "action": null,
+                "align": "start",
                 "block_id": "name",
                 "default": "",
                 "error_message": "",
@@ -996,11 +1234,14 @@
                 "placeholder": "",
                 "required": true,
                 "secret": false,
+                "span": 12,
                 "type": "text_input",
+                "valign": "start",
                 "visible_when": null
               },
               {
                 "action": null,
+                "align": "start",
                 "block_id": "email",
                 "default": "",
                 "error_message": "",
@@ -1011,7 +1252,9 @@
                 "placeholder": "",
                 "required": true,
                 "secret": false,
+                "span": 12,
                 "type": "text_input",
+                "valign": "start",
                 "visible_when": null
               },
               {
@@ -1019,13 +1262,16 @@
                   "name": "toggle_notifications",
                   "payload": {}
                 },
+                "align": "start",
                 "block_id": "notifications",
                 "default": false,
                 "error_message": "",
                 "field": "profile.notifications",
                 "label": "Notifications",
                 "required": false,
+                "span": 12,
                 "type": "switch",
+                "valign": "start",
                 "visible_when": null
               },
               {
@@ -1033,14 +1279,20 @@
                   "name": "save_profile",
                   "payload": {}
                 },
+                "align": "start",
                 "block_id": "save",
                 "label": "Save",
+                "page_id": null,
+                "span": 12,
                 "type": "button",
+                "url": "",
+                "valign": "start",
                 "variant": "primary",
                 "visible_when": null
               }
             ],
             "page_id": "main",
+            "show_title": true,
             "title": "Profile"
           }
         ],
@@ -1058,34 +1310,47 @@
           {
             "blocks": [
               {
+                "align": "start",
                 "alt": "{?event.title}",
                 "block_id": "cover",
+                "span": 12,
                 "type": "image",
                 "url": "{?event.image_url}",
+                "valign": "start",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "title",
                 "level": 1,
+                "span": 12,
                 "text": "{?event.title|Event}",
                 "type": "heading",
+                "valign": "start",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "date",
                 "label": "{?event.starts_at}",
+                "span": 12,
                 "tone": "info",
                 "type": "badge",
+                "valign": "start",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "description",
                 "markdown": "{?event.description}",
+                "span": 12,
                 "type": "text",
+                "valign": "start",
                 "visible_when": null
               },
               {
                 "action": null,
+                "align": "start",
                 "block_id": "email",
                 "default": "",
                 "error_message": "",
@@ -1096,7 +1361,9 @@
                 "placeholder": "",
                 "required": true,
                 "secret": false,
+                "span": 12,
                 "type": "text_input",
+                "valign": "start",
                 "visible_when": null
               },
               {
@@ -1104,14 +1371,20 @@
                   "name": "register",
                   "payload": {}
                 },
+                "align": "start",
                 "block_id": "register",
                 "label": "Register",
+                "page_id": null,
+                "span": 12,
                 "type": "button",
+                "url": "",
+                "valign": "start",
                 "variant": "primary",
                 "visible_when": null
               }
             ],
             "page_id": "main",
+            "show_title": true,
             "title": "Event"
           }
         ],
@@ -1129,10 +1402,13 @@
           {
             "blocks": [
               {
+                "align": "start",
                 "block_id": "title",
                 "level": 1,
+                "span": 12,
                 "text": "Notifications",
                 "type": "heading",
+                "valign": "start",
                 "visible_when": null
               },
               {
@@ -1140,13 +1416,16 @@
                   "name": "update_settings",
                   "payload": {}
                 },
+                "align": "start",
                 "block_id": "email-switch",
                 "default": false,
                 "error_message": "",
                 "field": "settings.email",
                 "label": "Email",
                 "required": false,
+                "span": 12,
                 "type": "switch",
+                "valign": "start",
                 "visible_when": null
               },
               {
@@ -1154,21 +1433,28 @@
                   "name": "update_settings",
                   "payload": {}
                 },
+                "align": "start",
                 "block_id": "push-switch",
                 "default": false,
                 "error_message": "",
                 "field": "settings.push",
                 "label": "Push",
                 "required": false,
+                "span": 12,
                 "type": "switch",
+                "valign": "start",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "divider",
+                "span": 12,
                 "type": "divider",
+                "valign": "start",
                 "visible_when": null
               },
               {
+                "align": "start",
                 "block_id": "list",
                 "columns": [],
                 "file_id": "",
@@ -1177,11 +1463,14 @@
                   "payload": {}
                 },
                 "rows": "notifications",
+                "span": 12,
                 "type": "data_table",
+                "valign": "start",
                 "visible_when": null
               }
             ],
             "page_id": "main",
+            "show_title": true,
             "title": "Notifications"
           }
         ],
@@ -1199,6 +1488,7 @@
           {
             "blocks": [],
             "page_id": "main",
+            "show_title": true,
             "title": "Page"
           }
         ],

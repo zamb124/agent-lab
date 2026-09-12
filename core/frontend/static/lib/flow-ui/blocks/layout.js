@@ -5,21 +5,28 @@
 
 import { html } from '../../lit-shim.js';
 import { blockText as text } from '../runtime/templating.js';
+import { flowUIText } from '../utils/text.js';
 
+function containerChildren(ctx, blocks) {
+    if (ctx.editing === true && Array.isArray(blocks) && blocks.length === 0) {
+        return html`<div class="fu-container-empty">${flowUIText(ctx.locale, 'drop_block_here')}</div>`;
+    }
+    return ctx.renderBlocks(blocks);
+}
 
 export const LAYOUT_BLOCKS = Object.freeze({
     section(block, ctx) {
         const title = text(ctx, block.title);
         return html`<section class="fu-section" data-container-key=${block.block_id}>
             ${title ? html`<h3>${title}</h3>` : ''}
-            ${ctx.renderBlocks(block.blocks)}
+            ${containerChildren(ctx, block.blocks)}
         </section>`;
     },
 
     columns(block, ctx) {
         const template = block.columns.map((column) => `${column.width}fr`).join(' ');
         return html`<div class="fu-columns" style=${`--fu-columns:${template}`}>
-            ${block.columns.map((column, index) => html`<div class="fu-column" data-container-key=${`${block.block_id}/${index}`}>${ctx.renderBlocks(column.blocks)}</div>`)}
+            ${block.columns.map((column, index) => html`<div class="fu-column" data-container-key=${`${block.block_id}/${index}`}>${containerChildren(ctx, column.blocks)}</div>`)}
         </div>`;
     },
 
@@ -40,7 +47,7 @@ export const LAYOUT_BLOCKS = Object.freeze({
                 >${text(ctx, tab.title) ?? ''}</button>`)}
             </nav>
             ${block.tabs.length > 0
-                ? html`<div class="fu-tab-panel" role="tabpanel" data-container-key=${`${block.block_id}/${active}`}>${ctx.renderBlocks(block.tabs[active].blocks)}</div>`
+                ? html`<div class="fu-tab-panel" role="tabpanel" data-container-key=${`${block.block_id}/${active}`}>${containerChildren(ctx, block.tabs[active].blocks)}</div>`
                 : ''}
         </div>`;
     },

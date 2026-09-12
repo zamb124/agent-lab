@@ -40,9 +40,9 @@ function pageWith(blocks) {
     return { page_id: 'main', title: 'Main', blocks };
 }
 
-async function mountPanel(block, { page = null, problems = [], statePaths = [], sampleState = {} } = {}) {
+async function mountPanel(block, { page = null, pages = null, problems = [], statePaths = [], sampleState = {} } = {}) {
     const resolvedPage = page ?? pageWith(block === null ? [] : [block]);
-    const document = { start_page_id: 'main', pages: [resolvedPage] };
+    const document = { start_page_id: 'main', pages: pages ?? [resolvedPage] };
     const element = await fixture(html`<flows-interface-properties-panel
         .block=${block} .page=${resolvedPage} .document=${document} .catalog=${catalog} .schema=${schema}
         .frozen=${frozen} .statePaths=${statePaths} .sampleState=${sampleState} .problems=${problems}
@@ -98,8 +98,10 @@ describe('flows-interface-properties-panel', function () {
             const element = await mountPanel(block);
             expect(element.renderRoot.querySelector('.head .type').textContent, entry.type).to.equal(T[`block_${entry.type}`]);
             const visible = entry.properties.filter((property) => !['type', 'blocks', 'block_id'].includes(property.name) && property.kind !== 'const' && property.kind !== 'blocks');
+            const folded = entry.type === 'button' ? ['action', 'page_id', 'url'] : entry.type === 'link' ? ['page_id', 'url'] : [];
+            const foldedVisible = visible.filter((property) => folded.includes(property.name)).length;
             const rendered = element.renderRoot.querySelector('.fields').children.length;
-            expect(rendered, `${entry.type}: editors`).to.be.greaterThanOrEqual(1 + visible.length);
+            expect(rendered, `${entry.type}: editors`).to.be.greaterThanOrEqual(1 + visible.length - Math.max(0, foldedVisible - 1));
             expect(fieldByLabel(element, T.prop_block_id).value).to.equal(`b-${entry.type}`);
             fixtureCleanup();
         }
@@ -112,7 +114,12 @@ describe('flows-interface-properties-panel', function () {
             { block_id: 'rows', type: 'data_table', visible_when: null, rows: 'items', file_id: '', columns: [], row_action: { name: 'open_row', payload: {} } },
         ]);
         const element = await mountPanel(null, { page });
-        expect(element.renderRoot.querySelector('.empty').textContent).to.equal(T.properties_empty);
+        expect(element.renderRoot.querySelector('.head .type').textContent).to.equal(T.page_properties);
+        expect(fieldByLabel(element, T.page_title).value).to.equal('Main');
+        expect(fieldByLabel(element, T.page_show_title).value).to.equal(true);
+        const hidden = oneEvent(element, 'page-property-change');
+        fieldByLabel(element, T.page_show_title).dispatchEvent(new CustomEvent('change', { detail: { value: false }, bubbles: true, composed: true }));
+        expect((await hidden).detail).to.deep.equal({ property: 'show_title', value: false });
         const contract = element.renderRoot.querySelector('.contract');
         expect([...contract.querySelectorAll('code')].map((code) => code.textContent)).to.deep.equal(['email', 'quick', 'submit', 'open_row']);
     });
@@ -239,5 +246,83 @@ describe('flows-interface-properties-panel', function () {
             buttonByText(element, T[`block_${action === 'wrap' ? 'wrap_section' : action}`]).click();
             expect((await listened).detail).to.deep.equal({ blockId: 'f', action });
         }
+    });
+
+    it('picks an agent identity image by file instead of a string field', async () => {
+        const block = defaultBlock(catalogEntry(catalog, 'agent_identity'), 'agent-identity', labels);
+        const element = await mountPanel(block);
+        const field = element.renderRoot.querySelector('.image-field');
+        expect(field, 'image picker').to.exist;
+        expect(field.querySelector('platform-field')).to.equal(null);
+        expect(field.querySelector('.sub-title span').textContent).to.equal(T.prop_image_url);
+        expect(field.querySelector('img')).to.equal(null);
+        expect(buttonByText(element, T.image_upload)).to.exist;
+        const input = element.renderRoot.querySelector('[data-image-input]');
+        expect(input.getAttribute('accept')).to.equal('image/*');
+
+        const png = new File([new Uint8Array([1, 2, 3])], 'logo.png', { type: 'image/png' });
+        const uploaded = oneEvent(element, 'image-upload');
+        const transfer = new DataTransfer();
+        transfer.items.add(png);
+        input.files = transfer.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        expect((await uploaded).detail).to.deep.equal({ blockId: 'agent-identity', property: 'image_url', file: png });
+
+        element.block = { ...block, image_url: 'https://files.test/logo.png' };
+        await elementUpdated(element);
+        expect(element.renderRoot.querySelector('.image-preview img').getAttribute('src')).to.equal('https://files.test/logo.png');
+        const cleared = oneEvent(element, 'property-change');
+        buttonByText(element, T.image_clear).click();
+        expect((await cleared).detail).to.deep.equal({ blockId: 'agent-identity', property: 'image_url', value: '' });
+
+        let emitted = false;
+        element.addEventListener('image-upload', () => { emitted = true; });
+        const toasts = [];
+        getPlatformBus().subscribeType(CoreEvents.UI_TOAST_SHOW, (event) => { toasts.push(event.payload); });
+        const txt = new File(['nope'], 'note.txt', { type: 'text/plain' });
+        const bad = new DataTransfer();
+        bad.items.add(txt);
+        const nextInput = element.renderRoot.querySelector('[data-image-input]');
+        nextInput.files = bad.files;
+        nextInput.dispatchEvent(new Event('change', { bubbles: true }));
+        expect(emitted).to.equal(false);
+        expect(toasts.some((payload) => typeof payload.i18n_key === 'string' && payload.i18n_key.endsWith('interface_editor.toast_image_type'))).to.equal(true);
+    });
+
+    it('picks horizontal and vertical align from icon buttons', async () => {
+        const element = await mountPanel(defaultBlock(catalogEntry(catalog, 'heading'), 'h', labels));
+        const horizontal = element.renderRoot.querySelector('[data-align-axis="align"]');
+        const vertical = element.renderRoot.querySelector('[data-align-axis="valign"]');
+        expect(horizontal).to.not.equal(null);
+        expect(vertical).to.not.equal(null);
+        expect(horizontal.querySelectorAll('.align-glyph i').length).to.equal(9);
+        const changed = oneEvent(element, 'property-change');
+        horizontal.querySelector('button[data-value="center"]').click();
+        expect((await changed).detail).to.deep.equal({ blockId: 'h', property: 'align', value: 'center' });
+        const valign = oneEvent(element, 'property-change');
+        vertical.querySelector('button[data-value="end"]').click();
+        expect((await valign).detail).to.deep.equal({ blockId: 'h', property: 'valign', value: 'end' });
+    });
+
+    it('switches a button from a flow action to another page', async () => {
+        const block = defaultBlock(catalogEntry(catalog, 'button'), 'next', labels);
+        const main = pageWith([block]);
+        const done = { page_id: 'done', title: 'Done', blocks: [] };
+        const element = await mountPanel(block, { page: main, pages: [main, done] });
+        expect(element.renderRoot.querySelector('[data-click-target="action"]')).to.not.equal(null);
+        expect(await fieldChanged(element, fieldByLabel(element, T.click_target), 'page')).to.deep.equal({
+            blockId: 'next',
+            property: 'click_target',
+            value: { action: null, page_id: 'done', url: '' },
+        });
+        element.block = { ...block, action: null, page_id: 'done', url: '' };
+        await elementUpdated(element);
+        expect(element.renderRoot.querySelector('[data-click-target="page"]')).to.not.equal(null);
+        expect(fieldByLabel(element, T.prop_page_id).value).to.equal('done');
+        expect(await fieldChanged(element, fieldByLabel(element, T.prop_page_id), 'main')).to.deep.equal({
+            blockId: 'next',
+            property: 'click_target',
+            value: { action: null, page_id: 'main', url: '' },
+        });
     });
 });

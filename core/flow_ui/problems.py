@@ -90,11 +90,11 @@ def _block_problems(
             if value not in allowed:
                 problem("unknown_option", f"Значение по умолчанию {value!r} отсутствует в options")
     if (
-        isinstance(block, FlowUILink)
+        isinstance(block, (FlowUILink, FlowUIButton))
         and block.page_id is not None
         and block.page_id not in page_ids
     ):
-        problem("unknown_page", f"Ссылка ведёт на несуществующую страницу {block.page_id!r}")
+        problem("unknown_page", f"Переход ведёт на несуществующую страницу {block.page_id!r}")
     return problems
 
 

@@ -7,8 +7,34 @@
 import { css } from '../../lit-shim.js';
 
 export const blockStyles = css`
-    .fu-block { min-width: 0; }
+    .fu-block {
+        min-width: 0;
+        box-sizing: border-box;
+        width: calc(var(--fu-span, 12) / 12 * 100%);
+        justify-self: start;
+        align-self: start;
+    }
+    /* Grid — justify-self; flex-колонка (страница с лентой, .fu-column) — align-self. */
+    .fu-block[data-align='center'] { justify-self: center; align-self: center; }
+    .fu-block[data-align='end'] { justify-self: end; align-self: end; }
+    .fu-block[data-block-type='button'],
+    .fu-block[data-block-type='link'],
+    .fu-block[data-block-type='badge'],
+    .fu-block[data-block-type='status'] {
+        width: max(min-content, calc(var(--fu-span, 12) / 12 * 100%));
+        min-width: min-content;
+    }
+    .fu-block[data-span='12'],
+    .fu-block[data-block-type='conversation'] {
+        width: 100%;
+        justify-self: stretch;
+    }
+    .fu-block[data-block-type='conversation'] { align-self: stretch; }
     .fu-block[data-selected='true'] { outline: 2px solid var(--flow-ui-accent); outline-offset: 3px; border-radius: var(--flow-ui-radius-sm); }
+    :host([editing]) .fu-block { cursor: pointer; }
+    :host([editing]) .fu-button,
+    :host([editing]) .fu-link,
+    :host([editing]) .fu-prompts button { pointer-events: none; }
     img.fu-glyph { display: block; filter: var(--flow-ui-glyph-filter); }
 
     /* Раскладка */
@@ -16,7 +42,31 @@ export const blockStyles = css`
     .fu-section > h3 { margin: 0 0 2px; font-size: var(--flow-ui-font-size-xs); font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--flow-ui-muted); }
     .fu-columns { display: grid; gap: var(--flow-ui-space-4); grid-template-columns: var(--fu-columns, 1fr); }
     @media (max-width: 640px) { .fu-columns { grid-template-columns: 1fr; } }
-    .fu-column { display: grid; gap: var(--flow-ui-space-3); align-content: start; min-width: 0; }
+    .fu-column {
+        display: flex; flex-direction: column; gap: var(--flow-ui-space-3);
+        min-width: 0; min-height: 100%; align-items: start;
+    }
+    .fu-column > .fu-block[data-align='center'] { align-self: center; }
+    .fu-column > .fu-block[data-align='end'] { align-self: end; }
+    .fu-column > .fu-block[data-span='12'] { align-self: stretch; }
+    .fu-column > .fu-block[data-valign='center'] { margin-block: auto; }
+    .fu-column > .fu-block[data-valign='end'] { margin-top: auto; }
+    :host([editing]) .fu-columns {
+        padding: 6px; border: 1px dashed color-mix(in srgb, var(--flow-ui-accent) 32%, var(--flow-ui-border));
+        border-radius: var(--flow-ui-radius-lg); background: color-mix(in srgb, var(--flow-ui-surface) 45%, transparent);
+    }
+    :host([editing]) .fu-column {
+        min-height: 88px; padding: 8px; border: 1px dashed var(--flow-ui-border);
+        border-radius: var(--flow-ui-radius-md); background: var(--flow-ui-page-background, var(--flow-ui-card));
+    }
+    :host([editing]) .fu-section, :host([editing]) .fu-tab-panel {
+        min-height: 72px; padding: 8px; border: 1px dashed var(--flow-ui-border);
+        border-radius: var(--flow-ui-radius-md);
+    }
+    .fu-container-empty {
+        display: grid; place-items: center; min-height: 64px; padding: 16px 10px;
+        color: var(--flow-ui-muted); font-size: var(--flow-ui-font-size-xs); text-align: center; pointer-events: none;
+    }
     .fu-tabs { display: grid; gap: var(--flow-ui-space-3); }
     .fu-tabs > nav { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--flow-ui-radius-full); background: var(--flow-ui-surface); justify-self: start; max-width: 100%; overflow: auto; scrollbar-width: none; }
     .fu-tabs > nav button { border: 0; border-radius: var(--flow-ui-radius-full); padding: 6px 14px; background: transparent; color: var(--flow-ui-muted); font: inherit; font-size: var(--flow-ui-font-size-sm); font-weight: 550; white-space: nowrap; cursor: pointer; transition: var(--flow-ui-transition); }
@@ -48,6 +98,7 @@ export const blockStyles = css`
     .fu-prose th, .fu-prose td, .fu-markdown th, .fu-markdown td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--flow-ui-border); vertical-align: top; }
     .fu-prose th, .fu-markdown th { font-weight: 600; color: var(--flow-ui-text-secondary); }
     .fu-media { display: block; max-width: 100%; border-radius: var(--flow-ui-radius-lg); }
+    video.fu-media, audio.fu-media { width: 100%; height: auto; }
     .fu-code { margin: 0; padding: 12px 14px; border-radius: var(--flow-ui-radius-md); background: var(--flow-ui-code-bg); color: var(--flow-ui-text); font: var(--flow-ui-font-size-mono)/1.55 var(--font-mono); overflow: auto; white-space: pre; }
     .fu-badge, .fu-status { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: var(--flow-ui-radius-full); font-size: var(--flow-ui-font-size-xs); font-weight: 600; line-height: 1.4; background: color-mix(in srgb, currentColor 12%, transparent); color: var(--flow-ui-text); }
     .fu-status::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }

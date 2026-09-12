@@ -10,8 +10,10 @@
 import { css, html, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
+import { buildFlowAssetFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import { flowUIEditorChromeTokens } from '@platform/lib/flow-ui/editor/editor-chrome.styles.js';
-import { blockFrame, blockIdFromEvent } from '@platform/lib/flow-ui/editor/selection.js';
+import { blockElement, blockFrame, blockIdFromEvent } from '@platform/lib/flow-ui/editor/selection.js';
+import { renderAlignButtons, renderSpanHandle } from '@platform/lib/flow-ui/editor/layout-handles.js';
 import { BLOCK_ID_MIME, dropTargetFromEvent, hasFlowUiDrag, readDragPayload } from '@platform/lib/flow-ui/editor/drop-zones.js';
 import { inlineEditKeyAction, inlineTextIsMultiline, inlineTextProperty } from '@platform/lib/flow-ui/editor/inline-text-edit.js';
 import '@platform/lib/flow-ui/components/platform-flow-ui.js';
@@ -21,6 +23,7 @@ import '@platform/lib/components/platform-menu.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-button.js';
 import {
+    CONTAINER_TYPES,
     EDITOR_VIEWPORTS,
     blockCatalog,
     catalogEntry,
@@ -34,6 +37,7 @@ import {
     insertPage,
     locateBlock,
     moveBlock,
+    paletteInsertTarget,
     removeBlock,
     removePage,
     replacePageBlocks,
@@ -91,9 +95,9 @@ export class FlowsInterfaceEditor extends PlatformElement {
         .sidebar-tabs { display: block; margin: 8px 10px 0; }
         .canvas { position: relative; min-width: 0; min-height: 0; overflow: auto; padding: 28px 24px 120px; background:
             radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--text-tertiary) 22%, transparent) 1px, transparent 0) 0 0 / 22px 22px; }
-        .frame { position: relative; margin: 0 auto; min-height: 480px; border-radius: 16px; border: 1px solid var(--border-subtle); background: var(--bg-primary); box-shadow: var(--shadow-lg); transition: width 180ms ease; }
-        .frame platform-flow-ui { display: block; border-radius: inherit; overflow: hidden; }
-        .frame[data-preview='true'] platform-flow-ui { height: 720px; }
+        .frame { position: relative; margin: 0 auto; min-height: 480px; border-radius: 16px; border: 1px solid var(--border-subtle); background: var(--bg-primary); box-shadow: var(--shadow-lg); transition: width 180ms ease; overflow: visible; }
+        .frame platform-flow-ui { display: block; height: auto; border-radius: inherit; overflow: visible; }
+        .frame[data-preview='true'] platform-flow-ui { height: 720px; overflow: hidden; }
         .selection { position: absolute; pointer-events: none; border: 2px solid var(--flow-ui-editor-select); border-radius: 8px; z-index: 3; }
         .selection .label { position: absolute; top: -26px; left: -2px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px 6px 6px 0; background: var(--flow-ui-editor-select); color: var(--flow-ui-editor-label-fg); font-size: 11px; font-weight: 650; white-space: nowrap; pointer-events: auto; }
         .selection .label .handle { cursor: grab; display: inline-grid; place-items: center; }
@@ -126,6 +130,7 @@ export class FlowsInterfaceEditor extends PlatformElement {
         this._editor = this.useOp('flows/editor');
         this._schemaOp = this.useOp('flows/flow_ui_schema');
         this._assistOp = this.useOp('flows/flow_ui_assist');
+        this._fileUpload = this.useOp('platform/file_create');
         this._frameRaf = 0;
         this._resizeObserver = null;
         this._onKeyDown = (event) => this._handleKeydown(event);
@@ -170,7 +175,8 @@ export class FlowsInterfaceEditor extends PlatformElement {
         const flowUi = this._flowUi();
         const pageId = this._ui.value.pageId;
         if (flowUi === null || this._ui.value.preview || pageId === '' || this._page === null) return;
-        if (flowUi.store.document !== null && flowUi.store.pageId !== pageId) flowUi.navigate(pageId);
+        if (flowUi.store.document === null || flowUi.store.pageId === pageId || !flowUi.store.page(pageId)) return;
+        flowUi.navigate(pageId);
     }
 
     // --- Документ ---------------------------------------------------------------------------
@@ -234,12 +240,29 @@ export class FlowsInterfaceEditor extends PlatformElement {
         const block = columns === null ? defaultBlock(entry, blockId, this._labels()) : withColumns(entry, blockId, columns, this._labels());
         this._commit(insertBlock(this._draft, page.page_id, containerKey, index, block));
         this._ui.selectBlock({ blockId });
+        if (CONTAINER_TYPES.includes(type)) this._ui.setSidebarTab({ tab: 'add' });
     }
 
     _setProperty(blockId, property, value) {
         const pageId = this._ui.value.pageId;
         this._commit(setBlockProperty(this._draft, pageId, blockId, property, value), `${blockId}:${property}`);
         if (property === 'block_id') this._ui.selectBlock({ blockId: value });
+    }
+
+    async _uploadBlockImage(detail) {
+        if (!detail || typeof detail !== 'object') throw new Error('flows-interface-editor: image-upload detail required');
+        const { blockId, property, file } = detail;
+        if (typeof blockId !== 'string' || blockId === '') throw new Error('flows-interface-editor: image-upload blockId required');
+        if (typeof property !== 'string' || property === '') throw new Error('flows-interface-editor: image-upload property required');
+        if (!(file instanceof File)) throw new Error('flows-interface-editor: image-upload file required');
+        if (typeof this.flowId !== 'string' || this.flowId === '') throw new Error('flows-interface-editor: flowId required for image upload');
+        const spec = buildFlowAssetFileCreateSpecJson({ flowId: this.flowId, isPublic: true });
+        const result = await this._fileUpload.run({ file, spec });
+        if (!result || typeof result !== 'object' || typeof result.url !== 'string' || result.url === '') {
+            this.toast('interface_editor.image_upload_failed', { type: 'error' });
+            return;
+        }
+        this._setProperty(blockId, property, result.url);
     }
 
     _remove(blockId) {
@@ -268,7 +291,7 @@ export class FlowsInterfaceEditor extends PlatformElement {
         const { command, pageId, property, value } = event.detail;
         const draft = this._draft;
         if (command === 'add') {
-            const page = { page_id: uniquePageId(draft), title: this.t('interface_editor.page_default_title'), blocks: [] };
+            const page = { page_id: uniquePageId(draft), title: this.t('interface_editor.page_default_title'), show_title: false, blocks: [] };
             this._commit(insertPage(draft, page));
             this._ui.selectPage({ pageId: page.page_id });
         } else if (command === 'remove') {
@@ -463,11 +486,13 @@ export class FlowsInterfaceEditor extends PlatformElement {
             <div class="label">
                 <span class="handle" draggable="true" title=${this.t('interface_editor.drag_hint')} @dragstart=${(event) => this._onHandleDragStart(event, blockId)}><platform-icon name="drag-handle" size="12"></platform-icon></span>
                 <span>${this.t(`interface_editor.block_${block.type}`)}</span>
+                ${renderAlignButtons({ block, t: (key) => this.t(key), setProperty: (id, name, value) => this._setProperty(id, name, value) })}
                 <platform-button ghost density="dense" icon-only class="kebab" aria-label=${this.t('interface_editor.block_menu')} @click=${(event) => { event.stopPropagation(); this._menuOpen = !this._menuOpen; }}><platform-icon name="more-vert" size="12"></platform-icon></platform-button>
                 <platform-popover trigger="manual" .anchor=${this.renderRoot.querySelector('.kebab')} ?open=${this._menuOpen} role="menu" dismiss-on-outside @popover-dismiss=${() => { this._menuOpen = false; }}>
                     <platform-menu compact .items=${items} @menu-select=${(event) => this._blockMenuAction(blockId, event.detail.id)}></platform-menu>
                 </platform-popover>
             </div>
+            ${renderSpanHandle({ block, t: (key) => this.t(key), setProperty: (id, name, value) => this._setProperty(id, name, value), blockEl: blockElement(this._flowUi(), blockId) })}
         </div>`;
     }
 
@@ -516,11 +541,13 @@ export class FlowsInterfaceEditor extends PlatformElement {
                         @change=${(event) => this._ui.setSidebarTab({ tab: event.detail.value })}></platform-segmented-control>
                     ${ui.sidebarTab === 'add'
                         ? html`<flows-interface-add-panel .catalog=${this._catalog}
-                            @block-add=${(event) => this._insert(event.detail.type, 'page', page.blocks.length, event.detail.columns)}></flows-interface-add-panel>`
+                            @block-add=${(event) => { const target = paletteInsertTarget(page, ui.selectedBlockId); this._insert(event.detail.type, target.containerKey, target.index, event.detail.columns); }}></flows-interface-add-panel>`
                         : html`<flows-interface-properties-panel .block=${selected} .page=${page} .document=${draft}
                             .catalog=${this._catalog} .schema=${this._schema} .frozen=${this._frozen} .statePaths=${catalogPaths} .sampleState=${this._sampleState}
                             .problems=${problems.filter((problem) => selected !== null && problem.blockId === selected.block_id)}
                             @property-change=${(event) => this._setProperty(event.detail.blockId, event.detail.property, event.detail.value)}
+                            @page-property-change=${(event) => this._commit(setPageProperty(this._draft, ui.pageId, event.detail.property, event.detail.value), `page:${ui.pageId}:${event.detail.property}`)}
+                            @image-upload=${(event) => void this._uploadBlockImage(event.detail)}
                             @block-action=${(event) => this._blockMenuAction(event.detail.blockId, event.detail.action)}
                         ></flows-interface-properties-panel>`}
                 </aside>
@@ -529,8 +556,8 @@ export class FlowsInterfaceEditor extends PlatformElement {
                     @scroll=${() => this._scheduleFrame()}>
                     <div class="frame" data-preview=${ui.preview ? 'true' : 'false'} style=${`width:min(100%, ${EDITOR_VIEWPORTS[ui.viewport]}px)`}>
                         ${ui.preview
-                            ? html`<platform-flow-ui profile="editor_test" display="panel" theme="auto" flow-id=${this.flowId} branch-id=${this.branchId} .initialDocument=${draft}></platform-flow-ui>`
-                            : html`<platform-flow-ui editing theme="auto" flow-id=${this.flowId} .initialDocument=${draft} .sampleState=${this._sampleState}
+                            ? html`<platform-flow-ui profile="editor_test" display="panel" theme="auto" flow-id=${this.flowId} branch-id=${this.branchId} base-url="/flows" .initialDocument=${draft}></platform-flow-ui>`
+                            : html`<platform-flow-ui editing theme="auto" flow-id=${this.flowId} page-id=${ui.pageId} .initialDocument=${draft} .sampleState=${this._sampleState}
                                 selected-block-id=${ui.selectedBlockId}
                                 @flow-ui-navigation=${(event) => { if (event.detail.pageId !== ui.pageId) this._ui.selectPage({ pageId: event.detail.pageId }); }}></platform-flow-ui>`}
                         ${this._renderSelection()}
