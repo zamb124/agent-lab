@@ -9,6 +9,8 @@ from types import ModuleType
 
 import pytest
 
+from apps.flows.src.durable_execution.models import ExecutionStateDelta
+from apps.flows.src.durable_execution.state_delta import apply_state_delta
 from core.flow_ui.document import FlowUIDataTable, FlowUIDocument
 from core.types import JsonObject, require_json_object
 
@@ -137,3 +139,46 @@ def test_convert_interface_keeps_empty_datatable_publishable() -> None:
         "columns": [],
         "row_action": None,
     }
+
+
+def test_strip_delta_drops_onlyoffice_binding_id_from_files() -> None:
+    migration = _load_migration()
+    stripped = migration._strip_delta(  # pyright: ignore[reportAny]
+        {
+            "fields_set": {
+                "session_id": "public_search:ctx",
+                "task_id": "task-public-search",
+                "context_id": "ctx",
+                "user_id": "user-public-search",
+                "files": [
+                    {
+                        "file_id": "file_485d3c279c6b",
+                        "original_name": "contract.docx",
+                        "url": "https://files.test/contract.docx",
+                        "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        "file_size": 12,
+                        "capabilities": {
+                            "document": {
+                                "kind": "onlyoffice",
+                                "title": "contract.docx",
+                                "file_id": "file_485d3c279c6b",
+                                "editable": True,
+                                "namespace": "default",
+                                "binding_id": "22ed768fd38749ae8674c24f6207074d",
+                                "catalog_id": "2c0bff6298da4ac89fc4e9199006b71f",
+                                "editor_url": "/documents/embed/edit/22ed768fd38749ae8674c24f6207074d?namespace=default",
+                                "document_type": "word",
+                            }
+                        },
+                    }
+                ],
+            }
+        }
+    )
+    if not isinstance(stripped, ExecutionStateDelta):
+        raise TypeError("migration _strip_delta must return ExecutionStateDelta")
+    state = apply_state_delta(None, stripped)
+    document = state.files[0].capabilities.document
+    assert document is not None
+    assert document.file_id == "file_485d3c279c6b"
+    assert "binding_id" not in document.model_dump()

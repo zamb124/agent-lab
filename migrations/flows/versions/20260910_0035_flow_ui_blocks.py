@@ -1140,6 +1140,24 @@ def _strip_state_keys(state: JsonObject) -> JsonObject:
     return {key: value for key, value in state.items() if key not in _LEGACY_STATE_KEYS}
 
 
+def _strip_legacy_onlyoffice_binding_id(value: JsonValue) -> JsonValue:
+    """В ledger остался office ``binding_id``; канон capability — ``file_id``."""
+    if isinstance(value, list):
+        return [_strip_legacy_onlyoffice_binding_id(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    stripped: JsonObject = {
+        key: _strip_legacy_onlyoffice_binding_id(item) for key, item in value.items()
+    }
+    if (
+        stripped.get("kind") == "onlyoffice"
+        and isinstance(stripped.get("file_id"), str)
+        and "binding_id" in stripped
+    ):
+        _ = stripped.pop("binding_id")
+    return stripped
+
+
 def _strip_delta(raw_delta: JsonObject) -> ExecutionStateDelta:
     allowed = set(ExecutionStateDelta.model_fields)
     delta: JsonObject = {key: value for key, value in raw_delta.items() if key in allowed}
@@ -1156,7 +1174,10 @@ def _strip_delta(raw_delta: JsonObject) -> ExecutionStateDelta:
             for message in messages_append
             if not isinstance(message, dict) or _strip_parts(message)
         ]
-    return ExecutionStateDelta.model_validate(delta)
+    walked = _strip_legacy_onlyoffice_binding_id(delta)
+    if not isinstance(walked, dict):
+        raise RuntimeError("state_delta must remain an object after stripping onlyoffice binding_id")
+    return ExecutionStateDelta.model_validate(walked)
 
 
 def _rewrite_activity_attempts() -> None:
