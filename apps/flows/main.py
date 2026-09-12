@@ -37,6 +37,7 @@ from apps.flows.src.api import (  # noqa: E402
     websocket_router,
 )
 from apps.flows.src.api.v1 import api_v1_router  # noqa: E402
+from apps.flows.src.api.v1.flow_ui import install_flow_ui_exception_handlers  # noqa: E402
 from apps.flows.src.container import FlowContainer, get_container  # noqa: E402
 from apps.flows.src.container_contracts import as_flow_runtime_container  # noqa: E402
 from apps.flows.src.middleware.embed_dynamic_cors import EmbedDynamicCorsMiddleware  # noqa: E402
@@ -327,6 +328,7 @@ app = create_service_app(
     version="2.0.0",
 )
 agent_llm_proxy.install_llm_proxy_exception_handlers(app)
+install_flow_ui_exception_handlers(app)
 
 if _flow_settings.dynamic_embed_cors_enabled:
     app.add_middleware(EmbedDynamicCorsMiddleware, container=get_container())

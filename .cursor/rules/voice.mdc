@@ -41,7 +41,7 @@ Whitelist имён артефактов для озвучивания — `apps/
 
 **Client barge-in и `tts_state`:** условие «ассистент ещё говорит» в `VoiceAgentBridge._isClientBargeInScope` включает не только `_ttsActive` (JSON `tts_state`) и живой A2A-fetch, но и `VoiceMediaSession.hasScheduledTtsPlayback()` — локальная очередь Web Audio после `tts_state: stopped` на сервере может ещё воспроизводить принятые PCM.
 
-**`<platform-flow-ui>` и `language=`:** при наличии `flowId` мёржится voice-session-query control-plane с locale из `FlowUIRenderContext`/voice input component; без `flowId` — только validated overlay. Невалидная строка из `normalizeVoiceLocaleForWs` не добавляет overlay.
+**`<platform-flow-ui>` и voice query:** при наличии `flowId` координатор (`flow-ui/voice/coordinator.js`) берёт параметры сессии из control-plane `GET /flows/api/v1/flows/{flow_id}/voice-session-query?branch_id=` (`fetchFlowVoiceSessionQueryDict`); без `flowId` (embed по `embed_id`) query пустой. Невалидная строка из `normalizeVoiceLocaleForWs` не добавляет overlay.
 
 **Неожиданное закрытие WS в embed:** если `VoiceMediaSession` шлёт `closed` не после явного `_stopVoice` / `disconnectedCallback` (`_voiceDisconnectExpected`), через ~500 ms вызывается `_startVoice()` при открытой панели и полном duplex — один реконнект без цикла при совпадении условий.
 
@@ -214,22 +214,21 @@ Capabilities `voice.transcribe_audio` / `voice.synthesize_speech` для isolate
 
 ## `<platform-flow-ui>`: голос в браузере
 
-Полный голос AI (эфир) в `<platform-flow-ui>` включается только для catalog **`VoiceInput`** (`mode: session`) при capability **`voice`** (embed — из `InterfaceProfile.look.voice_*` → `capabilities.voice`) и готовности инфраструктуры (`voice-base-url`, `company-id`, `flow-id` или `embed-id`, `baseUrl` / flows root). `mode: dictation` пишет STT в bound TextArea через `<platform-voice-dictation>`. Form composer **не** инжектит mic сам — только рендерит child `VoiceInput` из document. Без capability компонент остаётся в document как disabled control.
+Полный голос AI (эфир) в `<platform-flow-ui>` включается при `FlowInterfaceResponse.capabilities.voice` (сервер: `FlowUIConversationSettings.allow_voice` ∧ не share-viewer ∧ embed `look.voice_enabled`) и готовности инфраструктуры (`flowUIVoiceSessionReady`: `company-id`, voice origin из `voice-base-url` или flows `base-url`, `flow-id` либо `embed-id`). Кнопка микрофона — в composer блока `conversation` (вне HITL) и в блоке `voice_input` (`FlowUIVoiceInput`: текстовое поле `field` + toggle эфира). `<platform-voice-dictation>` в Flow UI не используется: реплика пользователя и ответ идут через `VoiceAgentBridge` тем же A2A-потоком (`onA2aStreamEvent` → `applyA2AFrame`). Без capability кнопка не рендерится / `voice_input` остаётся disabled control.
 
 | Условие | Кнопка микрофона | Технология |
 |---|---|---|
-| `VoiceInput` `mode=session`, `capabilities.voice`, готова инфраструктура voice + A2A | переключение эфира | `VoiceMediaSession` + `VoiceAgentBridge`, WS `/voice/api/ws/session/{id}` |
-| `VoiceInput` `mode=session`, инфраструктура неполная (при разрешённом voice) | диктовка в textarea | `<platform-voice-dictation>` → `VoiceMediaSession` STT-only |
-| `VoiceInput` `mode=dictation`, `capabilities.voice` | диктовка в bound field | `<platform-voice-dictation>` → `VoiceMediaSession` STT-only |
-| нет `VoiceInput` в document | нет mic | — |
+| `capabilities.voice`, готова инфраструктура voice + A2A | переключение эфира (`toggleVoiceSession`) | `VoiceMediaSession` + `VoiceAgentBridge`, WS `/voice/api/ws/session/{id}` |
+| `capabilities.voice`, инфраструктура неполная | кнопка disabled | — |
+| `allow_voice=false` в документе или нет capability | нет mic | — |
 
 Потоковая озвучка ответа (`feedStreamTtsFromA2aResult` → WS `speak`): при видимой surface и включённом pref `platform:voice:tts_output_enabled` universal runtime держит tts-only `VoiceMediaSession`; duplex переносит target на свою сессию. Команды буферизуются до `OPEN`, длинный text режется по `VOICE_WS_SPEAK_TEXT_CHUNK_MAX`. Artifact projection сохраняет wire order и не озвучивает data/raw/url или hidden reasoning без policy.
 
-**Barge-in:** новый Submit/voice turn и cancel обязаны вызывать `stopStreamTtsPlayback()` до A2A action, чтобы прервать stream и per-component audio. Единственная orchestration point — universal Flow UI voice coordinator; catalog components не запускают второй transport.
+**Barge-in:** новый ход (`text`/`ui-action`)/voice turn и cancel обязаны вызывать `stopStreamTtsPlayback()` до A2A action, чтобы прервать stream и per-component audio. Единственная orchestration point — `flow-ui/voice/coordinator.js`; блоки не запускают второй transport.
 
 Stop action в Flow UI при active Task вызывает `stopStreamTtsPlayback()`, abort current SSE + standard `CancelTask` при известном `task_id`; для voice relay — `VoiceAgentBridge.userStopActiveTurn()`.
 
-Хосты (CRM Lara, landing) получают voice capabilities из resolved `InterfaceProfile`/`FlowUIRenderContext`; embed — из `look.voice_*`. Host не может расширить server allowlist атрибутом.
+Host не может расширить server allowlist атрибутом: `capabilities.voice` считает только сервер (`GET .../interface`).
 
 `VoiceMediaSession` uplink — **только** Web Audio: `MediaStream` → один зафиксированный при `startRecording` граф (`AudioWorklet voice-mic-capture` → `ScriptProcessorNode` → `AnalyserNode`+таймер). `MediaStreamTrackProcessor` не используется. Нет переключения тракта во время сессии — при неудаче графа сессия падает в ошибку. Флаг `_recording` до графа; интервал `~140 ms` + `onstatechange` → `resume()` при `suspended`. TTS binary downlink: очередь `_playbackQueue` — декод и смещение `_playbackCursor` строго по порядку WS-кадров; перед каждым `BufferSource.start` и при повторном использовании контекста — `await audioContext.resume()`, иначе после первого чанка Chromium снова держит playback-контекст в `suspended` и последующие фразы без звука (`primePlaybackFromUserGesture` — только первичный жест).
 

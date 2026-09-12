@@ -83,9 +83,6 @@ from core.capabilities import (
     PlatformEffect,
     PlatformEffectEnvelope,
     PlatformEffectOrigin,
-    UIApplyEffect,
-    UINavigateEffect,
-    UIResetEffect,
     sandbox_modules_for_language,
     verify_execution_context,
     verify_execution_token,
@@ -102,24 +99,12 @@ from core.files.reader.models import ReadFileArgs, ReadLane
 from core.files.registry import default_retention_for_source
 from core.files.s3_client import S3ClientFactory
 from core.files.writer import ContentMode, FileWriteError, FileWriter
+from core.flow_ui.document import FlowUISuggestedPrompts
+from core.flow_ui.protocol import CONVERSATION_SLOT_ID, FlowUINavigate, FlowUIRender
 from core.http.client import HttpRequestKwargs
 from core.logging import get_logger
 from core.models.context_models import Context
-from core.models.flow_interface import (
-    DEFAULT_CHAT_TEMPLATE_ID,
-    DEFAULT_CHAT_TEMPLATE_VERSION,
-)
 from core.models.identity_models import Company
-from core.state.flow_ui import (
-    FlowUIComponent,
-    FlowUICreateSurfaceCommand,
-    FlowUIDeleteComponentsCommand,
-    FlowUIDeleteDataCommand,
-    FlowUIDeleteSurfaceCommand,
-    FlowUISetDataCommand,
-    FlowUISurface,
-    FlowUIUpsertComponentsCommand,
-)
 from core.text_transforms import TextTransformService
 from core.tracing.operation_span import traced_operation
 from core.types import OtelAttributeValue, require_json_object, require_json_value
@@ -582,15 +567,8 @@ class CapabilityRegistry:
             "state.get_messages": self._state_get_messages,
             "state.add_user_message": self._state_add_user_message,
             "state.add_agent_message": self._state_add_agent_message,
-            "ui.create_surface": self._ui_create_surface,
-            "ui.update_components": self._ui_update_components,
-            "ui.delete_components": self._ui_delete_components,
-            "ui.update_data": self._ui_update_data,
-            "ui.delete_data": self._ui_delete_data,
-            "ui.delete_surface": self._ui_delete_surface,
+            "ui.render": self._ui_render,
             "ui.navigate": self._ui_navigate,
-            "ui.reset": self._ui_reset,
-            "ui.apply": self._ui_apply,
             "state.extract_json": self._state_extract_json,
             "channel.send": self._channel_send,
             "channel.send_with_buttons": self._channel_send_with_buttons,
@@ -1693,125 +1671,25 @@ class CapabilityRegistry:
     def _ui_definitions(self) -> dict[str, CapabilityDefinition]:
         specs: list[tuple[str, str, str, JsonObject, JsonObject]] = [
             (
-                "create_surface",
-                "Create Flow UI surface",
-                "Создаёт trusted declarative surface; raw HTML/JavaScript запрещены.",
+                "render",
+                "Render Flow UI blocks",
+                "Показывает блоки грамматики Flow UI в slot интерфейса (замена) или в ленте conversation (дополнение).",
                 _schema_object(
                     properties={
-                        "surface": _object_schema("FlowUISurface"),
-                        "expected_revision": _integer_schema("Expected document revision"),
+                        "slot_id": _string_schema("block_id блока slot или 'conversation'"),
+                        "blocks": _array_schema("FlowUIBlock objects"),
                     },
-                    required=["surface"],
-                ),
-                _object_schema("Issued platform effect"),
-            ),
-            (
-                "update_components",
-                "Update Flow UI components",
-                "Атомарно добавляет или заменяет catalog components существующей surface.",
-                _schema_object(
-                    properties={
-                        "surface_id": _string_schema("Surface ID"),
-                        "components": _array_schema("FlowUIComponent objects"),
-                        "expected_revision": _integer_schema("Expected document revision"),
-                    },
-                    required=["surface_id", "components"],
-                ),
-                _object_schema("Issued platform effect"),
-            ),
-            (
-                "delete_components",
-                "Delete Flow UI components",
-                "Удаляет catalog components; root и dangling references запрещены domain validation.",
-                _schema_object(
-                    properties={
-                        "surface_id": _string_schema("Surface ID"),
-                        "component_ids": _array_schema("Component IDs"),
-                        "expected_revision": _integer_schema("Expected document revision"),
-                    },
-                    required=["surface_id", "component_ids"],
-                ),
-                _object_schema("Issued platform effect"),
-            ),
-            (
-                "update_data",
-                "Update Flow UI data",
-                "Записывает JSON value по RFC 6901 path; /system недоступен sandbox-коду.",
-                _schema_object(
-                    properties={
-                        "surface_id": _string_schema("Surface ID"),
-                        "path": _string_schema("RFC 6901 path"),
-                        "value": _json_schema("JSON value"),
-                        "expected_revision": _integer_schema("Expected document revision"),
-                    },
-                    required=["surface_id", "path", "value"],
-                ),
-                _object_schema("Issued platform effect"),
-            ),
-            (
-                "delete_data",
-                "Delete Flow UI data",
-                "Удаляет data-model value по RFC 6901 path; /system запрещён.",
-                _schema_object(
-                    properties={
-                        "surface_id": _string_schema("Surface ID"),
-                        "path": _string_schema("RFC 6901 path"),
-                        "expected_revision": _integer_schema("Expected document revision"),
-                    },
-                    required=["surface_id", "path"],
-                ),
-                _object_schema("Issued platform effect"),
-            ),
-            (
-                "delete_surface",
-                "Delete Flow UI surface",
-                "Удаляет независимую surface; page root защищён domain validation.",
-                _schema_object(
-                    properties={
-                        "surface_id": _string_schema("Surface ID"),
-                        "expected_revision": _integer_schema("Expected document revision"),
-                    },
-                    required=["surface_id"],
+                    required=["slot_id", "blocks"],
                 ),
                 _object_schema("Issued platform effect"),
             ),
             (
                 "navigate",
                 "Navigate Flow UI page",
-                "Меняет активную страницу materialized document.",
+                "Переключает активную страницу интерфейса flow.",
                 _schema_object(
-                    properties={
-                        "page_id": _string_schema("Page ID"),
-                        "expected_revision": _integer_schema("Expected document revision"),
-                    },
+                    properties={"page_id": _string_schema("Page ID")},
                     required=["page_id"],
-                ),
-                _object_schema("Issued platform effect"),
-            ),
-            (
-                "reset",
-                "Reset Flow UI template",
-                "Явно сбрасывает document к известной versioned template.",
-                _schema_object(
-                    properties={
-                        "template_id": _string_schema("Template ID"),
-                        "template_version": _string_schema("Template version"),
-                        "expected_revision": _integer_schema("Expected document revision"),
-                    },
-                    required=["template_id", "template_version"],
-                ),
-                _object_schema("Issued platform effect"),
-            ),
-            (
-                "apply",
-                "Apply Flow UI command batch",
-                "Trusted-only atomic batch of Flow UI domain commands in one effect.",
-                _schema_object(
-                    properties={
-                        "commands": _array_schema("FlowUICommand objects"),
-                        "expected_revision": _integer_schema("Expected document revision"),
-                    },
-                    required=["commands"],
                 ),
                 _object_schema("Issued platform effect"),
             ),
@@ -2213,15 +2091,6 @@ class CapabilityRegistry:
         return message
 
     @staticmethod
-    def _expected_ui_revision(request: CapabilityCallRequest) -> int | None:
-        value = request.kwargs.get("expected_revision")
-        if value is None:
-            return None
-        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-            raise TypeError("expected_revision must be a positive integer")
-        return value
-
-    @staticmethod
     def _issue_platform_effect(
         request: CapabilityCallRequest,
         effect: PlatformEffect,
@@ -2259,112 +2128,15 @@ class CapabilityRegistry:
         }
         return _CapabilityResult(result=result, platform_effects=[envelope])
 
-    async def _ui_create_surface(
-        self, request: CapabilityCallRequest
-    ) -> _CapabilityResult:
+    async def _ui_render(self, request: CapabilityCallRequest) -> _CapabilityResult:
         self._reject_positional_args(request)
-        surface = FlowUISurface.model_validate(
-            require_json_object(request.kwargs.get("surface"), "surface")
-        )
         return self._issue_platform_effect(
             request,
-            UIApplyEffect(
-                commands=[FlowUICreateSurfaceCommand(surface=surface)],
-                expected_revision=self._expected_ui_revision(request),
-            ),
-        )
-
-    async def _ui_update_components(
-        self, request: CapabilityCallRequest
-    ) -> _CapabilityResult:
-        self._reject_positional_args(request)
-        surface_id = _required_string(request.kwargs.get("surface_id"), "surface_id")
-        raw_components = _optional_array(request.kwargs.get("components"), "components")
-        if raw_components is None or not raw_components:
-            raise TypeError("components must be a non-empty array")
-        components = [FlowUIComponent.model_validate(item) for item in raw_components]
-        return self._issue_platform_effect(
-            request,
-            UIApplyEffect(
-                commands=[
-                    FlowUIUpsertComponentsCommand(
-                        surface_id=surface_id,
-                        components=components,
-                    )
-                ],
-                expected_revision=self._expected_ui_revision(request),
-            ),
-        )
-
-    async def _ui_update_data(self, request: CapabilityCallRequest) -> _CapabilityResult:
-        self._reject_positional_args(request)
-        if "value" not in request.kwargs:
-            raise TypeError("value is required")
-        surface_id = _required_string(request.kwargs.get("surface_id"), "surface_id")
-        path = _required_string(request.kwargs.get("path"), "path")
-        if path.startswith("/system"):
-            raise ValueError("sandbox Flow UI capabilities cannot write /system")
-        return self._issue_platform_effect(
-            request,
-            UIApplyEffect(
-                commands=[
-                    FlowUISetDataCommand(
-                        surface_id=surface_id,
-                        path=path,
-                        value=require_json_value(request.kwargs["value"], "value"),
-                    )
-                ],
-                expected_revision=self._expected_ui_revision(request),
-            ),
-        )
-
-    async def _ui_delete_components(
-        self, request: CapabilityCallRequest
-    ) -> _CapabilityResult:
-        self._reject_positional_args(request)
-        surface_id = _required_string(request.kwargs.get("surface_id"), "surface_id")
-        raw_ids = _optional_array(request.kwargs.get("component_ids"), "component_ids")
-        if raw_ids is None or not raw_ids or not all(
-            isinstance(item, str) and item.strip() for item in raw_ids
-        ):
-            raise TypeError("component_ids must be a non-empty array of strings")
-        return self._issue_platform_effect(
-            request,
-            UIApplyEffect(
-                commands=[
-                    FlowUIDeleteComponentsCommand(
-                        surface_id=surface_id,
-                        component_ids=[cast(str, item).strip() for item in raw_ids],
-                    )
-                ],
-                expected_revision=self._expected_ui_revision(request),
-            ),
-        )
-
-    async def _ui_delete_data(self, request: CapabilityCallRequest) -> _CapabilityResult:
-        self._reject_positional_args(request)
-        surface_id = _required_string(request.kwargs.get("surface_id"), "surface_id")
-        path = _required_string(request.kwargs.get("path"), "path")
-        if path.startswith("/system"):
-            raise ValueError("sandbox Flow UI capabilities cannot delete /system")
-        return self._issue_platform_effect(
-            request,
-            UIApplyEffect(
-                commands=[FlowUIDeleteDataCommand(surface_id=surface_id, path=path)],
-                expected_revision=self._expected_ui_revision(request),
-            ),
-        )
-
-    async def _ui_delete_surface(
-        self, request: CapabilityCallRequest
-    ) -> _CapabilityResult:
-        self._reject_positional_args(request)
-        surface_id = _required_string(request.kwargs.get("surface_id"), "surface_id")
-        return self._issue_platform_effect(
-            request,
-            UIApplyEffect(
-                commands=[FlowUIDeleteSurfaceCommand(surface_id=surface_id)],
-                expected_revision=self._expected_ui_revision(request),
+            FlowUIRender.model_validate(
+                {
+                    "slot_id": _required_string(request.kwargs.get("slot_id"), "slot_id"),
+                    "blocks": _optional_array(request.kwargs.get("blocks"), "blocks"),
+                }
             ),
         )
 
@@ -2372,45 +2144,7 @@ class CapabilityRegistry:
         self._reject_positional_args(request)
         return self._issue_platform_effect(
             request,
-            UINavigateEffect(
-                page_id=_required_string(request.kwargs.get("page_id"), "page_id"),
-                expected_revision=self._expected_ui_revision(request),
-            ),
-        )
-
-    async def _ui_reset(self, request: CapabilityCallRequest) -> _CapabilityResult:
-        self._reject_positional_args(request)
-        template_id = _required_string(request.kwargs.get("template_id"), "template_id")
-        template_version = _required_string(
-            request.kwargs.get("template_version"), "template_version"
-        )
-        if (
-            template_id != DEFAULT_CHAT_TEMPLATE_ID
-            or template_version != DEFAULT_CHAT_TEMPLATE_VERSION
-        ):
-            raise ValueError("Unknown Flow UI template")
-        return self._issue_platform_effect(
-            request,
-            UIResetEffect(
-                template_id=template_id,
-                template_version=template_version,
-                expected_revision=self._expected_ui_revision(request),
-            ),
-        )
-
-    async def _ui_apply(self, request: CapabilityCallRequest) -> _CapabilityResult:
-        self._reject_positional_args(request)
-        raw_commands = _optional_array(request.kwargs.get("commands"), "commands")
-        if raw_commands is None or not raw_commands:
-            raise TypeError("commands must be a non-empty array")
-        return self._issue_platform_effect(
-            request,
-            UIApplyEffect.model_validate(
-                {
-                    "commands": raw_commands,
-                    "expected_revision": self._expected_ui_revision(request),
-                }
-            ),
+            FlowUINavigate(page_id=_required_string(request.kwargs.get("page_id"), "page_id")),
         )
 
     async def _state_extract_json(self, request: CapabilityCallRequest) -> JsonValue:
@@ -2451,14 +2185,14 @@ class CapabilityRegistry:
         )
         issued = self._issue_platform_effect(
             request,
-            UIApplyEffect(
-                commands=[
-                    FlowUISetDataCommand(
-                        surface_id="main",
-                        path="/content/suggestedPrompts",
-                        value=cast(JsonValue, buttons),
+            FlowUIRender(
+                slot_id=CONVERSATION_SLOT_ID,
+                blocks=[
+                    FlowUISuggestedPrompts(
+                        block_id="suggested-prompts",
+                        items=[cast(str, button) for button in buttons],
                     )
-                ]
+                ],
             ),
         )
         return _CapabilityResult(

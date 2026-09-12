@@ -45,7 +45,6 @@ from core.clients.redis_client import RedisClient
 from core.context import get_context
 from core.logging import get_logger
 from core.state import TERMINAL_TASK_STATES, ExecutionState, ExecutionTaskState
-from core.state.flow_ui import FlowUIDocument
 from core.types import JsonObject, parse_json_object, require_json_object
 
 logger = get_logger(__name__)
@@ -59,15 +58,8 @@ def create_initial_state(
     content: str | None = None,
     branch_id: str = "default",
     initiator_user_id: str | None = None,
-    ui_document: FlowUIDocument | None = None,
 ) -> ExecutionState:
     """Создаёт новую проекцию ExecutionState для сессии workflow."""
-    if ui_document is None:
-        from core.models.flow_interface import default_flow_interface_config
-
-        ui_document = default_flow_interface_config().template.materialize(
-            document_id=f"flow-ui:{context_id}"
-        )
     return ExecutionState(
         task_id=task_id,
         context_id=context_id,
@@ -76,8 +68,6 @@ def create_initial_state(
         session_id=session_id,
         content=content,
         branch_id=branch_id,
-        ui_document=ui_document,
-        ui_template_version=ui_document.template_version,
     )
 
 

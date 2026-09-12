@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -14,6 +13,7 @@ from core.logging.attributes import LOG_BILLING_SETTLEMENT_LAG_MS, LOG_OPERATION
 from core.models.billing_models import UsageType
 from core.models.identity_models import Company
 from core.tracing.models import TraceSpanWrite
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 from tests.fixtures.observability_log_capture import (
     require_log_fields,
     require_numeric_field,

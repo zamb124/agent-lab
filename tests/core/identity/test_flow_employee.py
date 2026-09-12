@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 
-from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import uuid
 
 import pytest
@@ -25,6 +24,7 @@ from core.identity.flow_employee import (
 )
 from core.models.identity_models import User, UserStatus
 from tests.fixtures.ai_provider_defaults import make_test_company
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
 @pytest_asyncio.fixture

@@ -1,0 +1,95 @@
+{
+    "description": "Грамматика текстовых шаблонов блоков: {path}, {?path}, {path|default}, \\{ литерал. paths — порядок ссылок без дублей (Python template_paths == JS templatePaths). text — результат рендера, когда он одинаков в Python VariableResolver.render_template и JS renderTemplate. rendered=false — обязательный путь пуст, блок не рендерится (только JS).",
+    "cases": [
+        {
+            "name": "nested_path",
+            "template": "Привет, {customer.name}!",
+            "state": { "customer": { "name": "Анна" } },
+            "paths": ["customer.name"],
+            "text": "Привет, Анна!"
+        },
+        {
+            "name": "default_used_when_missing",
+            "template": "Итого: {total|0} ₽",
+            "state": {},
+            "paths": ["total"],
+            "text": "Итого: 0 ₽"
+        },
+        {
+            "name": "default_ignored_when_present",
+            "template": "Итого: {total|0} ₽",
+            "state": { "total": 1200 },
+            "paths": ["total"],
+            "text": "Итого: 1200 ₽"
+        },
+        {
+            "name": "optional_missing_is_empty",
+            "template": "{?note}",
+            "state": {},
+            "paths": ["note"],
+            "text": ""
+        },
+        {
+            "name": "optional_empty_string_uses_default",
+            "template": "{?note|нет заметки}",
+            "state": { "note": "" },
+            "paths": ["note"],
+            "text": "нет заметки"
+        },
+        {
+            "name": "nested_default_expression",
+            "template": "Статус: {status|{?pending_status|—}}",
+            "state": { "pending_status": "ожидание" },
+            "paths": ["status", "pending_status"],
+            "text": "Статус: ожидание"
+        },
+        {
+            "name": "zero_is_a_value",
+            "template": "Ноль {count}",
+            "state": { "count": 0 },
+            "paths": ["count"],
+            "text": "Ноль 0"
+        },
+        {
+            "name": "repeated_path_listed_once",
+            "template": "{email} / {email}",
+            "state": { "email": "a@b.c" },
+            "paths": ["email"],
+            "text": "a@b.c / a@b.c"
+        },
+        {
+            "name": "escaped_braces_are_not_references",
+            "template": "Скобки \\{не шаблон\\}",
+            "state": {},
+            "paths": []
+        },
+        {
+            "name": "required_missing_blocks_render",
+            "template": "Привет, {name}",
+            "state": {},
+            "paths": ["name"],
+            "rendered": false
+        },
+        {
+            "name": "malformed_expression_is_literal_but_path_is_scanned",
+            "template": "{total-1} {total}",
+            "state": { "total": 5 },
+            "paths": ["total"],
+            "text": "{total-1} 5"
+        },
+        {
+            "name": "json_like_braces_are_literal",
+            "template": "json: { \"k\": 1 } {real}",
+            "state": { "real": "R" },
+            "paths": ["real"],
+            "text": "json: { \"k\": 1 } R"
+        }
+    ],
+    "unbalanced_templates": [
+        "{open",
+        "{a|x",
+        "a } b",
+        "{a} }",
+        "{a|{b}}}"
+    ]
+}

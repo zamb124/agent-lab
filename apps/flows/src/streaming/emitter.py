@@ -13,6 +13,7 @@ from apps.flows.src.db.a2a_task_repository import A2ATaskRepository
 from apps.flows.src.observability.flow_timing import maybe_record_flow_first_content_chunk
 from core.a2a import struct_from_mapping
 from core.context import require_context
+from core.flow_ui.protocol import RESPONSE_ARTIFACT_NAME
 from core.logging import get_logger
 from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
@@ -116,7 +117,7 @@ class Emitter(BaseEmitter):
         append: bool = True,
         last_chunk: bool = False,
         *,
-        artifact_name: str = "response",
+        artifact_name: str = RESPONSE_ARTIFACT_NAME,
     ) -> None:
         if (
             artifact_name == "response"

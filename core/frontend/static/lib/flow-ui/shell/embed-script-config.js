@@ -21,7 +21,8 @@ export function resolvePresentation(script) {
 export function resolveLauncherPosition(script) {
     const raw = (script.dataset.position || 'bottom-right').trim().toLowerCase();
     if (raw === 'bottom-left') return 'bottom-left';
-    return 'bottom-right';
+    if (raw === 'bottom-right') return 'bottom-right';
+    throw new Error(`Linnex Flow UI embed: invalid data-position ${JSON.stringify(raw)}`);
 }
 
 export function resolveToggleEventName(script) {

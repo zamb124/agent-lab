@@ -1,10 +1,5 @@
 """Durable execution ledger для flows."""
 
-from .begin_interaction_turn import (
-    BEGIN_INTERACTION_TURN_PRESERVED_FIELDS,
-    BEGIN_INTERACTION_TURN_RESET_FIELDS,
-    begin_interaction_turn,
-)
 from .hashing import hash_state_json
 from .manager import DurableWorkflowRuntime, WorkflowStateEventSpec, create_initial_state
 from .models import (
@@ -42,9 +37,6 @@ from .models import (
     SuperstepCommittedPayload,
     SuperstepStartedPayload,
     TimeTravelEffect,
-    UIDocumentPatchedPayload,
-    UIInteractionAcceptedPayload,
-    UIRepresentationSelectedPayload,
     UserInputAppliedPayload,
     VariablesResolvedPayload,
     WorkflowAppendResult,
@@ -75,8 +67,6 @@ __all__ = [
     "ActivityLifecyclePayload",
     "ActivityRecord",
     "ActivityRescheduleResult",
-    "BEGIN_INTERACTION_TURN_PRESERVED_FIELDS",
-    "BEGIN_INTERACTION_TURN_RESET_FIELDS",
     "BranchTransitionPayload",
     "BreakpointHitPayload",
     "ChildWorkflowLifecyclePayload",
@@ -106,9 +96,6 @@ __all__ = [
     "SuperstepCommittedPayload",
     "SuperstepStartedPayload",
     "TimeTravelEffect",
-    "UIDocumentPatchedPayload",
-    "UIInteractionAcceptedPayload",
-    "UIRepresentationSelectedPayload",
     "UserInputAppliedPayload",
     "VariablesResolvedPayload",
     "WorkflowAppendResult",
@@ -123,7 +110,6 @@ __all__ = [
     "WorkflowStatus",
     "WorkflowStateEventSpec",
     "apply_state_delta",
-    "begin_interaction_turn",
     "build_state_delta",
     "create_initial_state",
     "hash_state_json",

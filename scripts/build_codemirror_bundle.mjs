@@ -39,6 +39,7 @@ export { python } from '@codemirror/lang-python';
 export { json } from '@codemirror/lang-json';
 export { javascript } from '@codemirror/lang-javascript';
 export { go } from '@codemirror/lang-go';
+export { html } from '@codemirror/lang-html';
 
 import { StreamLanguage } from '@codemirror/language';
 import { csharp as csharpMode } from '@codemirror/legacy-modes/mode/clike';

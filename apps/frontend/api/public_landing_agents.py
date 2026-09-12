@@ -25,10 +25,6 @@ from core.identity.runtime_users import ensure_persisted_runtime_user
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID, SYSTEM_COMPANY_SUBDOMAIN
 from core.logging import get_logger
 from core.models.embed_models import EmbedConfig, EmbedStatus
-from core.models.flow_interface import (
-    apply_embed_interface_override,
-    resolve_flow_interface_config,
-)
 from core.utils.tokens import get_token_service
 
 logger = get_logger(__name__)
@@ -129,17 +125,12 @@ async def _collect_landing_cards(
             continue
         greeting_message: str | None = None
         if flow_cfg is not None:
-            branch = flow_cfg.branches.get(c.branch_id)
-            interface = resolve_flow_interface_config(
-                flow_cfg.interface,
-                branch_override=None if branch is None else branch.interface_override,
+            document = flow_cfg.interface_for_branch(c.branch_id).with_embed_overrides(
+                conversation=c.conversation,
+                start_page_id=c.start_page_id,
             )
-            interface = apply_embed_interface_override(interface, c.interface_override)
-            document = interface.template.document
-            page = document.pages[document.active_page_id]
-            content = document.surfaces[page.root_surface_id].data_model.content
-            greeting = content.get("greeting")
-            greeting_message = greeting if isinstance(greeting, str) else None
+            greeting = document.conversation_settings().greeting
+            greeting_message = greeting if greeting != "" else None
         cards.append(
             PublicLandingAgentCard(
                 embed_id=c.embed_id,

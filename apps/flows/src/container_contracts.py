@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Protocol, TypeAlias, TypedDict, cast
 
 from core.authz.service import AuthzService
+from core.flow_ui.document import FlowUIDocument
 from core.mail.service import MailService
 from core.types import JsonObject, JsonValue
 from core.worktracker.service import WorkItemService
@@ -47,7 +48,6 @@ if TYPE_CHECKING:
     from apps.flows.src.services.agent_skill_service import AgentSkillService
     from apps.flows.src.services.flow_access_service import FlowAccessService
     from apps.flows.src.services.flow_discovery import FlowDiscoveryService
-    from apps.flows.src.services.flow_ui_session_service import FlowUISessionService
     from apps.flows.src.services.flow_ui_share_service import FlowUIShareService
     from apps.flows.src.services.handoff_orchestrator_service import HandoffOrchestratorService
     from apps.flows.src.services.hitl_conversation_service import HitlConversationService
@@ -111,6 +111,7 @@ class RuntimeFlowConfig(TypedDict, total=False):
 class RuntimeFlowProtocol(Protocol):
     variables: JsonObject
     config: RuntimeFlowConfig
+    interface: FlowUIDocument
     nodes: dict[str, "RuntimeNodeProtocol"]
     run: Callable[["ExecutionState"], Awaitable["ExecutionState"]]
 
@@ -297,9 +298,6 @@ class FlowRuntimeContainer(Protocol):
 
     @property
     def a2a_task_projection_service(self) -> A2ATaskProjectionService: ...
-
-    @property
-    def flow_ui_session_service(self) -> "FlowUISessionService": ...
 
     @property
     def flow_ui_share_repository(self) -> FlowUIShareRepository: ...

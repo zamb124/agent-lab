@@ -1,0 +1,4014 @@
+{
+  "$defs": {
+    "FlowUIActionPreview": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "parameters": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Parameters",
+          "type": "object"
+        },
+        "summary": {
+          "default": "",
+          "title": "Summary",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "type": {
+          "const": "action_preview",
+          "default": "action_preview",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "title"
+      ],
+      "title": "FlowUIActionPreview",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "platform",
+        "icon": "eye"
+      }
+    },
+    "FlowUIActionResult": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "status": {
+          "default": "success",
+          "enum": [
+            "success",
+            "failed",
+            "pending"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "summary": {
+          "default": "",
+          "title": "Summary",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "type": {
+          "const": "action_result",
+          "default": "action_result",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "title"
+      ],
+      "title": "FlowUIActionResult",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "platform",
+        "icon": "done-all"
+      }
+    },
+    "FlowUIActionSpec": {
+      "additionalProperties": false,
+      "description": "Действие интерактивного блока: имя и данные, уходящие во flow.",
+      "properties": {
+        "name": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "payload": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Payload",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "FlowUIActionSpec",
+      "type": "object"
+    },
+    "FlowUIActivity": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "status": {
+          "default": "running",
+          "enum": [
+            "running",
+            "completed",
+            "failed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "type": {
+          "const": "activity",
+          "default": "activity",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "title"
+      ],
+      "title": "FlowUIActivity",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "platform",
+        "icon": "refresh"
+      }
+    },
+    "FlowUIAgentIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "image_url": {
+          "default": "",
+          "maxLength": 2000,
+          "title": "Image Url",
+          "type": "string"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "type": {
+          "const": "agent_identity",
+          "default": "agent_identity",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id"
+      ],
+      "title": "FlowUIAgentIdentity",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "platform",
+        "icon": "bot"
+      }
+    },
+    "FlowUIAlert": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "tone": {
+          "default": "info",
+          "enum": [
+            "neutral",
+            "info",
+            "success",
+            "warning",
+            "danger"
+          ],
+          "title": "Tone",
+          "type": "string"
+        },
+        "type": {
+          "const": "alert",
+          "default": "alert",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "message"
+      ],
+      "title": "FlowUIAlert",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "content",
+        "icon": "alert-triangle"
+      }
+    },
+    "FlowUIAudio": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "audio",
+          "default": "audio",
+          "title": "Type",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "url"
+      ],
+      "title": "FlowUIAudio",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "content",
+        "icon": "volume-up"
+      }
+    },
+    "FlowUIAvatar": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "image_url": {
+          "default": "",
+          "title": "Image Url",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "type": {
+          "const": "avatar",
+          "default": "avatar",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "name"
+      ],
+      "title": "FlowUIAvatar",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "platform",
+        "icon": "avatar"
+      }
+    },
+    "FlowUIBadge": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "tone": {
+          "default": "neutral",
+          "enum": [
+            "neutral",
+            "info",
+            "success",
+            "warning",
+            "danger"
+          ],
+          "title": "Tone",
+          "type": "string"
+        },
+        "type": {
+          "const": "badge",
+          "default": "badge",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "label"
+      ],
+      "title": "FlowUIBadge",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "content",
+        "icon": "tag"
+      }
+    },
+    "FlowUIBrowserPreview": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "screenshot_url": {
+          "default": "",
+          "title": "Screenshot Url",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "status": {
+          "default": "finished",
+          "enum": [
+            "running",
+            "finished",
+            "failed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "type": {
+          "const": "browser_preview",
+          "default": "browser_preview",
+          "title": "Type",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "url"
+      ],
+      "title": "FlowUIBrowserPreview",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "platform",
+        "icon": "globe"
+      }
+    },
+    "FlowUIButton": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/FlowUIActionSpec"
+        },
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "type": {
+          "const": "button",
+          "default": "button",
+          "title": "Type",
+          "type": "string"
+        },
+        "variant": {
+          "default": "primary",
+          "enum": [
+            "primary",
+            "secondary",
+            "ghost",
+            "danger"
+          ],
+          "title": "Variant",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "label",
+        "action"
+      ],
+      "title": "FlowUIButton",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "action",
+        "icon": "zap"
+      }
+    },
+    "FlowUIChart": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "data": {
+          "description": "Путь к списку точек (объектов) в state",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)*$",
+          "title": "Data",
+          "type": "string",
+          "x-flow-ui": "state_path"
+        },
+        "kind": {
+          "default": "bar",
+          "enum": [
+            "bar",
+            "line",
+            "area",
+            "pie"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "type": {
+          "const": "chart",
+          "default": "chart",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "x": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "X",
+          "type": "string"
+        },
+        "y": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Y",
+          "type": "array"
+        }
+      },
+      "required": [
+        "block_id",
+        "data",
+        "x",
+        "y"
+      ],
+      "title": "FlowUIChart",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "data",
+        "icon": "chart"
+      }
+    },
+    "FlowUICheckbox": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUIActionSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "default": {
+          "default": false,
+          "title": "Default",
+          "type": "boolean"
+        },
+        "error_message": {
+          "default": "",
+          "title": "Error Message",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "field": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)*$",
+          "title": "Field",
+          "type": "string",
+          "x-flow-ui": "state_path"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "checkbox",
+          "default": "checkbox",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "field"
+      ],
+      "title": "FlowUICheckbox",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "input",
+        "icon": "check-square"
+      }
+    },
+    "FlowUICode": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "code": {
+          "title": "Code",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "language": {
+          "default": "text",
+          "maxLength": 32,
+          "title": "Language",
+          "type": "string"
+        },
+        "type": {
+          "const": "code",
+          "default": "code",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "code"
+      ],
+      "title": "FlowUICode",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "content",
+        "icon": "code"
+      }
+    },
+    "FlowUIColumn": {
+      "additionalProperties": false,
+      "properties": {
+        "blocks": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "action_preview": "#/$defs/FlowUIActionPreview",
+                "action_result": "#/$defs/FlowUIActionResult",
+                "activity": "#/$defs/FlowUIActivity",
+                "agent_identity": "#/$defs/FlowUIAgentIdentity",
+                "alert": "#/$defs/FlowUIAlert",
+                "audio": "#/$defs/FlowUIAudio",
+                "avatar": "#/$defs/FlowUIAvatar",
+                "badge": "#/$defs/FlowUIBadge",
+                "browser_preview": "#/$defs/FlowUIBrowserPreview",
+                "button": "#/$defs/FlowUIButton",
+                "chart": "#/$defs/FlowUIChart",
+                "checkbox": "#/$defs/FlowUICheckbox",
+                "code": "#/$defs/FlowUICode",
+                "columns": "#/$defs/FlowUIColumns",
+                "conversation": "#/$defs/FlowUIConversation",
+                "data_table": "#/$defs/FlowUIDataTable",
+                "date_input": "#/$defs/FlowUIDateInput",
+                "datetime_input": "#/$defs/FlowUIDateTimeInput",
+                "divider": "#/$defs/FlowUIDivider",
+                "empty_state": "#/$defs/FlowUIEmptyState",
+                "file_card": "#/$defs/FlowUIFileCard",
+                "file_list": "#/$defs/FlowUIFileList",
+                "file_upload": "#/$defs/FlowUIFileUpload",
+                "heading": "#/$defs/FlowUIHeading",
+                "html": "#/$defs/FlowUIHtml",
+                "image": "#/$defs/FlowUIImage",
+                "json_view": "#/$defs/FlowUIJsonView",
+                "link": "#/$defs/FlowUILink",
+                "metric": "#/$defs/FlowUIMetric",
+                "number_input": "#/$defs/FlowUINumberInput",
+                "progress": "#/$defs/FlowUIProgress",
+                "reflection": "#/$defs/FlowUIReflection",
+                "run_trace": "#/$defs/FlowUIRunTrace",
+                "section": "#/$defs/FlowUISection",
+                "select": "#/$defs/FlowUISelect",
+                "skill_activity": "#/$defs/FlowUISkillActivity",
+                "slider": "#/$defs/FlowUISlider",
+                "slot": "#/$defs/FlowUISlot",
+                "status": "#/$defs/FlowUIStatus",
+                "suggested_prompts": "#/$defs/FlowUISuggestedPrompts",
+                "switch": "#/$defs/FlowUISwitch",
+                "tabs": "#/$defs/FlowUITabs",
+                "text": "#/$defs/FlowUIMarkdownText",
+                "text_input": "#/$defs/FlowUITextInput",
+                "tool_activity": "#/$defs/FlowUIToolActivity",
+                "video": "#/$defs/FlowUIVideo",
+                "voice_input": "#/$defs/FlowUIVoiceInput"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/FlowUISection"
+              },
+              {
+                "$ref": "#/$defs/FlowUIColumns"
+              },
+              {
+                "$ref": "#/$defs/FlowUITabs"
+              },
+              {
+                "$ref": "#/$defs/FlowUIHeading"
+              },
+              {
+                "$ref": "#/$defs/FlowUIMarkdownText"
+              },
+              {
+                "$ref": "#/$defs/FlowUIImage"
+              },
+              {
+                "$ref": "#/$defs/FlowUIVideo"
+              },
+              {
+                "$ref": "#/$defs/FlowUIAudio"
+              },
+              {
+                "$ref": "#/$defs/FlowUICode"
+              },
+              {
+                "$ref": "#/$defs/FlowUIBadge"
+              },
+              {
+                "$ref": "#/$defs/FlowUIAlert"
+              },
+              {
+                "$ref": "#/$defs/FlowUIMetric"
+              },
+              {
+                "$ref": "#/$defs/FlowUIProgress"
+              },
+              {
+                "$ref": "#/$defs/FlowUIStatus"
+              },
+              {
+                "$ref": "#/$defs/FlowUIEmptyState"
+              },
+              {
+                "$ref": "#/$defs/FlowUIDivider"
+              },
+              {
+                "$ref": "#/$defs/FlowUITextInput"
+              },
+              {
+                "$ref": "#/$defs/FlowUINumberInput"
+              },
+              {
+                "$ref": "#/$defs/FlowUISelect"
+              },
+              {
+                "$ref": "#/$defs/FlowUICheckbox"
+              },
+              {
+                "$ref": "#/$defs/FlowUISwitch"
+              },
+              {
+                "$ref": "#/$defs/FlowUISlider"
+              },
+              {
+                "$ref": "#/$defs/FlowUIDateInput"
+              },
+              {
+                "$ref": "#/$defs/FlowUIDateTimeInput"
+              },
+              {
+                "$ref": "#/$defs/FlowUIFileUpload"
+              },
+              {
+                "$ref": "#/$defs/FlowUIVoiceInput"
+              },
+              {
+                "$ref": "#/$defs/FlowUIButton"
+              },
+              {
+                "$ref": "#/$defs/FlowUILink"
+              },
+              {
+                "$ref": "#/$defs/FlowUIDataTable"
+              },
+              {
+                "$ref": "#/$defs/FlowUIChart"
+              },
+              {
+                "$ref": "#/$defs/FlowUIJsonView"
+              },
+              {
+                "$ref": "#/$defs/FlowUIFileCard"
+              },
+              {
+                "$ref": "#/$defs/FlowUIFileList"
+              },
+              {
+                "$ref": "#/$defs/FlowUIConversation"
+              },
+              {
+                "$ref": "#/$defs/FlowUISlot"
+              },
+              {
+                "$ref": "#/$defs/FlowUIAgentIdentity"
+              },
+              {
+                "$ref": "#/$defs/FlowUIAvatar"
+              },
+              {
+                "$ref": "#/$defs/FlowUIRunTrace"
+              },
+              {
+                "$ref": "#/$defs/FlowUIToolActivity"
+              },
+              {
+                "$ref": "#/$defs/FlowUIBrowserPreview"
+              },
+              {
+                "$ref": "#/$defs/FlowUISkillActivity"
+              },
+              {
+                "$ref": "#/$defs/FlowUIActionPreview"
+              },
+              {
+                "$ref": "#/$defs/FlowUIActionResult"
+              },
+              {
+                "$ref": "#/$defs/FlowUIReflection"
+              },
+              {
+                "$ref": "#/$defs/FlowUIActivity"
+              },
+              {
+                "$ref": "#/$defs/FlowUISuggestedPrompts"
+              },
+              {
+                "$ref": "#/$defs/FlowUIHtml"
+              }
+            ]
+          },
+          "title": "Blocks",
+          "type": "array"
+        },
+        "width": {
+          "maximum": 12,
+          "minimum": 1,
+          "title": "Width",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width"
+      ],
+      "title": "FlowUIColumn",
+      "type": "object"
+    },
+    "FlowUIColumns": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "columns": {
+          "items": {
+            "$ref": "#/$defs/FlowUIColumn"
+          },
+          "maxItems": 6,
+          "minItems": 1,
+          "title": "Columns",
+          "type": "array"
+        },
+        "type": {
+          "const": "columns",
+          "default": "columns",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "columns"
+      ],
+      "title": "FlowUIColumns",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "layout",
+        "icon": "columns"
+      }
+    },
+    "FlowUICondition": {
+      "additionalProperties": false,
+      "description": "Условие показа блока: значение по пути равно ``equals``; без ``equals`` — истинно.",
+      "properties": {
+        "equals": {
+          "$ref": "#/$defs/JsonValue",
+          "default": null
+        },
+        "path": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)*$",
+          "title": "Path",
+          "type": "string",
+          "x-flow-ui": "state_path"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "FlowUICondition",
+      "type": "object"
+    },
+    "FlowUIConversation": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "settings": {
+          "$ref": "#/$defs/FlowUIConversationSettings"
+        },
+        "type": {
+          "const": "conversation",
+          "default": "conversation",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id"
+      ],
+      "title": "FlowUIConversation",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "platform",
+        "icon": "chat"
+      }
+    },
+    "FlowUIConversationSettings": {
+      "additionalProperties": false,
+      "description": "Настройки ленты и композера; ими владеет блок conversation.",
+      "properties": {
+        "allow_cancel": {
+          "default": true,
+          "title": "Allow Cancel",
+          "type": "boolean"
+        },
+        "allow_voice": {
+          "default": true,
+          "title": "Allow Voice",
+          "type": "boolean"
+        },
+        "errors": {
+          "default": "generic",
+          "enum": [
+            "generic",
+            "detailed"
+          ],
+          "title": "Errors",
+          "type": "string"
+        },
+        "greeting": {
+          "default": "",
+          "title": "Greeting",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "placeholder": {
+          "default": "",
+          "title": "Placeholder",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "show_activity": {
+          "default": true,
+          "title": "Show Activity",
+          "type": "boolean"
+        },
+        "show_browser_previews": {
+          "default": true,
+          "title": "Show Browser Previews",
+          "type": "boolean"
+        },
+        "show_files_panel": {
+          "default": true,
+          "title": "Show Files Panel",
+          "type": "boolean"
+        },
+        "show_reasoning": {
+          "default": false,
+          "title": "Show Reasoning",
+          "type": "boolean"
+        },
+        "show_reflection": {
+          "default": true,
+          "title": "Show Reflection",
+          "type": "boolean"
+        },
+        "show_run_trace": {
+          "default": false,
+          "title": "Show Run Trace",
+          "type": "boolean"
+        },
+        "show_skill_loads": {
+          "default": true,
+          "title": "Show Skill Loads",
+          "type": "boolean"
+        },
+        "show_trace_actions": {
+          "default": false,
+          "title": "Show Trace Actions",
+          "type": "boolean"
+        },
+        "suggested_prompts": {
+          "items": {
+            "type": "string",
+            "x-flow-ui": "template"
+          },
+          "maxItems": 12,
+          "title": "Suggested Prompts",
+          "type": "array"
+        },
+        "tool_calls": {
+          "default": "compact",
+          "enum": [
+            "hidden",
+            "compact",
+            "detailed"
+          ],
+          "title": "Tool Calls",
+          "type": "string"
+        }
+      },
+      "title": "FlowUIConversationSettings",
+      "type": "object"
+    },
+    "FlowUIDataTable": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "columns": {
+          "items": {
+            "$ref": "#/$defs/FlowUITableColumn"
+          },
+          "title": "Columns",
+          "type": "array"
+        },
+        "file_id": {
+          "default": "",
+          "description": "Шаблон, дающий file_id табличного файла",
+          "title": "File Id",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "row_action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUIActionSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "rows": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)*$",
+              "type": "string",
+              "x-flow-ui": "state_path"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Путь к списку строк в state",
+          "title": "Rows"
+        },
+        "type": {
+          "const": "data_table",
+          "default": "data_table",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id"
+      ],
+      "title": "FlowUIDataTable",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "data",
+        "icon": "table"
+      }
+    },
+    "FlowUIDateInput": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUIActionSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "default": {
+          "default": "",
+          "title": "Default",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "error_message": {
+          "default": "",
+          "title": "Error Message",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "field": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)*$",
+          "title": "Field",
+          "type": "string",
+          "x-flow-ui": "state_path"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "date_input",
+          "default": "date_input",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "field"
+      ],
+      "title": "FlowUIDateInput",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "input",
+        "icon": "calendar"
+      }
+    },
+    "FlowUIDateTimeInput": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUIActionSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "default": {
+          "default": "",
+          "title": "Default",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "error_message": {
+          "default": "",
+          "title": "Error Message",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "field": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)*$",
+          "title": "Field",
+          "type": "string",
+          "x-flow-ui": "state_path"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "datetime_input",
+          "default": "datetime_input",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "field"
+      ],
+      "title": "FlowUIDateTimeInput",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "input",
+        "icon": "schedule"
+      }
+    },
+    "FlowUIDivider": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "divider",
+          "default": "divider",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id"
+      ],
+      "title": "FlowUIDivider",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "content",
+        "icon": "minus"
+      }
+    },
+    "FlowUIEmptyState": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "type": {
+          "const": "empty_state",
+          "default": "empty_state",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "message"
+      ],
+      "title": "FlowUIEmptyState",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "content",
+        "icon": "inbox"
+      }
+    },
+    "FlowUIFileCard": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "file": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)*$",
+              "type": "string",
+              "x-flow-ui": "state_path"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Путь к FileRef в state",
+          "title": "File"
+        },
+        "file_id": {
+          "default": "",
+          "description": "Шаблон, дающий file_id из state.files",
+          "title": "File Id",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "type": {
+          "const": "file_card",
+          "default": "file_card",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id"
+      ],
+      "title": "FlowUIFileCard",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "data",
+        "icon": "file-text"
+      }
+    },
+    "FlowUIFileList": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "files": {
+          "default": "files",
+          "description": "Путь к списку FileRef в state",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)*$",
+          "title": "Files",
+          "type": "string",
+          "x-flow-ui": "state_path"
+        },
+        "type": {
+          "const": "file_list",
+          "default": "file_list",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id"
+      ],
+      "title": "FlowUIFileList",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "data",
+        "icon": "folder"
+      }
+    },
+    "FlowUIFileUpload": {
+      "additionalProperties": false,
+      "properties": {
+        "accept": {
+          "default": "",
+          "description": "accept-строка из реестра типов файлов",
+          "maxLength": 500,
+          "title": "Accept",
+          "type": "string"
+        },
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUIActionSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "error_message": {
+          "default": "",
+          "title": "Error Message",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "field": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)*$",
+          "title": "Field",
+          "type": "string",
+          "x-flow-ui": "state_path"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "multiple": {
+          "default": true,
+          "title": "Multiple",
+          "type": "boolean"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "file_upload",
+          "default": "file_upload",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "field"
+      ],
+      "title": "FlowUIFileUpload",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "input",
+        "icon": "paperclip"
+      }
+    },
+    "FlowUIHeading": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "level": {
+          "default": 2,
+          "enum": [
+            1,
+            2,
+            3
+          ],
+          "title": "Level",
+          "type": "integer"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "type": {
+          "const": "heading",
+          "default": "heading",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "text"
+      ],
+      "title": "FlowUIHeading",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "content",
+        "icon": "heading-1"
+      }
+    },
+    "FlowUIHtml": {
+      "additionalProperties": false,
+      "description": "Пользовательский HTML/CSS/JS в sandbox-iframe с opaque origin.\n\nКод получает проекцию state по ``fields`` и путям ``data-bind``/``data-show``\nиз ``source``; пишет значение в ``field`` через ``flowUi.setValue``.",
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "field": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)*$",
+              "type": "string",
+              "x-flow-ui": "state_path"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Field"
+        },
+        "fields": {
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)*$",
+            "type": "string",
+            "x-flow-ui": "state_path"
+          },
+          "maxItems": 64,
+          "title": "Fields",
+          "type": "array"
+        },
+        "height": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "const": "auto",
+              "type": "string"
+            }
+          ],
+          "default": "auto",
+          "title": "Height"
+        },
+        "source": {
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "type": {
+          "const": "html",
+          "default": "html",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "source"
+      ],
+      "title": "FlowUIHtml",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "custom",
+        "icon": "terminal"
+      }
+    },
+    "FlowUIImage": {
+      "additionalProperties": false,
+      "properties": {
+        "alt": {
+          "default": "",
+          "title": "Alt",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "image",
+          "default": "image",
+          "title": "Type",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "url"
+      ],
+      "title": "FlowUIImage",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "content",
+        "icon": "image"
+      }
+    },
+    "FlowUIJsonView": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "path": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)*$",
+          "title": "Path",
+          "type": "string",
+          "x-flow-ui": "state_path"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "type": {
+          "const": "json_view",
+          "default": "json_view",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "path"
+      ],
+      "title": "FlowUIJsonView",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "data",
+        "icon": "trace-json"
+      }
+    },
+    "FlowUILink": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "page_id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page Id"
+        },
+        "type": {
+          "const": "link",
+          "default": "link",
+          "title": "Type",
+          "type": "string"
+        },
+        "url": {
+          "default": "",
+          "title": "Url",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "label"
+      ],
+      "title": "FlowUILink",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "action",
+        "icon": "link"
+      }
+    },
+    "FlowUIMarkdownText": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "markdown": {
+          "title": "Markdown",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "type": {
+          "const": "text",
+          "default": "text",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "markdown"
+      ],
+      "title": "FlowUIMarkdownText",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "content",
+        "icon": "text"
+      }
+    },
+    "FlowUIMetric": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "hint": {
+          "default": "",
+          "title": "Hint",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "type": {
+          "const": "metric",
+          "default": "metric",
+          "title": "Type",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "label",
+        "value"
+      ],
+      "title": "FlowUIMetric",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "content",
+        "icon": "chart"
+      }
+    },
+    "FlowUINumberInput": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUIActionSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "default": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default"
+        },
+        "error_message": {
+          "default": "",
+          "title": "Error Message",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "field": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)*$",
+          "title": "Field",
+          "type": "string",
+          "x-flow-ui": "state_path"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "max": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max"
+        },
+        "min": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min"
+        },
+        "placeholder": {
+          "default": "",
+          "title": "Placeholder",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "step": {
+          "default": 1,
+          "exclusiveMinimum": 0,
+          "title": "Step",
+          "type": "number"
+        },
+        "type": {
+          "const": "number_input",
+          "default": "number_input",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "field"
+      ],
+      "title": "FlowUINumberInput",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "input",
+        "icon": "ruler"
+      }
+    },
+    "FlowUIPage": {
+      "additionalProperties": false,
+      "properties": {
+        "blocks": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "action_preview": "#/$defs/FlowUIActionPreview",
+                "action_result": "#/$defs/FlowUIActionResult",
+                "activity": "#/$defs/FlowUIActivity",
+                "agent_identity": "#/$defs/FlowUIAgentIdentity",
+                "alert": "#/$defs/FlowUIAlert",
+                "audio": "#/$defs/FlowUIAudio",
+                "avatar": "#/$defs/FlowUIAvatar",
+                "badge": "#/$defs/FlowUIBadge",
+                "browser_preview": "#/$defs/FlowUIBrowserPreview",
+                "button": "#/$defs/FlowUIButton",
+                "chart": "#/$defs/FlowUIChart",
+                "checkbox": "#/$defs/FlowUICheckbox",
+                "code": "#/$defs/FlowUICode",
+                "columns": "#/$defs/FlowUIColumns",
+                "conversation": "#/$defs/FlowUIConversation",
+                "data_table": "#/$defs/FlowUIDataTable",
+                "date_input": "#/$defs/FlowUIDateInput",
+                "datetime_input": "#/$defs/FlowUIDateTimeInput",
+                "divider": "#/$defs/FlowUIDivider",
+                "empty_state": "#/$defs/FlowUIEmptyState",
+                "file_card": "#/$defs/FlowUIFileCard",
+                "file_list": "#/$defs/FlowUIFileList",
+                "file_upload": "#/$defs/FlowUIFileUpload",
+                "heading": "#/$defs/FlowUIHeading",
+                "html": "#/$defs/FlowUIHtml",
+                "image": "#/$defs/FlowUIImage",
+                "json_view": "#/$defs/FlowUIJsonView",
+                "link": "#/$defs/FlowUILink",
+                "metric": "#/$defs/FlowUIMetric",
+                "number_input": "#/$defs/FlowUINumberInput",
+                "progress": "#/$defs/FlowUIProgress",
+                "reflection": "#/$defs/FlowUIReflection",
+                "run_trace": "#/$defs/FlowUIRunTrace",
+                "section": "#/$defs/FlowUISection",
+                "select": "#/$defs/FlowUISelect",
+                "skill_activity": "#/$defs/FlowUISkillActivity",
+                "slider": "#/$defs/FlowUISlider",
+                "slot": "#/$defs/FlowUISlot",
+                "status": "#/$defs/FlowUIStatus",
+                "suggested_prompts": "#/$defs/FlowUISuggestedPrompts",
+                "switch": "#/$defs/FlowUISwitch",
+                "tabs": "#/$defs/FlowUITabs",
+                "text": "#/$defs/FlowUIMarkdownText",
+                "text_input": "#/$defs/FlowUITextInput",
+                "tool_activity": "#/$defs/FlowUIToolActivity",
+                "video": "#/$defs/FlowUIVideo",
+                "voice_input": "#/$defs/FlowUIVoiceInput"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/FlowUISection"
+              },
+              {
+                "$ref": "#/$defs/FlowUIColumns"
+              },
+              {
+                "$ref": "#/$defs/FlowUITabs"
+              },
+              {
+                "$ref": "#/$defs/FlowUIHeading"
+              },
+              {
+                "$ref": "#/$defs/FlowUIMarkdownText"
+              },
+              {
+                "$ref": "#/$defs/FlowUIImage"
+              },
+              {
+                "$ref": "#/$defs/FlowUIVideo"
+              },
+              {
+                "$ref": "#/$defs/FlowUIAudio"
+              },
+              {
+                "$ref": "#/$defs/FlowUICode"
+              },
+              {
+                "$ref": "#/$defs/FlowUIBadge"
+              },
+              {
+                "$ref": "#/$defs/FlowUIAlert"
+              },
+              {
+                "$ref": "#/$defs/FlowUIMetric"
+              },
+              {
+                "$ref": "#/$defs/FlowUIProgress"
+              },
+              {
+                "$ref": "#/$defs/FlowUIStatus"
+              },
+              {
+                "$ref": "#/$defs/FlowUIEmptyState"
+              },
+              {
+                "$ref": "#/$defs/FlowUIDivider"
+              },
+              {
+                "$ref": "#/$defs/FlowUITextInput"
+              },
+              {
+                "$ref": "#/$defs/FlowUINumberInput"
+              },
+              {
+                "$ref": "#/$defs/FlowUISelect"
+              },
+              {
+                "$ref": "#/$defs/FlowUICheckbox"
+              },
+              {
+                "$ref": "#/$defs/FlowUISwitch"
+              },
+              {
+                "$ref": "#/$defs/FlowUISlider"
+              },
+              {
+                "$ref": "#/$defs/FlowUIDateInput"
+              },
+              {
+                "$ref": "#/$defs/FlowUIDateTimeInput"
+              },
+              {
+                "$ref": "#/$defs/FlowUIFileUpload"
+              },
+              {
+                "$ref": "#/$defs/FlowUIVoiceInput"
+              },
+              {
+                "$ref": "#/$defs/FlowUIButton"
+              },
+              {
+                "$ref": "#/$defs/FlowUILink"
+              },
+              {
+                "$ref": "#/$defs/FlowUIDataTable"
+              },
+              {
+                "$ref": "#/$defs/FlowUIChart"
+              },
+              {
+                "$ref": "#/$defs/FlowUIJsonView"
+              },
+              {
+                "$ref": "#/$defs/FlowUIFileCard"
+              },
+              {
+                "$ref": "#/$defs/FlowUIFileList"
+              },
+              {
+                "$ref": "#/$defs/FlowUIConversation"
+              },
+              {
+                "$ref": "#/$defs/FlowUISlot"
+              },
+              {
+                "$ref": "#/$defs/FlowUIAgentIdentity"
+              },
+              {
+                "$ref": "#/$defs/FlowUIAvatar"
+              },
+              {
+                "$ref": "#/$defs/FlowUIRunTrace"
+              },
+              {
+                "$ref": "#/$defs/FlowUIToolActivity"
+              },
+              {
+                "$ref": "#/$defs/FlowUIBrowserPreview"
+              },
+              {
+                "$ref": "#/$defs/FlowUISkillActivity"
+              },
+              {
+                "$ref": "#/$defs/FlowUIActionPreview"
+              },
+              {
+                "$ref": "#/$defs/FlowUIActionResult"
+              },
+              {
+                "$ref": "#/$defs/FlowUIReflection"
+              },
+              {
+                "$ref": "#/$defs/FlowUIActivity"
+              },
+              {
+                "$ref": "#/$defs/FlowUISuggestedPrompts"
+              },
+              {
+                "$ref": "#/$defs/FlowUIHtml"
+              }
+            ]
+          },
+          "title": "Blocks",
+          "type": "array"
+        },
+        "page_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Page Id",
+          "type": "string"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string",
+          "x-flow-ui": "template"
+        }
+      },
+      "required": [
+        "page_id"
+      ],
+      "title": "FlowUIPage",
+      "type": "object"
+    },
+    "FlowUIProgress": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "max": {
+          "default": 100,
+          "exclusiveMinimum": 0,
+          "title": "Max",
+          "type": "number"
+        },
+        "type": {
+          "const": "progress",
+          "default": "progress",
+          "title": "Type",
+          "type": "string"
+        },
+        "value": {
+          "description": "Шаблон, дающий число от 0 до max",
+          "title": "Value",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "value"
+      ],
+      "title": "FlowUIProgress",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "content",
+        "icon": "hourglass-top"
+      }
+    },
+    "FlowUIReflection": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "type": {
+          "const": "reflection",
+          "default": "reflection",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "text"
+      ],
+      "title": "FlowUIReflection",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "platform",
+        "icon": "quote"
+      }
+    },
+    "FlowUIRunTrace": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "run_trace",
+          "default": "run_trace",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id"
+      ],
+      "title": "FlowUIRunTrace",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "platform",
+        "icon": "trace-tree"
+      }
+    },
+    "FlowUISection": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "blocks": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "action_preview": "#/$defs/FlowUIActionPreview",
+                "action_result": "#/$defs/FlowUIActionResult",
+                "activity": "#/$defs/FlowUIActivity",
+                "agent_identity": "#/$defs/FlowUIAgentIdentity",
+                "alert": "#/$defs/FlowUIAlert",
+                "audio": "#/$defs/FlowUIAudio",
+                "avatar": "#/$defs/FlowUIAvatar",
+                "badge": "#/$defs/FlowUIBadge",
+                "browser_preview": "#/$defs/FlowUIBrowserPreview",
+                "button": "#/$defs/FlowUIButton",
+                "chart": "#/$defs/FlowUIChart",
+                "checkbox": "#/$defs/FlowUICheckbox",
+                "code": "#/$defs/FlowUICode",
+                "columns": "#/$defs/FlowUIColumns",
+                "conversation": "#/$defs/FlowUIConversation",
+                "data_table": "#/$defs/FlowUIDataTable",
+                "date_input": "#/$defs/FlowUIDateInput",
+                "datetime_input": "#/$defs/FlowUIDateTimeInput",
+                "divider": "#/$defs/FlowUIDivider",
+                "empty_state": "#/$defs/FlowUIEmptyState",
+                "file_card": "#/$defs/FlowUIFileCard",
+                "file_list": "#/$defs/FlowUIFileList",
+                "file_upload": "#/$defs/FlowUIFileUpload",
+                "heading": "#/$defs/FlowUIHeading",
+                "html": "#/$defs/FlowUIHtml",
+                "image": "#/$defs/FlowUIImage",
+                "json_view": "#/$defs/FlowUIJsonView",
+                "link": "#/$defs/FlowUILink",
+                "metric": "#/$defs/FlowUIMetric",
+                "number_input": "#/$defs/FlowUINumberInput",
+                "progress": "#/$defs/FlowUIProgress",
+                "reflection": "#/$defs/FlowUIReflection",
+                "run_trace": "#/$defs/FlowUIRunTrace",
+                "section": "#/$defs/FlowUISection",
+                "select": "#/$defs/FlowUISelect",
+                "skill_activity": "#/$defs/FlowUISkillActivity",
+                "slider": "#/$defs/FlowUISlider",
+                "slot": "#/$defs/FlowUISlot",
+                "status": "#/$defs/FlowUIStatus",
+                "suggested_prompts": "#/$defs/FlowUISuggestedPrompts",
+                "switch": "#/$defs/FlowUISwitch",
+                "tabs": "#/$defs/FlowUITabs",
+                "text": "#/$defs/FlowUIMarkdownText",
+                "text_input": "#/$defs/FlowUITextInput",
+                "tool_activity": "#/$defs/FlowUIToolActivity",
+                "video": "#/$defs/FlowUIVideo",
+                "voice_input": "#/$defs/FlowUIVoiceInput"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/FlowUISection"
+              },
+              {
+                "$ref": "#/$defs/FlowUIColumns"
+              },
+              {
+                "$ref": "#/$defs/FlowUITabs"
+              },
+              {
+                "$ref": "#/$defs/FlowUIHeading"
+              },
+              {
+                "$ref": "#/$defs/FlowUIMarkdownText"
+              },
+              {
+                "$ref": "#/$defs/FlowUIImage"
+              },
+              {
+                "$ref": "#/$defs/FlowUIVideo"
+              },
+              {
+                "$ref": "#/$defs/FlowUIAudio"
+              },
+              {
+                "$ref": "#/$defs/FlowUICode"
+              },
+              {
+                "$ref": "#/$defs/FlowUIBadge"
+              },
+              {
+                "$ref": "#/$defs/FlowUIAlert"
+              },
+              {
+                "$ref": "#/$defs/FlowUIMetric"
+              },
+              {
+                "$ref": "#/$defs/FlowUIProgress"
+              },
+              {
+                "$ref": "#/$defs/FlowUIStatus"
+              },
+              {
+                "$ref": "#/$defs/FlowUIEmptyState"
+              },
+              {
+                "$ref": "#/$defs/FlowUIDivider"
+              },
+              {
+                "$ref": "#/$defs/FlowUITextInput"
+              },
+              {
+                "$ref": "#/$defs/FlowUINumberInput"
+              },
+              {
+                "$ref": "#/$defs/FlowUISelect"
+              },
+              {
+                "$ref": "#/$defs/FlowUICheckbox"
+              },
+              {
+                "$ref": "#/$defs/FlowUISwitch"
+              },
+              {
+                "$ref": "#/$defs/FlowUISlider"
+              },
+              {
+                "$ref": "#/$defs/FlowUIDateInput"
+              },
+              {
+                "$ref": "#/$defs/FlowUIDateTimeInput"
+              },
+              {
+                "$ref": "#/$defs/FlowUIFileUpload"
+              },
+              {
+                "$ref": "#/$defs/FlowUIVoiceInput"
+              },
+              {
+                "$ref": "#/$defs/FlowUIButton"
+              },
+              {
+                "$ref": "#/$defs/FlowUILink"
+              },
+              {
+                "$ref": "#/$defs/FlowUIDataTable"
+              },
+              {
+                "$ref": "#/$defs/FlowUIChart"
+              },
+              {
+                "$ref": "#/$defs/FlowUIJsonView"
+              },
+              {
+                "$ref": "#/$defs/FlowUIFileCard"
+              },
+              {
+                "$ref": "#/$defs/FlowUIFileList"
+              },
+              {
+                "$ref": "#/$defs/FlowUIConversation"
+              },
+              {
+                "$ref": "#/$defs/FlowUISlot"
+              },
+              {
+                "$ref": "#/$defs/FlowUIAgentIdentity"
+              },
+              {
+                "$ref": "#/$defs/FlowUIAvatar"
+              },
+              {
+                "$ref": "#/$defs/FlowUIRunTrace"
+              },
+              {
+                "$ref": "#/$defs/FlowUIToolActivity"
+              },
+              {
+                "$ref": "#/$defs/FlowUIBrowserPreview"
+              },
+              {
+                "$ref": "#/$defs/FlowUISkillActivity"
+              },
+              {
+                "$ref": "#/$defs/FlowUIActionPreview"
+              },
+              {
+                "$ref": "#/$defs/FlowUIActionResult"
+              },
+              {
+                "$ref": "#/$defs/FlowUIReflection"
+              },
+              {
+                "$ref": "#/$defs/FlowUIActivity"
+              },
+              {
+                "$ref": "#/$defs/FlowUISuggestedPrompts"
+              },
+              {
+                "$ref": "#/$defs/FlowUIHtml"
+              }
+            ]
+          },
+          "title": "Blocks",
+          "type": "array"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "type": {
+          "const": "section",
+          "default": "section",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id"
+      ],
+      "title": "FlowUISection",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "layout",
+        "icon": "square"
+      }
+    },
+    "FlowUISelect": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUIActionSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "default": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default"
+        },
+        "error_message": {
+          "default": "",
+          "title": "Error Message",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "field": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)*$",
+          "title": "Field",
+          "type": "string",
+          "x-flow-ui": "state_path"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "multiple": {
+          "default": false,
+          "title": "Multiple",
+          "type": "boolean"
+        },
+        "options": {
+          "items": {
+            "$ref": "#/$defs/FlowUISelectOption"
+          },
+          "minItems": 1,
+          "title": "Options",
+          "type": "array"
+        },
+        "placeholder": {
+          "default": "",
+          "title": "Placeholder",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "select",
+          "default": "select",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "field",
+        "options"
+      ],
+      "title": "FlowUISelect",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "input",
+        "icon": "list"
+      }
+    },
+    "FlowUISelectOption": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "title": "Label",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "value": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "label"
+      ],
+      "title": "FlowUISelectOption",
+      "type": "object"
+    },
+    "FlowUISkillActivity": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_skill_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Agent Skill Id",
+          "type": "string"
+        },
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "status": {
+          "default": "loaded",
+          "enum": [
+            "loading",
+            "loaded",
+            "failed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "type": {
+          "const": "skill_activity",
+          "default": "skill_activity",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "agent_skill_id",
+        "title"
+      ],
+      "title": "FlowUISkillActivity",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "platform",
+        "icon": "sparkle"
+      }
+    },
+    "FlowUISlider": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUIActionSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "default": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default"
+        },
+        "error_message": {
+          "default": "",
+          "title": "Error Message",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "field": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)*$",
+          "title": "Field",
+          "type": "string",
+          "x-flow-ui": "state_path"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "max": {
+          "default": 100,
+          "title": "Max",
+          "type": "number"
+        },
+        "min": {
+          "default": 0,
+          "title": "Min",
+          "type": "number"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "step": {
+          "default": 1,
+          "exclusiveMinimum": 0,
+          "title": "Step",
+          "type": "number"
+        },
+        "type": {
+          "const": "slider",
+          "default": "slider",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "field"
+      ],
+      "title": "FlowUISlider",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "input",
+        "icon": "adjustment"
+      }
+    },
+    "FlowUISlot": {
+      "additionalProperties": false,
+      "description": "Цель ``ui_render``: сюда агент кладёт блоки во время выполнения.",
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "type": {
+          "const": "slot",
+          "default": "slot",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id"
+      ],
+      "title": "FlowUISlot",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "platform",
+        "icon": "box"
+      }
+    },
+    "FlowUIStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "tone": {
+          "default": "neutral",
+          "enum": [
+            "neutral",
+            "info",
+            "success",
+            "warning",
+            "danger"
+          ],
+          "title": "Tone",
+          "type": "string"
+        },
+        "type": {
+          "const": "status",
+          "default": "status",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "label"
+      ],
+      "title": "FlowUIStatus",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "content",
+        "icon": "fiber-manual-record"
+      }
+    },
+    "FlowUISuggestedPrompts": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "items": {
+          "items": {
+            "type": "string",
+            "x-flow-ui": "template"
+          },
+          "maxItems": 12,
+          "minItems": 1,
+          "title": "Items",
+          "type": "array"
+        },
+        "type": {
+          "const": "suggested_prompts",
+          "default": "suggested_prompts",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "items"
+      ],
+      "title": "FlowUISuggestedPrompts",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "platform",
+        "icon": "list-check"
+      }
+    },
+    "FlowUISwitch": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUIActionSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "default": {
+          "default": false,
+          "title": "Default",
+          "type": "boolean"
+        },
+        "error_message": {
+          "default": "",
+          "title": "Error Message",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "field": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)*$",
+          "title": "Field",
+          "type": "string",
+          "x-flow-ui": "state_path"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "switch",
+          "default": "switch",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "field"
+      ],
+      "title": "FlowUISwitch",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "input",
+        "icon": "swap-horiz"
+      }
+    },
+    "FlowUITab": {
+      "additionalProperties": false,
+      "properties": {
+        "blocks": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "action_preview": "#/$defs/FlowUIActionPreview",
+                "action_result": "#/$defs/FlowUIActionResult",
+                "activity": "#/$defs/FlowUIActivity",
+                "agent_identity": "#/$defs/FlowUIAgentIdentity",
+                "alert": "#/$defs/FlowUIAlert",
+                "audio": "#/$defs/FlowUIAudio",
+                "avatar": "#/$defs/FlowUIAvatar",
+                "badge": "#/$defs/FlowUIBadge",
+                "browser_preview": "#/$defs/FlowUIBrowserPreview",
+                "button": "#/$defs/FlowUIButton",
+                "chart": "#/$defs/FlowUIChart",
+                "checkbox": "#/$defs/FlowUICheckbox",
+                "code": "#/$defs/FlowUICode",
+                "columns": "#/$defs/FlowUIColumns",
+                "conversation": "#/$defs/FlowUIConversation",
+                "data_table": "#/$defs/FlowUIDataTable",
+                "date_input": "#/$defs/FlowUIDateInput",
+                "datetime_input": "#/$defs/FlowUIDateTimeInput",
+                "divider": "#/$defs/FlowUIDivider",
+                "empty_state": "#/$defs/FlowUIEmptyState",
+                "file_card": "#/$defs/FlowUIFileCard",
+                "file_list": "#/$defs/FlowUIFileList",
+                "file_upload": "#/$defs/FlowUIFileUpload",
+                "heading": "#/$defs/FlowUIHeading",
+                "html": "#/$defs/FlowUIHtml",
+                "image": "#/$defs/FlowUIImage",
+                "json_view": "#/$defs/FlowUIJsonView",
+                "link": "#/$defs/FlowUILink",
+                "metric": "#/$defs/FlowUIMetric",
+                "number_input": "#/$defs/FlowUINumberInput",
+                "progress": "#/$defs/FlowUIProgress",
+                "reflection": "#/$defs/FlowUIReflection",
+                "run_trace": "#/$defs/FlowUIRunTrace",
+                "section": "#/$defs/FlowUISection",
+                "select": "#/$defs/FlowUISelect",
+                "skill_activity": "#/$defs/FlowUISkillActivity",
+                "slider": "#/$defs/FlowUISlider",
+                "slot": "#/$defs/FlowUISlot",
+                "status": "#/$defs/FlowUIStatus",
+                "suggested_prompts": "#/$defs/FlowUISuggestedPrompts",
+                "switch": "#/$defs/FlowUISwitch",
+                "tabs": "#/$defs/FlowUITabs",
+                "text": "#/$defs/FlowUIMarkdownText",
+                "text_input": "#/$defs/FlowUITextInput",
+                "tool_activity": "#/$defs/FlowUIToolActivity",
+                "video": "#/$defs/FlowUIVideo",
+                "voice_input": "#/$defs/FlowUIVoiceInput"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/FlowUISection"
+              },
+              {
+                "$ref": "#/$defs/FlowUIColumns"
+              },
+              {
+                "$ref": "#/$defs/FlowUITabs"
+              },
+              {
+                "$ref": "#/$defs/FlowUIHeading"
+              },
+              {
+                "$ref": "#/$defs/FlowUIMarkdownText"
+              },
+              {
+                "$ref": "#/$defs/FlowUIImage"
+              },
+              {
+                "$ref": "#/$defs/FlowUIVideo"
+              },
+              {
+                "$ref": "#/$defs/FlowUIAudio"
+              },
+              {
+                "$ref": "#/$defs/FlowUICode"
+              },
+              {
+                "$ref": "#/$defs/FlowUIBadge"
+              },
+              {
+                "$ref": "#/$defs/FlowUIAlert"
+              },
+              {
+                "$ref": "#/$defs/FlowUIMetric"
+              },
+              {
+                "$ref": "#/$defs/FlowUIProgress"
+              },
+              {
+                "$ref": "#/$defs/FlowUIStatus"
+              },
+              {
+                "$ref": "#/$defs/FlowUIEmptyState"
+              },
+              {
+                "$ref": "#/$defs/FlowUIDivider"
+              },
+              {
+                "$ref": "#/$defs/FlowUITextInput"
+              },
+              {
+                "$ref": "#/$defs/FlowUINumberInput"
+              },
+              {
+                "$ref": "#/$defs/FlowUISelect"
+              },
+              {
+                "$ref": "#/$defs/FlowUICheckbox"
+              },
+              {
+                "$ref": "#/$defs/FlowUISwitch"
+              },
+              {
+                "$ref": "#/$defs/FlowUISlider"
+              },
+              {
+                "$ref": "#/$defs/FlowUIDateInput"
+              },
+              {
+                "$ref": "#/$defs/FlowUIDateTimeInput"
+              },
+              {
+                "$ref": "#/$defs/FlowUIFileUpload"
+              },
+              {
+                "$ref": "#/$defs/FlowUIVoiceInput"
+              },
+              {
+                "$ref": "#/$defs/FlowUIButton"
+              },
+              {
+                "$ref": "#/$defs/FlowUILink"
+              },
+              {
+                "$ref": "#/$defs/FlowUIDataTable"
+              },
+              {
+                "$ref": "#/$defs/FlowUIChart"
+              },
+              {
+                "$ref": "#/$defs/FlowUIJsonView"
+              },
+              {
+                "$ref": "#/$defs/FlowUIFileCard"
+              },
+              {
+                "$ref": "#/$defs/FlowUIFileList"
+              },
+              {
+                "$ref": "#/$defs/FlowUIConversation"
+              },
+              {
+                "$ref": "#/$defs/FlowUISlot"
+              },
+              {
+                "$ref": "#/$defs/FlowUIAgentIdentity"
+              },
+              {
+                "$ref": "#/$defs/FlowUIAvatar"
+              },
+              {
+                "$ref": "#/$defs/FlowUIRunTrace"
+              },
+              {
+                "$ref": "#/$defs/FlowUIToolActivity"
+              },
+              {
+                "$ref": "#/$defs/FlowUIBrowserPreview"
+              },
+              {
+                "$ref": "#/$defs/FlowUISkillActivity"
+              },
+              {
+                "$ref": "#/$defs/FlowUIActionPreview"
+              },
+              {
+                "$ref": "#/$defs/FlowUIActionResult"
+              },
+              {
+                "$ref": "#/$defs/FlowUIReflection"
+              },
+              {
+                "$ref": "#/$defs/FlowUIActivity"
+              },
+              {
+                "$ref": "#/$defs/FlowUISuggestedPrompts"
+              },
+              {
+                "$ref": "#/$defs/FlowUIHtml"
+              }
+            ]
+          },
+          "title": "Blocks",
+          "type": "array"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string",
+          "x-flow-ui": "template"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "title": "FlowUITab",
+      "type": "object"
+    },
+    "FlowUITableColumn": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Key",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string",
+          "x-flow-ui": "template"
+        }
+      },
+      "required": [
+        "key",
+        "label"
+      ],
+      "title": "FlowUITableColumn",
+      "type": "object"
+    },
+    "FlowUITabs": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "tabs": {
+          "items": {
+            "$ref": "#/$defs/FlowUITab"
+          },
+          "maxItems": 12,
+          "minItems": 1,
+          "title": "Tabs",
+          "type": "array"
+        },
+        "type": {
+          "const": "tabs",
+          "default": "tabs",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "tabs"
+      ],
+      "title": "FlowUITabs",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "layout",
+        "icon": "tabs"
+      }
+    },
+    "FlowUITextInput": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUIActionSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "default": {
+          "default": "",
+          "title": "Default",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "error_message": {
+          "default": "",
+          "title": "Error Message",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "field": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)*$",
+          "title": "Field",
+          "type": "string",
+          "x-flow-ui": "state_path"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "multiline": {
+          "default": false,
+          "title": "Multiline",
+          "type": "boolean"
+        },
+        "pattern": {
+          "default": "",
+          "maxLength": 500,
+          "title": "Pattern",
+          "type": "string"
+        },
+        "placeholder": {
+          "default": "",
+          "title": "Placeholder",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "secret": {
+          "default": false,
+          "description": "Скрывать вводимые символы (пароль)",
+          "title": "Secret",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "text_input",
+          "default": "text_input",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "field"
+      ],
+      "title": "FlowUITextInput",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "input",
+        "icon": "text-fields"
+      }
+    },
+    "FlowUIToolActivity": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "display": {
+          "default": "compact",
+          "enum": [
+            "compact",
+            "detailed"
+          ],
+          "title": "Display",
+          "type": "string"
+        },
+        "type": {
+          "const": "tool_activity",
+          "default": "tool_activity",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id"
+      ],
+      "title": "FlowUIToolActivity",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "platform",
+        "icon": "tool"
+      }
+    },
+    "FlowUIVideo": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "video",
+          "default": "video",
+          "title": "Type",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "url"
+      ],
+      "title": "FlowUIVideo",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "content",
+        "icon": "play"
+      }
+    },
+    "FlowUIVoiceInput": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUIActionSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "block_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "error_message": {
+          "default": "",
+          "title": "Error Message",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "field": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)*$",
+          "title": "Field",
+          "type": "string",
+          "x-flow-ui": "state_path"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "placeholder": {
+          "default": "",
+          "title": "Placeholder",
+          "type": "string",
+          "x-flow-ui": "template"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "voice_input",
+          "default": "voice_input",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUICondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "block_id",
+        "field"
+      ],
+      "title": "FlowUIVoiceInput",
+      "type": "object",
+      "x-flow-ui-block": {
+        "group": "input",
+        "icon": "mic"
+      }
+    },
+    "JsonValue": {}
+  },
+  "additionalProperties": false,
+  "description": "Design-time интерфейс flow: страницы с блоками и стартовая страница.",
+  "properties": {
+    "pages": {
+      "items": {
+        "$ref": "#/$defs/FlowUIPage"
+      },
+      "maxItems": 100,
+      "minItems": 1,
+      "title": "Pages",
+      "type": "array"
+    },
+    "start_page_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_-]*$",
+      "title": "Start Page Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "pages",
+    "start_page_id"
+  ],
+  "title": "FlowUIDocument",
+  "type": "object",
+  "x-flow-ui-frozen-state-fields": [
+    "agent_plan",
+    "branch_id",
+    "breakpoint_hit",
+    "breakpoint_state",
+    "breakpoints",
+    "context_id",
+    "current_nodes",
+    "execution_exceptions",
+    "flow_config_version",
+    "flow_deadline_monotonic",
+    "flow_timeout_effective_seconds",
+    "hitl_handoff_correlation_id",
+    "hitl_streamed_closing_text",
+    "interrupt",
+    "interrupt_path",
+    "join_arrived_preds",
+    "llm_context_memory_cursor",
+    "nested_states",
+    "node_history",
+    "pending_reasoning",
+    "prompt_history",
+    "reasoning_history",
+    "scheduled_tasks",
+    "session_id",
+    "task_id",
+    "terminal_task_error",
+    "terminal_task_state",
+    "triggers",
+    "ui_action",
+    "ui_slots",
+    "user_groups",
+    "user_id"
+  ]
+}

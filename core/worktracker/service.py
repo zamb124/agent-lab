@@ -13,6 +13,7 @@ import uuid
 from datetime import datetime, timezone
 
 from pydantic import Field
+from sqlalchemy.exc import IntegrityError
 
 from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
@@ -580,7 +581,13 @@ class WorkItemService:
             created_at=now,
             updated_at=now,
         )
-        saved = await self._repo.insert_queue(queue)
+        try:
+            saved = await self._repo.insert_queue(queue)
+        except IntegrityError as exc:
+            raced = await self._repo.get_queue_by_slug(company_id, slug)
+            if raced is not None:
+                raise ValueError(f"Очередь со slug {slug!r} уже существует") from exc
+            raise
         try:
             await self._queue_access.sync_queue_created(
                 saved.work_queue_id,

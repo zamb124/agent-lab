@@ -808,8 +808,7 @@ export class FlowsExecutionPanel extends PlatformElement {
      */
     async _onResetChat() {
         const host = this._platformChat();
-        const editorState = asObject(this._editor.state);
-        if (Boolean(editorState.agentExecutionRunning)) {
+        if (host.store.taskRunning) {
             await host.cancelActiveTask();
         }
         this.dispatch('flows/run/session_cleared', {}, { source: 'http' });

@@ -2,7 +2,7 @@ import { html, css, nothing } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
-import { flowsChatMarkdownToHtml } from '@platform/lib/flow-ui/utils/markdown.js';
+import { markdownToHtml } from '@platform/lib/utils/markdown.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 import '@platform/lib/components/glass-spinner.js';
 import '../components/crawl-report/crawl-report-metadata-panels.js';
@@ -182,7 +182,7 @@ export class FrontendCrawlUrlDetailModal extends PlatformModal {
         if (!markdown || !markdown.trim()) {
             return html`<div class="state">${this.t(emptyKey)}</div>`;
         }
-        const htmlContent = flowsChatMarkdownToHtml(markdown);
+        const htmlContent = markdownToHtml(markdown);
         return html`<div class="markdown-preview">${unsafeHTML(htmlContent)}</div>`;
     }
 

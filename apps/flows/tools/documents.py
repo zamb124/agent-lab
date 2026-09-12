@@ -11,7 +11,7 @@ from typing import Literal
 
 from apps.flows.src.files.state_file_refs import upsert_state_file, with_document_capability
 from apps.flows.src.runtime.tool_call_context import get_active_tool_call_context
-from apps.flows.src.runtime_helpers.flow_ui_presenter import present_flow_ui_artifact
+from apps.flows.src.runtime_helpers.flow_ui_cards import show_files
 from apps.flows.src.runtime_helpers.state_utils import find_file
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
@@ -128,13 +128,7 @@ async def _apply_document_mutation(
         update={"file_size": mutation_file_size, "checksum": mutation_checksum}
     )
     upsert_state_file(state, enriched)
-    _ = present_flow_ui_artifact(
-        state,
-        kind="file_collection",
-        data={"operation": "updated", "files": [enriched.to_json_object()]},
-        source="documents",
-        artifact_id=document_file_id,
-    )
+    _ = show_files(state, [enriched])
     document = enriched.capabilities.document
     if document is None:
         raise ValueError("FileRef.capabilities.document is required after documents mutation")
@@ -177,14 +171,7 @@ async def documents_open_file(
     )
     enriched = with_document_capability(item, office_document, namespace)
     upsert_state_file(state, enriched)
-    document_file_id = _require_document_file_id(office_document, "documents.open_file")
-    _ = present_flow_ui_artifact(
-        state,
-        kind="file_collection",
-        data={"operation": "updated", "files": [enriched.to_json_object()]},
-        source="documents",
-        artifact_id=document_file_id,
-    )
+    _ = show_files(state, [enriched])
     document = enriched.capabilities.document
     if document is None:
         raise ValueError("FileRef.capabilities.document is required after documents_open_file")

@@ -38,6 +38,12 @@ class AppUI:
     def origin(self) -> str:
         return f"http://{self._host()}:{self._spec.port}"
 
+    @property
+    def apex_origin(self) -> str:
+        """Origin платформы без company subdomain: публичный landing и system-виджеты."""
+        host = "lvh.me" if ui_e2e_use_lvh_me() else "localhost"
+        return f"http://{host}:{self._spec.port}"
+
     def spa_url(self) -> str:
         path = self._spec.spa_path
         if not path.startswith("/"):

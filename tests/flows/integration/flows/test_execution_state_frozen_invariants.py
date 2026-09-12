@@ -24,6 +24,7 @@ from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from apps.flows.src.streaming import InMemoryEmitter
 from apps.flows.src.tools.code_tool import CodeTool
 from core.errors import FrozenStateFieldError, ToolExecutionError
+from core.flow_ui.templates import default_chat_document
 from core.state import ExecutionState
 from core.state.mutation_policy import FROZEN_STATE_FIELDS
 from core.types import JsonObject
@@ -99,6 +100,7 @@ async def _run_single_node_flow(
         entry=node.node_id,
         nodes={node.node_id: node},
         edges=[],
+        interface=default_chat_document(),
         container=container,
     )
     _ = await run_flow(container=container, flow=flow, state=state)

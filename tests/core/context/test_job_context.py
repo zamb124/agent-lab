@@ -3,12 +3,12 @@
 
 from __future__ import annotations
 
-from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import pytest
 
 from core.context.job_context import build_job_context, pick_company_billing_user
 from core.models.identity_models import Company, User
 from core.utils.tokens import get_token_service
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
 @pytest.mark.asyncio

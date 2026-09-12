@@ -263,6 +263,7 @@ class FlowFactory:
         config_dict["entry"] = entry
         config_dict["nodes"] = effective["nodes"]
         config_dict["edges"] = edges
+        config_dict["interface"] = config.interface_for_branch(branch_id).model_dump(mode="json")
 
         return await Flow.from_config(config_dict, container=self.container)
 

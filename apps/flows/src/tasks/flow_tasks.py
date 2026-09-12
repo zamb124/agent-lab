@@ -2,14 +2,13 @@
 
 from a2a.types import Message
 
-from apps.flows.src.a2a.interaction_parser import parse_flow_ui_command
 from apps.flows.src.channels.types import PreparedTaskParams
 from apps.flows.src.container import get_container
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from core.a2a import message_from_json_dict
-from core.a2a.representation import A2ARepresentationSnapshot
 from core.context import Context, set_context
 from core.files.file_ref import FileRef
+from core.flow_ui.action import ui_action_from_message
 from core.logging import get_logger
 from core.tasks import platform_task
 from core.tracing.context import set_current_trace_context
@@ -35,7 +34,6 @@ async def process_flow_task(
     context_data: JsonObject | None = None,
     trace_context: JsonObject | None = None,
     initiator_user_id: str | None = None,
-    a2a_representation: JsonObject | None = None,
 ) -> JsonObject:
     """
     Обрабатывает запрос через агента.
@@ -75,11 +73,8 @@ async def process_flow_task(
     parsed_message: Message | None = (
         message_from_json_dict(message) if message is not None else None
     )
-    # Channel prepare already parsed this; TaskIQ only ships the Message JSON, so
-    # the worker must re-parse for Flow UI turn identity + user_message emit.
-    flow_ui_command = (
-        parse_flow_ui_command(parsed_message) if parsed_message is not None else None
-    )
+    # TaskIQ везёт только JSON сообщения, поэтому ui-action Part разбирается заново в worker.
+    ui_action = ui_action_from_message(parsed_message) if parsed_message is not None else None
 
     params = PreparedTaskParams(
         task_id=task_id or "",
@@ -93,12 +88,7 @@ async def process_flow_task(
         metadata=metadata,
         user_id=user_id,
         initiator_user_id=initiator_user_id,
-        a2a_representation=(
-            A2ARepresentationSnapshot.model_validate(a2a_representation)
-            if a2a_representation is not None
-            else None
-        ),
-        flow_ui_command=flow_ui_command,
+        ui_action=ui_action,
     )
 
     result = await channel_instance.process_task(params)

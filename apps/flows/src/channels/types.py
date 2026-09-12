@@ -8,11 +8,11 @@ from typing import TypeAlias
 from a2a.types import Message
 from pydantic import Field
 
-from apps.flows.src.a2a.interaction_parser import FlowUIInboundCommand
-from core.a2a.representation import A2ARepresentationSnapshot
 from core.files.file_ref import FileRef
+from core.flow_ui.protocol import FlowUIActionMessage
 from core.models import StrictBaseModel
 from core.models.context_models import Context
+from core.models.flow_ui_share import FlowUIShareGrant
 from core.state import ExecutionTaskState, InterruptData
 from core.types import JsonObject
 
@@ -52,8 +52,8 @@ class PreparedTaskParams:
     files_data: list[FileRef]
     message: Message | None
     metadata: JsonObject | None
-    a2a_representation: A2ARepresentationSnapshot
-    flow_ui_command: FlowUIInboundCommand | None
+    ui_action: FlowUIActionMessage | None
+    share_grant: FlowUIShareGrant | None
     user_id: str
     initiator_user_id: str | None
     is_takeover_user_reply: bool
@@ -74,8 +74,8 @@ class PreparedTaskParams:
         files_data: list[FileRef],
         message: Message | None,
         metadata: JsonObject | None,
-        a2a_representation: A2ARepresentationSnapshot | None = None,
-        flow_ui_command: FlowUIInboundCommand | None = None,
+        ui_action: FlowUIActionMessage | None = None,
+        share_grant: FlowUIShareGrant | None = None,
         user_id: str | None = None,
         initiator_user_id: str | None = None,
         is_takeover_user_reply: bool = False,
@@ -94,8 +94,8 @@ class PreparedTaskParams:
         self.files_data = files_data
         self.message = message
         self.metadata = metadata
-        self.a2a_representation = a2a_representation or A2ARepresentationSnapshot()
-        self.flow_ui_command = flow_ui_command
+        self.ui_action = ui_action
+        self.share_grant = share_grant
         self.user_id = user_id or context_id
         self.initiator_user_id = initiator_user_id
         self.is_takeover_user_reply = is_takeover_user_reply

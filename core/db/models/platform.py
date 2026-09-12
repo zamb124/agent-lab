@@ -520,11 +520,10 @@ class PlatformPronunciationRule(Base):
 
 
 class LLMModelScore(Base):
-    """Платформенный скоринг LLM-модели для provider-neutral routing.
+    """Manual overlay поверх computed score platform free pool.
 
-    Таблица живёт в shared БД и задаёт глобальный порядок выбора моделей.
-    Конфиг используется только как initial seed; source of truth после старта
-    сервиса — эта таблица.
+    Таблица живёт в shared БД. Computed score и AA живут в каталоге и Redis,
+    здесь только enabled / editorial_prior / note.
     """
 
     __tablename__: str = "llm_model_scores"
@@ -532,14 +531,8 @@ class LLMModelScore(Base):
     provider: Mapped[str] = mapped_column(String(64), primary_key=True)
     model_id: Mapped[str] = mapped_column(String(512), primary_key=True)
     capability: Mapped[str] = mapped_column(String(64), primary_key=True)
-    score: Mapped[float] = mapped_column(Float, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    source: Mapped[str] = mapped_column(String(32), nullable=False, default="manual")
-    score_dimensions: Mapped[JsonObject] = mapped_column(
-        JSONB,
-        nullable=False,
-        server_default=text("'{}'::jsonb"),
-    )
+    editorial_prior: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_by_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -553,14 +546,13 @@ class LLMModelScore(Base):
     )
 
     __table_args__: _TableArgs = (
-        CheckConstraint("score >= 0 AND score <= 1000", name="llm_model_scores_score_range_check"),
         CheckConstraint(
-            "source IN ('config_seed','manual','benchmark_import','computed')",
-            name="llm_model_scores_source_check",
+            "editorial_prior >= -5 AND editorial_prior <= 5",
+            name="llm_model_scores_editorial_prior_range_check",
         ),
         Index("ix_llm_model_scores_provider", "provider"),
         Index("ix_llm_model_scores_capability", "capability"),
-        Index("ix_llm_model_scores_enabled_score", "enabled", "score"),
+        Index("ix_llm_model_scores_enabled", "enabled"),
         Index("ix_llm_model_scores_updated_at", "updated_at"),
     )
 

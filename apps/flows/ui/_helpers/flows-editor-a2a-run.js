@@ -5,7 +5,7 @@
  * на каждом `flow-ui-a2a-frame`.
  */
 
-import { mapA2aResultToChatRuntimeEvents } from '@platform/lib/flow-ui/protocol/a2a-result-helpers.js';
+import { mapA2aResultToRunEvents } from './a2a-run-events.js';
 
 function _isPlainObject(value) {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -84,7 +84,7 @@ export function mapEditorA2aFrame(frame, session) {
     }
     const contextId = _optionalId(session.contextId, 'contextId');
     const currentTaskId = _optionalId(session.currentTaskId, 'currentTaskId');
-    const mapped = mapA2aResultToChatRuntimeEvents(frame.result, {
+    const mapped = mapA2aResultToRunEvents(frame.result, {
         contextId,
         currentTaskId,
         taskPrimed: session.taskPrimed,

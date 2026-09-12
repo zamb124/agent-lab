@@ -67,6 +67,7 @@ describe('flows-dataflow-canvas helpers', () => {
             label: 'topic',
             sourceLabel: 'topic',
             targetParam: 'topic',
+            sourceKind: 'state',
         }]);
     });
 
@@ -101,6 +102,7 @@ describe('flows-dataflow-canvas helpers', () => {
             label: 'search_effective_query',
             sourceLabel: 'search_effective_query',
             targetParam: 'arguments.search_effective_query',
+            sourceKind: 'state',
         }]);
     });
 
@@ -415,12 +417,13 @@ describe('flows-dataflow-canvas helpers', () => {
     });
 
     it('dataflowChipKind prefers explicit kind and falls back to path prefix', () => {
-        expect(dataflowChipKind({ label: 'ui_values.email', kind: 'ui_value' })).toBe('ui_value');
-        expect(dataflowChipKind({ label: 'ui_values.email' })).toBe('ui_value');
+        expect(dataflowChipKind({ label: 'email', kind: 'interface' })).toBe('interface');
+        expect(dataflowChipKind({ label: 'email' })).toBe('content');
         expect(dataflowChipKind({ label: 'variables.x' })).toBe('variable');
         expect(dataflowChipKind({ label: 'triggers.tg.payload' })).toBe('trigger');
         expect(dataflowChipKind({ label: 'content' })).toBe('content');
-        expect(dataWireChipKind({ sourceLabel: 'ui_values.email', label: 'email' })).toBe('ui_value');
+        expect(dataWireChipKind({ sourceLabel: 'email', label: 'email', sourceKind: 'interface' })).toBe('interface');
+        expect(dataWireChipKind({ sourceLabel: 'variables.x', label: 'x', sourceKind: 'state' })).toBe('variable');
         expect(dataflowPathChipKind('files')).toBe('files');
     });
 });

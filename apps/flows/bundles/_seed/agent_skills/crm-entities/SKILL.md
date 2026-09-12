@@ -1,7 +1,7 @@
 ---
 name: crm-entities
 description: Search, create, update, delete, merge CRM NetWorkle entities; types; daily/period summaries; activity-task bridge; embed blocks.
-allowed-tools: crm_search_entities crm_create_entity crm_get_entity crm_update_entity crm_delete_entity crm_merge_entities crm_create_relationship crm_list_entity_types crm_daily_summary crm_period_summary crm_create_activity_task crm_list_activity_tasks push_embed_blocks
+allowed-tools: crm_search_entities crm_create_entity crm_get_entity crm_update_entity crm_delete_entity crm_merge_entities crm_create_relationship crm_list_entity_types crm_daily_summary crm_period_summary crm_create_activity_task crm_list_activity_tasks ui_render
 ---
 
 # CRM entities
@@ -22,7 +22,7 @@ Work with NetWorkle CRM graph entities (CRUD, merge, relationships create, types
 8. Relationships create — `crm_create_relationship`; list/delete/neighborhood — load parent `crm-graph`.
 9. Digests — `crm_daily_summary` / `crm_period_summary`.
 10. Activity task — `crm_create_activity_task` / `crm_list_activity_tasks`; then load `work-items` for state/board/assignee.
-11. Structured UI — `push_embed_blocks` when a visual summary helps.
+11. Structured UI — `ui_render` (slot_id `conversation`) when a visual summary helps.
 
 ## Rules
 

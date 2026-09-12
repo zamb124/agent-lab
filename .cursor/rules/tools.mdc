@@ -95,8 +95,9 @@ Builtin specs — `apps/flows/tools/builtin_specs.py`. Runtime gate — `ToolAut
 - Team: `team_list_members`, `team_resolve_user` — tag `misc`; через `TeamClient`.
 - Device: `device_tools_list`, `device_tools_call` — tag `device`; через `DeviceClient`.
 - Sync: `sync_*` — tag `sync`; тонкие обёртки над `SyncClient`. Eval SDK: `await sync.*` (полный `SyncClient`).
-- Flows editor: `flows_get_node` / `flows_list_nodes` / `flows_read_context` / `flows_patch_*` / `push_embed_blocks` — tag `flows`; тонкие обёртки над `FlowsClient`. Patch: LLM `mode=propose|apply` — workflow switch, **не** authorization; apply требует prior propose и server-validated `pending_action_id` (LaraActionEngine). Phase 3: `ToolApprovalStore` пишется alongside (`approval_id`); полная миграция apply — Phase 4.
+- Flows editor: `flows_get_node` / `flows_list_nodes` / `flows_read_context` / `flows_patch_*` — tag `flows`; тонкие обёртки над `FlowsClient`. Patch: LLM `mode=propose|apply` — workflow switch, **не** authorization; apply требует prior propose и server-validated `pending_action_id` (LaraActionEngine). Phase 3: `ToolApprovalStore` пишется alongside (`approval_id`); полная миграция apply — Phase 4.
 - Agent handoff: `handoff_to_flow`, `handback_to_parent` (`apps/flows/src/tools/handoff_tools.py` → **`handoff.mdc`**) — tag `flows`.
+- Flow UI: `ui_render(slot_id, blocks)` (блоки грамматики в `slot` страницы или карточкой в `conversation`; `assert_known_slot` по текущему интерфейсу), `ui_navigate(page_id)` (`assert_known_page`), `state_set(path, value)` (`assign_state_path`; экран меняется через `{path}`) — `apps/flows/tools/flow_ui_tools.py`, tag `flows`. Тулы только ставят события в очередь state / пишут state; артефакты `ui`/`state` публикует runtime на `flush_ui` → **`flow_ui.mdc`**.
 
 ## Tag groups (tool picker)
 

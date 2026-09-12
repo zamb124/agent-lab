@@ -58,6 +58,9 @@ import {
 } from '../_helpers/flow-editor-layout.js';
 import '../components/editor/flows-agent-focus-studio.js';
 import '../components/interface-editor/flows-interface-editor.js';
+import '../modals/flows-interface-template-modal.js';
+import '../modals/flows-interface-html-editor-modal.js';
+import { saveEditorFlow } from '../_helpers/flow-editor-save.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 
@@ -171,6 +174,7 @@ export class FlowEditorPage extends PlatformPage {
         this._flowSettingsOpen = false;
         this._nodeAiHelperOpen = false;
         this._editor = this.useOp('flows/editor');
+        this._flowUpdate = this.useOp('flows/flow_update');
         this._flows = this.useResource('flows/flows');
         this._editorStateOp = this.useOp('flows/code_editor_state');
         this._dataflowInspectOp = this.useOp('flows/dataflow_inspect');
@@ -525,13 +529,11 @@ export class FlowEditorPage extends PlatformPage {
         if (!flow || !isPlainObject(flow.interface)) return null;
         if (!this.branchId || this.branchId === 'base') return flow.interface;
         const branch = isPlainObject(flow.branches?.[this.branchId]) ? flow.branches[this.branchId] : null;
-        const override = branch?.interface_override;
-        return override?.mode === 'replace' && isPlainObject(override.replacement)
-            ? override.replacement
-            : flow.interface;
+        return branch !== null && isPlainObject(branch.interface) ? branch.interface : flow.interface;
     }
 
-    _onInterfaceChange(event) {
+    /** «Опубликовать» в редакторе интерфейса: документ ветки в flowConfig и сразу сохранение flow. */
+    async _onInterfaceChange(event) {
         const config = event.detail?.config;
         const state = asObject(this._editor.state);
         if (!isPlainObject(config)) {
@@ -542,23 +544,14 @@ export class FlowEditorPage extends PlatformPage {
         }
         if (!this.branchId || this.branchId === 'base') {
             this._editor.patchFlowConfig({ patch: { interface: config } });
-            this._scheduleDataflowRefresh(asObject(this._editor.state));
-            return;
+        } else {
+            const branches = isPlainObject(state.flowConfig.branches) ? state.flowConfig.branches : {};
+            const branch = isPlainObject(branches[this.branchId]) ? branches[this.branchId] : { name: this.branchId };
+            this._editor.patchFlowConfig({ patch: { branches: { ...branches, [this.branchId]: { ...branch, interface: config } } } });
         }
-        const branches = isPlainObject(state.flowConfig.branches) ? state.flowConfig.branches : {};
-        const branch = isPlainObject(branches[this.branchId]) ? branches[this.branchId] : { name: this.branchId };
-        this._editor.patchFlowConfig({
-            patch: {
-                branches: {
-                    ...branches,
-                    [this.branchId]: {
-                        ...branch,
-                        interface_override: { mode: 'replace', replacement: config },
-                    },
-                },
-            },
-        });
         this._scheduleDataflowRefresh(asObject(this._editor.state));
+        const saved = await saveEditorFlow(this._editor, this._flowUpdate, this.flowId);
+        if (saved) this.toast('interface_editor.published');
     }
 
     _renderWorkspaceShell(state) {

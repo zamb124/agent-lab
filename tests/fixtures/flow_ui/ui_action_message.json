@@ -1,0 +1,37 @@
+{
+    "description": "Ход интерактивного блока: ровно один data Part application/vnd.platform.ui-action+json в Message пользователя. JS buildUserMessage({action}) собирает part; Python ui_action_from_message читает его в FlowUIActionMessage.",
+    "action": {
+        "action": "submit",
+        "source": "send_button",
+        "fields": { "email": "a@b.c", "agree": true },
+        "payload": { "plan": "pro" }
+    },
+    "part": {
+        "data": {
+            "action": "submit",
+            "source": "send_button",
+            "fields": { "email": "a@b.c", "agree": true },
+            "payload": { "plan": "pro" }
+        },
+        "mediaType": "application/vnd.platform.ui-action+json"
+    },
+    "state_action": { "name": "submit", "source": "send_button", "payload": { "plan": "pro" } },
+    "rejected_messages": {
+        "two_actions": {
+            "role": "ROLE_USER",
+            "messageId": "m-2",
+            "parts": [
+                { "data": { "action": "a", "source": "b", "fields": {}, "payload": {} }, "mediaType": "application/vnd.platform.ui-action+json" },
+                { "data": { "action": "c", "source": "d", "fields": {}, "payload": {} }, "mediaType": "application/vnd.platform.ui-action+json" }
+            ]
+        },
+        "action_with_text": {
+            "role": "ROLE_USER",
+            "messageId": "m-3",
+            "parts": [
+                { "text": "и текст" },
+                { "data": { "action": "a", "source": "b", "fields": {}, "payload": {} }, "mediaType": "application/vnd.platform.ui-action+json" }
+            ]
+        }
+    }
+}

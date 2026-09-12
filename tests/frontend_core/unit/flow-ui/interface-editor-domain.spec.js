@@ -1,314 +1,244 @@
+/**
+ * Домен редактора интерфейса: каталог из JSON Schema грамматики (фикстура ``schema.json``),
+ * команды над документом, история, publish gate и каталог путей state.
+ */
+
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
+
+import { INPUT_BLOCK_TYPES } from '../../../../core/frontend/static/lib/flow-ui/protocol/constants.js';
 import {
-    cloneSubtree,
-    collectSubtreeIds,
-    defaultComponent,
-    findParentId,
-    materializeClipboard,
-    removeSubtree,
-    renameComponent,
-    sanitizeClipboard,
-    serializeClipboard,
-    validateInterfaceDocument,
+    CONTAINER_TYPES,
+    EMPTY_DOCUMENT,
+    blockCatalog,
+    catalogEntry,
+    commitHistory,
+    createHistory,
+    defaultBlock,
+    documentProblems,
+    duplicateBlock,
+    frozenStateFields,
+    hasBlockingProblems,
+    insertBlock,
+    insertPage,
+    moveBlock,
+    redoHistory,
+    removeBlock,
+    removePage,
+    setBlockProperty,
+    setPageProperty,
+    statePathCatalog,
+    undoHistory,
+    uniqueBlockId,
+    uniquePageId,
+    walkPage,
+    withColumns,
+    wrapInSection,
 } from '../../../../apps/flows/ui/components/interface-editor/interface-editor-domain.js';
-import { FLOW_UI_PAGE_TEMPLATE_CATEGORIES, FLOW_UI_PAGE_TEMPLATES, filterFlowUIPageTemplates } from '../../../../core/frontend/static/lib/flow-ui/templates/page-templates.js';
 
-function documentWithSurface(components, dataModel = { content: {}, values: {}, system: {} }) {
-    return {
-        document_id: 'doc-1',
-        catalog_id: 'https://linnex.io/a2ui/catalog/platform/v1',
-        active_page_id: 'main',
-        revision: 1,
-        pages: {
-            main: { page_id: 'main', title: { default: 'Main' }, route: '/', root_surface_id: 'main' },
-        },
-        surfaces: {
-            main: {
-                surface_id: 'main',
-                root_component_id: 'root',
-                components,
-                data_model: dataModel,
-            },
-        },
-        policy: {},
-    };
+const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '../../../fixtures/flow_ui');
+const schema = JSON.parse(readFileSync(join(FIXTURES, 'schema.json'), 'utf8'));
+const catalog = blockCatalog(schema);
+const frozen = frozenStateFields(schema);
+const labels = {
+    tab: 'Вкладка',
+    option: 'Вариант',
+    text: (type, property) => `${type}.${property}`,
+};
+
+function heading(blockId, text = 'Заголовок') {
+    return { type: 'heading', block_id: blockId, visible_when: null, text, level: 2 };
 }
 
-function stackContainer(id, children) {
-    const component = defaultComponent('Stack', id);
-    component.children = children;
-    return component;
+function documentWith(blocks) {
+    return { start_page_id: 'main', pages: [{ page_id: 'main', title: '', blocks }] };
 }
 
-describe('defaultComponent (manifest-driven)', () => {
-    it('builds a container with a layout preset and manifest kind', () => {
-        const grid = defaultComponent('Grid', 'grid-1');
-        expect(grid.kind).toBe('container');
-        expect(grid.container_layout.mode).toBe('grid');
-        expect(grid.container_layout.grid.columns_by_band).toEqual({ compact: 4, medium: 8, wide: 12 });
-        const section = defaultComponent('Section', 'section-1');
-        expect(section.container_layout.mode).toBe('grid');
-        // Grid-first authoring: every insertable container is a grid, Form included.
-        const form = defaultComponent('Form', 'form-1');
-        expect(form.container_layout.mode).toBe('grid');
+function blockIds(document, pageId = 'main') {
+    return walkPage(document.pages.find((page) => page.page_id === pageId)).map((entry) => entry.block.block_id);
+}
+
+describe('interface editor catalog', () => {
+    it('exposes every grammar block with group, icon and typed properties', () => {
+        const types = catalog.map((entry) => entry.type);
+        expect(new Set(types).size).toBe(types.length);
+        for (const type of [...CONTAINER_TYPES, ...INPUT_BLOCK_TYPES, 'heading', 'text', 'button', 'html', 'slot', 'conversation']) {
+            expect(types).toContain(type);
+        }
+        for (const entry of catalog) {
+            expect(entry.group, entry.type).toBeTypeOf('string');
+            expect(entry.icon, entry.type).toBeTypeOf('string');
+            expect(entry.properties.some((property) => property.name === 'block_id')).toBe(true);
+        }
+        expect(catalogEntry(catalog, 'text_input').properties.find((property) => property.name === 'field').kind).toBe('state_path');
+        expect(catalogEntry(catalog, 'heading').properties.find((property) => property.name === 'text').kind).toBe('template');
+        expect(catalogEntry(catalog, 'columns').properties.find((property) => property.name === 'columns').kind).toBe('columns');
+        expect(catalogEntry(catalog, 'html').properties.find((property) => property.name === 'height').kind).toBe('height');
+        expect(() => catalogEntry(catalog, 'grid')).toThrow(/unknown block type/);
     });
 
-    it('applies manifest defaults with the component id substituted into bindings', () => {
-        const field = defaultComponent('TextField', 'text-field-2', 'en');
-        expect(field.kind).toBe('leaf');
-        expect(field.bindings.value).toBe('/values/text-field-2');
-        expect(field.properties.label).toBe('Field');
-    });
-
-    it('localizes defaults for ru', () => {
-        const heading = defaultComponent('Heading', 'heading', 'ru');
-        expect(heading.properties.text).toBe('Новый заголовок');
-        expect(heading.properties.level).toBe(2);
-    });
-
-    it('materializes Submit as a primary Button wired to platform.ui.submit', () => {
-        const submit = defaultComponent('Submit', 'submit');
-        expect(submit.type).toBe('Button');
-        expect(submit.properties.variant).toBe('primary');
-        expect(submit.actions.press).toEqual({
-            kind: 'event',
-            name: 'platform.ui.submit',
-            context: {},
-        });
-    });
-
-    it('rejects a type outside the catalog', () => {
-        expect(() => defaultComponent('Iframe', 'x')).toThrow(/unknown catalog type/);
+    it('builds valid default blocks for every type', () => {
+        const page = { page_id: 'main', title: '', blocks: [] };
+        for (const entry of catalog) {
+            const block = defaultBlock(entry, uniqueBlockId(page, entry.type), labels);
+            expect(block.type).toBe(entry.type);
+            const problems = documentProblems(documentWith([block]), catalog, frozen)
+                .filter((problem) => problem.code !== 'inputs_without_action');
+            expect(problems, entry.type).toEqual([]);
+        }
+        const columns = withColumns(catalogEntry(catalog, 'columns'), 'cols', 3, labels);
+        expect(columns.columns.map((column) => column.width)).toEqual([4, 4, 4]);
+        expect(frozen.has('task_id')).toBe(true);
     });
 });
 
-describe('subtree helpers', () => {
-    const surface = () => ({
-        root_component_id: 'root',
-        components: {
-            root: stackContainer('root', ['card']),
-            card: stackContainer('card', ['label']),
-            label: defaultComponent('Text', 'label'),
-        },
+describe('interface editor commands', () => {
+    it('inserts, moves, wraps, duplicates and removes blocks by container key', () => {
+        let document = insertBlock(EMPTY_DOCUMENT, 'main', 'page', 0, heading('a'));
+        document = insertBlock(document, 'main', 'page', 99, heading('b'));
+        const section = defaultBlock(catalogEntry(catalog, 'section'), 'box', labels);
+        document = insertBlock(document, 'main', 'page', 1, section);
+        expect(blockIds(document)).toEqual(['a', 'box', 'b']);
+
+        document = moveBlock(document, 'main', 'b', 'box', 0);
+        expect(blockIds(document)).toEqual(['a', 'box', 'b']);
+        expect(document.pages[0].blocks[1].blocks.map((block) => block.block_id)).toEqual(['b']);
+        expect(() => moveBlock(document, 'main', 'box', 'box', 0)).toThrow(/into itself/);
+
+        document = wrapInSection(document, 'main', 'a');
+        expect(document.pages[0].blocks[0].type).toBe('section');
+        expect(document.pages[0].blocks[0].blocks[0].block_id).toBe('a');
+
+        document = duplicateBlock(document, 'main', 'box');
+        expect(blockIds(document)).toEqual(['section', 'a', 'box', 'b', 'section-2', 'heading']);
+
+        document = removeBlock(document, 'main', 'section-2');
+        expect(blockIds(document)).toEqual(['section', 'a', 'box', 'b']);
+        expect(() => removeBlock(document, 'main', 'nope')).toThrow(/unknown block/);
+        expect(EMPTY_DOCUMENT.pages[0].blocks).toEqual([]);
     });
 
-    it('collects ids depth-first and finds parents', () => {
-        const target = surface();
-        expect(collectSubtreeIds(target, 'card')).toEqual(['card', 'label']);
-        expect(findParentId(target, 'label')).toBe('card');
-        expect(findParentId(target, 'root')).toBe(null);
+    it('renames block ids only when unique on the page', () => {
+        const document = documentWith([heading('a'), heading('b')]);
+        expect(() => setBlockProperty(document, 'main', 'a', 'block_id', 'b')).toThrow(/already used/);
+        const renamed = setBlockProperty(document, 'main', 'a', 'block_id', 'title');
+        expect(blockIds(renamed)).toEqual(['title', 'b']);
+        expect(setBlockProperty(document, 'main', 'a', 'text', 'x').pages[0].blocks[0].text).toBe('x');
+        expect(document.pages[0].blocks[0].text).toBe('Заголовок');
     });
 
-    it('removes a subtree together with parent references', () => {
-        const target = surface();
-        removeSubtree(target, 'card');
-        expect(Object.keys(target.components)).toEqual(['root']);
-        expect(target.components.root.children).toEqual([]);
-    });
-
-    it('clones a subtree with fresh ids and remapped children', () => {
-        const target = surface();
-        const { rootId, components } = cloneSubtree(target, 'card');
-        expect(rootId).not.toBe('card');
-        const copy = components[rootId];
-        expect(copy.children).toHaveLength(1);
-        expect(copy.children[0]).not.toBe('label');
-        expect(components[copy.children[0]].type).toBe('Text');
-    });
-
-    it('renames a component and rewires parent references', () => {
-        const target = surface();
-        renameComponent(target, 'label', 'headline');
-        expect(target.components.headline.component_id).toBe('headline');
-        expect(target.components.label).toBeUndefined();
-        expect(target.components.card.children).toEqual(['headline']);
-    });
-
-    it('rejects invalid, duplicate and root renames', () => {
-        const target = surface();
-        expect(() => renameComponent(target, 'label', 'Bad Id')).toThrow(/invalid component id/);
-        expect(() => renameComponent(target, 'label', 'card')).toThrow(/already exists/);
-        expect(() => renameComponent(target, 'root', 'shell')).toThrow(/root component cannot be renamed/);
-    });
-});
-
-describe('clipboard', () => {
-    const surface = () => ({
-        root_component_id: 'root',
-        components: {
-            root: stackContainer('root', ['card']),
-            card: stackContainer('card', ['label']),
-            label: defaultComponent('Text', 'label'),
-        },
-    });
-
-    it('round-trips a versioned payload and materializes fresh ids', () => {
-        const target = surface();
-        const payload = serializeClipboard(target, ['card']);
-        expect(payload.version).toBe('flow-ui-clipboard@1');
-        expect(payload.roots).toEqual(['card']);
-
-        const { roots, components } = materializeClipboard(target, payload);
-        expect(roots).toHaveLength(1);
-        expect(roots[0]).not.toBe('card');
-        const pasted = components[roots[0]];
-        expect(components[pasted.children[0]].type).toBe('Text');
-    });
-
-    it('rejects unknown versions and non-catalog types', () => {
-        expect(() => sanitizeClipboard({ version: 'other', roots: ['a'], components: {} }))
-            .toThrow(/unsupported clipboard payload/);
-        expect(() => sanitizeClipboard({
-            version: 'flow-ui-clipboard@1',
-            roots: ['a'],
-            components: { a: { component_id: 'a', type: 'Iframe', children: [] } },
-        })).toThrow(/is not in the catalog/);
+    it('manages pages and keeps start page and link targets consistent', () => {
+        let document = insertPage(EMPTY_DOCUMENT, { page_id: uniquePageId(EMPTY_DOCUMENT), title: 'Вторая', blocks: [] });
+        expect(document.pages.map((page) => page.page_id)).toEqual(['main', 'page-2']);
+        const link = { ...defaultBlock(catalogEntry(catalog, 'link'), 'go', labels), url: '', page_id: 'page-2' };
+        document = insertBlock(document, 'main', 'page', 0, link);
+        document = setPageProperty(document, 'page-2', 'page_id', 'done');
+        expect(document.pages[0].blocks[0].page_id).toBe('done');
+        document = setPageProperty(document, 'main', 'page_id', 'start');
+        expect(document.start_page_id).toBe('start');
+        expect(() => setPageProperty(document, 'done', 'page_id', 'start')).toThrow(/already used/);
+        document = removePage(document, 'start');
+        expect(document.start_page_id).toBe('done');
+        expect(() => removePage(document, 'done')).toThrow(/at least one page/);
     });
 });
 
-describe('validateInterfaceDocument', () => {
-    it('accepts a minimal document with a reachable submit', () => {
-        const document = documentWithSurface({
-            root: stackContainer('root', ['submit']),
-            submit: defaultComponent('Submit', 'submit'),
-        });
-        expect(validateInterfaceDocument(document)).toEqual([]);
+describe('interface editor history', () => {
+    it('coalesces consecutive edits with the same key and clears redo on new commits', () => {
+        let history = createHistory(documentWith([heading('a', '')]));
+        history = commitHistory(history, documentWith([heading('a', 'З')]), 'a:text');
+        history = commitHistory(history, documentWith([heading('a', 'За')]), 'a:text');
+        expect(history.past).toHaveLength(1);
+        history = commitHistory(history, documentWith([heading('a', 'За'), heading('b')]));
+        expect(history.past).toHaveLength(2);
+        history = undoHistory(history);
+        expect(blockIds(history.present)).toEqual(['a']);
+        history = redoHistory(history);
+        expect(blockIds(history.present)).toEqual(['a', 'b']);
+        history = undoHistory(undoHistory(history));
+        expect(history.present.pages[0].blocks[0].text).toBe('');
+        expect(undoHistory(history)).toBe(history);
+        history = commitHistory(history, documentWith([heading('c')]));
+        expect(history.future).toEqual([]);
     });
+});
 
-    it('blocks a document without any submit', () => {
-        const document = documentWithSurface({
-            root: stackContainer('root', ['label']),
-            label: defaultComponent('Text', 'label'),
-        });
-        const codes = validateInterfaceDocument(document).map((problem) => problem.code);
-        expect(codes).toContain('submit.missing');
-    });
+describe('interface editor publish gate', () => {
+    it('reports blocking problems and passes a well-formed form', () => {
+        const email = { ...defaultBlock(catalogEntry(catalog, 'text_input'), 'email', labels), field: 'email', required: true };
+        const send = { ...defaultBlock(catalogEntry(catalog, 'button'), 'send', labels), label: 'Отправить {email}' };
+        const valid = documentWith([heading('title', 'Заявка {?customer.name}'), email, send]);
+        expect(documentProblems(valid, catalog, frozen)).toEqual([]);
 
-    it('reports id mismatch, missing children and leaf children', () => {
-        const leafWithChildren = defaultComponent('Text', 'label');
-        leafWithChildren.children = ['ghost'];
-        const document = documentWithSurface({
-            root: stackContainer('root', ['label', 'submit']),
-            label: leafWithChildren,
-            submit: defaultComponent('Submit', 'submit'),
-            stray: { ...defaultComponent('Text', 'other-id'), children: [] },
-        });
-        const codes = validateInterfaceDocument(document).map((problem) => problem.code);
-        expect(codes).toContain('component.child_missing');
-        expect(codes).toContain('component.leaf_children');
-        expect(codes).toContain('component.id_mismatch');
-    });
-
-    it('rejects unknown catalog types and navigation targets that do not exist', () => {
-        const link = defaultComponent('PageLink', 'link');
-        link.properties = { pageId: 'ghost-page' };
-        const document = documentWithSurface({
-            root: stackContainer('root', ['link', 'submit', 'alien']),
-            link,
-            submit: defaultComponent('Submit', 'submit'),
-            alien: { component_id: 'alien', type: 'Iframe', kind: 'leaf', children: [], properties: {}, bindings: {}, actions: {} },
-        });
-        const codes = validateInterfaceDocument(document).map((problem) => problem.code);
-        expect(codes).toContain('navigation.target_missing');
-        expect(codes).toContain('catalog.unknown_type');
-    });
-
-    it('flags grid placement that overflows a band', () => {
-        const grid = defaultComponent('Grid', 'grid');
-        grid.children = ['wide-card'];
-        const card = defaultComponent('Card', 'wide-card');
-        card.placement = {
-            base: { column_start: 3, column_span: 4 },
-            overrides: {},
+        const broken = {
+            start_page_id: 'missing',
+            pages: [{
+                page_id: 'Main Page',
+                title: '',
+                blocks: [
+                    { ...email, field: 'task_id' },
+                    { ...email, block_id: 'email' },
+                    { ...heading('h', 'Итого {task_id}') },
+                    { type: 'grid', block_id: 'g' },
+                    { ...defaultBlock(catalogEntry(catalog, 'link'), 'lnk', labels), url: '', page_id: 'nowhere' },
+                ],
+            }],
         };
-        const document = documentWithSurface({
-            root: stackContainer('root', ['grid', 'submit']),
-            grid,
-            'wide-card': card,
-            submit: defaultComponent('Submit', 'submit'),
-        });
-        const problems = validateInterfaceDocument(document)
-            .filter((problem) => problem.code === 'layout.overflow');
-        // compact band has 4 columns: 3 + 4 - 1 = 6 > 4
-        expect(problems.length).toBeGreaterThan(0);
-        expect(problems[0].componentId).toBe('wide-card');
+        const codes = documentProblems(broken, catalog, frozen).map((problem) => problem.code);
+        expect(codes).toEqual(expect.arrayContaining([
+            'start_page_missing',
+            'page_id_invalid',
+            'state_path_frozen',
+            'block_id_duplicate',
+            'template_path_frozen',
+            'block_type_unknown',
+            'link_page_missing',
+            'inputs_without_action',
+        ]));
+        expect(hasBlockingProblems(documentProblems(broken, catalog, frozen))).toBe(true);
+        expect(hasBlockingProblems([{ code: 'columns_overflow', severity: 'warning' }])).toBe(false);
     });
 
-    it('warns about interactive controls without an accessible label', () => {
-        const field = defaultComponent('TextField', 'field');
-        field.properties = {};
-        const document = documentWithSurface({
-            root: stackContainer('root', ['field', 'submit']),
-            field,
-            submit: defaultComponent('Submit', 'submit'),
-        });
-        const problem = validateInterfaceDocument(document)
-            .find((item) => item.code === 'a11y.label_missing');
-        expect(problem?.severity).toBe('warning');
-    });
-
-    it('requires a reachable submit when the page has interactive inputs', () => {
-        const modal = defaultComponent('Modal', 'modal');
-        modal.children = ['submit'];
-        const document = documentWithSurface({
-            root: stackContainer('root', ['field']),
-            field: defaultComponent('TextField', 'field'),
-            modal,
-            submit: defaultComponent('Submit', 'submit'),
-        });
-        const codes = validateInterfaceDocument(document).map((problem) => problem.code);
-        expect(codes).toContain('submit.unreachable');
+    it('blocks unbalanced templates in every template property while typing, like the backend gate', () => {
+        const select = {
+            ...defaultBlock(catalogEntry(catalog, 'select'), 'plan', labels),
+            field: 'plan',
+            options: [{ value: 'a', label: 'Тариф {name' }],
+            action: { name: 'pick', payload: {} },
+        };
+        const conversation = {
+            ...defaultBlock(catalogEntry(catalog, 'conversation'), 'conversation', labels),
+        };
+        conversation.settings = { ...conversation.settings, greeting: 'Привет }', suggested_prompts: ['{a}', '{b'] };
+        const typing = documentWith([heading('h', 'Итого {total'), heading('ok', 'Ок {total-1}'), select, conversation]);
+        const problems = documentProblems(typing, catalog, frozen).filter((problem) => problem.code === 'template_unbalanced');
+        expect(problems.map((problem) => [problem.blockId, problem.params.value])).toEqual([
+            ['h', 'Итого {total'],
+            ['plan', 'Тариф {name'],
+            ['conversation', 'Привет }'],
+            ['conversation', '{b'],
+        ]);
+        expect(problems.every((problem) => problem.severity === 'error')).toBe(true);
+        expect(documentProblems(documentWith([heading('ok', 'Ок {total-1} { "json": 1 }')]), catalog, frozen)).toEqual([]);
     });
 });
 
-describe('page templates', () => {
-    it('every starter template publishes without blocking problems', () => {
-        for (const template of FLOW_UI_PAGE_TEMPLATES) {
-            const surface = template.buildSurface('main', 'en');
-            const document = documentWithSurface(surface.components, surface.data_model);
-            const blocking = validateInterfaceDocument(document)
-                .filter((problem) => problem.severity === 'error');
-            expect(blocking, `${template.template_id}: ${JSON.stringify(blocking)}`).toEqual([]);
-        }
-    });
-
-    it('keeps stable template ids, versions and categories', () => {
-        expect(FLOW_UI_PAGE_TEMPLATES.map((item) => item.template_id)).toEqual([
-            'linnex.page.chat',
-            'linnex.page.assistant_context',
-            'linnex.page.lead_form',
-            'linnex.page.login',
-            'linnex.page.contact',
-            'linnex.page.validated_form',
-            'linnex.page.dashboard',
-            'linnex.page.stats_overview',
-            'linnex.page.task_list',
-            'linnex.page.status_tracker',
-            'linnex.page.product_detail',
-            'linnex.page.purchase_complete',
-            'linnex.page.user_profile',
-            'linnex.page.event_detail',
-            'linnex.page.notification_center',
-            'linnex.page.blank',
-        ]);
-        for (const template of FLOW_UI_PAGE_TEMPLATES) {
-            expect(template.version).toBe('1.0.0');
-            expect(FLOW_UI_PAGE_TEMPLATE_CATEGORIES).toContain(template.category);
-            expect(template.tags.length).toBeGreaterThan(0);
-            expect(template.title.ru.length).toBeGreaterThan(0);
-            expect(template.title.en.length).toBeGreaterThan(0);
-        }
-    });
-
-    it('filters by category and query', () => {
-        const forms = filterFlowUIPageTemplates({ category: 'forms', locale: 'en' });
-        expect(forms.every((item) => item.category === 'forms')).toBe(true);
-        expect(forms.map((item) => item.template_id)).toContain('linnex.page.login');
-
-        const chatHits = filterFlowUIPageTemplates({ query: 'composer', locale: 'en' });
-        expect(chatHits.map((item) => item.template_id)).toContain('linnex.page.chat');
-
-        const empty = filterFlowUIPageTemplates({ query: 'zzz-no-such-template', locale: 'en' });
-        expect(empty).toEqual([]);
+describe('interface editor state path catalog', () => {
+    it('merges dataflow descriptors, sample state and interface fields without duplicates', () => {
+        const document = documentWith([{ ...defaultBlock(catalogEntry(catalog, 'text_input'), 'email', labels), field: 'email' }]);
+        const paths = statePathCatalog({
+            dataflow: {
+                variables: [{ path: 'plan', type: 'string', source: 'variable', protected: false }],
+                nodes: { llm_1: { output_state: [{ path: 'content', type: 'string', source: 'node', protected: false }], incoming_state: [{ path: 'task_id', type: 'string', source: 'system', protected: true }] } },
+            },
+            sampleState: { email: 'a@b.c', total: 12 },
+            document,
+        });
+        expect(paths.map((entry) => entry.path)).toEqual(['content', 'email', 'plan', 'task_id', 'total']);
+        expect(paths.find((entry) => entry.path === 'email')).toEqual({ path: 'email', type: 'string', source: 'preview_state', protected: false });
+        expect(paths.find((entry) => entry.path === 'task_id').protected).toBe(true);
     });
 });

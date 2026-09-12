@@ -115,13 +115,14 @@ async def test_hitl_custom_form_submit_is_operator_ask(
     editor = await worktracker_open_task_page(wt_page, worktracker_ui, work_item_id)
     await worktracker_claim_task(wt_page, editor)
     chat = await worktracker_hitl_embedded_chat(editor)
-    field = chat.locator('[data-flow-ui-component="note-field"] input[type="text"]').first
+    field = chat.locator('[data-block-id="note-field"] input[type="text"]').first
     await expect(field).to_be_visible(timeout=30_000)
     await field.fill(reply)
-    submit = chat.locator('[data-flow-ui-component="submit"] button').first
+    submit = chat.locator('[data-block-id="submit"] button').first
     await expect(submit).to_be_enabled(timeout=10_000)
     await worktracker_hitl_click_send_and_assert_http(wt_page, submit)
+    # Ход оператора из формы — строки «подпись блока: значение» (operatorTurnFromAction).
     await hitl_api_assert_turn_role(
-        flows_ui.origin, auth_token_system, work_item_id, reply, "operator"
+        flows_ui.origin, auth_token_system, work_item_id, f"Reply: {reply}", "operator"
     )
     await hitl_assert_work_item_open(worktracker_ui.origin, auth_token_system, work_item_id)

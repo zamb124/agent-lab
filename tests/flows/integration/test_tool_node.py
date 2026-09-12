@@ -9,6 +9,7 @@ import pytest
 from apps.flows.src.models import Edge
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import CodeNode, create_node
+from core.flow_ui.templates import default_chat_document
 from core.state import ExecutionState
 from tests.flows.durable_runtime_harness import run_flow, run_node, workflow_state
 
@@ -68,6 +69,7 @@ class TestCodeNodeInAgent:
                 Edge(from_node="format", to_node=None),
             ],
             variables={},
+            interface=default_chat_document(),
             container=container,
         )
 
@@ -96,6 +98,7 @@ class TestCodeNodeInAgent:
             nodes={"greet": tool_node},
             edges=[Edge(from_node="greet", to_node=None)],
             variables={"company_name": "Platform Corp"},
+            interface=default_chat_document(),
             container=container,
         )
         state = workflow_state(
@@ -159,6 +162,7 @@ class TestCodeNodeInAgent:
                 Edge(from_node="skip", to_node=None),
             ],
             variables={},
+            interface=default_chat_document(),
             container=container,
         )
         state1 = workflow_state(
@@ -233,6 +237,7 @@ class TestCodeNodeFromConfig:
                 {"from_node": "finish", "to_node": None},
             ],
             "variables": {},
+            "interface": default_chat_document().model_dump(mode="json"),
         }
         flow = await Flow.from_config(flow_config, container=container)
         state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, content="start")
@@ -264,6 +269,7 @@ class TestCodeNodeWithSkillVariables:
             nodes={"format": tool_node},
             edges=[Edge(from_node="format", to_node=None)],
             variables={"prefix": "ORDER-"},
+            interface=default_chat_document(),
             container=container,
         )
         state = workflow_state(flow_id=flow.flow_id, unique_id=f"{unique_id}-order", entity_id="12345")
@@ -304,6 +310,7 @@ class TestCodeNodeChaining:
             nodes={"step1": node1, "step2": node2},
             edges=[Edge(from_node="step1", to_node="step2"), Edge(from_node="step2", to_node=None)],
             variables={"bonus": 100},
+            interface=default_chat_document(),
             container=container,
         )
         state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, input=25)
@@ -386,6 +393,7 @@ class TestCodeNodeDynamicDataAgent:
                 Edge(from_node="final_node", to_node=None),
             ],
             variables={"multiplier": 3, "bonus": 5},
+            interface=default_chat_document(),
             container=container,
         )
         state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, content="start")
@@ -443,6 +451,7 @@ class TestCodeNodeDynamicDataAgent:
                 Edge(from_node="format_node", to_node=None),
             ],
             variables={"player_name": "Alice", "boost_amount": 50},
+            interface=default_chat_document(),
             container=container,
         )
         state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, content="start")
@@ -515,6 +524,7 @@ class TestCodeNodeDynamicDataAgent:
                 Edge(from_node="save_node", to_node=None),
             ],
             variables={"min_items": 2},
+            interface=default_chat_document(),
             container=container,
         )
         state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, raw_input="apple, banana, cherry")
@@ -578,6 +588,7 @@ class TestCodeNodeDynamicDataAgent:
                 Edge(from_node="finalize_node", to_node=None),
             ],
             variables={"bonus_text": "+VIP"},
+            interface=default_chat_document(),
             container=container,
         )
         state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, content="start")

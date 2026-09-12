@@ -8,6 +8,7 @@ from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import ResourceNode
 from apps.flows.src.streaming import BaseEmitter
+from core.flow_ui.templates import default_chat_document
 from core.state import ExecutionState
 from tests.flows.durable_runtime_harness import run_flow, workflow_state
 
@@ -35,6 +36,7 @@ async def test_flow_emits_edge_executed_linear(
         entry="a",
         nodes=nodes,
         edges=edges,
+        interface=default_chat_document(),
         container=container,
     )
     state_task = ExecutionState.model_validate(
@@ -83,6 +85,7 @@ async def test_flow_emits_two_edges_parallel(
         entry="a",
         nodes=nodes,
         edges=edges,
+        interface=default_chat_document(),
         container=container,
     )
     state = ExecutionState.model_validate(
@@ -142,6 +145,7 @@ async def test_flow_emits_both_edges_on_and_join(
         entry="0",
         nodes=nodes,
         edges=edges,
+        interface=default_chat_document(),
         container=container,
     )
     state_task = ExecutionState.model_validate(

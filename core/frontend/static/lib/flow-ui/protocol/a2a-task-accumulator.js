@@ -1,8 +1,9 @@
 import { INTERRUPTED_TASK_STATES, TERMINAL_TASK_STATES } from './constants.js';
-import { cloneSerializable } from '../utils/clone.js';
 
+/** Глубокая копия JSON-значений протокола: аккумулятор не делит объекты с входящими кадрами. */
 function clone(value) {
-    return cloneSerializable(value);
+    if (value === null || typeof value !== 'object') return value;
+    return globalThis.structuredClone(value);
 }
 
 function eventIdentity(event) {
@@ -79,7 +80,6 @@ function ensureTask(accumulator, taskId, contextId) {
         artifactsById: {},
         closedArtifactIds: new Set(),
         metadata: {},
-        latestSequence: 0,
     };
     accumulator.tasksById[taskId] = task;
     accumulator.taskOrder.push(taskId);
@@ -135,8 +135,6 @@ export function applyA2AFrame(accumulator, frame) {
     const contextId = contextIdOf(value);
     if (!taskId || !contextId) throw new Error(`flow-ui: ${kind} scope is incomplete`);
     const task = ensureTask(accumulator, taskId, contextId);
-    const sequence = Number(value?.metadata?.platformSequence || 0);
-    if (Number.isFinite(sequence)) task.latestSequence = Math.max(task.latestSequence, sequence);
     if (kind === 'statusUpdate') {
         task.status = clone(value.status || null);
         if (value.metadata && typeof value.metadata === 'object') {

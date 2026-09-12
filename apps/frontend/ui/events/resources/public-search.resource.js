@@ -3,17 +3,21 @@
  *
  * Исполнение остаётся в Flows A2A/SSE:
  *   1. frontend выдаёт short-lived embed-session token;
- *   2. flow public_search стримит артефакты `ui_event`;
- *   3. эта фабрика сводит события в SERP-state для UI.
+ *   2. code-ноды flow public_search пишут staged-поля state (`serp_results`, `serp_completed`,
+ *      `research_*`), которые приходят артефактом `state` (snapshot + RFC 6902 патчи),
+ *      а текст ответа — артефактом `response`;
+ *   3. эта фабрика сводит их в SERP-state для UI.
  */
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest, HttpError } from '@platform/lib/events/http.js';
+import { a2aEndpointUrl, buildSendMessageBody, buildUserMessage } from '@platform/lib/flow-ui/protocol/a2a-codec.js';
 import {
-    a2aEndpointUrl,
-    buildA2aSendStreamingMessageBody,
-} from '@platform/lib/flow-ui/protocol/a2a-codec.js';
-import { consumeA2AStream as consumeA2aStream } from '@platform/lib/flow-ui/protocol/a2a-stream.js';
-import { mapA2aResultToChatRuntimeEvents } from '@platform/lib/flow-ui/protocol/a2a-result-helpers.js';
+    consumeA2AStream as consumeA2aStream,
+    isTerminalTaskState,
+    unwrapA2aStreamResult,
+} from '@platform/lib/flow-ui/protocol/a2a-stream.js';
+import { RESPONSE_ARTIFACT_NAME, STATE_ARTIFACT_ID } from '@platform/lib/flow-ui/protocol/constants.js';
+import { applyJsonPatch, decodePart, textFromParts } from '@platform/lib/flow-ui/protocol/parts.js';
 import {
     takePendingPublicSearchRunFiles,
     uploadPublicSearchFilesForA2a,
@@ -492,18 +496,6 @@ function _createStreamPublisher(ctx, eventId, publishFn) {
     };
 }
 
-function _mappedEventsNeedImmediatePublish(events) {
-    for (const runtimeEvent of events) {
-        if (!runtimeEvent || typeof runtimeEvent !== 'object') {
-            continue;
-        }
-        if (runtimeEvent.type !== 'content_chunk' && runtimeEvent.type !== 'activity') {
-            return true;
-        }
-    }
-    return false;
-}
-
 function _publishSourceDescribeStream(ctx, eventId, sourceStream) {
     ctx.dispatch(
         PUBLIC_SEARCH_SOURCE_STREAM_EVENT,
@@ -538,11 +530,11 @@ function _clearActiveSearchRun(runId, controller) {
 }
 
 function _applySearchUiEvent(stream, event) {
-    const eventType = _requireNonEmptyString(event.type, 'ui_event.type');
+    const eventType = _requireNonEmptyString(event.type, 'staged search event type');
     if (eventType.startsWith('files.')) {
         return;
     }
-    const payload = _requireObject(event.payload, 'ui_event.payload');
+    const payload = _requireObject(event.payload, 'staged search event payload');
     if (eventType === 'search/serp/results_ready') {
         stream.phase = 'results';
         stream.rank_stage = 'preview';
@@ -663,93 +655,184 @@ function _applySearchUiEvent(stream, event) {
         stream.completed = true;
         return;
     }
-    throw new Error(`Unsupported public search ui_event: ${eventType}`);
+    throw new Error(`Unsupported public search staged event: ${eventType}`);
 }
 
-function _applyRuntimeEvents(stream, events) {
-    for (const runtimeEvent of events) {
-        if (!runtimeEvent || typeof runtimeEvent !== 'object') {
-            throw new Error('A2A runtime event must be object');
-        }
-        if (runtimeEvent.type === 'task_started') {
-            const payload = _requireObject(runtimeEvent.payload, 'task_started.payload');
-            stream.task_id = _requireNonEmptyString(payload.task_id, 'task_started.task_id');
-            stream.context_id = _requireNonEmptyString(payload.context_id, 'task_started.context_id');
-            stream.task_primed = true;
-            stream.phase = stream.phase === 'starting' ? 'searching' : stream.phase;
-            continue;
-        }
-        if (runtimeEvent.type === 'activity') {
-            const payload = _requireObject(runtimeEvent.payload, 'activity.payload');
-            stream.activity = _requireString(payload.text, 'activity.text');
-            continue;
-        }
-        if (runtimeEvent.type === 'content_chunk') {
-            const payload = _requireObject(runtimeEvent.payload, 'content_chunk.payload');
-            const chunk = _requireString(payload.text, 'content_chunk.text');
-            if (stream.mode === 'research') {
-                if (stream.phase === 'synthesizing') {
-                    stream.report = `${stream.report}${chunk}`;
-                }
-            } else {
-                stream.answer = `${stream.answer}${chunk}`;
-                stream.phase = stream.phase === 'insights' ? 'answering' : stream.phase;
-            }
-            continue;
-        }
-        if (runtimeEvent.type === 'ui_event') {
-            const payload = _requireObject(runtimeEvent.payload, 'ui_event.payload');
-            const uiEvent = _requireObject(payload.event, 'ui_event.payload.event');
-            _applySearchUiEvent(stream, uiEvent);
-            continue;
-        }
-        if (runtimeEvent.type === 'files_event') {
-            continue;
-        }
-        if (runtimeEvent.type === 'failed') {
-            const payload = _requireObject(runtimeEvent.payload, 'failed.payload');
-            throw new Error(_requireNonEmptyString(payload.error, 'failed.error'));
+/** Пути state публичного поиска → staged-события SERP; порядок задаёт приоритет применения. */
+const SEARCH_STATE_EVENTS = Object.freeze([
+    ['serp_results', 'search/serp/results_ready'],
+    ['serp_results_refined', 'search/serp/results_refined'],
+    ['serp_suggestions', 'search/serp/suggestions_ready'],
+    ['serp_insights', 'search/serp/insights_ready'],
+    ['research_plan', 'search/research/plan_ready'],
+    ['research_search', 'search/research/search_ready'],
+    ['research_reflection', 'search/research/reflection_ready'],
+    ['serp_completed', 'search/serp/completed'],
+]);
+
+function _createStateFold() {
+    return { state: {}, seen: new Map(), sourcesRead: 0 };
+}
+
+function _foldStateArtifact(fold, artifact) {
+    for (const part of Array.isArray(artifact.parts) ? artifact.parts : []) {
+        const decoded = decodePart(part);
+        if (decoded.kind === 'json') {
+            fold.state = _requireObject(decoded.value, 'state snapshot');
+        } else if (decoded.kind === 'json_patch') {
+            fold.state = applyJsonPatch(fold.state, decoded.operations);
+        } else {
+            throw new Error(`Unsupported state artifact part: ${decoded.kind}`);
         }
     }
 }
 
-function _applySourceDescribeRuntimeEvents(stream, events) {
-    for (const runtimeEvent of events) {
-        if (!runtimeEvent || typeof runtimeEvent !== 'object') {
-            throw new Error('A2A runtime event must be object');
-        }
-        if (runtimeEvent.type === 'task_started') {
-            const payload = _requireObject(runtimeEvent.payload, 'task_started.payload');
-            stream.task_id = _requireNonEmptyString(payload.task_id, 'task_started.task_id');
-            stream.context_id = _requireNonEmptyString(payload.context_id, 'task_started.context_id');
-            stream.task_primed = true;
-            stream.phase = stream.phase === 'starting' ? 'reading' : stream.phase;
+function _stagedSearchEvents(fold) {
+    const events = [];
+    for (const [path, eventType] of SEARCH_STATE_EVENTS) {
+        const payload = fold.state[path];
+        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
             continue;
         }
-        if (runtimeEvent.type === 'activity') {
-            const payload = _requireObject(runtimeEvent.payload, 'activity.payload');
-            stream.activity = _requireString(payload.text, 'activity.text');
+        const serialized = JSON.stringify(payload);
+        if (fold.seen.get(path) === serialized) {
             continue;
         }
-        if (runtimeEvent.type === 'content_chunk') {
-            const payload = _requireObject(runtimeEvent.payload, 'content_chunk.payload');
-            stream.answer = `${stream.answer}${_requireString(payload.text, 'content_chunk.text')}`;
-            stream.phase = 'answering';
-            continue;
+        fold.seen.set(path, serialized);
+        events.push({ type: eventType, payload });
+    }
+    const sourcesRead = fold.state.research_sources_read;
+    if (Array.isArray(sourcesRead)) {
+        for (const source of sourcesRead.slice(fold.sourcesRead)) {
+            events.push({ type: 'search/research/source_read', payload: _requireObject(source, 'research_sources_read[]') });
         }
-        if (runtimeEvent.type === 'completed') {
-            const payload = _requireObject(runtimeEvent.payload, 'completed.payload');
-            const content = _requireString(payload.content, 'completed.content');
-            if (stream.answer.trim() === '' && content.trim() !== '') {
-                stream.answer = content;
+        fold.sourcesRead = sourcesRead.length;
+    }
+    return events;
+}
+
+function _taskFrame(stream, unwrapped) {
+    const { frameKind, event } = unwrapped;
+    const taskId = frameKind === 'task' ? event.id : event.taskId;
+    if (typeof taskId === 'string' && taskId !== '') {
+        stream.task_id = taskId;
+    }
+    if (typeof event.contextId === 'string' && event.contextId !== '') {
+        stream.context_id = event.contextId;
+    }
+    if (!stream.task_primed && typeof taskId === 'string' && taskId !== '') {
+        stream.task_primed = true;
+        return true;
+    }
+    return false;
+}
+
+function _statusFrameError(status) {
+    const state = _requireNonEmptyString(status.state, 'status.state');
+    if (state === 'TASK_STATE_COMPLETED' || !isTerminalTaskState(state)) {
+        return null;
+    }
+    const text = status.message && typeof status.message === 'object' ? textFromParts(status.message.parts) : '';
+    return new Error(text !== '' ? text : `A2A task ${state}`);
+}
+
+/**
+ * Один кадр SendStreamingMessage → SERP-stream. Возвращает true, когда кадр
+ * требует немедленной публикации (staged-событие, старт Task), false для текстовых чанков.
+ */
+function _applySearchFrame(stream, fold, result) {
+    const unwrapped = unwrapA2aStreamResult(result);
+    if (unwrapped === null) {
+        throw new Error('A2A SSE result is not a StreamResponse frame');
+    }
+    const started = _taskFrame(stream, unwrapped);
+    if (started && stream.phase === 'starting') {
+        stream.phase = 'searching';
+    }
+    if (unwrapped.frameKind === 'task') {
+        return true;
+    }
+    if (unwrapped.frameKind === 'statusUpdate') {
+        const status = _requireObject(unwrapped.event.status, 'statusUpdate.status');
+        const error = _statusFrameError(status);
+        if (error !== null) {
+            throw error;
+        }
+        if (!isTerminalTaskState(status.state) && status.message && typeof status.message === 'object') {
+            const activity = textFromParts(status.message.parts);
+            if (activity !== '') {
+                stream.activity = activity;
+                return false;
+            }
+        }
+        return true;
+    }
+    if (unwrapped.frameKind !== 'artifactUpdate') {
+        return started;
+    }
+    const artifact = _requireObject(unwrapped.event.artifact, 'artifactUpdate.artifact');
+    if (artifact.artifactId === STATE_ARTIFACT_ID) {
+        _foldStateArtifact(fold, artifact);
+        const staged = _stagedSearchEvents(fold);
+        for (const stagedEvent of staged) {
+            _applySearchUiEvent(stream, stagedEvent);
+        }
+        return staged.length > 0 || started;
+    }
+    if (artifact.name === RESPONSE_ARTIFACT_NAME) {
+        const chunk = textFromParts(artifact.parts);
+        if (chunk === '') {
+            return started;
+        }
+        if (stream.mode === 'research') {
+            if (stream.phase === 'synthesizing') {
+                stream.report = `${stream.report}${chunk}`;
+            }
+        } else {
+            stream.answer = `${stream.answer}${chunk}`;
+            stream.phase = stream.phase === 'insights' ? 'answering' : stream.phase;
+        }
+        return false;
+    }
+    return started;
+}
+
+function _applySourceDescribeFrame(stream, result) {
+    const unwrapped = unwrapA2aStreamResult(result);
+    if (unwrapped === null) {
+        throw new Error('A2A SSE result is not a StreamResponse frame');
+    }
+    const started = _taskFrame(stream, unwrapped);
+    if (started && stream.phase === 'starting') {
+        stream.phase = 'reading';
+    }
+    if (unwrapped.frameKind === 'statusUpdate') {
+        const status = _requireObject(unwrapped.event.status, 'statusUpdate.status');
+        const error = _statusFrameError(status);
+        if (error !== null) {
+            throw error;
+        }
+        const messageText = status.message && typeof status.message === 'object' ? textFromParts(status.message.parts) : '';
+        if (status.state === 'TASK_STATE_COMPLETED') {
+            if (stream.answer.trim() === '' && messageText.trim() !== '') {
+                stream.answer = messageText;
             }
             stream.phase = 'completed';
             stream.completed = true;
-            continue;
+        } else if (messageText !== '') {
+            stream.activity = messageText;
         }
-        if (runtimeEvent.type === 'failed') {
-            const payload = _requireObject(runtimeEvent.payload, 'failed.payload');
-            throw new Error(_requireNonEmptyString(payload.error, 'failed.error'));
+        return;
+    }
+    if (unwrapped.frameKind !== 'artifactUpdate') {
+        return;
+    }
+    const artifact = _requireObject(unwrapped.event.artifact, 'artifactUpdate.artifact');
+    if (artifact.name === RESPONSE_ARTIFACT_NAME) {
+        const chunk = textFromParts(artifact.parts);
+        if (chunk !== '') {
+            stream.answer = `${stream.answer}${chunk}`;
+            stream.phase = 'answering';
         }
     }
 }
@@ -882,6 +965,7 @@ async function _runPublicSearch({ payload, ctx, event }) {
 
     let streamError = null;
     const controller = new AbortController();
+    const fold = _createStateFold();
     _replaceActiveSearchRun(request.run_id, controller);
     const onEvent = (frame) => {
         if (streamError !== null) {
@@ -897,19 +981,8 @@ async function _runPublicSearch({ payload, ctx, event }) {
                 throw new Error(message);
             }
             const result = _requireObject(envelope.result, 'A2A SSE result');
-            const mapped = mapA2aResultToChatRuntimeEvents(result, {
-                currentTaskId: stream.task_id,
-                contextId: stream.context_id,
-                taskPrimed: stream.task_primed,
-            });
-            if (typeof mapped.nextTaskId === 'string') {
-                stream.task_id = mapped.nextTaskId;
-            }
-            if (mapped.taskPrimed === true) {
-                stream.task_primed = true;
-            }
-            _applyRuntimeEvents(stream, mapped.events);
-            publisher.publish(stream, _mappedEventsNeedImmediatePublish(mapped.events));
+            const immediate = _applySearchFrame(stream, fold, result);
+            publisher.publish(stream, immediate);
         } catch (error) {
             streamError = new Error(_errorMessage(error));
             controller.abort();
@@ -919,13 +992,10 @@ async function _runPublicSearch({ payload, ctx, event }) {
     try {
         await consumeA2aStream({
             url: a2aEndpointUrl({ baseUrl: _flowsBaseUrl(), embedId: session.embed_id }),
-            body: buildA2aSendStreamingMessageBody({
-                message: request.query,
-                contextId: stream.context_id,
-                branchId: session.branch_id,
-                files: a2aFiles,
-                metadata: { branch: session.branch_id },
-            }),
+            body: buildSendMessageBody(
+                buildUserMessage({ contextId: stream.context_id, text: request.query, files: a2aFiles }),
+                { branchId: session.branch_id },
+            ),
             headers: { Authorization: `${session.token_type} ${session.token}` },
             credentials: 'omit',
             signal: controller.signal,
@@ -997,18 +1067,7 @@ async function _runPublicSearchSourceDescribe({ payload, ctx, event }) {
                 throw new Error(message);
             }
             const result = _requireObject(envelope.result, 'A2A SSE result');
-            const mapped = mapA2aResultToChatRuntimeEvents(result, {
-                currentTaskId: sourceStream.task_id,
-                contextId: sourceStream.context_id,
-                taskPrimed: sourceStream.task_primed,
-            });
-            if (typeof mapped.nextTaskId === 'string') {
-                sourceStream.task_id = mapped.nextTaskId;
-            }
-            if (mapped.taskPrimed === true) {
-                sourceStream.task_primed = true;
-            }
-            _applySourceDescribeRuntimeEvents(sourceStream, mapped.events);
+            _applySourceDescribeFrame(sourceStream, result);
             _publishSourceDescribeStream(ctx, event.id, sourceStream);
         } catch (error) {
             streamError = new Error(_errorMessage(error));
@@ -1019,13 +1078,10 @@ async function _runPublicSearchSourceDescribe({ payload, ctx, event }) {
     try {
         await consumeA2aStream({
             url: a2aEndpointUrl({ baseUrl: _flowsBaseUrl(), embedId: session.embed_id }),
-            body: buildA2aSendStreamingMessageBody({
-                message: _sourceDescribeMessage(request),
-                contextId: sourceStream.context_id,
-                branchId: session.branch_id,
-                files: [],
-                metadata: { branch: session.branch_id, source_url: request.source.url },
-            }),
+            body: buildSendMessageBody(
+                buildUserMessage({ contextId: sourceStream.context_id, text: _sourceDescribeMessage(request) }),
+                { branchId: session.branch_id },
+            ),
             headers: { Authorization: `${session.token_type} ${session.token}` },
             credentials: 'omit',
             signal: controller.signal,

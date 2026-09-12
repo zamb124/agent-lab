@@ -117,26 +117,28 @@ def _check_docs_placement_coverage() -> list[str]:
     return errors
 
 
+FLOW_UI_HOST = (
+    REPO_ROOT
+    / "core"
+    / "frontend"
+    / "static"
+    / "lib"
+    / "flow-ui"
+    / "components"
+    / "platform-flow-ui.js"
+)
+
+
 def _check_flow_ui_no_base64_upload() -> list[str]:
     """platform-flow-ui must upload files via resolvePlatformFileRefs, not base64."""
     errors: list[str] = []
-    controller = (
-        REPO_ROOT
-        / "core"
-        / "frontend"
-        / "static"
-        / "lib"
-        / "flow-ui"
-        / "runtime"
-        / "flow-ui-controller.js"
-    )
-    text = controller.read_text(encoding="utf-8")
+    text = FLOW_UI_HOST.read_text(encoding="utf-8")
     if "_fileToBase64Part" in text:
-        errors.append("flow-ui-controller.js: _fileToBase64Part must be removed")
+        errors.append("platform-flow-ui.js: _fileToBase64Part must be removed")
     if "readAsDataURL" in text:
-        errors.append("flow-ui-controller.js: readAsDataURL file upload path forbidden")
+        errors.append("platform-flow-ui.js: readAsDataURL file upload path forbidden")
     if "resolvePlatformFileRefs" not in text:
-        errors.append("flow-ui-controller.js: must use resolvePlatformFileRefs for outbound files")
+        errors.append("platform-flow-ui.js: must use resolvePlatformFileRefs for outbound files")
     return errors
 
 
@@ -160,21 +162,8 @@ def _check_a2a_stream_url_only() -> list[str]:
         errors.append("a2a-codec.js: buildA2aFileParts must not accept file.bytes")
     if "f.data != null" in text or "f && f.data" in text:
         errors.append("a2a-codec.js: buildA2aFileParts must not accept f.data fallback")
-    if "file_id or url" not in text:
-        errors.append("a2a-codec.js: must require file_id or url for file parts")
-    controller = (
-        REPO_ROOT
-        / "core"
-        / "frontend"
-        / "static"
-        / "lib"
-        / "flow-ui"
-        / "runtime"
-        / "flow-ui-controller.js"
-    )
-    controller_text = controller.read_text(encoding="utf-8")
-    if "resolvePlatformFileRefs" not in controller_text:
-        errors.append("flow-ui-controller.js: must resolve platform file refs before send")
+    if "file part requires url" not in text:
+        errors.append("a2a-codec.js: buildA2aFileParts must require url for file parts")
     return errors
 
 

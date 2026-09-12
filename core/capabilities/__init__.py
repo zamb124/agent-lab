@@ -43,9 +43,6 @@ from core.capabilities.models import (
     PlatformEffect,
     PlatformEffectEnvelope,
     PlatformEffectOrigin,
-    UIApplyEffect,
-    UINavigateEffect,
-    UIResetEffect,
     locked_down_code_sandbox_policy,
 )
 from core.capabilities.sandbox_libraries import (
@@ -110,9 +107,6 @@ __all__ = [
     "PlatformEffect",
     "PlatformEffectEnvelope",
     "PlatformEffectOrigin",
-    "UIApplyEffect",
-    "UINavigateEffect",
-    "UIResetEffect",
     "build_lsp_workspace",
     "CapabilityExecutionTokenClaims",
     "CAPABILITY_GATEWAY_TOKEN_AUDIENCE",

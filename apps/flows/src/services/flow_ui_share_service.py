@@ -12,6 +12,7 @@ from apps.flows.src.services.flow_access_service import FlowAccessService
 from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
 from core.authz.types import AuthzRelation
+from core.flow_ui.projection import validate_redacted_paths
 from core.models.flow_ui_share import (
     FlowUIShareCreateRequest,
     FlowUIShareCreateResponse,
@@ -20,7 +21,6 @@ from core.models.flow_ui_share import (
 )
 from core.short_links.service import ShortLinkService
 from core.state import ExecutionState
-from core.state.flow_ui_share_redaction import validate_share_redacted_paths
 from core.utils.tokens import TokenService
 
 _FLOWS_SERVICE_BASE_URL = "/flows"
@@ -84,13 +84,6 @@ class FlowUIShareService:
         )
         if state.session_flow_id != request.flow_id or state.context_id != request.context_id:
             raise ValueError("Flow UI share target identity mismatch")
-        document = state.ui_document
-        if document.document_id != request.document_id:
-            raise ValueError("Flow UI share document identity mismatch")
-        if document.revision != request.minimum_revision:
-            raise ValueError(
-                "Flow UI share requires the latest server-acknowledged revision"
-            )
 
         now = datetime.now(UTC)
         expires_at = now + timedelta(seconds=request.expires_in_seconds)
@@ -100,12 +93,8 @@ class FlowUIShareService:
             flow_id=request.flow_id,
             branch_id=state.branch_id,
             context_id=request.context_id,
-            document_id=document.document_id,
-            minimum_revision=document.revision,
             permission=request.permission,
-            redacted_value_paths=validate_share_redacted_paths(
-                list(request.redacted_value_paths)
-            ),
+            redacted_paths=validate_redacted_paths(list(request.redacted_paths)),
             created_by_user_id=user_id,
             expires_at=expires_at,
             created_at=now,
@@ -177,7 +166,6 @@ class FlowUIShareService:
         company_id: str,
         flow_id: str,
         context_id: str,
-        document_id: str | None = None,
         require_editor: bool = False,
         user_id: str | None = None,
     ) -> FlowUIShareGrant:
@@ -190,8 +178,6 @@ class FlowUIShareService:
             or grant.context_id != context_id
         ):
             raise PermissionError("Flow UI share grant scope mismatch")
-        if document_id is not None and document_id != grant.document_id:
-            raise PermissionError("Flow UI share document scope mismatch")
         if require_editor and grant.permission != "editor":
             raise PermissionError("Flow UI share grant is read-only")
         subject_user_id = user_id if user_id is not None else "share_visitor"
@@ -211,11 +197,7 @@ class FlowUIShareService:
         )
         if state is None:
             raise PermissionError("Shared Flow UI session no longer exists")
-        if (
-            state.ui_document.document_id != grant.document_id
-            or state.ui_document.revision < grant.minimum_revision
-            or state.branch_id != grant.branch_id
-        ):
+        if state.branch_id != grant.branch_id:
             raise PermissionError("Shared Flow UI durable identity no longer matches the grant")
         return grant
 
@@ -233,7 +215,6 @@ class FlowUIShareService:
             company_id=grant.company_id,
             flow_id=grant.flow_id,
             context_id=grant.context_id,
-            document_id=grant.document_id,
             user_id="share_visitor",
         )
         now = datetime.now(UTC)
@@ -250,7 +231,6 @@ class FlowUIShareService:
                 "flow_ui_share_flow_id": grant.flow_id,
                 "flow_ui_share_branch_id": grant.branch_id,
                 "flow_ui_share_context_id": grant.context_id,
-                "flow_ui_share_document_id": grant.document_id,
                 "flow_ui_share_origin": origin,
             },
         )
@@ -260,10 +240,8 @@ class FlowUIShareService:
             flow_id=grant.flow_id,
             branch_id=grant.branch_id,
             context_id=grant.context_id,
-            document_id=grant.document_id,
-            minimum_revision=grant.minimum_revision,
             permission=grant.permission,
-            redacted_value_paths=list(grant.redacted_value_paths),
+            redacted_paths=list(grant.redacted_paths),
             flows_base_url=_FLOWS_SERVICE_BASE_URL,
         )
 

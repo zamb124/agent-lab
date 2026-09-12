@@ -1,206 +1,146 @@
-"""Helpers for durable Flow UI session/share tests against real container + DB."""
+"""Helpers для тестов Flow UI поверх чистого A2A: ui-action сообщения, сессии, артефакты.
+
+Upstream интерфейс отправляет либо ``text`` Part, либо ровно один ``data`` Part
+``application/vnd.platform.ui-action+json``; downstream состояние читается из артефакта
+``state`` (снимок + JSON Patch), рендеры — из артефакта ``ui``.
+"""
 
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from collections.abc import Sequence
 
-from a2a.types import Message, Role
-from google.protobuf.json_format import MessageToDict
 from httpx import AsyncClient
 
-from apps.flows.src.a2a.interaction_parser import parse_flow_ui_command
 from apps.flows.src.container import get_container
 from apps.flows.src.models.flow_config import Edge, FlowConfig
-from apps.flows.src.services.flow_ui_session_service import (
-    FlowUISessionCommandResult,
-    FlowUISessionService,
-)
-from core.a2a import (
-    A2A_EXTENSIONS_HEADER,
-    A2UI_EXTENSION_URI,
-    A2UI_MIME_TYPE,
-    A2UI_PLATFORM_CATALOG_ID,
-    PLATFORM_UI_BOOTSTRAP_ACTION,
-    PLATFORM_UI_SUBMIT_ACTION,
-    PLATFORM_UI_SYNC_ACTION,
-    A2ARepresentation,
-    A2ARepresentationSnapshot,
-    struct_from_mapping,
-)
-from core.a2ui import A2UI091Codec
+from core.clients.flow_ui_client import task_state, task_text, task_ui_events
 from core.context import require_context
-from core.models.flow_interface import default_flow_interface_config
-from core.models.flow_ui_share import FlowUIShareGrant
+from core.flow_ui.document import FlowUIDocument
+from core.flow_ui.protocol import FLOW_UI_ACTION_MEDIA_TYPE, FlowUIEvent, FlowUIRender
 from core.state import ExecutionState
-from core.state.flow_ui import FlowUIDocument
-from core.types import JsonObject
-from tests.flows._a2a_v1 import A2A_HEADERS, SEND_MESSAGE, a2a_rpc
+from core.types import JsonArray, JsonObject, JsonValue, parse_json_object, require_json_object
+from tests.flows._a2a_v1 import A2A_HEADERS, GET_TASK, SEND_MESSAGE, a2a_rpc
+
+ECHO_CODE = "async def run(args, state): return state"
 
 
-def flow_ui_a2a_headers(base: dict[str, str] | None = None) -> dict[str, str]:
-    merged = dict(base or {})
-    merged.update(A2A_HEADERS)
-    merged[A2A_EXTENSIONS_HEADER] = A2UI_EXTENSION_URI
-    return merged
-
-
-def flow_ui_representation() -> A2ARepresentationSnapshot:
-    return A2ARepresentationSnapshot(
-        representation=A2ARepresentation.A2UI_0_9_1,
-        negotiated_extensions=[A2UI_EXTENSION_URI],
-        extension_uri=A2UI_EXTENSION_URI,
-        catalog_id=A2UI_PLATFORM_CATALOG_ID,
-        output_mime_type=A2UI_MIME_TYPE,
-    )
-
-
-def flow_ui_command_message(
+def ui_action_message(
     *,
-    action: str,
     context_id: str,
-    action_id: str,
-    revision: int | None = None,
-    message_value: str | None = None,
-    values: JsonObject | None = None,
-    surfaces_values: dict[str, JsonObject] | None = None,
-    session_view_state: JsonObject | None = None,
-    active_page_id: str = "main",
-) -> Message:
-    source_component_id = "submit" if action == PLATFORM_UI_SUBMIT_ACTION else "root"
-    part = A2UI091Codec().encode_data_part(
-        [
-            {
-                "version": "v0.9.1",
-                "action": {
-                    "name": action,
-                    "surfaceId": "main",
-                    "sourceComponentId": source_component_id,
-                    "timestamp": "2026-08-04T12:00:00Z",
-                    "context": (
-                        {"formId": "message-form"}
-                        if action == PLATFORM_UI_SUBMIT_ACTION
-                        else {}
-                    ),
-                },
-            }
-        ]
-    )
-    platform_ui: JsonObject = {"actionId": action_id}
-    if revision is not None:
-        view_state: JsonObject = (
-            dict(session_view_state)
-            if session_view_state is not None
-            else {"activeTabs": {"main": "conversation"}}
-        )
-        platform_ui.update(
-            {
-                "documentId": f"flow-ui:{context_id}",
-                "revision": revision,
-                "clientMutationId": action_id,
-                "activePageId": active_page_id,
-                "sessionViewState": view_state,
-            }
-        )
-    metadata: JsonObject = {
-        "a2uiClientCapabilities": {
-            "v0.9.1": {
-                "supportedCatalogIds": [A2UI_PLATFORM_CATALOG_ID],
-                "inlineCatalogs": [],
-            }
-        },
-        "platformUi": platform_ui,
+    action: str,
+    source: str,
+    fields: JsonObject | None = None,
+    payload: JsonObject | None = None,
+    message_id: str | None = None,
+    task_id: str | None = None,
+) -> JsonObject:
+    """ProtoJSON Message с единственным ui-action data Part."""
+    body: JsonObject = {
+        "action": action,
+        "source": source,
+        "fields": dict(fields) if fields is not None else {},
+        "payload": dict(payload) if payload is not None else {},
     }
-    if surfaces_values is not None:
-        if values is not None or message_value is not None:
-            raise ValueError("surfaces_values cannot be combined with values/message_value")
-        client_surfaces = {
-            surface_id: {"values": dict(surface_values)}
-            for surface_id, surface_values in surfaces_values.items()
-        }
-    else:
-        surface_values: JsonObject
-        if values is not None:
-            surface_values = dict(values)
-        elif message_value is not None:
-            surface_values = {"message": message_value, "files": []}
-        else:
-            surface_values = {"message": "", "files": []}
-        client_surfaces = {
-            "main": {
-                "content": {"forged": "ignored"},
-                "values": surface_values,
-                "system": {"forged": "ignored"},
-            }
-        }
-    if (
-        surfaces_values is not None
-        or message_value is not None
-        or values is not None
-        or action
-        in {
-            PLATFORM_UI_SYNC_ACTION,
-            PLATFORM_UI_SUBMIT_ACTION,
-        }
-    ):
-        metadata["a2uiClientDataModel"] = {
-            "version": "v0.9.1",
-            "surfaces": client_surfaces,
-        }
-    return Message(
-        message_id=f"message-{action_id}",
-        context_id=context_id,
-        role=Role.ROLE_USER,
-        parts=[part],
-        extensions=[A2UI_EXTENSION_URI],
-        metadata=struct_from_mapping(metadata),
-    )
-
-
-def flow_ui_protojson_message(
-    *,
-    action: str,
-    context_id: str,
-    action_id: str,
-    revision: int | None = None,
-    message_value: str | None = None,
-    values: JsonObject | None = None,
-) -> dict[str, Any]:
-    message = flow_ui_command_message(
-        action=action,
-        context_id=context_id,
-        action_id=action_id,
-        revision=revision,
-        message_value=message_value,
-        values=values,
-    )
-    wire: dict[str, Any] = {
-        "messageId": message.message_id,
+    message: JsonObject = {
+        "messageId": message_id if message_id is not None else f"message-{uuid.uuid4().hex}",
         "role": "ROLE_USER",
         "contextId": context_id,
-        "extensions": [A2UI_EXTENSION_URI],
-        "parts": [MessageToDict(part) for part in message.parts],
+        "parts": [{"data": body, "mediaType": FLOW_UI_ACTION_MEDIA_TYPE}],
     }
-    if message.HasField("metadata"):
-        wire["metadata"] = MessageToDict(message.metadata)
-    return wire
+    if task_id is not None:
+        message["taskId"] = task_id
+    return message
 
 
-async def bootstrap_flow_ui_session(
+def text_message(*, context_id: str, text: str, task_id: str | None = None) -> JsonObject:
+    message: JsonObject = {
+        "messageId": f"message-{uuid.uuid4().hex}",
+        "role": "ROLE_USER",
+        "contextId": context_id,
+        "parts": [{"text": text}],
+    }
+    if task_id is not None:
+        message["taskId"] = task_id
+    return message
+
+
+async def a2a_send(
+    client: AsyncClient,
+    *,
+    flow_id: str,
+    message: JsonObject,
+    branch_id: str | None = None,
+    auth_headers: dict[str, str] | None = None,
+    rpc_id: str | None = None,
+) -> JsonObject:
+    """SendMessage к flow; возвращает ``result`` JSON-RPC ответа (Task)."""
+    params: JsonObject = {"message": message}
+    if branch_id is not None:
+        params["metadata"] = {"branch": branch_id}
+    response = await client.post(
+        f"/flows/api/v1/{flow_id}",
+        headers={**(auth_headers or {}), **A2A_HEADERS},
+        json=a2a_rpc(SEND_MESSAGE, params, rpc_id=rpc_id),
+    )
+    assert response.status_code == 200, response.text
+    body = parse_json_object(response.content, "a2a response")
+    assert "error" not in body, body
+    return require_json_object(body["result"], "a2a result")
+
+
+async def a2a_send_error(
+    client: AsyncClient,
+    *,
+    flow_id: str,
+    message: JsonObject,
+    branch_id: str | None = None,
+    auth_headers: dict[str, str] | None = None,
+) -> JsonObject:
+    """SendMessage, который обязан завершиться JSON-RPC ошибкой; возвращает объект ``error``."""
+    params: JsonObject = {"message": message}
+    if branch_id is not None:
+        params["metadata"] = {"branch": branch_id}
+    response = await client.post(
+        f"/flows/api/v1/{flow_id}",
+        headers={**(auth_headers or {}), **A2A_HEADERS},
+        json=a2a_rpc(SEND_MESSAGE, params),
+    )
+    body = parse_json_object(response.content, "a2a response")
+    if response.status_code == 200:
+        assert "error" in body, body
+        return require_json_object(body["error"], "a2a error")
+    return body
+
+
+async def a2a_get_task(
+    client: AsyncClient,
+    *,
+    flow_id: str,
+    task_id: str,
+    auth_headers: dict[str, str] | None = None,
+) -> JsonObject:
+    response = await client.post(
+        f"/flows/api/v1/{flow_id}",
+        headers={**(auth_headers or {}), **A2A_HEADERS},
+        json=a2a_rpc(GET_TASK, {"id": task_id}),
+    )
+    assert response.status_code == 200, response.text
+    body = parse_json_object(response.content, "a2a response")
+    assert "error" not in body, body
+    return require_json_object(body["result"], "a2a task")
+
+
+async def ensure_flow(
     *,
     flow_id: str | None = None,
-    context_id: str | None = None,
-    branch_id: str = "default",
-    user_id: str | None = None,
-    initial_document: FlowUIDocument | None = None,
-) -> tuple[str, str, str, FlowUISessionCommandResult]:
+    interface: FlowUIDocument | None = None,
+    code: str = ECHO_CODE,
+    owner_user_id: str | None = None,
+) -> FlowConfig:
+    """Code-flow из одной ноды с явным интерфейсом; authz синхронизируется как при сохранении."""
     context = require_context()
-    owner_user_id = user_id if user_id is not None else context.user.user_id
     resolved_flow_id = flow_id if flow_id is not None else f"flow-ui-{uuid.uuid4().hex}"
-    resolved_context_id = (
-        context_id if context_id is not None else f"context-{uuid.uuid4().hex}"
-    )
-    session_id = f"{resolved_flow_id}:{resolved_context_id}"
     container = get_container()
     config = await container.flow_repository.get(resolved_flow_id)
     if config is None:
@@ -208,135 +148,20 @@ async def bootstrap_flow_ui_session(
             flow_id=resolved_flow_id,
             name=resolved_flow_id,
             entry="main",
-            nodes={
-                "main": {
-                    "type": "code",
-                    "code": "async def run(args, state): return state",
-                }
-            },
+            nodes={"main": {"type": "code", "code": code}},
             edges=[Edge(from_node="main", to_node=None)],
         )
+        if interface is not None:
+            config.interface = interface
         _ = await container.flow_repository.set(config)
     if context.active_company is None:
         raise AssertionError("active company required for flow authz sync")
     await container.flow_access_service.sync_flow_saved(
         config,
         company_id=context.active_company.company_id,
-        owner_user_id=owner_user_id,
+        owner_user_id=owner_user_id if owner_user_id is not None else context.user.user_id,
     )
-    service = FlowUISessionService(container.workflow_runtime)
-    if initial_document is None:
-        document = default_flow_interface_config().template.materialize(
-            document_id=f"flow-ui:{resolved_context_id}"
-        )
-    else:
-        document = initial_document.model_copy(deep=True)
-        document.document_id = f"flow-ui:{resolved_context_id}"
-        document.revision = 1
-    command = parse_flow_ui_command(
-        flow_ui_command_message(
-            action=PLATFORM_UI_BOOTSTRAP_ACTION,
-            context_id=resolved_context_id,
-            action_id=f"bootstrap-{uuid.uuid4().hex}",
-        )
-    )
-    if command is None:
-        raise AssertionError("bootstrap command failed to parse")
-    result = await service.bootstrap(
-        command=command,
-        task_id=f"task-bootstrap-{uuid.uuid4().hex}",
-        context_id=resolved_context_id,
-        session_id=session_id,
-        user_id=owner_user_id,
-        initiator_user_id=owner_user_id,
-        branch_id=branch_id,
-        initial_document=document,
-        representation=flow_ui_representation(),
-    )
-    return resolved_flow_id, resolved_context_id, session_id, result
-
-
-async def sync_flow_ui_session(
-    *,
-    flow_id: str,
-    context_id: str,
-    revision: int,
-    message_value: str | None = None,
-    action_id: str | None = None,
-    values: JsonObject | None = None,
-    surfaces_values: dict[str, JsonObject] | None = None,
-    session_view_state: JsonObject | None = None,
-    active_page_id: str = "main",
-    user_id: str | None = None,
-    share_grant: FlowUIShareGrant | None = None,
-) -> FlowUISessionCommandResult:
-    if surfaces_values is None and message_value is None and values is None:
-        raise ValueError("sync_flow_ui_session requires message_value, values, or surfaces_values")
-    context = require_context()
-    actor_user_id = user_id if user_id is not None else context.user.user_id
-    session_id = f"{flow_id}:{context_id}"
-    service = FlowUISessionService(get_container().workflow_runtime)
-    mutation_id = action_id if action_id is not None else f"sync-{uuid.uuid4().hex}"
-    command = parse_flow_ui_command(
-        flow_ui_command_message(
-            action=PLATFORM_UI_SYNC_ACTION,
-            context_id=context_id,
-            action_id=mutation_id,
-            revision=revision,
-            message_value=message_value,
-            values=values,
-            surfaces_values=surfaces_values,
-            session_view_state=session_view_state,
-            active_page_id=active_page_id,
-        )
-    )
-    if command is None:
-        raise AssertionError("sync command failed to parse")
-    return await service.sync(
-        command=command,
-        task_id=f"task-sync-{mutation_id}",
-        context_id=context_id,
-        session_id=session_id,
-        user_id=actor_user_id,
-        share_grant=share_grant,
-    )
-
-
-async def submit_flow_ui_session(
-    *,
-    flow_id: str,
-    context_id: str,
-    revision: int,
-    message_value: str,
-    action_id: str | None = None,
-    user_id: str | None = None,
-    share_grant: FlowUIShareGrant | None = None,
-) -> FlowUISessionCommandResult:
-    context = require_context()
-    actor_user_id = user_id if user_id is not None else context.user.user_id
-    session_id = f"{flow_id}:{context_id}"
-    service = FlowUISessionService(get_container().workflow_runtime)
-    mutation_id = action_id if action_id is not None else f"submit-{uuid.uuid4().hex}"
-    command = parse_flow_ui_command(
-        flow_ui_command_message(
-            action=PLATFORM_UI_SUBMIT_ACTION,
-            context_id=context_id,
-            action_id=mutation_id,
-            revision=revision,
-            message_value=message_value,
-        )
-    )
-    if command is None:
-        raise AssertionError("submit command failed to parse")
-    return await service.submit(
-        command=command,
-        task_id=f"task-submit-{mutation_id}",
-        context_id=context_id,
-        session_id=session_id,
-        user_id=actor_user_id,
-        representation=flow_ui_representation(),
-        share_grant=share_grant,
-    )
+    return config
 
 
 async def load_flow_ui_state(session_id: str) -> ExecutionState:
@@ -346,56 +171,61 @@ async def load_flow_ui_state(session_id: str) -> ExecutionState:
     return state
 
 
-async def a2a_flow_ui_send(
-    client: AsyncClient,
-    *,
-    flow_id: str,
-    action: str,
-    context_id: str,
-    action_id: str,
-    revision: int | None = None,
-    message_value: str | None = None,
-    values: JsonObject | None = None,
-    branch_id: str | None = None,
-    auth_headers: dict[str, str] | None = None,
-) -> dict[str, Any]:
-    params: dict[str, Any] = {
-        "message": flow_ui_protojson_message(
-            action=action,
-            context_id=context_id,
-            action_id=action_id,
-            revision=revision,
-            message_value=message_value,
-            values=values,
-        )
-    }
-    # The client sends the graph branch in params metadata next to variables.
-    if branch_id is not None:
-        params["metadata"] = {"branch": branch_id}
-    payload = a2a_rpc(SEND_MESSAGE, params, rpc_id=action_id)
-    response = await client.post(
-        f"/flows/api/v1/{flow_id}",
-        headers=flow_ui_a2a_headers(auth_headers),
-        json=payload,
-    )
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert "error" not in body, body
-    assert "result" in body, body
-    result = body["result"]
-    if not isinstance(result, dict):
-        raise AssertionError(f"A2A Flow UI result must be object, got {type(result)}")
-    return result
+def state_from_task(task: JsonObject) -> JsonObject:
+    """Итоговый ``state`` Task: снимок плюс накопленные JSON Patch (SDK ``task_state``)."""
+    return task_state(task)
+
+
+def ui_events_from_task(task: JsonObject) -> list[FlowUIEvent]:
+    return task_ui_events(task)
+
+
+def conversation_renders(events: Sequence[FlowUIEvent]) -> list[FlowUIRender]:
+    return [event for event in events if isinstance(event, FlowUIRender)]
+
+
+def text_of(task: JsonObject, name: str) -> str:
+    return task_text(task, name)
+
+
+def _parts(container: JsonObject) -> list[JsonObject]:
+    parts = container.get("parts")
+    if not isinstance(parts, list):
+        raise AssertionError("parts must be a list")
+    return [require_json_object(part, "parts[]") for part in parts]
+
+
+def status_text(task: JsonObject) -> str:
+    """Текст status.message завершённого Task: итог хода без LLM-потока (code flow)."""
+    status = require_json_object(task.get("status"), "task.status")
+    message = require_json_object(status.get("message"), "task.status.message")
+    chunks: list[str] = []
+    for part in _parts(message):
+        text = part.get("text")
+        if isinstance(text, str):
+            chunks.append(text)
+    return "".join(chunks)
+
+
+def json_array(value: JsonValue, label: str) -> JsonArray:
+    if not isinstance(value, list):
+        raise AssertionError(f"{label} must be a list, got {type(value)}")
+    return value
 
 
 __all__ = [
-    "a2a_flow_ui_send",
-    "bootstrap_flow_ui_session",
-    "flow_ui_a2a_headers",
-    "flow_ui_command_message",
-    "flow_ui_protojson_message",
-    "flow_ui_representation",
+    "ECHO_CODE",
+    "a2a_get_task",
+    "a2a_send",
+    "a2a_send_error",
+    "conversation_renders",
+    "ensure_flow",
+    "json_array",
     "load_flow_ui_state",
-    "submit_flow_ui_session",
-    "sync_flow_ui_session",
+    "state_from_task",
+    "status_text",
+    "text_message",
+    "text_of",
+    "ui_action_message",
+    "ui_events_from_task",
 ]

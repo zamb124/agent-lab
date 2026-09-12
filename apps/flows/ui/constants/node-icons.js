@@ -37,6 +37,23 @@ export const CATEGORY_TOKEN = Object.freeze({
 
 export const FALLBACK_NODE_META = Object.freeze({ icon: 'box', category: 'core' });
 
+export const DATASOURCE_CONNECTOR_ICONS = Object.freeze({
+    postgres: { icon: 'postgres' },
+    mysql: { icon: 'mysql' },
+    clickhouse: { icon: 'clickhouse' },
+});
+
+export function datasourceIconName(connectorId) {
+    if (typeof connectorId !== 'string' || connectorId.length === 0) {
+        throw new Error('datasourceIconName: connector_id required');
+    }
+    const meta = DATASOURCE_CONNECTOR_ICONS[connectorId];
+    if (meta) {
+        return meta.icon;
+    }
+    return 'database';
+}
+
 export function getNodeTypeMeta(type) {
     if (typeof type !== 'string' || type.length === 0) return FALLBACK_NODE_META;
     const meta = NODE_TYPE_META[type];

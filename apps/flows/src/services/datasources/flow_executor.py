@@ -16,7 +16,6 @@ from core.datasources.models import (
     DatasourceSchemaSnapshot,
     DatasourceTestResult,
 )
-from core.models.flow_interface import default_flow_interface_config
 from core.types import JsonObject, require_json_object
 
 
@@ -48,16 +47,12 @@ class DatasourceFlowExecutor:
         ctx = require_context()
         context_id = f"ds-{uuid4().hex}"
         session_id = f"{flow_id}:{context_id}"
-        ui_document = default_flow_interface_config().template.materialize(
-            document_id=f"flow-ui:{context_id}"
-        )
         state = create_initial_state(
             task_id=context_id,
             context_id=context_id,
             user_id=ctx.user.user_id,
             session_id=session_id,
             branch_id=branch_id,
-            ui_document=ui_document,
         )
         state["datasource_operation"] = operation.value
         state["datasource_id"] = connection.datasource_id

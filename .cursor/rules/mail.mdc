@@ -102,6 +102,7 @@ Wire folder = exact IMAP name; роли только SPECIAL-USE. Ensure: sent/d
 ## Provision
 
 - **System**: `reconcile_system` / `ensure_system_*` — company connection + role boxes; `ensure_system_user_bindings` итерирует всех `company.members` (включая `flow_employee_*`) без prefix-skip. User-binding, чей `user_id` не в `company.members`, — `unbind_mailbox(acting_as_admin=True)` (personal `scope` не трогать). `list_sync_candidates` не фильтрует employee. Тесты `system.members` не сужают roster до одного user_id: leftover-unbind иначе снимет чужие ящики под xdist.
+- **Local-dev inventory** (`mail.local_dev.enabled` и `mutate_remote_passwords=false`): `mailbox_passwords` — единственный локальный реестр ящиков. `ensure_system_*` **не** вызывает ISP `ensure_mailbox` / `set_mailbox_password`; новый binding только если email уже в карте. Член/role без ключа в карте → `MailReconcileResult.*_missing_password`, startup **не** падает. Прод (`local_dev.enabled=false`) по-прежнему provision=true и может менять пароли на ISP.
 - **Prod K8s**: `mail.system.enabled` + hosts/user в `deploy/helm/agent-lab/files/app-conf.k8s-overlay.json`; `authinfo_password` — GitHub Secret `MAIL__SYSTEM__ISPMANAGER__AUTHINFO_PASSWORD` → `platform-secrets` → ENV. Frontend lifespan вызывает `reconcile_system` при `enabled=true`.
 - **Lazy company**: `MailService.get_or_create_user_binding(user_id)`. Живой flow-сотрудник — тот же path из `flow_employee_provisioning` (не `core/identity/flow_employee.py`: цикл `BaseContainer → MailService → flow_employee`). На `company_id=system` mailbox даёт `ensure_system_user_bindings` при reconcile, не get_or_create из provisioning. `deactivate` / delete flow — `unbind_company_user_mailboxes` (company-scope; personal не трогать).
 - **Personal**: `MailService.connect_personal_mailbox` — personal connection + binding, `provision=false`, healthcheck login до save.
@@ -201,6 +202,7 @@ Hosts: hostname панели (`sm36.hosting.reg.ru`), не `mail.linnex.io` ес
 
 - `enabled=true` + `mailbox_passwords: { "user@domain": "…" }` — IMAP/SMTP логин берёт plaintext из конфига (прод-пароли можно один раз выгрузить в conf.local).
 - `mutate_remote_passwords=false` (дефолт) — **запрет** `set_mailbox_password` / `email.edit(passwd)`: локальный `bind`/`reconcile` не меняет пароли на ISP и не роняет прод.
+- `reconcile_system` в этом режиме не provision'ит ISP: биндит только email из `mailbox_passwords`; остальные члены/role — `*_missing_password` в результате, без `MailConfigError`. Явный HTTP `bind_mailbox` существующего ящика без пароля в карте по-прежнему `raise`.
 - `reconcile_system` дополнительно пишет эти пароли в локальные `mailbox_bindings.password_encrypted`.
 
 Прод K8s: `local_dev.enabled` остаётся `false` в overlay.

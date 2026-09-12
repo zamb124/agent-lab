@@ -314,8 +314,8 @@ async def test_create_embed_config_presentation_page(
     assert create_response.status_code == 200
     created = create_response.json()
     assert created["presentation"] == "page"
-    assert created["show_launcher"] is False
-    assert created["position"] == "bottom-right"
+    assert created["show_launcher"] is True
+    assert created["position"] == "bottom-left"
     embed_id = created["embed_id"]
 
     code_response = await frontend_client.get(
@@ -327,7 +327,7 @@ async def test_create_embed_config_presentation_page(
     assert code["presentation"] == "page"
     assert code["page_url"].endswith(f"/flow-embed-page?embed={embed_id}")
     assert 'data-presentation="page"' in code["html_code"]
-    assert 'data-show-launcher="false"' in code["html_code"]
+    assert 'data-show-launcher="true"' in code["html_code"]
 
     await frontend_client.delete(
         f"/frontend/api/embed/configs/{embed_id}",
@@ -469,8 +469,8 @@ async def test_update_embed_config(frontend_client: AsyncClient, test_auth_with_
 
 
 @pytest.mark.asyncio
-async def test_embed_config_interface_override_crud(frontend_client: AsyncClient, test_auth_with_agent):
-    """CRUD interface_override: create с override, PATCH null сброс, PATCH partial update."""
+async def test_embed_config_conversation_crud(frontend_client: AsyncClient, test_auth_with_agent):
+    """Настройки беседы embed: create с conversation, PATCH null сброс к flow, PATCH новыми настройками."""
 
     auth_headers, _, _ = test_auth_with_agent
 
@@ -478,40 +478,35 @@ async def test_embed_config_interface_override_crud(frontend_client: AsyncClient
         "/frontend/api/embed/configs",
         headers=auth_headers,
         json={
-            "name": "Interface override widget",
+            "name": "Conversation settings widget",
             "flow_id": "test_agent",
-            "interface_override": {
-                "policy": {
-                    "show_reasoning": True,
-                    "tool_calls_display": "detailed",
-                },
-            },
+            "conversation": {"show_reasoning": True, "tool_calls": "detailed"},
         },
     )
     assert create_response.status_code == 200
     created = create_response.json()
     embed_id = created["embed_id"]
-    assert created["interface_override"] is not None
-    assert created["interface_override"]["policy"]["show_reasoning"] is True
-    assert created["interface_override"]["policy"]["tool_calls_display"] == "detailed"
+    assert created["conversation"]["show_reasoning"] is True
+    assert created["conversation"]["tool_calls"] == "detailed"
+    assert created["start_page_id"] is None
 
     patch_reset = await frontend_client.patch(
         f"/frontend/api/embed/configs/{embed_id}",
         headers=auth_headers,
-        json={"interface_override": None},
+        json={"conversation": None},
     )
     assert patch_reset.status_code == 200
-    assert patch_reset.json()["interface_override"] is None
+    assert patch_reset.json()["conversation"] is None
 
-    patch_override = await frontend_client.patch(
+    patch_conversation = await frontend_client.patch(
         f"/frontend/api/embed/configs/{embed_id}",
         headers=auth_headers,
-        json={"interface_override": {"policy": {"show_files_panel": False}}},
+        json={"conversation": {"show_files_panel": False}},
     )
-    assert patch_override.status_code == 200
-    override_payload = patch_override.json()["interface_override"]
-    assert override_payload is not None
-    assert override_payload["policy"]["show_files_panel"] is False
+    assert patch_conversation.status_code == 200
+    conversation = patch_conversation.json()["conversation"]
+    assert conversation["show_files_panel"] is False
+    assert conversation["show_reasoning"] is False
 
     await frontend_client.delete(
         f"/frontend/api/embed/configs/{embed_id}",

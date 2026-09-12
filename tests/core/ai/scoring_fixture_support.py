@@ -13,11 +13,11 @@ import yaml
 from core.ai.free_pool import PlatformFreeModelRecord
 from core.ai.models import AIModelRecord
 from core.ai.providers import AICapability
-from core.ai.scoring import compute_platform_model_score
+from core.ai.scoring import EDITORIAL_PRIOR_CAP, compute_platform_model_score
 from core.config import get_settings
 from core.config.base import BaseSettings
 from core.types import JsonArray, JsonObject, JsonValue, require_json_object
-from tests.core.clients.live_llm_provider_helpers import build_scored_free_pool, hints_from_settings
+from tests.core.clients.live_llm_provider_helpers import build_scored_free_pool
 
 SCORING_FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "scoring"
 EXPECTATIONS_PATH = SCORING_FIXTURES_DIR / "expectations.yaml"
@@ -319,11 +319,11 @@ def pool_ranking_snapshot_to_json(snapshot: PoolRankingSnapshot) -> str:
 
 def settings_hash(settings: BaseSettings | None = None) -> str:
     resolved = settings or get_settings()
-    scoring = resolved.llm.model_scoring
+    pool = resolved.llm.platform_free_pool
     payload: JsonObject = {
-        "dimension_weights": dict(scoring.dimension_weights),
-        "editorial_prior_cap": scoring.editorial_prior_cap,
-        "hint_blend_ratio": scoring.hint_blend_ratio,
+        "editorial_prior_cap": EDITORIAL_PRIOR_CAP,
+        "max_candidates_per_provider": pool.max_candidates_per_provider,
+        "max_candidates_total": pool.max_candidates_total,
     }
     return json.dumps(payload, sort_keys=True, ensure_ascii=False)
 
@@ -342,28 +342,22 @@ def pool_rows_from_records(
     *,
     settings: BaseSettings | None = None,
 ) -> list[ScoredPoolRow]:
-    resolved = settings or get_settings()
-    hints = hints_from_settings(resolved)
-    scoring_config = resolved.llm.model_scoring
+    _ = settings
     rows: list[ScoredPoolRow] = []
     for record in records:
         catalog_record = catalog_index.get((record.provider, record.id))
-        breakdown: dict[str, float] = {}
-        if catalog_record is not None:
-            computed = compute_platform_model_score(
-                catalog_record,
-                AICapability.LLM_CHAT,
-                hint=hints.get((record.provider, record.id)),
-                scoring_config=scoring_config,
+        if catalog_record is None:
+            raise ValueError(
+                f"free-pool record {record.provider}:{record.id} отсутствует в каталоге фикстур"
             )
-            breakdown = dict(computed.breakdown)
+        computed = compute_platform_model_score(catalog_record, AICapability.LLM_CHAT)
         rows.append(
             ScoredPoolRow(
                 provider=record.provider,
                 model_id=record.id,
                 score=float(record.score),
                 free_reason=record.free_reason,
-                breakdown=breakdown,
+                breakdown=dict(computed.breakdown),
             )
         )
     return rows

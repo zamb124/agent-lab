@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import secrets
 from contextlib import suppress
 
@@ -39,6 +38,7 @@ from core.mail.service import MailService
 from core.models.context_models import Context
 from core.models.identity_models import Company, User, UserStatus
 from tests.core.mail.live.poll import poll_fetch_message as _poll_fetch_message
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 pytestmark = [pytest.mark.network, pytest.mark.timeout(240)]
 

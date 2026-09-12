@@ -17,6 +17,7 @@ from core.context.job_context import build_job_context
 from core.identity.flow_employee import flow_employee_user_id, is_flow_employee
 from core.logging import get_logger
 from core.models.context_models import Context
+from core.models.flow_ui_share import FlowUIShareGrant
 from core.types import JsonObject
 
 logger = get_logger(__name__)
@@ -40,22 +41,67 @@ def _employee_permission_groups(company_id: str, groups: list[str], roles: list[
     return merged
 
 
+async def _share_owner_context(
+    container: FlowRuntimeContainer,
+    *,
+    share_grant: FlowUIShareGrant,
+    visitor_context: Context,
+) -> Context:
+    """Ход editor-посетителя share исполняется от имени владельца сессии, выдавшего grant.
+
+    Владелец остаётся и инициатором: A2A Task принадлежит ему, посетитель не является
+    пользователем платформы и виден только в metadata контекста.
+    """
+    company = visitor_context.active_company
+    if company is None or company.company_id != share_grant.company_id:
+        raise ValueError("share visitor context must carry the grant company")
+    owner = await container.user_repository.get(share_grant.created_by_user_id)
+    if owner is None:
+        raise ValueError(
+            f"share grant {share_grant.grant_id} owner {share_grant.created_by_user_id} not found"
+        )
+    owner_context = build_job_context(
+        company=company,
+        user=owner,
+        host=visitor_context.host,
+        trace_id=visitor_context.trace_id or "",
+        session_id=visitor_context.session_id or "",
+        channel=visitor_context.channel,
+    )
+    owner_context.active_namespace = visitor_context.active_namespace
+    owner_context.language = visitor_context.language
+    owner_context.metadata = {
+        "context_type": "flow_ui_share_owner",
+        "authenticated": True,
+        "grps": list(owner.groups),
+        "flow_ui_share_grant_id": share_grant.grant_id,
+        "flow_ui_share_visitor_user_id": visitor_context.user.user_id,
+    }
+    return owner_context
+
+
 async def resolve_execution_context(
     container: FlowRuntimeContainer,
     *,
     flow_config: FlowConfig,
     initiator_context: Context,
+    share_grant: FlowUIShareGrant | None = None,
 ) -> ResolvedExecutionIdentity:
     """Возвращает контекст, от чьего имени исполняется flow, и инициатора запуска."""
-    initiator_user_id = initiator_context.user.user_id
+    actor_context = initiator_context
+    if share_grant is not None:
+        actor_context = await _share_owner_context(
+            container, share_grant=share_grant, visitor_context=initiator_context
+        )
+    initiator_user_id = actor_context.user.user_id
     if not flow_config.employee.enabled:
         return ResolvedExecutionIdentity(
-            context=initiator_context,
+            context=actor_context,
             initiator_user_id=initiator_user_id,
             is_employee=False,
         )
 
-    company = initiator_context.active_company
+    company = actor_context.active_company
     if company is None:
         raise ValueError(
             f"resolve_execution_context: flow {flow_config.flow_id} employee requires active company"
@@ -81,13 +127,13 @@ async def resolve_execution_context(
     employee_context = build_job_context(
         company=company,
         user=user,
-        host=initiator_context.host,
-        trace_id=initiator_context.trace_id or "",
-        session_id=initiator_context.session_id or "",
-        channel=initiator_context.channel,
+        host=actor_context.host,
+        trace_id=actor_context.trace_id or "",
+        session_id=actor_context.session_id or "",
+        channel=actor_context.channel,
     )
-    employee_context.active_namespace = initiator_context.active_namespace
-    employee_context.language = initiator_context.language
+    employee_context.active_namespace = actor_context.active_namespace
+    employee_context.language = actor_context.language
     metadata: JsonObject = {
         "context_type": "flow_employee",
         "authenticated": True,

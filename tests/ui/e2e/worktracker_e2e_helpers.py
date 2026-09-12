@@ -420,9 +420,7 @@ async def worktracker_hitl_click_send_and_assert_http(page: Page, send_button: L
 
 async def worktracker_hitl_chat_send(editor: Locator, text: str) -> None:
     chat = await worktracker_hitl_embedded_chat(editor)
-    textarea = chat.locator(
-        '[data-flow-ui-component="message-input"] textarea, textarea[data-canon="composer"]'
-    ).first
+    textarea = chat.locator('textarea[data-canon="composer"]').first
     await expect(textarea).to_be_visible(timeout=30_000)
     await expect(textarea).to_be_editable(timeout=20_000)
     await textarea.click()

@@ -16,6 +16,7 @@ import pytest
 from apps.flows.src.models import Edge
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import CodeNode
+from core.flow_ui.templates import default_chat_document
 from core.state import ExecutionState
 from tests.flows.durable_runtime_harness import run_flow, run_node, workflow_state
 
@@ -283,6 +284,7 @@ class TestAllNodeTypesDataFlow:
                 Edge(from_node="multiply", to_node=None),
             ],
             variables={},
+            interface=default_chat_document(),
             container=container,
         )
         state = make_state(unique_id, flow_id=flow_id)
@@ -315,6 +317,7 @@ class TestAllNodeTypesDataFlow:
                 Edge(from_node="format", to_node=None),
             ],
             variables={},
+            interface=default_chat_document(),
             container=container,
         )
         state = make_state(unique_id, flow_id=flow_id)
@@ -361,6 +364,7 @@ class TestAllNodeTypesDataFlow:
                 Edge(from_node="subtract", to_node=None),
             ],
             variables={},
+            interface=default_chat_document(),
             container=container,
         )
         state = make_state(unique_id, flow_id=flow_id, initial=5)
@@ -390,6 +394,7 @@ class TestAllNodeTypesDataFlow:
                 Edge(from_node="step3", to_node=None),
             ],
             variables={},
+            interface=default_chat_document(),
             container=container,
         )
         state = make_state(unique_id, flow_id=flow_id)
@@ -429,6 +434,7 @@ class TestAllNodeTypesDataFlow:
                 Edge(from_node="add_bonus", to_node=None),
             ],
             variables={"bonus_amount": 50},
+            interface=default_chat_document(),
             container=container,
         )
         state = make_state(unique_id, flow_id=flow_id, messages=[])
@@ -463,6 +469,7 @@ class TestFromConfig:
                 {"from_node": "step1", "to_node": "step2"},
                 {"from_node": "step2", "to_node": None},
             ],
+            "interface": default_chat_document().model_dump(mode="json"),
         }
         flow = await Flow.from_config(flow_config, container=container)
         state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id)
@@ -485,6 +492,7 @@ class TestFromConfig:
                 }
             },
             "edges": [{"from_node": "process", "to_node": None}],
+            "interface": default_chat_document().model_dump(mode="json"),
         }
         flow = await Flow.from_config(flow_config, container=container)
         state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, messages=[])
@@ -509,6 +517,7 @@ class TestFromConfig:
                 }
             },
             "edges": [{"from_node": "process", "to_node": None}],
+            "interface": default_chat_document().model_dump(mode="json"),
         }
         flow = await Flow.from_config(flow_config, container=container)
         state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, messages=[])
@@ -569,6 +578,7 @@ class TestComplexPipeline:
                 Edge(from_node="load", to_node=None),
             ],
             variables={},
+            interface=default_chat_document(),
             container=container,
         )
         state = make_state(unique_id, flow_id=flow_id, messages=[])
@@ -660,6 +670,7 @@ class TestComplexPipeline:
                 Edge(from_node="finalize", to_node=None),
             ],
             variables={},
+            interface=default_chat_document(),
             container=container,
         )
         state1 = make_state(

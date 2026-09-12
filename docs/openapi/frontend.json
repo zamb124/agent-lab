@@ -718,6 +718,93 @@
           }
         }
       }
+    },
+    "/frontend/api/public/cookie-consent": {
+      "post": {
+        "tags": [
+          "public-site",
+          "public-site",
+          "public-site",
+          "public"
+        ],
+        "summary": "Record Cookie Consent",
+        "operationId": "record_cookie_consent_frontend_api_public_cookie_consent_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CookieConsentCreateBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CookieConsentRecord"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/public/cookie-consent": {
+      "post": {
+        "tags": [
+          "public-site",
+          "public-site",
+          "public"
+        ],
+        "summary": "Record Cookie Consent",
+        "operationId": "record_cookie_consent_api_public_cookie_consent_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CookieConsentCreateBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CookieConsentRecord"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1415,6 +1502,473 @@
         "title": "ApiKeyUpdate",
         "description": "Запрос на обновление API ключа"
       },
+      "AuthzExplorerByObjectResponse": {
+        "properties": {
+          "object_type": {
+            "$ref": "#/components/schemas/AuthzObjectType"
+          },
+          "object_key": {
+            "type": "string",
+            "title": "Object Key"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "title_status": {
+            "$ref": "#/components/schemas/AuthzTitleStatus"
+          },
+          "href": {
+            "type": "string",
+            "title": "Href"
+          },
+          "manage_href": {
+            "type": "string",
+            "title": "Manage Href"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace"
+          },
+          "company_visible": {
+            "type": "boolean",
+            "title": "Company Visible"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AuthzGrantRow"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/AuthzExplorerSummary"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "object_type",
+          "object_key",
+          "title",
+          "title_status",
+          "href",
+          "manage_href",
+          "namespace",
+          "company_visible",
+          "items",
+          "summary"
+        ],
+        "title": "AuthzExplorerByObjectResponse"
+      },
+      "AuthzExplorerByUserResponse": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "company_visible": {
+            "type": "boolean",
+            "title": "Company Visible"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AuthzGrantRow"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/AuthzExplorerSummary"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "user_id",
+          "company_visible",
+          "items",
+          "summary"
+        ],
+        "title": "AuthzExplorerByUserResponse"
+      },
+      "AuthzExplorerObjectHit": {
+        "properties": {
+          "object_type": {
+            "$ref": "#/components/schemas/AuthzObjectType"
+          },
+          "object_key": {
+            "type": "string",
+            "title": "Object Key"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "title_status": {
+            "$ref": "#/components/schemas/AuthzTitleStatus"
+          },
+          "href": {
+            "type": "string",
+            "title": "Href"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "object_type",
+          "object_key",
+          "title",
+          "title_status",
+          "href",
+          "namespace"
+        ],
+        "title": "AuthzExplorerObjectHit"
+      },
+      "AuthzExplorerObjectsResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AuthzExplorerObjectHit"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "AuthzExplorerObjectsResponse"
+      },
+      "AuthzExplorerRevokeRequest": {
+        "properties": {
+          "object_type": {
+            "$ref": "#/components/schemas/AuthzObjectType"
+          },
+          "object_key": {
+            "type": "string",
+            "title": "Object Key"
+          },
+          "relation": {
+            "$ref": "#/components/schemas/AuthzRelation"
+          },
+          "subject_kind": {
+            "$ref": "#/components/schemas/AuthzSubjectKind"
+          },
+          "subject_id": {
+            "type": "string",
+            "title": "Subject Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "object_type",
+          "object_key",
+          "relation",
+          "subject_kind",
+          "subject_id"
+        ],
+        "title": "AuthzExplorerRevokeRequest"
+      },
+      "AuthzExplorerRevokeResponse": {
+        "properties": {
+          "revoked": {
+            "type": "boolean",
+            "title": "Revoked"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "revoked"
+        ],
+        "title": "AuthzExplorerRevokeResponse"
+      },
+      "AuthzExplorerSummary": {
+        "properties": {
+          "explicit_grant_count": {
+            "type": "integer",
+            "title": "Explicit Grant Count"
+          },
+          "company_visible": {
+            "type": "boolean",
+            "title": "Company Visible"
+          },
+          "group_count": {
+            "type": "integer",
+            "title": "Group Count"
+          },
+          "counts_by_type": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Counts By Type"
+          },
+          "counts_by_relation": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Counts By Relation"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "explicit_grant_count",
+          "company_visible",
+          "group_count",
+          "counts_by_type",
+          "counts_by_relation"
+        ],
+        "title": "AuthzExplorerSummary"
+      },
+      "AuthzExplorerWhyResponse": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "object_type": {
+            "$ref": "#/components/schemas/AuthzObjectType"
+          },
+          "object_key": {
+            "type": "string",
+            "title": "Object Key"
+          },
+          "allowed": {
+            "type": "boolean",
+            "title": "Allowed"
+          },
+          "reasons": {
+            "items": {
+              "$ref": "#/components/schemas/AuthzWhyReason"
+            },
+            "type": "array",
+            "title": "Reasons"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "user_id",
+          "object_type",
+          "object_key",
+          "allowed",
+          "reasons"
+        ],
+        "title": "AuthzExplorerWhyResponse"
+      },
+      "AuthzGrantRow": {
+        "properties": {
+          "subject_kind": {
+            "$ref": "#/components/schemas/AuthzSubjectKind"
+          },
+          "subject_id": {
+            "type": "string",
+            "title": "Subject Id"
+          },
+          "relation": {
+            "$ref": "#/components/schemas/AuthzRelation"
+          },
+          "object_type": {
+            "$ref": "#/components/schemas/AuthzObjectType"
+          },
+          "object_key": {
+            "type": "string",
+            "title": "Object Key"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "title_status": {
+            "$ref": "#/components/schemas/AuthzTitleStatus"
+          },
+          "href": {
+            "type": "string",
+            "title": "Href"
+          },
+          "manage_href": {
+            "type": "string",
+            "title": "Manage Href"
+          },
+          "grant_source": {
+            "$ref": "#/components/schemas/AuthzGrantSource"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace"
+          },
+          "can_revoke": {
+            "type": "boolean",
+            "title": "Can Revoke"
+          },
+          "why_reasons": {
+            "items": {
+              "$ref": "#/components/schemas/AuthzWhyReason"
+            },
+            "type": "array",
+            "title": "Why Reasons"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "subject_kind",
+          "subject_id",
+          "relation",
+          "object_type",
+          "object_key",
+          "title",
+          "title_status",
+          "href",
+          "manage_href",
+          "grant_source",
+          "namespace",
+          "can_revoke"
+        ],
+        "title": "AuthzGrantRow"
+      },
+      "AuthzGrantSource": {
+        "type": "string",
+        "enum": [
+          "direct",
+          "group",
+          "inherited",
+          "company_visible"
+        ],
+        "title": "AuthzGrantSource"
+      },
+      "AuthzObjectType": {
+        "type": "string",
+        "enum": [
+          "user",
+          "group",
+          "company",
+          "platform",
+          "platform_namespace",
+          "crm_namespace",
+          "crm_entity",
+          "wiki_page",
+          "office_catalog",
+          "office_document",
+          "sync_channel",
+          "work_queue",
+          "mailbox_binding",
+          "flow",
+          "flow_branch",
+          "tool",
+          "flow_ui_share",
+          "agent_device",
+          "datasource"
+        ],
+        "title": "AuthzObjectType"
+      },
+      "AuthzRelation": {
+        "type": "string",
+        "enum": [
+          "owner",
+          "admin",
+          "editor",
+          "viewer",
+          "member",
+          "manager",
+          "parent",
+          "company",
+          "platform",
+          "namespace",
+          "catalog",
+          "flow",
+          "company_viewer",
+          "can_share",
+          "can_view",
+          "can_edit",
+          "can_admin"
+        ],
+        "title": "AuthzRelation"
+      },
+      "AuthzSubjectKind": {
+        "type": "string",
+        "enum": [
+          "user",
+          "public",
+          "company_member",
+          "group",
+          "api_key",
+          "object"
+        ],
+        "title": "AuthzSubjectKind"
+      },
+      "AuthzTitleStatus": {
+        "type": "string",
+        "enum": [
+          "loaded",
+          "missing",
+          "unavailable"
+        ],
+        "title": "AuthzTitleStatus"
+      },
+      "AuthzWhyReason": {
+        "type": "string",
+        "enum": [
+          "direct_grant",
+          "group_membership",
+          "parent_inherit",
+          "company_visible"
+        ],
+        "title": "AuthzWhyReason"
+      },
       "BillingPlanChangeResponse": {
         "properties": {
           "success": {
@@ -1635,134 +2189,6 @@
           "state"
         ],
         "title": "Body_auth_callback_post_frontend_api_auth_callback__provider_name__post"
-      },
-      "Body_payment_webhook_api_v1_payments_webhook__provider_name__post": {
-        "properties": {
-          "notification_type": {
-            "type": "string",
-            "title": "Notification Type"
-          },
-          "operation_id": {
-            "type": "string",
-            "title": "Operation Id"
-          },
-          "amount": {
-            "type": "string",
-            "title": "Amount"
-          },
-          "currency": {
-            "type": "string",
-            "title": "Currency"
-          },
-          "datetime": {
-            "type": "string",
-            "title": "Datetime"
-          },
-          "sender": {
-            "type": "string",
-            "title": "Sender"
-          },
-          "codepro": {
-            "type": "string",
-            "title": "Codepro"
-          },
-          "sha1_hash": {
-            "type": "string",
-            "title": "Sha1 Hash"
-          },
-          "label": {
-            "type": "string",
-            "title": "Label"
-          },
-          "test_notification": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Test Notification"
-          }
-        },
-        "type": "object",
-        "required": [
-          "notification_type",
-          "operation_id",
-          "amount",
-          "currency",
-          "datetime",
-          "sender",
-          "codepro",
-          "sha1_hash",
-          "label"
-        ],
-        "title": "Body_payment_webhook_api_v1_payments_webhook__provider_name__post"
-      },
-      "Body_payment_webhook_frontend_api_v1_payments_webhook__provider_name__post": {
-        "properties": {
-          "notification_type": {
-            "type": "string",
-            "title": "Notification Type"
-          },
-          "operation_id": {
-            "type": "string",
-            "title": "Operation Id"
-          },
-          "amount": {
-            "type": "string",
-            "title": "Amount"
-          },
-          "currency": {
-            "type": "string",
-            "title": "Currency"
-          },
-          "datetime": {
-            "type": "string",
-            "title": "Datetime"
-          },
-          "sender": {
-            "type": "string",
-            "title": "Sender"
-          },
-          "codepro": {
-            "type": "string",
-            "title": "Codepro"
-          },
-          "sha1_hash": {
-            "type": "string",
-            "title": "Sha1 Hash"
-          },
-          "label": {
-            "type": "string",
-            "title": "Label"
-          },
-          "test_notification": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Test Notification"
-          }
-        },
-        "type": "object",
-        "required": [
-          "notification_type",
-          "operation_id",
-          "amount",
-          "currency",
-          "datetime",
-          "sender",
-          "codepro",
-          "sha1_hash",
-          "label"
-        ],
-        "title": "Body_payment_webhook_frontend_api_v1_payments_webhook__provider_name__post"
       },
       "CalendarAttendee": {
         "properties": {
@@ -3504,6 +3930,143 @@
         ],
         "title": "ConsoleNamespaceItem",
         "description": "Запись namespace для admin console."
+      },
+      "CookieConsentCreateBody": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "accept_all",
+              "necessary_only",
+              "custom"
+            ],
+            "title": "Decision"
+          },
+          "analytics_allowed": {
+            "type": "boolean",
+            "title": "Analytics Allowed"
+          },
+          "consent_text_version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Consent Text Version"
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "ru",
+              "en"
+            ],
+            "title": "Locale"
+          },
+          "supersedes_cookie_consent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Cookie Consent Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decision",
+          "analytics_allowed",
+          "consent_text_version",
+          "locale"
+        ],
+        "title": "CookieConsentCreateBody",
+        "description": "Тело публичной записи согласия на аналитические cookie."
+      },
+      "CookieConsentRecord": {
+        "properties": {
+          "cookie_consent_id": {
+            "type": "string",
+            "title": "Cookie Consent Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "brand_host": {
+            "type": "string",
+            "title": "Brand Host"
+          },
+          "apex_domain": {
+            "type": "string",
+            "title": "Apex Domain"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "accept_all",
+              "necessary_only",
+              "custom"
+            ],
+            "title": "Decision"
+          },
+          "analytics_allowed": {
+            "type": "boolean",
+            "title": "Analytics Allowed"
+          },
+          "consent_text_version": {
+            "type": "string",
+            "title": "Consent Text Version"
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "ru",
+              "en"
+            ],
+            "title": "Locale"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "user_agent": {
+            "type": "string",
+            "title": "User Agent"
+          },
+          "ip_hash": {
+            "type": "string",
+            "title": "Ip Hash"
+          },
+          "supersedes_cookie_consent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Cookie Consent Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "cookie_consent_id",
+          "created_at",
+          "brand_host",
+          "apex_domain",
+          "decision",
+          "analytics_allowed",
+          "consent_text_version",
+          "locale",
+          "request_id",
+          "user_agent",
+          "ip_hash"
+        ],
+        "title": "CookieConsentRecord",
+        "description": "Запись журнала согласия на cookie (доказательство ст. 9 152-ФЗ)."
       },
       "CrawlDomain": {
         "properties": {
@@ -5270,6 +5833,16 @@
             "title": "Allowed Origins",
             "description": "Разрешенные домены"
           },
+          "presentation": {
+            "type": "string",
+            "enum": [
+              "drawer",
+              "page"
+            ],
+            "title": "Presentation",
+            "description": "drawer — FAB + панель; page — полноэкранный Flow UI",
+            "default": "drawer"
+          },
           "theme": {
             "type": "string",
             "title": "Theme",
@@ -5279,7 +5852,7 @@
           "position": {
             "type": "string",
             "title": "Position",
-            "description": "Позиция на странице",
+            "description": "Позиция FAB (drawer)",
             "default": "bottom-right"
           },
           "show_launcher": {
@@ -5372,16 +5945,37 @@
             "description": "Автоматически включать голосовой режим при открытии виджета",
             "default": false
           },
-          "interface_override": {
+          "session_share_enabled": {
+            "type": "boolean",
+            "title": "Session Share Enabled",
+            "description": "Разрешить Share текущей сессии из embed-чата",
+            "default": false
+          },
+          "conversation": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/EmbedInterfaceOverride"
+                "$ref": "#/components/schemas/FlowUIConversationSettings"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Частичное переопределение policy/initial content Flow UI; null — наследовать interface flow"
+            "description": "Настройки блока conversation для этой embed-поверхности; null — как у flow"
+          },
+          "start_page_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_-]*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Page Id",
+            "description": "Стартовая страница интерфейса для embed; null — как у flow"
           }
         },
         "type": "object",
@@ -6379,6 +6973,18 @@
             "type": "string",
             "title": "Embed Id"
           },
+          "presentation": {
+            "type": "string",
+            "enum": [
+              "drawer",
+              "page"
+            ],
+            "title": "Presentation"
+          },
+          "page_url": {
+            "type": "string",
+            "title": "Page Url"
+          },
           "token_endpoint": {
             "type": "string",
             "title": "Token Endpoint"
@@ -6404,6 +7010,8 @@
           "html_code",
           "script_url",
           "embed_id",
+          "presentation",
+          "page_url",
           "token_endpoint",
           "backend_proxy_code",
           "browser_to_host_backend_code",
@@ -6439,6 +7047,14 @@
           },
           "status": {
             "$ref": "#/components/schemas/EmbedStatus"
+          },
+          "presentation": {
+            "type": "string",
+            "enum": [
+              "drawer",
+              "page"
+            ],
+            "title": "Presentation"
           },
           "theme": {
             "type": "string",
@@ -6517,15 +7133,33 @@
             "type": "boolean",
             "title": "Voice Default On"
           },
-          "interface_override": {
+          "session_share_enabled": {
+            "type": "boolean",
+            "title": "Session Share Enabled"
+          },
+          "conversation": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/EmbedInterfaceOverride"
+                "$ref": "#/components/schemas/FlowUIConversationSettings"
               },
               {
                 "type": "null"
               }
             ]
+          },
+          "start_page_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_-]*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Page Id"
           },
           "preview_share_link": {
             "type": "boolean",
@@ -6570,6 +7204,7 @@
           "branch_id",
           "allowed_origins",
           "status",
+          "presentation",
           "theme",
           "position",
           "show_launcher",
@@ -6584,7 +7219,9 @@
           "guest_max_user_messages",
           "voice_enabled",
           "voice_default_on",
-          "interface_override",
+          "session_share_enabled",
+          "conversation",
+          "start_page_id",
           "preview_share_link",
           "usage_count",
           "last_used_at",
@@ -6595,193 +7232,81 @@
         "title": "EmbedConfigResponse",
         "description": "Ответ с конфигурацией виджета"
       },
-      "EmbedInterfaceOverride": {
+      "EmbedPageSessionRequest": {
         "properties": {
-          "policy": {
-            "$ref": "#/components/schemas/EmbedInterfacePolicyOverride"
+          "embed_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Embed Id"
           },
-          "initial_content": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/JsonValue"
-            },
-            "type": "object",
-            "title": "Initial Content"
+          "origin": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Origin"
+          },
+          "expires_in_seconds": {
+            "type": "integer",
+            "maximum": 900.0,
+            "minimum": 60.0,
+            "title": "Expires In Seconds",
+            "default": 300
           }
         },
-        "additionalProperties": false,
         "type": "object",
-        "title": "EmbedInterfaceOverride",
-        "description": "Embed-scoped look policy and initial template data, never a second document."
+        "required": [
+          "embed_id",
+          "origin"
+        ],
+        "title": "EmbedPageSessionRequest"
       },
-      "EmbedInterfacePolicyOverride": {
+      "EmbedPageSessionResponse": {
         "properties": {
-          "show_reasoning": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Show Reasoning"
+          "token": {
+            "type": "string",
+            "title": "Token"
           },
-          "tool_calls_display": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "hidden",
-                  "compact",
-                  "detailed"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tool Calls Display"
+          "token_type": {
+            "type": "string",
+            "title": "Token Type"
           },
-          "show_activity": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Show Activity"
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
           },
-          "show_skill_loads": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Show Skill Loads"
+          "flow_id": {
+            "type": "string",
+            "title": "Flow Id"
           },
-          "show_reflection": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Show Reflection"
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
           },
-          "errors_display": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "generic",
-                  "detailed"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Errors Display"
+          "flows_base_url": {
+            "type": "string",
+            "title": "Flows Base Url"
           },
-          "show_run_trace": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Show Run Trace"
+          "theme": {
+            "type": "string",
+            "title": "Theme"
           },
-          "show_trace_actions": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Show Trace Actions"
-          },
-          "show_browser_previews": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Show Browser Previews"
-          },
-          "show_files_panel": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Show Files Panel"
-          },
-          "allow_cancel": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Allow Cancel"
-          },
-          "allow_voice": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Allow Voice"
-          },
-          "embed_safe_mode": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Embed Safe Mode"
-          },
-          "initial_page_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Initial Page Id"
+          "interface_locale": {
+            "type": "string",
+            "title": "Interface Locale"
           }
         },
-        "additionalProperties": false,
         "type": "object",
-        "title": "EmbedInterfacePolicyOverride"
+        "required": [
+          "token",
+          "token_type",
+          "expires_at",
+          "flow_id",
+          "branch_id",
+          "flows_base_url",
+          "theme",
+          "interface_locale"
+        ],
+        "title": "EmbedPageSessionResponse"
       },
       "EmbedSessionTokenRequest": {
         "properties": {
@@ -7425,6 +7950,104 @@
         ],
         "title": "FilesUploadConfigResponse"
       },
+      "FlowUIConversationSettings": {
+        "properties": {
+          "greeting": {
+            "type": "string",
+            "title": "Greeting",
+            "default": "",
+            "x-flow-ui": "template"
+          },
+          "suggested_prompts": {
+            "items": {
+              "type": "string",
+              "x-flow-ui": "template"
+            },
+            "type": "array",
+            "maxItems": 12,
+            "title": "Suggested Prompts"
+          },
+          "placeholder": {
+            "type": "string",
+            "title": "Placeholder",
+            "default": "",
+            "x-flow-ui": "template"
+          },
+          "show_reasoning": {
+            "type": "boolean",
+            "title": "Show Reasoning",
+            "default": false
+          },
+          "tool_calls": {
+            "type": "string",
+            "enum": [
+              "hidden",
+              "compact",
+              "detailed"
+            ],
+            "title": "Tool Calls",
+            "default": "compact"
+          },
+          "show_activity": {
+            "type": "boolean",
+            "title": "Show Activity",
+            "default": true
+          },
+          "show_skill_loads": {
+            "type": "boolean",
+            "title": "Show Skill Loads",
+            "default": true
+          },
+          "show_reflection": {
+            "type": "boolean",
+            "title": "Show Reflection",
+            "default": true
+          },
+          "errors": {
+            "type": "string",
+            "enum": [
+              "generic",
+              "detailed"
+            ],
+            "title": "Errors",
+            "default": "generic"
+          },
+          "show_run_trace": {
+            "type": "boolean",
+            "title": "Show Run Trace",
+            "default": false
+          },
+          "show_trace_actions": {
+            "type": "boolean",
+            "title": "Show Trace Actions",
+            "default": false
+          },
+          "show_browser_previews": {
+            "type": "boolean",
+            "title": "Show Browser Previews",
+            "default": true
+          },
+          "show_files_panel": {
+            "type": "boolean",
+            "title": "Show Files Panel",
+            "default": true
+          },
+          "allow_cancel": {
+            "type": "boolean",
+            "title": "Allow Cancel",
+            "default": true
+          },
+          "allow_voice": {
+            "type": "boolean",
+            "title": "Allow Voice",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FlowUIConversationSettings",
+        "description": "Настройки ленты и композера; ими владеет блок conversation."
+      },
       "GenerateInviteRequest": {
         "properties": {
           "role": {
@@ -7492,6 +8115,11 @@
           "configured": {
             "type": "boolean",
             "title": "Configured"
+          },
+          "can_admin": {
+            "type": "boolean",
+            "title": "Can Admin",
+            "default": false
           },
           "impersonate_email": {
             "anyOf": [
@@ -8337,34 +8965,10 @@
             "type": "boolean",
             "title": "Enabled"
           },
-          "source": {
-            "type": "string",
-            "enum": [
-              "config_seed",
-              "manual",
-              "benchmark_import",
-              "computed"
-            ],
-            "title": "Source"
-          },
           "editorial_prior": {
             "type": "number",
             "title": "Editorial Prior",
             "default": 0.0
-          },
-          "score_dimensions": {
-            "additionalProperties": {
-              "type": "number"
-            },
-            "type": "object",
-            "title": "Score Dimensions"
-          },
-          "score_breakdown": {
-            "additionalProperties": {
-              "type": "number"
-            },
-            "type": "object",
-            "title": "Score Breakdown"
           },
           "note": {
             "anyOf": [
@@ -8376,6 +8980,51 @@
               }
             ],
             "title": "Note"
+          },
+          "has_overlay_row": {
+            "type": "boolean",
+            "title": "Has Overlay Row",
+            "default": false
+          },
+          "intelligence_index": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intelligence Index"
+          },
+          "coding_index": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coding Index"
+          },
+          "agentic_index": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agentic Index"
+          },
+          "score_breakdown": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Score Breakdown"
           },
           "updated_by_user_id": {
             "anyOf": [
@@ -8411,11 +9060,6 @@
               }
             ],
             "title": "Updated At"
-          },
-          "has_hint_row": {
-            "type": "boolean",
-            "title": "Has Hint Row",
-            "default": false
           }
         },
         "additionalProperties": false,
@@ -8425,10 +9069,9 @@
           "model_id",
           "capability",
           "score",
-          "enabled",
-          "source"
+          "enabled"
         ],
-        "title": "LLMModelScoreDTO"
+        "title": "LLMModelScoreItem"
       },
       "LLMModelScoreDeleteResponse": {
         "properties": {
@@ -8514,17 +9157,10 @@
           },
           "editorial_prior": {
             "type": "number",
-            "maximum": 50.0,
-            "minimum": -50.0,
+            "maximum": 5.0,
+            "minimum": -5.0,
             "title": "Editorial Prior",
             "default": 0.0
-          },
-          "score_dimensions": {
-            "additionalProperties": {
-              "type": "number"
-            },
-            "type": "object",
-            "title": "Score Dimensions"
           },
           "note": {
             "anyOf": [
@@ -8895,7 +9531,7 @@
           "billing_provider": {
             "type": "string",
             "title": "Billing Provider",
-            "default": "YooMoney"
+            "default": "T-Bank"
           },
           "bank_name_ru": {
             "type": "string",
@@ -9104,6 +9740,17 @@
               }
             ],
             "title": "File Id"
+          },
+          "content_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Id"
           }
         },
         "additionalProperties": false,
@@ -9155,6 +9802,17 @@
               }
             ],
             "title": "File Id"
+          },
+          "content_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Id"
           }
         },
         "additionalProperties": false,
@@ -9940,6 +10598,20 @@
             },
             "type": "array",
             "title": "User Bindings Ensured"
+          },
+          "role_mailboxes_missing_password": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Role Mailboxes Missing Password"
+          },
+          "user_bindings_missing_password": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "User Bindings Missing Password"
           }
         },
         "additionalProperties": false,
@@ -9947,7 +10619,9 @@
         "required": [
           "connection_ensured",
           "role_mailboxes_ensured",
-          "user_bindings_ensured"
+          "user_bindings_ensured",
+          "role_mailboxes_missing_password",
+          "user_bindings_missing_password"
         ],
         "title": "MailReconcileResult"
       },
@@ -10829,6 +11503,29 @@
         ],
         "title": "MailboxBindingPublic"
       },
+      "MailboxBindingsMeResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MailboxBindingPublic"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "can_admin": {
+            "type": "boolean",
+            "title": "Can Admin"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "can_admin"
+        ],
+        "title": "MailboxBindingsMeResponse",
+        "description": "Мои mailbox bindings + server-driven company admin capability."
+      },
       "MetaSearchProviderStatus": {
         "properties": {
           "ok": {
@@ -11312,12 +12009,12 @@
       "PaymentProviderType": {
         "type": "string",
         "enum": [
-          "yoomoney",
-          "yukassa",
-          "grant"
+          "tinkoff",
+          "grant",
+          "yoomoney"
         ],
         "title": "PaymentProviderType",
-        "description": "Типы источника пополнения: платёжные провайдеры или начисление гранта из админки platform."
+        "description": "Источник пополнения в хранимой Transaction. Новые Init — только tinkoff/grant."
       },
       "PaymentStatus": {
         "type": "string",
@@ -15183,6 +15880,21 @@
               }
             ]
           },
+          "presentation": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "drawer",
+                  "page"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presentation"
+          },
           "theme": {
             "anyOf": [
               {
@@ -15337,15 +16049,40 @@
             ],
             "title": "Voice Default On"
           },
-          "interface_override": {
+          "session_share_enabled": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/EmbedInterfaceOverride"
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Share Enabled"
+          },
+          "conversation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlowUIConversationSettings"
               },
               {
                 "type": "null"
               }
             ]
+          },
+          "start_page_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_-]*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Page Id"
           }
         },
         "type": "object",
@@ -15879,6 +16616,10 @@
     {
       "name": "companies",
       "description": "Public API endpoints for companies"
+    },
+    {
+      "name": "public-site",
+      "description": "Public API endpoints for public-site"
     }
   ]
 }

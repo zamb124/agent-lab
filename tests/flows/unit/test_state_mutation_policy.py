@@ -10,8 +10,9 @@ import pytest
 
 from apps.flows.src.container import get_container
 from apps.flows.src.runtime.nodes import BaseNode, NodeInputs, NodeRunResult
-from apps.flows.src.runtime_helpers.flow_ui_presenter import present_flow_ui_artifact
 from core.errors import FrozenStateFieldError
+from core.flow_ui.document import FlowUIMarkdownText
+from core.flow_ui.runtime import render_conversation
 from core.state import ExecutionState
 from core.state.mutation_policy import (
     FIELDS_COPY_FROM_RUNTIME_NODE_STATE,
@@ -115,26 +116,13 @@ def test_runtime_node_merge_propagates_handback_terminal_state() -> None:
     assert not should_skip_field_on_runtime_node_state_merge("terminal_task_state")
 
 
-def test_copy_state_back_merges_pending_ui_transitions(app) -> None:
-    """Presenter queues PrivateAttr transitions; _copy_state_back must forward them."""
+def test_copy_state_back_forwards_pending_ui_events(app) -> None:
+    """Очередь ui-событий — PrivateAttr; copy_state_back переносит её в целевой state и очищает исходный."""
     _ = app
     node = _DummyNode("n1", config={"type": "test_dummy"}, container=get_container())  # pyright: ignore[reportArgumentType]
     target = _minimal_state()
     source = target.runtime_copy()
-    _ = present_flow_ui_artifact(
-        source,
-        kind="browser_preview",
-        data={
-            "tool_call_id": "call-1",
-            "viewer_url": "https://example.test/viewer",
-            "session_id": "sess-1",
-            "status": "running",
-        },
-        source="browser",
-        artifact_id="browser:call-1",
-    )
+    render = render_conversation(source, [FlowUIMarkdownText(block_id="card", markdown="preview")])
     node.copy_state_back_for_test(source, target, full_trust=True)
-    pending = target.drain_ui_transitions()
-    assert len(pending) == 1
-    assert pending[0].source == "presenter:browser"
-    assert source.drain_ui_transitions() == []
+    assert target.drain_ui_events() == [render]
+    assert source.drain_ui_events() == []

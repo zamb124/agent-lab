@@ -1,0 +1,39 @@
+{
+    "description": "Артефакт state: snapshot application/json, затем RFC 6902 патчи application/json-patch+json (add/replace/remove). Python json_patch_operations(before, after) == operations; apply_json_patch(before, operations) == after; JS applyJsonPatch(before, operations) == after.",
+    "cases": [
+        {
+            "name": "add_replace_remove",
+            "before": { "status": "draft", "customer": { "name": "Анна", "phone": "+7" }, "items": [1, 2] },
+            "after": { "status": "sent", "customer": { "name": "Анна", "email": "a@b.c" }, "items": [1, 2, 3] },
+            "operations": [
+                { "op": "replace", "path": "/status", "value": "sent" },
+                { "op": "remove", "path": "/customer/phone" },
+                { "op": "add", "path": "/customer/email", "value": "a@b.c" },
+                { "op": "replace", "path": "/items", "value": [1, 2, 3] }
+            ]
+        },
+        {
+            "name": "escaped_pointer_segments",
+            "before": { "a/b": 1, "c~d": 2 },
+            "after": { "a/b": 3, "c~d": 2, "plain": true },
+            "operations": [
+                { "op": "replace", "path": "/a~1b", "value": 3 },
+                { "op": "add", "path": "/plain", "value": true }
+            ]
+        },
+        {
+            "name": "nested_object_created_by_add",
+            "before": {},
+            "after": { "form": { "email": "a@b.c" } },
+            "operations": [
+                { "op": "add", "path": "/form", "value": { "email": "a@b.c" } }
+            ]
+        },
+        {
+            "name": "no_changes",
+            "before": { "x": 1 },
+            "after": { "x": 1 },
+            "operations": []
+        }
+    ]
+}

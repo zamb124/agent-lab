@@ -12,12 +12,14 @@ from core.ai.free_pool import (
 )
 from core.ai.models import AIModelRecord
 from core.ai.providers import AICapability
-from core.ai.scoring import PlatformModelScoreHint
+from core.ai.scoring import PlatformModelScoreOverlay
 from core.config import get_settings
 from tests.core.ai.scoring_fixture_support import (
     POOL_RANKING_PATH,
     REPLAY_SCORE_TOLERANCE,
     assert_scoring_expectations,
+    catalog_by_key,
+    load_all_catalog_records,
     load_pool_ranking_snapshot,
     replay_scored_pool_from_fixtures,
 )
@@ -50,13 +52,11 @@ def test_fixture_replay_scores_match_snapshot() -> None:
 
 def test_fixture_replay_satisfies_expectations() -> None:
     replay_rows = replay_scored_pool_from_fixtures()
-    from tests.core.ai.scoring_fixture_support import catalog_by_key, load_all_catalog_records
-
     catalog_index = catalog_by_key(load_all_catalog_records())
     assert_scoring_expectations(replay_rows, catalog_index)
 
 
-def test_disabled_hint_excludes_model_from_pool() -> None:
+def test_disabled_overlay_excludes_model_from_pool() -> None:
     record = AIModelRecord(
         provider="openrouter",
         model_id="vendor/disabled:free",
@@ -68,20 +68,17 @@ def test_disabled_hint_excludes_model_from_pool() -> None:
     )
     settings = get_settings()
     base_records = platform_free_records_from_model_records([record], settings=settings)
-    hints = {
-        ("openrouter", "vendor/disabled:free"): PlatformModelScoreHint(
+    overlays = {
+        ("openrouter", "vendor/disabled:free"): PlatformModelScoreOverlay(
             editorial_prior=0.0,
-            score_dimensions={"general_chat": 90.0},
             enabled=False,
-            source="manual",
             note=None,
         )
     }
     scored = compute_platform_free_record_scores(
         base_records,
         catalog_records=[record],
-        hints=hints,
-        scoring_config=settings.llm.model_scoring,
+        overlays=overlays,
     )
     assert scored == []
 

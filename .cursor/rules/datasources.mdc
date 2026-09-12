@@ -30,7 +30,7 @@ alwaysApply: false
 - Backfill tuples: `uv run python -m core.datasources.authz.backfill` (в `make openfga-backfill` и cluster script).
 - `core/` не импортирует `apps/`. MCP/flow executors — в `apps/flows/src/services/datasources/`, инжект в `DatasourceService` из `FlowContainer`.
 - Sandbox: capability `db.*` через gateway → `DatasourceClient` → flows. TCP/драйверы в sandbox запрещены.
-- Палитра: секция **Источники** (`category: sources`). Карточки из `list_connectors()`, drop → `type: datasource` + `connector_id`. На полке ресурсов: RAG → «База знаний», Data table → «Таблица».
+- Палитра: секция **Источники** (`category: sources`). Карточки из `list_connectors()`, drop → `type: datasource` + `connector_id`. Иконка карточки и канвы — `DatasourceConnectorSpec.icon` (`<platform-icon colored>` в палитре; канва — `<img>`). Platform ids: `postgres` / `mysql` / `clickhouse` — официальные локальные SVG в `core/frontend/static/assets/icons/` (Slonik с wiki.postgresql.org/wiki/Logo; дельфин Sakila в цветах MySQL; logomark ClickHouse). MCP/flow stamp без своего знака — `database`. Runtime не ходит на офсайты за лого. На полке ресурсов: RAG → «База знаний», Data table → «Таблица».
 - Lara: `datasource_node_helper` в `LARA_NODE_HELPER_BRANCH_BY_TYPE` + ветка в `apps/flows/bundles/lara/flow.json`.
 
 ## Слои

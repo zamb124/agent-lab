@@ -4,6 +4,7 @@
   "license": "Elastic-2.0",
   "scripts": {
     "build:codemirror": "node scripts/build_codemirror_bundle.mjs",
+    "build:marked": "node scripts/build_marked_bundle.mjs",
     "build:prosemirror": "node scripts/build_prosemirror_bundle.mjs",
     "test:core": "npm run test:core-unit && npm run test:core-browser",
     "test:core-browser": "web-test-runner --config web-test-runner.config.mjs",
@@ -19,6 +20,7 @@
     "@codemirror/autocomplete": "^6.20.2",
     "@codemirror/commands": "^6.10.3",
     "@codemirror/lang-go": "^6.0.1",
+    "@codemirror/lang-html": "^6.4.12",
     "@codemirror/lang-javascript": "^6.2.5",
     "@codemirror/lang-json": "^6.0.2",
     "@codemirror/lang-python": "^6.2.1",
@@ -37,6 +39,7 @@
     "@web/test-runner-playwright": "^0.11.0",
     "esbuild": "^0.28.0",
     "lit": "^3.2.1",
+    "marked": "^15.0.12",
     "prosemirror-commands": "^1.7.1",
     "prosemirror-dropcursor": "^1.8.3",
     "prosemirror-gapcursor": "^1.4.1",

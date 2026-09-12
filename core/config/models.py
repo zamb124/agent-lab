@@ -26,7 +26,6 @@ from core.ai.providers import (
     LLM_PROVIDER_SMOKE_MODELS,
     OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER,
     OPENAI_COMPATIBLE_LLM_PROVIDER_SLUGS,
-    PLATFORM_LLM_PROVIDER_ORDER,
     AICapability,
     validate_platform_provider_for_capability,
 )
@@ -1892,79 +1891,6 @@ class ModelConfig(BaseModel):
     context_length: int | None = Field(default=None, gt=0)
 
 
-class LLMModelScoreSeedItem(BaseModel):
-    """Recommendatory seed hints for shared ``llm_model_scores``.
-
-    ``score`` is seed-only: when ``score_dimensions`` are empty it is converted
-    to ``general_chat`` hint at seed time. Runtime ranking always recomputes score
-    from catalog signals plus these hints.
-    """
-
-    provider: str
-    model_id: str
-    capability: AICapability
-    enabled: bool = True
-    editorial_prior: float = Field(default=0.0, ge=-50.0, le=50.0)
-    score_dimensions: dict[str, float] = Field(default_factory=dict)
-    score: float | None = Field(default=None, ge=0, le=1000)
-    note: str | None = None
-
-    @field_validator("provider")
-    @classmethod
-    def _provider_must_be_platform_llm_provider(cls, value: str) -> str:
-        provider = value.strip()
-        if provider not in PLATFORM_LLM_PROVIDER_ORDER:
-            allowed = ", ".join(PLATFORM_LLM_PROVIDER_ORDER)
-            raise ValueError(f"provider должен быть одним из: {allowed}")
-        return provider
-
-    @field_validator("model_id")
-    @classmethod
-    def _model_id_must_be_non_empty(cls, value: str) -> str:
-        model_id = value.strip()
-        if model_id == "":
-            raise ValueError("model_id не может быть пустым")
-        return model_id
-
-    @model_validator(mode="after")
-    def _normalize_legacy_score_hint(self) -> Self:
-        if self.score_dimensions:
-            return self
-        if self.score is None:
-            return self
-        return self.model_copy(
-            update={
-                "score_dimensions": {
-                    "general_chat": float(self.score),
-                },
-            },
-        )
-
-
-class LLMModelScoringConfig(BaseModel):
-    """Recommendatory config seed for shared LLM model scoring hints.
-
-    ``force_seed_refresh=false`` means config creates only missing rows.
-    Manual hint edits in DB remain authoritative until the next refresh.
-    """
-
-    seed_enabled: bool = True
-    force_seed_refresh: bool = False
-    dimension_weights: dict[str, float] = Field(
-        default_factory=lambda: {
-            "coding": 1.0,
-            "agentic": 0.8,
-            "general_chat": 1.0,
-            "reasoning": 0.9,
-            "roleplay": 0.5,
-            "vision": 0.6,
-        }
-    )
-    editorial_prior_cap: float = Field(default=5.0, ge=0.0, le=50.0)
-    hint_blend_ratio: float = Field(default=0.3, ge=0.0, le=1.0)
-    items: tuple[LLMModelScoreSeedItem, ...] = Field(default_factory=tuple)
-
-
 class PlatformFreePoolPaidFallbackConfig(BaseModel):
     """Paid reserve route used only after verified free candidates are unavailable."""
 
@@ -2067,7 +1993,6 @@ class LLMConfig(BaseModel):
         ),
     )
     platform_free_pool: PlatformFreePoolConfig = Field(default_factory=PlatformFreePoolConfig)
-    model_scoring: LLMModelScoringConfig = Field(default_factory=LLMModelScoringConfig)
 
 
 class S3BucketConfig(BaseModel):

@@ -33,7 +33,9 @@ emitter = Emitter(redis_client, state)
 await emitter.emit_text("Hello")                       # текстовый чанк
 await emitter.emit_tool_call(name, args, call_id)
 await emitter.emit_tool_result(name, result, call_id)
-await emitter.emit_artifact(artifact)                   # ordinary/A2UI Artifact
+await emitter.emit_artifact(artifact)                   # произвольный Artifact без пересборки
+await emitter.emit_state(interface)                     # артефакт state: snapshot, затем JSON Patch
+await emitter.flush_ui(interface)                       # очередь ui-событий агента, затем emit_state
 await emitter.emit_complete("Done!")
 await emitter.emit_interrupt(state.interrupt)          # TASK_STATE_INPUT_REQUIRED, metadata.platform_interrupt
 await emitter.emit_error("Connection failed")
@@ -41,7 +43,9 @@ await emitter.emit_error("Connection failed")
 
 К каждому событию автоматически: `task_id`, `context_id`, `trace_id`, `span_id` (OpenTelemetry).
 
-`BaseEmitter` выделяет stable `artifact_id` на логический artifact stream (`response`, `reasoning`, operator reply и т. п.). UUID на каждый text chunk запрещён. Произвольный Artifact публикуется generic методом без text/data re-synthesis. `emit_ui_event` отсутствует; Flow UI effect проходит representation service и становится ровно одним negotiated Artifact.
+`BaseEmitter` выделяет stable `artifact_id` на логический artifact stream (`response`, `reasoning`, operator reply и т. п.). UUID на каждый text chunk запрещён. Произвольный Artifact публикуется generic методом без text/data re-synthesis.
+
+Flow UI — системные артефакты того же emitter: `emit_state(interface)` публикует проекцию `ExecutionState` по путям документа (`referenced_paths`) — первый вызов в Task `application/json` snapshot, далее `application/json-patch+json` (пустой diff не публикуется); `emit_ui_event(event)` / `emit_ui_events` — `FlowUIRender`/`FlowUINavigate` одним Part артефакта `ui` (`application/vnd.platform.ui+json`); `flush_ui(interface)` — точка публикации runtime после шага: очередь `state.drain_ui_events()`, затем `emit_state`. Авторский код (тулы `ui_render`/`ui_navigate`/`state_set`, `runtime_helpers/flow_ui_cards.py`) только ставит события в очередь state — публикует runtime. Артефакты `state`/`ui` не закрываются `last_chunk`.
 
 Redis wire: `Emitter._publish` оборачивает protobuf-событие в `StreamResponse` и публикует `MessageToDict(stream)` — JSON без поля `kind`:
 
@@ -125,10 +129,9 @@ Wire SSE `result` — `StreamResponse`: `statusUpdate` | `artifactUpdate` | `tas
 
 ### Flow UI в протоколе
 
-- UI не имеет side protocol: A2UI v0.9.1 либо generic fallback находится в standard `TaskArtifactUpdateEvent.artifact.parts`.
-- Representation фиксируется negotiation snapshot Task; один effect не эмитится двумя вариантами.
-- Ordinary arbitrary Artifacts проходят без изменения и отображаются generic Part projector'ом.
-- `ArtifactAccumulator` одинаково применяет append/replace/lastChunk во всех consumers.
+- UI не имеет side protocol: артефакты `state` и `ui` — обычные `TaskArtifactUpdateEvent.artifact.parts`, клиент различает их по `artifactId` и `mediaType`.
+- Ordinary arbitrary Artifacts проходят без изменения; лента показывает текстовые артефакты по `name`.
+- `ArtifactAccumulator` одинаково применяет append/replace/lastChunk во всех consumers; клиентский аналог — `protocol/a2a-task-accumulator.js`.
 - Новый oneof-вариант A2A для UI не вводится. Канон → **`flow_ui.mdc`**.
 
 **Граф (ноды/рёбра) в data Part:** помимо `node_start`/`node_complete`/`node_error` с `node_id`, рантайн публикует `event: "edge_executed"` с `edge_index` (0-based, тот же порядок, что у рёбер исполняемого flow), `from_node`, `to_node`. UI сопоставляет `edge_index` с `edges[i]`. При исключении в вычислении `condition` — `event: "edge_error"` с теми же полями плюс `error`.
@@ -182,4 +185,4 @@ Emitter добавляет trace в `metadata` каждого события а�
 - `apps/flows/src/streaming/base.py` — `BaseEmitter`, `StreamEvent`.
 - Universal Flow UI: `core/frontend/static/lib/flow-ui/protocol/` и `<platform-flow-ui>`.
 - Канон протокола: **`a2a.mdc`**.
-- Канон UI representation/state: **`flow_ui.mdc`**.
+- Канон Flow UI (артефакты `state`/`ui`, `ui-action`): **`flow_ui.mdc`**.

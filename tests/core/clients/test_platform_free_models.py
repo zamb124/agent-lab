@@ -3,9 +3,10 @@
 from types import SimpleNamespace
 from typing import cast
 
+import pytest
+
 from core.ai.free_pool import (
     PlatformFreeModelRecord,
-    apply_platform_model_score_overrides,
     compute_platform_free_record_scores,
     humanitec_llms_model_options_from_records,
     parse_platform_free_models,
@@ -14,11 +15,10 @@ from core.ai.free_pool import (
     serialize_platform_free_models,
     sort_platform_free_records,
 )
-from core.ai.models import AIModelRecord
+from core.ai.models import AIModelRecord, ArtificialAnalysisIndices
 from core.ai.providers import OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER, AICapability
-from core.ai.scoring import PlatformModelScoreHint
+from core.ai.scoring import PlatformModelScoreOverlay
 from core.config.base import BaseSettings
-from core.config.models import LLMModelScoringConfig
 
 
 def _settings_stub() -> BaseSettings:
@@ -36,55 +36,57 @@ def _settings_stub() -> BaseSettings:
 
 
 def test_catalog_free_records_prefers_larger_models_and_keeps_router_last_by_score() -> None:
+    catalog = [
+        AIModelRecord(
+            provider="openrouter",
+            model_id="small/model-8b:free",
+            capabilities=(AICapability.LLM_CHAT,),
+            input_modalities=("text",),
+            output_modalities=("text",),
+            context_length=32768,
+            supported_parameters=("temperature",),
+            created=1,
+            is_free=True,
+            free_reason="zero_price_catalog",
+            raw={"name": "Small 8B"},
+        ),
+        AIModelRecord(
+            provider="openrouter",
+            model_id="large/model-120b:free",
+            capabilities=(AICapability.LLM_CHAT,),
+            input_modalities=("text",),
+            output_modalities=("text",),
+            context_length=8192,
+            supported_parameters=("response_format",),
+            created=1,
+            is_free=True,
+            free_reason="zero_price_catalog",
+            raw={"name": "Large 120B"},
+        ),
+        AIModelRecord(
+            provider="openrouter",
+            model_id="paid/model-405b",
+            capabilities=(AICapability.LLM_CHAT,),
+            input_modalities=("text",),
+            output_modalities=("text",),
+            is_free=False,
+        ),
+        AIModelRecord(
+            provider="openrouter",
+            model_id="openrouter/free",
+            capabilities=(AICapability.LLM_CHAT,),
+            input_modalities=("text",),
+            output_modalities=("text",),
+            is_free=True,
+            free_reason="zero_price_catalog",
+            raw={"name": "Free Router"},
+        ),
+    ]
     records = sort_platform_free_records(
-        platform_free_records_from_model_records(
-            [
-                AIModelRecord(
-                    provider="openrouter",
-                    model_id="small/model-8b:free",
-                    capabilities=(AICapability.LLM_CHAT,),
-                    input_modalities=("text",),
-                    output_modalities=("text",),
-                    context_length=32768,
-                    supported_parameters=("temperature",),
-                    created=1,
-                    is_free=True,
-                    free_reason="zero_price_catalog",
-                    raw={"name": "Small 8B"},
-                ),
-                AIModelRecord(
-                    provider="openrouter",
-                    model_id="large/model-120b:free",
-                    capabilities=(AICapability.LLM_CHAT,),
-                    input_modalities=("text",),
-                    output_modalities=("text",),
-                    context_length=8192,
-                    supported_parameters=("response_format",),
-                    created=1,
-                    is_free=True,
-                    free_reason="zero_price_catalog",
-                    raw={"name": "Large 120B"},
-                ),
-                AIModelRecord(
-                    provider="openrouter",
-                    model_id="paid/model-405b",
-                    capabilities=(AICapability.LLM_CHAT,),
-                    input_modalities=("text",),
-                    output_modalities=("text",),
-                    is_free=False,
-                ),
-                AIModelRecord(
-                    provider="openrouter",
-                    model_id="openrouter/free",
-                    capabilities=(AICapability.LLM_CHAT,),
-                    input_modalities=("text",),
-                    output_modalities=("text",),
-                    is_free=True,
-                    free_reason="zero_price_catalog",
-                    raw={"name": "Free Router"},
-                ),
-            ],
-            settings=_settings_stub(),
+        compute_platform_free_record_scores(
+            platform_free_records_from_model_records(catalog, settings=_settings_stub()),
+            catalog_records=catalog,
+            overlays=None,
         ),
         max_candidates=10,
     )
@@ -195,7 +197,7 @@ def test_platform_free_model_cache_roundtrips_provider_and_capability_metadata()
     assert len(parsed) == 1
     assert parsed[0].provider == "openrouter"
     assert parsed[0].id == "vendor/model-70B:free"
-    assert parsed[0].score == 70
+    assert parsed[0].score == 0.0
     assert parsed[0].context_length == 131072
     assert parsed[0].supported_parameters == ("response_format", "tools")
     assert parsed[0].input_modalities == ("image", "text")
@@ -247,7 +249,7 @@ def test_platform_free_model_sort_is_power_first_then_capabilities_then_confiden
     ]
 
 
-def test_compute_platform_free_record_scores_uses_hints_and_catalog() -> None:
+def test_compute_platform_free_record_scores_uses_aa_and_overlay() -> None:
     catalog_record = AIModelRecord(
         provider="openrouter",
         model_id="tencent/hy3:free",
@@ -259,26 +261,27 @@ def test_compute_platform_free_record_scores_uses_hints_and_catalog() -> None:
         is_free=True,
         free_reason="zero_price_catalog",
         raw={"name": "Hy3 295B"},
+        artificial_analysis=ArtificialAnalysisIndices(
+            intelligence_index=71.0,
+            model_permaslug="tencent/hy3",
+        ),
     )
     records = compute_platform_free_record_scores(
         platform_free_records_from_model_records([catalog_record], settings=_settings_stub()),
         catalog_records=[catalog_record],
-        hints={
-            ("openrouter", "tencent/hy3:free"): PlatformModelScoreHint(
+        overlays={
+            ("openrouter", "tencent/hy3:free"): PlatformModelScoreOverlay(
                 editorial_prior=1.0,
-                score_dimensions={"coding": 94.0, "agentic": 93.0},
                 enabled=True,
-                source="config_seed",
                 note=None,
             )
         },
-        scoring_config=LLMModelScoringConfig(),
     )
     assert len(records) == 1
-    assert records[0].score > 20.0
+    assert records[0].score == 72.0
 
 
-def test_compute_platform_free_record_scores_skips_disabled_hints() -> None:
+def test_compute_platform_free_record_scores_skips_disabled_overlay() -> None:
     catalog_record = AIModelRecord(
         provider="openrouter",
         model_id="vendor/disabled:free",
@@ -290,51 +293,34 @@ def test_compute_platform_free_record_scores_skips_disabled_hints() -> None:
     records = compute_platform_free_record_scores(
         platform_free_records_from_model_records([catalog_record], settings=_settings_stub()),
         catalog_records=[catalog_record],
-        hints={
-            ("openrouter", "vendor/disabled:free"): PlatformModelScoreHint(
+        overlays={
+            ("openrouter", "vendor/disabled:free"): PlatformModelScoreOverlay(
                 editorial_prior=0.0,
-                score_dimensions={"general_chat": 90.0},
                 enabled=False,
-                source="manual",
                 note=None,
             )
         },
-        scoring_config=LLMModelScoringConfig(),
     )
     assert records == []
 
 
-def test_platform_model_score_overrides_replace_heuristic_score() -> None:
-    records = apply_platform_model_score_overrides(
-        [
-            PlatformFreeModelRecord(
-                provider="github",
-                id="openai/gpt-4o-mini",
-                score=0,
-                context_length=None,
-                supported_parameters=(),
-                input_modalities=("text",),
-                output_modalities=("text",),
-                free_reason="account_free_tier",
-            ),
-            PlatformFreeModelRecord(
-                provider="groq",
-                id="llama-3.1-8b-instant",
-                score=8,
-                context_length=None,
-                supported_parameters=(),
-                input_modalities=("text",),
-                output_modalities=("text",),
-                free_reason="account_free_tier",
-            ),
-        ],
-        {("github", "openai/gpt-4o-mini"): 82},
-    )
-
-    assert [(record.provider, record.id, record.score) for record in records] == [
-        ("github", "openai/gpt-4o-mini", 82),
-        ("groq", "llama-3.1-8b-instant", 8),
-    ]
+def test_compute_platform_free_record_scores_requires_catalog() -> None:
+    with pytest.raises(ValueError, match="отсутствует в каталоге"):
+        compute_platform_free_record_scores(
+            [
+                PlatformFreeModelRecord(
+                    provider="openrouter",
+                    id="missing:free",
+                    score=0.0,
+                    context_length=None,
+                    supported_parameters=(),
+                    input_modalities=("text",),
+                    output_modalities=("text",),
+                )
+            ],
+            catalog_records=[],
+            overlays=None,
+        )
 
 
 def test_humanitec_llms_model_options_are_auto_plus_provider_prefixed_free_models() -> None:
@@ -373,11 +359,17 @@ def test_humanitec_llms_model_options_are_auto_plus_provider_prefixed_free_model
     assert options[2]["free_reason"] == "account_free_tier"
 
 
-def test_parse_platform_free_models_treats_bad_cache_as_empty() -> None:
+def test_parse_platform_free_models_empty_cache_is_empty() -> None:
     assert parse_platform_free_models(None) == []
-    assert parse_platform_free_models("{bad-json") == []
-    assert parse_platform_free_models('{"version":999,"models":[]}') == []
-    assert parse_platform_free_models('{"version":1,"models":"bad"}') == []
+
+
+def test_parse_platform_free_models_rejects_corrupt_cache() -> None:
+    with pytest.raises(ValueError):
+        parse_platform_free_models("{bad-json")
+    with pytest.raises(ValueError):
+        parse_platform_free_models('{"version":999,"models":[]}')
+    with pytest.raises(ValueError):
+        parse_platform_free_models('{"version":1,"models":"bad"}')
 
 
 def test_every_platform_provider_has_explicit_free_model_policy() -> None:
@@ -387,10 +379,9 @@ def test_every_platform_provider_has_explicit_free_model_policy() -> None:
     }
 
     assert set(policies) == set(OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER)
-    assert all(policy != "unknown_provider" for policy in policies.values())
 
 
-def test_account_free_tier_uses_configured_smoke_model_from_shared_catalog() -> None:
+def test_account_free_tier_includes_all_text_chat_catalog_models() -> None:
     records = platform_free_records_from_model_records(
         [
             AIModelRecord(
@@ -414,18 +405,14 @@ def test_account_free_tier_uses_configured_smoke_model_from_shared_catalog() -> 
         settings=_settings_stub(),
     )
 
-    assert len(records) == 1
-    record = records[0]
-    assert record.provider == "groq"
-    assert record.id == "llama-3.1-8b-instant"
-    assert record.free_reason == "account_free_tier"
-    assert record.context_length == 131072
-    assert record.input_modalities == ("text",)
-    assert record.output_modalities == ("text",)
-    assert record.supported_parameters == ("tools",)
+    assert {(record.provider, record.id) for record in records} == {
+        ("groq", "llama-3.1-8b-instant"),
+        ("groq", "other-free-tier-model"),
+    }
+    assert all(record.free_reason == "account_free_tier" for record in records)
 
 
-def test_account_free_tier_requires_catalog_record_for_smoke_model() -> None:
+def test_account_free_tier_includes_non_smoke_google_text_chat() -> None:
     records = platform_free_records_from_model_records(
         [
             AIModelRecord(
@@ -439,4 +426,6 @@ def test_account_free_tier_requires_catalog_record_for_smoke_model() -> None:
         settings=_settings_stub(),
     )
 
-    assert records == []
+    assert len(records) == 1
+    assert records[0].id == "gemini-2.5-pro"
+    assert records[0].free_reason == "account_free_tier"

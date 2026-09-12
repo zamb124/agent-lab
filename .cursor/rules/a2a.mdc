@@ -1,5 +1,5 @@
 ---
-description: "A2A Protocol 1.0 hard cut: lossless Tasks/Artifacts/Parts, SSE StreamResponse, optional A2UI extension, fixtures pin, no 0.3"
+description: "A2A Protocol 1.0 hard cut: lossless Tasks/Artifacts/Parts, SSE StreamResponse, Flow UI как обычные артефакты state/ui, fixtures pin, no 0.3"
 alwaysApply: false
 ---
 
@@ -48,7 +48,7 @@ Capabilities согласованы с кодом: `streaming=true`, `pushNotifi
 `skills` — **обязательное** поле A2A 1.0 (ветки flow как `AgentSkill[]`).  
 Платформенные extensions: `branches` (зеркало `skills`), `variables` — не заменяют и не удаляют `skills`.
 
-Optional Flow UI/A2UI extension объявляется стандартным extension descriptor с официальным URI `https://a2ui.org/a2a-extension/a2ui/v0.9.1`. Linnex catalog ID — `https://linnex.io/a2ui/catalog/platform/v1`; он строится из primary domain, а не request Host. A2UI v0.9.1 находится только в обычном `Artifact.parts[].data`, активируется через `A2A-Extensions` и не вводит отдельный method/endpoint/SSE envelope. Полный контракт → **`flow_ui.mdc`**.
+Flow UI не является A2A extension и не объявляется в AgentCard: интерфейс идёт обычными артефактами `state` (`application/json` snapshot + `application/json-patch+json`) и `ui` (`application/vnd.platform.ui+json`), а действие пользователя — одним `data` Part `application/vnd.platform.ui-action+json` в стандартном `Message`. Никакой negotiation, `A2A-Extensions` и отдельного envelope/endpoint. Полный контракт → **`flow_ui.mdc`**, спецификация → `docs/api/flows/flow-ui-protocol.md`.
 
 `RegistryFlowCard` (`apps/flows/src/api/registry.py`, поле `protocolVersion`) — **не** A2A Agent Card: это platform registry discovery, отдельный контракт от `GET /{flow_id}/.well-known/agent-card.json`.
 
@@ -78,7 +78,7 @@ Artifact stream имеет stable непустой `artifactId`: `append=false` 
 
 - HTTP API: `apps/flows/src/api/a2a.py` + `A2AChannel`.
 - Universal Flow UI: `core/frontend/static/lib/flow-ui/protocol/` + `<platform-flow-ui>`; host pages не имеют собственного transport/reducer.
-- Outbound: `core.clients.a2a_client.A2AClient`. `send_task` — convenience text Part **без** AgentCard (`negotiate_extensions=False`). A2UI — только `negotiate_extensions=True` или `send_message` с `activated_extensions`. CRM analyze/summarize/dedup — internal skills, не Flow UI; лишний `GET /.well-known/agent-card.json` на каждый `send_task` запрещён. `send_task` всегда `returnImmediately=true` и ждёт terminal через `GetTask` (не держит granian на весь граф). Как `ServiceClient`: при `active_company` всегда signed `X-Platform-Context-*` (TaskIQ crm_worker часто без JWT на hop к `:9001`).
+- Outbound: `core.clients.a2a_client.A2AClient`. `send_task` — convenience text Part **без** AgentCard; `send_message` принимает готовые Parts (в том числе `ui-action`), `task_id` для продолжения Task и `accepted_output_modes`; `cancel_task` — `CancelTask`. Flow UI поверх него — `core.clients.flow_ui_client.FlowUIClient`. CRM analyze/summarize/dedup — internal skills, не Flow UI; лишний `GET /.well-known/agent-card.json` на каждый `send_task` запрещён. `send_task` всегда `returnImmediately=true` и ждёт terminal через `GetTask` (не держит granian на весь граф). Как `ServiceClient`: при `active_company` всегда signed `X-Platform-Context-*` (TaskIQ crm_worker часто без JWT на hop к `:9001`).
 - Outbound: `core/clients/a2a_client.py` возвращает structured Task/Artifacts/Parts; text — derived convenience. `RemoteFlowNode` сохраняет/проецирует exact remote artifacts (direct URL; Skill ID = `branch_id` → `metadata.branch`; `metadata_template` → `params.metadata` с `@state:`/`@var:`).
 - Internal platform `ExecutionTaskState` остаётся kebab-case; маппинг на wire — `core.a2a.task_states`.
 
@@ -98,4 +98,4 @@ Artifact stream имеет stable непустой `artifactId`: `append=false` 
 3. Alias старых method names.
 4. `final=` на `TaskStatusUpdateEvent`.
 5. Моки транспорта A2A в conformance suite.
-6. `artifact.name="ui_event"`, второй UI envelope/endpoint или dual emit A2UI + fallback одного результата.
+6. `artifact.name="ui_event"`, второй UI envelope/endpoint, A2A extension/negotiation для интерфейса или dual emit одного результата.

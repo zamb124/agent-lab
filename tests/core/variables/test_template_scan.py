@@ -1,4 +1,11 @@
-from core.variables import scan_prompt_template
+import pytest
+
+from core.variables import (
+    UnmatchedBracesError,
+    VariableResolver,
+    scan_prompt_template,
+    unmatched_brace_message,
+)
 
 
 def test_scan_prompt_template_extracts_required_and_optional_roots():
@@ -99,3 +106,20 @@ def test_scan_prompt_template_large_template():
     result = scan_prompt_template("x" * 10000 + "{topic}")
 
     assert result.required_roots == ["topic"]
+
+
+def test_unmatched_brace_message_reports_first_problem_and_ignores_escapes():
+    assert unmatched_brace_message("") is None
+    assert unmatched_brace_message("{a} {b|{c}} \\{ \\}") is None
+    assert unmatched_brace_message("{a") == "Непарная открывающая скобка '{' - не закрыто 1 скобок"
+    assert unmatched_brace_message("{{a}") == "Непарная открывающая скобка '{' - не закрыто 1 скобок"
+    assert unmatched_brace_message("a } b") == "Непарная закрывающая скобка '}' на позиции 2"
+    assert unmatched_brace_message("{a}}{") == "Непарная закрывающая скобка '}' на позиции 3"
+    assert unmatched_brace_message("tail\\") is None
+
+
+def test_render_template_raises_the_same_message_as_the_brace_check():
+    template = "Итого {total"
+    with pytest.raises(UnmatchedBracesError) as failure:
+        _ = VariableResolver.render_template(template, {"total": 1}, include_system=False)
+    assert str(failure.value) == unmatched_brace_message(template)

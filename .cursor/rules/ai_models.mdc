@@ -28,7 +28,7 @@ alwaysApply: true
 
 - Единственный каталог моделей — `core.ai.model_catalog_repository.AIModelCatalogRepository`.
 - Storage namespace — `ai_model_catalog:*`.
-- Record — `core.ai.models.AIModelRecord`: provider, model_id, capabilities, modalities, context, tools/json/vision/image, embedding dimensions, pricing/free policy, score metadata.
+- Record — `core.ai.models.AIModelRecord`: provider, id, modalities, pricing/`is_free`, typed AA indices, embedding dimensions. Score и editorial на записи нет.
 - Модель — не строка. Строка допустима только как пользовательский выбор, который сразу резолвится в typed record/selection.
 
 Запрещены отдельные таблицы/namespace `llm_model:*`, `embedding_models`, `rerank_models`, `free_models` и flows-owned model repository/model.
@@ -58,12 +58,30 @@ alwaysApply: true
 
 ## Platform model scoring
 
-- Финальный `score` в `llm_model_scores` и Redis free-pool cache — **всегда computed** через `core.ai.scoring.compute_platform_model_score()`.
-- `conf.json` `llm.model_scoring.items[]` и Settings UI задают только **рекомендательные hints**: `score_dimensions`, `editorial_prior`, `enabled`, `note`.
-- Legacy `score` в conf seed конвертируется в `score_dimensions.general_chat` при seed; в runtime не используется как финальный рейтинг.
-- `source` в БД: `config_seed` / `manual` / `benchmark_import` — откуда hints; после refresh computed строки получают `source=computed` для persisted score, hints сохраняются в `score_dimensions`.
-- Scoring применяется ко **всем** free-моделям каталога, не только к seeded rows; unseeded модели ранжируются по `base_catalog_score` (size, context, tools, benchmarks из `raw`, free policy, availability).
-- Settings UI: редактируются только hints; computed `score` и `score_breakdown` — read-only.
+Один контур, который читается сверху вниз:
+
+```text
+каталог провайдера → is_free?
+                → AA (OpenRouter), если есть
+                → score = AA.intelligence | catalog_heuristic
+                → + editorial_prior из БД, если строка есть
+                → Redis ranked list
+                → auto берёт этот список
+```
+
+- `AIModelRecord` хранит modalities, pricing/`is_free` и typed AA indices. Score и editorial в каталоге нет.
+- `llm_model_scores` — только overlay компании `system`: `enabled`, `editorial_prior`, `note`. Computed score, AA и seed-рейтинги в БД не пишутся.
+- Redis `llm:platform:free_models:v1` — ranked snapshot с computed `score`.
+- Есть AA → `score = intelligence_index`. Нет AA → `catalog_heuristic` (size/context/tools). Не выдумывать AA.
+- Overlay: `score += clamp(editorial_prior)` (`EDITORIAL_PRIOR_CAP` в `core/ai/scoring.py`). `enabled=false` → модели нет в pool.
+- Tie-break при равном score — `_record_sort_key` (context, tools, created, provider, id).
+- `conf.json` не хранит рейтинги, seed `items[]`, blend/weights. Overlay правится в Settings UI только у `system`.
+- AA импортируется с OpenRouter `GET /api/v1/benchmarks?source=artificial-analysis` на refresh free-pool (~55 мин), не на catalog sync каждые 60s.
+- Per-company рейтинги не делаются: компания выбирает `humanitec_llm`/`auto` или конкретную модель / BYOK.
+
+Fail-closed: ошибка HTTP каталога/AA → задача scheduler падает, старый catalog/Redis не затирается пустотой. Пустой `records` на refresh/rescore → `raise` **до** записи Redis (`models:[]` не пишется). Битый Redis payload → `raise`. Adapter `list_models` не возвращает `[]` из-за «не настроен».
+
+Пустой или отсутствующий free-pool на LLM-вызове не обрывает authored `fallback_models` (company / эффективный node config): expand `humanitec_llm` auto / missing pinned возвращает `[]`, цепочка идёт дальше; `RuntimeError` только если итоговая цепочка пуста. `paid_fallback` ≠ `fallback_models`. Конструктор `humanitec_llm` не требует живой free-pool, если есть не-humanitec fallback.
 
 ## Embedding / Rerank / Fallback
 
@@ -88,7 +106,7 @@ uv run pytest -q tests/core/clients/test_llm_external_provider_live.py --tb=shor
 uv run pytest -q tests/core/ai/test_platform_model_scoring_live.py -m network  # conf.local.json keys
 ```
 
-Обновление scoring fixtures после смены catalog/conf hints:
+Обновление scoring fixtures после смены catalog/AA/heuristic:
 
 ```bash
 uv run python scripts/generate_llm_scoring_fixtures.py

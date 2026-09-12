@@ -73,19 +73,19 @@ describe('createSlice: contract', () => {
 describe('createSlice: shape', () => {
     it('возвращает factory с kind="slice", events, actions, slice, selectors', () => {
         const factory = createSlice({
-            name: 'svc/ui_state',
+            name: 'svc/panel_state',
             extraInitial: { open: false, count: 0 },
             extraReducer: (state) => state,
             extraEvents: { OPENED: 'opened', CLOSED: 'closed' },
             actions: { increment: 'inc' },
         });
         expect(factory.kind).toBe('slice');
-        expect(factory.name).toBe('svc/ui_state');
-        expect(factory.sliceKey).toBe('svcUiState');
-        expect(factory.events.OPENED).toBe('svc/ui_state/opened');
-        expect(factory.events.CLOSED).toBe('svc/ui_state/closed');
-        expect(factory.events.INC).toBe('svc/ui_state/inc');
-        expect(factory.actions.increment).toBe('svc/ui_state/inc');
+        expect(factory.name).toBe('svc/panel_state');
+        expect(factory.sliceKey).toBe('svcPanelState');
+        expect(factory.events.OPENED).toBe('svc/panel_state/opened');
+        expect(factory.events.CLOSED).toBe('svc/panel_state/closed');
+        expect(factory.events.INC).toBe('svc/panel_state/inc');
+        expect(factory.actions.increment).toBe('svc/panel_state/inc');
         expect(factory.slice.initial).toEqual({ open: false, count: 0 });
         expect(typeof factory.slice.reducer).toBe('function');
         expect(typeof factory.selectors.slice).toBe('function');

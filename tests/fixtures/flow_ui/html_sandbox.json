@@ -1,0 +1,96 @@
+{
+    "description": "Sandbox блока html: фиксированный CSP srcdoc и атрибут sandbox iframe (opaque origin, только скрипты). Атрибуты привязок и разбор путей одинаковы в Python html_bound_paths и JS htmlBoundPaths.",
+    "csp": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: https:; font-src data: https:; media-src https:",
+    "sandbox": "allow-scripts",
+    "bind_attribute": "data-bind",
+    "show_attribute": "data-show",
+    "bound_paths_cases": [
+        {
+            "name": "bind_and_show_in_order",
+            "source": "<section data-show=\"order\"><b data-bind=\"order.total\"></b><i data-bind='customer.name'></i></section>",
+            "paths": ["order", "order.total", "customer.name"]
+        },
+        {
+            "name": "repeated_path_listed_once",
+            "source": "<p data-bind=\"email\"></p><p data-bind=\"email\"></p>",
+            "paths": ["email"]
+        },
+        {
+            "name": "no_bindings",
+            "source": "<button onclick=\"flowUi.submit('save')\">Сохранить</button>",
+            "paths": []
+        },
+        {
+            "name": "comment_is_not_markup",
+            "source": "<!-- <b data-bind=\"hidden\"></b> --><i data-bind=\"shown\"></i>",
+            "paths": ["shown"]
+        },
+        {
+            "name": "script_and_style_bodies_are_raw_text",
+            "source": "<script>var t = \"<b data-bind='nope'></b>\";</script><style>/* <i data-bind='nope'></i> */</style><i data-bind=\"ok\"></i>",
+            "paths": ["ok"]
+        },
+        {
+            "name": "textarea_and_title_bodies_are_raw_text",
+            "source": "<textarea><b data-bind=\"nope\"></b></textarea><title><b data-show=\"nope\"></b></title><i data-show=\"ok\"></i>",
+            "paths": ["ok"]
+        },
+        {
+            "name": "attribute_names_are_case_insensitive",
+            "source": "<P DATA-BIND=\"Upper.Case\" Data-Show=\"flag\"></P>",
+            "paths": ["Upper.Case", "flag"]
+        },
+        {
+            "name": "unquoted_value_and_spaces_around_equals",
+            "source": "<p data-bind=a.b data-show = \"c\"></p>",
+            "paths": ["a.b", "c"]
+        },
+        {
+            "name": "self_closing_tags_and_boolean_attributes",
+            "source": "<span data-bind=\"x\"/><span data-bind=\"y\" /><input data-bind=\"z\" disabled>",
+            "paths": ["x", "y", "z"]
+        },
+        {
+            "name": "end_tag_attributes_are_ignored",
+            "source": "</p data-bind=\"end\"><p data-bind=\"start\"></p>",
+            "paths": ["start"]
+        },
+        {
+            "name": "character_references_are_decoded",
+            "source": "<p data-bind=\"a&#46;b\" data-show=\"c&#x2E;d\"></p>",
+            "paths": ["a.b", "c.d"]
+        },
+        {
+            "name": "value_is_trimmed",
+            "source": "<p data-bind=\"  spaced  \"></p>",
+            "paths": ["spaced"]
+        },
+        {
+            "name": "similar_attribute_names_do_not_count",
+            "source": "<p data-binding=\"nope\" data-bind-x=\"nope\" title=\"data-bind=t\" data-bind=\"yes\"></p>",
+            "paths": ["yes"]
+        },
+        {
+            "name": "cdata_and_processing_instructions_are_skipped",
+            "source": "<![CDATA[ <b data-bind=\"nope\"></b> ]]><?php <b data-bind=\"nope\"></b> ?><i data-bind=\"ok\"></i>",
+            "paths": ["ok"]
+        },
+        {
+            "name": "nested_foreign_content_is_scanned",
+            "source": "<svg><foreignObject><div data-bind=\"deep\"></div></foreignObject></svg><p data-show=\"a.b_c.d9\"></p>",
+            "paths": ["deep", "a.b_c.d9"]
+        }
+    ],
+    "invalid_sources": [
+        "<p data-bind=\"1bad\"></p>",
+        "<p data-show=\"order..total\"></p>",
+        "<p data-bind></p>",
+        "<p data-bind=\"\"></p>",
+        "<p data-show=\"a-b\"></p>",
+        "<p data-bind=\"a.\"></p>",
+        "<p data-bind=\".a\"></p>",
+        "<p data-bind=\"a b\"></p>",
+        "<p data-bind=\"ok\" data-show=\"bad!\"></p>",
+        "<P DATA-BIND=\"1bad\"></P>"
+    ]
+}

@@ -19,6 +19,13 @@ AIModelMetadataStatus = Literal["discovered", "verified"]
 AICostOrigin = Literal["platform", "company"]
 
 
+class ArtificialAnalysisIndices(BaseModel):
+    intelligence_index: float
+    coding_index: float | None = None
+    agentic_index: float | None = None
+    model_permaslug: str
+
+
 class AIModelRecord(BaseModel):
     provider: str
     model_id: str
@@ -37,6 +44,7 @@ class AIModelRecord(BaseModel):
     free_reason: str | None = None
     free_policy: str | None = None
     pricing: JsonObject | None = None
+    artificial_analysis: ArtificialAnalysisIndices | None = None
     availability_status: AIAvailabilityStatus = "unknown"
     metadata_status: AIModelMetadataStatus = "discovered"
     last_seen_at: datetime | None = None

@@ -1,0 +1,41 @@
+{
+    "description": "Артефакт ui (artifactId=ui): каждый data Part application/vnd.platform.ui+json — событие render (блоки грамматики в slot) или navigate (page_id). Любой другой kind или mediaType у data Part — ошибка протокола на обеих сторонах.",
+    "document": {
+        "start_page_id": "main",
+        "pages": [
+            {
+                "page_id": "main",
+                "title": "Заявка",
+                "blocks": [
+                    { "block_id": "title", "type": "heading", "text": "Заявка {?customer.name}", "level": 2 },
+                    { "block_id": "email", "type": "text_input", "field": "email", "label": "Email", "required": true },
+                    { "block_id": "send_button", "type": "button", "label": "Отправить", "action": { "name": "submit", "payload": { "plan": "pro" } } },
+                    { "block_id": "result", "type": "slot", "title": "Результат" }
+                ]
+            },
+            { "page_id": "done", "title": "Готово", "blocks": [{ "block_id": "done_text", "type": "text", "markdown": "Спасибо, {email}" }] }
+        ]
+    },
+    "render": {
+        "kind": "render",
+        "slot_id": "result",
+        "blocks": [
+            { "block_id": "summary", "type": "text", "markdown": "Заявка **{email}** принята" },
+            { "block_id": "amount", "type": "metric", "label": "Сумма", "value": "{total|0} ₽" }
+        ]
+    },
+    "navigate": { "kind": "navigate", "page_id": "done" },
+    "parts": [
+        { "data": { "email": "a@b.c", "total": 1200 }, "mediaType": "application/json" },
+        { "data": [{ "op": "replace", "path": "/total", "value": 1500 }], "mediaType": "application/json-patch+json" },
+        { "data": { "kind": "render", "slot_id": "result", "blocks": [{ "block_id": "summary", "type": "text", "markdown": "Заявка **{email}** принята" }] }, "mediaType": "application/vnd.platform.ui+json" },
+        { "data": { "kind": "navigate", "page_id": "done" }, "mediaType": "application/vnd.platform.ui+json" },
+        { "text": "Готово" }
+    ],
+    "decoded_kinds": ["json", "json_patch", "ui", "ui", "text"],
+    "rejected_events": [
+        { "kind": "patch", "slot_id": "result" },
+        { "kind": "render", "slot_id": "result", "blocks": [] },
+        { "kind": "navigate" }
+    ]
+}

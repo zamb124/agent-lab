@@ -17,9 +17,10 @@ from apps.flows.tools.crm_tools import (
     crm_create_note_and_analyze,
     crm_search_entities,
 )
+from core.flow_ui.document import FlowUIActionPreview, FlowUIButton
 from core.state import ExecutionState
 from core.types import JsonObject, JsonValue, require_json_object
-from tests.flows._flow_ui import flow_ui_artifacts
+from tests.flows._flow_ui import conversation_blocks
 
 pytestmark = [
     pytest.mark.timeout(120, func_only=True),
@@ -79,16 +80,21 @@ async def test_crm_create_note_tool_returns_blocks_for_chat(
     _ = lara_crm_tool_context
     state = _tool_state(unique_id=unique_id, system_user_id=system_user_id)
     propose_raw = await crm_create_note._run_impl(
-        {"name": f"Lara note {unique_id}", "description": "Тело заметки для теста тула.", "mode": "propose"},
+        {
+            "name": f"Lara note {unique_id}",
+            "description": "Тело заметки для теста тула.",
+            "mode": "propose",
+        },
         state,
     )
     proposed = _as_object(propose_raw)
-    preview = flow_ui_artifacts(state)[-1]
-    assert preview.kind == "action_preview"
-    assert preview.component_type == "ActionPreview"
-    preview_buttons = preview.data["blocks"][1]["buttons"]
-    assert preview_buttons[0]["action_kind"] == "apply"
-    assert preview_buttons[0]["action_id"] == "crm.note.create.apply"
+    preview, apply_button = conversation_blocks(state)[-2:]
+    assert isinstance(preview, FlowUIActionPreview)
+    assert preview.block_id.startswith("crm-note-preview-")
+    assert isinstance(apply_button, FlowUIButton)
+    assert apply_button.action is not None
+    assert apply_button.action.name == "apply_pending_action"
+    assert apply_button.action.payload["capability"] == "crm.note"
     raw = await crm_create_note._run_impl(
         {
             "mode": "apply",
@@ -170,30 +176,30 @@ async def test_crm_analyze_note_text_tool_returns_blocks_for_chat(
     _ = auth_headers_system
     note_title = f"Lara analyze {unique_id}"
     _analyze_body = {
-                        "note": {
-                            "entity_type": "note",
-                            "name": note_title,
-                            "description": "Краткое содержание для анализа.",
-                            "attributes": {},
-                            "confidence": 0.9,
-                        },
-                        "entities": [
-                            {
-                                "entity_type": "contact",
-                                "name": f"Контакт {unique_id}",
-                                "description": "Проверка извлечения сущности для Lara analyze",
-                                "attributes": {},
-                                "confidence": 0.85,
-                            }
-                        ],
-                        "relationships": [],
-                        "metadata": {
-                            "dates_mentioned": [],
-                            "places_mentioned": [],
-                            "key_topics": [],
-                        },
-                        "attachment_summaries": [],
-                    }
+        "note": {
+            "entity_type": "note",
+            "name": note_title,
+            "description": "Краткое содержание для анализа.",
+            "attributes": {},
+            "confidence": 0.9,
+        },
+        "entities": [
+            {
+                "entity_type": "contact",
+                "name": f"Контакт {unique_id}",
+                "description": "Проверка извлечения сущности для Lara analyze",
+                "attributes": {},
+                "confidence": 0.85,
+            }
+        ],
+        "relationships": [],
+        "metadata": {
+            "dates_mentioned": [],
+            "places_mentioned": [],
+            "key_topics": [],
+        },
+        "attachment_summaries": [],
+    }
     _slot = {
         "type": "text",
         "content": json.dumps(_analyze_body, ensure_ascii=False),
@@ -252,30 +258,30 @@ async def test_crm_create_note_and_analyze_tool_chains(
     _ = auth_headers_system
     note_title = f"Lara combo {unique_id}"
     _combo_body = {
-                        "note": {
-                            "entity_type": "note",
-                            "name": note_title,
-                            "description": "Комбо: заметка и анализ.",
-                            "attributes": {},
-                            "confidence": 0.9,
-                        },
-                        "entities": [
-                            {
-                                "entity_type": "contact",
-                                "name": f"Контакт {unique_id}",
-                                "description": "Извлечённый контакт",
-                                "attributes": {},
-                                "confidence": 0.87,
-                            }
-                        ],
-                        "relationships": [],
-                        "metadata": {
-                            "dates_mentioned": [],
-                            "places_mentioned": [],
-                            "key_topics": [],
-                        },
-                        "attachment_summaries": [],
-                    }
+        "note": {
+            "entity_type": "note",
+            "name": note_title,
+            "description": "Комбо: заметка и анализ.",
+            "attributes": {},
+            "confidence": 0.9,
+        },
+        "entities": [
+            {
+                "entity_type": "contact",
+                "name": f"Контакт {unique_id}",
+                "description": "Извлечённый контакт",
+                "attributes": {},
+                "confidence": 0.87,
+            }
+        ],
+        "relationships": [],
+        "metadata": {
+            "dates_mentioned": [],
+            "places_mentioned": [],
+            "key_topics": [],
+        },
+        "attachment_summaries": [],
+    }
     _combo_slot = {
         "type": "text",
         "content": json.dumps(_combo_body, ensure_ascii=False),

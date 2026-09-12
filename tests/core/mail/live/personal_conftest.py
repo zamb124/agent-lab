@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from core.authz.factory import build_authz_service
-
 from collections.abc import AsyncIterator
 from contextlib import suppress
 from datetime import datetime, timezone
 
 import pytest
 
+from core.authz.factory import build_authz_service
 from core.config import get_settings
 from core.config.models import MailConfig, MailLivePersonalConfig
 from core.context import clear_context, set_context

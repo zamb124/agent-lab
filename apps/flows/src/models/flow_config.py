@@ -22,12 +22,9 @@ from typing import Annotated, ClassVar, Literal, cast
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from apps.flows.src.constants.execution_limits import get_flow_execution_wall_time_cap_seconds
+from core.flow_ui.document import FlowUIDocument
+from core.flow_ui.templates import default_chat_document
 from core.models import StrictBaseModel
-from core.models.flow_interface import (
-    FlowInterfaceConfig,
-    FlowInterfaceOverride,
-    default_flow_interface_config,
-)
 from core.types import JsonObject, JsonValue
 from core.urn import extract_resource_id
 from core.variables.models import VariableEntry, normalize_variables_map
@@ -238,12 +235,9 @@ class BranchConfig(StrictBaseModel):
         description="Переопределение профиля речи для ветки (мержится поверх flow.speech)",
     )
 
-    interface_override: FlowInterfaceOverride = Field(
-        default_factory=FlowInterfaceOverride,
-        description=(
-            "Полная replacement-семантика Flow UI для ветки; "
-            "inherit не создаёт частичный component merge"
-        ),
+    interface: FlowUIDocument | None = Field(
+        default=None,
+        description="Интерфейс ветки; None — интерфейс flow",
     )
 
     @model_validator(mode="before")
@@ -482,12 +476,9 @@ class FlowConfig(StrictBaseModel):
         description="Профиль речи (STT/TTS/VAD) без секретов; tier ниже explicit SpeechOverride, выше company",
     )
 
-    interface: FlowInterfaceConfig = Field(
-        default_factory=default_flow_interface_config,
-        description=(
-            "Единственный design-time Flow UI; чат является его "
-            "редактируемым default template"
-        ),
+    interface: FlowUIDocument = Field(
+        default_factory=default_chat_document,
+        description="Design-time интерфейс flow; чат — документ по умолчанию",
     )
 
     # Триггеры flow — точки входа (telegram, cron, webhook, email)
@@ -506,6 +497,13 @@ class FlowConfig(StrictBaseModel):
         default=None,
         description="Поля доступные для редактирования в UI. None = все поля доступны"
     )
+
+    def interface_for_branch(self, branch_id: str) -> FlowUIDocument:
+        """Интерфейс ветки, если ветка задала свой; иначе интерфейс flow."""
+        branch = self.branches.get(branch_id)
+        if branch is not None and branch.interface is not None:
+            return branch.interface
+        return self.interface
 
     @model_validator(mode="after")
     def validate_flow_type_fields(self) -> "FlowConfig":

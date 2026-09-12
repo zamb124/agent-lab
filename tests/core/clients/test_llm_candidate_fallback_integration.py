@@ -16,6 +16,7 @@ from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from typing import Any, Callable
 
+import httpx
 import pytest
 from a2a.helpers.proto_helpers import get_message_text
 from a2a.types import (
@@ -268,15 +269,17 @@ def _production_llm_env():
 
 
 @pytest.mark.asyncio
-async def test_stream_falls_back_when_primary_has_no_first_token() -> None:
+async def test_stream_falls_back_when_primary_has_no_first_token(unique_id: str) -> None:
+    primary_model = f"primary-slow-{unique_id}"
+    fallback_model = f"fallback-fast-{unique_id}"
     server = _OpenAICompatibleTestServer(
         {
-            "primary-slow": lambda writer: _write_sse_text(
+            primary_model: lambda writer: _write_sse_text(
                 writer,
                 "too-late",
                 delay_before_first_chunk=2.0,
             ),
-            "fallback-fast": lambda writer: _write_sse_text(writer, "fallback-ok"),
+            fallback_model: lambda writer: _write_sse_text(writer, "fallback-ok"),
         }
     )
     await server.start()
@@ -284,8 +287,8 @@ async def test_stream_falls_back_when_primary_has_no_first_token() -> None:
         client = _client_for(
             server,
             [
-                _candidate("primary-slow", base_url=server.base_url),
-                _candidate("fallback-fast", base_url=server.base_url),
+                _candidate(primary_model, base_url=server.base_url),
+                _candidate(fallback_model, base_url=server.base_url),
             ],
         )
 
@@ -293,8 +296,8 @@ async def test_stream_falls_back_when_primary_has_no_first_token() -> None:
 
         assert get_message_text(message) == "fallback-ok"
         assert [request.model for request in server.requests] == [
-            "primary-slow",
-            "fallback-fast",
+            primary_model,
+            fallback_model,
         ]
     finally:
         await server.close()
@@ -1110,3 +1113,376 @@ def test_platform_free_pool_provider_not_configured_without_keys() -> None:
         assert _platform_free_pool_provider_is_configured(settings, "openrouter") is False
     finally:
         set_settings(old_settings)
+
+
+def _tools_payload() -> list[dict[str, object]]:
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": "lookup",
+                "description": "Lookup something",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        }
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [401, 402, 403, 404, 429, 500])
+async def test_stream_falls_back_before_first_chunk_on_http_status(
+    status: int,
+    unique_id: str,
+) -> None:
+    primary_model = f"primary-fail-{status}-{unique_id}"
+    fallback_model = f"fallback-fast-{status}-{unique_id}"
+    server = _OpenAICompatibleTestServer(
+        {
+            primary_model: lambda writer: _write_json_response(
+                writer,
+                status,
+                {"error": f"http-{status}"},
+            ),
+            fallback_model: lambda writer: _write_sse_text(writer, "fallback-ok"),
+        }
+    )
+    await server.start()
+    try:
+        client = _client_for(
+            server,
+            [
+                _candidate(primary_model, base_url=server.base_url),
+                _candidate(fallback_model, base_url=server.base_url),
+            ],
+        )
+        message = await client.chat([_message("hello")])
+        assert get_message_text(message) == "fallback-ok"
+        assert [request.model for request in server.requests] == [
+            primary_model,
+            fallback_model,
+        ]
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_all_free_fail_then_paid_succeeds(unique_id: str) -> None:
+    free_model = f"free-500-{unique_id}"
+    paid_model = f"paid-ok-{unique_id}"
+    server = _OpenAICompatibleTestServer(
+        {
+            free_model: lambda writer: _write_json_response(writer, 500, {"error": "free"}),
+            paid_model: lambda writer: _write_sse_text(writer, "paid-ok"),
+        }
+    )
+    await server.start()
+    try:
+        client = LLMClient(
+            model=free_model,
+            api_key="test-key",
+            base_url=server.base_url,
+            llm_provider="openai",
+            candidates=[
+                _candidate(free_model, base_url=server.base_url, source="platform_free"),
+                _candidate(paid_model, base_url=server.base_url, source="platform_paid_fallback"),
+            ],
+            first_token_timeout=0.5,
+            candidate_cooldown_seconds=0.0,
+            timeout=5.0,
+            platform_default_free_pool=True,
+            platform_paid_fallback_enabled=True,
+        )
+        message = await client.chat([_message("hello")])
+        assert get_message_text(message) == "paid-ok"
+        assert [request.model for request in server.requests] == [free_model, paid_model]
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_all_free_and_paid_fail_raises_last_http_error(unique_id: str) -> None:
+    free_model = f"free-500-{unique_id}"
+    paid_model = f"paid-500-{unique_id}"
+    server = _OpenAICompatibleTestServer(
+        {
+            free_model: lambda writer: _write_json_response(writer, 500, {"error": "free"}),
+            paid_model: lambda writer: _write_json_response(writer, 500, {"error": "paid"}),
+        }
+    )
+    await server.start()
+    try:
+        client = LLMClient(
+            model=free_model,
+            api_key="test-key",
+            base_url=server.base_url,
+            llm_provider="openai",
+            candidates=[
+                _candidate(free_model, base_url=server.base_url, source="platform_free"),
+                _candidate(paid_model, base_url=server.base_url, source="platform_paid_fallback"),
+            ],
+            first_token_timeout=0.5,
+            candidate_cooldown_seconds=0.0,
+            timeout=5.0,
+            platform_default_free_pool=True,
+            platform_paid_fallback_enabled=True,
+        )
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.chat([_message("hello")])
+        assert [request.model for request in server.requests] == [free_model, paid_model]
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_platform_free_pool_raises_when_no_candidate_supports_files() -> None:
+    server = _OpenAICompatibleTestServer(
+        {"free-text": lambda writer: _write_sse_text(writer, "unexpected")}
+    )
+    await server.start()
+    try:
+        candidate = _candidate(
+            "free-text",
+            base_url=server.base_url,
+            supported_parameters=frozenset({"temperature"}),
+            source="platform_free",
+        )
+        client = LLMClient(
+            model=str(candidate.model),
+            api_key=str(candidate.api_key),
+            base_url=candidate.base_url,
+            llm_provider=candidate.provider,
+            candidates=[candidate],
+            first_token_timeout=0.05,
+            candidate_cooldown_seconds=0.0,
+            timeout=2.0,
+            platform_default_free_pool=True,
+            platform_paid_fallback_enabled=False,
+        )
+        with pytest.raises(RuntimeError, match="совместимых"):
+            await client.chat(
+                [
+                    Message(
+                        message_id="file-msg",
+                        role=ROLE_USER,
+                        parts=[
+                            Part(raw=b"image", filename="image.png", media_type="image/png"),
+                        ],
+                    )
+                ]
+            )
+        assert server.requests == []
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_platform_free_pool_raises_when_no_candidate_supports_response_format() -> None:
+    server = _OpenAICompatibleTestServer(
+        {"free-text": lambda writer: _write_sse_text(writer, "unexpected")}
+    )
+    await server.start()
+    try:
+        candidate = _candidate(
+            "free-text",
+            base_url=server.base_url,
+            supported_parameters=frozenset({"temperature"}),
+            source="platform_free",
+        )
+        client = LLMClient(
+            model=str(candidate.model),
+            api_key=str(candidate.api_key),
+            base_url=candidate.base_url,
+            llm_provider=candidate.provider,
+            candidates=[candidate],
+            first_token_timeout=0.05,
+            candidate_cooldown_seconds=0.0,
+            timeout=2.0,
+            platform_default_free_pool=True,
+            platform_paid_fallback_enabled=False,
+        )
+        with pytest.raises(RuntimeError, match="совместимых"):
+            async for _event in client.stream(
+                [_message("hello")],
+                response_format={"type": "json_object"},
+            ):
+                raise AssertionError("stream must not yield")
+        assert server.requests == []
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_paid_fallback_used_when_free_has_no_tools() -> None:
+    server = _OpenAICompatibleTestServer(
+        {
+            "free-no-tools": lambda writer: _write_sse_text(writer, "unexpected"),
+            "paid-tools": lambda writer: _write_sse_text(writer, "paid-tools-ok"),
+        }
+    )
+    await server.start()
+    try:
+        client = LLMClient(
+            model="free-no-tools",
+            api_key="test-key",
+            base_url=server.base_url,
+            llm_provider="openai",
+            candidates=[
+                _candidate(
+                    "free-no-tools",
+                    base_url=server.base_url,
+                    supported_parameters=frozenset({"temperature"}),
+                    source="platform_free",
+                ),
+                _candidate(
+                    "paid-tools",
+                    base_url=server.base_url,
+                    supported_parameters=frozenset({"tools"}),
+                    source="platform_paid_fallback",
+                ),
+            ],
+            first_token_timeout=0.5,
+            candidate_cooldown_seconds=0.0,
+            timeout=5.0,
+            platform_default_free_pool=True,
+            platform_paid_fallback_enabled=True,
+        )
+        message = await client.chat([_message("hello")], tools=_tools_payload())
+        assert get_message_text(message) == "paid-tools-ok"
+        assert [request.model for request in server.requests] == ["paid-tools"]
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_paid_without_tools_does_not_guess() -> None:
+    server = _OpenAICompatibleTestServer(
+        {
+            "free-no-tools": lambda writer: _write_sse_text(writer, "unexpected"),
+            "paid-no-tools": lambda writer: _write_sse_text(writer, "unexpected-paid"),
+        }
+    )
+    await server.start()
+    try:
+        client = LLMClient(
+            model="free-no-tools",
+            api_key="test-key",
+            base_url=server.base_url,
+            llm_provider="openai",
+            candidates=[
+                _candidate(
+                    "free-no-tools",
+                    base_url=server.base_url,
+                    supported_parameters=frozenset({"temperature"}),
+                    source="platform_free",
+                ),
+                _candidate(
+                    "paid-no-tools",
+                    base_url=server.base_url,
+                    supported_parameters=frozenset({"temperature"}),
+                    source="platform_paid_fallback",
+                ),
+            ],
+            first_token_timeout=0.05,
+            candidate_cooldown_seconds=0.0,
+            timeout=2.0,
+            platform_default_free_pool=True,
+            platform_paid_fallback_enabled=True,
+        )
+        with pytest.raises(RuntimeError, match="совместимых"):
+            await client.chat([_message("hello")], tools=_tools_payload())
+        assert server.requests == []
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_authored_fallback_used_when_free_has_no_tools() -> None:
+    server = _OpenAICompatibleTestServer(
+        {
+            "free-no-tools": lambda writer: _write_sse_text(writer, "unexpected"),
+            "authored-tools": lambda writer: _write_sse_text(writer, "authored-ok"),
+        }
+    )
+    await server.start()
+    try:
+        client = LLMClient(
+            model="free-no-tools",
+            api_key="test-key",
+            base_url=server.base_url,
+            llm_provider="openai",
+            candidates=[
+                _candidate(
+                    "free-no-tools",
+                    base_url=server.base_url,
+                    supported_parameters=frozenset({"temperature"}),
+                    source="platform_free",
+                ),
+                _candidate(
+                    "authored-tools",
+                    base_url=server.base_url,
+                    supported_parameters=frozenset({"tools"}),
+                    source="fallback",
+                ),
+            ],
+            first_token_timeout=0.5,
+            candidate_cooldown_seconds=0.0,
+            timeout=5.0,
+            platform_default_free_pool=True,
+            platform_paid_fallback_enabled=False,
+        )
+        message = await client.chat([_message("hello")], tools=_tools_payload())
+        assert get_message_text(message) == "authored-ok"
+        assert [request.model for request in server.requests] == ["authored-tools"]
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_explicit_byok_without_tools_uses_first_candidate() -> None:
+    server = _OpenAICompatibleTestServer(
+        {"byok-no-tools": lambda writer: _write_sse_text(writer, "byok-ok")}
+    )
+    await server.start()
+    try:
+        client = LLMClient(
+            model="byok-no-tools",
+            api_key="test-key",
+            base_url=server.base_url,
+            llm_provider="openai",
+            candidates=[
+                _candidate(
+                    "byok-no-tools",
+                    base_url=server.base_url,
+                    supported_parameters=frozenset({"temperature"}),
+                    source="explicit",
+                )
+            ],
+            first_token_timeout=0.5,
+            candidate_cooldown_seconds=0.0,
+            timeout=5.0,
+            platform_default_free_pool=False,
+        )
+        message = await client.chat([_message("hello")], tools=_tools_payload())
+        assert get_message_text(message) == "byok-ok"
+        assert [request.model for request in server.requests] == ["byok-no-tools"]
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_empty_candidates_platform_pool_without_paid_raises() -> None:
+    client = LLMClient(
+        model="unused",
+        api_key="test-key",
+        base_url="https://example.invalid/v1",
+        llm_provider="openai",
+        candidates=[],
+        first_token_timeout=0.05,
+        candidate_cooldown_seconds=0.0,
+        timeout=2.0,
+        platform_default_free_pool=True,
+        platform_paid_fallback_enabled=False,
+    )
+    with pytest.raises(RuntimeError, match="нет доступных бесплатных моделей"):
+        await client.chat([_message("hello")])
+

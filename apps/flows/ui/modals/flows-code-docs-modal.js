@@ -14,6 +14,7 @@ import '@platform/lib/components/platform-modal-search-field.js';
 import '../components/common/flows-code-language-segment.js';
 import { asObject } from '../_helpers/flows-resolvers.js';
 import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
+import { markdownToHtml } from '@platform/lib/utils/markdown.js';
 import {
     flowCodeLanguageLabel,
     normalizeFlowCodeLanguage,
@@ -28,38 +29,29 @@ function _lower(s) {
 }
 
 /**
+ * Оглавление по ATX-заголовкам второго и третьего уровня вне code fence.
+ *
  * @param {string} md
- * @returns {Array<{ level: number, text: string, id: string | null }>}
+ * @returns {Array<{ level: number, text: string }>}
  */
 function buildTocFromMarkdown(md) {
     if (typeof md !== 'string' || md.length === 0) {
         return [];
     }
     const items = [];
-    const lines = md.split('\n');
     let inFence = false;
-    const htmlH = /^<h([1-3])[^>]*\sid="([^"]+)"[^>]*>([^<]*)<\/h[1-3]>\s*$/i;
     const mdH = /^(#{2,3})(?!#)\s+(.+)$/;
-    for (const line of lines) {
-        const tr = line.trim();
-        if (tr.startsWith('```')) {
+    for (const line of md.split('\n')) {
+        if (line.trim().startsWith('```')) {
             inFence = !inFence;
             continue;
         }
         if (inFence) {
             continue;
         }
-        let m = line.match(htmlH);
+        const m = line.match(mdH);
         if (m) {
-            const text = m[3].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
-            items.push({ level: Number(m[1]), id: m[2], text: text.trim() });
-            continue;
-        }
-        m = line.match(mdH);
-        if (m) {
-            const level = m[1].length;
-            const text = m[2].replace(/`+/g, '').trim();
-            items.push({ level, id: null, text });
+            items.push({ level: m[1].length, text: m[2].replace(/`+/g, '').trim() });
         }
     }
     return items;
@@ -77,21 +69,6 @@ function getDocsMarkdown(result) {
         return result.markdown;
     }
     return formatJsonPretty(asObject(result));
-}
-
-/**
- * @param {string} md
- * @returns {string}
- */
-function markdownToHtml(md) {
-    const marked = globalThis.marked;
-    if (marked && typeof marked.parse === 'function') {
-        if (typeof marked.setOptions === 'function') {
-            marked.setOptions({ gfm: true, breaks: true, mangle: false, headerIds: true });
-        }
-        return marked.parse(md);
-    }
-    return `<pre class="docs-md-fallback">${md.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</pre>`;
 }
 
 export class FlowsCodeDocsModal extends PlatformModal {
@@ -242,11 +219,6 @@ export class FlowsCodeDocsModal extends PlatformModal {
                 padding-left: var(--space-3);
                 color: var(--text-secondary);
             }
-            .docs-md-fallback {
-                white-space: pre-wrap;
-                font-family: var(--font-mono);
-                font-size: var(--text-xs);
-            }
         `,
     ];
 
@@ -298,13 +270,6 @@ export class FlowsCodeDocsModal extends PlatformModal {
     _scrollToTarget(item) {
         const main = this.renderRoot?.querySelector('.docs-main .docs-md');
         if (!main) {
-            return;
-        }
-        if (item.id) {
-            const el = main.querySelector(`#${CSS.escape(item.id)}`);
-            if (el) {
-                el.scrollIntoView({ block: 'start', behavior: 'smooth' });
-            }
             return;
         }
         const want = item.text;

@@ -17,7 +17,7 @@ alwaysApply: false
 | Test | MinIO (docker-compose-test) | `http://minio-test:9000` (внутри контейнера) / `localhost:19002` (хост) | `test-bucket` |
 | Prod | Selectel S3 | `https://s3.ru-3.storage.selcloud.ru` | `shvedzilla` |
 
-Compose-конфиги MinIO — `docker-compose-{dev,test}.yaml`. Подробности — `docs/minio-setup.md`, `infrastructure.mdc`.
+Compose-конфиги MinIO — `docker-compose-{dev,test}.yaml` и `scripts/zed_search/docker/docker-compose.yml`. Образ — `pgsty/silo:RELEASE.2026-09-03T13-18-01Z` (drop-in: те же `MINIO_*`, S3 API, `/minio/health/live`). MinIO community с осени 2025 source-only; Docker Hub `minio/minio` не отдаёт pull, `quay.io/minio/minio:latest` застыл на `2025-09-07`. Подробности — `docs/minio-setup.md`, `infrastructure.mdc`.
 
 ## Конфигурация
 

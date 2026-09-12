@@ -5,11 +5,11 @@
 
 from __future__ import annotations
 
-from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import pytest
 
 from core.api.companies import CompanyMembershipResponse, build_my_companies_response
 from core.models.identity_models import Company, User
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
 @pytest.mark.asyncio

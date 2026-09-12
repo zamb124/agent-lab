@@ -10,12 +10,11 @@ Live CalDAV Mail.ru: реальный ящик из mail.live_test.personal.
 
 from __future__ import annotations
 
-from core.authz.factory import build_authz_service
-
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from core.authz.factory import build_authz_service
 from core.calendar.caldav_discovery import CaldavAutolinkKind, resolve_caldav_target
 from core.calendar.service import CalDavClient
 from core.config import get_settings

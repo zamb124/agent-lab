@@ -33,8 +33,37 @@ _SYSTEM_TEMPLATE_VARIABLES: frozenset[str] = frozenset(
 )
 
 
+class UnmatchedBracesError(Exception):
+    """Непарные скобки ``{}`` в шаблоне."""
+
+
+def unmatched_brace_message(template: str) -> str | None:
+    """Описание первой непарной скобки или ``None``, когда все ``{}`` парные.
+
+    Экранированные ``\\{`` / ``\\}`` не считаются. Одна проверка для рендера
+    (``VariableResolver.render_template``) и publish gate Flow UI.
+    """
+
+    depth = 0
+    i = 0
+    while i < len(template):
+        if template[i] == "\\" and i + 1 < len(template):
+            i += 2
+            continue
+        if template[i] == "{":
+            depth += 1
+        elif template[i] == "}":
+            depth -= 1
+            if depth < 0:
+                return f"Непарная закрывающая скобка '}}' на позиции {i}"
+        i += 1
+    if depth > 0:
+        return f"Непарная открывающая скобка '{{' - не закрыто {depth} скобок"
+    return None
+
+
 class TemplateVariableRef(StrictBaseModel):
-    """Одна ссылка на переменную, найденная в шаблоне."""
+    """Одна ссылка на переменную, найденную в шаблоне."""
 
     name: str
     root: str
@@ -267,5 +296,7 @@ def _scan_for_loop(
 __all__ = [
     "TemplateScanResult",
     "TemplateVariableRef",
+    "UnmatchedBracesError",
     "scan_prompt_template",
+    "unmatched_brace_message",
 ]

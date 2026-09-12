@@ -349,9 +349,9 @@ flow-сотрудника (worktracker assigned, sync DM/@mention) — сист�
 
 ## A2A / Flow UI не являются второй platform event bus
 
-`platform:events` доставляет доменные push-события между сервисами/UI factories. A2A Task lifecycle, Artifact updates, Flow UI revisions/effects/autosync относятся к durable flow execution и идут через A2A projection/stream. Они не публикуются как `PlatformEvent` ради рендера и не получают отдельную Redis event bus.
+`platform:events` доставляет доменные push-события между сервисами/UI factories. A2A Task lifecycle, Artifact updates (включая артефакты Flow UI `state`/`ui`) и `ui-action` относятся к durable flow execution и идут через A2A projection/stream. Они не публикуются как `PlatformEvent` ради рендера и не получают отдельную Redis event bus.
 
-Запрещены `UIEvent`, `ui_events_pending`, `artifact.name="ui_event"` и дублирование одного Flow UI effect в `platform:events` + A2A. Доменные последствия Submit могут после durable commit публиковать обычный catalogued `PlatformEvent`; это другой факт с собственным `event_id`/causation.
+Запрещены `UIEvent`, `artifact.name="ui_event"` и дублирование одного Flow UI события в `platform:events` + A2A. Доменные последствия `ui-action` могут после durable commit публиковать обычный catalogued `PlatformEvent`; это другой факт с собственным `event_id`/causation.
 
 ## DevTools
 

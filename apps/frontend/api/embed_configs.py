@@ -16,6 +16,7 @@ from apps.frontend.dependencies import ContainerDep
 from core.authz.models import AuthzObject
 from core.config import get_settings
 from core.context import require_context
+from core.flow_ui.document import FlowUIConversationSettings, FlowUIPageId
 from core.identity.embed_guest_turns import EMBED_SESSION_ID_METADATA_KEY
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.logging import get_logger
@@ -23,13 +24,9 @@ from core.models.embed_models import (
     DEFAULT_EMBED_INPUT_PLACEHOLDER,
     EmbedConfig,
     EmbedMapping,
+    EmbedPosition,
     EmbedPresentation,
     EmbedStatus,
-    resolve_embed_presentation,
-)
-from core.models.flow_interface import (
-    EmbedInterfaceOverride,
-    compact_embed_interface_override,
 )
 from core.models.identity_models import Company, User
 from core.pagination import OffsetPage
@@ -167,10 +164,6 @@ def _validate_voice_flags(*, voice_enabled: bool, voice_default_on: bool) -> Non
 
 
 def _embed_config_to_response(config: EmbedConfig) -> "EmbedConfigResponse":
-    presentation = resolve_embed_presentation(
-        presentation=config.presentation,
-        position=config.position,
-    )
     return EmbedConfigResponse(
         embed_id=config.embed_id,
         name=config.name,
@@ -178,10 +171,10 @@ def _embed_config_to_response(config: EmbedConfig) -> "EmbedConfigResponse":
         branch_id=config.branch_id,
         allowed_origins=config.allowed_origins,
         status=config.status,
-        presentation=presentation,
+        presentation=config.presentation,
         theme=config.theme,
-        position=config.position if presentation == "drawer" else "bottom-right",
-        show_launcher=False if presentation == "page" else config.show_launcher,
+        position=config.position,
+        show_launcher=config.show_launcher,
         primary_color=config.primary_color,
         assistant_title=config.assistant_title,
         interface_locale=config.interface_locale,
@@ -194,7 +187,8 @@ def _embed_config_to_response(config: EmbedConfig) -> "EmbedConfigResponse":
         voice_enabled=config.voice_enabled,
         voice_default_on=config.voice_default_on,
         session_share_enabled=config.session_share_enabled,
-        interface_override=compact_embed_interface_override(config.interface_override),
+        conversation=config.conversation,
+        start_page_id=config.start_page_id,
         preview_share_link=config.preview_share_link,
         usage_count=config.usage_count,
         last_used_at=config.last_used_at,
@@ -214,7 +208,7 @@ class CreateEmbedConfigRequest(BaseModel):
         description="drawer — FAB + панель; page — полноэкранный Flow UI",
     )
     theme: str = Field(default="dark", description="Тема оформления")
-    position: str = Field(default="bottom-right", description="Позиция FAB (drawer)")
+    position: EmbedPosition = Field(default="bottom-right", description="Угол launcher-кнопки (drawer)")
     show_launcher: bool = Field(default=True, description="Показывать встроенную кнопку запуска")
     primary_color: str = Field(default="#6366f1", description="Основной цвет")
     assistant_title: str | None = Field(default=None, description="Имя ассистента в шапке")
@@ -243,12 +237,13 @@ class CreateEmbedConfigRequest(BaseModel):
         default=False,
         description="Разрешить Share текущей сессии из embed-чата",
     )
-    interface_override: EmbedInterfaceOverride | None = Field(
+    conversation: FlowUIConversationSettings | None = Field(
         default=None,
-        description=(
-            "Частичное переопределение policy/initial content Flow UI; "
-            "null — наследовать interface flow"
-        ),
+        description="Настройки блока conversation для этой embed-поверхности; null — как у flow",
+    )
+    start_page_id: FlowUIPageId | None = Field(
+        default=None,
+        description="Стартовая страница интерфейса для embed; null — как у flow",
     )
 
 class UpdateEmbedConfigRequest(BaseModel):
@@ -260,7 +255,7 @@ class UpdateEmbedConfigRequest(BaseModel):
     status: EmbedStatus | None = None
     presentation: EmbedPresentation | None = None
     theme: str | None = None
-    position: str | None = None
+    position: EmbedPosition | None = None
     show_launcher: bool | None = None
     primary_color: str | None = None
     assistant_title: str | None = None
@@ -274,7 +269,8 @@ class UpdateEmbedConfigRequest(BaseModel):
     voice_enabled: bool | None = None
     voice_default_on: bool | None = None
     session_share_enabled: bool | None = None
-    interface_override: EmbedInterfaceOverride | None = None
+    conversation: FlowUIConversationSettings | None = None
+    start_page_id: FlowUIPageId | None = None
 
 class EmbedConfigResponse(BaseModel):
     """Ответ с конфигурацией виджета"""
@@ -286,7 +282,7 @@ class EmbedConfigResponse(BaseModel):
     status: EmbedStatus
     presentation: EmbedPresentation
     theme: str
-    position: str
+    position: EmbedPosition
     show_launcher: bool
     primary_color: str
     assistant_title: str | None
@@ -300,7 +296,8 @@ class EmbedConfigResponse(BaseModel):
     voice_enabled: bool
     voice_default_on: bool
     session_share_enabled: bool
-    interface_override: EmbedInterfaceOverride | None
+    conversation: FlowUIConversationSettings | None
+    start_page_id: FlowUIPageId | None
     preview_share_link: bool
     usage_count: int
     last_used_at: datetime | None
@@ -403,19 +400,6 @@ async def create_embed_config(
         voice_default_on=request_data.voice_default_on,
     )
 
-    # Создаем конфигурацию
-    presentation = resolve_embed_presentation(
-        presentation=request_data.presentation,
-        position=request_data.position,
-    )
-    position = request_data.position
-    show_launcher = request_data.show_launcher
-    if presentation == "page":
-        position = "bottom-right"
-        show_launcher = False
-    elif position.strip().lower() not in ("bottom-right", "bottom-left"):
-        position = "bottom-right"
-
     config = EmbedConfig(
         embed_id=embed_id,
         name=request_data.name,
@@ -423,10 +407,10 @@ async def create_embed_config(
         branch_id=branch_id,
         allowed_origins=allowed_origins,
         status=EmbedStatus.ACTIVE,
-        presentation=presentation,
+        presentation=request_data.presentation,
         theme=request_data.theme,
-        position=position,
-        show_launcher=show_launcher,
+        position=request_data.position,
+        show_launcher=request_data.show_launcher,
         primary_color=request_data.primary_color,
         assistant_title=request_data.assistant_title,
         interface_locale=interface_locale,
@@ -439,9 +423,8 @@ async def create_embed_config(
         voice_enabled=request_data.voice_enabled,
         voice_default_on=request_data.voice_default_on,
         session_share_enabled=request_data.session_share_enabled,
-        interface_override=compact_embed_interface_override(
-            request_data.interface_override
-        ),
+        conversation=request_data.conversation,
+        start_page_id=request_data.start_page_id,
         preview_share_link=False,
         created_by=user.user_id,
     )
@@ -558,16 +541,6 @@ async def update_embed_config(
         if request_data.show_launcher is None:
             raise HTTPException(status_code=400, detail="show_launcher не может быть null")
         config.show_launcher = request_data.show_launcher
-    effective_presentation = resolve_embed_presentation(
-        presentation=config.presentation,
-        position=config.position,
-    )
-    if effective_presentation == "page":
-        config.presentation = "page"
-        config.position = "bottom-right"
-        config.show_launcher = False
-    elif config.position.strip().lower() not in ("bottom-right", "bottom-left"):
-        config.position = "bottom-right"
     if "primary_color" in fields:
         if request_data.primary_color is None:
             raise HTTPException(status_code=400, detail="primary_color не может быть null")
@@ -614,10 +587,10 @@ async def update_embed_config(
         if request_data.session_share_enabled is None:
             raise HTTPException(status_code=400, detail="session_share_enabled не может быть null")
         config.session_share_enabled = request_data.session_share_enabled
-    if "interface_override" in fields:
-        config.interface_override = compact_embed_interface_override(
-            request_data.interface_override
-        )
+    if "conversation" in fields:
+        config.conversation = request_data.conversation
+    if "start_page_id" in fields:
+        config.start_page_id = request_data.start_page_id
 
     _validate_landing_catalog_fields(
         landing_visible=config.landing_visible,
@@ -728,30 +701,17 @@ async def get_embed_code(
         allowed_origins=allowed_origins,
         expires_in_seconds=ttl,
     )
-    presentation = resolve_embed_presentation(
-        presentation=config.presentation,
-        position=config.position,
-    )
-    position = (
-        "bottom-right"
-        if presentation == "page"
-        else (
-            config.position
-            if config.position.strip().lower() in ("bottom-right", "bottom-left")
-            else "bottom-right"
-        )
-    )
-    show_launcher = False if presentation == "page" else config.show_launcher
+    presentation = config.presentation
     page_url = f"{base_url}/flow-embed-page?embed={config.embed_id}"
 
     open_tag_parts = [
         f'src="{html.escape(script_url, quote=True)}"',
         f'data-embed-id="{html.escape(config.embed_id, quote=True)}"',
         f'data-presentation="{presentation}"',
-        f'data-position="{html.escape(position, quote=True)}"',
+        f'data-position="{config.position}"',
         f'data-theme="{html.escape(config.theme, quote=True)}"',
         f'data-locale="{html.escape(config.interface_locale, quote=True)}"',
-        ('data-show-launcher="true"' if show_launcher else 'data-show-launcher="false"'),
+        ('data-show-launcher="true"' if config.show_launcher else 'data-show-launcher="false"'),
         f'data-flows-base-url="{html.escape(f"{base_url}/flows", quote=True)}"',
         f'data-platform-ui-origin="{html.escape(base_url, quote=True)}"',
         'data-token-url="/api/flow-ui-token"',

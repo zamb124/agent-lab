@@ -8,7 +8,7 @@ from apps.idle_worker.tasks.task_names import (
     TASK_REFRESH_PLATFORM_FREE_MODELS,
     TASK_SYNC_LLM_MODELS,
 )
-from core.ai.adapters import AIProviderAdapterError, create_model_catalog_adapter_registry
+from core.ai.adapters import AIProviderAdapter, create_model_catalog_adapter_registry
 from core.ai.free_pool import read_humanitec_llms_model_options
 from core.ai.model_catalog_repository import AIModelCatalogRepository
 from core.ai.models import AIModelRecord
@@ -68,41 +68,29 @@ class LLMModelsService:
             return False
         return registry.get(provider).is_configured()
 
-    async def fetch_models_by_provider(self, provider: str) -> list[str]:
-        """Fetch provider model ids from canonical ``core.ai`` model discovery."""
-        normalized_provider = provider.strip()
-        registry = self._registry()
-        if not registry.has(normalized_provider):
-            logger.warning("Неизвестный провайдер: %s", provider)
-            return []
-        records = await registry.get(normalized_provider).list_models(probe_embeddings=False)
-        return [record.model_id for record in records]
-
-    async def fetch_model_records_by_provider(self, provider: str) -> list[AIModelRecord]:
-        """Fetch full provider model records from dynamic discovery and probes."""
-        normalized_provider = provider.strip()
-        registry = self._registry()
-        if not registry.has(normalized_provider):
-            logger.warning("Неизвестный провайдер: %s", provider)
-            return []
-        return await registry.get(normalized_provider).list_models(probe_embeddings=True)
-
-    async def discover_model_records_by_provider(self, provider: str) -> list[AIModelRecord]:
-        """Fetch provider catalog without inference endpoint probes."""
-        normalized_provider = provider.strip()
-        registry = self._registry()
-        if not registry.has(normalized_provider):
-            logger.warning("Неизвестный провайдер: %s", provider)
-            return []
-        return await registry.get(normalized_provider).list_models(probe_embeddings=False)
-
-    async def probe_embedding_dimension(self, provider: str, model_id: str) -> int | None:
-        """Public live probe for verified embedding model metadata."""
+    def _adapter(self, provider: str) -> AIProviderAdapter:
         normalized_provider = provider.strip()
         registry = self._registry()
         if not registry.has(normalized_provider):
             raise ValueError(f"Неизвестный провайдер: {provider}")
-        return await registry.get(normalized_provider).probe_embedding_dimension(model_id)
+        return registry.get(normalized_provider)
+
+    async def fetch_models_by_provider(self, provider: str) -> list[str]:
+        """Fetch provider model ids from canonical ``core.ai`` model discovery."""
+        records = await self._adapter(provider).list_models(probe_embeddings=False)
+        return [record.model_id for record in records]
+
+    async def fetch_model_records_by_provider(self, provider: str) -> list[AIModelRecord]:
+        """Fetch full provider model records from dynamic discovery and probes."""
+        return await self._adapter(provider).list_models(probe_embeddings=True)
+
+    async def discover_model_records_by_provider(self, provider: str) -> list[AIModelRecord]:
+        """Fetch provider catalog without inference endpoint probes."""
+        return await self._adapter(provider).list_models(probe_embeddings=False)
+
+    async def probe_embedding_dimension(self, provider: str, model_id: str) -> int | None:
+        """Public live probe for verified embedding model metadata."""
+        return await self._adapter(provider).probe_embedding_dimension(model_id)
 
     @staticmethod
     def storage_dimension_for_embedding(native_dimension: int | None) -> int | None:
@@ -121,34 +109,24 @@ class LLMModelsService:
 
     async def sync_models_by_provider(self, provider: str) -> int:
         """Sync model records from one provider into the single catalog storage."""
-        try:
-            records = await self.fetch_model_records_by_provider(provider)
-            if not records:
-                logger.warning("Не получено моделей от провайдера %s", provider)
-                return 0
+        records = await self.fetch_model_records_by_provider(provider)
+        if not records:
+            raise RuntimeError(f"провайдер {provider} не вернул моделей")
 
-            for model in records:
-                _ = await self._repository.set(model)
+        for model in records:
+            existing = await self._repository.get_provider_model(model.provider, model.model_id)
+            if (
+                existing is not None
+                and existing.artificial_analysis is not None
+                and model.artificial_analysis is None
+            ):
+                model = model.model_copy(
+                    update={"artificial_analysis": existing.artificial_analysis}
+                )
+            _ = await self._repository.set(model)
 
-            logger.info("Синхронизировано %d моделей от %s", len(records), provider)
-            return len(records)
-        except AIProviderAdapterError as exc:
-            logger.error(
-                "llm_models.sync_provider_failed",
-                provider=provider,
-                error_type=type(exc).__name__,
-                status_code=exc.status_code,
-                error=str(exc),
-            )
-            return 0
-        except Exception as exc:
-            logger.error(
-                "llm_models.sync_provider_failed",
-                provider=provider,
-                error_type=type(exc).__name__,
-                error=str(exc),
-            )
-            return 0
+        logger.info("Синхронизировано %d моделей от %s", len(records), provider)
+        return len(records)
 
     async def sync_models(self) -> int:
         """Sync models from the configured default provider."""

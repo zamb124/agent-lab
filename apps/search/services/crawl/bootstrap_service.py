@@ -44,7 +44,11 @@ class CrawlBootstrapService:
             domain_count = await self._crawl_domain_repository.count_for_profile(crawl_profile_id)
             pending_urls = await self._crawl_url_repository.count_pending_for_profile(crawl_profile_id)
             if pending_urls > 0:
-                _ = await enqueue(CRAWL_ORCHESTRATOR_TICK, crawl_profile_id)
+                _ = await enqueue(
+                    CRAWL_ORCHESTRATOR_TICK,
+                    crawl_profile_id,
+                    background_kind="startup",
+                )
             return CrawlBootstrapResult(
                 crawl_profile_id=crawl_profile_id,
                 action="bootstrap_disabled",
@@ -59,7 +63,11 @@ class CrawlBootstrapService:
         if domain_count > 0:
             pending_urls = await self._crawl_url_repository.count_pending_for_profile(crawl_profile_id)
             if pending_urls > 0:
-                _ = await enqueue(CRAWL_ORCHESTRATOR_TICK, crawl_profile_id)
+                _ = await enqueue(
+                    CRAWL_ORCHESTRATOR_TICK,
+                    crawl_profile_id,
+                    background_kind="startup",
+                )
             return CrawlBootstrapResult(
                 crawl_profile_id=crawl_profile_id,
                 action="skipped_seed",
@@ -71,6 +79,7 @@ class CrawlBootstrapService:
             crawl_profile_id,
             "tranco",
             self._crawl_config.tranco_seed_limit,
+            background_kind="startup",
         )
         return CrawlBootstrapResult(
             crawl_profile_id=crawl_profile_id,

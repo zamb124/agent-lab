@@ -1,0 +1,1215 @@
+{
+  "items": [
+    {
+      "category": "conversation",
+      "description": "Conversation feed, greeting, prompts and a composer with files and voice.",
+      "document": {
+        "pages": [
+          {
+            "blocks": [
+              {
+                "block_id": "agent-identity",
+                "image_url": "",
+                "title": "",
+                "type": "agent_identity",
+                "visible_when": null
+              },
+              {
+                "block_id": "conversation",
+                "settings": {
+                  "allow_cancel": true,
+                  "allow_voice": true,
+                  "errors": "generic",
+                  "greeting": "Hello! How can I help?",
+                  "placeholder": "",
+                  "show_activity": true,
+                  "show_browser_previews": true,
+                  "show_files_panel": true,
+                  "show_reasoning": false,
+                  "show_reflection": true,
+                  "show_run_trace": false,
+                  "show_skill_loads": true,
+                  "show_trace_actions": false,
+                  "suggested_prompts": [
+                    "What can you do?",
+                    "Show me an example"
+                  ],
+                  "tool_calls": "compact"
+                },
+                "type": "conversation",
+                "visible_when": null
+              }
+            ],
+            "page_id": "main",
+            "title": "Conversation"
+          }
+        ],
+        "start_page_id": "main"
+      },
+      "icon": "chat",
+      "template_id": "chat",
+      "title": "Agent chat"
+    },
+    {
+      "category": "conversation",
+      "description": "Conversation plus a context block above the feed.",
+      "document": {
+        "pages": [
+          {
+            "blocks": [
+              {
+                "block_id": "agent-identity",
+                "image_url": "",
+                "title": "",
+                "type": "agent_identity",
+                "visible_when": null
+              },
+              {
+                "block_id": "context",
+                "blocks": [
+                  {
+                    "block_id": "context-text",
+                    "markdown": "Task: {?task_title|not selected}",
+                    "type": "text",
+                    "visible_when": null
+                  },
+                  {
+                    "block_id": "context-slot",
+                    "title": "",
+                    "type": "slot",
+                    "visible_when": null
+                  }
+                ],
+                "title": "Context",
+                "type": "section",
+                "visible_when": null
+              },
+              {
+                "block_id": "conversation",
+                "settings": {
+                  "allow_cancel": true,
+                  "allow_voice": true,
+                  "errors": "generic",
+                  "greeting": "",
+                  "placeholder": "",
+                  "show_activity": true,
+                  "show_browser_previews": true,
+                  "show_files_panel": true,
+                  "show_reasoning": false,
+                  "show_reflection": true,
+                  "show_run_trace": false,
+                  "show_skill_loads": true,
+                  "show_trace_actions": false,
+                  "suggested_prompts": [],
+                  "tool_calls": "compact"
+                },
+                "type": "conversation",
+                "visible_when": null
+              }
+            ],
+            "page_id": "main",
+            "title": "Assistant"
+          }
+        ],
+        "start_page_id": "main"
+      },
+      "icon": "layers",
+      "template_id": "assistant_context",
+      "title": "Chat with context"
+    },
+    {
+      "category": "forms",
+      "description": "Headline, description and a request form: name, email, message.",
+      "document": {
+        "pages": [
+          {
+            "blocks": [
+              {
+                "block_id": "title",
+                "level": 1,
+                "text": "How can we help?",
+                "type": "heading",
+                "visible_when": null
+              },
+              {
+                "block_id": "subtitle",
+                "markdown": "Leave a request and the agent will reply in this interface.",
+                "type": "text",
+                "visible_when": null
+              },
+              {
+                "action": null,
+                "block_id": "name",
+                "default": "",
+                "error_message": "",
+                "field": "name",
+                "label": "Name",
+                "multiline": false,
+                "pattern": "",
+                "placeholder": "",
+                "required": true,
+                "secret": false,
+                "type": "text_input",
+                "visible_when": null
+              },
+              {
+                "action": null,
+                "block_id": "email",
+                "default": "",
+                "error_message": "Enter a valid email",
+                "field": "email",
+                "label": "Email",
+                "multiline": false,
+                "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+                "placeholder": "",
+                "required": true,
+                "secret": false,
+                "type": "text_input",
+                "visible_when": null
+              },
+              {
+                "action": null,
+                "block_id": "message",
+                "default": "",
+                "error_message": "",
+                "field": "message",
+                "label": "Message",
+                "multiline": true,
+                "pattern": "",
+                "placeholder": "",
+                "required": false,
+                "secret": false,
+                "type": "text_input",
+                "visible_when": null
+              },
+              {
+                "action": {
+                  "name": "submit",
+                  "payload": {}
+                },
+                "block_id": "submit",
+                "label": "Send request",
+                "type": "button",
+                "variant": "primary",
+                "visible_when": null
+              }
+            ],
+            "page_id": "main",
+            "title": "Request"
+          }
+        ],
+        "start_page_id": "main"
+      },
+      "icon": "checklist",
+      "template_id": "lead_form",
+      "title": "Request form"
+    },
+    {
+      "category": "forms",
+      "description": "Sign-in screen: email, password and a button.",
+      "document": {
+        "pages": [
+          {
+            "blocks": [
+              {
+                "block_id": "title",
+                "level": 1,
+                "text": "Sign in",
+                "type": "heading",
+                "visible_when": null
+              },
+              {
+                "action": null,
+                "block_id": "email",
+                "default": "",
+                "error_message": "",
+                "field": "email",
+                "label": "Email",
+                "multiline": false,
+                "pattern": "",
+                "placeholder": "",
+                "required": true,
+                "secret": false,
+                "type": "text_input",
+                "visible_when": null
+              },
+              {
+                "action": null,
+                "block_id": "password",
+                "default": "",
+                "error_message": "",
+                "field": "password",
+                "label": "Password",
+                "multiline": false,
+                "pattern": "",
+                "placeholder": "",
+                "required": true,
+                "secret": true,
+                "type": "text_input",
+                "visible_when": null
+              },
+              {
+                "action": {
+                  "name": "login",
+                  "payload": {}
+                },
+                "block_id": "submit",
+                "label": "Sign in",
+                "type": "button",
+                "variant": "primary",
+                "visible_when": null
+              }
+            ],
+            "page_id": "main",
+            "title": "Sign in"
+          }
+        ],
+        "start_page_id": "main"
+      },
+      "icon": "lock",
+      "template_id": "login",
+      "title": "Login form"
+    },
+    {
+      "category": "forms",
+      "description": "Contact card with avatar and a message form.",
+      "document": {
+        "pages": [
+          {
+            "blocks": [
+              {
+                "block_id": "avatar",
+                "image_url": "{?contact.image_url}",
+                "name": "{?contact.name|Support}",
+                "type": "avatar",
+                "visible_when": null
+              },
+              {
+                "block_id": "title",
+                "level": 2,
+                "text": "{?contact.name|Support}",
+                "type": "heading",
+                "visible_when": null
+              },
+              {
+                "block_id": "role",
+                "markdown": "{?contact.role}",
+                "type": "text",
+                "visible_when": null
+              },
+              {
+                "action": null,
+                "block_id": "message",
+                "default": "",
+                "error_message": "",
+                "field": "message",
+                "label": "Message",
+                "multiline": true,
+                "pattern": "",
+                "placeholder": "",
+                "required": true,
+                "secret": false,
+                "type": "text_input",
+                "visible_when": null
+              },
+              {
+                "action": {
+                  "name": "send_message",
+                  "payload": {}
+                },
+                "block_id": "send",
+                "label": "Send",
+                "type": "button",
+                "variant": "primary",
+                "visible_when": null
+              }
+            ],
+            "page_id": "main",
+            "title": "Contact"
+          }
+        ],
+        "start_page_id": "main"
+      },
+      "icon": "users",
+      "template_id": "contact",
+      "title": "Contact card"
+    },
+    {
+      "category": "forms",
+      "description": "Required fields, patterns and columns.",
+      "document": {
+        "pages": [
+          {
+            "blocks": [
+              {
+                "block_id": "title",
+                "level": 1,
+                "text": "Registration",
+                "type": "heading",
+                "visible_when": null
+              },
+              {
+                "block_id": "name-row",
+                "columns": [
+                  {
+                    "blocks": [
+                      {
+                        "action": null,
+                        "block_id": "first-name",
+                        "default": "",
+                        "error_message": "",
+                        "field": "first_name",
+                        "label": "First name",
+                        "multiline": false,
+                        "pattern": "",
+                        "placeholder": "",
+                        "required": true,
+                        "secret": false,
+                        "type": "text_input",
+                        "visible_when": null
+                      }
+                    ],
+                    "width": 6
+                  },
+                  {
+                    "blocks": [
+                      {
+                        "action": null,
+                        "block_id": "last-name",
+                        "default": "",
+                        "error_message": "",
+                        "field": "last_name",
+                        "label": "Last name",
+                        "multiline": false,
+                        "pattern": "",
+                        "placeholder": "",
+                        "required": true,
+                        "secret": false,
+                        "type": "text_input",
+                        "visible_when": null
+                      }
+                    ],
+                    "width": 6
+                  }
+                ],
+                "type": "columns",
+                "visible_when": null
+              },
+              {
+                "action": null,
+                "block_id": "phone",
+                "default": "",
+                "error_message": "Enter a phone number",
+                "field": "phone",
+                "label": "Phone",
+                "multiline": false,
+                "pattern": "^\\+?[0-9 ()-]{7,20}$",
+                "placeholder": "",
+                "required": false,
+                "secret": false,
+                "type": "text_input",
+                "visible_when": null
+              },
+              {
+                "action": null,
+                "block_id": "plan",
+                "default": "free",
+                "error_message": "",
+                "field": "plan",
+                "label": "Plan",
+                "multiple": false,
+                "options": [
+                  {
+                    "label": "Free",
+                    "value": "free"
+                  },
+                  {
+                    "label": "Pro",
+                    "value": "pro"
+                  },
+                  {
+                    "label": "Team",
+                    "value": "team"
+                  }
+                ],
+                "placeholder": "",
+                "required": false,
+                "type": "select",
+                "visible_when": null
+              },
+              {
+                "action": null,
+                "block_id": "consent",
+                "default": false,
+                "error_message": "",
+                "field": "consent",
+                "label": "I agree to the terms",
+                "required": true,
+                "type": "checkbox",
+                "visible_when": null
+              },
+              {
+                "action": {
+                  "name": "register",
+                  "payload": {}
+                },
+                "block_id": "submit",
+                "label": "Register",
+                "type": "button",
+                "variant": "primary",
+                "visible_when": null
+              }
+            ],
+            "page_id": "main",
+            "title": "Form"
+          }
+        ],
+        "start_page_id": "main"
+      },
+      "icon": "check-square",
+      "template_id": "validated_form",
+      "title": "Validated form"
+    },
+    {
+      "category": "dashboards",
+      "description": "Metrics, chart, table and chat.",
+      "document": {
+        "pages": [
+          {
+            "blocks": [
+              {
+                "block_id": "title",
+                "level": 1,
+                "text": "Overview",
+                "type": "heading",
+                "visible_when": null
+              },
+              {
+                "block_id": "metrics",
+                "columns": [
+                  {
+                    "blocks": [
+                      {
+                        "block_id": "revenue",
+                        "hint": "",
+                        "label": "Revenue",
+                        "type": "metric",
+                        "value": "{?metrics.revenue|0}",
+                        "visible_when": null
+                      }
+                    ],
+                    "width": 4
+                  },
+                  {
+                    "blocks": [
+                      {
+                        "block_id": "orders",
+                        "hint": "",
+                        "label": "Orders",
+                        "type": "metric",
+                        "value": "{?metrics.orders|0}",
+                        "visible_when": null
+                      }
+                    ],
+                    "width": 4
+                  },
+                  {
+                    "blocks": [
+                      {
+                        "block_id": "customers",
+                        "hint": "",
+                        "label": "Customers",
+                        "type": "metric",
+                        "value": "{?metrics.customers|0}",
+                        "visible_when": null
+                      }
+                    ],
+                    "width": 4
+                  }
+                ],
+                "type": "columns",
+                "visible_when": null
+              },
+              {
+                "block_id": "chart",
+                "data": "metrics.series",
+                "kind": "line",
+                "title": "Trend",
+                "type": "chart",
+                "visible_when": null,
+                "x": "date",
+                "y": [
+                  "revenue"
+                ]
+              },
+              {
+                "block_id": "table",
+                "columns": [],
+                "file_id": "",
+                "row_action": {
+                  "name": "open_row",
+                  "payload": {}
+                },
+                "rows": "metrics.rows",
+                "type": "data_table",
+                "visible_when": null
+              },
+              {
+                "block_id": "conversation",
+                "settings": {
+                  "allow_cancel": true,
+                  "allow_voice": true,
+                  "errors": "generic",
+                  "greeting": "",
+                  "placeholder": "",
+                  "show_activity": true,
+                  "show_browser_previews": true,
+                  "show_files_panel": true,
+                  "show_reasoning": false,
+                  "show_reflection": true,
+                  "show_run_trace": false,
+                  "show_skill_loads": true,
+                  "show_trace_actions": false,
+                  "suggested_prompts": [],
+                  "tool_calls": "compact"
+                },
+                "type": "conversation",
+                "visible_when": null
+              }
+            ],
+            "page_id": "main",
+            "title": "Dashboard"
+          }
+        ],
+        "start_page_id": "main"
+      },
+      "icon": "apps",
+      "template_id": "dashboard",
+      "title": "Dashboard"
+    },
+    {
+      "category": "dashboards",
+      "description": "Status, progress and metric cards.",
+      "document": {
+        "pages": [
+          {
+            "blocks": [
+              {
+                "block_id": "title",
+                "level": 1,
+                "text": "Statistics",
+                "type": "heading",
+                "visible_when": null
+              },
+              {
+                "block_id": "status",
+                "label": "{?stats.status|ok}",
+                "tone": "success",
+                "type": "status",
+                "visible_when": null
+              },
+              {
+                "block_id": "progress",
+                "label": "Completed",
+                "max": 100.0,
+                "type": "progress",
+                "value": "{?stats.progress|0}",
+                "visible_when": null
+              },
+              {
+                "block_id": "cards",
+                "columns": [
+                  {
+                    "blocks": [
+                      {
+                        "block_id": "active",
+                        "hint": "",
+                        "label": "Active",
+                        "type": "metric",
+                        "value": "{?stats.active|0}",
+                        "visible_when": null
+                      }
+                    ],
+                    "width": 6
+                  },
+                  {
+                    "blocks": [
+                      {
+                        "block_id": "done",
+                        "hint": "",
+                        "label": "Done",
+                        "type": "metric",
+                        "value": "{?stats.done|0}",
+                        "visible_when": null
+                      }
+                    ],
+                    "width": 6
+                  }
+                ],
+                "type": "columns",
+                "visible_when": null
+              },
+              {
+                "action": {
+                  "name": "refresh",
+                  "payload": {}
+                },
+                "block_id": "refresh",
+                "label": "Refresh",
+                "type": "button",
+                "variant": "secondary",
+                "visible_when": null
+              }
+            ],
+            "page_id": "main",
+            "title": "Statistics"
+          }
+        ],
+        "start_page_id": "main"
+      },
+      "icon": "chart",
+      "template_id": "stats_overview",
+      "title": "Stats overview"
+    },
+    {
+      "category": "utility",
+      "description": "Status, progress, activity and a conditional block.",
+      "document": {
+        "pages": [
+          {
+            "blocks": [
+              {
+                "block_id": "title",
+                "level": 1,
+                "text": "Order {?order.number} status",
+                "type": "heading",
+                "visible_when": null
+              },
+              {
+                "block_id": "status",
+                "label": "{?order.status|pending}",
+                "tone": "info",
+                "type": "status",
+                "visible_when": null
+              },
+              {
+                "block_id": "progress",
+                "label": "",
+                "max": 100.0,
+                "type": "progress",
+                "value": "{?order.progress|0}",
+                "visible_when": null
+              },
+              {
+                "block_id": "activity",
+                "detail": "",
+                "status": "running",
+                "title": "{?order.stage|Processing}",
+                "type": "activity",
+                "visible_when": null
+              },
+              {
+                "block_id": "delivered",
+                "message": "Order delivered",
+                "title": "",
+                "tone": "success",
+                "type": "alert",
+                "visible_when": {
+                  "equals": "delivered",
+                  "path": "order.status"
+                }
+              },
+              {
+                "action": {
+                  "name": "refresh",
+                  "payload": {}
+                },
+                "block_id": "refresh",
+                "label": "Refresh",
+                "type": "button",
+                "variant": "secondary",
+                "visible_when": null
+              }
+            ],
+            "page_id": "main",
+            "title": "Status"
+          }
+        ],
+        "start_page_id": "main"
+      },
+      "icon": "schedule",
+      "template_id": "status_tracker",
+      "title": "Status tracker"
+    },
+    {
+      "category": "utility",
+      "description": "Task table with row action and quick add.",
+      "document": {
+        "pages": [
+          {
+            "blocks": [
+              {
+                "block_id": "title",
+                "level": 1,
+                "text": "Tasks",
+                "type": "heading",
+                "visible_when": null
+              },
+              {
+                "block_id": "empty",
+                "message": "No tasks yet",
+                "title": "",
+                "type": "empty_state",
+                "visible_when": {
+                  "equals": null,
+                  "path": "tasks_empty"
+                }
+              },
+              {
+                "block_id": "tasks",
+                "columns": [
+                  {
+                    "key": "title",
+                    "label": "Title"
+                  },
+                  {
+                    "key": "status",
+                    "label": "Status"
+                  }
+                ],
+                "file_id": "",
+                "row_action": {
+                  "name": "open_task",
+                  "payload": {}
+                },
+                "rows": "tasks",
+                "type": "data_table",
+                "visible_when": null
+              },
+              {
+                "action": null,
+                "block_id": "new-task",
+                "default": "",
+                "error_message": "",
+                "field": "task_title",
+                "label": "New task",
+                "multiline": false,
+                "pattern": "",
+                "placeholder": "",
+                "required": true,
+                "secret": false,
+                "type": "text_input",
+                "visible_when": null
+              },
+              {
+                "action": {
+                  "name": "add_task",
+                  "payload": {}
+                },
+                "block_id": "add",
+                "label": "Add",
+                "type": "button",
+                "variant": "primary",
+                "visible_when": null
+              }
+            ],
+            "page_id": "main",
+            "title": "Tasks"
+          }
+        ],
+        "start_page_id": "main"
+      },
+      "icon": "list-check",
+      "template_id": "task_list",
+      "title": "Task list"
+    },
+    {
+      "category": "content",
+      "description": "Photo, description, price and purchase.",
+      "document": {
+        "pages": [
+          {
+            "blocks": [
+              {
+                "block_id": "layout",
+                "columns": [
+                  {
+                    "blocks": [
+                      {
+                        "alt": "{?product.title}",
+                        "block_id": "photo",
+                        "type": "image",
+                        "url": "{?product.image_url}",
+                        "visible_when": null
+                      }
+                    ],
+                    "width": 5
+                  },
+                  {
+                    "blocks": [
+                      {
+                        "block_id": "title",
+                        "level": 1,
+                        "text": "{?product.title|Product}",
+                        "type": "heading",
+                        "visible_when": null
+                      },
+                      {
+                        "block_id": "description",
+                        "markdown": "{?product.description}",
+                        "type": "text",
+                        "visible_when": null
+                      },
+                      {
+                        "block_id": "price",
+                        "hint": "",
+                        "label": "Price",
+                        "type": "metric",
+                        "value": "{?product.price|—}",
+                        "visible_when": null
+                      },
+                      {
+                        "action": null,
+                        "block_id": "quantity",
+                        "default": 1.0,
+                        "error_message": "",
+                        "field": "quantity",
+                        "label": "Quantity",
+                        "max": null,
+                        "min": 1.0,
+                        "placeholder": "",
+                        "required": false,
+                        "step": 1.0,
+                        "type": "number_input",
+                        "visible_when": null
+                      },
+                      {
+                        "action": {
+                          "name": "buy",
+                          "payload": {}
+                        },
+                        "block_id": "buy",
+                        "label": "Buy",
+                        "type": "button",
+                        "variant": "primary",
+                        "visible_when": null
+                      }
+                    ],
+                    "width": 7
+                  }
+                ],
+                "type": "columns",
+                "visible_when": null
+              }
+            ],
+            "page_id": "main",
+            "title": "Product"
+          }
+        ],
+        "start_page_id": "main"
+      },
+      "icon": "tag",
+      "template_id": "product_detail",
+      "title": "Product detail"
+    },
+    {
+      "category": "content",
+      "description": "Confirmation, total and files.",
+      "document": {
+        "pages": [
+          {
+            "blocks": [
+              {
+                "block_id": "done",
+                "message": "Order number: {?order.number}",
+                "title": "Thank you for your purchase!",
+                "tone": "success",
+                "type": "alert",
+                "visible_when": null
+              },
+              {
+                "block_id": "total",
+                "hint": "",
+                "label": "Total",
+                "type": "metric",
+                "value": "{?order.total|0}",
+                "visible_when": null
+              },
+              {
+                "block_id": "receipts",
+                "files": "files",
+                "type": "file_list",
+                "visible_when": null
+              },
+              {
+                "action": {
+                  "name": "new_order",
+                  "payload": {}
+                },
+                "block_id": "again",
+                "label": "New order",
+                "type": "button",
+                "variant": "secondary",
+                "visible_when": null
+              }
+            ],
+            "page_id": "main",
+            "title": "Done"
+          }
+        ],
+        "start_page_id": "main"
+      },
+      "icon": "done-all",
+      "template_id": "purchase_complete",
+      "title": "Purchase complete"
+    },
+    {
+      "category": "content",
+      "description": "Avatar, profile fields and switches.",
+      "document": {
+        "pages": [
+          {
+            "blocks": [
+              {
+                "block_id": "avatar",
+                "image_url": "{?profile.image_url}",
+                "name": "{?profile.name|User}",
+                "type": "avatar",
+                "visible_when": null
+              },
+              {
+                "block_id": "title",
+                "level": 1,
+                "text": "Profile",
+                "type": "heading",
+                "visible_when": null
+              },
+              {
+                "action": null,
+                "block_id": "name",
+                "default": "",
+                "error_message": "",
+                "field": "profile.name",
+                "label": "Name",
+                "multiline": false,
+                "pattern": "",
+                "placeholder": "",
+                "required": true,
+                "secret": false,
+                "type": "text_input",
+                "visible_when": null
+              },
+              {
+                "action": null,
+                "block_id": "email",
+                "default": "",
+                "error_message": "",
+                "field": "profile.email",
+                "label": "Email",
+                "multiline": false,
+                "pattern": "",
+                "placeholder": "",
+                "required": true,
+                "secret": false,
+                "type": "text_input",
+                "visible_when": null
+              },
+              {
+                "action": {
+                  "name": "toggle_notifications",
+                  "payload": {}
+                },
+                "block_id": "notifications",
+                "default": false,
+                "error_message": "",
+                "field": "profile.notifications",
+                "label": "Notifications",
+                "required": false,
+                "type": "switch",
+                "visible_when": null
+              },
+              {
+                "action": {
+                  "name": "save_profile",
+                  "payload": {}
+                },
+                "block_id": "save",
+                "label": "Save",
+                "type": "button",
+                "variant": "primary",
+                "visible_when": null
+              }
+            ],
+            "page_id": "main",
+            "title": "Profile"
+          }
+        ],
+        "start_page_id": "main"
+      },
+      "icon": "user",
+      "template_id": "user_profile",
+      "title": "User profile"
+    },
+    {
+      "category": "content",
+      "description": "Cover, description and registration.",
+      "document": {
+        "pages": [
+          {
+            "blocks": [
+              {
+                "alt": "{?event.title}",
+                "block_id": "cover",
+                "type": "image",
+                "url": "{?event.image_url}",
+                "visible_when": null
+              },
+              {
+                "block_id": "title",
+                "level": 1,
+                "text": "{?event.title|Event}",
+                "type": "heading",
+                "visible_when": null
+              },
+              {
+                "block_id": "date",
+                "label": "{?event.starts_at}",
+                "tone": "info",
+                "type": "badge",
+                "visible_when": null
+              },
+              {
+                "block_id": "description",
+                "markdown": "{?event.description}",
+                "type": "text",
+                "visible_when": null
+              },
+              {
+                "action": null,
+                "block_id": "email",
+                "default": "",
+                "error_message": "",
+                "field": "email",
+                "label": "Email",
+                "multiline": false,
+                "pattern": "",
+                "placeholder": "",
+                "required": true,
+                "secret": false,
+                "type": "text_input",
+                "visible_when": null
+              },
+              {
+                "action": {
+                  "name": "register",
+                  "payload": {}
+                },
+                "block_id": "register",
+                "label": "Register",
+                "type": "button",
+                "variant": "primary",
+                "visible_when": null
+              }
+            ],
+            "page_id": "main",
+            "title": "Event"
+          }
+        ],
+        "start_page_id": "main"
+      },
+      "icon": "calendar",
+      "template_id": "event_detail",
+      "title": "Event detail"
+    },
+    {
+      "category": "utility",
+      "description": "Channel switches and a notification list.",
+      "document": {
+        "pages": [
+          {
+            "blocks": [
+              {
+                "block_id": "title",
+                "level": 1,
+                "text": "Notifications",
+                "type": "heading",
+                "visible_when": null
+              },
+              {
+                "action": {
+                  "name": "update_settings",
+                  "payload": {}
+                },
+                "block_id": "email-switch",
+                "default": false,
+                "error_message": "",
+                "field": "settings.email",
+                "label": "Email",
+                "required": false,
+                "type": "switch",
+                "visible_when": null
+              },
+              {
+                "action": {
+                  "name": "update_settings",
+                  "payload": {}
+                },
+                "block_id": "push-switch",
+                "default": false,
+                "error_message": "",
+                "field": "settings.push",
+                "label": "Push",
+                "required": false,
+                "type": "switch",
+                "visible_when": null
+              },
+              {
+                "block_id": "divider",
+                "type": "divider",
+                "visible_when": null
+              },
+              {
+                "block_id": "list",
+                "columns": [],
+                "file_id": "",
+                "row_action": {
+                  "name": "open_notification",
+                  "payload": {}
+                },
+                "rows": "notifications",
+                "type": "data_table",
+                "visible_when": null
+              }
+            ],
+            "page_id": "main",
+            "title": "Notifications"
+          }
+        ],
+        "start_page_id": "main"
+      },
+      "icon": "bell-ring",
+      "template_id": "notification_center",
+      "title": "Notification center"
+    },
+    {
+      "category": "utility",
+      "description": "Start from scratch.",
+      "document": {
+        "pages": [
+          {
+            "blocks": [],
+            "page_id": "main",
+            "title": "Page"
+          }
+        ],
+        "start_page_id": "main"
+      },
+      "icon": "square",
+      "template_id": "blank",
+      "title": "Blank page"
+    }
+  ],
+  "limit": 200,
+  "offset": 0,
+  "total": 16
+}

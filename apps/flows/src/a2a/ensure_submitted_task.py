@@ -5,7 +5,7 @@ from __future__ import annotations
 from a2a.types import Message, Part, Role, Task, TaskState, TaskStatus
 
 from apps.flows.src.db.a2a_task_repository import A2ATaskRepository
-from core.a2a import set_task_status_state, struct_from_mapping
+from core.a2a import set_task_status_state
 from core.state import ExecutionState
 
 
@@ -72,16 +72,6 @@ async def ensure_submitted_a2a_task(
         context_id=state.context_id,
         status=submitted_status,
         history=history,
-        metadata=struct_from_mapping(
-            {
-                "platformUi": {
-                    **state.a2a_representation.model_dump(mode="json"),
-                    "documentId": state.ui_document.document_id,
-                    "startingRevision": state.ui_document.revision,
-                    "templateVersion": state.ui_template_version,
-                }
-            }
-        ),
     )
     _ = await repository.ensure_task(
         company_id=company_id,
@@ -91,7 +81,6 @@ async def ensure_submitted_a2a_task(
         task=task,
         execution_branch_id=state.durable_execution_branch_id,
         flow_config_version=state.flow_config_version,
-        ui_template_version=state.ui_template_version,
         input_message_id=resolved.message_id,
     )
 

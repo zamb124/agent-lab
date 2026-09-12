@@ -166,7 +166,7 @@ def assert_lara_attach(flow: FlowConfig) -> None:
         "flows_list_nodes",
         "create_file",
         "read_file",
-        "push_embed_blocks",
+        "ui_render",
         "create_viz",
         "docs_search",
     }
@@ -193,6 +193,7 @@ def assert_lara_attach(flow: FlowConfig) -> None:
             raise AssertionError(
                 f"lara branch {branch_id} standing tools mismatch: {sorted(branch_tools)}"
             )
+
 
 def _assert_skill_roots_attach(flow: FlowConfig, *, flow_id_label: str) -> None:
     nodes = flow.nodes

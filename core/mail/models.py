@@ -618,10 +618,17 @@ class MailIdleWake(StrictBaseModel):
     raw: str = ""
 
 
+class MailSystemEnsureResult(StrictBaseModel):
+    ensured: list[str]
+    missing_password: list[str]
+
+
 class MailReconcileResult(StrictBaseModel):
     connection_ensured: bool
     role_mailboxes_ensured: list[str]
     user_bindings_ensured: list[str]
+    role_mailboxes_missing_password: list[str]
+    user_bindings_missing_password: list[str]
 
 
 class MailSyncErrorKind(StrEnum):

@@ -6,9 +6,7 @@
  *
  * Поля соответствуют CreateEmbedConfigRequest/UpdateEmbedConfigRequest
  * (apps/frontend/api/embed_configs.py): идентичность, безопасность и look&feel.
- * Поведение чата: базовая политика живёт в FlowConfig.chat (редактор агента);
- * секция «Поведение чата виджета» показывает наследуемые значения и позволяет
- * частично переопределить их через interface_override (null = полное наследование).
+ * Поведение ленты и композера задаёт блок conversation интерфейса flow (редактор интерфейса).
  *
  * Branch (branch_id): список из flow.branches в ответе GET /flows/api/v1/flows/.
  * Заблокирован для external и для LOCAL без веток (бэк подставит default).
@@ -18,7 +16,6 @@ import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js'
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-button.js';
-import '@platform/lib/flow-ui/components/flow-ui-policy-fields.js';
 
 const POSITIONS = Object.freeze([
     { value: 'bottom-right', key: 'pos_br' },
@@ -42,22 +39,6 @@ const LOCALES = Object.freeze([
     { value: 'en',   key: 'locale_en' },
 ]);
 
-const INTERFACE_POLICY_FIELD_KEYS = Object.freeze([
-    'show_reasoning',
-    'tool_calls_display',
-    'show_activity',
-    'show_skill_loads',
-    'show_reflection',
-    'errors_display',
-    'show_run_trace',
-    'show_trace_actions',
-    'show_browser_previews',
-    'show_files_panel',
-    'allow_cancel',
-    'allow_voice',
-    'embed_safe_mode',
-]);
-
 export class FrontendCreateEmbedModal extends PlatformFormModal {
     static modalKind = 'frontend.embed_create';
 
@@ -79,25 +60,6 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             .radio-row label.checked { background: var(--glass-solid-medium); border-color: var(--accent); }
             .switch-row { display: flex; align-items: center; gap: var(--space-2); }
             input[type=color] { width: 60px; height: 36px; padding: 0; border-radius: var(--radius-md); border: 1px solid var(--glass-border-subtle); }
-            .chat-policy-section {
-                grid-column: 1 / -1;
-                padding: var(--space-3);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--border-subtle);
-                background: var(--glass-solid-subtle);
-            }
-            .chat-policy-title {
-                margin: 0 0 var(--space-1);
-                font-size: var(--text-sm);
-                font-weight: var(--font-semibold);
-                color: var(--text-primary);
-            }
-            .chat-policy-actions {
-                display: flex;
-                flex-wrap: wrap;
-                gap: var(--space-2);
-                margin-top: var(--space-3);
-            }
         `,
     ];
 
@@ -124,8 +86,6 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         _voiceEnabled: { state: true },
         _voiceDefaultOn: { state: true },
         _sessionShareEnabled: { state: true },
-        _interfaceOverrideEnabled: { state: true },
-        _interfacePolicyPatch: { state: true },
     };
 
     constructor() {
@@ -151,8 +111,6 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         this._voiceEnabled = true;
         this._voiceDefaultOn = false;
         this._sessionShareEnabled = false;
-        this._interfaceOverrideEnabled = false;
-        this._interfacePolicyPatch = {};
         this.size = 'lg';
         this._configs = this.useResource('frontend/embed_configs');
         this._catalog = this.useOp('frontend/flows_catalog');
@@ -186,8 +144,6 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         this._voiceEnabled = true;
         this._voiceDefaultOn = false;
         this._sessionShareEnabled = false;
-        this._interfaceOverrideEnabled = false;
-        this._interfacePolicyPatch = {};
         this._placeholder = this.t('embed_create_modal.default_message_placeholder');
     }
 
@@ -215,18 +171,14 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             if (typeof c.flow_id === 'string') this._flowId = c.flow_id;
             if (typeof c.branch_id === 'string') this._branchId = c.branch_id;
             if (typeof c.theme === 'string') this._theme = c.theme;
-            if (c.presentation === 'page' || c.presentation === 'drawer') {
-                this._presentation = c.presentation;
-            } else if (typeof c.position === 'string' && c.position === 'fullscreen') {
-                this._presentation = 'page';
-            } else {
-                this._presentation = 'drawer';
+            if (c.presentation !== 'page' && c.presentation !== 'drawer') {
+                throw new Error(`create-embed-modal: unsupported presentation ${JSON.stringify(c.presentation)}`);
             }
-            if (typeof c.position === 'string' && (c.position === 'bottom-right' || c.position === 'bottom-left')) {
-                this._position = c.position;
-            } else {
-                this._position = 'bottom-right';
+            this._presentation = c.presentation;
+            if (c.position !== 'bottom-right' && c.position !== 'bottom-left') {
+                throw new Error(`create-embed-modal: unsupported position ${JSON.stringify(c.position)}`);
             }
+            this._position = c.position;
             if (typeof c.interface_locale === 'string') this._interfaceLocale = c.interface_locale;
             if (Array.isArray(c.allowed_origins)) {
                 this._allowedOrigins = c.allowed_origins.join('\n');
@@ -251,16 +203,6 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             this._voiceEnabled = c.voice_enabled === true;
             this._voiceDefaultOn = c.voice_default_on === true;
             this._sessionShareEnabled = c.session_share_enabled === true;
-            if (c.interface_override != null && typeof c.interface_override === 'object' && !Array.isArray(c.interface_override)) {
-                this._interfaceOverrideEnabled = true;
-                const policy = c.interface_override.policy;
-                this._interfacePolicyPatch = policy && typeof policy === 'object' && !Array.isArray(policy)
-                    ? { ...policy }
-                    : {};
-            } else {
-                this._interfaceOverrideEnabled = false;
-                this._interfacePolicyPatch = {};
-            }
         }
     }
 
@@ -319,121 +261,6 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         if (!flow) return false;
         if (flow.type === 'external') return false;
         return this._flowBranches().length > 0;
-    }
-
-    _flowBasePolicy() {
-        const flow = this._selectedFlow();
-        if (!flow) {
-            return null;
-        }
-        if (!flow.interface || typeof flow.interface !== 'object' || Array.isArray(flow.interface)) {
-            throw new Error('create-embed-modal: selected flow missing interface');
-        }
-        if (!flow.interface.policy || typeof flow.interface.policy !== 'object') {
-            throw new Error('create-embed-modal: selected flow missing interface.policy');
-        }
-        return flow.interface.policy;
-    }
-
-    _mergeFlowPolicyWithOverride(basePolicy, override) {
-        const effective = { ...basePolicy };
-        if (!override || typeof override !== 'object' || Array.isArray(override)) {
-            return effective;
-        }
-        for (const key of INTERFACE_POLICY_FIELD_KEYS) {
-            if (Object.prototype.hasOwnProperty.call(override, key) && override[key] !== null) {
-                effective[key] = override[key];
-            }
-        }
-        return effective;
-    }
-
-    _effectivePolicyForForm() {
-        const basePolicy = this._flowBasePolicy();
-        if (!basePolicy) {
-            return null;
-        }
-        if (!this._interfaceOverrideEnabled) {
-            return basePolicy;
-        }
-        return this._mergeFlowPolicyWithOverride(basePolicy, this._interfacePolicyPatch);
-    }
-
-    _onInterfacePolicyFieldChanged(patch) {
-        if (!this._interfaceOverrideEnabled) {
-            return;
-        }
-        this._interfacePolicyPatch = { ...this._interfacePolicyPatch, ...patch };
-        this.isDirty = true;
-    }
-
-    _toggleInterfaceOverrideEnabled(enabled) {
-        this._interfaceOverrideEnabled = enabled;
-        if (!enabled) {
-            this._interfacePolicyPatch = {};
-        }
-        this.isDirty = true;
-    }
-
-    _resetInterfaceOverrideToFlow() {
-        this._interfaceOverrideEnabled = false;
-        this._interfacePolicyPatch = {};
-        this.isDirty = true;
-    }
-
-    _buildInterfaceOverridePayload() {
-        if (!this._interfaceOverrideEnabled) {
-            return null;
-        }
-        return { policy: { ...this._interfacePolicyPatch } };
-    }
-
-    _renderInterfacePolicySection() {
-        if (!this._flowId) {
-            return html`
-                <div class="chat-policy-section">
-                    <h4 class="chat-policy-title">${this.t('embed_create_modal.interface_override_section_title')}</h4>
-                    <div class="hint">${this.t('embed_create_modal.interface_override_select_flow_hint')}</div>
-                </div>
-            `;
-        }
-        const effectivePolicy = this._effectivePolicyForForm();
-        if (!effectivePolicy) {
-            return null;
-        }
-        return html`
-            <div class="chat-policy-section">
-                <h4 class="chat-policy-title">${this.t('embed_create_modal.interface_override_section_title')}</h4>
-                <div class="hint">${this.t('embed_create_modal.interface_override_section_hint')}</div>
-                <label class="switch-row">
-                    <input
-                        type="checkbox"
-                        .checked=${this._interfaceOverrideEnabled}
-                        @change=${(e) => this._toggleInterfaceOverrideEnabled(e.target.checked)}
-                    />
-                    <span>${this.t('embed_create_modal.interface_override_toggle')}</span>
-                </label>
-                <div class="hint">
-                    ${this._interfaceOverrideEnabled
-                        ? this.t('embed_create_modal.interface_override_enabled_hint')
-                        : this.t('embed_create_modal.interface_override_inherit_hint')}
-                </div>
-                <flow-ui-policy-fields
-                    .policy=${effectivePolicy}
-                    ?disabled=${!this._interfaceOverrideEnabled}
-                    @policy-changed=${(e) => this._onInterfacePolicyFieldChanged(e.detail.patch)}
-                ></flow-ui-policy-fields>
-                ${this._interfaceOverrideEnabled
-                    ? html`
-                        <div class="chat-policy-actions">
-                            <platform-button variant="secondary" @click=${this._resetInterfaceOverrideToFlow}>
-                                ${this.t('embed_create_modal.interface_override_reset')}
-                            </platform-button>
-                        </div>
-                    `
-                    : nothing}
-            </div>
-        `;
     }
 
     validateForm() {
@@ -565,7 +392,6 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             voice_enabled: this._voiceEnabled,
             voice_default_on: this._voiceEnabled && this._voiceDefaultOn,
             session_share_enabled: this._sessionShareEnabled,
-            interface_override: this._buildInterfaceOverridePayload(),
         };
         const result = await this._awaitEmbedWrite(isEdit, payload);
         if (!result.ok) {
@@ -760,7 +586,6 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                         @change=${(e) => { this._assistantTitle = e.detail.value; this.isDirty = true; }}
                     ></platform-field>
 
-                    ${this._renderInterfacePolicySection()}
 
                     <div class="full">
                         <platform-field

@@ -37,6 +37,7 @@ from apps.flows.src.state.cancellation import (
 )
 from apps.flows.src.state.flow_deadline import apply_flow_wall_clock_deadline
 from core.errors import FlowWallClockTimeoutError, NodeWallClockTimeoutError
+from core.flow_ui.templates import default_chat_document
 from tests.flows.durable_runtime_harness import run_flow, run_node
 
 
@@ -171,6 +172,7 @@ async def test_flow_run_aborts_on_expired_deadline_before_node(
         entry=n_id,
         nodes={n_id: node},
         edges=[{"from_node": n_id, "to_node": None}],
+        interface=default_chat_document(),
         container=container,
     )
     state = make_test_state(

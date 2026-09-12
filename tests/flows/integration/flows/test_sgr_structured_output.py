@@ -25,6 +25,7 @@ from apps.flows.src.runtime.nodes import (
     LlmNode,
     RemoteFlowNode,
 )
+from core.flow_ui.templates import default_chat_document
 from core.state import ExecutionState
 from tests.flows.durable_runtime_harness import run_flow, workflow_state
 
@@ -172,6 +173,7 @@ async def run(args, state):
                 Edge(from_node="done", to_node=None),
             ],
             variables={},
+            interface=default_chat_document(),
             container=container,
         )
 
@@ -289,6 +291,7 @@ async def run(args, state):
                 Edge(from_node="done", to_node=None),
             ],
             variables={},
+            interface=default_chat_document(),
             container=container,
         )
 
@@ -405,6 +408,7 @@ async def run(args, state):
                 Edge(from_node="done", to_node=None),
             ],
             variables={},
+            interface=default_chat_document(),
             container=container,
         )
 
@@ -528,6 +532,7 @@ async def run(args, state):
                 Edge(from_node="done", to_node=None),
             ],
             variables={},
+            interface=default_chat_document(),
             container=container,
         )
 
@@ -675,6 +680,7 @@ async def run(args, state):
                 Edge(from_node="done", to_node=None),
             ],
             variables={},
+            interface=default_chat_document(),
             container=container,
         )
 
@@ -823,6 +829,7 @@ async def run(args, state):
                 Edge(from_node="done", to_node=None),
             ],
             variables={},
+            interface=default_chat_document(),
             container=container,
         )
 

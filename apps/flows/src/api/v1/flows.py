@@ -12,8 +12,9 @@ from typing import Annotated, ClassVar
 
 import yaml
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator
 
+from apps.flows.config import get_settings as get_flows_settings
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import (
@@ -61,25 +62,16 @@ from core.authz.types import AuthzRelation
 from core.config import get_settings
 from core.context import get_context, require_active_company, require_context
 from core.events import publish_event_to_user
+from core.flow_ui.document import FlowUIDocument
+from core.flow_ui.problems import assert_flow_ui_publishable
+from core.flow_ui.templates import default_chat_document
 from core.identity.embed_guest_turns import EMBED_SESSION_ID_METADATA_KEY
 from core.identity.flow_preview_handoff import store_flow_preview_handoff
 from core.identity.runtime_users import ensure_persisted_runtime_user
 from core.logging import get_logger
 from core.models.embed_models import EmbedConfig, EmbedMapping, EmbedStatus
-from core.models.flow_interface import (
-    FlowInterfaceConfig,
-    FlowInterfaceOverride,
-    default_flow_interface_config,
-    resolve_flow_interface_config,
-)
 from core.pagination import ListResponse, OffsetPage
 from core.short_links.service import require_platform_public_base_url
-from core.state.flow_ui import FlowUIDocument
-from core.state.flow_ui_contract import (
-    FlowUIContentMode,
-    build_flow_ui_submit_contract,
-)
-from core.state.flow_ui_publish import assert_flow_ui_publishable
 from core.types import (
     JsonArray,
     JsonObject,
@@ -92,30 +84,18 @@ from core.types import (
 from core.utils.tokens import get_token_service
 
 
-def _assert_interface_publishable(interface: FlowInterfaceConfig) -> None:
+def _assert_interface_publishable(interface: FlowUIDocument) -> None:
     try:
-        assert_flow_ui_publishable(interface.template.document)
+        assert_flow_ui_publishable(interface, get_flows_settings().flow_ui)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-def _assert_branch_interface_overrides_publishable(
-    branches: Mapping[str, BranchConfig],
-) -> None:
-    for branch_id, branch_cfg in branches.items():
-        override = branch_cfg.interface_override
-        if override.mode != "replace":
-            continue
-        replacement = override.replacement
-        if replacement is None:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"branch {branch_id}: interface_override mode=replace "
-                    "requires replacement"
-                ),
-            )
-        _assert_interface_publishable(replacement)
+def _assert_branch_interfaces_publishable(branches: Mapping[str, BranchConfig]) -> None:
+    for branch_cfg in branches.values():
+        if branch_cfg.interface is not None:
+            _assert_interface_publishable(branch_cfg.interface)
+
 
 logger = get_logger(__name__)
 
@@ -230,38 +210,6 @@ class FlowPreviewShareRequest(BaseModel):
 
 class FlowPreviewShareResponse(BaseModel):
     share_url: str
-
-
-class FlowInterfaceContractPreviewRequest(BaseModel):
-    """Draft screen the editor wants the flow contract for."""
-
-    document: JsonObject = Field(description="Draft FlowUIDocument as authored in the editor")
-    surface_id: str | None = Field(
-        default=None,
-        description="Surface to project; defaults to the active page root surface",
-    )
-    values: JsonObject | None = Field(
-        default=None,
-        description="Values to project; defaults to the surface data_model values",
-    )
-
-
-class FlowInterfaceContractFieldView(BaseModel):
-    field: str
-    pointer: str
-    component_id: str
-    component_type: str
-    label: str
-    state_ref: str
-    included_in_content: bool
-
-
-class FlowInterfaceContractPreviewResponse(BaseModel):
-    surface_id: str
-    content_mode: FlowUIContentMode
-    content: str
-    values: JsonObject
-    fields: list[FlowInterfaceContractFieldView]
 
 
 def _speech_to_json(settings: FlowSpeechSettings | None) -> JsonObject | None:
@@ -705,9 +653,7 @@ class BranchResponse(BaseModel):
     resources: dict[str, ResourceReference] = Field(default_factory=dict)
     resources_mode: str | None = None
     speech: JsonObject | None = None
-    interface_override: FlowInterfaceOverride = Field(
-        default_factory=FlowInterfaceOverride,
-    )
+    interface: FlowUIDocument | None = None
 
 
 def _branch_config_to_response(branch_cfg: BranchConfig) -> BranchResponse:
@@ -727,7 +673,7 @@ def _branch_config_to_response(branch_cfg: BranchConfig) -> BranchResponse:
         resources=branch_cfg.resources,
         resources_mode=branch_cfg.resources_mode.value,
         speech=_speech_to_json(branch_cfg.speech),
-        interface_override=branch_cfg.interface_override,
+        interface=branch_cfg.interface,
     )
 
 
@@ -752,7 +698,7 @@ class FlowCreateRequest(BaseModel):
     resources: dict[str, ResourceReference] = Field(default_factory=dict)
     store_card_image_url: str | None = None
     speech: FlowSpeechSettings | None = None
-    interface: FlowInterfaceConfig | None = None
+    interface: FlowUIDocument | None = None
     employee: FlowEmployeeConfig = Field(default_factory=FlowEmployeeConfig)
     agent_toolkit_ids: list[str] = Field(default_factory=list)
 
@@ -819,7 +765,7 @@ class FlowResponse(BaseModel):
 
     speech: JsonObject | None = None
 
-    interface: FlowInterfaceConfig = Field(default_factory=default_flow_interface_config)
+    interface: FlowUIDocument = Field(default_factory=default_chat_document)
 
     employee: FlowEmployeeConfig = Field(default_factory=FlowEmployeeConfig)
 
@@ -858,19 +804,6 @@ class FlowValidateRequest(BaseModel):
     entry: str
     variables: JsonObject = Field(default_factory=dict)
     flow_id: str | None = None
-    interface: FlowInterfaceConfig | None = None
-
-    @field_validator("interface", mode="before")
-    @classmethod
-    def _normalize_validate_interface(
-        cls,
-        value: JsonValue | FlowInterfaceConfig | None,
-    ) -> FlowInterfaceConfig | None:
-        if value is None:
-            return None
-        if isinstance(value, FlowInterfaceConfig):
-            return value
-        return FlowInterfaceConfig.model_validate(value)
 
 
 class ValidationErrorResponse(BaseModel):
@@ -902,7 +835,7 @@ class FlowDataflowInspectRequest(BaseModel):
     edges: list[Edge] = Field(default_factory=list)
     variables: dict[str, FlowVariableConfig] = Field(default_factory=dict)
     triggers: dict[str, TriggerConfig] = Field(default_factory=dict)
-    interface: FlowInterfaceConfig | None = None
+    interface: FlowUIDocument | None = None
     sample_state: JsonObject | None = None
     observed_runs: JsonObject = Field(default_factory=dict)
 
@@ -934,18 +867,6 @@ class FlowDataflowInspectRequest(BaseModel):
             else:
                 out[trigger_id] = TriggerConfig.model_validate(trigger)
         return out
-
-    @field_validator("interface", mode="before")
-    @classmethod
-    def _normalize_interface(
-        cls,
-        value: JsonValue | FlowInterfaceConfig | None,
-    ) -> FlowInterfaceConfig | None:
-        if value is None:
-            return None
-        if isinstance(value, FlowInterfaceConfig):
-            return value
-        return FlowInterfaceConfig.model_validate(value)
 
 
 async def _attach_nested_dataflow_for_editor(
@@ -1014,7 +935,7 @@ async def inspect_dataflow(
     entry = request.entry
     variables: dict[str, FlowVariableConfig] = request.variables
     triggers: dict[str, TriggerConfig] = request.triggers
-    interface: FlowInterfaceConfig | None = request.interface
+    interface: FlowUIDocument | None = request.interface
 
     if not nodes and request.flow_id:
         await _require_view_flow(container, request.flow_id)
@@ -1030,11 +951,7 @@ async def inspect_dataflow(
         variables = _flow_variable_models(effective.get("variables"), "flow.variables")
         triggers = flow_cfg.triggers
         if interface is None:
-            branch = flow_cfg.branches.get(branch_id)
-            interface = resolve_flow_interface_config(
-                flow_cfg.interface,
-                branch_override=None if branch is None else branch.interface_override,
-            )
+            interface = flow_cfg.interface_for_branch(branch_id)
 
     node_payloads = _graph_nodes_payload(nodes)
     node_payloads = await _inline_tools_in_nodes(copy.deepcopy(node_payloads), container)
@@ -1085,7 +1002,6 @@ async def validate_flow(
         entry=request.entry,
         variables=request.variables,
         flow_id=request.flow_id,
-        interface=request.interface,
     )
 
     return FlowValidateResponse(
@@ -1366,13 +1282,9 @@ async def create_flow(request: FlowCreateRequest, container: ContainerDep) -> Fl
         for branch_id, branch_req in request.branches.items()
     }
 
-    interface = (
-        request.interface
-        if request.interface is not None
-        else default_flow_interface_config()
-    )
+    interface = request.interface if request.interface is not None else default_chat_document()
     _assert_interface_publishable(interface)
-    _assert_branch_interface_overrides_publishable(branches_payload)
+    _assert_branch_interfaces_publishable(branches_payload)
 
     flow_config = FlowConfig(
         flow_id=request.flow_id,
@@ -1588,75 +1500,6 @@ async def reload_flow_from_bundle(
     )
 
 
-@router.post(
-    "/{flow_id}/interface/contract-preview",
-    response_model=FlowInterfaceContractPreviewResponse,
-)
-async def preview_flow_interface_contract(
-    flow_id: str,
-    body: FlowInterfaceContractPreviewRequest,
-    container: ContainerDep,
-) -> FlowInterfaceContractPreviewResponse:
-    """What the flow receives from this screen: flat values and `state.content`.
-
-    The editor renders this instead of guessing: the same server projector runs
-    on submit, so preview and runtime can never diverge.
-    """
-    await _require_view_flow(container, flow_id)
-    _ = container
-    ctx = get_context()
-    if ctx is None:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    _ = flow_id
-    try:
-        document = FlowUIDocument.model_validate(body.document)
-    except ValidationError as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid interface document: {exc}") from exc
-
-    surface_id = body.surface_id
-    if surface_id is None:
-        page = document.pages.get(document.active_page_id)
-        if page is None:
-            raise HTTPException(status_code=400, detail="Active page is missing")
-        surface_id = page.root_surface_id
-
-    surface = document.surfaces.get(surface_id)
-    if surface is None:
-        raise HTTPException(status_code=400, detail=f"Unknown surface: {surface_id}")
-
-    raw_values = body.values
-    if raw_values is None:
-        raw_values = dict(surface.data_model.values)
-
-    try:
-        contract = build_flow_ui_submit_contract(
-            document,
-            surface_id=surface_id,
-            values=raw_values,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    return FlowInterfaceContractPreviewResponse(
-        surface_id=contract.surface_id,
-        content_mode=contract.content_mode,
-        content=contract.content,
-        values=contract.values,
-        fields=[
-            FlowInterfaceContractFieldView(
-                field=field.field,
-                pointer=field.pointer,
-                component_id=field.component_id,
-                component_type=field.component_type,
-                label=field.label,
-                state_ref=f"@state:ui_values.{field.field}",
-                included_in_content=field.included_in_content,
-            )
-            for field in contract.fields
-        ],
-    )
-
-
 @router.post("/{flow_id}/preview-share", response_model=FlowPreviewShareResponse)
 async def create_flow_preview_share(
     flow_id: str,
@@ -1815,7 +1658,7 @@ async def update_flow(
         request.interface if request.interface is not None else existing.interface
     )
     _assert_interface_publishable(interface_merged)
-    _assert_branch_interface_overrides_publishable(branches)
+    _assert_branch_interfaces_publishable(branches)
 
     flow_config = FlowConfig(
         flow_id=flow_id,

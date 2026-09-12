@@ -40,6 +40,7 @@ postgres:
       cpu: "2"
       memory: 8Gi
   maxConnections: 300
+  sharedBuffers: 2GB
 
 openfga:
   enabled: true
@@ -767,10 +768,10 @@ workers:
     resources:
       requests:
         cpu: 100m
-        memory: 256Mi
+        memory: 1Gi
       limits:
         cpu: "1"
-        memory: 3Gi
+        memory: 6Gi
   search-worker:
     nodeName: master
     enabled: true

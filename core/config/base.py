@@ -56,7 +56,7 @@ logger = get_logger(__name__)
 
 PLATFORM_DEFAULT_APEX = "linnex.io"
 """Deployment default apex. Single source for identities that must stay stable
-across brands (A2UI catalog ID); host-aware code uses resolve_brand()."""
+across brands; host-aware code uses resolve_brand()."""
 
 
 class MergedJsonConfigSettingsSource(PydanticBaseSettingsSource):

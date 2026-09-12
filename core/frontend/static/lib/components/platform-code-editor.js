@@ -26,6 +26,8 @@ export class PlatformCodeEditor extends PlatformElement {
         fillParent: { type: Boolean, reflect: true, attribute: 'fill-parent' },
         lineWrapping: { type: Boolean, reflect: true, attribute: 'line-wrapping' },
         minHeight: { type: Number, attribute: 'min-height' },
+        /** ``(cm) => Extension[]`` — расширения потребителя (автодополнение, подсветка переменных). */
+        extensionsFactory: { attribute: false },
     };
 
     static styles = [
@@ -115,6 +117,7 @@ export class PlatformCodeEditor extends PlatformElement {
         this.fillParent = false;
         this.lineWrapping = true;
         this.minHeight = 220;
+        this.extensionsFactory = null;
         this._cm = null;
         this._editorView = null;
         this._readonlyCompartment = null;
@@ -220,6 +223,9 @@ export class PlatformCodeEditor extends PlatformElement {
         if (lang === 'json' && this._cm.json) {
             return this._cm.json();
         }
+        if (lang === 'html' && this._cm.html) {
+            return this._cm.html({ matchClosingTags: false });
+        }
         return [];
     }
 
@@ -272,6 +278,7 @@ export class PlatformCodeEditor extends PlatformElement {
                     this._languageCompartment.of(this._buildLanguageExtension()),
                     this._wrappingCompartment.of(this._buildWrappingExtension()),
                     this._themeCompartment.of(this._buildThemeExtension()),
+                    ...(typeof this.extensionsFactory === 'function' ? this.extensionsFactory(cm) : []),
                     cm.keymap.of(keymap),
                     cm.EditorView.updateListener.of((update) => {
                         if (!update.docChanged) return;

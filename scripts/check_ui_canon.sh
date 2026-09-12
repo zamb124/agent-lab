@@ -147,7 +147,7 @@ if rg -q "new CustomEvent\(\s*['\"]navigate['\"]" "${LEGACY_GLOBS[@]}"; then
 fi
 
 # 11. Запрет старых геттеров в core/frontend/static/lib (кроме standalone Flow UI surface —
-#     у platform-flow-ui / production-render-frame `theme` — reactive property/attribute,
+#     у platform-flow-ui `theme` — reactive property/attribute,
 #     контракт render-context и embed-виджета, не ThemeService).
 #     `icon` удалён из списка: reactive property Lit-компонентов
 #     (`<sidebar-nav-item icon="...">`, `<platform-panel icon="...">`), а не
@@ -308,6 +308,13 @@ ESCAPE_HTML_PATTERN="function\s+escapeHtml\s*\(|const\s+escapeHtml\s*=\s*functio
 if rg -nP "${ESCAPE_HTML_PATTERN}" "${APPS_UI_GLOBS[@]}" >/dev/null 2>&1; then
     fail "локальный escapeHtml запрещён — используйте core/utils/escape-html.js"
     rg -nP "${ESCAPE_HTML_PATTERN}" "${APPS_UI_GLOBS[@]}" >&2 || true
+fi
+
+# 19c-2. marked вне единого рендерера core/utils/markdown.js.
+MARKED_PATTERN="globalThis\.marked|window\.marked|marked(\.min)?\.js|from ['\"]marked['\"]"
+if rg -nP "${MARKED_PATTERN}" "${APPS_UI_GLOBS[@]}" apps/*/ui/index.html >/dev/null 2>&1; then
+    fail "прямой marked запрещён — используйте core/utils/markdown.js (markdownToHtml)"
+    rg -nP "${MARKED_PATTERN}" "${APPS_UI_GLOBS[@]}" apps/*/ui/index.html >&2 || true
 fi
 
 # 19d. Локальный hash*31 цикл вне core/.

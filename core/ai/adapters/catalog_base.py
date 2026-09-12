@@ -155,11 +155,8 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
     @staticmethod
     def _float_zero(value: JsonValue | None) -> bool:
         if isinstance(value, bool) or not isinstance(value, (int, float, str)):
-            return False
-        try:
-            return float(value) == 0.0
-        except ValueError:
-            return False
+            raise ValueError("pricing value must be number or numeric string")
+        return float(value) == 0.0
 
     @classmethod
     def _pricing_is_free(cls, item: JsonObject) -> bool | None:
@@ -168,10 +165,28 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
             return None
         pricing = require_json_object(pricing_raw, "provider.model.pricing")
         price_fields = ("prompt", "completion", "input", "output", "request", "image")
-        present_values = [pricing.get(field) for field in price_fields if field in pricing]
+        present_values: list[JsonValue] = []
+        for field in price_fields:
+            if field not in pricing:
+                continue
+            value = pricing.get(field)
+            if value is None:
+                continue
+            present_values.append(value)
         if not present_values:
             return None
         return all(cls._float_zero(value) for value in present_values)
+
+    @classmethod
+    def _record_is_free(cls, item: JsonObject, model_id: str) -> bool | None:
+        pricing = cls._pricing_is_free(item)
+        if pricing is True:
+            return True
+        if pricing is False:
+            return False
+        if model_id.lower().endswith(":free"):
+            return True
+        return None
 
     @classmethod
     def _dimension_from_item(cls, item: JsonObject) -> int | None:
@@ -319,7 +334,7 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
             "structured_outputs" in supported_parameters
             or "json_schema" in supported_parameters
         )
-        is_free = self._pricing_is_free(item)
+        is_free = self._record_is_free(item, model_id)
         raw = require_json_object(item, f"{provider}.model.{model_id}")
         return AIModelRecord(
             model_id=model_id,
@@ -456,6 +471,7 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
                     ),
                     "is_free": is_free,
                     "free_reason": existing.free_reason or record.free_reason,
+                    "artificial_analysis": record.artificial_analysis or existing.artificial_analysis,
                     "metadata_status": (
                         "verified"
                         if existing.metadata_status == "verified" or record.metadata_status == "verified"
@@ -472,6 +488,7 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
         url: str,
         headers: dict[str, str],
         response_label: str,
+        params: dict[str, str] | None = None,
     ) -> JsonValue:
         response: httpx.Response | None = None
         for attempt_index in range(3):
@@ -479,6 +496,7 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
                 "GET",
                 url,
                 headers=headers,
+                params=params,
                 timeout=30.0,
                 strategy=ProxyStrategy.SMART,
                 direct_attempts=3,
@@ -505,27 +523,21 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
 
     def _configured_llm_provider(self) -> _ConfiguredLLMProvider | None:
         llm = self._settings.llm
-        if self.provider == "openrouter":
-            return llm.openrouter
-        if self.provider == "bothub":
-            return llm.bothub
-        if self.provider == "groq":
-            return llm.groq
-        if self.provider == "google":
-            return llm.google
-        if self.provider == "github":
-            return llm.github
-        if self.provider == "huggingface":
-            return llm.huggingface
-        if self.provider == "deepinfra":
-            return llm.deepinfra
-        if self.provider == "caila":
-            return llm.caila
-        if self.provider == "openai":
-            return llm.openai
-        if self.provider == "yandex":
-            return llm.yandex
-        return None
+        by_provider: dict[str, _ConfiguredLLMProvider | None] = {
+            "openrouter": llm.openrouter,
+            "bothub": llm.bothub,
+            "groq": llm.groq,
+            "google": llm.google,
+            "github": llm.github,
+            "huggingface": llm.huggingface,
+            "deepinfra": llm.deepinfra,
+            "caila": llm.caila,
+            "openai": llm.openai,
+            "yandex": llm.yandex,
+        }
+        if self.provider not in by_provider:
+            raise ValueError(f"unknown LLM provider {self.provider!r}")
+        return by_provider[self.provider]
 
     def _provider_models_url(self, cfg: _ConfiguredLLMProvider) -> str:
         configured_models_url = cfg.models_url

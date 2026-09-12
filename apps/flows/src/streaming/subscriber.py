@@ -125,7 +125,8 @@ def is_final_event(event: StreamEvent) -> bool:
     return False
 
 
-def _event_platform_sequence(event: StreamEvent) -> int | None:
+def event_platform_sequence(event: StreamEvent) -> int | None:
+    """``metadata.platformSequence`` durable-события (None — событие без ledger-курсора)."""
     if not event.HasField("metadata"):
         return None
     metadata = mapping_from_struct(event.metadata)
@@ -188,7 +189,7 @@ class EventSubscriber(BaseSubscriber):
             except (ValueError, DecodeError, TypeError) as e:
                 logger.error(f"[Subscriber] Error parsing event on {channel}: {e}")
                 continue
-            sequence = _event_platform_sequence(event)
+            sequence = event_platform_sequence(event)
             if sequence is not None and sequence <= after_sequence:
                 logger.debug(
                     f"[Subscriber] Skipping duplicate sequence {sequence} on {channel}"

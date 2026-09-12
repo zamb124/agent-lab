@@ -34,12 +34,13 @@ alwaysApply: false
 
 | Смысл | Канон | Не использовать |
 |---|---|---|
-| Materialized interface | `FlowUIDocument`, `ui_document` | chat state, page JSON, canvas state |
-| Design-time config | `FlowInterfaceConfig`, `interface` | `chat`, `FlowChatSettings` |
-| Page/surface/component | `page_id`, `surface_id`, `component_id` | голый `id`, widget id |
-| User interaction | `FlowInteraction`, `interaction_id` | Не `UIEvent`, не chat event |
-| Semantic mutation | `mutation_id`, `base_revision`, `revision` | DOM patch, ui event |
-| Layout | `Grid`, `Stack`, `Flex`, `placement`, `container_band` | editor grid CSS, breakpoint guess |
+| Интерфейс flow (design-time) | `FlowUIDocument`, `FlowConfig.interface`, `BranchConfig.interface` | `ui_document`, `FlowInterfaceConfig`, `chat`, canvas state |
+| Страница / блок / слот | `page_id`, `block_id`, `slot_id` | голый `id`, `surface_id`, `component_id`, widget id |
+| Поле ввода | `field` — top-level путь state | `ui_values`, `value_key`, отдельное хранилище значений |
+| Действие пользователя | `FlowUIActionMessage` (`action`, `source`, `fields`, `payload`) на wire, `ExecutionState.ui_action` (`FlowUIAction`) в state | `FlowInteraction`, `interaction_id`, `ui_event`, `submit` как имя события |
+| События агента | `FlowUIRender` (`slot_id`, `blocks`), `FlowUINavigate` (`page_id`), тулы `ui_render`/`ui_navigate`/`state_set` | `present_ui`, `card`, `mutation_id`, `base_revision`, `revision` |
+| Артефакты интерфейса | `state` (`application/json`, `application/json-patch+json`), `ui` (`application/vnd.platform.ui+json`) | `ui_event`, `ui_document`, A2UI |
+| Layout | `section`, `columns`, `tabs`, `slot`, `conversation` | grid/placement/breakpoint модели |
 | A2A artifact identity | external wire `artifact_id` / ProtoJSON `artifactId` | новый platform artifact key |
 
 Чат — название default interface template/UX, не доменная ветвь runtime. Полный канон → **`flow_ui.mdc`**.

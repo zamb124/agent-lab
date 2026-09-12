@@ -16,8 +16,8 @@ import { createRouterEffect } from '@platform/lib/events/effects/router.effect.j
 
 import { flowsResource, flowUpdateOp, flowReloadFromBundleOp, flowVersionsListOp,
          flowStoreBundlesOp, flowValidateOp, branchCreateOp, branchUpdateOp,
-         branchRemoveOp, flowVoiceSessionQueryOp, flowPreviewShareOp,
-         flowInterfaceContractPreviewOp } from '../events/resources/flows.resource.js';
+         branchRemoveOp, flowVoiceSessionQueryOp, flowPreviewShareOp } from '../events/resources/flows.resource.js';
+import { flowUiSchemaOp, flowUiTemplatesOp, flowUiAssistOp } from '../events/resources/flow-ui.resource.js';
 import { flowsVoiceCatalogLoadOp } from '../events/resources/voice-catalog.resource.js';
 import { toolsResource, toolsAllOp } from '../events/resources/tools.resource.js';
 import { toolTagGroupsOp } from '../events/resources/tool-tag-groups.resource.js';
@@ -232,7 +232,9 @@ export class FlowsApp extends PlatformApp {
         flowsVoiceCatalogLoadOp,
         flowVoiceSessionQueryOp,
         flowPreviewShareOp,
-        flowInterfaceContractPreviewOp,
+        flowUiSchemaOp,
+        flowUiTemplatesOp,
+        flowUiAssistOp,
         toolsResource,
         toolsAllOp,
         toolTagGroupsOp,

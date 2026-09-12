@@ -12,6 +12,7 @@ from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import BaseNode, ReflectionNode, create_node
 from core.clients.llm.mock import MockLLM
 from core.errors import FlowPrematureCompletionError
+from core.flow_ui.templates import default_chat_document
 from core.reflection import CriticExit, CriticExitWhen
 from core.state import ExecutionState
 from core.types import JsonObject
@@ -93,6 +94,7 @@ async def _build_dual_exit_flow(
             {"from_node": "approved_sink", "to_node": None},
             {"from_node": "blocked_sink", "to_node": None},
         ],
+        interface=default_chat_document(),
         container=container,
     )
 
@@ -190,6 +192,7 @@ async def test_reflection_flow_incomplete_exits_raises_no_conditional_match(
             _approved_edge("critic", "approved_sink"),
             {"from_node": "approved_sink", "to_node": None},
         ],
+        interface=default_chat_document(),
         container=container,
     )
     state = workflow_state(
@@ -283,6 +286,7 @@ async def _build_three_exit_flow(
             {"from_node": "revise_sink", "to_node": None},
             {"from_node": "reject_sink", "to_node": None},
         ],
+        interface=default_chat_document(),
         container=container,
     )
 

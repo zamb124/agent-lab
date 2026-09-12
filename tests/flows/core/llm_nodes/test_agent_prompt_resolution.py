@@ -189,7 +189,7 @@ class TestFlowVariablesInPrompts:
             context_id=f"test-context-{unique_id}",
             user_id="test_user_123",
             session_id=f"test-agent:test-context-{unique_id}",
-            variables={"company_name": "TestCorp"}
+            variables={"company_name": "TestCorp"},
         )
         rendered = await runner._render_prompt(state)
 
@@ -210,7 +210,7 @@ class TestFlowVariablesInPrompts:
             variables={
                 "company_name": "TestCorp",
                 "phone": "+7-999-123-45-67",
-            }
+            },
         )
         rendered = await runner._render_prompt(state)
 
@@ -239,19 +239,19 @@ class TestFlowVariablesInPrompts:
             context_id=f"test-context-{unique_id}",
             user_id="test_user_123",
             session_id=f"test-agent:test-context-{unique_id}",
-            variables={"city": "Москва"}
+            variables={"city": "Москва"},
         )
         rendered = await runner._render_prompt(state)
         assert "Москва" in rendered
         assert "не указан" not in rendered
 
 
-class TestUiValuesInPrompts:
-    """Flow UI submit fields as {ui_values.field} in llm_node prompts."""
+class TestInterfaceFieldsInPrompts:
+    """Поля интерфейса — обычные поля state: {email}, {lead.headcount} в prompt llm_node."""
 
     @pytest.mark.asyncio
-    async def test_ui_values_nested_path_in_prompt(self, runner, flow_config, unique_id):
-        flow_config.prompt = "Email: {ui_values.email}. Help the lead."
+    async def test_interface_field_nested_path_in_prompt(self, runner, flow_config, unique_id):
+        flow_config.prompt = "Email: {email}. Team of {lead.headcount}."
         runner.prompt = flow_config.prompt
 
         state = ExecutionState(
@@ -259,15 +259,16 @@ class TestUiValuesInPrompts:
             context_id=f"test-context-{unique_id}",
             user_id="test_user_123",
             session_id=f"test-agent:test-context-{unique_id}",
-            ui_values={"email": "lead@example.com"},
+            email="lead@example.com",
+            lead={"headcount": 12},
         )
         rendered = await runner._render_prompt(state)
 
-        assert rendered == "Email: lead@example.com. Help the lead."
+        assert rendered == "Email: lead@example.com. Team of 12."
 
     @pytest.mark.asyncio
-    async def test_ui_values_optional_missing_field(self, runner, flow_config, unique_id):
-        flow_config.prompt = "Hint: {?ui_values.channel}"
+    async def test_interface_field_optional_missing(self, runner, flow_config, unique_id):
+        flow_config.prompt = "Hint: {?lead.channel}"
         runner.prompt = flow_config.prompt
 
         state = ExecutionState(
@@ -275,15 +276,15 @@ class TestUiValuesInPrompts:
             context_id=f"test-context-{unique_id}",
             user_id="test_user_123",
             session_id=f"test-agent:test-context-{unique_id}",
-            ui_values={},
+            lead={},
         )
         rendered = await runner._render_prompt(state)
 
         assert rendered == "Hint: "
 
     @pytest.mark.asyncio
-    async def test_ui_values_optional_with_default(self, runner, flow_config, unique_id):
-        flow_config.prompt = "Hint: {?ui_values.channel|web}"
+    async def test_interface_field_optional_with_default(self, runner, flow_config, unique_id):
+        flow_config.prompt = "Hint: {?lead.channel|web}"
         runner.prompt = flow_config.prompt
 
         state = ExecutionState(
@@ -291,7 +292,7 @@ class TestUiValuesInPrompts:
             context_id=f"test-context-{unique_id}",
             user_id="test_user_123",
             session_id=f"test-agent:test-context-{unique_id}",
-            ui_values={},
+            lead={},
         )
         rendered = await runner._render_prompt(state)
 
@@ -331,7 +332,7 @@ class TestLocalAgentVariablesInPrompts:
             context_id=f"test-context-{unique_id}",
             user_id="test_user_123",
             session_id=f"test-agent:test-context-{unique_id}",
-            variables={"role": "flow_роль"}
+            variables={"role": "flow_роль"},
         )
         rendered = await runner._render_prompt(state)
 
@@ -357,7 +358,7 @@ class TestCombinedVariablesInPrompts:
             context_id=f"test-context-{unique_id}",
             user_id="test_user_123",
             session_id=f"test-agent:test-context-{unique_id}",
-            variables={"company_name": "TestCorp"}
+            variables={"company_name": "TestCorp"},
         )
         rendered = await runner._render_prompt(state)
 
@@ -382,7 +383,7 @@ class TestCombinedVariablesInPrompts:
             context_id=f"test-context-{unique_id}",
             user_id="test_user_123",
             session_id=f"test-agent:test-context-{unique_id}",
-            variables={"company_name": "TestCorp"}
+            variables={"company_name": "TestCorp"},
         )
         rendered = await runner._render_prompt(state)
 
@@ -430,7 +431,7 @@ class TestPromptSyntaxInAgents:
             context_id=f"test-context-{unique_id}",
             user_id="test_user_123",
             session_id=f"test-agent:test-context-{unique_id}",
-            variables={"has_instructions": True}
+            variables={"has_instructions": True},
         )
         rendered = await runner._render_prompt(state)
         assert "Специальные инструкции" in rendered
@@ -462,7 +463,7 @@ class TestPromptSyntaxInAgents:
                     "name": "Москва",
                     "street": "Тверская",
                 }
-            }
+            },
         )
         rendered = await runner._render_prompt(state)
 
@@ -497,7 +498,7 @@ VIP клиент: {client_name}
                 "company_name": "TestCorp",
                 "client_name": "Иван Иванов",
                 "phone": "+7-999-123-45-67",
-            }
+            },
         )
         rendered = await runner._render_prompt(state)
 
@@ -647,7 +648,7 @@ class TestVariablesFromMetadata:
             variables={
                 "company_name": "FlowCorp",
                 "phone": "+7-999-000-00-00",
-            }
+            },
         )
 
         # Переопределяем через metadata (симулируем что они пришли из metadata)
@@ -678,7 +679,7 @@ class TestVariablesFromMetadata:
                 "company_name": "FlowCorp",
                 "phone": "+7-999-000-00-00",
                 "email": "flow@example.com",
-            }
+            },
         )
 
         # Переопределяем только company_name
@@ -710,7 +711,7 @@ class TestJsonDictVariablesInPrompts:
                     "name": "Иван Иванов",
                     "email": "ivan@example.com",
                 }
-            }
+            },
         )
         rendered = await runner._render_prompt(state)
 
@@ -736,7 +737,7 @@ class TestJsonDictVariablesInPrompts:
                     "street": "Тверская",
                     "building": {"number": "10", "entrance": "A"},
                 }
-            }
+            },
         )
         rendered = await runner._render_prompt(state)
 
@@ -761,7 +762,7 @@ class TestJsonDictVariablesInPrompts:
                     "name": "Москва",
                     "district": "Центральный",
                 }
-            }
+            },
         )
         rendered = await runner._render_prompt(state)
         assert "Москва" in rendered
@@ -777,7 +778,7 @@ class TestJsonDictVariablesInPrompts:
                 "city": {
                     "name": "Москва",
                 }
-            }
+            },
         )
         rendered = await runner._render_prompt(state)
         assert "Москва" in rendered
@@ -800,7 +801,7 @@ class TestJsonDictVariablesInPrompts:
                     "name": "Иван",
                     "email": "ivan@example.com",
                 }
-            }
+            },
         )
         rendered = await runner._render_prompt(state)
         assert "Иван" in rendered
@@ -847,7 +848,7 @@ API Key: {config.api.key}
                         },
                     },
                 }
-            }
+            },
         )
         rendered = await runner._render_prompt(state)
 
@@ -873,7 +874,7 @@ API Key: {config.api.key}
                     {"name": "Иван", "phone": "+7-999-111-11-11"},
                     {"name": "Петр", "phone": "+7-999-222-22-22"},
                 ]
-            }
+            },
         )
         rendered = await runner._render_prompt(state)
 
@@ -902,7 +903,7 @@ API Key: {config.api.key}
                 "address": {"city": "Москва", "street": "Тверская"},
                 "phone": "+7-999-123-45-67",
                 "contact": {"email": "info@testcorp.com", "name": "Support"},
-            }
+            },
         )
         rendered = await runner._render_prompt(state)
 
@@ -928,7 +929,7 @@ API Key: {config.api.key}
                     "name": "FlowUser",
                     "role": "ROLE_USER",
                 }
-            }
+            },
         )
 
         # Переопределяем из metadata

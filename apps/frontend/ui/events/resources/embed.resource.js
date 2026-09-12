@@ -67,14 +67,10 @@ export const embedConfigsResource = createResourceCollection({
         if (typeof raw.session_share_enabled !== 'boolean') {
             throw new Error('frontend/embed_configs: session_share_enabled required');
         }
-        if (raw.interface_override != null && (typeof raw.interface_override !== 'object' || Array.isArray(raw.interface_override))) {
-            throw new Error('frontend/embed_configs: interface_override must be object or null');
-        }
         return {
             ...raw,
             landing_card_image_url:
                 typeof raw.landing_card_image_url === 'string' ? raw.landing_card_image_url : null,
-            interface_override: raw.interface_override != null ? raw.interface_override : null,
         };
     },
 });

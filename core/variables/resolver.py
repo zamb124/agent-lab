@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 from core.context import get_context
 from core.logging import get_logger
 from core.types import JsonArray, JsonObject, JsonValue, require_json_object
+from core.variables.template_scan import UnmatchedBracesError, unmatched_brace_message
 
 logger = get_logger(__name__)
 
@@ -25,11 +26,6 @@ def _mapping_item(value: JsonValue | VariableMap, key: str) -> tuple[bool, JsonV
     if key not in value:
         return False, None
     return True, value[key]
-
-
-class UnmatchedBracesError(Exception):
-    """Исключение для непарных скобок {}."""
-    pass
 
 
 class VariableResolutionError(ValueError):
@@ -360,29 +356,9 @@ class VariableResolver:
         if not template:
             return template
 
-        def validate_braces(text: str) -> None:
-            """Проверяет, что все скобки {} парные."""
-            depth = 0
-            i = 0
-            while i < len(text):
-                if text[i] == '\\' and i + 1 < len(text):
-                    i += 2
-                    continue
-
-                if text[i] == '{':
-                    depth += 1
-                elif text[i] == '}':
-                    depth -= 1
-                    if depth < 0:
-                        raise UnmatchedBracesError(f"Непарная закрывающая скобка '}}' на позиции {i}")
-                i += 1
-
-            if depth > 0:
-                raise UnmatchedBracesError(f"Непарная открывающая скобка '{{' - не закрыто {depth} скобок")
-            elif depth < 0:
-                raise UnmatchedBracesError(f"Непарная закрывающая скобка '}}' - лишних {abs(depth)} скобок")
-
-        validate_braces(template)
+        brace_problem = unmatched_brace_message(template)
+        if brace_problem is not None:
+            raise UnmatchedBracesError(brace_problem)
 
         variables = VariableResolver.resolve_all(
             local_vars=local_vars, include_system=include_system

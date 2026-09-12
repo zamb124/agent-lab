@@ -71,7 +71,9 @@ async def test_lara_every_effective_branch_keeps_full_roots_and_device_tools(
     docs_branch = branches["docs"]
     assert docs_branch.entry == "docs_lookup"
     assert docs_branch.edges is not None
-    assert any(edge.from_node == "docs_lookup" and edge.to_node == "main" for edge in docs_branch.edges)
+    assert any(
+        edge.from_node == "docs_lookup" and edge.to_node == "main" for edge in docs_branch.edges
+    )
     factory = container.flow_factory
     for branch_id in sorted(branches):
         effective = factory.apply_branch(flow, branch_id)
@@ -102,17 +104,13 @@ async def test_lara_cross_domain_skill_loads_from_any_root(
         host = AgentSkillRuntimeHost(
             attached_ids=frozenset(LARA_PLATFORM_SKILL_ROOTS),
             index_entries=tuple(
-                await container.agent_skill_service.resolve_index(
-                    list(LARA_PLATFORM_SKILL_ROOTS)
-                )
+                await container.agent_skill_service.resolve_index(list(LARA_PLATFORM_SKILL_ROOTS))
             ),
         )
         state = make_skill_state(flow_id="lara", unique_id=unique_id)
 
         with agent_skill_runtime_host_scope(host):
-            net = _load_payload(
-                await load_agent_skill.run({"agent_skill_id": "networkle"}, state)
-            )
+            net = _load_payload(await load_agent_skill.run({"agent_skill_id": "networkle"}, state))
             assert net["depth"] == 0
             entities = _load_payload(
                 await load_agent_skill.run({"agent_skill_id": "crm-entities"}, state)
@@ -146,7 +144,7 @@ async def test_lara_cross_domain_skill_loads_from_any_root(
                     "flows_read_context",
                     "flows_get_node",
                     "flows_list_nodes",
-                    "push_embed_blocks",
+                    "ui_render",
                 },
             )
 
@@ -272,7 +270,9 @@ async def test_lara_cross_domain_skill_loads_from_any_root(
             diagrams = _load_payload(
                 await load_agent_skill.run({"agent_skill_id": "diagrams-viz"}, state)
             )
-            _assert_tools_include(diagrams, {"create_viz", "update_viz", "export_viz", "viz_open_file"})
+            _assert_tools_include(
+                diagrams, {"create_viz", "update_viz", "export_viz", "viz_open_file"}
+            )
 
             worktracker = _load_payload(
                 await load_agent_skill.run(

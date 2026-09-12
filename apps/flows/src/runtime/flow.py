@@ -52,6 +52,7 @@ from apps.flows.src.runtime.exceptions import (
     EdgeConditionError,
     FlowInterrupt,
 )
+from apps.flows.src.runtime.flow_interface_context import flow_interface_scope
 from apps.flows.src.runtime.state_diff import (
     build_canvas_result_preview,
     compute_state_diff,
@@ -61,12 +62,12 @@ from apps.flows.src.runtime.state_diff import (
 from apps.flows.src.state.cancellation import FlowCancelled, check_cancellation
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming import Emitter
-from apps.flows.src.streaming.flow_ui import emit_flow_ui_transitions
 from core.errors import (
     FlowInfiniteLoopError,
     FlowPrematureCompletionError,
     NodeCallLimitError,
 )
+from core.flow_ui.document import FlowUIDocument
 from core.logging import get_logger
 from core.state import ExecutionState
 from core.state.interrupt import HandoffInterrupt, OperatorTaskInterrupt
@@ -117,9 +118,11 @@ class Flow:
         variables: JsonObject | None = None,
         config: JsonObject | None = None,
         *,
+        interface: FlowUIDocument,
         container: FlowRuntimeContainer,
     ):
         self.flow_id: str = flow_id
+        self.interface: FlowUIDocument = interface
         self.name: str = name
         self.entry: str = entry
         self.nodes: dict[str, BaseNode] = nodes
@@ -139,9 +142,6 @@ class Flow:
             self._edges_by_from.setdefault(edge.from_node, []).append(edge)
 
         self._join_required: dict[str, frozenset[str]] = self._build_join_required_predecessors()
-
-    async def _emit_flow_ui_transitions(self, emitter: Emitter, state: ExecutionState) -> None:
-        await emit_flow_ui_transitions(emitter=emitter, state=state)
 
     async def _checkpoint_state(
         self,
@@ -435,7 +435,8 @@ class Flow:
         state.variables = {**self.variables, **state.variables}
         state.node_history = {}
 
-        return await self._execute_loop(state)
+        with flow_interface_scope(self.interface):
+            return await self._execute_loop(state)
 
     async def _execute_loop(self, state: ExecutionState) -> ExecutionState:
         """Цикл выполнения."""
@@ -685,7 +686,7 @@ class Flow:
                             event_type=event_type,
                             payload=event_payload,
                         )
-                        await self._emit_flow_ui_transitions(emitter, state)
+                        await emitter.flush_ui(self.interface)
                         return state
 
                     errors = [exc for _, _, exc, _run_state in outcomes if exc is not None]
@@ -711,16 +712,15 @@ class Flow:
                                 superstep_base_state,
                                 result_states,
                             )
-                            await self._emit_flow_ui_transitions(
-                                emitter,
-                                persisted_results,
-                            )
+                            emitter.state = persisted_results
+                            await emitter.flush_ui(self.interface)
                         raise errors[0]
                     if result_states:
                         state = self._merge_results(superstep_base_state, result_states)
                     else:
                         state = self._clone_state(superstep_base_state)
-                    await self._emit_flow_ui_transitions(emitter, state)
+                    emitter.state = state
+                    await emitter.flush_ui(self.interface)
                 except FlowInterrupt as e:
                     node_id = current_nodes[0]
                     logger.info(f"Flow {self.flow_id}: interrupt at '{node_id}': {e.question}")
@@ -842,7 +842,7 @@ class Flow:
         original_exc_count = len(original_state.execution_exceptions)
 
         for result in results:
-            merged.queue_ui_transitions(result.drain_ui_transitions())
+            merged.queue_ui_events(result.drain_ui_events())
             # messages — добавляем новые
             new_messages = result.messages[original_msg_count:]
             merged.messages.extend(new_messages)
@@ -1417,5 +1417,8 @@ class Flow:
             tags=tags,
             variables=resolved_variables,
             config=config_json,
+            interface=FlowUIDocument.model_validate(
+                require_json_object(config_json.get("interface"), "flow_config.interface")
+            ),
             container=container,
         )

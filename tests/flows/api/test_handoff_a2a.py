@@ -78,7 +78,9 @@ def _handoff_parent_child_configs(unique_id: str) -> tuple[dict[str, Any], dict[
     return parent, child
 
 
-async def _send_message(client, flow_id: str, context_id: str, content: str, task_id: str | None = None):
+async def _send_message(
+    client, flow_id: str, context_id: str, content: str, task_id: str | None = None
+):
     message = _msg(content, context_id=context_id)
     if task_id is not None:
         message["taskId"] = task_id
@@ -104,14 +106,16 @@ class TestHandoffA2A:
         child_fid = child_cfg["flow_id"]
         parent_fid = parent_cfg["flow_id"]
 
-        mock_llm_with_queue([
-            {
-                "type": "tool_call",
-                "tool": "handoff_to_flow",
-                "args": {"target_flow_id": child_fid, "variables": {"order_id": "1"}},
-            },
-            "child idle after kickoff",
-        ])
+        mock_llm_with_queue(
+            [
+                {
+                    "type": "tool_call",
+                    "tool": "handoff_to_flow",
+                    "args": {"target_flow_id": child_fid, "variables": {"order_id": "1"}},
+                },
+                "child idle after kickoff",
+            ]
+        )
 
         context_id = f"ctx-k1-{unique_id}"
         resp = await _send_message(client, parent_fid, context_id, "handoff please")
@@ -143,15 +147,17 @@ class TestHandoffA2A:
         parent_fid = parent_cfg["flow_id"]
         context_id = f"ctx-k2-{unique_id}"
 
-        mock_llm_with_queue([
-            {
-                "type": "tool_call",
-                "tool": "handoff_to_flow",
-                "args": {"target_flow_id": child_fid},
-            },
-            "child idle after kickoff",
-            "child received user message",
-        ])
+        mock_llm_with_queue(
+            [
+                {
+                    "type": "tool_call",
+                    "tool": "handoff_to_flow",
+                    "args": {"target_flow_id": child_fid},
+                },
+                "child idle after kickoff",
+                "child received user message",
+            ]
+        )
 
         first = await _send_message(client, parent_fid, context_id, "start handoff")
         first_data = first.json()
@@ -192,16 +198,22 @@ class TestHandoffA2A:
         parent_fid = parent_cfg["flow_id"]
         context_id = f"ctx-k3-{unique_id}"
 
-        mock_llm_with_queue([
-            {
-                "type": "tool_call",
-                "tool": "handoff_to_flow",
-                "args": {"target_flow_id": child_fid},
-            },
-            "child idle after kickoff",
-            {"type": "tool_call", "tool": "ask_user", "args": {"question": "What is your order id?"}},
-            "thanks for order info",
-        ])
+        mock_llm_with_queue(
+            [
+                {
+                    "type": "tool_call",
+                    "tool": "handoff_to_flow",
+                    "args": {"target_flow_id": child_fid},
+                },
+                "child idle after kickoff",
+                {
+                    "type": "tool_call",
+                    "tool": "ask_user",
+                    "args": {"question": "What is your order id?"},
+                },
+                "thanks for order info",
+            ]
+        )
 
         first = await _send_message(client, parent_fid, context_id, "handoff to child")
         first_data = first.json()
@@ -240,16 +252,22 @@ class TestHandoffA2A:
         parent_fid = parent_cfg["flow_id"]
         context_id = f"ctx-k4-{unique_id}"
 
-        mock_llm_with_queue([
-            {
-                "type": "tool_call",
-                "tool": "handoff_to_flow",
-                "args": {"target_flow_id": child_fid, "variables": {"ticket_id": "T-1"}},
-            },
-            "child idle after kickoff",
-            {"type": "tool_call", "tool": "handback_to_parent", "args": {"response": "resolved", "variables": {"ticket_id": "T-1"}}},
-            "parent continues after handback",
-        ])
+        mock_llm_with_queue(
+            [
+                {
+                    "type": "tool_call",
+                    "tool": "handoff_to_flow",
+                    "args": {"target_flow_id": child_fid, "variables": {"ticket_id": "T-1"}},
+                },
+                "child idle after kickoff",
+                {
+                    "type": "tool_call",
+                    "tool": "handback_to_parent",
+                    "args": {"response": "resolved", "variables": {"ticket_id": "T-1"}},
+                },
+                "parent continues after handback",
+            ]
+        )
 
         first = await _send_message(client, parent_fid, context_id, "start")
         first_data = first.json()
@@ -298,34 +316,61 @@ class TestHandoffA2A:
 
         for fid, tools in (
             (fid_c, [{"tool_id": "handback_to_parent", "description": "HB"}]),
-            (fid_b, [{"tool_id": "handoff_to_flow", "description": "H"}, {"tool_id": "handback_to_parent", "description": "HB"}]),
+            (
+                fid_b,
+                [
+                    {"tool_id": "handoff_to_flow", "description": "H"},
+                    {"tool_id": "handback_to_parent", "description": "HB"},
+                ],
+            ),
             (fid_a, [{"tool_id": "handoff_to_flow", "description": "H"}]),
         ):
-            await _save_flow(container, {
-                "flow_id": fid,
-                "name": fid,
-                "entry": "main",
-                "nodes": {
-                    "main": {
-                        "type": "llm_node",
-                        "node_id": "n",
-                        "prompt": "p",
-                        "llm": {"model": "mock-gpt-4"},
-                        "tools": tools,
-                    }
+            await _save_flow(
+                container,
+                {
+                    "flow_id": fid,
+                    "name": fid,
+                    "entry": "main",
+                    "nodes": {
+                        "main": {
+                            "type": "llm_node",
+                            "node_id": "n",
+                            "prompt": "p",
+                            "llm": {"model": "mock-gpt-4"},
+                            "tools": tools,
+                        }
+                    },
+                    "edges": [{"from_node": "main", "to_node": None}],
                 },
-                "edges": [{"from_node": "main", "to_node": None}],
-            })
+            )
 
         context_id = f"ctx-k5-{unique_id}"
-        mock_llm_with_queue([
-            {"type": "tool_call", "tool": "handoff_to_flow", "args": {"target_flow_id": fid_b, "variables": {"level": "a"}}},
-            "child b idle",
-            {"type": "tool_call", "tool": "handoff_to_flow", "args": {"target_flow_id": fid_c, "variables": {"level": "b"}}},
-            {"type": "tool_call", "tool": "handback_to_parent", "args": {"response": "from c", "variables": {"level": "c"}}},
-            {"type": "tool_call", "tool": "handback_to_parent", "args": {"response": "from b", "variables": {"level": "b"}}},
-            "parent a final",
-        ])
+        mock_llm_with_queue(
+            [
+                {
+                    "type": "tool_call",
+                    "tool": "handoff_to_flow",
+                    "args": {"target_flow_id": fid_b, "variables": {"level": "a"}},
+                },
+                "child b idle",
+                {
+                    "type": "tool_call",
+                    "tool": "handoff_to_flow",
+                    "args": {"target_flow_id": fid_c, "variables": {"level": "b"}},
+                },
+                {
+                    "type": "tool_call",
+                    "tool": "handback_to_parent",
+                    "args": {"response": "from c", "variables": {"level": "c"}},
+                },
+                {
+                    "type": "tool_call",
+                    "tool": "handback_to_parent",
+                    "args": {"response": "from b", "variables": {"level": "b"}},
+                },
+                "parent a final",
+            ]
+        )
 
         first = await _send_message(client, fid_a, context_id, "chain start")
         assert first.json()["result"]["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
@@ -351,9 +396,7 @@ class TestHandoffA2A:
         assert parent_state.child_workflows[child_b_key].status == "completed"
 
     @pytest.mark.asyncio
-    async def test_k6_handoff_max_depth_exceeded(
-        self, container, unique_id
-    ):
+    async def test_k6_handoff_max_depth_exceeded(self, container, unique_id):
         """Превышение handoff_max_depth — контракт orchestrator (без monkeypatch)."""
         orchestrator = container.handoff_orchestrator_service
         from apps.flows.config import get_settings
@@ -377,14 +420,16 @@ class TestHandoffA2A:
         parent_fid = parent_cfg["flow_id"]
         context_id = f"ctx-k7-{unique_id}"
 
-        mock_llm_with_queue([
-            {
-                "type": "tool_call",
-                "tool": "handoff_to_flow",
-                "args": {"target_flow_id": child_fid},
-            },
-            "child idle",
-        ])
+        mock_llm_with_queue(
+            [
+                {
+                    "type": "tool_call",
+                    "tool": "handoff_to_flow",
+                    "args": {"target_flow_id": child_fid},
+                },
+                "child idle",
+            ]
+        )
 
         first = await _send_message(client, parent_fid, context_id, "cancel me")
         assert first.json()["result"]["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
@@ -413,28 +458,33 @@ class TestHandoffA2A:
         self, client, container, mock_llm_with_queue, sync_tools, unique_id
     ):
         parent_fid = f"ht-k8-{unique_id}"
-        await _save_flow(container, {
-            "flow_id": parent_fid,
-            "name": "Parent",
-            "entry": "main",
-            "nodes": {
-                "main": {
-                    "type": "llm_node",
-                    "node_id": "p",
-                    "prompt": "p",
-                    "llm": {"model": "mock-gpt-4"},
-                    "tools": [{"tool_id": "handoff_to_flow", "description": "Handoff"}],
-                }
-            },
-            "edges": [{"from_node": "main", "to_node": None}],
-        })
-        mock_llm_with_queue([
+        await _save_flow(
+            container,
             {
-                "type": "tool_call",
-                "tool": "handoff_to_flow",
-                "args": {"target_flow_id": "missing-flow-id"},
+                "flow_id": parent_fid,
+                "name": "Parent",
+                "entry": "main",
+                "nodes": {
+                    "main": {
+                        "type": "llm_node",
+                        "node_id": "p",
+                        "prompt": "p",
+                        "llm": {"model": "mock-gpt-4"},
+                        "tools": [{"tool_id": "handoff_to_flow", "description": "Handoff"}],
+                    }
+                },
+                "edges": [{"from_node": "main", "to_node": None}],
             },
-        ])
+        )
+        mock_llm_with_queue(
+            [
+                {
+                    "type": "tool_call",
+                    "tool": "handoff_to_flow",
+                    "args": {"target_flow_id": "missing-flow-id"},
+                },
+            ]
+        )
         resp = await _send_message(client, parent_fid, f"ctx-k8-{unique_id}", "go")
         data = resp.json()
         _validate_jsonrpc_response(data)
@@ -449,14 +499,16 @@ class TestHandoffA2A:
         await _save_flow(container, child_cfg)
         child_fid = child_cfg["flow_id"]
         parent_fid = parent_cfg["flow_id"]
-        mock_llm_with_queue([
-            {
-                "type": "tool_call",
-                "tool": "handoff_to_flow",
-                "args": {"target_flow_id": child_fid},
-            },
-            "child idle",
-        ])
+        mock_llm_with_queue(
+            [
+                {
+                    "type": "tool_call",
+                    "tool": "handoff_to_flow",
+                    "args": {"target_flow_id": child_fid},
+                },
+                "child idle",
+            ]
+        )
         resp = await client.post(
             f"/flows/api/v1/{parent_fid}",
             json={
@@ -476,9 +528,21 @@ class TestHandoffA2A:
         assert len(input_required) > 0
         meta = input_required[-1]["result"]["statusUpdate"]["status"]["message"]["metadata"]
         assert meta.get("platform_handoff_continue") is True
-        # Handoff is presented as Flow UI activity (ActivityCard data.activity),
-        # streamed via ui.document A2UI updates — not legacy platform.* UIEvent.
-        assert "handoff_initiated" in resp.text
+        # Handoff показывается карточкой активности в артефакте ``ui`` (render в conversation).
+        rendered_blocks = [
+            block
+            for event in events
+            for part in event.get("result", {})
+            .get("artifactUpdate", {})
+            .get("artifact", {})
+            .get("parts", [])
+            if isinstance(part.get("data"), dict) and part["data"].get("kind") == "render"
+            for block in part["data"].get("blocks", [])
+        ]
+        assert any(
+            block.get("type") == "activity" and str(block.get("block_id", "")).startswith("handoff-")
+            for block in rendered_blocks
+        )
 
     @pytest.mark.asyncio
     async def test_demo_bundles_handoff_roundtrip(
@@ -495,16 +559,22 @@ class TestHandoffA2A:
         child_fid = child_cfg["flow_id"]
         context_id = f"ctx-demo-{unique_id}"
 
-        mock_llm_with_queue([
-            {
-                "type": "tool_call",
-                "tool": "handoff_to_flow",
-                "args": {"target_flow_id": child_fid, "variables": {"order_id": "99"}},
-            },
-            "child idle after kickoff",
-            {"type": "tool_call", "tool": "handback_to_parent", "args": {"response": "demo done"}},
-            "parent demo final",
-        ])
+        mock_llm_with_queue(
+            [
+                {
+                    "type": "tool_call",
+                    "tool": "handoff_to_flow",
+                    "args": {"target_flow_id": child_fid, "variables": {"order_id": "99"}},
+                },
+                "child idle after kickoff",
+                {
+                    "type": "tool_call",
+                    "tool": "handback_to_parent",
+                    "args": {"response": "demo done"},
+                },
+                "parent demo final",
+            ]
+        )
 
         first = await _send_message(client, parent_fid, context_id, "courier problem")
         assert first.json()["result"]["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"

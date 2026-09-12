@@ -7,7 +7,7 @@
 import { html, css, nothing } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '../platform-element/index.js';
-import { flowsChatMarkdownToHtml } from '../flow-ui/utils/markdown.js';
+import { markdownToHtml } from '../utils/markdown.js';
 import './platform-help-hint.js';
 import './platform-icon.js';
 import './platform-button.js';
@@ -638,7 +638,7 @@ export class PlatformMarkdownEditor extends PlatformElement {
             .syntax-chip[data-source="input"] { color: var(--success); }
             .syntax-chip[data-source="upstream"],
             .syntax-chip[data-source="preview"],
-            .syntax-chip[data-source="ui_value"] { color: var(--info); }
+            .syntax-chip[data-source="interface"] { color: var(--info); }
 
             .syntax-chip:hover {
                 color: var(--accent);
@@ -900,9 +900,7 @@ export class PlatformMarkdownEditor extends PlatformElement {
 
     _changeDetailFromMarkdown(markdown) {
         const value = typeof markdown === 'string' ? markdown : '';
-        const htmlValue = value.length > 0
-            ? flowsChatMarkdownToHtml(value, { streaming: false })
-            : '';
+        const htmlValue = markdownToHtml(value);
         const tmp = document.createElement('div');
         tmp.innerHTML = sanitizeMarkdownEditorHtml(htmlValue);
         const textValue = tmp.innerText || '';
@@ -1232,7 +1230,7 @@ export class PlatformMarkdownEditor extends PlatformElement {
         }
 
         const rendered = this._resolveTemplate(this.value);
-        const htmlContent = flowsChatMarkdownToHtml(rendered, { streaming: false });
+        const htmlContent = markdownToHtml(rendered);
         return html`<div class="preview-container">${unsafeHTML(htmlContent)}</div>`;
     }
     
@@ -1406,7 +1404,7 @@ export class PlatformMarkdownEditor extends PlatformElement {
         if (!this._editorEl) return;
         let html = typeof this.htmlValue === 'string' ? this.htmlValue : '';
         if (html.length === 0 && typeof this.value === 'string' && this.value.length > 0) {
-            html = flowsChatMarkdownToHtml(this.value, { streaming: false });
+            html = markdownToHtml(this.value);
         }
         const next = sanitizeMarkdownEditorHtml(html);
         if (this._editorEl.innerHTML !== next) {

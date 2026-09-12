@@ -34,16 +34,8 @@ FROZEN_STATE_FIELDS: frozenset[str] = frozenset(
         "node_history",
         "execution_exceptions",
         "prompt_history",
-        "a2a_representation",
-        "ui_document",
-        "ui_interaction",
-        "ui_effect_cursor",
-        "ui_applied_effect_ids",
-        "ui_template_version",
-        "ui_last_synced_at",
-        "ui_last_accepted_client_mutation_id",
-        "ui_last_accepted_client_mutation_hash",
-        "ui_conflict",
+        "ui_action",
+        "ui_slots",
         "llm_context_memory_cursor",
         "reasoning_history",
         "pending_reasoning",
@@ -78,18 +70,9 @@ FIELDS_COPY_FROM_RUNTIME_NODE_STATE: frozenset[str] = USER_CODE_OVERRIDABLE_FROZ
     "prompt_history",
     "llm_context_memory_cursor",
     "scheduled_tasks",
-    # Flow UI is mutated only by trusted platform effects after user-returned
-    # state has been restored. Those accepted mutations must survive the
-    # parallel node merge and become part of the durable workflow checkpoint.
-    "ui_document",
-    "ui_interaction",
-    "ui_effect_cursor",
-    "ui_applied_effect_ids",
-    "ui_template_version",
-    "ui_last_synced_at",
-    "ui_last_accepted_client_mutation_id",
-    "ui_last_accepted_client_mutation_hash",
-    "ui_conflict",
+    # Блоки, отрендеренные агентом через ui_render, пишутся только доверенным
+    # runtime и должны пережить merge параллельных нод и попасть в checkpoint.
+    "ui_slots",
     # handback_to_parent в llm_node: channel смотрит terminal_task_state после flow.run
     "terminal_task_state",
 }

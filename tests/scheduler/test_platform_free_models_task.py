@@ -28,7 +28,7 @@ async def test_platform_free_models_task_accepts_scheduler_payload(monkeypatch) 
             "count": 2,
             "providers": ["openrouter", "bothub"],
             "models": ["openrouter:a:free", "bothub:b:free"],
-            "score_overrides_count": 1,
+            "overlay_count": 1,
             "redis_ok": True,
         }
 
@@ -46,7 +46,7 @@ async def test_platform_free_models_task_accepts_scheduler_payload(monkeypatch) 
         "count": 2,
         "providers": ["openrouter", "bothub"],
         "models": ["openrouter:a:free", "bothub:b:free"],
-        "score_overrides_count": 1,
+        "overlay_count": 1,
         "redis_ok": True,
     }
     assert calls == [

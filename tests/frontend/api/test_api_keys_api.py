@@ -6,9 +6,10 @@ Integration тесты для API управления API ключами.
 """
 
 
-from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import pytest
 from httpx import AsyncClient
+
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
 @pytest.mark.asyncio

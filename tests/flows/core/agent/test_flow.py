@@ -20,6 +20,7 @@ from apps.flows.src.runtime.nodes import (
     create_node,
 )
 from core.errors import FlowInfiniteLoopError
+from core.flow_ui.templates import default_chat_document
 from core.state import ExecutionState
 from core.types import JsonObject, JsonValue, require_json_object
 from core.variables import VariableResolver
@@ -244,6 +245,7 @@ class TestFlowWithEdges:
                 {"from_node": "step1", "to_node": "step2"},
                 {"from_node": "step2", "to_node": None},
             ],
+            interface=default_chat_document(),
             container=container,
         )
 
@@ -276,6 +278,7 @@ class TestFlowWithEdges:
                 {"from_node": "valid_path", "to_node": None},
                 {"from_node": "invalid_path", "to_node": None},
             ],
+            interface=default_chat_document(),
             container=container,
         )
 
@@ -306,6 +309,7 @@ class TestFlowWithEdges:
                 {"from_node": "valid_path", "to_node": None},
                 {"from_node": "invalid_path", "to_node": None},
             ],
+            interface=default_chat_document(),
             container=container,
         )
 
@@ -333,6 +337,7 @@ class TestFlowWithEdges:
                 {"from_node": "init", "to_node": "success", "condition": simple_condition("validation.valid", "==", True)},
                 {"from_node": "success", "to_node": None},
             ],
+            interface=default_chat_document(),
             container=container,
         )
 
@@ -360,6 +365,7 @@ class TestFlowWithEdges:
                 {"from_node": "step1", "to_node": "step2"},  # Без condition
                 {"from_node": "step2", "to_node": None},
             ],
+            interface=default_chat_document(),
             container=container,
         )
 
@@ -384,6 +390,7 @@ class TestFlowWithEdges:
             entry="nonexistent",
             nodes=nodes,
             edges=[],
+            interface=default_chat_document(),
             container=container,
         )
 
@@ -414,6 +421,7 @@ class TestFlowWithEdges:
                 {"from_node": "a", "to_node": "b"},
                 {"from_node": "b", "to_node": "a"},  # Бесконечный цикл
             ],
+            interface=default_chat_document(),
             container=container,
         )
 
@@ -435,6 +443,7 @@ class TestFlowWithEdges:
             entry="prep",
             nodes=nodes,
             edges=[{"from_node": "prep", "to_node": None}],
+            interface=default_chat_document(),
             container=container,
         )
         state = make_state(flow.flow_id, unique_id)
@@ -467,6 +476,7 @@ class TestFlowWithEdges:
             entry="loop",
             nodes=nodes,
             edges=[{"from_node": "loop", "to_node": "loop"}],
+            interface=default_chat_document(),
             container=container,
         )
         from core.errors import NodeCallLimitError
@@ -505,6 +515,7 @@ class TestFlowWithEdges:
                 {"from_node": "a", "to_node": "b"},
                 {"from_node": "b", "to_node": "a"},
             ],
+            interface=default_chat_document(),
             container=container,
         )
         from core.errors import FlowInfiniteLoopError
@@ -528,6 +539,7 @@ class TestFlowWithEdges:
             entry="nc",
             nodes=nodes,
             edges=[{"from_node": "nc", "to_node": "nc"}],
+            interface=default_chat_document(),
             container=container,
         )
         from core.errors import NodeCallLimitError
@@ -553,6 +565,7 @@ class TestFlowWithEdges:
             "edges": [
                 {"from_node": "init", "to_node": None},
             ],
+            "interface": default_chat_document().model_dump(mode="json"),
         }
 
         flow = await Flow.from_config(config, container=container)
@@ -587,6 +600,7 @@ class TestFlowVariables:
             nodes=nodes,
             edges=[{"from_node": "main", "to_node": None}],
             variables={"company": "TestCorp", "phone": "123-456"},
+            interface=default_chat_document(),
             container=container,
         )
 
@@ -615,6 +629,7 @@ class TestFlowVariables:
             nodes=nodes,
             edges=[{"from_node": "main", "to_node": None}],
             variables={"company": "Acme Inc"},
+            interface=default_chat_document(),
             container=container,
         )
 
@@ -636,6 +651,7 @@ class TestFlowVariables:
                 },
             },
             "edges": [{"from_node": "main", "to_node": None}],
+            "interface": default_chat_document().model_dump(mode="json"),
         }
         variables: JsonObject = {"api_key": "secret123", "timeout": 30}
 
@@ -736,6 +752,7 @@ class TestFlowConditionEvaluation:
                 {"from_node": "init", "to_node": "active", "condition": simple_condition("status", "==", "active")},
                 {"from_node": "active", "to_node": None},
             ],
+            interface=default_chat_document(),
             container=container,
         )
 
@@ -766,6 +783,7 @@ class TestFlowConditionEvaluation:
                 {"from_node": "high", "to_node": None},
                 {"from_node": "low", "to_node": None},
             ],
+            interface=default_chat_document(),
             container=container,
         )
 

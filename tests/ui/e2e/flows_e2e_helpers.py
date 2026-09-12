@@ -695,6 +695,17 @@ async def flows_open_chat_page(
     await expect(page.locator("chat-page platform-flow-ui")).to_be_visible(timeout=30_000)
 
 
+FLOW_UI_COMPOSER_SELECTOR = 'textarea[data-canon="composer"]'
+FLOW_UI_SEND_PATTERN = re.compile(r"^(Send|Отправить)$")
+FLOW_UI_STOP_PATTERN = re.compile(r"^(Stop|Остановить)$")
+FLOW_UI_READ_ONLY_PATTERN = re.compile(r"Read only|Только просмотр")
+FLOW_UI_READ_ONLY_STATUS_PATTERN = re.compile(r"Live read-only view|Просмотр без изменений")
+
+
+def flows_chat_composer(page: Page, chat_selector: str = "chat-page platform-flow-ui") -> Locator:
+    return page.locator(chat_selector).first.locator(FLOW_UI_COMPOSER_SELECTOR).first
+
+
 async def flows_chat_send_message(
     page: Page,
     text: str,
@@ -703,12 +714,12 @@ async def flows_chat_send_message(
 ) -> None:
     root = page.locator(chat_selector).first
     await expect(root).to_be_attached(timeout=30_000)
-    textarea = root.locator('[data-flow-ui-component="message-input"] textarea, textarea').first
+    textarea = root.locator(FLOW_UI_COMPOSER_SELECTOR).first
     await expect(textarea).to_be_visible(timeout=30_000)
     await textarea.fill(text)
-    submit = root.get_by_role("button", name=re.compile(r"^(Submit|Отправить|Send)$")).first
-    await expect(submit).to_be_enabled(timeout=10_000)
-    await submit.click()
+    send = root.get_by_role("button", name=FLOW_UI_SEND_PATTERN).first
+    await expect(send).to_be_enabled(timeout=10_000)
+    await send.click()
 
 
 async def flows_chat_click_clear(page: Page) -> None:
@@ -726,72 +737,72 @@ async def flows_chat_wait_ready(
     *,
     chat_selector: str = "chat-page platform-flow-ui",
 ) -> None:
+    """Interface loaded, context opened (ListTasks replayed) and the page rendered."""
     root = page.locator(chat_selector).first
     await expect(root).to_be_visible(timeout=60_000)
-    # SPA/multipage: active page may be non-chat (no message-form). Ready =
-    # hydration finished + surface mounted.
     await expect(root.locator(".skeleton")).to_have_count(0, timeout=60_000)
-    await expect(root.locator("flow-ui-surface")).to_be_visible(timeout=60_000)
+    await expect(root.locator("flow-ui-page")).to_be_visible(timeout=60_000)
     handle = await root.element_handle()
     if handle is None:
         raise AssertionError(f"flows_chat_wait_ready: no element for {chat_selector!r}")
     await page.wait_for_function(
-        """(el) => {
-            const context = el.controller?.activeContext;
-            return Boolean(
-                context
-                && context.hydration !== 'idle'
-                && context.hydration !== 'loading'
-                && context.hydration !== 'error'
-                && context.document
-            );
-        }""",
+        """(el) => Boolean(el.store?.document)
+            && typeof el.contextId === 'string' && el.contextId !== ''
+            && el.client !== null""",
         arg=handle,
         timeout=60_000,
     )
 
 
-async def flows_chat_fill_draft(
+async def flows_chat_type_composer(
     page: Page,
     text: str,
     *,
     chat_selector: str = "chat-page platform-flow-ui",
 ) -> None:
-    root = page.locator(chat_selector).first
-    textarea = root.locator('[data-flow-ui-component="message-input"] textarea, textarea').first
+    """Type into the conversation composer without sending; the value stays in the browser."""
+    textarea = flows_chat_composer(page, chat_selector)
     await expect(textarea).to_be_visible(timeout=30_000)
     await textarea.fill(text)
 
 
-async def flows_chat_wait_saved(
-    page: Page,
-    *,
-    chat_selector: str = "chat-page platform-flow-ui",
-) -> None:
-    root = page.locator(chat_selector).first
-    await expect(root).to_be_visible(timeout=60_000)
-    handle = await root.element_handle()
-    if handle is None:
-        raise AssertionError(f"flows_chat_wait_saved: no element for {chat_selector!r}")
-    await page.wait_for_function(
-        "(el) => el.controller?.activeContext?.saveStatus === 'saved'",
-        arg=handle,
-        timeout=60_000,
-    )
-
-
-async def flows_chat_draft_value(
+async def flows_chat_composer_value(
     page: Page,
     *,
     chat_selector: str = "chat-page platform-flow-ui",
 ) -> str:
-    root = page.locator(chat_selector).first
-    textarea = root.locator('[data-flow-ui-component="message-input"] textarea, textarea').first
+    textarea = flows_chat_composer(page, chat_selector)
     await expect(textarea).to_be_visible(timeout=30_000)
     value = await textarea.input_value()
     if not isinstance(value, str):
-        raise AssertionError(f"draft value must be str, got {type(value)}")
+        raise AssertionError(f"composer value must be str, got {type(value)}")
     return value
+
+
+async def flows_chat_task_count(
+    page: Page,
+    *,
+    chat_selector: str = "chat-page platform-flow-ui",
+) -> int:
+    root = page.locator(chat_selector).first
+    count = await root.evaluate("(el) => el.store.orderedTasks().length")
+    if not isinstance(count, int):
+        raise AssertionError(f"task count must be int, got {count!r}")
+    return count
+
+
+async def flows_chat_state_value(
+    page: Page,
+    path: str,
+    *,
+    chat_selector: str = "chat-page platform-flow-ui",
+) -> Any:
+    """Top-level field of the ``state`` artifact projection as seen by this client."""
+    root = page.locator(chat_selector).first
+    return await root.evaluate(
+        "(el, path) => (Object.hasOwn(el.store.state, path) ? el.store.state[path] : null)",
+        path,
+    )
 
 
 async def flows_chat_session_url(page: Page) -> str:
@@ -810,11 +821,11 @@ async def flows_chat_create_share(
     *,
     permission: str = "viewer",
     chat_selector: str = "chat-page platform-flow-ui",
-    redacted_value_paths: list[str] | None = None,
+    redacted_paths: list[str] | None = None,
 ) -> FlowUIShareLink:
     root = page.locator(chat_selector).first
     await expect(root).to_be_visible(timeout=30_000)
-    paths = list(redacted_value_paths) if redacted_value_paths is not None else []
+    paths = list(redacted_paths) if redacted_paths is not None else []
     if paths:
         payload = await root.evaluate(
             """async (el, args) => {
@@ -823,7 +834,7 @@ async def flows_chat_create_share(
                 }
                 return el.createShare({
                     permission: args.permission,
-                    redactedValuePaths: args.paths,
+                    redactedPaths: args.paths,
                 });
             }""",
             {"permission": permission, "paths": paths},
@@ -841,7 +852,7 @@ async def flows_chat_create_share(
     share = root.locator("details.share").first
     await expect(share).to_be_visible(timeout=30_000)
     await share.locator("summary").click()
-    label = "View only" if permission == "viewer" else "Can interact"
+    label = "View only" if permission == "viewer" else "Can write"
     async with page.expect_response(
         lambda response: (
             response.request.method == "POST"
@@ -861,7 +872,7 @@ async def flows_chat_create_share(
     if not isinstance(grant, dict) or not isinstance(grant.get("grant_id"), str):
         raise AssertionError(f"share create missing grant_id: {payload!r}")
     grant_id = grant["grant_id"]
-    link = share.locator('.share-result input[aria-label="Share link"]')
+    link = share.locator('.share-result input[aria-label="Link"]')
     await expect(link).to_be_visible(timeout=60_000)
     share_url = await link.input_value()
     if not isinstance(share_url, str) or "/l/" not in share_url:
@@ -894,23 +905,65 @@ async def flows_expire_share_grant(grant_id: str) -> None:
         await engine.dispose()
 
 
+INTERFACE_PAGE_TAB_SELECTOR = 'flows-interface-pages-tabs .tab[role="tab"]'
+
+
 async def flows_interface_add_page(page: Page) -> None:
-    """Add a page in Interface editor; waits until Pages panel shows two entries."""
+    """Add a page in the Interface editor; waits until the tabs strip shows two pages."""
     editor = page.locator("flows-interface-editor").first
     await expect(editor).to_be_visible(timeout=30_000)
-    pages = editor.locator("flows-interface-pages-panel").first
-    await expect(pages).to_be_visible(timeout=30_000)
-    await expect(pages.locator("button.page")).to_have_count(1, timeout=30_000)
-    await expect(
-        pages.locator("button.page").filter(has_text=re.compile(r"Conversation"))
-    ).to_be_visible(timeout=30_000)
-    add = pages.locator("button.add").first
+    tabs = editor.locator(INTERFACE_PAGE_TAB_SELECTOR)
+    await expect(tabs).to_have_count(1, timeout=30_000)
+    await expect(tabs.filter(has_text=re.compile(r"Conversation"))).to_be_visible(timeout=30_000)
+    add = editor.locator("flows-interface-pages-tabs platform-button.add").first
     await expect(add).to_be_visible(timeout=10_000)
-    await add.click(force=True)
-    await expect(pages.locator("button.page")).to_have_count(2, timeout=30_000)
-    await expect(pages.locator("button.page").filter(has_text=re.compile(r"Page 2"))).to_be_visible(
+    await add.locator("button").first.click()
+    await expect(tabs).to_have_count(2, timeout=30_000)
+    await expect(tabs.filter(has_text=re.compile(r"New page|Новая страница"))).to_be_visible(
         timeout=15_000
     )
+
+
+async def flows_interface_add_block(page: Page, label: str) -> None:
+    """Insert a block from the Add panel by its palette label; selection follows the new block."""
+    editor = page.locator("flows-interface-editor").first
+    item = (
+        editor.locator("flows-interface-add-panel article.item")
+        .filter(has_text=re.compile(rf"^\s*{re.escape(label)}\s*$"))
+        .first
+    )
+    await expect(item).to_be_visible(timeout=15_000)
+    await item.click()
+
+
+def flows_interface_canvas_block(page: Page, block_type: str) -> Locator:
+    return page.locator(
+        f'flows-interface-editor platform-flow-ui [data-block-id][data-block-type="{block_type}"]'
+    )
+
+
+async def flows_interface_publish(page: Page) -> None:
+    """Publish from the Interface editor toolbar: the page saves the flow with the new document."""
+    toolbar = page.locator("flows-interface-editor flows-interface-toolbar").first
+    publish = (
+        toolbar.locator("platform-button")
+        .filter(has_text=re.compile(r"^\s*(Publish|Опубликовать)\s*$"))
+        .first
+    )
+    await expect(publish.locator("button")).to_be_enabled(timeout=10_000)
+    async with page.expect_response(
+        lambda response: (
+            response.request.method == "PUT" and "/flows/api/v1/flows/" in response.url
+        ),
+        timeout=30_000,
+    ) as publish_response:
+        await publish.locator("button").click()
+    response = await publish_response.value
+    if response.status >= 400:
+        raise AssertionError(
+            f"flows_interface_publish: PUT failed with {response.status}: {await response.text()}"
+        )
+    await expect(toolbar.locator(".status")).to_have_attribute("data-dirty", "false", timeout=15_000)
 
 
 async def flows_open_interface_editor_workspace(
@@ -2069,10 +2122,10 @@ async def flows_execution_send_message(page: Page, text: str) -> None:
     panel = await flows_open_execution_panel(page)
     chat = panel.locator("platform-flow-ui").first
     await expect(chat).to_be_visible(timeout=15_000)
-    textarea = chat.locator('[data-flow-ui-component="message-input"] textarea, textarea').first
+    textarea = chat.locator(FLOW_UI_COMPOSER_SELECTOR).first
     await expect(textarea).to_be_visible(timeout=15_000)
     await textarea.fill(text)
-    send_btn = chat.get_by_role("button", name=re.compile(r"^(Submit|Отправить|Send)$")).first
+    send_btn = chat.get_by_role("button", name=FLOW_UI_SEND_PATTERN).first
     await expect(send_btn).to_be_enabled(timeout=10_000)
     await send_btn.click()
 
@@ -2570,28 +2623,14 @@ async def flows_open_durable_history_modal(page: Page) -> Locator:
     opened = await chat.evaluate(
         """
         (el) => {
-            if (!el || typeof el.openModal !== 'function') {
-                throw new Error('chat-page.openModal is unavailable');
+            if (typeof el._sessionId !== 'function' || typeof el._openHistory !== 'function') {
+                throw new Error('chat-page history API is unavailable');
             }
-            if (typeof el._openDurableHistory === 'function') {
-                el._openDurableHistory();
-                const flowId = typeof el.flowId === 'string' ? el.flowId : '';
-                const contextId = typeof el._currentContextId === 'function'
-                    ? el._currentContextId()
-                    : '';
-                return flowId && contextId ? `${flowId}:${contextId}` : 'opened';
+            const sessionId = el._sessionId();
+            if (!sessionId) {
+                throw new Error('chat-page has no active session for durable history');
             }
-            const flowId = typeof el.flowId === 'string' ? el.flowId : '';
-            const contextId = typeof el._currentContextId === 'function'
-                ? el._currentContextId()
-                : '';
-            if (!flowId || !contextId) {
-                throw new Error(
-                    `chat-page missing flowId/contextId (flowId=${flowId}, contextId=${contextId})`
-                );
-            }
-            const sessionId = `${flowId}:${contextId}`;
-            el.openModal('flows.durable_history', { sessionId });
+            el._openHistory();
             return sessionId;
         }
         """
@@ -4455,7 +4494,7 @@ async def flows_e2e_open_lara_chat(page: Page, flows_ui: AppUI) -> None:
     await expect(fab).to_be_visible(timeout=30_000)
     await fab.click()
     await expect(chat).to_have_attribute("open", "", timeout=15_000)
-    composer = chat.locator('[data-flow-ui-component="message-input"] textarea, textarea').first
+    composer = chat.locator(FLOW_UI_COMPOSER_SELECTOR).first
     await expect(composer).to_be_visible(timeout=30_000)
 
 

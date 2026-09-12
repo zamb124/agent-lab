@@ -80,6 +80,29 @@ def read_intro(service_name: str, lang: str) -> str | None:
     return None
 
 
+def service_pages(service_name: str, lang: str) -> list[tuple[str, Path]]:
+    """Дополнительные страницы сервиса из docs/api/{service}/*.md: ``name.{lang}.md`` приоритетнее ``name.md``.
+
+    ``intro*.md`` — часть главной страницы сервиса и сюда не попадает.
+    """
+    root = Path(__file__).resolve().parents[1]
+    service_dir = root / "docs" / "api" / service_name
+    if not service_dir.is_dir():
+        return []
+    pages: dict[str, Path] = {}
+    for page in sorted(service_dir.glob("*.md")):
+        stem = page.name[: -len(".md")]
+        if stem == "intro" or stem.startswith("intro."):
+            continue
+        name, dot, page_lang = stem.rpartition(".")
+        if dot == "" or page_lang not in {"ru", "en"}:
+            pages.setdefault(stem, page)
+            continue
+        if page_lang == lang:
+            pages[name] = page
+    return sorted(pages.items())
+
+
 def generate_swagger_ui_embed(openapi_schema: dict, service_name: str) -> str:
     """
     Генерирует ссылки на встроенную документацию сервиса.
@@ -378,6 +401,10 @@ title: {json.dumps("API" if lang == "en" else "API", ensure_ascii=False)}
             output_file = build_dir / service_name / "index.md"
             output_file.parent.mkdir(parents=True, exist_ok=True)
             output_file.write_text(markdown, encoding="utf-8")
+            for page_name, page_source in service_pages(service_name, lang):
+                (output_file.parent / f"{page_name}.md").write_text(
+                    page_source.read_text(encoding="utf-8"), encoding="utf-8"
+                )
 
             # Добавляем в индекс
             service_title = _brand_display_text(schema.get("info", {}).get("title", service_name.title()))

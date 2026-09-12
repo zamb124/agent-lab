@@ -51,8 +51,15 @@ export class SyncMessageList extends PlatformElement {
             padding: var(--space-6) var(--space-8);
             display: flex;
             flex-direction: column;
+            justify-content: flex-start;
+            align-items: stretch;
             gap: var(--space-3);
             background: var(--bg-primary, var(--glass-solid));
+        }
+        .scroll > sync-message-bubble {
+            flex: 0 0 auto;
+            width: 100%;
+            height: auto;
         }
         @media (max-width: 767px) {
             .scroll { padding: var(--space-4); }

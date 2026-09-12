@@ -1,6 +1,8 @@
 /**
  * Flow UI theme tokens — bridge onto platform Design Standard tokens.
  * SPA: @import from tokens.css. Values inherit html[data-theme].
+ * Embed pages без tokens.css получают те же значения литералами в
+ * components/platform-flow-ui.styles.js (:host([data-resolved-theme])).
  */
 
 :root {
@@ -8,16 +10,41 @@
     --flow-ui-space-2: 8px;
     --flow-ui-space-3: 12px;
     --flow-ui-space-4: 16px;
+    --flow-ui-space-5: 20px;
     --flow-ui-space-6: 24px;
+    --flow-ui-space-8: 32px;
     --flow-ui-content-narrow: 720px;
     --flow-ui-content-medium: 960px;
     --flow-ui-content-wide: 1280px;
+    /* Колонка чтения ленты и композера: как у ChatGPT / Claude — узкая, по центру. */
+    --flow-ui-feed-width: 760px;
+    --flow-ui-hero-mark: 64px;
 
-    --flow-ui-radius: var(--radius-2xl, 25px);
-    --flow-ui-radius-lg: var(--radius-lg, 16px);
+    /* Типографика: тело 15px/1.6 на странице, 14px в drawer (см. :host([display='drawer'])). */
+    --flow-ui-font-size-body: 15px;
+    --flow-ui-font-size-sm: 13px;
+    --flow-ui-font-size-xs: 12px;
+    --flow-ui-font-size-hero: 22px;
+    --flow-ui-font-size-mono: 13px;
+    --flow-ui-line-height: 1.6;
+    --flow-ui-line-height-tight: 1.3;
+
+    --flow-ui-radius-sm: var(--radius-sm, 8px);
     --flow-ui-radius-md: var(--radius-md, 12px);
+    --flow-ui-radius-lg: var(--radius-lg, 16px);
+    --flow-ui-radius-xl: var(--radius-xl, 20px);
+    --flow-ui-radius-2xl: var(--radius-2xl, 24px);
+    --flow-ui-radius-full: var(--radius-full, 9999px);
+    --flow-ui-radius: var(--flow-ui-radius-2xl);
+
+    --flow-ui-transition: var(
+        --motion-transition-interactive,
+        background-color 120ms ease, border-color 120ms ease, color 120ms ease,
+        box-shadow 120ms ease, opacity 120ms ease, transform 120ms ease
+    );
 
     --flow-ui-text: var(--text-primary);
+    --flow-ui-text-secondary: var(--text-secondary);
     --flow-ui-heading: var(--text-primary);
     --flow-ui-muted: var(--text-tertiary);
     --flow-ui-border: var(--border-default);
@@ -27,8 +54,14 @@
     --flow-ui-surface: var(--glass-solid-medium);
     --flow-ui-surface-subtle: var(--glass-solid-subtle);
     --flow-ui-surface-hover: var(--glass-tint-strong);
+    --flow-ui-card: var(--glass-tint-medium);
     --flow-ui-input: rgba(0, 0, 0, 0.22);
-    --flow-ui-composer-bg: var(--glass-solid-subtle);
+    --flow-ui-code-bg: rgba(0, 0, 0, 0.28);
+    --flow-ui-composer-bg: rgba(255, 255, 255, 0.06);
+    --flow-ui-composer-shadow: 0 10px 32px rgba(0, 0, 0, 0.28);
+    /* Реплика пользователя: нейтральный пузырь, акцент остаётся кнопкам и фокусу. */
+    --flow-ui-user-bubble: rgba(255, 255, 255, 0.09);
+    --flow-ui-user-bubble-text: var(--text-primary);
     /* Opaque page/panel/drawer/embed/shared fill; overlay island uses --flow-ui-background. */
     --flow-ui-page-background: var(--bg-primary, #16213e);
     --flow-ui-background: transparent;
@@ -39,11 +72,19 @@
     --flow-ui-button-text: var(--text-inverse);
     --flow-ui-chip: var(--accent-subtle);
     --flow-ui-interrupt-bg: var(--accent-subtle);
+    --flow-ui-focus-ring: var(--focus-ring, 0 0 0 3px rgba(153, 166, 249, 0.4));
+    --flow-ui-danger: var(--error, #f43f5e);
+    --flow-ui-success: var(--success, #10b981);
+    --flow-ui-warning: var(--warning, #f59e0b);
+    --flow-ui-info: var(--info, #3b82f6);
     --flow-ui-panel-shadow: var(
         --glass-shadow-strong,
         0 16px 48px rgba(0, 0, 0, 0.4),
         0 4px 16px rgba(0, 0, 0, 0.25)
     );
+    /* Глифы — чёрные SVG <img>: фильтр перекрашивает под текст темы и под текст на акценте. */
+    --flow-ui-glyph-filter: brightness(0) saturate(100%) invert(88%) opacity(0.92);
+    --flow-ui-glyph-on-accent-filter: brightness(0) opacity(0.9);
 
     /* Ink disc: brand logo is the only color */
     --flow-ui-logo-disc-bg: #0c0c0f;
@@ -62,8 +103,10 @@
     --flow-ui-brand-logo: url('/static/core/assets/service_logos/linnex_spinner_logo.png');
 }
 
-html[data-theme='light'] {
+html[data-theme='light'],
+platform-flow-ui[theme='light'] {
     --flow-ui-text: var(--text-primary, #1c1f2e);
+    --flow-ui-text-secondary: var(--text-secondary, rgba(28, 31, 46, 0.65));
     --flow-ui-heading: var(--text-primary, #1c1f2e);
     --flow-ui-muted: var(--text-tertiary, rgba(28, 31, 46, 0.52));
     --flow-ui-border: var(--border-default, rgba(28, 31, 46, 0.1));
@@ -73,8 +116,13 @@ html[data-theme='light'] {
     --flow-ui-surface: rgba(28, 31, 46, 0.05);
     --flow-ui-surface-subtle: #f2f3f8;
     --flow-ui-surface-hover: rgba(28, 31, 46, 0.08);
+    --flow-ui-card: #ffffff;
     --flow-ui-input: rgba(255, 255, 255, 0.92);
-    --flow-ui-composer-bg: #f2f3f8;
+    --flow-ui-code-bg: #eef0f6;
+    --flow-ui-composer-bg: #ffffff;
+    --flow-ui-composer-shadow: 0 10px 32px rgba(22, 26, 38, 0.1);
+    --flow-ui-user-bubble: #eceef5;
+    --flow-ui-user-bubble-text: var(--text-primary, #1c1f2e);
     --flow-ui-page-background: var(--bg-primary, #f8fafc);
     --flow-ui-background: transparent;
     --flow-ui-accent: var(--accent, #6d62e8);
@@ -84,7 +132,10 @@ html[data-theme='light'] {
     --flow-ui-button-text: #ffffff;
     --flow-ui-chip: var(--accent-subtle, rgba(109, 98, 232, 0.2));
     --flow-ui-interrupt-bg: var(--accent-subtle, rgba(109, 98, 232, 0.1));
+    --flow-ui-focus-ring: var(--focus-ring, 0 0 0 3px rgba(109, 98, 232, 0.3));
     --flow-ui-panel-shadow: 0 24px 64px rgba(22, 26, 38, 0.12);
+    --flow-ui-glyph-filter: brightness(0) opacity(0.72);
+    --flow-ui-glyph-on-accent-filter: brightness(0) invert(1);
 
     --flow-ui-logo-disc-bg: #0c0c0f;
     --flow-ui-logo-disc-fg: #ffffff;
@@ -93,29 +144,4 @@ html[data-theme='light'] {
         0 1px 0 rgba(255, 255, 255, 0.12) inset,
         0 14px 40px rgba(15, 15, 20, 0.28),
         0 4px 12px rgba(15, 15, 20, 0.14);
-}
-
-platform-flow-ui[theme='light'] {
-    --flow-ui-text: var(--text-primary, #1c1f2e);
-    --flow-ui-heading: var(--text-primary, #1c1f2e);
-    --flow-ui-muted: var(--text-tertiary, rgba(28, 31, 46, 0.52));
-    --flow-ui-border: var(--border-default, rgba(28, 31, 46, 0.1));
-    --flow-ui-border-strong: var(--border-subtle, rgba(28, 31, 46, 0.08));
-    --flow-ui-panel: var(--bg-elevated, rgba(255, 255, 255, 0.98));
-    --flow-ui-panel-strong: var(--bg-surface, #ffffff);
-    --flow-ui-surface: rgba(28, 31, 46, 0.05);
-    --flow-ui-surface-subtle: #f2f3f8;
-    --flow-ui-surface-hover: rgba(28, 31, 46, 0.08);
-    --flow-ui-input: rgba(255, 255, 255, 0.92);
-    --flow-ui-composer-bg: #f2f3f8;
-    --flow-ui-page-background: var(--bg-primary, #f8fafc);
-    --flow-ui-background: transparent;
-    --flow-ui-accent: var(--accent, #6d62e8);
-    --flow-ui-accent-hover: var(--accent-hover, #5a50d4);
-    --flow-ui-on-accent: #ffffff;
-    --flow-ui-accent-muted: var(--accent-subtle, rgba(109, 98, 232, 0.2));
-    --flow-ui-button-text: #ffffff;
-    --flow-ui-chip: var(--accent-subtle, rgba(109, 98, 232, 0.2));
-    --flow-ui-interrupt-bg: var(--accent-subtle, rgba(109, 98, 232, 0.1));
-    --flow-ui-panel-shadow: 0 24px 64px rgba(22, 26, 38, 0.12);
 }

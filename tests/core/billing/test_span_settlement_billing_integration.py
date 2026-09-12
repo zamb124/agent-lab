@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import json
 
 import pytest
@@ -22,6 +21,7 @@ from core.models.billing_models import DEFAULT_TARIFF_PRICES, TariffPlan
 from core.models.identity_models import Company
 from core.tracing.models import BillingSettlementSpan
 from core.types import JsonObject
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
 def _settlement_span(

@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from '../../lit-shim.js';
+import { LitElement, html, nothing } from '../../lit-shim.js';
 import '../components/platform-flow-ui.js';
 import { resolveAgentIdentityImageSrc } from '../runtime/agent-identity-image.js';
 import {
@@ -13,6 +13,7 @@ import {
     VIEWPORT_MARGIN_MOBILE_PX,
 } from './drawer-geometry.js';
 import { FLOW_UI_DRAWER_MOVE_START } from './drawer-move.js';
+import { flowUIDrawerStyles } from './drawer.styles.js';
 import {
     FLOW_UI_TOGGLE_EVENT,
     readEmbedDrawerGeometry,
@@ -32,151 +33,7 @@ export class FlowUIDrawer extends LitElement {
         _identityImageUrl: { state: true },
     };
 
-    static styles = css`
-        :host {
-            position: fixed;
-            z-index: 2147483000;
-            font-family: system-ui;
-        }
-        :host([data-drawer-gestures='on']) {
-            inset: 0;
-            pointer-events: none;
-        }
-        :host(:not([data-drawer-gestures='on'])) {
-            inset: auto 22px 22px auto;
-        }
-        :host(:not([data-drawer-gestures='on'])[data-embed-position='bottom-left']) {
-            inset: auto auto 22px 22px;
-        }
-        .launcher {
-            width: 58px; height: 58px; padding: 0; border: 1px solid var(--flow-ui-logo-disc-border, rgba(255, 255, 255, 0.14));
-            border-radius: 50%; cursor: pointer; display: grid; place-items: center;
-            background: var(--flow-ui-logo-disc-bg, #0c0c0f);
-            box-shadow: var(
-                --flow-ui-logo-disc-shadow,
-                0 1px 0 rgba(255, 255, 255, 0.1) inset,
-                0 14px 36px rgba(0, 0, 0, 0.45),
-                0 4px 12px rgba(0, 0, 0, 0.3)
-            );
-            overflow: visible;
-            touch-action: none;
-            pointer-events: auto;
-        }
-        :host([data-drawer-gestures='on']) .launcher {
-            position: absolute;
-        }
-        :host([data-drawer-dragging='move']) .launcher,
-        :host([data-drawer-dragging='move']) .panel {
-            cursor: grabbing;
-        }
-        .launcher img {
-            width: 34px; height: 34px; object-fit: contain; display: block; pointer-events: none;
-        }
-        .panel {
-            position: absolute; right: 0; bottom: 70px; width: min(430px, calc(100vw - 24px));
-            height: min(720px, calc(100vh - 110px)); transform-origin: bottom right;
-            transition: opacity .18s ease, transform .18s ease;
-            display: flex;
-            flex-direction: column;
-            min-height: 0;
-            overflow: visible;
-            border-radius: 22px;
-            pointer-events: auto;
-        }
-        :host([data-drawer-gestures='on']) .panel {
-            right: auto;
-            bottom: auto;
-            width: var(--drawer-panel-width);
-            height: var(--drawer-panel-height);
-        }
-        :host([data-embed-position='bottom-left']:not([data-drawer-gestures='on'])) .panel {
-            right: auto; left: 0; transform-origin: bottom left;
-        }
-        :host(:not([open])) .panel { opacity: 0; transform: translateY(12px) scale(.98); pointer-events: none; }
-        :host([expanded][open]) {
-            inset: 0;
-            pointer-events: none;
-        }
-        :host([expanded][open]) .panel {
-            position: fixed;
-            inset: 0;
-            right: 0;
-            left: 0;
-            bottom: 0;
-            width: 100vw;
-            height: 100dvh;
-            max-width: none;
-            max-height: none;
-            border-radius: 0;
-            transform: none;
-            pointer-events: auto;
-        }
-        :host([expanded][open]) platform-flow-ui {
-            border-radius: 0;
-        }
-        :host([expanded][open]) .launcher,
-        :host([expanded][open]) .resize-handle {
-            display: none;
-        }
-        platform-flow-ui {
-            flex: 1 1 0;
-            min-height: 0;
-            height: 100%;
-            border: 1px solid var(--flow-ui-border, rgba(149, 163, 194, 0.2));
-            border-radius: 22px;
-        }
-        .resize-handle {
-            position: absolute;
-            right: 2px;
-            bottom: 2px;
-            width: 18px;
-            height: 18px;
-            padding: 0;
-            border: 0;
-            cursor: nwse-resize;
-            background: transparent;
-            z-index: 2;
-            touch-action: none;
-            pointer-events: auto;
-        }
-        .resize-handle::before {
-            content: '';
-            position: absolute;
-            right: 3px;
-            bottom: 3px;
-            width: 10px;
-            height: 10px;
-            border-right: 2px solid var(--flow-ui-muted, rgba(149, 163, 194, 0.7));
-            border-bottom: 2px solid var(--flow-ui-muted, rgba(149, 163, 194, 0.7));
-            border-radius: 0 0 2px 0;
-        }
-        :host(:not([open])) .resize-handle,
-        :host(:not([data-drawer-gestures='on'])) .resize-handle {
-            display: none;
-        }
-        @media (max-width: 520px) {
-            :host { inset: auto 10px 10px 10px; pointer-events: none; }
-            .panel {
-                position: fixed;
-                inset: 0;
-                width: 100vw;
-                height: 100dvh;
-                left: 0;
-                top: 0;
-                right: 0;
-                bottom: 0;
-                pointer-events: auto;
-            }
-            .launcher {
-                position: relative;
-                margin-left: auto;
-                display: grid;
-                pointer-events: auto;
-            }
-            .resize-handle { display: none; }
-        }
-        @media (prefers-reduced-motion: reduce) { .panel { transition: none; } }
-    `;
+    static styles = flowUIDrawerStyles;
 
     constructor() {
         super();
@@ -221,13 +78,9 @@ export class FlowUIDrawer extends LitElement {
         };
         this._onIdentityChanged = (event) => {
             const detail = event.detail;
-            if (!detail || typeof detail !== 'object') {
-                throw new Error('flow-ui-drawer: flow-ui-identity-changed detail required');
-            }
+            if (!detail || typeof detail !== 'object') throw new Error('flow-ui-drawer: flow-ui-identity-changed detail required');
             const imageUrl = detail.image_url;
-            if (imageUrl !== null && typeof imageUrl !== 'string') {
-                throw new Error('flow-ui-drawer: image_url must be string or null');
-            }
+            if (imageUrl !== null && typeof imageUrl !== 'string') throw new Error('flow-ui-drawer: image_url must be string or null');
             this._identityImageUrl = imageUrl;
         };
     }
@@ -289,48 +142,34 @@ export class FlowUIDrawer extends LitElement {
 
     _toggleEventName() {
         const name = this.config?.toggleEventName;
-        if (name === null || name === undefined || name === '') {
-            return FLOW_UI_TOGGLE_EVENT;
-        }
-        if (typeof name !== 'string') {
-            throw new Error('flow-ui-drawer: config.toggleEventName must be a string');
-        }
+        if (name === null || name === undefined || name === '') return FLOW_UI_TOGGLE_EVENT;
+        if (typeof name !== 'string') throw new Error('flow-ui-drawer: config.toggleEventName must be a string');
         return name;
     }
 
     _unbindToggleListener() {
-        if (this._boundToggleEventName === null) {
-            return;
-        }
+        if (this._boundToggleEventName === null) return;
         globalThis.removeEventListener(this._boundToggleEventName, this._toggle);
         this._boundToggleEventName = null;
     }
 
     _bindToggleListener() {
-        if (!this.isConnected) {
-            return;
-        }
+        if (!this.isConnected) return;
         const next = this._toggleEventName();
-        if (this._boundToggleEventName === next) {
-            return;
-        }
+        if (this._boundToggleEventName === next) return;
         this._unbindToggleListener();
         this._boundToggleEventName = next;
         globalThis.addEventListener(next, this._toggle);
     }
 
     _credentials(config) {
-        if (typeof config.credentials !== 'string' || config.credentials.trim() === '') {
-            return 'include';
-        }
+        if (typeof config.credentials !== 'string' || config.credentials.trim() === '') return 'include';
         return config.credentials;
     }
 
     _launcherPosition() {
         const position = this.config.launcherPosition;
-        if (position === undefined || position === null || position === '') {
-            return 'bottom-right';
-        }
+        if (position === undefined || position === null || position === '') return 'bottom-right';
         if (position !== 'bottom-left' && position !== 'bottom-right') {
             throw new Error(
                 `flow-ui-drawer: invalid launcherPosition ${JSON.stringify(position)}`,
@@ -342,12 +181,8 @@ export class FlowUIDrawer extends LitElement {
     _readViewport() {
         const width = globalThis.innerWidth;
         const height = globalThis.innerHeight;
-        if (typeof width !== 'number' || !Number.isFinite(width) || width <= 0) {
-            throw new Error('flow-ui-drawer: window.innerWidth is required');
-        }
-        if (typeof height !== 'number' || !Number.isFinite(height) || height <= 0) {
-            throw new Error('flow-ui-drawer: window.innerHeight is required');
-        }
+        if (typeof width !== 'number' || !Number.isFinite(width) || width <= 0) throw new Error('flow-ui-drawer: window.innerWidth is required');
+        if (typeof height !== 'number' || !Number.isFinite(height) || height <= 0) throw new Error('flow-ui-drawer: window.innerHeight is required');
         return {
             width,
             height,
@@ -358,25 +193,17 @@ export class FlowUIDrawer extends LitElement {
     }
 
     _gesturesEnabled() {
-        if (this.expanded === true) {
-            return false;
-        }
+        if (this.expanded === true) return false;
         return gesturesAllowed(this._readViewport());
     }
 
     _persistIdentity() {
         const config = this.config;
-        if (!config || typeof config !== 'object') {
-            return { kind: 'none', id: '' };
-        }
+        if (!config || typeof config !== 'object') return { kind: 'none', id: '' };
         const embedId = typeof config.embedId === 'string' ? config.embedId.trim() : '';
-        if (embedId !== '') {
-            return { kind: 'embed', id: embedId };
-        }
+        if (embedId !== '') return { kind: 'embed', id: embedId };
         const branchId = typeof config.branchId === 'string' ? config.branchId.trim() : '';
-        if (branchId !== '') {
-            return { kind: 'lara', id: branchId };
-        }
+        if (branchId !== '') return { kind: 'lara', id: branchId };
         return { kind: 'none', id: '' };
     }
 
@@ -387,22 +214,14 @@ export class FlowUIDrawer extends LitElement {
 
     _loadStoredGeometry() {
         const identity = this._persistIdentity();
-        if (identity.kind === 'embed') {
-            return readEmbedDrawerGeometry(identity.id);
-        }
-        if (identity.kind === 'lara') {
-            return readLaraDrawerGeometry(identity.id);
-        }
+        if (identity.kind === 'embed') return readEmbedDrawerGeometry(identity.id);
+        if (identity.kind === 'lara') return readLaraDrawerGeometry(identity.id);
         return null;
     }
 
     _persistGeometry() {
-        if (this._cluster === null) {
-            throw new Error('flow-ui-drawer: cluster is required to persist');
-        }
-        if (this._gesturesEnabled() !== true) {
-            return;
-        }
+        if (this._cluster === null) throw new Error('flow-ui-drawer: cluster is required to persist');
+        if (this._gesturesEnabled() !== true) return;
         const identity = this._persistIdentity();
         if (identity.kind === 'embed') {
             writeEmbedDrawerGeometry(identity.id, this._cluster);
@@ -453,9 +272,7 @@ export class FlowUIDrawer extends LitElement {
             this.setAttribute('data-drawer-gestures', gestures);
         }
         if (this._dragging === true) {
-            if (this._gesture === null) {
-                throw new Error('flow-ui-drawer: gesture is required while dragging');
-            }
+            if (this._gesture === null) throw new Error('flow-ui-drawer: gesture is required while dragging');
             this.setAttribute('data-drawer-dragging', this._gesture.type);
         } else if (this.hasAttribute('data-drawer-dragging')) {
             this.removeAttribute('data-drawer-dragging');
@@ -465,21 +282,15 @@ export class FlowUIDrawer extends LitElement {
 
     _applyClusterCssVars() {
         const cluster = this._cluster;
-        if (cluster === null) {
-            return;
-        }
+        if (cluster === null) return;
         this.style.setProperty('--drawer-panel-width', `${cluster.panelWidth}px`);
         this.style.setProperty('--drawer-panel-height', `${cluster.panelHeight}px`);
     }
 
     _clusterStyle(kind) {
         const cluster = this._cluster;
-        if (cluster === null || this._gesturesEnabled() !== true) {
-            return '';
-        }
-        if (kind === 'launcher') {
-            return `left:${cluster.launcherLeft}px;top:${cluster.launcherTop}px`;
-        }
+        if (cluster === null || this._gesturesEnabled() !== true) return '';
+        if (kind === 'launcher') return `left:${cluster.launcherLeft}px;top:${cluster.launcherTop}px`;
         return `left:${cluster.panelLeft}px;top:${cluster.panelTop}px;width:${cluster.panelWidth}px;height:${cluster.panelHeight}px`;
     }
 
@@ -503,25 +314,15 @@ export class FlowUIDrawer extends LitElement {
     }
 
     _capturePointer(pointerId) {
-        if (typeof pointerId !== 'number' || !Number.isFinite(pointerId)) {
-            throw new Error('flow-ui-drawer: pointerId must be a finite number');
-        }
-        if (typeof this.setPointerCapture !== 'function') {
-            return;
-        }
+        if (typeof pointerId !== 'number' || !Number.isFinite(pointerId)) throw new Error('flow-ui-drawer: pointerId must be a finite number');
+        if (typeof this.setPointerCapture !== 'function') return;
         this.setPointerCapture(pointerId);
     }
 
     _beginGesture(type, event, offsets) {
-        if (offsets === null || typeof offsets !== 'object' || Array.isArray(offsets)) {
-            throw new Error('flow-ui-drawer: gesture offsets are required');
-        }
-        if (typeof offsets.seOffsetX !== 'number' || !Number.isFinite(offsets.seOffsetX)) {
-            throw new Error('flow-ui-drawer: seOffsetX must be a finite number');
-        }
-        if (typeof offsets.seOffsetY !== 'number' || !Number.isFinite(offsets.seOffsetY)) {
-            throw new Error('flow-ui-drawer: seOffsetY must be a finite number');
-        }
+        if (offsets === null || typeof offsets !== 'object' || Array.isArray(offsets)) throw new Error('flow-ui-drawer: gesture offsets are required');
+        if (typeof offsets.seOffsetX !== 'number' || !Number.isFinite(offsets.seOffsetX)) throw new Error('flow-ui-drawer: seOffsetX must be a finite number');
+        if (typeof offsets.seOffsetY !== 'number' || !Number.isFinite(offsets.seOffsetY)) throw new Error('flow-ui-drawer: seOffsetY must be a finite number');
         if (this._cluster === null) {
             this._syncGeometryFromStore();
         }
@@ -541,21 +342,11 @@ export class FlowUIDrawer extends LitElement {
     }
 
     _beginMoveFromDetail(detail) {
-        if (this._gesturesEnabled() !== true) {
-            return;
-        }
-        if (!detail || typeof detail !== 'object') {
-            throw new Error('flow-ui-drawer: move detail is required');
-        }
-        if (typeof detail.clientX !== 'number' || !Number.isFinite(detail.clientX)) {
-            throw new Error('flow-ui-drawer: move detail.clientX must be a finite number');
-        }
-        if (typeof detail.clientY !== 'number' || !Number.isFinite(detail.clientY)) {
-            throw new Error('flow-ui-drawer: move detail.clientY must be a finite number');
-        }
-        if (typeof detail.pointerId !== 'number' || !Number.isFinite(detail.pointerId)) {
-            throw new Error('flow-ui-drawer: move detail.pointerId must be a finite number');
-        }
+        if (this._gesturesEnabled() !== true) return;
+        if (!detail || typeof detail !== 'object') throw new Error('flow-ui-drawer: move detail is required');
+        if (typeof detail.clientX !== 'number' || !Number.isFinite(detail.clientX)) throw new Error('flow-ui-drawer: move detail.clientX must be a finite number');
+        if (typeof detail.clientY !== 'number' || !Number.isFinite(detail.clientY)) throw new Error('flow-ui-drawer: move detail.clientY must be a finite number');
+        if (typeof detail.pointerId !== 'number' || !Number.isFinite(detail.pointerId)) throw new Error('flow-ui-drawer: move detail.pointerId must be a finite number');
         if (this._cluster === null) {
             this._syncGeometryFromStore();
         }
@@ -575,9 +366,7 @@ export class FlowUIDrawer extends LitElement {
     }
 
     _onLauncherPointerDown(event) {
-        if (event.button !== 0) {
-            return;
-        }
+        if (event.button !== 0) return;
         if (this._gesturesEnabled() !== true) {
             this._gesture = {
                 type: 'launcher',
@@ -597,12 +386,8 @@ export class FlowUIDrawer extends LitElement {
     }
 
     _onResizePointerDown(event) {
-        if (event.button !== 0) {
-            return;
-        }
-        if (this._gesturesEnabled() !== true || this.open !== true) {
-            return;
-        }
+        if (event.button !== 0) return;
+        if (this._gesturesEnabled() !== true || this.open !== true) return;
         event.preventDefault();
         event.stopPropagation();
         if (this._cluster === null) {
@@ -617,21 +402,13 @@ export class FlowUIDrawer extends LitElement {
 
     _handlePointerMove(event) {
         const gesture = this._gesture;
-        if (gesture === null || event.pointerId !== gesture.pointerId) {
-            return;
-        }
-        if (this._gesturesEnabled() !== true) {
-            return;
-        }
+        if (gesture === null || event.pointerId !== gesture.pointerId) return;
+        if (this._gesturesEnabled() !== true) return;
         const dx = event.clientX - gesture.startX;
         const dy = event.clientY - gesture.startY;
-        if (gesture.didMove !== true && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) {
-            return;
-        }
+        if (gesture.didMove !== true && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
         gesture.didMove = true;
-        if (this._gesturesEnabled() !== true) {
-            return;
-        }
+        if (this._gesturesEnabled() !== true) return;
         if (gesture.type === 'resize') {
             this._cluster = resizeFromSouthEast(
                 gesture.startCluster,
@@ -647,9 +424,7 @@ export class FlowUIDrawer extends LitElement {
 
     _handlePointerUp(event) {
         const gesture = this._gesture;
-        if (gesture === null || event.pointerId !== gesture.pointerId) {
-            return;
-        }
+        if (gesture === null || event.pointerId !== gesture.pointerId) return;
         const didMove = gesture.didMove === true;
         const type = gesture.type;
         this._detachGestureListeners();
@@ -665,12 +440,8 @@ export class FlowUIDrawer extends LitElement {
 
     render() {
         const c = this.config;
-        if (!c || typeof c !== 'object') {
-            throw new Error('flow-ui-drawer: config is required');
-        }
-        if (typeof c.baseUrl !== 'string' || c.baseUrl.trim() === '') {
-            throw new Error('flow-ui-drawer: config.baseUrl is required');
-        }
+        if (!c || typeof c !== 'object') throw new Error('flow-ui-drawer: config is required');
+        if (typeof c.baseUrl !== 'string' || c.baseUrl.trim() === '') throw new Error('flow-ui-drawer: config.baseUrl is required');
         const companyId = typeof c.companyId === 'string' ? c.companyId : '';
         const voiceBaseUrl = typeof c.voiceBaseUrl === 'string' ? c.voiceBaseUrl : '';
         const platformUiOrigin = typeof c.platformUiOrigin === 'string' ? c.platformUiOrigin.trim().replace(/\/+$/, '') : '';

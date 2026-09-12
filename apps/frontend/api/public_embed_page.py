@@ -17,7 +17,7 @@ from apps.frontend.dependencies import ContainerDep
 from core.identity.embed_guest_turns import EMBED_SESSION_ID_METADATA_KEY
 from core.identity.runtime_users import ensure_persisted_runtime_user
 from core.logging import get_logger
-from core.models.embed_models import EmbedStatus, resolve_embed_presentation
+from core.models.embed_models import EmbedStatus
 from core.utils.tokens import get_token_service
 
 logger = get_logger(__name__)
@@ -86,11 +86,7 @@ async def issue_embed_page_session(
     if config.status != EmbedStatus.ACTIVE:
         raise HTTPException(status_code=403, detail="Виджет отключён")
 
-    presentation = resolve_embed_presentation(
-        presentation=config.presentation,
-        position=config.position,
-    )
-    if presentation != "page":
+    if config.presentation != "page":
         raise HTTPException(
             status_code=403,
             detail="Полноэкранная страница доступна только при presentation=page",

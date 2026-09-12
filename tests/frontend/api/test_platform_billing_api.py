@@ -5,7 +5,6 @@ API platform-billing: доступ system, цены, отчёт usage.
 
 from __future__ import annotations
 
-from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import json
 
 import pytest
@@ -19,6 +18,7 @@ from core.billing.service import (
 from core.models.billing_models import TariffPlan
 from core.models.identity_models import Company
 from core.models.payment_models import PaymentProviderType
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
 @pytest_asyncio.fixture

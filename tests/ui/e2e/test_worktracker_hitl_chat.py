@@ -117,7 +117,7 @@ async def test_worktracker_hitl_embedded_operator_chat(
         await worktracker_claim_task(wt_page, editor)
         chat = await worktracker_hitl_embedded_chat(editor)
         await expect(
-            chat.locator('[data-flow-ui-component="message-input"] textarea, textarea').first
+            chat.locator('textarea[data-canon="composer"]').first
         ).to_be_visible(timeout=30_000)
         await scenario.step(
             "Возьмите задачу и проверьте композер",

@@ -12,8 +12,9 @@ from apps.flows.tools.flows_editor_tools import (
     flows_patch_node,
     flows_read_context,
 )
+from core.flow_ui.document import FlowUIActionPreview, FlowUIActionResult, FlowUIButton
 from core.state import ExecutionState
-from tests.flows._flow_ui import flow_ui_artifact, flow_ui_artifacts
+from tests.flows._flow_ui import conversation_block, conversation_blocks
 
 pytestmark = [pytest.mark.timeout(90, func_only=True)]
 
@@ -178,23 +179,24 @@ async def test_flows_patch_node_confirm_first_apply_persists_flow(
     proposed = json.loads(propose_raw)
     pending_action_id = proposed["pending_action_id"]
     assert proposed["success"] is True
-    preview = flow_ui_artifact(state, f"flows-node-preview-{pending_action_id}")
-    assert preview.kind == "action_preview"
-    assert preview.component_type == "ActionPreview"
-    assert preview.data["changes"]["prompt"] == new_prompt
-    preview_buttons = preview.data["blocks"][1]["buttons"]
-    assert preview_buttons[0]["action_kind"] == "apply"
-    assert preview_buttons[0]["action_id"] == "flows.node.patch.apply"
+    preview = conversation_block(state, f"flows-node-preview-{pending_action_id}")
+    assert isinstance(preview, FlowUIActionPreview)
+    assert preview.parameters["changes"]["prompt"] == new_prompt
+    apply_button = conversation_block(state, f"flows-node-preview-{pending_action_id}-apply")
+    assert isinstance(apply_button, FlowUIButton)
+    assert apply_button.action is not None
+    assert apply_button.action.name == "apply_pending_action"
+    assert apply_button.action.payload["pending_action_id"] == pending_action_id
     apply_raw = await flows_patch_node._run_impl(
         {"mode": "apply", "pending_action_id": pending_action_id}, state
     )
     data = json.loads(apply_raw)
     assert data["success"] is True
     assert data["node_after"]["prompt"] == new_prompt
-    applied = flow_ui_artifacts(state)[-1]
-    assert applied.kind == "action_result"
-    assert applied.component_type == "ActionResult"
-    assert applied.data["changes"]["prompt"] == new_prompt
+    applied = conversation_blocks(state)[-1]
+    assert isinstance(applied, FlowUIActionResult)
+    assert applied.block_id == f"flows-node-apply-{pending_action_id}"
+    assert applied.status == "success"
     flow_resp = await flows_client.get(
         f"/flows/api/v1/flows/{flow_id}", headers=auth_headers_system
     )
@@ -222,12 +224,16 @@ async def test_flows_patch_flow_propose_does_not_persist(
     assert data["success"] is True
     assert data["flow_after"]["name"] == proposed_name
     assert isinstance(data.get("pending_action_id"), str) and data["pending_action_id"]
-    preview = flow_ui_artifact(state, f"flows-flow-preview-{data['pending_action_id']}")
-    assert preview.kind == "action_preview"
-    assert preview.data["flow_changes"]["name"] == proposed_name
-    preview_buttons = preview.data["blocks"][1]["buttons"]
-    assert preview_buttons[0]["action_kind"] == "apply"
-    assert preview_buttons[0]["action_id"] == "flows.flow.patch.apply"
+    preview = conversation_block(state, f"flows-flow-preview-{data['pending_action_id']}")
+    assert isinstance(preview, FlowUIActionPreview)
+    assert preview.parameters["flow_changes"]["name"] == proposed_name
+    apply_button = conversation_block(
+        state, f"flows-flow-preview-{data['pending_action_id']}-apply"
+    )
+    assert isinstance(apply_button, FlowUIButton)
+    assert apply_button.action is not None
+    assert apply_button.action.name == "apply_pending_action"
+    assert apply_button.action.payload["pending_action_id"] == data["pending_action_id"]
     flow_resp = await flows_client.get(
         f"/flows/api/v1/flows/{flow_id}", headers=auth_headers_system
     )

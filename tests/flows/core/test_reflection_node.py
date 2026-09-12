@@ -10,6 +10,8 @@ import pytest
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.runtime.nodes import ReflectionNode, create_node
 from core.clients.llm.mock import MockLLM
+from core.flow_ui.document import FlowUIReflection
+from core.flow_ui.protocol import CONVERSATION_SLOT_ID, FlowUIRender
 from core.reflection import CriticSeverity, ReflectionTargetKind
 from core.state import ExecutionState
 from core.types import JsonObject
@@ -71,20 +73,16 @@ async def test_reflection_blocks_and_records_typed_result(
     assert out.reflection_history[0].result.approved is False
     assert out.reflection_history[0].node_id == "critic"
     assert "issue:critical:safety" in out.validation["blocked_reasons"]
-    artifact = out.ui_document.surfaces["main"].data_model.content["artifacts"][
-        "critic:blocked"
-    ]
-    assert artifact["exit_id"] == "blocked"
-    assert artifact["approved"] is False
-    assert artifact["decision"] == "blocked"
-    assert artifact["exit_label"] == "Blocked"
-    component = out.ui_document.surfaces["main"].components[
-        "artifact-critic-blocked"
-    ]
-    assert component.type == "ReflectionResult"
-    transitions = out.drain_ui_transitions()
-    assert len(transitions) == 1
-    assert transitions[0].after.revision == out.ui_document.revision
+    events = out.drain_ui_events()
+    assert len(events) == 1
+    render = events[0]
+    assert isinstance(render, FlowUIRender)
+    assert render.slot_id == CONVERSATION_SLOT_ID
+    card = render.blocks[0]
+    assert isinstance(card, FlowUIReflection)
+    assert card.block_id == "reflection-critic-blocked"
+    assert card.text.startswith("**Blocked** — blocked")
+    assert "issue:critical:safety" in card.text
 
 
 @pytest.mark.asyncio

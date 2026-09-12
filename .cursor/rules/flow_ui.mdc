@@ -1,572 +1,121 @@
 ---
-description: "Flow UI: единый редактируемый многоканальный интерфейс flow поверх стандартного A2A 1.0; чат — default template; A2UI v0.9.1, persisted layout, durable state и строгий editor/runtime WYSIWYG"
+description: "Flow UI: интерфейс flow как FlowUIDocument (грамматика блоков) поверх чистого A2A 1.0 — артефакты state/ui вниз, ui-action Message вверх; редактор блоков, html-блок в sandbox, embed/share/HITL на одном runtime"
 alwaysApply: false
 ---
-# Flow UI — единый интерфейс flow
+# Flow UI — интерфейс flow поверх A2A
 
 ## Zero Translation (канон)
 
 См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
-A2UI/A2A wire ↔ `FlowUIDocument` / domain — только на codec/boundary владельца. Не дублировать chat-specific parallel layers, host DTO и mapper-цепочки между editor/runtime/share.
+Одна модель интерфейса — `FlowUIDocument` (`core/flow_ui/document.py`) — на всех слоях: `FlowConfig.interface`, `GET .../interface`, JSON Schema редактора, structured output LLM-помощника, store фронтенда. Никаких `*Config`/`*Profile`/`*Template` двойников, translation-слоёв между editor/runtime/embed/share и отдельных chat-runtime.
 
-## Архитектурная формула
+Публичная спецификация протокола — [`docs/api/flows/flow-ui-protocol.md`](../../docs/api/flows/flow-ui-protocol.md); её JSON-примеры совпадают с conformance-фикстурами `tests/fixtures/flow_ui/*.json` (тест `tests/core/flow_ui/test_flow_ui_protocol_docs.py`), которые читают pytest и JS unit.
 
-У flow нет отдельного «чата» и отдельного «UI-протокола». Пользователь всегда взаимодействует с материализованным **`FlowUIDocument`** через стандартный A2A 1.0:
-
-```text
-Message / Task / Artifact / StreamResponse
-  └─ Artifact.parts[]
-       ├─ text | raw | url | data                         обычный A2A
-       └─ data с MIME/extension A2UI v0.9.1              optional rich UI
-
-один ingress reducer
-  A2A frame → lossless Artifact accumulator → Part projector → Flow UI state
-```
-
-Чат — канонический initial `FlowUIDocumentTemplate`, доступный в том же Interface editor. Отдельные chat reducer, chat transport, chat state, chat page protocol и special `artifact.name="ui_event"` запрещены.
-
-## Неподвижные решения
-
-- Wire protocol — только A2A 1.0 JSON-RPC/SSE. A2UI не вводит второй endpoint/envelope/stream.
-- A2UI v0.9.1 — optional representation внутри обычного `Artifact.parts[].data` и активируется через A2A extension negotiation.
-- Текущие и внешние A2A Artifacts с произвольными именами и смешанными `text|raw|url|data` сохраняются lossless. Они не legacy.
-- Один логический результат Task имеет ровно одно negotiated representation: A2UI для поддерживающего клиента либо generic ordinary Artifact fallback. Dual emit одного результата запрещён.
-- Каждый UI-компонент имеет стабильный `component_id`, binding и projection provenance. При Submit весь материализованный документ и заполненные values доступны flow как frozen server-owned state.
-- Единственное UI-действие, запускающее flow turn, — `platform.ui.submit`. Локальные navigation/focus/suggestion actions flow не вызывают. Перед wire-submit клиент **fail-closed** прогоняет `component.checks` (`evaluateFlowUIChecks` / `evaluate_flow_ui_checks`); при ошибке submit не уходит, errors показываются под полями, фокус — на первом битом.
-- Произвольные JavaScript/HTML/CSS из flow, A2A Part или A2UI payload не исполняются. Renderer использует только pinned basic catalog и trusted Linnex catalog.
-- UI effects из tools/code runners проходят typed capability boundary. Returned state не может мутировать server-owned UI.
-
-### Field checks (Validation)
-
-Источник правды валидации input — `FlowUIComponent.checks: list[FlowUICheck]`, **не** `properties.required` (дубль запрещён).
-
-```python
-class FlowUICheck(StrictBaseModel):
-    function: Literal["required", "email", "regex", "minLength", "maxLength"]
-    message: str = ""          # пусто → chrome default из flowUIText / Python helper
-    pattern: str | None = None # только regex
-    value: int | None = None   # minLength / maxLength
-```
-
-- Policy `allowed_functions` whitelist; unknown function — document validation error.
-- A2UI codec encode/decode сохраняет typed checks.
-- Inspector (input-типы): секция Validation — toggle «Обязательное» + «Сообщение если пусто» → `checks` с `function: required` (`checks-change` → editor `_mutate`).
-- Runtime: `*` inline в `.field-label` рядом с подписью (один grid-child у `label`), `aria-required` / native `required`, `.field-error` отдельной строкой под контролом из `controller.fieldErrors`.
-- Eval: JS `core/frontend/static/lib/flow-ui/runtime/flow-ui-checks.js`, Python `core/state/flow_ui_checks.py` (parity). Author UI в этом проходе — только `required`+`message`; email/regex/length живут в модели/policy.
-
-## Идентичность и negotiation
-
-Канонические значения:
-
-- official extension URI: `https://a2ui.org/a2a-extension/a2ui/v0.9.1`;
-- catalog ID: `https://linnex.io/a2ui/catalog/platform/v1`;
-- canonical A2UI MIME: `application/a2ui+json` (the version lives in every A2UI message); the historical versioned vendor MIME is accepted only at the boundary;
-- команды: `platform.ui.bootstrap`, `platform.ui.sync`, `platform.ui.submit`;
-- interaction: `FlowInteraction`;
-- документ: `FlowUIDocument`;
-- design-time config: `FlowInterfaceConfig`;
-- universal host: `<platform-flow-ui>`.
-
-Catalog identity строится только из `primary_platform_domain` (primary — `linnex.io`), никогда из request Host. Runtime URL, auth, assets и branding остаются host-aware через `platform_brands`/`resolve_brand`, потому что Платформа работает на нескольких apex-доменах.
-
-Клиент объявляет поддержку extension через стандартные AgentCard/extension fields и `A2A-Extensions`. Сервер фиксирует negotiated representation один раз на Task. Неизвестная/неактивированная extension не меняет ordinary A2A поведение.
-
-## Lossless Artifact contract
-
-`ArtifactAccumulator` — единственная реализация materialization `TaskArtifactUpdateEvent` для blocking `SendMessage`, stream shadow state, `GetTask`, `ListTasks`, reconnect и remote A2A client.
-
-Инварианты:
-
-1. Ключ — непустой `artifact.artifact_id`; отсутствие identity является protocol error.
-2. Первый encounter задаёт ordering artifacts в Task; последующие updates не перемещают Artifact.
-3. `append=false` полностью заменяет name/description/parts/metadata/extensions текущего Artifact.
-4. `append=true` добавляет Parts и строго проверяет неизменность identity/name/description/extensions; metadata merge детерминирован и не теряет неизвестные поля.
-5. Повтор события с тем же event identity/sequence и тем же payload idempotent; тот же identity с другим payload — error.
-6. После `lastChunk=true` новый update того же Artifact запрещён.
-7. Все четыре Part variants, metadata и extensions round-trip без text/json re-synthesis.
-8. Emitter выделяет stable artifact ID на логический stream (`response`, `reasoning`, operator reply и т. п.), а не UUID на чанк.
-9. Flow UI document/surface artifacts (`flow-ui:{document_id}…`) остаются **открытыми** (`lastChunk=false`) на протяжении Task: snapshot и transition — `append=false` replace одной identity. `lastChunk=true` на них запрещён, иначе следующая revision падает с `already closed by last_chunk`.
-
-Blocking/streaming/GetTask/ListTasks/SubscribeToTask обязаны строить один и тот же `Task` из одной durable projection. `extract_text_*` остаётся derived convenience и не является источником Task artifacts.
-
-## Flow UI domain
-
-`FlowUIDocument` — materialized runtime document, не raw A2UI JSON:
+## Формула
 
 ```text
-FlowUIDocument
-  schema_version
-  document_id
-  context_id
-  revision
-  active_page_id
-  pages[]
-    page_id
-    title
-    root_component_id
-  components: component_id -> FlowUIComponent
-  values: binding_path -> JsonValue
-  data_sources
-  validation
-  focus
-  metadata
+design-time   FlowConfig.interface: FlowUIDocument      (страницы → блоки грамматики; snake_case)
+runtime ↓     A2A Task.artifacts
+                state   application/json            снимок проекции state (первый Part)
+                        application/json-patch+json RFC 6902 поверх предыдущего снимка
+                ui      application/vnd.platform.ui+json  {kind:"render", slot_id, blocks} | {kind:"navigate", page_id}
+                <name>  text Part                  потоки текста: response, reasoning, авторские имена
+runtime ↑     A2A Message (ROLE_USER, contextId, taskId?)
+                text Part (+ raw/url файлы)        реплика в ленту
+                один data Part application/vnd.platform.ui-action+json {action, source, fields, payload}
 ```
 
-`revision` монотонна. Каждая accepted mutation имеет `mutation_id`, `base_revision`, semantic delta и causation. Optimistic concurrency conflict возвращается typed, без last-write-wins. Stable component/page IDs сохраняются при save/replay/undo/redo.
+Интерфейс не знает ни о ветках A2A, ни о расширениях: никаких extension negotiation, второго envelope/endpoint, `metadata`-протоколов. Чат — обычный документ с блоком `conversation` (`default_chat_document`); отдельного chat-протокола нет.
 
-### Layout
+Константы и модели wire — только `core/flow_ui/protocol.py`: `JSON_MEDIA_TYPE`, `JSON_PATCH_MEDIA_TYPE`, `FLOW_UI_MEDIA_TYPE`, `FLOW_UI_ACTION_MEDIA_TYPE`, `TEXT_MEDIA_TYPE`, `FLOW_UI_OUTPUT_MEDIA_TYPES`, `STATE_ARTIFACT_ID="state"`, `UI_ARTIFACT_ID="ui"`, `RESPONSE_ARTIFACT_NAME`, `REASONING_ARTIFACT_NAME`, `CONVERSATION_SLOT_ID`, `FlowUIActionMessage` (`to_state_action()`), `FlowUIRender`, `FlowUINavigate`, `FlowUIEvent` (discriminator `kind`), `JsonPatchOperation`. JS-зеркало — `core/frontend/static/lib/flow-ui/protocol/constants.js`.
 
-Layout — persisted domain contract, а не editor-only CSS:
+## Грамматика блоков
 
-- domain modes: `grid` | `stack` | `flex` (wire/A2UI/runtime);
-- **authoring (Interface editor):** только nested **grid** — см. Author mental model ниже;
-- canonical responsive Grid bands: 4 columns mobile, 8 tablet, 12 desktop;
-- placements: `column_start`, `column_span`, `row_start`, `row_span`, `block_clamp`, `align_self`, `justify_self`, order;
-- gaps/padding/min/max/aspect только через schema и platform tokens;
-- nested grids имеют собственный container context;
-- container bands выбираются по фактической ширине render container, не только viewport;
-- placement нормализуется/валидируется детерминированно, overlap/overflow — publish error;
-- строка сетки — `minmax(48px, auto)`: одна базовая линия минимум, растёт под контент, поэтому карточка или секция не наезжает на строку ниже. Явные треки — `grid-template-rows: repeat(gridRowCount, …)`;
-- `align-content: start` обязателен: контейнер выше своих строк (page shell, card) **не** раздаёт свободную высоту трекам, иначе элемент выглядит растянутым и его нельзя уменьшить;
-- **сетка живёт на том узле, который непосредственно держит детей.** У контейнера с визуальной поверхностью (`Card`/`Section`/`Form`/`FieldGroup`) это сама поверхность: `wrapFlowNode(host, component, children, { surfaceTag, surfaceClass, surfaceRole })` кладёт placement на `.flow-node`, а `container_layout` — на `.flow-grid`-поверхность. Рендерить обёртку внутри `content` запрещено: дети стали бы блоками, а внешняя сетка держала бы под них пустые строки;
-- inspection читает `contentRect`/`columnGap`/`rowGap`/`rowTracks` с этой же `.flow-grid`-поверхности, поэтому клетки редактора совпадают с рендером;
-- `block_clamp` — мёртвый флаг legacy max-height clamp: новые `row_span` его не пишут, on-load migrate снимает его и сбрасывает раздутый `row_span` у не-`runtime_owned` компонентов;
-- **единственная геометрия клетка↔пиксели** — `layout/grid-geometry.js` (`createGridGeometry({contentRect, columns, columnGap, rowGap})` → `cellAt` / `areaFor` / `rectOf`); инвариант `cellAt(rectOf(area)) === area` закреплён тестом. Локальные формулы `x/width/48` в editor/overlay запрещены;
-- **occupancy — только из документа** (`layout/grid-occupancy.js`: `placementCells` / `occupiedAreas` / `isAreaFree` / `firstFreeRow`). Восстанавливать занятость клеток из отрендеренных rect'ов запрещено;
-- `row_start: 'auto'` — только вход normalize (`layout/grid-normalize.js::assignExplicitGridRows`); в persisted authorable документе строки всегда целые;
-- runtime и editor используют один `resolveFlowUILayout` и не содержат host-specific grid implementations.
+`core/flow_ui/document.py` — единственная спецификация. `GET /flows/api/v1/flow-ui/schema` = `FlowUIDocument.model_json_schema()` + `x-flow-ui-frozen-state-fields` (`apps/flows/src/api/v1/flow_ui.py::flow_ui_schema`); палитра, инспектор, LLM structured output читают только её. Захардкоженные списки типов/иконок/групп во frontend запрещены (`blockCatalog(schema)`).
 
-DOM geometry или CSS snapshots не записываются в domain state. Сохраняются семантические layout values.
+- `FlowUIDocument{start_page_id, pages[]}`, `FlowUIPage{page_id, title, blocks[]}`; `block_id` уникален на странице (`assert_unique_block_ids`).
+- `FlowUIBlockBase{block_id, visible_when: FlowUICondition{path, equals}|None}`; `type` — Literal, discriminator union `FlowUIBlock`.
+- Метаданные палитры — `block_schema(group, icon)` → `x-flow-ui-block {group, icon}`; `group ∈ layout|content|input|action|data|platform|custom`, `icon` — имя SVG из `core/frontend/static/assets/icons/` (46 иконок, все существуют).
+- Ввод: `FlowUIInputBase{field: FlowUIStatePath, label, required, error_message, action: FlowUIActionSpec|None}` → `text_input`, `number_input`, `select`, `checkbox`, `switch`, `slider`, `date_input`, `datetime_input`, `file_upload`, `voice_input`. `field` — обычный top-level путь state; frozen-поля (`FROZEN_STATE_FIELDS`) запрещены (publish gate `frozen_path`).
+- Действие: `FlowUIActionSpec{name, payload}` у `button` и у input-блоков.
+- Раскладка: `section`, `columns`, `tabs`; контент/данные/платформенные — см. страницу протокола; `slot` — именованная цель `ui_render`; `conversation` — лента с `FlowUIConversationSettings` (`greeting`, `suggested_prompts`, `placeholder`, `show_reasoning`, `tool_calls`, `show_activity`, `show_skill_loads`, `show_reflection`, `errors`, `show_run_trace`, `show_trace_actions`, `show_browser_previews`, `show_files_panel`, `allow_cancel`, `allow_voice`).
+- `html`: `source`, `height: int | "auto"`, `fields` (≤ 64 путей), опциональное `field`; связанные пути из разметки — `core/flow_ui/html_bindings.py::html_bound_paths` (`data-bind` / `data-show`).
 
-### Author mental model: grid-first (Odoo-like)
+Шаблоны текста: `{path}`, `{?path}`, `{path|default}`, `\{` — одна грамматика в Python (`VariableResolver.render_template`, подмножество) и JS (`runtime/templating.js`); паритет — `tests/fixtures/flow_ui/templating.json`. Обязательный `{path}` без значения = блок не рендерится; в редакторе (`designText`) неизвестные пути остаются как `{path}`.
 
-Один закон для автора Interface editor:
+## Runtime backend
 
-> **Страница = дерево сеток. Каждый контейнер — сетка. Элемент кладётся в ячейки сетки родителя. Всё делается drag-and-drop.**
+- Проекция state — `core/flow_ui/projection.py`: `referenced_paths(document, ui_slots)` (шаблоны, `field`, `visible_when.path`, `fields` и `data-bind`/`data-show` html, пути блоков `ui_slots`) → `project_state`; `json_patch_operations(previous, current)` → `apply_json_patch`. Frozen-поля в проекцию не попадают.
+- Emitter (`apps/flows/src/streaming/base.py`): `emit_state(interface)` — первый вызов в Task snapshot `application/json`, далее только патчи (пустой diff не публикуется); `emit_ui_event(event)` — Part артефакта `ui` (`append` со второго события), `render` в `conversation` расширяет проекцию state путями блоков; `emit_ui_events`, `flush_ui(interface)` — очередь `state.drain_ui_events()`, затем `emit_state`. Артефакты `state`/`ui` не закрываются (`last_chunk=False`). Текст — `emit_text(name=...)`/`emit_reasoning`.
+- Агент меняет интерфейс тулами `apps/flows/tools/flow_ui_tools.py`: `ui_render(slot_id, blocks)`, `ui_navigate(page_id)`, `state_set(path, value)`; события ставятся в очередь `ExecutionState` (`core/flow_ui/runtime.py::apply_ui_render/apply_ui_navigate`, `assert_known_slot`/`assert_known_page`) и уходят на ближайшем `flush_ui`. Последний рендер именованного slot хранится в `state.ui_slots` (frozen, не проецируется); `conversation` в state не копится. Code-ноды меняют state напрямую.
+- Ingress `ui-action` — `core/flow_ui/action.py`: `ui_action_from_message` (ровно один `data` Part, без текста рядом) → `validate_flow_ui_action` (неизвестное поле, пустое `required` на странице источника, тип по блоку — `ValueError`) → `apply_flow_ui_action` пишет `fields` в state по их путям (`assign_state_path`), `state.ui_action = FlowUIAction{name, source, payload}`, `state.content` = Markdown-проекция с подписями блоков, файлы `file_upload` → `state.files`. Канал делает это до durable commit хода (`apps/flows/src/channels/base.py`), новый ход сбрасывает `ui_action`.
+- `PlatformEffect` из capability runners — `core/flow_ui/effects.py::apply_capability_platform_effects` (проверка manifest и origin); runner не знает renderer.
+- `GET /flows/api/v1/{flow_id}/interface?branch_id=` и `GET /flows/api/v1/embed/{embed_id}/interface` → `FlowInterfaceResponse` (`core/flow_ui/interface.py`): `document`, `viewer{can_edit_flow, can_interact, can_share, auth_mode}`, `capabilities{cancel, files, voice}`, `flow_identity{title, image_url}`, `look` (embed). Embed переопределяет только `EmbedConfig.conversation` / `start_page_id` / `assistant_title` / `look`, документ тот же.
+- Редактор: `GET /flow-ui/schema`, `GET /flow-ui/templates` (`OffsetPage[FlowUITemplate]`, `core/flow_ui/templates.py`, язык из контекста), `POST /flow-ui/assist` (`FlowUIAssistService`: structured output `FlowUIPage` / `FlowUIAssistBlocks`; запрос валидирует `page_id`/`block_id` против документа → 422; противоречивый ответ LLM — `FlowUIAssistOutputError` → 502 `flow_ui_assist_invalid_output`).
+- Publish gate — `core/flow_ui/problems.py::flow_ui_problems` / `assert_flow_ui_publishable` (`FlowUILimits`, `FlowUIProblem{code, message, page_id, block_id}`); JS-зеркало — `interface-editor-domain.js::documentProblems`.
 
-| Автор видит | Под капотом |
-|---|---|
-| DnD из палитры в клетку | insert + `column_start`/`row_start` + default spans |
-| Drag в любую сторону | `column_start` + `row_start` (+ spans), 2D collision |
-| Ручки E/W | `column_span` (упирается в занятую клетку, не отказывает) |
-| Ручки N/S | `row_span` (grid tracks) |
-| Section / Columns(2\|3\|4) / Card / Divider | layout palette; сырые Stack/Flex/Grid/Row/Column/List **не** в палитре |
+## Ветка сессии
 
-Позиция — **только** canvas DnD + resize по сетке. Стрелки `justify_self`/`align_self` в inspector нет (поля остаются в domain для wire/templates).
+- `FlowConfig.interface` — база; `BranchConfig.interface: FlowUIDocument | None` — полный документ ветки (`None` — интерфейс flow; partial merge нет).
+- Новая сессия берёт ветку из `params.metadata.branch` (`buildSendMessageBody`); нет — `default`. Graph `base` нормализуется в `default` (`normalizeFlowUIBranchId` / `normalize_branch_id`).
+- У живого контекста ветка неизменяема: другая непустая ветка — `ValueError`, не тихое исполнение.
+- URL сессии сохраняет ветку (`flow_chat_branch_session`); смена ветки в чате открывает новый контекст.
 
-**Free-cell инвариант:** элемент **обязан** встать в любую клетку parent-grid, если прямоугольник `column_*` × `row_*` не пересекается с siblings и не выходит за columns. Занято → жест **не коммитит** (`valid: false`, `targetCell[data-valid=false]`); сосед никогда не раздвигается сам. Проверка живёт в одной точке — `applyPlacementSet` (`layout-domain-commands.js`), поэтому инвариант одинаково держат canvas-жест, стрелки клавиатуры и числовые поля layout-инспектора.
+## Frontend runtime
 
-**Grab offset:** move считает клетку по **прямоугольнику** элемента (`startRect + pointer delta`), не по позиции курсора; округление к ближайшей линии трека — полклетки уже коммитят шаг. Клетка под курсором используется только для вставки из палитры и reparent-дропа.
-
-**Insert ≠ move.** У нового элемента ещё нет клетки, поэтому занятая строка **не отклоняет** drop: строка раздвигается — все siblings от неё и ниже сдвигаются на `row_span` вставляемого (`layout/grid-insert.js::proposeGridInsert`). Двухколоночный ряд едет целиком, порядок сохраняется. Во время drag автор видит результат заранее: aimed-клетка (`targetCell`) плюс dashed-контуры будущих позиций соседей (`projectInsertPreview` → `previewRects` в `selection-overlay`). Сдвиг применяется одной транзакцией вставки (`applyRowShifts` + `placeInGrid`). Reparent остаётся move-семантикой: он ищет свободную клетку и никого не раздвигает.
-
-**Autofit `row_span`:** после каждого commit editor измеряет `scroll.height` и **растит** `row_span` до нужного числа строк (`editor.autofitRows` в манифесте; `false` для `maturity: runtime_owned`). Только рост, один проход на revision — фиксированные строки не режут контент. Уменьшение — решение автора (ручки N/S).
-
-`children.reorder`, list-`insertionSlot`, sibling-edge snapping и `stack.promote_*` / `place.escape_and_move` удалены: сетка сама является snap'ом, а авторинг — grid-only.
-
-**Не в author UX:** переключатель `stack\|flex\|grid`, surprise promote-to-grid, chip-стрелки выравнивания, vertical-as-list-reorder на grid.
-
-**On-load migrate:** authorable `container_layout.mode ≠ grid` → grid; children с `row_start: 'auto'` получают явный `row_start` через `assignExplicitGridRows` (первая свободная строка для своего диапазона колонок, row-major по порядку детей). Domain `stack`/`flex` — wire/legacy; editor не предлагает. Стартовые шаблоны декларируют реальные клетки (`gridCell` в `templates/component-factory.js`) и проходят тот же normalize — CSS auto-placement в persisted документе не остаётся.
-
-**Runtime exceptions (не author layout):**
-
-- conversation `PageShell` **всегда** (включая `editor_test`) форсится в flex shell geometry (`CONVERSATION_FLEX_LAYOUT`); author grid на chat root запрещён — иначе `grid-template-rows: repeat(N,…)` + `message-form` на высоком `row_start` оставляют пустые строки и обрезают ленту. `effectiveParentMode(conversation)` = `none` (дети не двигаются сеткой);
-- composer `Form` (`presentation: composer`) игнорирует placement детей → `effectiveParentMode` = `none`, дети залочены (никакого «escape на root»).
-
-Insert-дефолты: любой новый container → `container_layout.mode = grid`. Wrap → Section(grid), не Stack. New page root → grid.
-
-### A2UI boundary
-
-Pinned codec `core/a2ui/v0_9_1.py` переводит A2UI messages в semantic domain commands/deltas и обратно. Codec version isolated; v0.9.1 payload не размазывается по flow/runtime/frontend.
-
-- batch применяется атомарно;
-- snapshot заменяет полный document только после validation;
-- patch применяет semantic operations к exact `base_revision`;
-- unknown component/function/catalog/version отвергается до state mutation;
-- raw A2UI JSON не хранится как второй authoritative UI state.
-
-## Branch ownership сессии
-
-Ветка выбирает и граф, и интерфейс, поэтому она — свойство сессии, а не запроса:
-
-- design-time: `FlowConfig.interface` — база; `BranchConfig.interface_override` (`mode=inherit|replace`) — полная replacement-семантика без partial component merge; поле обязательно в API `BranchPayload` / `BranchDetailResponse` / flow `BranchResponse` (create/update/GET), иначе PUT flow с branch UI падает `extra_forbidden`;
-- новая сессия берёт ветку из A2A `params.metadata.branch` (клиент — `buildSendMessageBody`); её нет — `default`;
-- у живого контекста ветка **неизменяема**: запрос с другой непустой ветвью — `ValueError` (`_prepare_task_params`), а не тихое исполнение чужой ветки;
-- `default` — это «ветка неизвестна» (session deep link), она никогда не перезаписывает `state.branch_id`;
-- `SessionConfig.branch_id` отдаёт ветку сессии наружу, чтобы UI открывал сессию на её ветке (`flowSessionRoute`);
-- URL сессии сохраняет ветку: `flow_chat_branch_session` (`:flowId/branch/:branchId/session/:sessionId`). Reload, «Новый экран» и выход из редактора ветки не проваливаются на базовый flow;
-- смена ветки в чате не продолжает старую сессию — `chat-page` открывает новый контекст.
-
-## Session continuity, autosync и share
-
-Authoritative UI document живёт в durable execution state и task/artifact projection. Закрытие вкладки, reload, новый tab/device и live-session share всегда сначала получают server snapshot через A2A bootstrap/GetTask; default template не должен появляться даже на один frame поверх восстановленной session.
-
-Input changes сохраняются до Submit:
-
-1. UI reducer применяет локальную semantic mutation.
-2. Debounced `platform.ui.sync` отправляется через тот же A2A endpoint (**не** в live `profile="editor_test"` / Test run: там `capabilities.autosync=false`, values копятся локально до Submit; forced `flushNow` + `platform.ui.submit` — единственная сеть для values).
-3. Server проверяет owner/grant, `context_id`, `base_revision`, `mutation_id`, schema, binding и limits.
-4. Accepted revision durable commit выполняется до acknowledgement/publication.
-5. `pagehide`/visibility/share/submit выполняют forced flush и ждут acknowledgement.
-6. Local recovery journal содержит только unacknowledged semantic mutations и шифруется/изолируется по company/user/context; server snapshot всегда authoritative.
-
-`platform.ui.submit` атомарно синхронизирует последнюю mutation batch и создаёт новый Task в том же `context_id`. Submit payload содержит interaction identity и current acknowledged document revision; client не отправляет отдельный невалидируемый «form JSON». `platform.ui.sync` **не** запускает flow graph — это только durable draft document.
-
-### Два продукта шеринга (не дубли)
-
-| Продукт | Что шерит | Токен | Entry |
-|---|---|---|---|
-| Flow invite (preview / embed / landing) | **Flow** — гость стартует **новую** сессию | `TokenType.EMBED_SESSION` | редактор «Гостевой просмотр», виджеты, публичные демо |
-| Live session share | **Уже существующий** `context_id` / экран | `TokenType.FLOW_UI_SHARE` | Share в chrome `<platform-flow-ui>` |
-
-Сливать нельзя: разный scope (новый guest vs живой контекст), разный auth (embed claims vs revocable grant + redaction), разные host-страницы. Preview-share канон → **`flows.mdc`** («Гостевой preview embed»).
-
-Live share:
-
-- отдельный revocable `flow_ui_session_share` grant с SQL expiry/scope/permission и optional `redacted_value_paths`; AuthZ после token AuthN — OpenFGA `flow_ui_share` (`user:*` viewer/editor);
-- share создаётся только после forced sync acknowledgement требуемой revision;
-- grant ссылается на существующие `context_id`/document identity и не создаёт новую conversation;
-- short-link хранит только `grant_id`, не document/JWT;
-- viewer/collaborator открывает тот же authoritative document; forbidden `/values`/`/content` paths вырезаются server-side до A2A snapshot serialization (`core.state.flow_ui_share_redaction`), durable ledger и owner projection не мутируются;
-- GetTask/ListTasks/bootstrap response для grant с redaction пересобирают UI Artifacts из redacted document; SubscribeToTask с redaction не реплеит raw owner events;
-- collaborator sync/submit на redacted path — `PermissionError`;
-- first-party host [`flow_ui_shared_session_html.py`](../../apps/frontend/services/flow_ui_shared_session_html.py): обязан подключать `tokens.css` (через него — flow-ui shell tokens); фон/текст/карточки — только `--flow-ui-*` / platform tokens, без hardcoded navy palette; `platform-flow-ui theme="auto"`; стартовая тема — `localStorage.platform_theme` → `prefers-color-scheme` → `light`; на странице есть `#theme-toggle` (sun/moon), пишет в тот же `platform_theme`;
-- snapshot sharing, если появится, является отдельной сущностью.
-
-Embed/landing/preview guest (`EMBED_SESSION`) использует тот же Flow UI runtime; A2A allowlist совпадает с scoped session methods (`SendMessage`, `SendStreamingMessage`, `GetTask`, `ListTasks`, `SubscribeToTask`, `CancelTask`). `ListTasks` для embed требует непустой `contextId` (без company-wide listing).
-
-## Visual SSOT (chat ≈ platform tokens)
-
-Default chat template (`linnex.default-chat`) обязан визуально совпадать со старым platform-chat на platform Design Standard:
-
-- токены — [`core/frontend/static/lib/flow-ui/shell/tokens.css`](../../core/frontend/static/lib/flow-ui/shell/tokens.css): `--flow-ui-*` только как алиасы на `--text-*` / `--glass-*` / `--accent` / `--bg-*`; параллельная purple/Inter/navy палитра запрещена;
-- **surface opacity:** `--flow-ui-page-background` — opaque fill для page/panel/drawer/embed/shared/editor; `--flow-ui-background` остаётся transparent как overlay-token. `<platform-flow-ui>` красит `:host` page-background (SPA chat **не** прозрачный — иначе ghosting поверх island). `.page-shell` / `.page-shell--conversation` наследуют тот же page fill;
-- chrome actions: stop/loading (`task-run-control`) и Share живут в shell `.top-actions` (stop слева от Share); Share — icon-only `chrome-icon-btn` + glyph `share`; document `TaskControls` — пустой slot (catalog/editor structure only);
-- `theme="auto"` резолвится через `html[data-theme]` (`resolveFlowUITheme`); light theme не остаётся чёрным островом;
-- AgentIdentity / topbar mark / пузыри / drawer FAB — один резолвер `resolveAgentIdentityImageSrc` (`runtime/agent-identity-image.js`): непустой `AgentIdentity.properties.image_url` → иначе `profile.flow_identity.image_url` → иначе бренд-марка `linnex_spinner_logo.png` на ink disc, не буква «A» и не CSS-gradient square. Bound `/system/agent` картинку не заполняет. Пустой `image_url` не маскирует бренд. Embed `<img>` требует `is_public` flow_asset + `flowUIMediaSrc` с `platformUiOrigin` (relative download/static path иначе бьёт origin хоста).
-- conversation presentation: bubbles + docked composer (`presentation: composer`), не CRUD-форма Files/Message/Submit;
-- **session files panel**: при `policy.show_files_panel` и `capabilities.files` и наличии FileRef в context — tray «Файлы N» в shell `.top-actions` слева от run/Share (`<flow-ui-files-panel>`), не absolute overlay поверх chrome; источники — `user_message` data.files + A2A file parts / `file_ids` по всем tasks ленты (включая optimistic pending); строки — core `platform-icon file-icon` + `resolveFileIconKey` (без `<img>` на download URL); клик → `openFlowUISessionFile` → `files/file/open_requested` → documents `editor-config` → modal `platform.file_viewer` (без bus — download URL);
-- bubble / composer file chips кликабельны тем же `openFlowUISessionFile` (`flow_ui_bubble` / `flow_ui_composer`); `show_files_panel=false` скрывает только tray, не attach в композере;
-- default composer (`Form` с `presentation: composer` / `formId|component_id = message-form`): compact pill bar — optional catalog **`VoiceInput`** child (не Form chrome inject) + attach (+) + autosize textarea + circle Send; file chips с remove; `multiple` append в `/values/files`; после submit очищаются `/values/message` и `/values/files` (server authoritative clear + client local clear до stream). `VoiceInput` в document — authorable; policy `allow_voice` + `capabilities.voice` только gate интерактивности (disabled mic), не удаление из document;
-- composer Form **не применяет** свой `container_layout` к CSS (wrapFlowNode `applyContainerLayout: false`): дети логические (FileUpload/TextArea/Button), визуально собраны в pill; иначе migrate-to-grid резервирует пустые `minmax(48px,auto)` строки и раздувает selection box в editor;
-- **composer submit state machine** (`renderForm` → `Button` property `composerState`): `send` (idle) → `busy` (`context.submitting`, spinner + `aria-busy`, disabled) → `stop` (in-flight Task и `capabilities.cancel`, квадрат = `cancelActiveTask`) → `send`. `TASK_STATE_INPUT_REQUIRED` / `AUTH_REQUIRED` — settled (не active): composer снова `send`, чтобы ответить на `ask_user`. `submitting` живёт в runtime context (`submit.started`/`submit.finished`), ручных `_busy` флагов нет;
-- **form / любой `platform.ui.submit` Button** (не-composer): при `context.submitting` — `disabled` + `aria-busy` + `.button-spinner`; повторный `submit()` / press no-op. `submit.started` выставляется **до** `flushNow`/сети, `submit.finished` — после SSE stream;
-- per-turn user bubble: artifact `name="user_message"` с обязательным `metadata.mutation_id` (эмитится `emit_user_message` на `platform.ui.submit`, значения берутся из `ui_interaction.validated_values_snapshot`) либо `ROLE_USER` с `task_id` текущего Task; не first-ever user message сессии;
-- **Flow UI Task identity:** один `platform.ui.submit` = один A2A Task (`_flow_ui_task_id(context_id, action_id)`). После `ask_user` / `TASK_STATE_INPUT_REQUIRED` следующий submit **не** переиспользует `interrupt.system.task_id` (в отличие от plain A2A resume); старый Task остаётся историческим turn, новый несёт user bubble + продолжение. `emit_user_message` на Flow UI SUBMIT всегда, даже при `is_resume` (ReAct `interrupt_path` сохраняется). При parked interrupt (`terminal_task_state` ∈ `input-required`/`auth-required`) submit **не** зовёт `begin_interaction_turn` (он сбрасывает interrupt) — только новый `task_id` + clear terminal. Worker `process_flow_task` re-parse'ит `flow_ui_command` из Message. Plain A2A same-task resume — отдельно (`effective_stream_task_id_for_session`);
-- **optimistic contract**: `turn.optimistic` кладёт `{id: mutation_id, text, files}` в `pendingTurns`; consume — **только** по `metadata.mutation_id` (`consumedPendingTurnIds`), текстовое сравнение запрещено; file-only submit тоже создаёт pending turn;
-- pending assistant bubble: пока у последнего non-terminal Task нет turn text — typing-индикатор; streamed ответ дописывается в тот же пузырь с caret; незакрытые `**`/`` ` `` буферизуются (`streamingSafeMarkdown`);
-- turn actions: Copy на завершённом ответе, Retry на `TASK_STATE_FAILED`; лента — `role="log"` + `aria-live="polite"` + `aria-atomic="false"`;
-- geometry conversation shell: `.page-shell--conversation` — `display:flex; column; overflow:hidden; max-height:100%`, селекторы по `data-flow-ui-type` (не по `component_id`); `ConversationFeed` — единственный scroll owner (`flex:1 1 0; overflow:auto`), композер прижат геометрией (`flex:0 0 auto` последним ребёнком), без `margin-top:auto`/`position:sticky`; читабельная колонка ленты и композера — `width:100%; max-width: 760px; margin-inline:auto` (`width:100%` обязателен: ArtifactFeed — column flex, без ширины `margin-inline:auto` shrink-wrap'ит `.task-feed` по контенту и центрирует короткие первые turns); `--flow-ui-disc-shadow-bleed` — нижний padding у `ConversationFeed` и composer `Form`, чтобы `overflow:auto`/`overflow:hidden` не резали soft `box-shadow` logo-disc и composer pill (не ставить `overflow:hidden` на сам `.avatar`);
-- runtime + editor: `renderPageShell` **всегда** форсирует flex conversation shell, даже если durable document потерял `presentation: conversation` или editor promote-to-grid оставил `container_layout.mode=grid` / `message-form` на `row_start: 11`. Детекция: `presentation=conversation` **или** structural (`ConversationFeed` / `ArtifactFeed` conversation). Author grid на conversation root запрещён (WYSIWYG = runtime geometry);
-- `<platform-flow-ui>` shell grid: viewport-ряд **только** `minmax(0, 1fr)` (не голый `1fr` = `minmax(auto,1fr)` — иначе ряд не сжимается ниже контента, feed не становится scrollport, предки с `overflow:hidden` клипают чат); host — `display:flex; column; min-height:0; height:100%; overflow:hidden`. Внешний wrapper обязан дать **specified height** (`height` / flex item в колонке с определённой высотой). `min-height` на wrapper **не** резолвит `%` у `:host` — conversation shell схлопывается в 0px и клипается. HITL page-layout → **`worktracker.mdc`**;
-- chrome `minimal`/`none`: shell — **одна** строка `minmax(0, 1fr)`; Share topbar (`minimal`) — `position:absolute` overlay **без** отдельного grid-track (иначе auto-placement сажает `.viewport` в 0px-ряд и клипает весь conversation);
-- `display=drawer`: в `.top-actions` всегда есть Close самой правой кнопкой (`flow-ui-drawer-close` → `flow-ui-drawer.open=false`). Нужна и при `show_launcher=false`, иначе панель нечем закрыть из chrome.
-- empty state: `page-shell--conversation-empty` (нет conversation content) — greeting растягивается hero-блоком, `SuggestedPrompts` показываются только до первого turn'а;
-- умный автоскролл: лента прилипает к низу, при отрыве появляется кнопка «вниз» (`scroll-to-bottom`), в `ConversationFeed`;
-- SPA host (`chat-page`) не добавляет вторую рамку вокруг `<platform-flow-ui>`: island с `padding="none"`, компактный topbar с breadcrumbs, `platform-flow-ui { flex:1 1 0; min-height:0 }` (никаких `height:auto`);
-- SPA host breadcrumbs: канон `<platform-breadcrumbs compact current-label .trail>` (не `.items`). Имя flow — `current-label` (base/session) или `trail` → `flow_chat`; имя branch — `current-label` на `flow_chat_branch`. Родитель `flow_chat_branch`/`flow_chat_session` в router — `list`, чтобы не было цепочки Overview / Flow / Flow;
-- SPA host переиспользует один `<platform-flow-ui>` между route updates: смена host `flowId`/`branchId`/`embedId` или явный non-empty `contextId` ≠ active → dispose + reconnect (`platform-flow-ui` `_restartSession`). Пустой host `contextId` не teardown'ит live session (URL ещё не догнал bootstrap). Sidebar «открыть чат» на том же flow (`flow_chat` без `sessionId`) → `chat-page` зовёт `startNewContext()`;
-- SPA/`display=panel` скрывает лишний Flow UI topbar/statusbar (chrome `none`/`minimal`), чтобы не дублировать page-header;
-- chrome-строки runtime (Send/Stop/placeholder/share/статусы/generic projector) живут в pinned RU/EN словаре [`core/frontend/static/lib/flow-ui/utils/text.js`](../../core/frontend/static/lib/flow-ui/utils/text.js) (`flowUIText(locale, key)`, `resolveFlowUILocale`) — runtime standalone и не зависит от platform i18n bus; хардкод EN-строк в каталоге запрещён. Контент документа (label/greeting/placeholder) остаётся редактируемыми данными владельца.
-
-## Universal frontend runtime
-
-`<platform-flow-ui>` — единственный production surface для SPA, editor test, embed, landing, Lara, HITL/operator и shared session. Различаются только `FlowUIRenderContext` и capabilities, не reducer/transport/renderer.
-
-HITL (`hitl_node.handoff_mode` = `single_reply` | `takeover`, не agent handoff):
-
-| Режим | Кто | Submit | Composer | Complete |
-|---|---|---|---|---|
-| `single_reply` | оператор (`profile=operator_handoff`) | `FlowUIHitlTransport.send()` → worktracker complete | `can_send` | нет в HITL-секции; header/kebab без текста запрещён |
-| `takeover` | оператор | `send()` → HITL ask REST | `can_send` | кнопка «Завершить задачу» |
-| `single_reply` | пользователь | блок (readonly + баннер) | disabled | — |
-| `takeover` | пользователь | A2A append (`_handle_takeover_user_reply`) | enabled + баннер | — |
-
-User followup в takeover не подменяет `status.message` текстом покупателя и не снимает `metadata.platform_interrupt` (live tail SubscribeToTask остаётся на parked `a2a_task_id`). Closing interrupt status — тот же parked Task. HITL Emitter (`user_message` / `operator_reply`) пишет в `WorkItemConversationRef.a2a_task_id`, не в action-scoped `ExecutionState.task_id` после Flow UI SUBMIT. Takeover complete без текста резюмит граф по `correlation_id` (не требует `state.content`).
-
-- Submit в `operator_handoff` всегда `hitlTransport.send()`, не `_sendControl('submit')` / A2A. `submit()` не делает A2A `flushNow`/`sync`; `setValue` пишет `document.preview`. Live tail не затирает локальные `values` (`overlayFlowUILocalValues`). Ask REST несёт `idempotency_key` UUID v4 из `crypto.getRandomValues` (`randomUUID` только в secure context — HTTP company-host его нет).
-- `operator_handoff` chrome `none` (карточка Worktracker — хост). Composer не уходит в Stop/Cancel parked A2A Task: `hitlMode` держит `composerState=send`.
-- Нет composer в документе — host-composer только в `operator_handoff` (тот же transport).
-- User live tail после `operator_task`: `runA2aTaskLiveTail` (SubscribeToTask), не отдельный ChatController. Лента покупателя читает Artifact `operator_reply` в `conversationTurnText` (не только `response`).
-- Лейблы Submit оператора — `hitlComposerSendLabel` в [`text.js`](../../core/frontend/static/lib/flow-ui/utils/text.js) (`hitl_submit_single_reply` / `hitl_submit_takeover`). User SPA остаётся на generic `composer_send`.
-
-HITL test matrix (web, без spy/`fetch` stub): HTTP `tests/flows/api/test_hitl_conversation_http.py` + channel/resume; `llm_node` + тул `hitl_operator_task` (`single_reply`/`takeover`) — `tests/flows/integration/test_hitl_llm_node_tool.py`; UX — `tests/ui/e2e/test_hitl_user_surfaces.py` (SPA/embed/Test Run), `tests/ui/e2e/test_hitl_operator_matrix.py` (page/panel/CRM), `tests/ui/e2e/test_hitl_custom_ui.py` (host-composer / form Submit). Чистые unit: labels, `document-composer`, `operatorHandoffFromTask`. Канон моков — **`testing.mdc`**.
-
-Canonical frontend layers:
+`core/frontend/static/lib/flow-ui/` (без host-специфичных копий; бюджет — `scripts/check_flow_ui_hard_cut.py`):
 
 ```text
-core/frontend/static/lib/flow-ui/
-  protocol/       A2A accumulator, frame decoder, Part projectors
-  state/          one reducer/store, hydration, autosync, recovery
-  layout/         shared 4/8/12 resolver and container bands
-  catalog/        basic + trusted Linnex manifests/registry
-  renderer/       production frame, component renderer, generic Part cards
-  components/     platform-flow-ui and trusted catalog elements
-  voice/          renderer-independent A2A/TTS integration
+protocol/   constants, a2a-codec (URL/Message/JSON-RPC bodies/headers), parts (decodePart, applyJsonPatch), a2a-stream, a2a-task-accumulator
+runtime/    flow-ui-client (open/hydrate/send/cancel/on), flow-ui-store, templating, html-sandbox, conversation, turn-activity, hitl-transport
+blocks/     рендереры по группам: export const <GROUP>_BLOCKS = Object.freeze({ type(block, ctx) {...} }); registry.js::renderBlock
+components/ platform-flow-ui (единственный production surface), flow-ui-page, flow-ui-conversation, files-panel, share-menu, task-controls, drawer-controls (expand/close, slot под share-menu), turn-toasts, run-trace, error-boundary
+editor/     selection, drop-zones, inline-text-edit, editor-chrome.styles — примитивы редактора, hosts запрещены
+shell/      embed-autoload, embed-host-api, embed-script-config, drawer(+geometry/move), page-host, preferences, resolve-theme, tokens.css
+utils/      text (RU/EN chrome словарь flowUIText), markdown, glyph, citations, open-session-file
+voice/      coordinator
 ```
 
-Apps не создают local store/service/fetch/transport. SPA factories/resources остаются host control-plane; standalone/embed host получает тот же runtime через component host API.
-
-### Turn activity toasts (non-conversation pages)
-
-На страницах **без** conversation feed (`ConversationFeed` / `ArtifactFeed` `presentation: conversation`) agent `response`/`reasoning`/activity иначе невидимы. Chrome-overlay внутри `<platform-flow-ui>` (`flow-ui-turn-toasts`, fixed bottom-right) показывает turn feedback без мутации document:
-
-- derive — [`runtime/turn-activity.js`](../../core/frontend/static/lib/flow-ui/runtime/turn-activity.js) (`hasConversationFeed`, `deriveTurnActivityToasts`);
-- conversation feed на active surface → overlay **выключен** (ответ уже в ленте);
-- toast kinds: `working` / `reasoning` / `activity` / `response` / `error` (max 3);
-- policy gates из `document.policy` с дефолтами `FlowInterfacePolicySnapshot`:
-
-| Toast | Gate |
-|---|---|
-| working | всегда при submit / non-terminal task |
-| reasoning | `show_reasoning === true` |
-| activity | `show_activity` + `tool_calls_display !== 'hidden'`; skills — `show_skill_loads` |
-| response | всегда при наличии `response` text |
-| error | `errors_display` generic/detailed |
-
-Cancel на working — `allow_cancel` + profile `capabilities.cancel`. Platform EventBus toast bus для standalone/embed **запрещён** — только этот chrome overlay.
-
-Unknown ordinary Artifacts безопасно показываются generic projector'ом:
-
-- text → trusted rich text/markdown;
-- raw → file/download card без inline executable content;
-- url → validated link/file card;
-- data → typed structured-data card/tree;
-- mixed Parts сохраняют wire order и artifact grouping.
-
-## Production frame и WYSIWYG editor
-
-Interface editor не рисует копию UI. Canvas монтирует тот же production bundle/component/catalog/layout resolver/tokens/fonts/assets внутри isolated production frame. Editor chrome — palette/layers/inspector/rulers/guides/selection/resize — живёт только внешним overlay и не мутирует production DOM/computed styles.
-
-### Semantic canvas drag / resize
-
-Жесты move/resize на canvas **не** пишут absolute `left/top/width/height` в document. Pointer → proposed semantic patch → один undoable `applyLayoutCommand` → production re-render → selection overlay ждёт inspection той же `revision`.
-
-| Слой | Роль |
-|---|---|
-| `catalog/manifest.js` `layout` | Per-type capabilities: `move` (`grid`/`none`), `resizeInline` (`span`/`none`), `resizeBlock` (`row_span`/`none`), min/max spans, `editor.autofitRows` |
-| `layout/grid-geometry.js` | Единственная биекция клетка↔пиксели (`cellAt`/`areaFor`/`rectOf`) из реального `contentRect` + gaps |
-| `layout/grid-occupancy.js` | Занятые клетки из документа + `isAreaFree` / `firstFreeRow` |
-| `layout/grid-normalize.js` | `row_start: 'auto'` → явная строка (editor migrate + templates) |
-| `editor/layout-capabilities.js` | Parent mode из document tree (`grid` \| `none`); handles fail-closed |
-| `editor/layout-gesture.js` | Pure `proposeGridMove` / `proposeGridResize` / `proposeGridDrop` / `proposeKeyboardStep` → `{area, targetCell, patch, valid}` |
-| `editor/grid-row-autofit.js` | Рост `row_span` по измеренному контенту (grow-only, idempotent) |
-| `editor/selection-overlay.js` | Box + allowed handles + ghost + `targetCell[data-valid]`; pointer capture; production DOM untouched |
-| `editor/layout-domain-commands.js` | Fail-closed: root lock, span/start vs columns, policy, **free-cell**, cycle-safe reparent |
-| `editor/overlay-coordinate-space.js` | Единственное преобразование overlay↔frame CSS pixels (`framePointFromOverlay`); локальных формул в canvas нет |
-| canvas hit-layer | Click→select по inspection rects; gesture→`layout-command` → editor `_mutate` |
-
-Parent semantics (grid-first): authorable parents — **grid** с `grid-auto-rows: 48px`. Жест move пишет `column_start` + `row_start` (+ spans) в `placement.base` (wide); medium/compact — overrides; overflow narrow → safe override. **Инвариант free-cell:** прямоугольник элемента → клетка; занято → отказ без коммита. `children.reorder`, list-`insertionSlot`, `stack.promote_*`, `place.escape_and_move` и sibling-edge snapping удалены. `row_span` с integer `row_start` → CSS `grid-row: N / span M`. Runtime-owned feeds и composer Form — не drop-таргеты (`isAuthorableDropTarget`); **root** lock. Absolute Figma `left/top` — вне scope. Insert-дефолт: containers → grid; Button/Submit `column_span: 3` (`defaultColumnSpan` — один источник для factory и drop-превью); Columns(N) → Row + N Column.
-
-**Reparent** — доменная команда `children.move` (`{surfaceId, componentId, targetParentId, index, patch}` — `patch` = клетка нового родителя, валидируется после attach): detach из текущего родителя, attach в container по индексу. Fail-closed: leaf-таргет, собственный subtree (цикл), root, отрицательный/нецелый index, отсутствующий таргет. Runtime-owned контейнеры (`ArtifactFeed`, `ConversationFeed`) не являются drop-таргетами. Источники: drag на canvas (подсветка `targetCell`) и drag в layers tree (`before`/`after`/`inside`).
-
-Editor chrome (только overlay, не production pixels): quiet-by-default — `gridVisible` / `baselineVisible` / `rulersVisible` / `dataFlowVisible` стартуют `false` (opt-in toggles `G`/`R`/`D`); `guidesVisible` остаётся `true` для пользовательских направляющих. `flow-ui-layout-grid-overlay` рисует **реальные** треки колонок и baseline-строки из `grid-geometry` root-грида (не `inset: 0` без padding). Structure outlines — только hovered компонент и цепочка ancestors (не всё inspection tree); selected рисуется своим selection box. При gesture — сдержанный `insertionSlot` (flex reorder) / `targetCell` (grid) на platform tokens без neon/glow. Цвета chrome — `--flow-ui-editor-*` в `editor/editor-chrome.styles.js` (alias на `--accent`/`--success`); hardcoded neon hex в `flow-ui/editor/**` запрещены. Root selection и PageShell fill совпадают с viewport profile artboard (`height:100%` host chain в iframe). Empty click внутри artboard → select root. Kebab `⋮` на hover/selected box (`selection-overlay`, `menuEnabled=false` во время gesture) открывает `flows-interface-component-menu`: quick props = только `boolean`/`enum` из `manifest.js` `editor.schema[]` плюс synthetic `__required` для `FLOW_UI_VALIDATION_INPUT_TYPES` (тот же set, что Validation в inspector); structural — duplicate/copy/paste/wrap/hide/lock/delete через те же события, что context menu и layers. Выдуманные поля в kebab запрещены; text/bindings/placement/actions остаются в inspector. Правый клик — отдельный structural shortcut, не заменяется kebab.
-
-Integer `row_start` + `row_span` → `grid-row: N / span M` на baseline tracks. Без `row_start` (wire/legacy документ до normalize): `row_span`/`block_clamp` → `max-height: row_span * 48px`. Константа высоты строки одна — `FLOW_UI_ROW_HEIGHT_PX` в `layout/grid-geometry.js`.
-
-
-
-
-`FlowUIRenderContext` фиксирует:
-
-- surface profile: page/panel/drawer/embed/shared;
-- **EmbedConfig.presentation** ∈ `{drawer, page}` — host mount mode (FAB drawer vs edge-to-edge page); не путать с component `properties.presentation`. Legacy `position=fullscreen` читается как `presentation=page`. Page host и drawer — один `<platform-flow-ui>`, не parallel chat runtime; first-party `page_url` (`/flow-embed-page`) из того же embed control plane;
-- **Landing / digital-workers Try** — first-party host монтирует `<flow-ui-drawer>` (`config.baseUrl`, `profile=embed_public`, `credentials='omit'`, `getRequestHeaders` → guest `EMBED_SESSION`), не obsolete props на голом `<platform-flow-ui>` (`open` / `getAuthToken` / `flows-base-url` / `humanitec-embed-drawer-open-changed`). Open sync — `@flow-ui-drawer-open-changed`; toggle event — отдельный `config.toggleEventName` (не `platform-lara-open`);
-- **Drawer cluster** — launcher + panel один кластер в `<flow-ui-drawer>` (Lara SPA, landing Try, CDN embed). Геометрия — [`drawer-geometry.js`](../../core/frontend/static/lib/flow-ui/shell/drawer-geometry.js): якорь `launcherLeft`/`launcherTop` + `panelWidth`/`panelHeight`; панель рядом с кружком (предпочтение над, align по половине экрана, flip, clamp safe-area + margin 22 desktop / 10 mobile). `launcherPosition` / embed `data-position` — только стартовый угол. Жесты: `setPointerCapture` + `pointermove`/`pointerup`/`pointercancel` на `window` (не `mousemove`). Drag launcher или composed `flow-ui-drawer-move-start` из chrome `.topbar` (не Expand/Share/Close) и `section--chat-header`; catalog не знает экранные координаты. SE `.resize-handle` (`resize_aria` в [`text.js`](../../core/frontend/static/lib/flow-ui/utils/text.js)): pointer следует за SE, у края viewport растёт противоположная сторона; launcher клеится к низу панели. `expanded` и `width <= 520` — жесты off, persist не пишется. Lara persist `platformStorageKey('core', 'assistant.drawer.<branchId>')`; внешний embed `writeFlowUIPreferences('drawer:<embedId>', { geometry })`. Битый JSON: parser throw не роняет drawer, откат к default corner; ключа нет → default. Не публичный API [`embed-host-api.js`](../../core/frontend/static/lib/flow-ui/shell/embed-host-api.js). Сервисы не копируют drag;
-- exact container width/height and 4/8/12 band;
-- brand/apex/runtime base URLs;
-- theme, locale, direction;
-- font/token/catalog/renderer/layout/asset checksums;
-- capabilities and deterministic data scenario.
-
-Fingerprint сравнивается с production target. Статус `Exact` допустим только при полном match; иначе editor показывает `Context differs` и field-level diff. Inspection bridge read-only: component IDs, semantic bounds, accessibility metadata; никаких editor callbacks в production component tree.
-
-Обязательная parity suite использует deterministic Chromium и сравнивает editor frame с production route:
-
-- geometry — zero-pixel tolerance для canonical matrix;
-- screenshot — exact/deterministic threshold, закреплённый fixture;
-- DOM/a11y tree и layout placements;
-- page/panel/drawer/embed, desktop/tablet/mobile, light/dark, RU/EN, primary/secondary brand.
-
-## Editor UX
-
-Flow editor имеет workspace `Interface` рядом с graph, но сохраняет graph + interface атомарно. Основные области: pages, palette, layers, production canvas, inspector, bindings/actions, responsive/layout inspector, data scenarios и preview target selector.
-
-### Editor hosts и единый источник каталога
-
-Editor chrome живёт в **`apps/flows/ui/components/interface-editor/`** (`flows-interface-editor` orchestrator, toolbar, pages-panel, palette, layers-tree, canvas, inspector + layout/binding/action editors, component-menu kebab, data-model-panel, contract-panel, problems-panel, `interface-editor-domain.js`; parity badge — в toolbar). Переиспользуемые примитивы (overlays, gesture, snap, capabilities, domain commands, coordinate space, `data-flow-overlay`, `component-quick-props`) остаются в `core/frontend/static/lib/flow-ui/editor/**`. Hosts в `core/` запрещены.
-
-`catalog/manifest.js` — **единственный** источник для палитры, inspector, insert-дефолтов и kebab quick props: у каждого типа `editor: { group, icon, schema[], defaults, maturity, palette }`, где `group ∈ FLOW_UI_EDITOR_GROUPS` (`layout|content|input|action|data|platform`), `maturity ∈ {production, partial, runtime_owned, stub}`, `palette: false` или `maturity: stub` / `PageShell` — тип **не** в editor palette (renderer остаётся для runtime/A2A). `schema[]` — поля `{name, kind: string|text|number|boolean|enum|image|file_id, label:{ru,en}, options?, publicAsset?}` для генерации формы inspector'а (`<platform-field>` для string/text/number/boolean/enum; `kind: image` — preview + `platform.file_picker`, значение — platform download URL; `publicAsset: true` — upload `is_public: true`, выбор непубличного файла — `throw`; `kind: file_id` — `platform.file_picker`, значение — `file_id`, не download URL), `defaults` — properties/bindings (`{id}` подставляется) для вставки. Kebab (`flowUIComponentQuickProps`) берёт только `boolean`/`enum` из schema (+ `__required` для input Validation types); string/text/number/image/file_id и поля вне schema в меню не появляются. Insert-дефолты обязаны давать валидный render без обязательных runtime bindings (Avatar.name, Icon.name, Image.src пустой → placeholder, DataTable без `file_id` и rows → placeholder, FileCard.file и т.д.) — иначе production iframe падает целиком. Захардкоженные списки типов/иконок/групп в chrome запрещены — enumeration через `flowUIPaletteComponentEntries()`. `Submit` — pseudo-type палитры: primary Button с `platform.ui.submit`. Schema input/content типов включает contract-поля `fieldName` / `markdownMode` / `markdownLabel`; у `PageShell` — `contentMode`.
-
-**Image asset.** `Image.properties.src` — не сырой URL-строкой в chrome: inspector открывает `platform.file_picker` (`acceptMimePrefix: 'image/'`, upload `platform/file_create` + `buildFlowAssetFileCreateSpecJson({ flowId })`, browse ops `flows/catalogs|documents|documents_search` → Office BFF). После выбора `src` = `buildPlatformFileDownloadUrl(file_id)`. Пустой `src` (дефолт вставки) рендерит `.image-empty` placeholder, не throw. Захардкоженные brand-пути (`/static/core/assets/service_logos/...`) в defaults Image запрещены.
-
-**AgentIdentity image.** Authorable `title` + `image_url` (`kind: image`, `publicAsset: true`). Значение — тот же platform download URL, что у Image. Inspector грузит public `flow_asset` (`buildFlowAssetFileCreateSpecJson({ flowId, isPublic: true })`); выбор существующего файла без `is_public` — `throw`. `GET .../interface-profile` проецирует то же значение в `flow_identity.image_url` (`flow_ui_agent_identity_image_url` по документу, не `store_card_image_url`). Два `AgentIdentity` с разными непустыми URL — `ValueError`. Chrome / пузыри / FAB drawer читают один JS-резолвер. `FlowEmployeeConfig.avatar_url` и витринная `store_card_image_url` — другие поверхности.
-
-**DataTable.** Один catalog-тип, два источника: непустой `file_id` (property или binding, опционально `table_name`) → живой `<platform-data-table-host interaction="view">` по office `CursorPage` (фильтр `column_q` в заголовках колонок, CSV/Excel экспорт активной таблицы, кнопка «Дальше» по `has_more`/`next_cursor`); иначе статичные `columns`+`rows` (dashboard `/content/rows`). Оба пустые — placeholder, не throw. Строки SQLite **не** копируются в `ExecutionState` / `ui_values` / `content`. Локальный page/filter **не** вызывает `platform.ui.submit`. Inspector `kind: file_id` пишет `file_id`, не download URL (`acceptMimePrefix: application/vnd.sqlite3`). Production iframe без EventBus: `PlatformElement.connectedCallback` не подписывается на i18n; host получает `.chrome` и не зовёт `this.t()`/`this.bus`; `httpRequest` `credentials: 'include'` на same-origin `/documents/api/...`. Гость без FGA `can_view` — fail-closed ошибка host. Отдельный тип `SqliteTable` запрещён.
-
-Palette maturity (as is):
-
-| maturity | В палитре | Примеры |
-|---|---|---|
-| `production` | да (если `palette !== false`) | Section, Card, Divider, Heading, TextField, Button, FileCard |
-| `partial` | да | Tabs, Modal, Select, Video, DataTable, Avatar |
-| `runtime_owned` | да | ConversationFeed, ArtifactFeed, EmptyState, SuggestedPrompts, TaskControls |
-| `stub` | **нет** | Chart, JsonInspector, BrowserPreview, SkillActivity, ReflectionResult, ActionPreview, ActionResult, ActivityCard, FileCollection |
-
-Layout palette (grid-first): Section, Card, Divider + pseudo `Columns2`/`Columns3`/`Columns4`. **Не в палитре** (`palette: false`, renderers остаются): `Grid`, `Stack`, `Row`, `Column`, `List`. `Submit` — pseudo action (Button + `platform.ui.submit`).
-
-Icon — static SVG через `flowUIGlyph` (не 2-char badge). Stub renderers могут жить в catalog для projection runtime, но не предлагаются автору в palette.
-
-**Palette copy.** У каждого palette-visible типа в манифесте есть `editor.label: {ru, en}` — человеческое имя («Карточка», «Поле ввода»), а не type id. Палитра рендерит `label` по `state.i18n.locale`, type id остаётся в tooltip (`<label> · <Type>`) и в поиске. Pseudo-entries (`Submit`, `Columns2|3|4`) живут в `FLOW_UI_PALETTE_PSEUDO_ENTRIES` того же манифеста — свой список типов/иконок/имён в chrome запрещён. `Columns(N)` подписан результатом вставки: «Ряд: N колонки» / «Row: N columns», потому что он создаёт `Row` с N `Column`. Labels пинятся RU/EN в манифесте (как `schema[]` и `flowUIText`), а не в `core/i18n`.
-
-Production canvas — iframe (`flow-ui-production-render-frame`) без `PlatformApp`/EventBus. Каталог не использует `<platform-icon>` (bus-backed): только `flowUIGlyph` (`catalog/flow-ui-glyph.js`) → static SVG. Catalog `VoiceInput` интерактивен только при `hasPlatformBus()` и `capabilities.voice` (в iframe и `editor_test` local profile `capabilities.voice=false` → disabled mic, компонент в document остаётся). Ошибка одного компонента в `flow-ui-surface._component` изолируется в placeholder `component_render_failed` и не обнуляет sibling-дерево. Graph branch `base` на control-plane нормализуется в A2A `default` (`normalizeFlowUIBranchId`).
-
-Editor state (`flows/interface_editor` slice): `selectedComponentIds` (multi-select), `hoveredComponentId`, `lockedComponentIds`, `editBand`, `guides`, quiet overlay defaults (`gridVisible`/`baselineVisible`/`rulersVisible`/`dataFlowVisible` = `false`, `guidesVisible` = `true`), `zoom` (`число | 'fit'`), `viewportProfile` (включая `custom` + `customWidth/Height`) и **command history** `{past, future}` с label + `coalesceKey` (жест = одна транзакция, окно 1200 мс, лимит 80). Snapshot-история внутри Lit-элемента запрещена — undo/redo переживает remount. Клавиши: `⌘Z`/`⇧⌘Z`, `⌘D`, `⌘C`/`⌘V`, `Delete`, `G` (grid), `D` (data-flow overlay), `R` (rulers), стрелки (semantic move/resize), `Esc`.
-
-### Submit contract (прозрачность для разработчика flow)
-
-Единственный projector — `core.state.flow_ui_contract.build_flow_ui_submit_contract`. На `platform.ui.submit` он пишет:
-
-| Канал | Куда | Как читать в flow |
-|---|---|---|
-| flat values | `ExecutionState.ui_values` | `@state:ui_values.<field>` / prompt `{ui_values.<field>}` |
-| Markdown | `ExecutionState.content` | `@state:content` / default input `llm_node` |
-| FileUpload attachments | `ExecutionState.files` (`FileRef`) | `read_file` / tools; также chips в user bubble Artifact |
-| FileUpload в `content` | `[FILE]…[/FILE]` (`format_a2a_files_content`) | тот же канон, что A2A Part.url; не `**files:**` bullet list |
-
-`FileUpload` на submit (`a2uiClientDataModel.surfaces.*.values`) — **не** A2A `Part.url`. `FlowUISessionService.submit` атомарно пишет `ui_values` + `content` ([FILE]) + `upsert_state_file` в `ExecutionState.files` (durable до TaskIQ). Worker без `flow_ui_command` дописывает из `ui_interaction.validated_values_snapshot`. Иначе `read_file` видит пустой `state.files` при живом chip в `ui_values`.
-
-Правила:
-
-- `field` = `properties.fieldName` или последний сегмент `/values/...` pointer; коллизии — fail-closed с суффиксом `component_id`;
-- один pointer → одно поле (owner = editable input, helper вроде `SuggestedPrompts` не дублирует);
-- `contentMode` на `PageShell`: `auto` / `values` / `page` / `message`;
-- `markdownMode` на компоненте: `auto` / `always` / `exclude`; `markdownLabel` переопределяет подпись в Markdown;
-- editor preview = runtime: `POST /flows/api/v1/flows/{flow_id}/interface/contract-preview` (тот же projector), UI — вкладка **Данные** (`flows-interface-contract-panel`) + сырой data model ниже.
-
-Data-flow overlay (`flow-ui-data-flow-overlay`, toolbar toggle / `D`): цветные метки поверх production iframe без мутации DOM:
-
-- accent — `/values/**` → tag `@state:ui_values.*`;
-- info — `/content/**`;
-- warning (dashed) — `/system/**`;
-- success — `platform.ui.submit`.
-
-Inspector показывает contract-card на выбранном компоненте с тем же ref. Угадывать mapping в UI запрещено — только server projector.
-
-Logic dataflow (`inspect_flow_dataflow`) seed'ит entry chips `ui_values.<field>` из того же projector (`iter_flow_ui_submit_contract_fields`): `source=flow_ui_contract`, `availability=guaranteed`, chip `kind=ui_value` (отдельный tint на Logic canvas). Interface contract panel и Logic chips — один projector, без дубля моделей / без копирования полей в `FlowVariableConfig`.
-
-`llm_node` prompt template: `{ui_values.<field>}` (и `{?ui_values.<field>|…}`) рендерится из `ExecutionState.ui_values` через `VariableResolver` (`dict.key`); editor catalog (`buildPromptVariableContext`) показывает chips `ui_values.<field>` (source `ui_value`, nested `values.ui_values`). Flatten в `{email}` запрещён (коллизия с `variables`).
-
-Editing operations редактора: insert по click и drag-and-drop из палитры (индекс вставки по геометрии), reparent (`children.move`), multi-select (shift), duplicate, sanitized versioned clipboard (`flow-ui-clipboard@1`, новые component_id), wrap in Stack, inline-редактирование текста (`Text`/`Heading`/`Markdown`/`Button.label`) overlay-редактором без мутации production DOM, context menu, kebab quick-menu (`component-quick-props` + structural), rename component/page, hide/lock слоёв, pages CRUD (create/rename/duplicate/delete), selection breadcrumb, стартовые шаблоны страницы.
-
-Стартовые шаблоны — `core/frontend/static/lib/flow-ui/templates/page-templates.js` (`FLOW_UI_PAGE_TEMPLATES`, versioned `linnex.page.*` с `category` ∈ `conversation|forms|dashboards|content|utility` и `tags[]`). Builders — `templates/pages/*.js` через общую фабрику `templates/component-factory.js` (дублирующих локальных builder'ов нет). Каталог:
-
-- conversation: `chat`, `assistant_context`;
-- forms: `lead_form`, `login`, `contact`, `validated_form`;
-- dashboards: `dashboard`, `stats_overview`, `task_list`, `status_tracker`;
-- content: `product_detail`, `purchase_complete`, `user_profile`, `event_detail`, `notification_center`;
-- utility: `blank`.
-
-Gallery UI — только Interface Editor модалка `flows.interface_template` ([`flows-interface-template-modal.js`](../../apps/flows/ui/modals/flows-interface-template-modal.js)): browse (search + category chips + lazy live-preview cards) → detail (крупный preview + Apply). Preview document — `templates/gallery/preview-document.js` (`buildFlowUIPageTemplatePreviewDocument` → `<platform-flow-ui .initialDocument profile="editor_test">`). Применение заменяет surface активной страницы одной undo-транзакцией; каждый шаблон обязан проходить publish gate без blocking-проблем (гарантируется тестом). Отдельный route/marketplace шаблонов вне editor modal в этом эпике запрещён.
-
-Минимальный catalog первого релиза:
-
-- layout: Page, Section, Grid, Stack, Flex, Divider, Spacer;
-- content: Heading, Text/Markdown, Image, Icon, Badge, Alert, Card;
-- input: Text, Textarea, Number, Select, Checkbox, Radio, Switch, Date/Time, File;
-- action: Button, Link, Tabs, pagination/navigation;
-- data: List, Table, KeyValue, JSON, progress/status;
-- platform: A2A transcript/message, file card, tool activity, reasoning, browser preview, HITL, agent plan.
-
-Компоненты с user-facing полями используют `<platform-field>`, действия editor chrome — `<platform-button>`, тексты — парные RU/EN i18n keys, colors/spacing/typography — только platform tokens.
-
-`ArtifactFeed` с `properties.presentation = "conversation"` (default chat template) показывает Tasks с turn content: user — artifact `user_message` или task-scoped `ROLE_USER`; assistant — сначала streamed artifact `name="response"`, иначе текст из A2A `task.status.message.parts[]`. Между user и assistant (и во время waiting) лента рисует **inline activity strip** из ordinary A2A artifacts через `projectConversationActivity` + `enrichConversationActivityWithBrowserPreviews` ([`turn-activity.js`](../../core/frontend/static/lib/flow-ui/runtime/turn-activity.js)), с теми же policy gates, что toast overlay:
-
-| Chip | Gate | UI |
-|---|---|---|
-| tool (`tool_call:` / `tool_result:`) | `show_activity` + `tool_calls_display !== 'hidden'` | icon-only chip (`tool`), tooltip = tool name |
-| skill (`load_agent_skill` / `skill_activity`) | `show_skill_loads` | icon-only chip (`scroll-text`), tooltip = skill id |
-| error (`node_error*` / failed task) | всегда при наличии; текст — `errors_display` generic/detailed | icon-only chip (`alert-triangle`), tooltip = error label |
-| browser preview match | `show_browser_previews` + `/content/artifacts/*` с `viewer_url`, match по `tool_call_id` | interactive glowing `globe` chip; click → `browser-preview-open` → `flows.browser_preview` modal (или `window.open` fallback) |
-
-Preview data пишется server-side через `present_flow_ui_artifact(kind="browser_preview")` и **сразу** публикуется A2UI transition'ом (`emit_flow_ui_transitions` в `browser_preview.py`, как handoff); `_copy_state_back` также мержит `_pending_ui_transitions`, чтобы superstep emit не терял presenter deltas. Без этих кадров conversation enrich не видит `viewer_url` и chip остаётся некликабельным `tool`.
-
-Strip **без текстовых лейблов** («Работа инструментов» и т.п.): только glyph + optional running pulse; имя/detail — `title` / `aria-label`.
-
-Observability artifacts **не** входят в turn text / `hasConversationContent` — EmptyState (`greeting`) остаётся видимым, пока нет user/response content. Toast overlay на conversation feed по-прежнему **выключен** (`hasConversationFeed` → `[]`). Без `presentation=conversation` feed рендерит ordinary artifacts как debug/trace dump.
-
-Standing Lara context (`flow_id` / `node_id` / …) уходит в `params.metadata.variables` через `getExtraMetadataVariables` на `<platform-flow-ui>` (drawer / node-ai-helper) **на submit**; `buildSendMessageBody` копирует `message.metadata.variables` в params metadata рядом с `branch`. Bootstrap документ гидрирует без host variables.
-
-Publish gate (`interface-editor-domain.js::validateInterfaceDocument`) требует:
-
-- хотя бы один enabled `platform.ui.submit` Button, достижимый на каждой submit-capable page (interactive inputs без reachable submit — blocking);
-- `component_id` совпадает с ключом в `components`, дети существуют, leaf не имеет детей;
-- каждый `type` есть в trusted catalog manifest;
-- bindings — absolute JSON Pointer; `/system/secrets` запрещён; interactive binding остаётся под `/values`;
-- navigation target существует (`page.navigate` context и `PageLink.pageId`), root surface каждой страницы существует;
-- grid placement не выходит за колонки родителя ни в одном band (`compact/medium/wide`);
-- interactive Button/inputs имеют accessible label (severity `warning`, composer-дети исключены);
-- `formId` не конфликтует между surfaces.
-
-Problems panel показывает полный список с severity, клик по проблеме фокусирует компонент (и переключает страницу), quick fix «Добавить Submit» доступен для submit-проблем.
-
-## Trusted platform effects
-
-`PlatformEffect` — strict discriminated union в capability response, отделённый от `state_returned`. UI capabilities возвращают effects, runner накапливает их в подтверждённом порядке, host validator проверяет company/context/task/component ownership, manifest, causation и idempotency, затем durable command применяет effect.
-
-Подтверждённые effects и interrupt коммитятся в одной durable transaction. Failed capability не добавляет effect. Retry одного idempotency key не применяет effect повторно. `state.push_ui_event(s)`/`pop_ui_events`, `PendingUIEvent`, `ui_events_pending`, `emit_ui_event` запрещены.
-
-## Durable projection
-
-Ledger — источник истины. Query projection хранит Task, messages, lossless artifacts/update order/dedup и Flow UI revisions. Commit order:
-
-1. validate command/effect/update;
-2. append durable ledger event;
-3. update task/artifact/UI projection и outbox atomically;
-4. commit;
-5. publish A2A stream/outbox;
-6. acknowledge sync/submit.
-
-`GetTask`, `ListTasks`, `SubscribeToTask` читают projection, а не реконструируют только последний `ExecutionState.response`. Rebuilder из ledger обязан давать тот же content/revision hash.
+- `FlowUIClient` (`runtime/flow-ui-client.js`) — публичный SDK и единственный транспорт `<platform-flow-ui>`: `open({contextId, document})` → `GET interface` + `ListTasks` гидрация; `send({text, files, action, taskId})` → `SendStreamingMessage`; `cancel`; события `frame|task|ui|state|error`. Python-аналог — `core/clients/flow_ui_client.py::FlowUIClient` (`open`, `send`, `cancel`, `events`, `state`; `decode_task_events`, `task_state`, `task_text`, `task_ui_events`) поверх `A2AClient`. Никаких `fetch`/store/transport в `apps/**`.
+- `FlowUIStore` — один store: документ, state (snapshot + patch по порядку Parts), локальные значения полей, `ui_slots`, активная страница, лента задач. Ошибка протокола (patch до snapshot, чужой mediaType, неизвестный `kind`) — `throw`, не пропуск.
+- `<platform-flow-ui>`: атрибуты `flow-id`/`branch-id`/`embed-id`/`context-id`/`base-url`, `display`, `profile`, `theme`, `locale`, `readonly`, `editing`, `selected-block-id`, `work-item-id`, `company-id`, `voice-base-url`, `platform-ui-origin`, `assistant-title`; свойства `initialDocument`, `sampleState`, `interactionPolicy`, `getRequestHeaders`, `getExtraMetadataVariables` (уходят в `params.metadata.variables` на submit). Рендер блоков — только `renderBlock` через `blockContext()`; выбранный блок помечается `data-selected`. `navigate(page_id)` на неизвестную страницу — `throw`.
+- Submit input-блока/кнопки: `fields` собираются со страницы источника (`field` → локальное значение или state), `source = block_id`, `payload = action.payload`; после отправки локальные значения очищаются, state приходит патчем.
+- Блок `html` (`runtime/html-sandbox.js`): iframe `sandbox="allow-scripts"` (никогда `allow-same-origin`), `srcdoc` с фиксированным `FLOW_UI_HTML_CSP`, токены темы; мост `postMessage` (`action|value|resize|open_url|error`) и API `window.flowUi` (`state`, `onChange`, `send`, `setValue`, `resize`, `openUrl`), `data-bind`/`data-show` в разметке. Константы совпадают с `tests/fixtures/flow_ui/html_sandbox.json` (проверяет hard-cut gate). Ошибка скрипта автора показывается в блоке, не роняет страницу.
+- Chrome-строки — `utils/text.js` (`flowUIText(locale, key)`), не platform i18n bus (runtime standalone). Контент документа (label/greeting/placeholder) — данные владельца.
+- Тема: `--flow-ui-*` только алиасы platform tokens (`shell/tokens.css`); `theme="auto"` через `resolveFlowUITheme`; embed палитра на `platform-flow-ui[data-resolved-theme]`.
+- Файлы сессии: панель «Файлы» из FileRef ленты (`flow-ui-files-panel`), открытие — `openFlowUISessionFile`.
+- Agent identity: `runtime/agent-identity-image.js::resolveAgentIdentityImageSrc` — `agent_identity.image_url` → `flow_identity.image_url` → бренд-марка.
+
+## Interface editor
+
+`apps/flows/ui/components/interface-editor/`: `flows-interface-editor` (host), `flows-interface-toolbar` (undo/redo/viewport/publish/assist), `flows-interface-pages-tabs`, `flows-interface-add-panel` (палитра из schema, DnD `application/x-flow-ui-block`), `flows-interface-properties-panel` (форма свойств из JSON Schema через `<platform-field>`, пути state через `<platform-variable-input>`), `flows-interface-template-card`; модалки `flows-interface-template-modal` (галерея `GET /flow-ui/templates`, live preview `<platform-flow-ui editing>`), `flows-interface-html-editor-modal` (CodeMirror + автодополнение `flowUi.*`, live preview в том же sandbox с тестовым state в JSON-редакторе, журнал моста, шпаргалка: пути чтения/записи блока, `FLOW_UI_API`, `FLOW_UI_HTML_THEME_TOKENS`, кнопка «Стартовый пример»). Новый `html`-блок из `defaultBlock` получает `source` = i18n `interface_editor.default_text_html_source` (прокомментированный пример всех приёмов: `data-bind`/`data-show`, `flowUi.onChange/send/setValue/openUrl`, токены темы), `fields: ['items']` и `field` = id блока — пример работает сразу. Чистая доменная логика — `interface-editor-domain.js` (`blockCatalog`, `defaultBlock`, `insertBlock/moveBlock/removeBlock/setBlockProperty/duplicateBlock/wrapInSection`, pages CRUD, `createHistory/commitHistory/undoHistory/redoHistory` (лимит 80, coalesce), `documentProblems`, `statePathCatalog`).
+
+- Холст — тот же `<platform-flow-ui editing .initialDocument .sampleState .selectedBlockId>`: production-рендер, скрытые `visible_when` блоки видны, шаблоны с неизвестными путями остаются `{path}`. Overlay выделения читает геометрию через `editor/selection.js` (`blockElement`, `blockFrame`, `pageRenderRoot`); отдельного «редакторского» рендера нет.
+- Состояние — slice `flows/interface_editor` (`apps/flows/ui/events/resources/interface-editor.resource.js`): `documentKey` (`flow_id:branch_id`), `history{present, past, future}`, `pageId`, `selectedBlockId`, `viewport` (`desktop|tablet|mobile`), `preview`, `sidebarTab` (`add|properties`); операции `flows/flow_ui_schema`, `flows/flow_ui_templates`, `flows/flow_ui_assist` (`flow-ui.resource.js`). Черновики — localStorage `platformStorageKey('flows','interface_drafts')`; snapshot-история внутри Lit-элемента запрещена.
+- Publish: `documentProblems` (severity `error` блокирует; `problem_inputs_without_action`, `frozen_path`, неизвестные `page_id`/`slot_id`, дубли `block_id`, лимиты) → `editor-publish` → `interface-change` с полным документом; сохранение вместе с графом.
+- AI-помощник: «Описать страницу» (без `block_id`) / «Изменить выбранный блок» — одна команда истории поверх ответа `POST /flow-ui/assist`.
+
+## Embed, share, HITL — один runtime
+
+- **Embed** (`TokenType.EMBED_SESSION`): гость стартует новую сессию; `EmbedConfig.presentation ∈ {drawer, page}`, `EmbedConfig.position ∈ {bottom-right, bottom-left}` — только угол launcher-кнопки drawer; `<flow-ui-drawer>` = launcher + панель (`shell/drawer*.js`, persist `writeFlowUIPreferences`). CDN entry — `embed-flow-ui/flow-ui-embed-autoload.js`; `embed-chat/humanitec-embed-autoload.js` — только import того же autoload. Сниппет `GET /frontend/api/embed/configs/{embed_id}/code` и autoload читают одни `data-*` (`data-embed-id|data-flow-id`, `data-token-url`, `data-flows-base-url`, `data-presentation`, `data-position`, `data-theme`, `data-locale`, `data-show-launcher`, `data-platform-ui-origin`, `data-token-expires-seconds`, `data-use-credentials`, `data-toggle-event-name`, `data-voice-base-url`, `data-company-id`; preview — `data-static-bearer`, `data-branch-id`, `data-initial-open`). После mount — `window.linnexFlowUI` (`setTheme`, `setLocale`, `setLauncherVisible`, `setAssistantTitle`, `setToggleEventName`, `setMetadataHooks`, `setAuthProvider`) и событие `linnex-flow-ui-mounted`. A2A allowlist embed = `SendMessage`, `SendStreamingMessage`, `GetTask`, `ListTasks`, `SubscribeToTask`, `CancelTask`; `ListTasks` требует `contextId`.
+- **Live share** (`TokenType.FLOW_UI_SHARE`): `FlowUIShareGrant{grant_id, context_id, permission viewer|editor, redacted_paths (JSON Pointer), expires_at, revoked_at}`; REST `/flows/api/v1/flow-ui/shares` (`POST`, `GET`, `DELETE /{grant_id}`, `POST /exchange/{grant_id}`); AuthZ — OpenFGA `flow_ui_share`. Redaction — на границе A2A: `apps/flows/src/a2a/share_task_redaction.py` вырезает пути из Parts артефакта `state` (snapshot и patch) для `GetTask`/`ListTasks`/stream; `ui-action` посетителя на скрытое поле — `assert_fields_outside_redacted` → `PermissionError`. Ledger и проекция владельца не мутируются. Host страницы — `apps/frontend/services/flow_ui_shared_session_html.py` (`tokens.css`, `theme="auto"`).
+- **HITL** (`hitl_node.handoff_mode = single_reply | takeover`): оператор в Worktracker отвечает через `runtime/hitl-transport.js` (REST worktracker/ask, не A2A), пользователь — обычным A2A ходом; лента читает артефакт `operator_reply`; `runtime/operator-handoff-from-task.js` строит режим из parked Task (`metadata.platform_interrupt`). Пока пользователь ждёт оператора (`single_reply`), композер остаётся на месте, но `readonly` (без файлов/голоса/отправки); без права хода (share viewer, оператор без доступа к очереди, закрытая задача) композер не рендерится. Кнопка формы у оператора — тоже HITL REST: `operatorTurnFromAction` проецирует поля страницы в текст «подпись блока: значение» (в порядке страницы; `file_upload` — вложениями; действие без полей — своим именем). Канон → **`worktracker.mdc`**.
 
 ## Security и limits
 
-- auth/company/origin/grant проверяются до task/document lookup disclosure;
-- limits на document/component/depth/parts/raw/data/patch/rate задаются typed policy;
-- URL проходят scheme/SSRF/file ownership validation;
-- markdown sanitizes; raw HTML/scripts/event attributes/style injection forbidden;
-- file/raw/data artifacts не превращаются в executable iframe/content;
-- embed-safe catalog/capabilities уже server-resolved и не расширяются клиентом;
-- every mutation/action имеет audit causation (`task_id`, `context_id`, `component_id`, `interaction_id`, `mutation_id`).
+- `html` исполняется только в opaque-origin iframe с фиксированным CSP; никакого `allow-same-origin`, inline HTML/скриптов в других блоках, `eval` данных из state.
+- Markdown санитизируется (`utils/markdown.js`); URL/файлы — только через platform download URL и `flowUIMediaSrc`.
+- `ui-action` принимает только поля, объявленные input/html-блоками документа или отрендеренные агентом (`ui_slots`); значения проверяются по типу блока; `required` — по странице источника.
+- Лимиты — `FlowUILimits` (`max_pages`, `max_blocks_per_page`, `max_blocks_per_render`, `max_state_bytes`, `max_html_source_bytes`, `max_html_blocks_per_page`) в настройках flows, не в документе.
+- Auth/company/origin/grant проверяются до чтения документа; embed CORS — `EmbedDynamicCorsMiddleware`.
 
-## Совместимость и публичная граница
+## Тесты
 
-Сохраняются A2A 1.0 methods, SDK protobuf types, все Part variants, произвольные Artifact names/metadata/extensions, Files API links/raw, HITL statuses/artifacts, public embed endpoint/auth/origin controls и historical CDN script URL.
+- Conformance: `tests/fixtures/flow_ui/{ui_artifacts,ui_action_message,state_patch,templating,html_sandbox,schema}.json` ↔ `tests/core/flow_ui/test_flow_ui_conformance.py`, `test_flow_ui_schema_fixture.py`, `test_flow_ui_protocol_docs.py`, JS `tests/frontend_core/unit/flow-ui/conformance.spec.js`.
+- Backend: `tests/core/flow_ui/test_flow_ui_action.py`, `test_flow_ui_effects.py`; API `tests/flows/api/test_flow_interface.py`, `test_flow_ui_assist.py`, `test_flow_ui_shares.py`, `test_hitl_conversation_http.py`; e2e A2A `tests/flows/e2e/test_embed_stream.py`; SDK `tests/core/clients/test_flow_ui_client.py`; хелперы `tests/flows/_flow_ui.py`, `_flow_ui_session.py` (декодирование через SDK).
+- Frontend unit (vitest) `tests/frontend_core/unit/flow-ui/*.spec.js`; browser (web-test-runner) `tests/frontend_core/browser/flow-ui/{platform-flow-ui-editing,html-block,html-editor-modal,interface-editor,template-card}.spec.js`; Playwright `tests/ui/e2e/test_flow_ui_*.py`, `test_hitl_*.py`, `test_embed_autoload_browser.py`.
 
-Публичный CDN entry: `embed-flow-ui/flow-ui-embed-autoload.js`. `embed-chat/humanitec-embed-autoload.js` — только import того же autoload.
+## Gates
 
-### Публичный script `data-*` (консоль = autoload)
-
-Канон — сниппет `GET /frontend/api/embed/configs/{embed_id}/code`. Autoload читает те же имена.
-
-Обязательные: `data-embed-id` или `data-flow-id`; `data-token-url` (обычно `/api/flow-ui-token`), кроме preview с `data-static-bearer`; `data-flows-base-url`.
-
-Живые: `data-presentation`, `data-position`, `data-theme`, `data-locale`, `data-show-launcher`, `data-platform-ui-origin`, `data-token-expires-seconds`, `data-use-credentials`, `data-toggle-event-name` (в сниппете `linnex-flow-ui-toggle`), `data-voice-base-url`, `data-company-id`. Preview-only: `data-static-bearer`, `data-flow-id`, `data-branch-id`, `data-initial-open`.
-
-Своя кнопка: `window.dispatchEvent(new CustomEvent('linnex-flow-ui-toggle', { detail: { open: true } }))`.
-
-После mount: `window.linnexFlowUI` (`element`, `embedId`, `presentation`, `setTheme`, `setLocale`, `setLauncherVisible`, `setAssistantTitle`, `setToggleEventName`, `setMetadataHooks`, `setAuthProvider`) и событие `linnex-flow-ui-mounted`. Статика chrome (`/static/core/...`) режется через `data-platform-ui-origin`. На чужом сайте CSP `img-src` обязан разрешать этот origin (apex и `*.`), иначе иконки и лого блокируются. `theme=auto` без `html[data-theme]` резолвится в `dark`; палитра живёт на `platform-flow-ui[data-resolved-theme]`, не на токенах host-страницы.
-
-## Обязательные gates
-
-- A2A official fixture pin v1.0.0 и conformance green.
-- All Parts/mixed arbitrary Artifacts round-trip одинаково для blocking/stream/Get/List/Subscribe/restart/remote client.
-- Durable replay/projection hash и UI revision stable.
-- Reopen/share возвращают exact acknowledged document/values до первого paint.
-- Editor/runtime fingerprint/geometry/screenshot parity matrix green.
-- Keyboard/a11y, RU/EN, responsive 4/8/12, nested grid tests green.
-- `rg` не находит runtime `platform-chat`, `FlowChatSettings`, `chat_override`, `ui_events_pending`, `push_ui_event`, `emit_ui_event`, `artifact.name === 'ui_event'`, кроме явно закреплённого CDN shim/data migration fixture.
-- Zero-legacy: `rg` не находит `flow-ui/editor/hosts`, `flows-interface-overlay-host`, `_layoutPointFromClient`, `_historyPast`, hardcoded palette `GROUPS`, `height: auto` у `platform-flow-ui` в chat-page, текстовый consume optimistic turn'ов и EN-хардкоды chrome в `flow-ui/catalog/**`.
-- Zero-legacy layout: `rg` по `core/**` + `apps/**` не находит `snap-engine`, `insertionSlot`, `children.reorder`, `stack.promote_`, `place.escape_and_move`, `proposeReorderGesture`, `proposeGridGesture`, `nearestFreeGridCell`, `siblingOccupiedCells`, `rowIndexAtY`, `canPromoteStackParentToGrid`, `isComposerPlacementLock`, `LAYOUT_REORDER_`, `FLOW_UI_ROW_BASELINE_PX` (в тестах эти имена допустимы только как negative-assert «команда отвергается»).
-- `make check-ui-canon check-ui-factories check-command-rest-mirror check-core-frontend-canon check-i18n check-i18n-keys check-events-canon`, `make lint` и целевые/full tests green.
+- `scripts/check_flow_ui_hard_cut.py` (в `make lint`): zero-reference на A2UI, negotiation/representation/interaction parser/session service/contract projector, `ui_values`/`ui_document`/`ui_state`/`mutation_id`/`base_revision`, grid layout (`row_start`/`column_span`/`container_layout`), `interface_override`/`FlowInterfaceConfig`, `platform.ui.*`, `ui.*` capabilities; маркеры `TODO|FIXME|HACK|XXX|compat|legacy|deprecated|shim|_v2`; паритет рендереров JS ↔ типы грамматики; бюджеты (файл ≤ 600 строк, `flow-ui/**` ≤ 9000, редактор ≤ 2500); совпадение sandbox/CSP с фикстурой. Единственные допустимые упоминания удалённых имён — allowlist в самом скрипте (CDN shim, миграции, `.cursor/rules`).
+- `make lint`, `uv run pytest tests/core/flow_ui tests/core/state tests/core/clients/test_flow_ui_client.py tests/flows/api/test_flow_interface.py tests/flows/api/test_flow_ui_assist.py`, `npx vitest run tests/frontend_core/unit`, `npm run test:core-browser`, `make check-i18n check-i18n-keys check-events-canon`.

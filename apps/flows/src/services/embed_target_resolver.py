@@ -4,11 +4,8 @@ from dataclasses import dataclass
 
 from apps.flows.src.container import FlowContainer
 from core.context import Context, clear_context, get_context, set_context
+from core.flow_ui.document import FlowUIConversationSettings, FlowUIPageId
 from core.models.embed_models import EmbedInterfaceLook, EmbedStatus
-from core.models.flow_interface import (
-    EmbedInterfaceOverride,
-    compact_embed_interface_override,
-)
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
 
@@ -23,7 +20,8 @@ class EmbedTarget:
     active: bool
     guest_max_user_messages: int | None
     look: EmbedInterfaceLook
-    interface_override: EmbedInterfaceOverride | None
+    conversation: FlowUIConversationSettings | None
+    start_page_id: FlowUIPageId | None
 
 
 async def resolve_embed_target(container: FlowContainer, embed_id: str) -> EmbedTarget | None:
@@ -53,7 +51,8 @@ async def resolve_embed_target(container: FlowContainer, embed_id: str) -> Embed
         active=config.status == EmbedStatus.ACTIVE,
         guest_max_user_messages=guest_cap,
         look=EmbedInterfaceLook.from_embed_config(config),
-        interface_override=compact_embed_interface_override(config.interface_override),
+        conversation=config.conversation,
+        start_page_id=config.start_page_id,
     )
 
 

@@ -1,46 +1,74 @@
 /**
- * Interface editor orchestrator: pages/layers/palette · production canvas ·
- * inspector, with slice-backed command history (undo/redo survives remounts),
- * clipboard, keyboard shortcuts and a selection breadcrumb.
- * Every document edit is one labeled history transaction.
+ * Редактор интерфейса flow (модель Odoo Studio): слева «Добавить» / «Свойства», в центре холст
+ * ``<platform-flow-ui editing>`` на реальном рендере, сверху вкладки страниц и панель инструментов.
+ *
+ * Хост-контракт: ``.interfaceConfig`` (FlowUIDocument ветки), ``.flowId``, ``.branchId``;
+ * ``interface-change {config}`` — публикация валидного черновика. Черновик и история живут
+ * в slice ``flows/interface_editor``; структура меняется только командами домена.
  */
+
 import { css, html, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { applyLayoutCommand } from '@platform/lib/flow-ui/editor/layout-domain-commands.js';
-import { flowUIPageTemplate } from '@platform/lib/flow-ui/templates/page-templates.js';
+import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
+import { flowUIEditorChromeTokens } from '@platform/lib/flow-ui/editor/editor-chrome.styles.js';
+import { blockFrame, blockIdFromEvent } from '@platform/lib/flow-ui/editor/selection.js';
+import { BLOCK_ID_MIME, dropTargetFromEvent, hasFlowUiDrag, readDragPayload } from '@platform/lib/flow-ui/editor/drop-zones.js';
+import { inlineEditKeyAction, inlineTextIsMultiline, inlineTextProperty } from '@platform/lib/flow-ui/editor/inline-text-edit.js';
+import '@platform/lib/flow-ui/components/platform-flow-ui.js';
+import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-popover.js';
+import '@platform/lib/components/platform-menu.js';
+import '@platform/lib/components/platform-segmented-control.js';
+import '@platform/lib/components/platform-button.js';
 import {
-    activeSurface,
-    clone,
-    cloneSubtree,
-    columnsPresetCount,
-    containerLayoutPreset,
-    createColumnsPreset,
-    defaultComponent,
-    findParentId,
-    materializeClipboard,
-    applyRowShifts,
-    normalizeAuthorContainersToGrid,
-    placeInGrid,
-    quickFixAddSubmit,
-    removeSubtree,
-    renameComponent,
-    serializeClipboard,
-    uniqueComponentId,
-    validateInterfaceDocument,
+    EDITOR_VIEWPORTS,
+    blockCatalog,
+    catalogEntry,
+    defaultBlock,
+    documentProblems,
+    duplicateBlock,
+    findPage,
+    frozenStateFields,
+    hasBlockingProblems,
+    insertBlock,
+    insertPage,
+    locateBlock,
+    moveBlock,
+    removeBlock,
+    removePage,
+    replacePageBlocks,
+    setBlockProperty,
+    setPageProperty,
+    statePathCatalog,
+    uniqueBlockId,
+    uniquePageId,
+    withColumns,
+    wrapInSection,
 } from './interface-editor-domain.js';
 import './flows-interface-toolbar.js';
-import './flows-interface-pages-panel.js';
-import './flows-interface-palette.js';
-import './flows-interface-layers-tree.js';
-import './flows-interface-canvas.js';
-import './flows-interface-inspector.js';
-import './flows-interface-component-menu.js';
-import './flows-interface-data-model-panel.js';
-import './flows-interface-contract-panel.js';
-import './flows-interface-problems-panel.js';
+import './flows-interface-pages-tabs.js';
+import './flows-interface-add-panel.js';
+import './flows-interface-properties-panel.js';
 
-// One clipboard per editor session; survives selection changes, not reloads.
-let interfaceClipboard = null;
+const DRAFTS_STORAGE_KEY = platformStorageKey('flows', 'interface_drafts');
+
+function stableStringify(value) {
+    if (value === null || typeof value !== 'object') return JSON.stringify(value);
+    if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
+}
+
+function readDrafts() {
+    const raw = globalThis.localStorage.getItem(DRAFTS_STORAGE_KEY);
+    return raw === null ? {} : JSON.parse(raw);
+}
+
+function writeDraft(documentKey, document) {
+    const drafts = readDrafts();
+    if (document === null) delete drafts[documentKey];
+    else drafts[documentKey] = document;
+    globalThis.localStorage.setItem(DRAFTS_STORAGE_KEY, JSON.stringify(drafts));
+}
 
 export class FlowsInterfaceEditor extends PlatformElement {
     static i18nNamespace = 'flows';
@@ -49,66 +77,37 @@ export class FlowsInterfaceEditor extends PlatformElement {
         interfaceConfig: { attribute: false },
         flowId: { type: String },
         branchId: { type: String },
-        parity: { state: true },
-        rightPanel: { state: true },
-        _componentMenu: { state: true },
+        _schema: { state: true },
+        _frame: { state: true },
+        _drop: { state: true },
+        _inlineEdit: { state: true },
+        _menuOpen: { state: true },
     };
 
-    static styles = [PlatformElement.styles, css`
-        :host {
-            display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
-            min-width: 0; min-height: 0; height: 100%; background: var(--bg-elevated);
-        }
-        .body {
-            display: grid;
-            grid-template-columns: minmax(260px, 280px) minmax(0, 1fr) minmax(300px, 340px);
-            min-height: 0;
-        }
-        .left, .right { min-height: 0; overflow: auto; background: var(--glass-solid-medium); }
-        .left { border-right: 1px solid var(--border-subtle); padding: 12px; display: grid; align-content: start; gap: 4px; }
-        .right { border-left: 1px solid var(--border-subtle); }
-        flows-interface-canvas { min-width: 0; min-height: 0; }
-        .tabs { display: flex; border-bottom: 1px solid var(--border-subtle); }
-        .tabs .tab {
-            flex: 1; color: var(--text-tertiary); text-align: center;
-            padding: 11px 9px; cursor: pointer; font-size: 12px; font-weight: 600;
-        }
-        .tabs .tab[data-active="true"] {
-            color: var(--text-primary); box-shadow: inset 0 -2px var(--accent);
-        }
-        .tabs .tab:hover { color: var(--text-primary); }
-        .tabs .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-        .footer {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) auto;
-            align-items: stretch;
-            border-top: 1px solid var(--border-subtle);
-            background: var(--glass-solid-medium);
-            min-height: 34px;
-        }
-        .breadcrumb {
-            display: flex; align-items: center; gap: 2px; padding: 6px 12px;
-            font-size: 11px; overflow-x: auto; white-space: nowrap; min-width: 0;
-        }
-        .breadcrumb .crumb {
-            color: var(--text-tertiary);
-            cursor: pointer; font-size: 11px; padding: 2px 4px; border-radius: 5px;
-        }
-        .breadcrumb .crumb:hover { color: var(--text-primary); background: var(--glass-solid-subtle); }
-        .breadcrumb .crumb[data-current="true"] { color: var(--accent); font-weight: 650; }
-        .breadcrumb .crumb:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-        .breadcrumb .sep { color: var(--text-tertiary); opacity: .5; }
-        .footer flows-interface-problems-panel {
-            border-top: none;
-            background: transparent;
-        }
-        @media (max-width: 1000px) {
-            .body { grid-template-columns: 220px minmax(0, 1fr); }
-            .right {
-                position: absolute; right: 0; top: 100px; bottom: 40px; width: 320px;
-                z-index: 5; box-shadow: var(--shadow-lg);
-            }
-        }
+    static styles = [PlatformElement.styles, flowUIEditorChromeTokens, css`
+        :host { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; min-width: 0; min-height: 0; height: 100%; background: var(--bg-elevated); outline: none; }
+        .body { display: grid; grid-template-columns: minmax(280px, 320px) minmax(0, 1fr); min-height: 0; }
+        .sidebar { min-height: 0; overflow: auto; border-right: 1px solid var(--border-subtle); background: var(--glass-solid-medium); display: grid; grid-template-rows: auto minmax(0, 1fr); }
+        .sidebar-tabs { display: block; margin: 8px 10px 0; }
+        .canvas { position: relative; min-width: 0; min-height: 0; overflow: auto; padding: 28px 24px 120px; background:
+            radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--text-tertiary) 22%, transparent) 1px, transparent 0) 0 0 / 22px 22px; }
+        .frame { position: relative; margin: 0 auto; min-height: 480px; border-radius: 16px; border: 1px solid var(--border-subtle); background: var(--bg-primary); box-shadow: var(--shadow-lg); transition: width 180ms ease; }
+        .frame platform-flow-ui { display: block; border-radius: inherit; overflow: hidden; }
+        .frame[data-preview='true'] platform-flow-ui { height: 720px; }
+        .selection { position: absolute; pointer-events: none; border: 2px solid var(--flow-ui-editor-select); border-radius: 8px; z-index: 3; }
+        .selection .label { position: absolute; top: -26px; left: -2px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px 6px 6px 0; background: var(--flow-ui-editor-select); color: var(--flow-ui-editor-label-fg); font-size: 11px; font-weight: 650; white-space: nowrap; pointer-events: auto; }
+        .selection .label .handle { cursor: grab; display: inline-grid; place-items: center; }
+        .selection .label .kebab { color: inherit; }
+        .drop-line { position: absolute; height: 3px; margin-top: -1px; border-radius: 3px; background: var(--flow-ui-editor-insert); box-shadow: 0 0 0 3px var(--flow-ui-editor-insert-fill); pointer-events: none; z-index: 4; }
+        .inline-edit { position: absolute; z-index: 5; box-sizing: border-box; padding: 6px 8px; border: 2px solid var(--flow-ui-editor-select); border-radius: 8px; background: var(--bg-primary); color: var(--text-primary); font: inherit; font-size: 14px; line-height: 1.4; resize: none; outline: none; box-shadow: var(--shadow-lg); }
+        .problems { display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 4px 12px; border-top: 1px solid var(--border-subtle); background: var(--glass-solid-medium); font-size: 12px; color: var(--text-secondary); overflow-x: auto; white-space: nowrap; }
+        .problems .problem { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 3px 8px; border-radius: 6px; background: var(--glass-solid-subtle); color: var(--text-primary); font-size: 12px; cursor: pointer; }
+        .problems .problem:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+        .problems .problem[data-severity='error'] { color: var(--error); }
+        .problems .problem[data-severity='warning'] { color: var(--warning); }
+        .problems .ok { color: var(--success); display: inline-flex; align-items: center; gap: 6px; }
+        .loading { display: grid; place-items: center; height: 100%; color: var(--text-tertiary); font-size: 13px; }
+        @media (max-width: 1000px) { .body { grid-template-columns: 240px minmax(0, 1fr); } }
     `];
 
     constructor() {
@@ -116,1001 +115,436 @@ export class FlowsInterfaceEditor extends PlatformElement {
         this.interfaceConfig = null;
         this.flowId = '';
         this.branchId = 'default';
-        this.parity = {
-            status: 'Loading',
-            fingerprint: '',
-            assetsReady: false,
-            expectedContext: null,
-            actualContext: null,
-            diff: [],
-        };
-        this.rightPanel = 'properties';
-        this._componentMenu = null;
-        this._normalizedDocument = null;
-        this._editorState = this.useSlice('flows/interface_editor');
-        this._onKeyDown = (event) => this._handleHotkeys(event);
-    }
-
-    updated(changed) {
-        if (!changed.has('interfaceConfig')) return;
-        const document = this.interfaceConfig?.template?.document;
-        // On-load migrate runs once per loaded document, not per config change: the
-        // document it emits comes back as the same object, so the pass cannot re-enter.
-        if (!document || document === this._normalizedDocument) return;
-        this._normalizedDocument = document;
-        queueMicrotask(() => this._normalizeAuthorGrids(document));
-    }
-
-    /**
-     * Grid-first on-load migrate: author containers → grid, `row_start: 'auto'` → a
-     * real row. Emits interface-change without history when anything changed.
-     */
-    _normalizeAuthorGrids(source) {
-        if (this.interfaceConfig?.template?.document !== source) return;
-        const document = clone(source);
-        if (!normalizeAuthorContainersToGrid(document)) return;
-        document.revision = Number(document.revision || 0) + 1;
-        const config = clone(this.interfaceConfig);
-        config.template.document = document;
-        config.policy = clone(document.policy);
-        this._normalizedDocument = document;
-        this.emit('interface-change', { config });
+        this._schema = null;
+        this._catalog = [];
+        this._frozen = new Set();
+        this._frame = null;
+        this._drop = null;
+        this._inlineEdit = null;
+        this._menuOpen = false;
+        this._ui = this.useSlice('flows/interface_editor');
+        this._editor = this.useOp('flows/editor');
+        this._schemaOp = this.useOp('flows/flow_ui_schema');
+        this._assistOp = this.useOp('flows/flow_ui_assist');
+        this._frameRaf = 0;
+        this._resizeObserver = null;
+        this._onKeyDown = (event) => this._handleKeydown(event);
     }
 
     connectedCallback() {
         super.connectedCallback();
-        window.addEventListener('keydown', this._onKeyDown);
+        this.tabIndex = 0;
+        this.addEventListener('keydown', this._onKeyDown);
+        void this._loadSchema();
     }
 
     disconnectedCallback() {
-        window.removeEventListener('keydown', this._onKeyDown);
+        this.removeEventListener('keydown', this._onKeyDown);
+        if (this._resizeObserver) this._resizeObserver.disconnect();
+        cancelAnimationFrame(this._frameRaf);
         super.disconnectedCallback();
     }
 
-    get editorState() {
-        return this._editorState.value;
+    async _loadSchema() {
+        const schema = await this._schemaOp.run(null);
+        if (schema === null) return;
+        this._catalog = blockCatalog(schema);
+        this._frozen = frozenStateFields(schema);
+        this._schema = schema;
     }
 
-    get document() {
-        return this.interfaceConfig?.template?.document || null;
+    firstUpdated() {
+        this._resizeObserver = new ResizeObserver(() => this._scheduleFrame());
+        const canvas = this.renderRoot.querySelector('.canvas');
+        if (canvas) this._resizeObserver.observe(canvas);
     }
 
-    get surface() {
-        return this.document ? activeSurface(this.document) : null;
+    updated(changed) {
+        if (changed.has('interfaceConfig') || changed.has('flowId') || changed.has('branchId')) this._openDocument();
+        this._syncCanvasPage();
+        this._scheduleFrame();
     }
 
-    get selected() {
-        return this.surface?.components?.[this.editorState?.selectedComponentId] || null;
+    /** Активная вкладка страницы — источник правды для страницы холста. */
+    _syncCanvasPage() {
+        const flowUi = this._flowUi();
+        const pageId = this._ui.value.pageId;
+        if (flowUi === null || this._ui.value.preview || pageId === '' || this._page === null) return;
+        if (flowUi.store.document !== null && flowUi.store.pageId !== pageId) flowUi.navigate(pageId);
     }
 
-    _locale() {
-        return this.select((state) => state.i18n.locale).value === 'ru' ? 'ru' : 'en';
+    // --- Документ ---------------------------------------------------------------------------
+
+    get _documentKey() {
+        return `${this.flowId}:${this.branchId}`;
     }
 
-    _dispatchConfig(config) {
-        this.emit('interface-change', { config });
+    get _draft() {
+        const ui = this._ui.value;
+        return ui.history !== null && ui.documentKey === this._documentKey ? ui.history.present : null;
     }
 
-    _pushHistory(label, coalesceKey = '') {
-        if (!this.interfaceConfig) return;
-        this._editorState.historyPush({
-            label,
-            coalesceKey,
-            config: clone(this.interfaceConfig),
-        });
+    get _page() {
+        const draft = this._draft;
+        return draft === null ? null : findPage(draft, this._ui.value.pageId);
     }
 
-    _commitDocument(document, { label, coalesceKey = '' }) {
-        if (typeof label !== 'string' || label === '') {
-            throw new Error('flows-interface-editor: history label required');
-        }
-        this._pushHistory(label, coalesceKey);
-        const config = clone(this.interfaceConfig);
-        config.template.document = document;
-        config.policy = clone(document.policy);
-        this._dispatchConfig(config);
+    get _sampleState() {
+        const preview = this._editor.state.previewExecutionState;
+        return preview && typeof preview === 'object' ? preview : {};
     }
 
-    _mutate(label, mutator, { coalesceKey = '' } = {}) {
-        if (!this.interfaceConfig || !this.document) {
-            throw new Error('flows-interface-editor: cannot mutate without interface document');
-        }
-        const document = clone(this.document);
-        mutator(document);
-        document.revision = Number(document.revision || 0) + 1;
-        this._commitDocument(document, { label, coalesceKey });
+    _openDocument() {
+        if (this.flowId === '' || this.interfaceConfig === null) return;
+        if (this._ui.value.documentKey === this._documentKey) return;
+        const drafts = readDrafts();
+        const stored = Object.hasOwn(drafts, this._documentKey) ? drafts[this._documentKey] : null;
+        this._ui.openDocument({ documentKey: this._documentKey, document: stored ?? structuredClone(this.interfaceConfig) });
     }
 
-    _undo() {
-        const past = this.editorState.history?.past || [];
-        if (!past.length) return;
-        const entry = past[past.length - 1];
-        this._editorState.historyUndo({ config: clone(this.interfaceConfig) });
-        this._dispatchConfig(clone(entry.config));
+    _commit(document, coalesceKey = null) {
+        this._ui.commitDocument({ document, coalesceKey });
+        writeDraft(this._documentKey, document);
     }
 
-    _redo() {
-        const future = this.editorState.history?.future || [];
-        if (!future.length) return;
-        const entry = future[0];
-        this._editorState.historyRedo({ config: clone(this.interfaceConfig) });
-        this._dispatchConfig(clone(entry.config));
+    get _dirty() {
+        const draft = this._draft;
+        return draft !== null && this.interfaceConfig !== null && stableStringify(draft) !== stableStringify(this.interfaceConfig);
     }
 
-    _selectComponent(event) {
-        this._editorState.selectComponent({
-            componentId: event.detail.componentId,
-            additive: event.detail.additive === true,
-        });
+    get _problems() {
+        const draft = this._draft;
+        return draft === null || this._schema === null ? [] : documentProblems(draft, this._catalog, this._frozen);
     }
 
-    _selectPage(event) {
-        const pageId = event.detail.pageId;
-        this._editorState.selectPage({ pageId });
-        this._mutate(this.t('interface_editor.history_page_select'), (document) => {
-            document.active_page_id = pageId;
-        });
-    }
-
-    /**
-     * Insert a component into a grid parent. `area` is the exact cell chosen on
-     * the canvas; without it (palette click, keyboard) the component appends to
-     * the first free row below everything else.
-     */
-    _insertComponent(type, targetParentId = null, index = null, area = null, shifted = null) {
-        let createdId = '';
-        this._mutate(this.t('interface_editor.history_insert'), (document) => {
-            const surface = activeSurface(document);
-            let parent = targetParentId
-                ? surface.components[targetParentId]
-                : surface.components[this.editorState.selectedComponentId];
-            if (!parent || parent.kind !== 'container') {
-                parent = surface.components[surface.root_component_id || 'root'];
-            }
-            const children = [...(parent.children || [])];
-            const at = Number.isInteger(index) ? Math.min(Math.max(index, 0), children.length) : children.length;
-            const columnCount = columnsPresetCount(type);
-            if (columnCount != null) {
-                const preset = createColumnsPreset(columnCount, surface, this._locale());
-                Object.assign(surface.components, preset.components);
-                applyRowShifts(surface, shifted);
-                placeInGrid(parent, surface, preset.components[preset.rootId], area);
-                children.splice(at, 0, preset.rootId);
-                parent.children = children;
-                createdId = preset.rootId;
-                return;
-            }
-            const component = defaultComponent(
-                type,
-                uniqueComponentId(surface, type),
-                this._locale(),
-            );
-            applyRowShifts(surface, shifted);
-            placeInGrid(parent, surface, component, area);
-            surface.components[component.component_id] = component;
-            children.splice(at, 0, component.component_id);
-            parent.children = children;
-            createdId = component.component_id;
-        });
-        if (createdId) {
-            this._editorState.selectComponent({ componentId: createdId, additive: false });
-        }
-    }
-
-    _addComponent(event) {
-        this._insertComponent(event.detail.type);
-    }
-
-    _dropComponent(event) {
-        this._insertComponent(
-            event.detail.type,
-            event.detail.targetParentId,
-            event.detail.index,
-            event.detail.area,
-            event.detail.shifted,
-        );
-    }
-
-    _deleteSelection() {
-        const surface = this.surface;
-        if (!surface) return;
-        const rootId = surface.root_component_id || 'root';
-        const ids = (this.editorState.selectedComponentIds || [])
-            .filter((id) => id !== rootId && surface.components[id]);
-        if (!ids.length) return;
-        this._mutate(this.t('interface_editor.history_delete'), (document) => {
-            const target = activeSurface(document);
-            for (const id of ids) removeSubtree(target, id);
-        });
-        this._editorState.selectComponent({ componentId: rootId, additive: false });
-    }
-
-    _deleteComponent(event) {
-        const id = event.detail.componentId;
-        const surface = this.surface;
-        if (!surface || id === (surface.root_component_id || 'root')) return;
-        this._mutate(this.t('interface_editor.history_delete'), (document) => {
-            removeSubtree(activeSurface(document), id);
-        });
-        this._editorState.selectComponent({
-            componentId: surface.root_component_id || 'root',
-            additive: false,
-        });
-    }
-
-    _renameComponent(event) {
-        const { componentId, nextId } = event.detail;
-        this._mutate(this.t('interface_editor.history_rename'), (document) => {
-            renameComponent(activeSurface(document), componentId, nextId);
-        });
-        this._editorState.selectComponent({ componentId: nextId, additive: false });
-    }
-
-    _componentVisibility(event) {
-        const { componentId, visible } = event.detail;
-        this._mutate(this.t('interface_editor.history_visibility'), (document) => {
-            const component = activeSurface(document).components[componentId];
-            if (!component) return;
-            component.visibility = visible ? null : false;
-        });
-    }
-
-    _layersMove(event) {
-        const { componentId, targetId, position } = event.detail;
-        const surface = this.surface;
-        if (!surface) return;
-        const surfaceId = surface.surface_id
-            || this.document.pages[this.document.active_page_id].root_surface_id;
-        let targetParentId;
-        let index;
-        if (position === 'inside') {
-            targetParentId = targetId;
-            index = (surface.components[targetId]?.children || []).length;
-        } else {
-            targetParentId = findParentId(surface, targetId);
-            if (!targetParentId) return;
-            const siblings = (surface.components[targetParentId].children || [])
-                .filter((id) => id !== componentId);
-            index = siblings.indexOf(targetId);
-            if (index < 0) return;
-            if (position === 'after') index += 1;
-        }
-        this._applyLayoutCommand({
-            kind: 'children.move',
-            surfaceId,
-            componentId,
-            targetParentId,
-            index,
-        }, this.t('interface_editor.history_move'));
-    }
-
-    _duplicateComponent(componentId) {
-        const surface = this.surface;
-        if (!surface || componentId === (surface.root_component_id || 'root')) return;
-        let createdId = '';
-        this._mutate(this.t('interface_editor.history_duplicate'), (document) => {
-            const target = activeSurface(document);
-            const parentId = findParentId(target, componentId);
-            if (!parentId) return;
-            const { rootId, components } = cloneSubtree(target, componentId);
-            Object.assign(target.components, components);
-            const parent = target.components[parentId];
-            const children = [...(parent.children || [])];
-            children.splice(children.indexOf(componentId) + 1, 0, rootId);
-            parent.children = children;
-            createdId = rootId;
-        });
-        if (createdId) {
-            this._editorState.selectComponent({ componentId: createdId, additive: false });
-        }
-    }
-
-    _copySelection() {
-        const surface = this.surface;
-        if (!surface) return;
-        const rootId = surface.root_component_id || 'root';
-        const ids = (this.editorState.selectedComponentIds || []).filter((id) => id !== rootId);
-        if (!ids.length) return;
-        interfaceClipboard = serializeClipboard(surface, ids);
-    }
-
-    _pasteClipboard(targetComponentId = null) {
-        if (!interfaceClipboard) return;
-        const surface = this.surface;
-        if (!surface) return;
-        let lastId = '';
-        this._mutate(this.t('interface_editor.history_paste'), (document) => {
-            const target = activeSurface(document);
-            const { roots, components } = materializeClipboard(target, interfaceClipboard);
-            Object.assign(target.components, components);
-            let parent = target.components[targetComponentId || this.editorState.selectedComponentId];
-            if (parent && parent.kind !== 'container') {
-                const parentId = findParentId(target, parent.component_id);
-                parent = parentId ? target.components[parentId] : null;
-            }
-            if (!parent || parent.kind !== 'container') {
-                parent = target.components[target.root_component_id || 'root'];
-            }
-            parent.children = [...(parent.children || []), ...roots];
-            lastId = roots[roots.length - 1];
-        });
-        if (lastId) {
-            this._editorState.selectComponent({ componentId: lastId, additive: false });
-        }
-    }
-
-    /**
-     * Wrap a component into a Section grid. The wrapper takes the component's own
-     * cell in the parent, and the component moves to the wrapper's first cell —
-     * so no sibling cell is disturbed.
-     */
-    _wrapInSection(componentId) {
-        const surface = this.surface;
-        if (!surface || componentId === (surface.root_component_id || 'root')) return;
-        let wrapperId = '';
-        this._mutate(this.t('interface_editor.history_wrap'), (document) => {
-            const target = activeSurface(document);
-            const parentId = findParentId(target, componentId);
-            if (!parentId) return;
-            const wrapped = target.components[componentId];
-            const wrapper = defaultComponent('Section', uniqueComponentId(target, 'Section'), this._locale());
-            wrapper.container_layout = containerLayoutPreset('grid');
-            wrapper.children = [componentId];
-            wrapper.placement.base = { ...wrapper.placement.base, ...wrapped.placement.base };
-            wrapper.placement.overrides = clone(wrapped.placement.overrides || {});
-            wrapped.placement.base = {
-                ...wrapped.placement.base,
-                column_start: 1,
-                column_span: 'full',
-                row_start: 1,
-            };
-            wrapped.placement.overrides = {};
-            target.components[wrapper.component_id] = wrapper;
-            const parent = target.components[parentId];
-            parent.children = (parent.children || [])
-                .map((childId) => (childId === componentId ? wrapper.component_id : childId));
-            wrapperId = wrapper.component_id;
-        });
-        if (wrapperId) {
-            this._editorState.selectComponent({ componentId: wrapperId, additive: false });
-        }
-    }
-
-    _addPage() {
-        this._mutate(this.t('interface_editor.history_page_add'), (document) => {
-            let index = Object.keys(document.pages).length + 1;
-            let pageId = `page-${index}`;
-            while (document.pages[pageId]) {
-                index += 1;
-                pageId = `page-${index}`;
-            }
-            const surfaceId = pageId;
-            document.pages[pageId] = {
-                page_id: pageId,
-                title: { default: `${this.t('interface_editor.page_default_title')} ${index}`, translations: {} },
-                route: `/${pageId}`,
-                root_surface_id: surfaceId,
-                navigation: { visible: true, allow_back: true, allow_direct: true },
-                default_target_profile_id: 'runtime',
-            };
-            const root = defaultComponent('PageShell', 'root', this._locale());
-            root.container_layout = containerLayoutPreset('grid');
-            const submit = defaultComponent('Submit', 'submit', this._locale());
-            root.children = ['submit'];
-            document.surfaces[surfaceId] = {
-                surface_id: surfaceId,
-                catalog_id: document.catalog_id,
-                root_component_id: 'root',
-                components: { root, submit },
-                data_model: { content: {}, values: {}, system: {} },
-                owner: 'platform',
-                send_data_model: true,
-            };
-            document.active_page_id = pageId;
-            queueMicrotask(() => this._editorState.selectPage({ pageId }));
-        });
-    }
-
-    _renamePage(event) {
-        const { pageId, title } = event.detail;
-        this._mutate(this.t('interface_editor.history_page_rename'), (document) => {
-            const page = document.pages[pageId];
-            if (!page) return;
-            page.title = { ...(page.title || { translations: {} }), default: title };
-        });
-    }
-
-    _duplicatePage(event) {
-        const sourcePageId = event.detail.pageId;
-        this._mutate(this.t('interface_editor.history_page_duplicate'), (document) => {
-            const source = document.pages[sourcePageId];
-            if (!source) return;
-            let index = Object.keys(document.pages).length + 1;
-            let pageId = `page-${index}`;
-            while (document.pages[pageId]) {
-                index += 1;
-                pageId = `page-${index}`;
-            }
-            const surfaceId = pageId;
-            document.pages[pageId] = {
-                ...clone(source),
-                page_id: pageId,
-                title: {
-                    default: `${source.title?.default || sourcePageId} ${this.t('interface_editor.page_copy_suffix')}`,
-                    translations: {},
-                },
-                route: `/${pageId}`,
-                root_surface_id: surfaceId,
-            };
-            const sourceSurface = document.surfaces[source.root_surface_id];
-            document.surfaces[surfaceId] = {
-                ...clone(sourceSurface),
-                surface_id: surfaceId,
-            };
-            document.active_page_id = pageId;
-            queueMicrotask(() => this._editorState.selectPage({ pageId }));
-        });
-    }
-
-    _deletePage(event) {
-        const pageId = event.detail.pageId;
-        this._mutate(this.t('interface_editor.history_page_delete'), (document) => {
-            if (Object.keys(document.pages).length <= 1) return;
-            const page = document.pages[pageId];
-            if (!page) return;
-            delete document.pages[pageId];
-            delete document.surfaces[page.root_surface_id];
-            if (document.active_page_id === pageId) {
-                document.active_page_id = Object.keys(document.pages)[0];
-            }
-        });
-        this._editorState.selectPage({ pageId: this.document?.active_page_id || 'main' });
-    }
-
-    _patchSelected(label, mutator, options = {}) {
-        this._mutate(label, (document) => {
-            const component = activeSurface(document).components[this.editorState.selectedComponentId];
-            if (!component) return;
-            mutator(component);
-        }, options);
-    }
-
-    _propertyChange(event) {
-        this._patchSelected(this.t('interface_editor.history_property'), (component) => {
-            component.properties = {
-                ...(component.properties || {}),
-                [event.detail.name]: event.detail.value,
-            };
-        }, { coalesceKey: `property:${this.editorState.selectedComponentId}:${event.detail.name}` });
-    }
-
-    _openComponentMenu(event) {
-        const { componentId, clientX, clientY } = event.detail || {};
-        if (typeof componentId !== 'string' || componentId === '') {
-            throw new Error('flows-interface-editor: component-menu-open requires componentId');
-        }
-        if (typeof clientX !== 'number' || typeof clientY !== 'number') {
-            throw new Error('flows-interface-editor: component-menu-open requires clientX/clientY');
-        }
-        this._editorState.selectComponent({ componentId, additive: false });
-        this._componentMenu = { componentId, x: clientX, y: clientY };
-    }
-
-    _closeComponentMenu() {
-        this._componentMenu = null;
-    }
-
-    _checksChange(event) {
-        this._patchSelected(this.t('interface_editor.history_validation'), (component) => {
-            component.checks = Array.isArray(event.detail.checks)
-                ? event.detail.checks.map((check) => ({ ...check }))
-                : [];
-        }, { coalesceKey: `checks:${this.editorState.selectedComponentId}` });
-    }
-
-    _inlineEdit(event) {
-        const { componentId, name, value } = event.detail;
-        this._mutate(this.t('interface_editor.history_property'), (document) => {
-            const component = activeSurface(document).components[componentId];
-            if (!component) return;
-            component.properties = { ...(component.properties || {}), [name]: value };
-        });
-    }
-
-    _placement(event) {
-        this._patchSelected(this.t('interface_editor.history_placement'), (component) => {
-            component.placement ||= { base: {}, overrides: {} };
-            const patch = { ...event.detail.patch };
-            if (Number.isInteger(patch.row_span)) {
-                patch.block_clamp = true;
-            }
-            const band = event.detail.band;
-            const writeBase = band === 'base' || band === 'wide';
-            if (writeBase) {
-                component.placement.base = { ...component.placement.base, ...patch };
-                const wideOverride = component.placement.overrides?.wide;
-                if (wideOverride != null && typeof wideOverride === 'object') {
-                    const cleared = { ...wideOverride };
-                    let changed = false;
-                    for (const key of Object.keys(patch)) {
-                        if (Object.prototype.hasOwnProperty.call(cleared, key)) {
-                            delete cleared[key];
-                            changed = true;
-                        }
-                    }
-                    if (changed) {
-                        if (Object.keys(cleared).length === 0) {
-                            delete component.placement.overrides.wide;
-                        } else {
-                            component.placement.overrides.wide = cleared;
-                        }
-                    }
-                }
-            } else {
-                component.placement.overrides[band] = {
-                    ...(component.placement.overrides[band] || {}),
-                    ...patch,
-                };
-            }
-        }, { coalesceKey: `placement:${this.editorState.selectedComponentId}:${event.detail.band}` });
-    }
-
-    _placementReset(event) {
-        this._patchSelected(this.t('interface_editor.history_placement_reset'), (component) => {
-            if (!component.placement?.overrides) return;
-            const overrides = { ...component.placement.overrides };
-            delete overrides[event.detail.band];
-            component.placement.overrides = overrides;
-        });
-    }
-
-    _applyLayoutCommand(command, label) {
-        if (!this.interfaceConfig || !this.document) {
-            throw new Error('flows-interface-editor: cannot apply layout-command without interface document');
-        }
-        const next = applyLayoutCommand(this.document, command);
-        this._commitDocument(next, {
-            label,
-            coalesceKey: `${command.kind}:${command.componentId}`,
-        });
-    }
-
-    _layoutCommand(event) {
-        const command = event.detail;
-        if (!command || typeof command !== 'object') {
-            throw new Error('flows-interface-editor: layout-command detail required');
-        }
-        this._applyLayoutCommand(command, this.t('interface_editor.history_layout'));
-    }
-
-    _layout(event) {
-        this._patchSelected(this.t('interface_editor.history_layout'), (component) => {
-            const patch = event.detail.patch;
-            if (patch.mode && patch.mode !== component.container_layout?.mode) {
-                component.container_layout = containerLayoutPreset(patch.mode);
-            }
-            const layout = component.container_layout;
-            if (!layout) return;
-            if (patch.columns && layout.grid) {
-                layout.grid.columns_by_band = {
-                    ...layout.grid.columns_by_band,
-                    ...patch.columns,
-                };
-            }
-            if (patch.gap && layout.grid) {
-                layout.grid.column_gap_token = patch.gap;
-                layout.grid.row_gap_token = patch.gap;
-            }
-            if (patch.flex && layout.flex) {
-                layout.flex = { ...layout.flex, ...patch.flex };
-            }
-            if (patch.stack && layout.stack) {
-                layout.stack = { ...layout.stack, ...patch.stack };
-            }
-        });
-    }
-
-    _binding(event) {
-        this._patchSelected(this.t('interface_editor.history_binding'), (component) => {
-            component.bindings = {
-                ...(component.bindings || {}),
-                [event.detail.name]: event.detail.path,
-            };
-        });
-    }
-
-    _bindingRemove(event) {
-        this._patchSelected(this.t('interface_editor.history_binding'), (component) => {
-            const next = { ...(component.bindings || {}) };
-            delete next[event.detail.name];
-            component.bindings = next;
-        });
-    }
-
-    _action(event) {
-        this._patchSelected(this.t('interface_editor.history_action'), (component) => {
-            const name = event.detail.name;
-            if (name === 'none') {
-                component.actions = {};
-                return;
-            }
-            if (name === 'platform.ui.submit') {
-                const context = {};
-                if (event.detail.formId) context.formId = event.detail.formId;
-                component.actions = { press: { kind: 'event', name, context } };
-                return;
-            }
-            if (name === 'page.navigate') {
-                const context = {};
-                if (event.detail.pageId) context.pageId = event.detail.pageId;
-                component.actions = { press: { kind: 'local', name, context } };
-                return;
-            }
-            component.actions = { press: { kind: 'local', name, context: {} } };
-        });
-    }
-
-    _dataModel(event) {
-        this._mutate(this.t('interface_editor.history_data_model'), (document) => {
-            const surface = activeSurface(document);
-            surface.data_model = event.detail.dataModel;
-        });
-    }
-
-    _quickFixSubmit() {
-        this._mutate(this.t('interface_editor.history_quick_fix'), (document) => {
-            quickFixAddSubmit(document);
-        });
-    }
-
-    _problemFocus(event) {
-        const { componentId, surfaceId } = event.detail;
-        if (surfaceId && this.document) {
-            const page = Object.values(this.document.pages || {})
-                .find((item) => item.root_surface_id === surfaceId);
-            if (page && page.page_id !== this.document.active_page_id) {
-                this._selectPage({ detail: { pageId: page.page_id } });
-            }
-        }
-        if (componentId) {
-            this._editorState.selectComponent({ componentId, additive: false });
-        }
-    }
-
-    _toolbar(event) {
-        const state = this._editorState;
-        if (event.type === 'undo') { this._undo(); return; }
-        if (event.type === 'redo') { this._redo(); return; }
-        if (event.type === 'target-change') { state.setTarget({ target: event.detail.target }); return; }
-        if (event.type === 'viewport-change') {
-            state.setViewport({
-                profile: event.detail.profile,
-                ...(Number.isFinite(event.detail.width) ? { width: event.detail.width } : {}),
-                ...(Number.isFinite(event.detail.height) ? { height: event.detail.height } : {}),
-            });
-            return;
-        }
-        if (event.type === 'zoom-change') { state.setZoom({ zoom: event.detail.zoom }); return; }
-        if (event.type === 'grid-toggle') { state.toggleGrid({}); return; }
-        if (event.type === 'baseline-toggle') { state.toggleBaseline({}); return; }
-        if (event.type === 'rulers-toggle') { state.toggleRulers({}); return; }
-        if (event.type === 'guides-toggle') { state.toggleGuides({}); return; }
-        if (event.type === 'snap-toggle') { state.toggleSnap({}); return; }
-        if (event.type === 'data-flow-toggle') { state.toggleDataFlow({}); return; }
-        if (event.type === 'preview-toggle') {
-            state.setPreview({ value: !this.editorState.previewMode });
-            return;
-        }
-        if (event.type === 'run-toggle') {
-            state.setRunMode({ value: !this.editorState.runMode });
-            return;
-        }
-        if (event.type === 'open-device') {
-            this.openModal('flows.preview_share', {
-                flowId: this.flowId,
-                branchId: this.branchId === 'base' ? 'default' : this.branchId,
-            });
-            return;
-        }
-        if (event.type === 'templates-open') {
-            this.openModal('flows.interface_template', {
-                onApply: (templateId) => this._applyPageTemplate(templateId),
-            });
-        }
-    }
-
-    /** Replace the active page surface with a starter template (one transaction). */
-    _applyPageTemplate(templateId) {
-        const template = flowUIPageTemplate(templateId);
-        this._mutate(this.t('interface_editor.history_template'), (document) => {
-            const page = document.pages[document.active_page_id];
-            if (!page) {
-                throw new Error('flows-interface-editor: active page missing for template apply');
-            }
-            const surfaceId = page.root_surface_id;
-            const built = template.buildSurface(surfaceId, this._locale());
-            document.surfaces[surfaceId] = {
-                ...clone(built),
-                catalog_id: document.catalog_id,
-            };
-            document.template_version = template.version;
-        });
-        this._editorState.selectComponent({ componentId: 'root', additive: false });
-    }
-
-    _committed(event) {
-        const detail = event.detail || {};
-        this.parity = {
-            status: detail.status || 'Exact',
-            fingerprint: detail.fingerprint || '',
-            assetsReady: true,
-            expectedContext: detail.expectedContext || null,
-            actualContext: detail.actualContext || detail.context || null,
-            diff: detail.diff || [],
+    _labels() {
+        return {
+            tab: this.t('interface_editor.default_tab'),
+            option: this.t('interface_editor.default_option'),
+            text: (type, name) => this.t(`interface_editor.default_text_${type}_${name}`),
         };
-        this._editorState.setMeasuredRevision({ revision: Number(detail.revision || 0) });
     }
 
-    _handleHotkeys(event) {
-        const state = this.editorState;
-        if (state.previewMode === true || state.runMode === true) return;
-        if (event.target && event.target !== document.body
-            && event.target.closest?.('input,textarea,select,[contenteditable]')) {
+    // --- Команды ------------------------------------------------------------------------------
+
+    _insert(type, containerKey, index, columns = null) {
+        const page = this._page;
+        const entry = catalogEntry(this._catalog, type);
+        const blockId = uniqueBlockId(page, type);
+        const block = columns === null ? defaultBlock(entry, blockId, this._labels()) : withColumns(entry, blockId, columns, this._labels());
+        this._commit(insertBlock(this._draft, page.page_id, containerKey, index, block));
+        this._ui.selectBlock({ blockId });
+    }
+
+    _setProperty(blockId, property, value) {
+        const pageId = this._ui.value.pageId;
+        this._commit(setBlockProperty(this._draft, pageId, blockId, property, value), `${blockId}:${property}`);
+        if (property === 'block_id') this._ui.selectBlock({ blockId: value });
+    }
+
+    _remove(blockId) {
+        this._commit(removeBlock(this._draft, this._ui.value.pageId, blockId));
+        this._ui.selectBlock({ blockId: '' });
+    }
+
+    _moveWithin(blockId, delta) {
+        const page = this._page;
+        const { containerKey, index } = locateBlock(page, blockId);
+        const target = index + delta;
+        if (target < 0) return;
+        this._commit(moveBlock(this._draft, page.page_id, blockId, containerKey, delta > 0 ? target + 1 : target));
+    }
+
+    _blockMenuAction(blockId, action) {
+        this._menuOpen = false;
+        const pageId = this._ui.value.pageId;
+        if (action === 'duplicate') this._commit(duplicateBlock(this._draft, pageId, blockId));
+        else if (action === 'wrap') this._commit(wrapInSection(this._draft, pageId, blockId));
+        else if (action === 'remove') this._remove(blockId);
+        else throw new Error(`interface editor: unknown block action ${action}`);
+    }
+
+    _pageCommand(event) {
+        const { command, pageId, property, value } = event.detail;
+        const draft = this._draft;
+        if (command === 'add') {
+            const page = { page_id: uniquePageId(draft), title: this.t('interface_editor.page_default_title'), blocks: [] };
+            this._commit(insertPage(draft, page));
+            this._ui.selectPage({ pageId: page.page_id });
+        } else if (command === 'remove') {
+            this._commit(removePage(draft, pageId));
+            this._ui.selectPage({ pageId: this._draft.start_page_id });
+        } else if (command === 'set') {
+            this._commit(setPageProperty(draft, pageId, property, value), `page:${pageId}:${property}`);
+            if (property === 'page_id') this._ui.selectPage({ pageId: value });
+        } else if (command === 'start') {
+            this._commit({ ...structuredClone(draft), start_page_id: pageId });
+        } else {
+            throw new Error(`interface editor: unknown page command ${String(command)}`);
+        }
+    }
+
+    _applyTemplate(document) {
+        this._commit(structuredClone(document));
+        this._ui.selectPage({ pageId: document.start_page_id });
+    }
+
+    async _assist(instruction, scope) {
+        const draft = this._draft;
+        const pageId = this._ui.value.pageId;
+        const blockId = scope === 'block' ? this._ui.value.selectedBlockId : null;
+        if (scope === 'block' && blockId === '') throw new Error('interface editor: assist for block requires selection');
+        const result = await this._assistOp.run({ flow_id: this.flowId, branch_id: this.branchId, instruction, document: draft, page_id: pageId, block_id: blockId });
+        if (result === null) return;
+        if (result.scope === 'page') {
+            this._commit(replacePageBlocks(this._draft, pageId, result.page.blocks));
             return;
         }
+        const { containerKey, index } = locateBlock(findPage(this._draft, pageId), blockId);
+        let next = removeBlock(this._draft, pageId, blockId);
+        result.blocks.forEach((block, offset) => { next = insertBlock(next, pageId, containerKey, index + offset, block); });
+        this._commit(next);
+        this._ui.selectBlock({ blockId: result.blocks[0].block_id });
+    }
+
+    /** @returns {boolean} опубликовано ли; при блокирующих проблемах фокусирует первую. */
+    _publish() {
+        const problems = this._problems;
+        if (hasBlockingProblems(problems)) {
+            const first = problems.find((problem) => problem.severity === 'error');
+            this._focusProblem(first);
+            this.toast('interface_editor.publish_blocked', { type: 'error' });
+            return false;
+        }
+        this.emit('interface-change', { config: structuredClone(this._draft) });
+        writeDraft(this._documentKey, null);
+        return true;
+    }
+
+    /**
+     * Тест — реальный Task на том же документе, что проверяет сервер: несохранённый черновик
+     * публикуется перед запуском, иначе поля черновика отклонит ingress ui-action.
+     */
+    async _setPreview(preview) {
+        if (preview && this._dirty) {
+            if (!this._publish()) return;
+            await this._flowSaved();
+            if (this._editor.state.isDirty) return;
+        }
+        this._ui.setPreview({ preview });
+    }
+
+    /** Страница сохраняет flow по ``interface-change``; ждём завершения этого сохранения. */
+    _flowSaved() {
+        if (!this._editor.state.isSaving) return Promise.resolve();
+        return new Promise((resolve) => {
+            const unsubscribe = this.useEvent(this._editor.op.actions.setSaving, (event) => {
+                if (event.payload.saving) return;
+                unsubscribe();
+                resolve();
+            });
+        });
+    }
+
+    _focusProblem(problem) {
+        if (problem.pageId !== null && problem.pageId !== this._ui.value.pageId) this._ui.selectPage({ pageId: problem.pageId });
+        if (problem.blockId !== null) this._ui.selectBlock({ blockId: problem.blockId });
+    }
+
+    // --- Холст: выделение, DnD, inline ------------------------------------------------------
+
+    _flowUi() {
+        return this.renderRoot.querySelector('platform-flow-ui');
+    }
+
+    _scheduleFrame() {
+        cancelAnimationFrame(this._frameRaf);
+        this._frameRaf = requestAnimationFrame(() => {
+            const frameHost = this.renderRoot.querySelector('.frame');
+            const blockId = this._ui.value.selectedBlockId;
+            const next = frameHost && blockId !== '' && !this._ui.value.preview ? blockFrame(this._flowUi(), blockId, frameHost) : null;
+            if (stableStringify(next) !== stableStringify(this._frame)) this._frame = next;
+        });
+    }
+
+    _onCanvasClick(event) {
+        if (this._inlineEdit !== null || this._ui.value.preview) return;
+        const blockId = blockIdFromEvent(event);
+        this._ui.selectBlock({ blockId: blockId === null ? '' : blockId });
+        this.focus();
+    }
+
+    _onCanvasDblClick(event) {
+        if (this._ui.value.preview) return;
+        const blockId = blockIdFromEvent(event);
+        if (blockId === null) return;
+        const { block } = locateBlock(this._page, blockId);
+        const property = inlineTextProperty(block.type);
+        if (property === null) return;
+        const frameHost = this.renderRoot.querySelector('.frame');
+        const frame = blockFrame(this._flowUi(), blockId, frameHost);
+        if (frame === null) return;
+        this._inlineEdit = { blockId, property, value: block[property], frame, multiline: inlineTextIsMultiline(block.type) };
+        this.updateComplete.then(() => { const field = this.renderRoot.querySelector('.inline-edit'); if (field) { field.focus(); field.select(); } });
+    }
+
+    _finishInlineEdit(commit) {
+        const edit = this._inlineEdit;
+        if (edit === null) return;
+        this._inlineEdit = null;
+        if (commit) {
+            const value = this.renderRoot.querySelector('.inline-edit').value;
+            if (value !== edit.value) this._setProperty(edit.blockId, edit.property, value);
+        }
+        this.focus();
+    }
+
+    _onDragOver(event) {
+        if (!hasFlowUiDrag(event.dataTransfer)) return;
+        event.preventDefault();
+        const frameHost = this.renderRoot.querySelector('.frame');
+        const movingId = event.dataTransfer.types.includes(BLOCK_ID_MIME) ? this._ui.value.selectedBlockId : null;
+        const target = dropTargetFromEvent(event, frameHost, movingId);
+        if (stableStringify(target) !== stableStringify(this._drop)) this._drop = target;
+    }
+
+    _onDrop(event) {
+        if (!hasFlowUiDrag(event.dataTransfer)) return;
+        event.preventDefault();
+        const target = this._drop;
+        this._drop = null;
+        if (target === null) return;
+        const payload = readDragPayload(event.dataTransfer);
+        if (payload === null) return;
+        if (payload.kind === 'insert') {
+            this._insert(payload.type, target.containerKey, target.index, payload.columns);
+            return;
+        }
+        this._commit(moveBlock(this._draft, this._ui.value.pageId, payload.blockId, target.containerKey, target.index));
+    }
+
+    _onHandleDragStart(event, blockId) {
+        event.dataTransfer.setData(BLOCK_ID_MIME, blockId);
+        event.dataTransfer.effectAllowed = 'move';
+    }
+
+    _handleKeydown(event) {
+        if (this._inlineEdit !== null || this._ui.value.preview) return;
+        const path = event.composedPath();
+        if (path.some((node) => node instanceof HTMLElement && (node.matches('input, textarea, select, [contenteditable="true"]') || node.classList.contains('cm-content')))) return;
         const meta = event.metaKey || event.ctrlKey;
-        const key = event.key.toLowerCase();
-        if (meta && key === 'z') {
+        const blockId = this._ui.value.selectedBlockId;
+        if (meta && event.key.toLowerCase() === 'z') {
             event.preventDefault();
-            if (event.shiftKey) this._redo();
-            else this._undo();
+            if (event.shiftKey) this._ui.redo(null); else this._ui.undo(null);
             return;
         }
-        if (meta && key === 'd') {
-            event.preventDefault();
-            this._duplicateComponent(state.selectedComponentId);
-            return;
-        }
-        if (meta && key === 'c') {
-            this._copySelection();
-            return;
-        }
-        if (meta && key === 'v') {
-            this._pasteClipboard();
-            return;
-        }
-        if (!meta && (event.key === 'Delete' || event.key === 'Backspace')) {
-            event.preventDefault();
-            this._deleteSelection();
-            return;
-        }
-        if (!meta && key === 'g') { this._editorState.toggleGrid({}); return; }
-        if (!meta && key === 'd') { this._editorState.toggleDataFlow({}); return; }
-        if (!meta && key === 'r') { this._editorState.toggleRulers({}); }
+        if (blockId === '') return;
+        if (meta && event.key.toLowerCase() === 'd') { event.preventDefault(); this._blockMenuAction(blockId, 'duplicate'); return; }
+        if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); this._remove(blockId); return; }
+        if (event.key === 'ArrowUp') { event.preventDefault(); this._moveWithin(blockId, -1); return; }
+        if (event.key === 'ArrowDown') { event.preventDefault(); this._moveWithin(blockId, 1); return; }
+        if (event.key === 'Escape') this._ui.selectBlock({ blockId: '' });
     }
 
-    _breadcrumbPath() {
-        const surface = this.surface;
-        if (!surface) return [];
-        const rootId = surface.root_component_id || 'root';
-        const path = [];
-        let currentId = this.editorState.selectedComponentId;
-        while (currentId && surface.components[currentId]) {
-            path.unshift(currentId);
-            if (currentId === rootId) break;
-            currentId = findParentId(surface, currentId);
-        }
-        return path;
-    }
+    // --- Рендер -------------------------------------------------------------------------------
 
-    _tab(panel, labelKey) {
-        const active = this.rightPanel === panel;
-        return html`<span
-            class="tab"
-            role="tab"
-            tabindex="0"
-            aria-selected=${active ? 'true' : 'false'}
-            data-active=${active ? 'true' : 'false'}
-            @click=${() => { this.rightPanel = panel; }}
-            @keydown=${(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    this.rightPanel = panel;
-                }
-            }}
-        >${this.t(labelKey)}</span>`;
-    }
-
-    _renderBreadcrumb() {
-        const path = this._breadcrumbPath();
-        if (path.length === 0) return nothing;
-        const surface = this.surface;
-        return html`<div class="breadcrumb">
-            ${path.map((id, index) => html`
-                ${index > 0 ? html`<span class="sep">›</span>` : nothing}
-                <span
-                    class="crumb"
-                    role="button"
-                    tabindex="0"
-                    data-current=${index === path.length - 1 ? 'true' : 'false'}
-                    @click=${() => this._editorState.selectComponent({ componentId: id, additive: false })}
-                    @keydown=${(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            this._editorState.selectComponent({ componentId: id, additive: false });
-                        }
-                    }}
-                >${surface.components[id]?.type || id}</span>
-            `)}
+    _renderSelection() {
+        const frame = this._frame;
+        const blockId = this._ui.value.selectedBlockId;
+        if (frame === null || blockId === '' || this._page === null) return nothing;
+        const { block } = locateBlock(this._page, blockId);
+        const items = [
+            { id: 'duplicate', label: this.t('interface_editor.block_duplicate'), icon: 'copy', hint: '⌘D' },
+            { id: 'wrap', label: this.t('interface_editor.block_wrap_section'), icon: 'square' },
+            { id: 'remove', label: this.t('interface_editor.block_remove'), icon: 'trash', hint: '⌫', danger: true },
+        ];
+        return html`<div class="selection" style=${`top:${frame.top}px;left:${frame.left}px;width:${frame.width}px;height:${frame.height}px`}>
+            <div class="label">
+                <span class="handle" draggable="true" title=${this.t('interface_editor.drag_hint')} @dragstart=${(event) => this._onHandleDragStart(event, blockId)}><platform-icon name="drag-handle" size="12"></platform-icon></span>
+                <span>${this.t(`interface_editor.block_${block.type}`)}</span>
+                <platform-button ghost density="dense" icon-only class="kebab" aria-label=${this.t('interface_editor.block_menu')} @click=${(event) => { event.stopPropagation(); this._menuOpen = !this._menuOpen; }}><platform-icon name="more-vert" size="12"></platform-icon></platform-button>
+                <platform-popover trigger="manual" .anchor=${this.renderRoot.querySelector('.kebab')} ?open=${this._menuOpen} role="menu" dismiss-on-outside @popover-dismiss=${() => { this._menuOpen = false; }}>
+                    <platform-menu compact .items=${items} @menu-select=${(event) => this._blockMenuAction(blockId, event.detail.id)}></platform-menu>
+                </platform-popover>
+            </div>
         </div>`;
     }
 
-    _renderFooter(problems) {
-        return html`<div class="footer">
-            ${this._renderBreadcrumb()}
-            <flows-interface-problems-panel
-                .problems=${problems}
-                @quick-fix-submit=${() => this._quickFixSubmit()}
-                @problem-focus=${this._problemFocus}
-            ></flows-interface-problems-panel>
+    _renderProblems(problems) {
+        if (problems.length === 0) return html`<div class="problems"><span class="ok"><platform-icon name="check" size="13"></platform-icon>${this.t('interface_editor.problems_none')}</span></div>`;
+        return html`<div class="problems">
+            ${problems.map((problem) => html`<article role="button" tabindex="0" class="problem" data-severity=${problem.severity}
+                @click=${() => this._focusProblem(problem)}
+                @keydown=${(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this._focusProblem(problem); } }}>
+                <platform-icon name=${problem.severity === 'error' ? 'notification-error' : 'alert-triangle'} size="12"></platform-icon>
+                ${problem.blockId !== null ? html`<code>${problem.blockId}</code>` : nothing}
+                ${this.t(`interface_editor.problem_${problem.code}`, problem.params)}
+            </article>`)}
         </div>`;
     }
 
     render() {
-        if (!this.document) {
-            return html`<div>${this.t('interface_editor.document_unavailable')}</div>`;
-        }
-        const editorState = this.editorState;
-        const problems = validateInterfaceDocument(this.document);
-        const blocking = problems.filter((problem) => problem.severity === 'error');
-        const selectedIds = editorState.selectedComponentIds || [];
+        const draft = this._draft;
+        if (draft === null || this._schema === null) return html`<div class="loading">${this.t('interface_editor.loading')}</div>`;
+        const ui = this._ui.value;
+        const page = this._page;
+        const problems = this._problems;
+        const catalogPaths = statePathCatalog({ dataflow: this._editor.state.dataflow, sampleState: this._sampleState, document: draft });
+        const selected = ui.selectedBlockId !== '' ? locateBlock(page, ui.selectedBlockId).block : null;
         return html`
             <flows-interface-toolbar
-                .state=${editorState}
-                .parity=${{
-                    exact: this.parity.status === 'Exact',
-                    label: this.parity.status === 'Exact'
-                        ? this.t('interface_editor.parity_exact')
-                        : (this.parity.assetsReady
-                            ? this.parity.status
-                            : this.t('interface_editor.parity_loading_assets')),
-                }}
-                .canUndo=${(editorState.history?.past || []).length > 0}
-                .canRedo=${(editorState.history?.future || []).length > 0}
-                .canPublish=${blocking.length === 0}
-                @target-change=${this._toolbar}
-                @viewport-change=${this._toolbar}
-                @zoom-change=${this._toolbar}
-                @grid-toggle=${this._toolbar}
-                @baseline-toggle=${this._toolbar}
-                @rulers-toggle=${this._toolbar}
-                @guides-toggle=${this._toolbar}
-                @snap-toggle=${this._toolbar}
-                @data-flow-toggle=${this._toolbar}
-                @preview-toggle=${this._toolbar}
-                @run-toggle=${this._toolbar}
-                @open-device=${this._toolbar}
-                @templates-open=${this._toolbar}
-                @undo=${this._toolbar}
-                @redo=${this._toolbar}
+                .canUndo=${ui.history.past.length > 0} .canRedo=${ui.history.future.length > 0}
+                .viewport=${ui.viewport} .preview=${ui.preview} .dirty=${this._dirty}
+                .problemCount=${problems.filter((problem) => problem.severity === 'error').length}
+                .hasSelection=${selected !== null} .assistBusy=${this._assistOp.busy}
+                @editor-undo=${() => this._ui.undo(null)} @editor-redo=${() => this._ui.redo(null)}
+                @editor-viewport=${(event) => this._ui.setViewport({ viewport: event.detail.viewport })}
+                @editor-preview=${(event) => this._setPreview(event.detail.preview)}
+                @editor-templates=${() => this.openModal('flows.interface_template', { onApply: (document) => this._applyTemplate(document) })}
+                @editor-publish=${() => this._publish()}
+                @editor-assist=${(event) => this._assist(event.detail.instruction, event.detail.scope)}
             ></flows-interface-toolbar>
+            <flows-interface-pages-tabs .document=${draft} .pageId=${ui.pageId}
+                @page-select=${(event) => this._ui.selectPage({ pageId: event.detail.pageId })}
+                @page-command=${(event) => this._pageCommand(event)}
+            ></flows-interface-pages-tabs>
             <div class="body">
-                <aside class="left">
-                    <flows-interface-pages-panel
-                        .document=${this.document}
-                        @page-select=${this._selectPage}
-                        @page-add=${() => this._addPage()}
-                        @page-rename=${this._renamePage}
-                        @page-duplicate=${this._duplicatePage}
-                        @page-delete=${this._deletePage}
-                    ></flows-interface-pages-panel>
-                    <flows-interface-layers-tree
-                        .surface=${this.surface}
-                        .selectedIds=${selectedIds}
-                        .hoveredId=${editorState.hoveredComponentId}
-                        .lockedIds=${editorState.lockedComponentIds}
-                        @component-select=${this._selectComponent}
-                        @component-hover=${(event) => this._editorState.hoverComponent(event.detail)}
-                        @component-rename=${this._renameComponent}
-                        @component-visibility=${this._componentVisibility}
-                        @component-lock=${(event) => this._editorState.toggleLock(event.detail)}
-                        @layers-move=${this._layersMove}
-                    ></flows-interface-layers-tree>
-                    <flows-interface-palette
-                        @component-add=${this._addComponent}
-                    ></flows-interface-palette>
+                <aside class="sidebar">
+                    <platform-segmented-control class="sidebar-tabs" density="compact" .value=${ui.sidebarTab}
+                        .items=${[{ value: 'add', label: this.t('interface_editor.tab_add') }, { value: 'properties', label: this.t('interface_editor.tab_properties') }]}
+                        @change=${(event) => this._ui.setSidebarTab({ tab: event.detail.value })}></platform-segmented-control>
+                    ${ui.sidebarTab === 'add'
+                        ? html`<flows-interface-add-panel .catalog=${this._catalog}
+                            @block-add=${(event) => this._insert(event.detail.type, 'page', page.blocks.length, event.detail.columns)}></flows-interface-add-panel>`
+                        : html`<flows-interface-properties-panel .block=${selected} .page=${page} .document=${draft}
+                            .catalog=${this._catalog} .schema=${this._schema} .frozen=${this._frozen} .statePaths=${catalogPaths} .sampleState=${this._sampleState}
+                            .problems=${problems.filter((problem) => selected !== null && problem.blockId === selected.block_id)}
+                            @property-change=${(event) => this._setProperty(event.detail.blockId, event.detail.property, event.detail.value)}
+                            @block-action=${(event) => this._blockMenuAction(event.detail.blockId, event.detail.action)}
+                        ></flows-interface-properties-panel>`}
                 </aside>
-                <flows-interface-canvas
-                    .document=${this.document}
-                    .state=${editorState}
-                    .flowId=${this.flowId}
-                    .branchId=${this.branchId}
-                    @component-select=${this._selectComponent}
-                    @component-hover=${(event) => this._editorState.hoverComponent(event.detail)}
-                    @canvas-committed=${this._committed}
-                    @layout-command=${this._layoutCommand}
-                    @component-drop=${this._dropComponent}
-                    @component-inline-edit=${this._inlineEdit}
-                    @component-duplicate=${(event) => this._duplicateComponent(event.detail.componentId)}
-                    @component-copy=${() => this._copySelection()}
-                    @component-paste=${(event) => this._pasteClipboard(event.detail.componentId)}
-                    @component-wrap=${(event) => this._wrapInSection(event.detail.componentId)}
-                    @component-delete-request=${() => this._deleteSelection()}
-                    @component-menu-open=${this._openComponentMenu}
-                    @guides-change=${(event) => this._editorState.setGuides(event.detail)}
-                ></flows-interface-canvas>
-                <aside class="right">
-                    <div class="tabs" role="tablist">
-                        ${this._tab('properties', 'interface_editor.tab_properties')}
-                        ${this._tab('data', 'interface_editor.tab_data')}
+                <div class="canvas" @click=${this._onCanvasClick} @dblclick=${this._onCanvasDblClick}
+                    @dragover=${this._onDragOver} @drop=${this._onDrop} @dragleave=${() => { this._drop = null; }}
+                    @scroll=${() => this._scheduleFrame()}>
+                    <div class="frame" data-preview=${ui.preview ? 'true' : 'false'} style=${`width:min(100%, ${EDITOR_VIEWPORTS[ui.viewport]}px)`}>
+                        ${ui.preview
+                            ? html`<platform-flow-ui profile="editor_test" display="panel" theme="auto" flow-id=${this.flowId} branch-id=${this.branchId} .initialDocument=${draft}></platform-flow-ui>`
+                            : html`<platform-flow-ui editing theme="auto" flow-id=${this.flowId} .initialDocument=${draft} .sampleState=${this._sampleState}
+                                selected-block-id=${ui.selectedBlockId}
+                                @flow-ui-navigation=${(event) => { if (event.detail.pageId !== ui.pageId) this._ui.selectPage({ pageId: event.detail.pageId }); }}></platform-flow-ui>`}
+                        ${this._renderSelection()}
+                        ${this._drop !== null ? html`<div class="drop-line" style=${`top:${this._drop.indicator.top}px;left:${this._drop.indicator.left}px;width:${this._drop.indicator.width}px`}></div>` : nothing}
+                        ${this._inlineEdit !== null ? html`<textarea class="inline-edit" data-canon="inline-edit" .value=${this._inlineEdit.value}
+                            style=${`top:${this._inlineEdit.frame.top}px;left:${this._inlineEdit.frame.left}px;width:${this._inlineEdit.frame.width}px;min-height:${Math.max(this._inlineEdit.frame.height, 36)}px`}
+                            @blur=${() => this._finishInlineEdit(true)}
+                            @keydown=${(event) => { const action = inlineEditKeyAction(event, this._inlineEdit.multiline); if (action !== null) { event.preventDefault(); this._finishInlineEdit(action === 'commit'); } }}></textarea>` : nothing}
                     </div>
-                    ${this.rightPanel === 'data'
-                        ? html`
-                            <flows-interface-contract-panel
-                                .flowId=${this.flowId}
-                                .document=${this.document}
-                                .surfaceId=${this.surface?.surface_id || ''}
-                                @component-select=${this._selectComponent}
-                            ></flows-interface-contract-panel>
-                            <flows-interface-data-model-panel
-                                .surface=${this.surface}
-                                @data-model-change=${this._dataModel}
-                            ></flows-interface-data-model-panel>
-                        `
-                        : html`<flows-interface-inspector
-                            .component=${this.selected}
-                            .dataModel=${this.surface?.data_model || null}
-                            .pages=${Object.values(this.document.pages || {})}
-                            .band=${editorState.editBand || 'wide'}
-                            .rootId=${this.surface?.root_component_id || 'root'}
-                            .selectionCount=${selectedIds.length}
-                            .flowId=${this.flowId}
-                            @band-change=${(event) => this._editorState.setEditBand(event.detail)}
-                            @property-change=${this._propertyChange}
-                            @checks-change=${this._checksChange}
-                            @placement-patch=${this._placement}
-                            @placement-reset=${this._placementReset}
-                            @layout-patch=${this._layout}
-                            @binding-change=${this._binding}
-                            @binding-remove=${this._bindingRemove}
-                            @action-change=${this._action}
-                            @component-rename=${this._renameComponent}
-                            @component-delete=${this._deleteComponent}
-                        ></flows-interface-inspector>`}
-                </aside>
+                </div>
             </div>
-            ${this._renderComponentMenu(editorState)}
-            ${this._renderFooter(problems)}
+            ${this._renderProblems(problems)}
         `;
     }
-
-    _renderComponentMenu(editorState) {
-        const menu = this._componentMenu;
-        if (!menu) return nothing;
-        const component = this.surface?.components?.[menu.componentId] || null;
-        if (!component) return nothing;
-        const lockedIds = editorState.lockedComponentIds || [];
-        return html`<flows-interface-component-menu
-            .x=${menu.x}
-            .y=${menu.y}
-            .component=${component}
-            .rootId=${this.surface?.root_component_id || 'root'}
-            .locked=${lockedIds.includes(menu.componentId)}
-            .locale=${this._locale()}
-            @menu-close=${this._closeComponentMenu}
-            @property-change=${this._propertyChange}
-            @checks-change=${this._checksChange}
-            @component-duplicate=${(event) => this._duplicateComponent(event.detail.componentId)}
-            @component-copy=${() => this._copySelection()}
-            @component-paste=${(event) => this._pasteClipboard(event.detail.componentId)}
-            @component-wrap=${(event) => this._wrapInSection(event.detail.componentId)}
-            @component-delete-request=${() => this._deleteSelection()}
-            @component-visibility=${this._componentVisibility}
-            @component-lock=${(event) => this._editorState.toggleLock(event.detail)}
-        ></flows-interface-component-menu>`;
-    }
 }
 
-if (!customElements.get('flows-interface-editor')) {
-    customElements.define('flows-interface-editor', FlowsInterfaceEditor);
-}
+if (!customElements.get('flows-interface-editor')) customElements.define('flows-interface-editor', FlowsInterfaceEditor);

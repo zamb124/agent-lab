@@ -1930,21 +1930,18 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         """Рендерит промпт с переменными и сохраняет в историю."""
         prompt_template = self.prompt
         flow_variables = self.get_variables(state)
+        # Поля интерфейса — обычные пользовательские поля state: {email}, {lead.headcount}.
+        # Они перекрывают одноимённые переменные flow; локальные переменные ноды — выше всех.
         variables: JsonObject = {
             **flow_variables,
+            **state.json_extra(),
             **(self.node_config.local_variables if self.node_config else {}),
-            "ui_values": dict(state.ui_values),
         }
 
         if self.llm_node:
             prompt_template, variables = await self.llm_node.before_prompt_render(
                 prompt_template, state, variables
             )
-            # Flow UI submit fields: always expose for {ui_values.field} (after hook).
-            variables = {
-                **variables,
-                "ui_values": dict(state.ui_values),
-            }
 
         resolved_vars = require_json_object(
             VariableResolver.resolve_all(local_vars=variables),

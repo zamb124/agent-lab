@@ -1,47 +1,44 @@
 /**
- * Flow UI chrome texts. The runtime is standalone (embed on foreign origins,
- * production iframe) and cannot depend on the platform i18n bus, so renderer
- * chrome strings live in this pinned RU/EN dictionary. Document content
- * (labels, greeting, placeholders) stays owner-editable data and never goes
- * through this module.
+ * Тексты chrome Flow UI. Runtime автономен (embed на чужом origin) и не зависит от i18n-шины
+ * платформы, поэтому строки chrome живут в этом словаре RU/EN. Контент документа
+ * (подписи, приветствие, placeholder) — данные автора, не проходят через этот модуль.
  */
 
 const FLOW_UI_TEXT = Object.freeze({
     ru: Object.freeze({
         composer_send: 'Отправить',
         composer_stop: 'Остановить',
-        composer_sending: 'Отправка…',
         composer_placeholder: 'Спросите о чём угодно…',
         attach_files: 'Прикрепить файлы',
         file_upload_hint: 'Перетащите сюда или выберите с устройства',
-        file_upload_browse: 'Выбрать',
+        file_uploading: 'Загружаем файл…',
         remove_file: 'Убрать {name}',
         open_file: 'Открыть {name}',
         session_files: 'Файлы',
         session_files_panel: 'Файлы сессии ({count})',
-        uploading: 'Загружаем файл…',
+        files_empty: 'Файлов пока нет',
         assistant_typing: 'Агент отвечает…',
         message_copy: 'Копировать',
         message_copied: 'Скопировано',
-        retry: 'Повторить',
-        scroll_to_bottom: 'К последним сообщениям',
         stop_task: 'Остановить ответ',
         task_running: 'Агент отвечает…',
+        task_canceled: 'Остановлено',
         conversation_feed: 'Сообщения',
+        reasoning: 'Рассуждение',
         read_only: 'Только просмотр',
-        status_saving: 'Сохранение…',
-        status_saved: 'Сохранено',
-        status_conflict: 'Конфликт синхронизации',
         status_preview: 'Предпросмотр',
+        status_read_only: 'Просмотр без изменений',
+        status_live: 'Онлайн',
+        status_error: 'Ошибка соединения',
         loading_interface: 'Загрузка интерфейса',
         pages_nav: 'Страницы',
         share: 'Поделиться сессией',
         share_aria: 'Поделиться этой сессией',
         share_title: 'Поделиться сессией',
-        share_description: 'Ссылка открывает этот же диалог в его последней сохранённой версии. Это не гостевой просмотр flow.',
+        share_description: 'Ссылка открывает этот же диалог и продолжает получать его обновления.',
         share_view_only: 'Только просмотр',
-        share_can_interact: 'Может редактировать',
-        share_creating: 'Сохраняем и создаём отзывную ссылку…',
+        share_can_interact: 'Может писать',
+        share_creating: 'Создаём отзывную ссылку…',
         share_link: 'Ссылка',
         share_copy: 'Копировать',
         share_copied: 'Скопировано',
@@ -57,50 +54,23 @@ const FLOW_UI_TEXT = Object.freeze({
         embed_page_description: 'Открывает чат на весь экран без FAB.',
         embed_copy: 'Копировать',
         embed_copied: 'Скопировано',
-        voice_unavailable: 'Голос недоступен',
-        voice_bind_missing: 'Нужно поле текста для диктовки',
-        voice_session_start_aria: 'Включить голосовой эфир',
-        voice_session_stop_aria: 'Выключить голосовой эфир',
-        surface_no_root: 'У поверхности нет корневого компонента',
-        unknown_component: 'Неподдерживаемый внешний компонент',
-        component_render_failed: 'Компонент не удалось отрисовать',
-        image_empty: 'Изображение не выбрано',
-        data_table_empty: 'Нет file_id таблицы — привяжите SQLite-файл или rows',
-        data_table_no_tables: 'В файле пока нет таблиц',
-        data_table_group: 'Таблица',
-        data_table_column_filter_placeholder: 'Фильтр…',
-        data_table_next: 'Дальше',
-        data_table_row_count: '{count} строк',
-        data_table_export_csv: 'Скачать CSV',
-        data_table_export_xlsx: 'Скачать Excel',
-        binary_file: 'Бинарный файл',
-        binary_data: 'Бинарные данные',
-        artifact: 'Артефакт',
-        message_composer: 'Поле сообщения',
-        status_read_only: 'Просмотр без изменений',
+        voice_start: 'Включить голосовой эфир',
+        voice_stop: 'Выключить голосовой эфир',
         interface_unavailable: 'Интерфейс недоступен',
         unknown_error: 'Неизвестная ошибка',
-        open: 'Открыть',
-        submit_default: 'Отправить',
-        dialog: 'Диалог',
-        citations: 'Источники',
-        chart: 'График',
-        run_trace: 'Трассировка выполнения',
-        tool_activity: 'Работа инструментов',
-        browser_preview: 'Предпросмотр браузера',
-        skill_activity: 'Активность Skill',
-        reflection: 'Рефлексия',
-        action_preview: 'Предпросмотр действия',
-        action_result: 'Результат действия',
-        activity: 'Активность',
-        required_field: 'Обязательное поле',
-        invalid_email: 'Введите корректный email',
-        invalid_pattern: 'Значение не соответствует шаблону',
-        min_length: 'Не меньше {value} символов',
-        max_length: 'Не больше {value} символов',
+        field_required: 'Обязательное поле',
+        slot_empty: 'Сюда агент положит блоки через ui_render',
+        block_empty: 'Блок {type} пока пуст: появится, когда в state будут данные',
+        tool_activity_empty: 'Здесь появится работа инструментов во время выполнения',
+        skill_label: 'Skill',
+        action_preview_label: 'Черновик действия',
+        action_status_success: 'Выполнено',
+        action_status_failed: 'Ошибка',
+        action_status_pending: 'Ожидает',
+        browser_status_running: 'Открывается',
+        browser_status_finished: 'Готово',
+        browser_status_failed: 'Ошибка',
         turn_toast_working: 'Агент работает…',
-        turn_toast_reasoning: 'Рассуждение',
-        turn_toast_activity: 'Активность',
         turn_toast_response: 'Ответ',
         turn_toast_error: 'Ошибка',
         turn_toast_error_generic: 'Не удалось выполнить запрос',
@@ -110,42 +80,53 @@ const FLOW_UI_TEXT = Object.freeze({
         hitl_banner_takeover: 'Можете писать оператору. Агент продолжит после завершения задачи.',
         hitl_submit_single_reply: 'Ответить и завершить',
         hitl_submit_takeover: 'Отправить',
+        value_yes: 'да',
+        value_no: 'нет',
+        oauth_authorize: 'Авторизоваться',
+        operator_label: 'Оператор',
+        open_tracing: 'Трассировка',
+        open_logs: 'Логи',
+        run_trace: 'Трассировка выполнения',
+        run_trace_empty: 'Пока нет событий выполнения',
+        node_start: 'старт',
+        node_complete: 'готово',
+        node_error: 'ошибка',
+        edge_executed: 'переход',
     }),
     en: Object.freeze({
         composer_send: 'Send',
         composer_stop: 'Stop',
-        composer_sending: 'Sending…',
         composer_placeholder: 'Ask anything…',
         attach_files: 'Attach files',
         file_upload_hint: 'Drop files here or browse',
-        file_upload_browse: 'Browse',
+        file_uploading: 'Uploading file…',
         remove_file: 'Remove {name}',
         open_file: 'Open {name}',
         session_files: 'Files',
         session_files_panel: 'Session files ({count})',
-        uploading: 'Uploading file…',
+        files_empty: 'No files yet',
         assistant_typing: 'Agent is responding…',
         message_copy: 'Copy',
         message_copied: 'Copied',
-        retry: 'Retry',
-        scroll_to_bottom: 'Jump to latest messages',
         stop_task: 'Stop response',
         task_running: 'Agent is responding…',
+        task_canceled: 'Stopped',
         conversation_feed: 'Messages',
+        reasoning: 'Reasoning',
         read_only: 'Read only',
-        status_saving: 'Saving…',
-        status_saved: 'Saved',
-        status_conflict: 'Sync conflict',
         status_preview: 'Preview',
+        status_read_only: 'Live read-only view',
+        status_live: 'Live',
+        status_error: 'Connection error',
         loading_interface: 'Loading interface',
         pages_nav: 'Pages',
         share: 'Share session',
         share_aria: 'Share this session',
         share_title: 'Share this session',
-        share_description: 'The link opens this same conversation at its latest acknowledged revision. This is not a guest flow preview.',
+        share_description: 'The link opens this same conversation and keeps receiving its updates.',
         share_view_only: 'View only',
-        share_can_interact: 'Can edit',
-        share_creating: 'Saving and creating a revocable link…',
+        share_can_interact: 'Can write',
+        share_creating: 'Creating a revocable link…',
         share_link: 'Link',
         share_copy: 'Copy',
         share_copied: 'Copied',
@@ -161,50 +142,23 @@ const FLOW_UI_TEXT = Object.freeze({
         embed_page_description: 'Opens the chat edge-to-edge without a FAB.',
         embed_copy: 'Copy',
         embed_copied: 'Copied',
-        voice_unavailable: 'Voice unavailable',
-        voice_bind_missing: 'A text field is required for dictation',
-        voice_session_start_aria: 'Start live voice session',
-        voice_session_stop_aria: 'Stop live voice session',
-        surface_no_root: 'Surface has no root component',
-        unknown_component: 'Unsupported external component',
-        component_render_failed: 'Component failed to render',
-        image_empty: 'No image selected',
-        data_table_empty: 'No table file_id — bind a SQLite file or rows',
-        data_table_no_tables: 'This file has no tables yet',
-        data_table_group: 'Data table',
-        data_table_column_filter_placeholder: 'Filter…',
-        data_table_next: 'Next',
-        data_table_row_count: '{count} rows',
-        data_table_export_csv: 'Download CSV',
-        data_table_export_xlsx: 'Download Excel',
-        binary_file: 'Binary file',
-        binary_data: 'Binary data',
-        artifact: 'Artifact',
-        message_composer: 'Message composer',
-        status_read_only: 'Live read-only view',
+        voice_start: 'Start live voice session',
+        voice_stop: 'Stop live voice session',
         interface_unavailable: 'Interface unavailable',
         unknown_error: 'Unknown error',
-        open: 'Open',
-        submit_default: 'Submit',
-        dialog: 'Dialog',
-        citations: 'Citations',
-        chart: 'Chart',
-        run_trace: 'Run trace',
-        tool_activity: 'Tool activity',
-        browser_preview: 'Browser preview',
-        skill_activity: 'Skill activity',
-        reflection: 'Reflection',
-        action_preview: 'Action preview',
-        action_result: 'Action result',
-        activity: 'Activity',
-        required_field: 'This field is required',
-        invalid_email: 'Enter a valid email',
-        invalid_pattern: 'Value does not match the required pattern',
-        min_length: 'Enter at least {value} characters',
-        max_length: 'Enter at most {value} characters',
+        field_required: 'This field is required',
+        slot_empty: 'The agent will place blocks here via ui_render',
+        block_empty: 'The {type} block is empty: it appears once state has data',
+        tool_activity_empty: 'Tool activity appears here while the flow runs',
+        skill_label: 'Skill',
+        action_preview_label: 'Action draft',
+        action_status_success: 'Done',
+        action_status_failed: 'Failed',
+        action_status_pending: 'Pending',
+        browser_status_running: 'Loading',
+        browser_status_finished: 'Ready',
+        browser_status_failed: 'Failed',
         turn_toast_working: 'Agent is working…',
-        turn_toast_reasoning: 'Reasoning',
-        turn_toast_activity: 'Activity',
         turn_toast_response: 'Response',
         turn_toast_error: 'Error',
         turn_toast_error_generic: 'The request could not be completed',
@@ -214,34 +168,34 @@ const FLOW_UI_TEXT = Object.freeze({
         hitl_banner_takeover: 'You can message the operator. The agent continues after the task is completed.',
         hitl_submit_single_reply: 'Reply and complete',
         hitl_submit_takeover: 'Send',
+        value_yes: 'yes',
+        value_no: 'no',
+        oauth_authorize: 'Authorize',
+        operator_label: 'Operator',
+        open_tracing: 'Tracing',
+        open_logs: 'Logs',
+        run_trace: 'Run trace',
+        run_trace_empty: 'No execution events yet',
+        node_start: 'start',
+        node_complete: 'done',
+        node_error: 'error',
+        edge_executed: 'edge',
     }),
 });
 
-/**
- * Normalize any locale tag to a supported Flow UI chrome locale.
- * @param {unknown} locale
- * @param {Document | undefined} [doc]
- * @returns {'ru' | 'en'}
- */
+/** @returns {'ru' | 'en'} */
 export function resolveFlowUILocale(locale, doc = globalThis.document) {
     let tag = typeof locale === 'string' ? locale.trim().toLowerCase() : '';
     if (tag === '' || tag === 'auto') {
         const documentLang = doc?.documentElement?.lang;
         tag = typeof documentLang === 'string' && documentLang.trim() !== ''
             ? documentLang.trim().toLowerCase()
-            : (typeof globalThis.navigator?.language === 'string'
-                ? globalThis.navigator.language.toLowerCase()
-                : 'en');
+            : (typeof globalThis.navigator?.language === 'string' ? globalThis.navigator.language.toLowerCase() : 'en');
     }
     return tag === 'ru' || tag.startsWith('ru-') ? 'ru' : 'en';
 }
 
-/**
- * Submit label for operator_handoff. User SPA keeps generic composer_send.
- * @param {'ru' | 'en'} locale
- * @param {unknown} mode
- * @returns {string | null}
- */
+/** Подпись кнопки отправки оператора; для обычного профиля — ``null`` (composer_send). */
 export function hitlComposerSendLabel(locale, mode) {
     if (mode === undefined || mode === null) return null;
     if (mode === 'single_reply') return flowUIText(locale, 'hitl_submit_single_reply');
@@ -249,24 +203,14 @@ export function hitlComposerSendLabel(locale, mode) {
     throw new Error(`flow-ui: unsupported HITL mode ${JSON.stringify(mode)}`);
 }
 
-/**
- * @param {'ru' | 'en'} locale
- * @param {string} key
- * @param {Record<string, string>} [vars]
- * @returns {string}
- */
 export function flowUIText(locale, key, vars = undefined) {
     const bundle = FLOW_UI_TEXT[locale === 'ru' ? 'ru' : 'en'];
     const template = bundle[key];
-    if (typeof template !== 'string') {
-        throw new Error(`flow-ui: unknown text key ${key}`);
-    }
+    if (typeof template !== 'string') throw new Error(`flow-ui: unknown text key ${key}`);
     if (!vars) return template;
     return template.replace(/\{(\w+)\}/g, (match, name) => {
         const value = vars[name];
-        if (typeof value !== 'string') {
-            throw new Error(`flow-ui: text ${key} missing variable ${name}`);
-        }
+        if (typeof value !== 'string') throw new Error(`flow-ui: text ${key} missing variable ${name}`);
         return value;
     });
 }

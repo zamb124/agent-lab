@@ -7,6 +7,7 @@ import pytest
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import BaseNode, CodeNode, NodeInputs, NodeRunResult, create_node
+from core.flow_ui.templates import default_chat_document
 from core.state import ExecutionState
 
 
@@ -78,6 +79,7 @@ async def test_flow_run_requires_existing_workflow_instance() -> None:
         entry="n",
         nodes={"n": _PureNode("n", {"type": "resource"}, container=container)},
         edges=[],
+        interface=default_chat_document(),
         container=container,
     )
 

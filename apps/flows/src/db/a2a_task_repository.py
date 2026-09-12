@@ -169,7 +169,6 @@ class A2ATaskRepository:
         task: Task,
         execution_branch_id: str | None = None,
         flow_config_version: str | None = None,
-        ui_template_version: str | None = None,
         input_message_id: str | None = None,
     ) -> bool:
         """Create the submitted Task snapshot exactly once."""
@@ -182,20 +181,6 @@ class A2ATaskRepository:
         )
         task_json = task_to_json_dict(task)
         task_metadata = mapping_from_struct(task.metadata) if task.HasField("metadata") else {}
-        platform_ui_raw = task_metadata.get("platformUi")
-        platform_ui = (
-            require_json_object(platform_ui_raw, "A2ATask.metadata.platformUi")
-            if platform_ui_raw is not None
-            else {}
-        )
-        negotiated_extensions_raw = platform_ui.get("negotiated_extensions", [])
-        if not isinstance(negotiated_extensions_raw, list) or not all(
-            isinstance(item, str) for item in negotiated_extensions_raw
-        ):
-            raise A2ATaskRepositoryError("Task negotiated extensions must be strings")
-        representation_raw = platform_ui.get("representation", "generic-a2a")
-        if not isinstance(representation_raw, str) or not representation_raw:
-            raise A2ATaskRepositoryError("Task representation must be a non-empty string")
         now = utc_now()
         async with self._storage.get_session() as session:
             async with session.begin():
@@ -212,11 +197,8 @@ class A2ATaskRepository:
                         task_state=_task_state_name(task),
                         task_json=task_json,
                         task_metadata=task_metadata,
-                        negotiated_extensions=negotiated_extensions_raw,
-                        representation=representation_raw,
                         input_message_id=input_message_id,
                         flow_config_version=flow_config_version,
-                        ui_template_version=ui_template_version,
                         latest_sequence=0,
                         is_terminal=is_terminal_a2a_task_state(task.status.state),
                         completed_at=(
@@ -513,6 +495,52 @@ class A2ATaskRepository:
             return task_from_json_dict(
                 require_json_object(task_row.task_json, "A2ATask.task_json")
             )
+
+    async def get_latest_sequence(self, *, company_id: str, task_id: str) -> int:
+        """Sequence of the last durable event of the task (0 — only the submitted snapshot)."""
+        _, latest = await self.get_task_with_sequence(company_id=company_id, task_id=task_id)
+        return latest
+
+    async def get_task_with_sequence(self, *, company_id: str, task_id: str) -> tuple[Task, int]:
+        """Projection Task together with the sequence it reflects — one row, one read.
+
+        A stream that starts with this snapshot continues with events whose sequence is
+        greater than the returned one: nothing is lost and nothing is applied twice.
+        """
+        async with self._storage.get_session() as session:
+            result = await session.execute(
+                select(A2ATaskProjections).where(
+                    A2ATaskProjections.company_id == company_id,
+                    A2ATaskProjections.task_id == task_id,
+                )
+            )
+            row = result.scalar_one_or_none()
+        if row is None:
+            raise A2ATaskRepositoryError(f"A2A Task {task_id!r} not found")
+        return (
+            task_from_json_dict(require_json_object(row.task_json, "A2ATask.task_json")),
+            int(row.latest_sequence),
+        )
+
+    async def get_submitted_task(self, *, company_id: str, task_id: str) -> Task | None:
+        """Sequence-0 snapshot: SUBMITTED Task with history and without artifacts.
+
+        Every status/artifact event of the task has sequence >= 1, so a stream that
+        starts with this snapshot and continues from sequence 1 never duplicates parts.
+        """
+        async with self._storage.get_session() as session:
+            result = await session.execute(
+                select(A2ATaskEventDedup).where(
+                    A2ATaskEventDedup.company_id == company_id,
+                    A2ATaskEventDedup.task_id == task_id,
+                    A2ATaskEventDedup.sequence == 0,
+                    A2ATaskEventDedup.event_kind == _TASK_SNAPSHOT_KIND,
+                )
+            )
+            row = result.scalar_one_or_none()
+        if row is None:
+            return None
+        return task_from_json_dict(require_json_object(row.event_json, "A2ATaskEvent.task"))
 
     async def get_task_for_owner(
         self,

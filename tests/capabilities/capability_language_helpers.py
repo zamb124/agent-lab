@@ -19,10 +19,7 @@ from core.capabilities import (
     issue_execution_token,
     locked_down_code_sandbox_policy,
 )
-from core.models.flow_interface import (
-    DEFAULT_CHAT_TEMPLATE_ID,
-    DEFAULT_CHAT_TEMPLATE_VERSION,
-)
+from core.flow_ui.protocol import CONVERSATION_SLOT_ID
 
 STATIC_PLATFORM_CAPABILITIES = {
     "channel.send",
@@ -57,77 +54,23 @@ STATIC_PLATFORM_CAPABILITIES = {
     "text.format_markdown",
     "text.summarize",
     "trace.event",
-    "ui.apply",
-    "ui.create_surface",
-    "ui.delete_components",
-    "ui.delete_data",
-    "ui.delete_surface",
     "ui.navigate",
-    "ui.reset",
-    "ui.update_components",
-    "ui.update_data",
+    "ui.render",
     "voice.synthesize_speech",
     "voice.transcribe_audio",
 }
 INTERRUPT_PLATFORM_CAPABILITIES = {"flow.ask_user"}
 
-FLOW_UI_SMOKE_KEPT_SURFACE = "smoke-kept"
-FLOW_UI_SMOKE_REMOVED_SURFACE = "smoke-removed"
-FLOW_UI_SMOKE_TEXT = "capability smoke surface"
-FLOW_UI_SMOKE_NOTE_COMPONENT = "smoke-note"
-FLOW_UI_CAPABILITY_NAMES = (
-    "ui.reset",
-    "ui.create_surface",
-    "ui.update_components",
-    "ui.update_data",
-    "ui.apply",
-    "ui.delete_data",
-    "ui.delete_components",
-    "ui.delete_surface",
-    "ui.navigate",
-)
-
-
-def _flow_ui_smoke_container(children: list[str]) -> dict[str, object]:
-    return {
-        "component_id": "root",
-        "type": "Section",
-        "kind": "container",
-        "children": children,
-        "container_layout": {"mode": "stack", "stack": {"gap_token": "space.4"}},
-    }
-
-
-def _flow_ui_smoke_surface(surface_id: str) -> dict[str, object]:
-    return {
-        "surface_id": surface_id,
-        "root_component_id": "root",
-        "components": {"root": _flow_ui_smoke_container([])},
-        "data_model": {"content": {}, "values": {}, "system": {}},
-    }
+FLOW_UI_SMOKE_TEXT = "capability smoke card"
+FLOW_UI_CAPABILITY_NAMES = ("ui.render", "ui.navigate")
 
 
 def flow_ui_smoke_state() -> dict[str, object]:
-    """Один payload Flow UI effects для всех языков sandbox."""
+    """Один payload ui-эффектов для всех языков sandbox: карточка в ленту и переход на страницу."""
     return {
-        "template_id": DEFAULT_CHAT_TEMPLATE_ID,
-        "template_version": DEFAULT_CHAT_TEMPLATE_VERSION,
+        "slot_id": CONVERSATION_SLOT_ID,
         "page_id": "main",
-        "kept_surface_id": FLOW_UI_SMOKE_KEPT_SURFACE,
-        "removed_surface_id": FLOW_UI_SMOKE_REMOVED_SURFACE,
-        "kept_surface": _flow_ui_smoke_surface(FLOW_UI_SMOKE_KEPT_SURFACE),
-        "removed_surface": _flow_ui_smoke_surface(FLOW_UI_SMOKE_REMOVED_SURFACE),
-        "components": [
-            _flow_ui_smoke_container([FLOW_UI_SMOKE_NOTE_COMPONENT]),
-            {
-                "component_id": FLOW_UI_SMOKE_NOTE_COMPONENT,
-                "type": "Text",
-                "kind": "leaf",
-                "bindings": {"text": "/content/note"},
-            },
-        ],
-        "note_ids": [FLOW_UI_SMOKE_NOTE_COMPONENT],
-        "note": FLOW_UI_SMOKE_TEXT,
+        "blocks": [{"type": "text", "block_id": "smoke-card", "markdown": FLOW_UI_SMOKE_TEXT}],
     }
 
 
@@ -347,17 +290,7 @@ async def run(args, state):
     agent_message = await call("state.add_agent_message", {"content": "hello agent"})
     results["state.add_agent_message"] = agent_message["role"]
     flow_ui = state["flow_ui"]
-    kept = flow_ui["kept_surface_id"]
-    await call("ui.reset", {"template_id": flow_ui["template_id"], "template_version": flow_ui["template_version"]})
-    await call("ui.create_surface", {"surface": flow_ui["kept_surface"]})
-    await call("ui.create_surface", {"surface": flow_ui["removed_surface"]})
-    await call("ui.update_components", {"surface_id": kept, "components": flow_ui["components"]})
-    await call("ui.update_data", {"surface_id": kept, "path": "/content/note", "value": flow_ui["note"]})
-    await call("ui.apply", {"commands": [{"kind": "data.set", "surface_id": kept, "path": "/content/note", "value": flow_ui["note"]}]})
-    await call("ui.update_data", {"surface_id": kept, "path": "/content/temporary", "value": "temporary"})
-    await call("ui.delete_data", {"surface_id": kept, "path": "/content/temporary"})
-    await call("ui.delete_components", {"surface_id": kept, "component_ids": flow_ui["note_ids"]})
-    await call("ui.delete_surface", {"surface_id": flow_ui["removed_surface_id"]})
+    await call("ui.render", {"slot_id": flow_ui["slot_id"], "blocks": flow_ui["blocks"]})
     await call("ui.navigate", {"page_id": flow_ui["page_id"]})
     extracted = await call("state.extract_json", {"text": "```json\\n{\\"ok\\": true}\\n```"})
     results["state.extract_json"] = extracted["ok"]
@@ -442,17 +375,7 @@ async function run(args, state) {
   results["state.add_user_message"] = (await call("state.add_user_message", {content: "hello user"})).role;
   results["state.add_agent_message"] = (await call("state.add_agent_message", {content: "hello agent"})).role;
   const flowUi = state.flow_ui;
-  const keptSurfaceId = flowUi.kept_surface_id;
-  await call("ui.reset", {template_id: flowUi.template_id, template_version: flowUi.template_version});
-  await call("ui.create_surface", {surface: flowUi.kept_surface});
-  await call("ui.create_surface", {surface: flowUi.removed_surface});
-  await call("ui.update_components", {surface_id: keptSurfaceId, components: flowUi.components});
-  await call("ui.update_data", {surface_id: keptSurfaceId, path: "/content/note", value: flowUi.note});
-  await call("ui.apply", {commands: [{kind: "data.set", surface_id: keptSurfaceId, path: "/content/note", value: flowUi.note}]});
-  await call("ui.update_data", {surface_id: keptSurfaceId, path: "/content/temporary", value: "temporary"});
-  await call("ui.delete_data", {surface_id: keptSurfaceId, path: "/content/temporary"});
-  await call("ui.delete_components", {surface_id: keptSurfaceId, component_ids: flowUi.note_ids});
-  await call("ui.delete_surface", {surface_id: flowUi.removed_surface_id});
+  await call("ui.render", {slot_id: flowUi.slot_id, blocks: flowUi.blocks});
   await call("ui.navigate", {page_id: flowUi.page_id});
   results["state.extract_json"] = (await call("state.extract_json", {text: "```json\\n{\\"ok\\": true}\\n```"})).ok;
   results["channel.send"] = (await call("channel.send", {content: "queued message"})).queued;
@@ -609,26 +532,7 @@ func Run(args map[string]any, state map[string]any) (any, error) {
     if err != nil { return nil, err }
     results["state.add_agent_message"] = agentMessage["role"]
     flowUi := state["flow_ui"].(map[string]any)
-    keptSurfaceID := flowUi["kept_surface_id"]
-    _, err = call("ui.reset", map[string]any{"template_id": flowUi["template_id"], "template_version": flowUi["template_version"]})
-    if err != nil { return nil, err }
-    _, err = call("ui.create_surface", map[string]any{"surface": flowUi["kept_surface"]})
-    if err != nil { return nil, err }
-    _, err = call("ui.create_surface", map[string]any{"surface": flowUi["removed_surface"]})
-    if err != nil { return nil, err }
-    _, err = call("ui.update_components", map[string]any{"surface_id": keptSurfaceID, "components": flowUi["components"]})
-    if err != nil { return nil, err }
-    _, err = call("ui.update_data", map[string]any{"surface_id": keptSurfaceID, "path": "/content/note", "value": flowUi["note"]})
-    if err != nil { return nil, err }
-    _, err = call("ui.apply", map[string]any{"commands": []any{map[string]any{"kind": "data.set", "surface_id": keptSurfaceID, "path": "/content/note", "value": flowUi["note"]}}})
-    if err != nil { return nil, err }
-    _, err = call("ui.update_data", map[string]any{"surface_id": keptSurfaceID, "path": "/content/temporary", "value": "temporary"})
-    if err != nil { return nil, err }
-    _, err = call("ui.delete_data", map[string]any{"surface_id": keptSurfaceID, "path": "/content/temporary"})
-    if err != nil { return nil, err }
-    _, err = call("ui.delete_components", map[string]any{"surface_id": keptSurfaceID, "component_ids": flowUi["note_ids"]})
-    if err != nil { return nil, err }
-    _, err = call("ui.delete_surface", map[string]any{"surface_id": flowUi["removed_surface_id"]})
+    _, err = call("ui.render", map[string]any{"slot_id": flowUi["slot_id"], "blocks": flowUi["blocks"]})
     if err != nil { return nil, err }
     _, err = call("ui.navigate", map[string]any{"page_id": flowUi["page_id"]})
     if err != nil { return nil, err }
@@ -784,46 +688,10 @@ async Task<object?> Run(Dictionary<string, object?> args, Dictionary<string, obj
     results["state.add_user_message"] = (await CallObj("state.add_user_message", new Dictionary<string, object?> { ["content"] = "hello user" }))["role"];
     results["state.add_agent_message"] = (await CallObj("state.add_agent_message", new Dictionary<string, object?> { ["content"] = "hello agent" }))["role"];
     var flowUi = (Dictionary<string, object?>) state["flow_ui"]!;
-    var keptSurfaceId = flowUi["kept_surface_id"];
-    await Call("ui.reset", new Dictionary<string, object?> {
-        ["template_id"] = flowUi["template_id"],
-        ["template_version"] = flowUi["template_version"],
+    await Call("ui.render", new Dictionary<string, object?> {
+        ["slot_id"] = flowUi["slot_id"],
+        ["blocks"] = flowUi["blocks"],
     });
-    await Call("ui.create_surface", new Dictionary<string, object?> { ["surface"] = flowUi["kept_surface"] });
-    await Call("ui.create_surface", new Dictionary<string, object?> { ["surface"] = flowUi["removed_surface"] });
-    await Call("ui.update_components", new Dictionary<string, object?> {
-        ["surface_id"] = keptSurfaceId,
-        ["components"] = flowUi["components"],
-    });
-    await Call("ui.update_data", new Dictionary<string, object?> {
-        ["surface_id"] = keptSurfaceId,
-        ["path"] = "/content/note",
-        ["value"] = flowUi["note"],
-    });
-    await Call("ui.apply", new Dictionary<string, object?> {
-        ["commands"] = new List<object?> {
-            new Dictionary<string, object?> {
-                ["kind"] = "data.set",
-                ["surface_id"] = keptSurfaceId,
-                ["path"] = "/content/note",
-                ["value"] = flowUi["note"],
-            },
-        },
-    });
-    await Call("ui.update_data", new Dictionary<string, object?> {
-        ["surface_id"] = keptSurfaceId,
-        ["path"] = "/content/temporary",
-        ["value"] = "temporary",
-    });
-    await Call("ui.delete_data", new Dictionary<string, object?> {
-        ["surface_id"] = keptSurfaceId,
-        ["path"] = "/content/temporary",
-    });
-    await Call("ui.delete_components", new Dictionary<string, object?> {
-        ["surface_id"] = keptSurfaceId,
-        ["component_ids"] = flowUi["note_ids"],
-    });
-    await Call("ui.delete_surface", new Dictionary<string, object?> { ["surface_id"] = flowUi["removed_surface_id"] });
     await Call("ui.navigate", new Dictionary<string, object?> { ["page_id"] = flowUi["page_id"] });
     results["state.extract_json"] = (await CallObj("state.extract_json", new Dictionary<string, object?> { ["text"] = "```json\\n{\\"ok\\": true}\\n```" }))["ok"];
     results["channel.send"] = (await CallObj("channel.send", new Dictionary<string, object?> { ["content"] = "queued message" }))["queued"];
@@ -1190,25 +1058,6 @@ async def assert_language_sdk_covers_manifest(
     assert body["output_state"]["sdk_method_count"] == len(pairs)
 
 
-def _assert_flow_ui_effects_applied(output_state: Mapping[str, Any]) -> None:
-    """Trusted effects применены к документу, а не к возвращённому state."""
-    document = output_state["ui_document"]
-    assert document["active_page_id"] == "main"
-    assert set(document["surfaces"]) == {"main", FLOW_UI_SMOKE_KEPT_SURFACE}
-    assert output_state["ui_effect_cursor"] == 12
-    assert document["revision"] == 13
-
-    kept = document["surfaces"][FLOW_UI_SMOKE_KEPT_SURFACE]
-    assert set(kept["components"]) == {"root"}
-    assert kept["components"]["root"]["children"] == []
-    assert kept["data_model"]["content"] == {"note": FLOW_UI_SMOKE_TEXT}
-    assert kept["catalog_id"] == document["catalog_id"]
-
-    chat_surface = document["surfaces"]["main"]
-    assert "submit" in chat_surface["components"]
-    assert "flow_ui" not in document
-
-
 async def assert_language_runs_static_platform_capabilities(
     language: str,
     sandbox_services: Mapping[str, str],
@@ -1317,11 +1166,8 @@ async def assert_language_runs_static_platform_capabilities(
         assert issued["issued"] is True, capability_name
         assert isinstance(issued["effect_id"], str) and issued["effect_id"], capability_name
         assert isinstance(issued["capability_call_id"], str) and issued["capability_call_id"]
-    assert results["ui.reset"]["kind"] == "ui.reset"
-    assert results["ui.navigate"]["kind"] == "ui.navigate"
-    assert results["ui.update_data"]["kind"] == "ui.apply"
-    assert results["ui.apply"]["kind"] == "ui.apply"
-    _assert_flow_ui_effects_applied(body["output_state"])
+    assert results["ui.render"]["kind"] == "render"
+    assert results["ui.navigate"]["kind"] == "navigate"
     assert results["state.extract_json"] is True
     assert results["channel.send"] is True
     assert results["channel.send_with_buttons"] is True

@@ -1,21 +1,35 @@
-import {
-    A2A_PROTOCOL_VERSION,
-    A2UI_EXTENSION_URI,
-    A2UI_MEDIA_TYPE,
-    A2UI_VERSION,
-    FLOW_UI_ACTIONS,
-    LINNEX_CATALOG_ID,
-} from './constants.js';
-import { cloneSerializable } from '../utils/clone.js';
+/**
+ * JSON-RPC тела и URL A2A 1.0 для Flow UI.
+ *
+ * Upstream-сообщение пользователя — обычное A2A ``Message``: ``text`` Part плюс
+ * файловые Parts ``{url, mediaType, filename}``, либо ровно один ``data`` Part
+ * ``application/vnd.platform.ui-action+json`` для действия блока интерфейса.
+ */
 
-let fallbackId = 0;
+import { A2A_PROTOCOL_VERSION, FLOW_UI_ACTION_MEDIA_TYPE } from './constants.js';
+
+/**
+ * UUID v4 через getRandomValues: ``crypto.randomUUID`` есть только в secure context,
+ * а локальный стенд и E2E ходят по HTTP company-host.
+ */
+export function randomUuid() {
+    if (!globalThis.crypto || typeof globalThis.crypto.getRandomValues !== 'function') {
+        throw new Error('flow-ui: crypto.getRandomValues is required');
+    }
+    const bytes = new Uint8Array(16);
+    globalThis.crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 export function createProtocolId(prefix = 'flow-ui') {
-    if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
-        return `${prefix}:${globalThis.crypto.randomUUID()}`;
-    }
-    fallbackId += 1;
-    return `${prefix}:${Date.now()}:${fallbackId}`;
+    return `${prefix}:${randomUuid()}`;
+}
+
+function rpc(method, params) {
+    return { jsonrpc: '2.0', id: createProtocolId('rpc'), method, params };
 }
 
 export function a2aEndpointUrl({ baseUrl = '', flowId = '', embedId = '' }) {
@@ -28,16 +42,17 @@ export function a2aEndpointUrl({ baseUrl = '', flowId = '', embedId = '' }) {
     return `${root}/api/v1/${encodeURIComponent(flow)}`;
 }
 
-/** Graph branch `base` is A2A/control-plane `default`. */
+/** Ветка графа ``base`` в A2A и control plane называется ``default``. */
 export function normalizeFlowUIBranchId(branchId) {
     const raw = typeof branchId === 'string' && branchId.trim() !== '' ? branchId.trim() : 'default';
     return raw === 'base' ? 'default' : raw;
 }
 
-export function interfaceProfileUrl(target) {
+/** ``GET .../interface`` — design-time документ, права, look и capabilities. */
+export function interfaceUrl(target) {
     const branch = normalizeFlowUIBranchId(target?.branchId);
     const query = branch === 'default' ? '' : `?branch_id=${encodeURIComponent(branch)}`;
-    return `${a2aEndpointUrl(target)}/interface-profile${query}`;
+    return `${a2aEndpointUrl(target)}/interface${query}`;
 }
 
 export function flowUIShareCollectionUrl({ baseUrl = '' } = {}) {
@@ -46,132 +61,80 @@ export function flowUIShareCollectionUrl({ baseUrl = '' } = {}) {
     return `${root}/api/v1/flow-ui/shares`;
 }
 
-export function a2uiCapabilities() {
-    return {
-        [A2UI_VERSION]: {
-            supportedCatalogIds: [LINNEX_CATALOG_ID],
-            inlineCatalogs: [],
-        },
-    };
-}
-
-function cleanObject(value) {
-    return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
-}
-
-export function buildFlowUIMessage({
-    kind,
-    contextId = null,
-    document = null,
-    surfaceId = 'main',
-    sourceComponentId = 'root',
-    actionContext = {},
-    clientMutationId = createProtocolId('mutation'),
-    actionId = createProtocolId('action'),
-    branchId = 'default',
-    metadata = {},
-}) {
-    const actionName = FLOW_UI_ACTIONS[kind];
-    if (!actionName) throw new Error(`flow-ui: unsupported command ${JSON.stringify(kind)}`);
-    if (kind !== 'bootstrap' && (!document || typeof document !== 'object')) {
-        throw new Error(`flow-ui: ${kind} requires an authoritative document`);
-    }
-
-    const message = {
-        messageId: createProtocolId('message'),
-        role: 'ROLE_USER',
-        extensions: [A2UI_EXTENSION_URI],
-        parts: [{
-            data: [{
-                version: A2UI_VERSION,
-                action: {
-                    name: actionName,
-                    surfaceId,
-                    sourceComponentId,
-                    timestamp: new Date().toISOString(),
-                    context: actionContext && typeof actionContext === 'object' ? actionContext : {},
-                },
-            }],
-            mediaType: A2UI_MEDIA_TYPE,
-            metadata: { mimeType: A2UI_MEDIA_TYPE },
-        }],
-    };
-    if (typeof contextId === 'string' && contextId) message.contextId = contextId;
-
-    const platformUi = cleanObject({
-        documentId: document?.document_id,
-        revision: document?.revision,
-        actionId,
-        clientMutationId,
-        activePageId: document?.active_page_id,
-        sessionViewState: document?.session_view_state ?? {},
+export function buildA2aFileParts(files) {
+    const list = Array.isArray(files) ? files : [];
+    return list.map((file) => {
+        if (!file || typeof file !== 'object') {
+            throw new Error('flow-ui: file part source must be an object');
+        }
+        if (typeof file.url !== 'string' || file.url.trim() === '') {
+            throw new Error('flow-ui: file part requires url');
+        }
+        if (typeof file.content_type !== 'string' || file.content_type.trim() === '') {
+            throw new Error('flow-ui: file part requires content_type');
+        }
+        if (typeof file.original_name !== 'string' || file.original_name.trim() === '') {
+            throw new Error('flow-ui: file part requires original_name');
+        }
+        return { url: file.url, mediaType: file.content_type, filename: file.original_name };
     });
-    const messageMetadata = {
-        ...metadata,
-        branch: branchId || 'default',
-        platformUi,
-        a2uiClientCapabilities: a2uiCapabilities(),
-    };
-    if (kind !== 'bootstrap') {
-        if (!document.surfaces || typeof document.surfaces !== 'object') {
-            throw new Error(`flow-ui: ${kind} document.surfaces is required`);
-        }
-        messageMetadata.a2uiClientDataModel = {
-            version: A2UI_VERSION,
-            surfaces: Object.fromEntries(
-                Object.entries(document.surfaces).map(([id, surface]) => [
-                    id,
-                    { values: cloneSerializable(surface?.data_model?.values ?? {}) },
-                ]),
-            ),
-        };
-    }
-    message.metadata = messageMetadata;
-    return Object.freeze({ message, actionId, clientMutationId });
 }
 
-export function buildSendMessageBody(command, { streaming = false } = {}) {
-    const body = {
-        jsonrpc: '2.0',
-        id: createProtocolId('rpc'),
-        method: streaming ? 'SendStreamingMessage' : 'SendMessage',
-        params: { message: command.message },
-    };
-    /** @type {Record<string, unknown>} */
-    const paramsMetadata = {};
-    const branch = command.message?.metadata?.branch;
-    if (typeof branch === 'string' && branch) {
-        paramsMetadata.branch = branch;
+/**
+ * @param {{
+ *   contextId?: string | null,
+ *   taskId?: string | null,
+ *   text?: string,
+ *   files?: object[],
+ *   action?: { action: string, source: string, fields: object, payload: object } | null,
+ * }} input
+ */
+export function buildUserMessage({ contextId = null, taskId = null, text = '', files = [], action = null }) {
+    const message = { messageId: createProtocolId('message'), role: 'ROLE_USER', parts: [] };
+    if (action !== null) {
+        if (typeof text === 'string' && text.trim() !== '') {
+            throw new Error('flow-ui: ui action cannot be combined with message text');
+        }
+        if (typeof action.action !== 'string' || action.action.trim() === '') {
+            throw new Error('flow-ui: ui action requires action name');
+        }
+        if (typeof action.source !== 'string' || action.source.trim() === '') {
+            throw new Error('flow-ui: ui action requires source block_id');
+        }
+        message.parts.push({
+            data: {
+                action: action.action,
+                source: action.source,
+                fields: action.fields && typeof action.fields === 'object' ? action.fields : {},
+                payload: action.payload && typeof action.payload === 'object' ? action.payload : {},
+            },
+            mediaType: FLOW_UI_ACTION_MEDIA_TYPE,
+        });
+    } else {
+        message.parts.push({ text: typeof text === 'string' ? text : '' });
     }
-    const variables = command.message?.metadata?.variables;
-    if (variables != null) {
+    message.parts.push(...buildA2aFileParts(files));
+    if (typeof contextId === 'string' && contextId !== '') message.contextId = contextId;
+    if (typeof taskId === 'string' && taskId !== '') message.taskId = taskId;
+    return message;
+}
+
+export function buildSendMessageBody(message, { streaming = true, branchId = 'default', variables = null } = {}) {
+    const params = { message };
+    const metadata = {};
+    const branch = normalizeFlowUIBranchId(branchId);
+    if (branch !== 'default') metadata.branch = branch;
+    if (variables !== null && variables !== undefined) {
         if (typeof variables !== 'object' || Array.isArray(variables)) {
-            throw new Error('flow-ui: message.metadata.variables must be a plain object');
+            throw new Error('flow-ui: metadata.variables must be a plain object');
         }
-        paramsMetadata.variables = variables;
+        if (Object.keys(variables).length > 0) metadata.variables = variables;
     }
-    if (Object.keys(paramsMetadata).length > 0) {
-        body.params.metadata = paramsMetadata;
-    }
-    return body;
+    if (Object.keys(metadata).length > 0) params.metadata = metadata;
+    return rpc(streaming ? 'SendStreamingMessage' : 'SendMessage', params);
 }
 
-export function buildGetTaskBody(taskId, historyLength = 100) {
-    return {
-        jsonrpc: '2.0',
-        id: createProtocolId('rpc'),
-        method: 'GetTask',
-        params: { id: taskId, historyLength },
-    };
-}
-
-export function buildListTasksBody({
-    contextId,
-    pageSize = 50,
-    pageToken = '',
-    includeArtifacts = true,
-    historyLength = 0,
-} = {}) {
+export function buildListTasksBody({ contextId, pageSize = 50, pageToken = '', includeArtifacts = true } = {}) {
     if (typeof contextId !== 'string' || contextId.trim() === '') {
         throw new Error('flow-ui: ListTasks contextId is required');
     }
@@ -181,53 +144,21 @@ export function buildListTasksBody({
     if (typeof pageToken !== 'string') {
         throw new Error('flow-ui: ListTasks pageToken must be a string');
     }
-    const params = {
-        contextId,
-        pageSize,
-        pageToken,
-        includeArtifacts: Boolean(includeArtifacts),
-    };
-    if (Number.isInteger(historyLength) && historyLength > 0) {
-        params.historyLength = historyLength;
-    }
-    return {
-        jsonrpc: '2.0',
-        id: createProtocolId('rpc'),
-        method: 'ListTasks',
-        params,
-    };
+    return rpc('ListTasks', { contextId, pageSize, pageToken, includeArtifacts: Boolean(includeArtifacts) });
 }
 
-export function buildSubscribeTaskBody(taskId, { afterSequence = 0 } = {}) {
+export function buildSubscribeTaskBody(taskId) {
     if (typeof taskId !== 'string' || !taskId.trim()) {
         throw new Error('flow-ui: SubscribeToTask taskId is required');
     }
-    if (!Number.isInteger(afterSequence) || afterSequence < 0) {
-        throw new Error('flow-ui: SubscribeToTask afterSequence must be a non-negative int');
-    }
-    const params = { id: taskId };
-    if (afterSequence > 0) {
-        params.metadata = {
-            platformUi: {
-                afterSequence,
-            },
-        };
-    }
-    return {
-        jsonrpc: '2.0',
-        id: createProtocolId('rpc'),
-        method: 'SubscribeToTask',
-        params,
-    };
+    return rpc('SubscribeToTask', { id: taskId });
 }
 
 export function buildCancelTaskBody(taskId) {
-    return {
-        jsonrpc: '2.0',
-        id: createProtocolId('rpc'),
-        method: 'CancelTask',
-        params: { id: taskId },
-    };
+    if (typeof taskId !== 'string' || !taskId.trim()) {
+        throw new Error('flow-ui: CancelTask taskId is required');
+    }
+    return rpc('CancelTask', { id: taskId });
 }
 
 export function a2aRequestHeaders(headers = {}, { stream = false } = {}) {
@@ -235,75 +166,6 @@ export function a2aRequestHeaders(headers = {}, { stream = false } = {}) {
         'Content-Type': 'application/json',
         Accept: stream ? 'text/event-stream' : 'application/json',
         'A2A-Version': A2A_PROTOCOL_VERSION,
-        'A2A-Extensions': A2UI_EXTENSION_URI,
         ...headers,
     };
-}
-
-export function buildA2aFileParts(files) {
-    const list = Array.isArray(files) ? files : [];
-    return list.map((file) => {
-        if (!file || typeof file !== 'object') {
-            throw new Error('flow-ui: buildA2aFileParts entry must be an object');
-        }
-        if (typeof file.file_id === 'string' && file.file_id.trim() !== '') {
-            return {
-                file: {
-                    name: file.original_name || file.filename || file.file_id,
-                    mimeType: file.content_type || 'application/octet-stream',
-                    uri: file.url || undefined,
-                },
-                metadata: { file_id: file.file_id },
-            };
-        }
-        if (typeof file.url === 'string' && file.url.trim() !== '') {
-            return {
-                file: {
-                    name: file.original_name || file.filename || 'file',
-                    mimeType: file.content_type || 'application/octet-stream',
-                    uri: file.url,
-                },
-            };
-        }
-        throw new Error('flow-ui: buildA2aFileParts requires file_id or url');
-    });
-}
-
-/**
- * Plain-text SendStreamingMessage body for hosts that are not Flow UI submit.
- */
-export function buildA2aSendStreamingMessageBody(input) {
-    if (!input || typeof input !== 'object') {
-        throw new Error('flow-ui: buildA2aSendStreamingMessageBody input required');
-    }
-    const a2aMessage = {
-        messageId: createProtocolId('message'),
-        role: 'ROLE_USER',
-        parts: [
-            { text: typeof input.message === 'string' ? input.message : '' },
-            ...buildA2aFileParts(input.files),
-        ],
-    };
-    if (typeof input.contextId === 'string' && input.contextId.length > 0) {
-        a2aMessage.contextId = input.contextId;
-    }
-    const body = {
-        jsonrpc: '2.0',
-        id: createProtocolId('rpc'),
-        method: 'SendStreamingMessage',
-        params: { message: a2aMessage },
-    };
-    const metadata =
-        input.metadata && typeof input.metadata === 'object' ? { ...input.metadata } : {};
-    const branchId =
-        input.branchId != null && String(input.branchId).trim() !== ''
-            ? normalizeFlowUIBranchId(input.branchId)
-            : null;
-    if (branchId && branchId !== 'default') {
-        metadata.branch = branchId;
-    }
-    if (Object.keys(metadata).length > 0) {
-        body.params.metadata = metadata;
-    }
-    return body;
 }

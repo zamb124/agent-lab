@@ -115,7 +115,7 @@ async def test_repository_materializes_lossless_task_and_replays_ledger(
             name="interface",
             description="lossless mixed content",
             parts=[new_text_part("hello ")],
-            extensions=["https://a2ui.org/a2a-extension/a2ui/v0.9.1"],
+            extensions=["https://example.test/a2a-extension/proof/v1"],
         ),
         append=False,
         last_chunk=False,
@@ -148,9 +148,9 @@ async def test_repository_materializes_lossless_task_and_replays_ledger(
                 new_text_part("world"),
                 Part(raw=b"bytes", filename="proof.bin", media_type="application/octet-stream"),
                 Part(url="https://linnex.io/files/proof"),
-                new_data_part({"surfaceUpdate": {"surfaceId": "main"}}),
+                new_data_part({"kind": "render", "slot_id": "conversation"}),
             ],
-            extensions=["https://a2ui.org/a2a-extension/a2ui/v0.9.1"],
+            extensions=["https://example.test/a2a-extension/proof/v1"],
         ),
         append=True,
         last_chunk=True,
@@ -208,19 +208,17 @@ async def test_repository_materializes_lossless_task_and_replays_ledger(
 
     async with storage.get_session() as session:
         event_count = await session.scalar(
-            select(func.count()).select_from(A2ATaskEventDedup).where(
-                A2ATaskEventDedup.task_id == task_id
-            )
+            select(func.count())
+            .select_from(A2ATaskEventDedup)
+            .where(A2ATaskEventDedup.task_id == task_id)
         )
         message_count = await session.scalar(
-            select(func.count()).select_from(A2ATaskMessages).where(
-                A2ATaskMessages.task_id == task_id
-            )
+            select(func.count())
+            .select_from(A2ATaskMessages)
+            .where(A2ATaskMessages.task_id == task_id)
         )
         artifact_row = await session.scalar(
-            select(A2AArtifactProjections).where(
-                A2AArtifactProjections.task_id == task_id
-            )
+            select(A2AArtifactProjections).where(A2AArtifactProjections.task_id == task_id)
         )
     assert event_count == 4
     assert message_count == 1

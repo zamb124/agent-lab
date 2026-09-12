@@ -45,7 +45,7 @@ from apps.flows.src.services.employee_inbox_service import EmployeeInboxService
 from apps.flows.src.services.flow_access_service import FlowAccessService
 from apps.flows.src.services.flow_discovery import FlowDiscoveryService
 from apps.flows.src.services.flow_factory import FlowFactory
-from apps.flows.src.services.flow_ui_session_service import FlowUISessionService
+from apps.flows.src.services.flow_ui_assist_service import FlowUIAssistService
 from apps.flows.src.services.flow_ui_share_service import FlowUIShareService
 from apps.flows.src.services.handoff_context_service import (
     HandoffContextService,
@@ -140,6 +140,10 @@ class FlowContainer(BaseContainer):
         )
 
     @lazy
+    def flow_ui_assist_service(self) -> FlowUIAssistService:
+        return FlowUIAssistService()
+
+    @lazy
     def agent_skill_repository(self) -> AgentSkillRepository:
         return AgentSkillRepository(storage=self.storage)
 
@@ -179,10 +183,6 @@ class FlowContainer(BaseContainer):
             repository=self.durable_workflow_repository,
             redis_client=self.redis_client,
         )
-
-    @lazy
-    def flow_ui_session_service(self) -> FlowUISessionService:
-        return FlowUISessionService(self.workflow_runtime)
 
     @lazy
     def flow_ui_share_service(self) -> FlowUIShareService:

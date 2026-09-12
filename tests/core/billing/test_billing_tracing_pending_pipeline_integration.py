@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -21,6 +20,7 @@ from core.billing.settlement_rules import (
 from core.billing.span_billing_settlement import SpanBillingSettlement
 from core.models.billing_models import UsageType
 from core.tracing.models import TraceSpanWrite
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
 @pytest.mark.asyncio

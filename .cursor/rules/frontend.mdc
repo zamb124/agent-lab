@@ -323,6 +323,7 @@ Composer / mention / inline-edit / search-as-you-type / combobox: `data-canon="c
 | `@platform/lib/utils/format-platform-number.js` | `formatPlatformNumber(value, locale, options?)`, `formatPlatformCurrencyRub(amount, locale, options?)` |
 | `@platform/lib/utils/format-platform-date.js` | `formatPlatformDate(input, locale, options?)`, `formatPlatformDateTime(input, locale)`, `formatPlatformTime(input, locale)` |
 | `@platform/lib/utils/escape-html.js` | `escapeHtml(value)` |
+| `@platform/lib/utils/markdown.js` | `markdownToHtml(markdown)` — единственный markdown → HTML рендерер (vendored `marked` ESM `assets/js/marked/`, сборка `npm run build:marked`); сырой HTML экранируется, ссылки/картинки только `http(s)`/`mailto`, результат идёт в `unsafeHTML` без отдельного sanitizer |
 | `@platform/lib/utils/hash-string.js` | `hashString31(seed)`, `hueFromString(seed)`, `initialsFromName(name)`, `indexFromSeed(seed, modulo)` |
 | `@platform/lib/utils/validators.js` | `EMAIL_RE`, `isValidEmail(value)`, `digitsOnly(value)`, `isValidPhone(value)`, `PHONE_DIGITS_MIN` |
 | `@platform/lib/utils/storage-keys.js` | `platformStorageKey(scope, key)` — единый префикс `platform:<scope>:<key>` |
@@ -338,6 +339,7 @@ Composer / mention / inline-edit / search-as-you-type / combobox: `data-canon="c
 ### Запреты в `apps/<svc>/ui/**`
 
 - Локальный `function escapeHtml`, `const escapeHtml = ...`.
+- Свой markdown-рендер (`marked` напрямую, `globalThis.marked`, `<script src=".../marked*.js">`, построчный markdown→HTML) — только `markdownToHtml`.
 - Локальный `EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/`, `_digitsOnly`, ad-hoc email regex.
 - Локальный hash-цикл `h = (h * 31 + s.charCodeAt(i))`.
 - Локальный `formatFileSize` / `_formatBytes` / `_formatFileSize` цикл (свой). Допустима тонкая обёртка-метод компонента, делегирующая в core `formatFileSize`.
@@ -345,7 +347,7 @@ Composer / mention / inline-edit / search-as-you-type / combobox: `data-canon="c
 - Свободный префикс ключа localStorage (`<brand>.*`, `<svc>:*`, `sync.chat.*`) — только `platformStorageKey('<scope>', '<key>')`.
 - Свой FormData/`UploadFile` upload байтов минуя `uploadPlatformFile` / `platform/file_create` — запрещён.
 
-CI: `scripts/check_ui_canon.sh` п.19 — детекторы `'ru-RU'`, `EMAIL_RE`/`_digitsOnly`, `escapeHtml`, hash×31.
+CI: `scripts/check_ui_canon.sh` п.19 — детекторы `'ru-RU'`, `EMAIL_RE`/`_digitsOnly`, `escapeHtml`, hash×31, `marked` вне `utils/markdown.js`.
 
 ## i18n
 
@@ -374,13 +376,12 @@ await publish_event_to_user(user_id=..., type="crm/note/updated", payload={"note
 
 WS-эффект форвардит фрейм, фронт диспатчит как обычное событие. Компонент: `this.useEvent('crm/note/updated', handler)`.
 
-### Flow UI host actions
+### Flow UI действия
 
-- `<platform-flow-ui>` рендерит только catalog-declared actions. `platform.ui.submit` идёт через A2A; local navigation/focus/suggestion не запускают flow.
-- Trusted host action (`lara.pending_action.apply`, `platform.entity.open` и т. п.) имеет typed catalog contract и проходит allowlist `FlowUIRenderContext.capabilities`; произвольное event name из Artifact не исполняется.
-- Apps регистрируют host handlers через documented component property/context. Handler вызывает фабрику/`navigate`/base helper, не `fetch` и не raw CoreEvents dispatch в page/component.
-- При непустом `company-id` universal transport добавляет `X-Platform-Namespace` из `getActivePlatformNamespaceName(companyId)` ко всем flows-запросам.
-- Preview/applied results приходят ordinary Artifact либо negotiated A2UI representation, не special `ui_event` branch.
+- `<platform-flow-ui>` рендерит только блоки грамматики `FlowUIDocument`; `button.action`, `action` input-блока (commit значения / Enter), `data_table.row_action` (payload + `row`), `send` из `html` — один `ui-action` Message во flow через `FlowUIClient` (`submitAction`); `suggested_prompts` и composer `conversation` — `text` Part (`sendText`). Локальные `tabs`/`navigate`/фокус flow не запускают.
+- Побочные эффекты хоста у блоков фиксированы грамматикой: `link` — переход по `url` (`target=_blank`), `browser_preview` — `openBrowserPreview`, `file_list` — ссылка на файл; `html`-блок общается только с sandbox-мостом `window.flowUi` (`send` → тот же `ui-action`, `openUrl` → новая вкладка). Произвольное имя действия из артефакта хостом не исполняется — его интерпретирует flow.
+- Хост передаёт `getRequestHeaders` (auth) и `getExtraMetadataVariables` (переменные хода, например `namespace`); pages/components не делают `fetch` к flows и не диспатчат raw CoreEvents.
+- Preview/applied results — блоки `action_preview`/`action_result` в `conversation` (артефакт `ui`), не special `ui_event` branch.
 
 ### Lara в PlatformApp
 
@@ -417,9 +418,9 @@ WS-эффект форвардит фрейм, фронт диспатчит к�
 
 ## Universal Flow UI
 
-`<platform-flow-ui>` (`core/frontend/static/lib/flow-ui/`) — единственный A2A interface runtime. Один protocol accumulator, reducer/store, catalog registry, layout resolver и production frame обслуживают page/panel/drawer/embed/shared/editor. Host не интерпретирует A2A frames и не реализует grid CSS.
+`<platform-flow-ui>` (`core/frontend/static/lib/flow-ui/`) — единственный A2A interface runtime. Один `FlowUIClient` (A2A JSON-RPC + SSE, `a2a-task-accumulator.js`), один `FlowUIStore` (документ, проекция state, локальные `edits`, лента) и один реестр блоков обслуживают page/panel/drawer/embed/shared/editor. Host не интерпретирует A2A frames и не рендерит блоки сам.
 
-Editor canvas монтирует тот же production bundle в isolated frame. Palette/layers/inspector/rulers/guides/selection/resize находятся снаружи read-only inspection boundary. `Exact` разрешён только при полном `FlowUIRenderContext` fingerprint match; обязательна zero-pixel geometry parity matrix. Полный канон → **`flow_ui.mdc`**.
+Canvas редактора — тот же `<platform-flow-ui editing selected-block-id .sampleState>` без iframe: блоки рендерятся production-реестром, а панели редактора (`flows-interface-add-panel`, `flows-interface-properties-panel`, `flows-interface-pages-tabs`, `flows-interface-toolbar`) живут снаружи и меняют документ через `interface-editor-domain.js`. Полный канон → **`flow_ui.mdc`**.
 
 ## Тесты
 

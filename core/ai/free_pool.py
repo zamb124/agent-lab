@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import json
-import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Protocol
 
+from core.ai.adapters.model_catalog import create_model_catalog_adapter_registry
+from core.ai.adapters.openrouter import OpenRouterModelCatalogAdapter
 from core.ai.model_catalog_repository import AIModelCatalogRepository
-from core.ai.models import AIModelRecord
+from core.ai.models import AIModelRecord, ArtificialAnalysisIndices
 from core.ai.providers import (
     ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS,
     HUMANITEC_LLM_AUTO_MODEL,
@@ -19,7 +20,11 @@ from core.ai.providers import (
     AICapability,
     humanitec_llms_model_ref,
 )
-from core.ai.scoring import PlatformModelScoreHint, compute_platform_model_score
+from core.ai.scoring import (
+    PlatformModelScoreOverlay,
+    attach_artificial_analysis,
+    compute_platform_model_score,
+)
 from core.clients.redis_client import RedisClient
 from core.config.base import BaseSettings
 from core.config.models import (
@@ -27,7 +32,6 @@ from core.config.models import (
     GoogleLLMProviderConfig,
     GroqProviderConfig,
     HuggingFaceProviderConfig,
-    LLMModelScoringConfig,
 )
 from core.logging import get_logger
 from core.types import (
@@ -46,14 +50,12 @@ PLATFORM_FREE_MODELS_CACHE_VERSION = 1
 PLATFORM_FREE_MODEL_SOURCE = "platform_free"
 PLATFORM_PAID_FALLBACK_SOURCE = "platform_paid_fallback"
 
-_SIZE_RE = re.compile(r"(?<![a-z0-9])(\d+(?:\.\d+)?)\s*([bm])\b", re.IGNORECASE)
 _OPENROUTER_ROUTER_MODEL_ID = "openrouter/free"
 _PROVIDER_ROUTER_MODEL_KEYS = frozenset({("openrouter", _OPENROUTER_ROUTER_MODEL_ID)})
 _FREE_REASON_PRIORITY = {
     "verified_zero_price": 2,
     "account_free_tier": 1,
 }
-
 _AccountFreeTierProviderConfig = (
     GroqProviderConfig
     | GoogleLLMProviderConfig
@@ -77,20 +79,10 @@ class PlatformFreeModelRecord:
 
 
 class PlatformModelScoreProvider(Protocol):
-    async def list_hints(
+    async def list_overlays(
         self,
         capability: AICapability,
-    ) -> Mapping[tuple[str, str], PlatformModelScoreHint]: ...
-
-    async def update_computed_score(
-        self,
-        *,
-        provider: str,
-        model_id: str,
-        capability: AICapability,
-        score: float,
-        score_breakdown: Mapping[str, float],
-    ) -> None: ...
+    ) -> Mapping[tuple[str, str], PlatformModelScoreOverlay]: ...
 
 
 def _json_str(value: JsonValue | None) -> str | None:
@@ -106,31 +98,26 @@ def _json_int(value: JsonValue | None) -> int | None:
     return None
 
 
-def _model_size_score(*texts: str) -> float:
-    """Returns size in billions when a slug/name contains 80B, 120b, 1.2B, etc."""
-    best_size_billions = 0.0
-    for text in texts:
-        for match in _SIZE_RE.finditer(text or ""):
-            value = float(match.group(1))
-            unit = match.group(2).lower()
-            billions = value if unit == "b" else value / 1000.0
-            best_size_billions = max(best_size_billions, billions)
-    return best_size_billions
-
-
 def _account_free_tier_provider_config(
     settings: BaseSettings,
     provider_slug: str,
 ) -> _AccountFreeTierProviderConfig | None:
-    if provider_slug == "groq":
-        return settings.llm.groq
-    if provider_slug == "google":
-        return settings.llm.google
-    if provider_slug == "github":
-        return settings.llm.github
-    if provider_slug == "huggingface":
-        return settings.llm.huggingface
-    return None
+    llm = settings.llm
+    by_provider: dict[str, _AccountFreeTierProviderConfig | None] = {
+        "groq": llm.groq,
+        "google": llm.google,
+        "github": llm.github,
+        "huggingface": llm.huggingface,
+    }
+    if provider_slug not in by_provider:
+        raise ValueError(f"provider {provider_slug!r} is not an account-free-tier LLM provider")
+    return by_provider[provider_slug]
+
+
+def _free_reason_priority(free_reason: str) -> int:
+    if free_reason not in _FREE_REASON_PRIORITY:
+        raise ValueError(f"unknown free_reason {free_reason!r}")
+    return _FREE_REASON_PRIORITY[free_reason]
 
 
 def _record_sort_key(record: PlatformFreeModelRecord) -> tuple[float, int, int, int, int, int, str, str]:
@@ -142,7 +129,7 @@ def _record_sort_key(record: PlatformFreeModelRecord) -> tuple[float, int, int, 
             "structured_outputs" in record.supported_parameters
             or "json_schema" in record.supported_parameters
         ),
-        _FREE_REASON_PRIORITY.get(record.free_reason, 0),
+        _free_reason_priority(record.free_reason),
         record.created or 0,
         record.provider,
         record.id,
@@ -158,22 +145,6 @@ def sort_platform_free_records(
     if max_candidates > 0:
         return sorted_records[:max_candidates]
     return sorted_records
-
-
-def apply_platform_model_score_overrides(
-    records: Iterable[PlatformFreeModelRecord],
-    score_overrides: Mapping[tuple[str, str], float] | None,
-) -> list[PlatformFreeModelRecord]:
-    if not score_overrides:
-        return list(records)
-    scored: list[PlatformFreeModelRecord] = []
-    for record in records:
-        override = score_overrides.get((record.provider, record.id))
-        if override is None:
-            scored.append(record)
-            continue
-        scored.append(replace(record, score=float(override)))
-    return scored
 
 
 def _catalog_record_map(
@@ -199,25 +170,24 @@ def compute_platform_free_record_scores(
     records: Iterable[PlatformFreeModelRecord],
     *,
     catalog_records: Iterable[AIModelRecord],
-    hints: Mapping[tuple[str, str], PlatformModelScoreHint] | None,
-    scoring_config: LLMModelScoringConfig,
+    overlays: Mapping[tuple[str, str], PlatformModelScoreOverlay] | None,
 ) -> list[PlatformFreeModelRecord]:
     catalog_by_key = _catalog_record_map(catalog_records)
-    hint_map = hints or {}
+    overlay_map = overlays or {}
     scored: list[PlatformFreeModelRecord] = []
     for record in records:
-        hint = hint_map.get((record.provider, record.id))
-        if hint is not None and not hint.enabled:
+        overlay = overlay_map.get((record.provider, record.id))
+        if overlay is not None and not overlay.enabled:
             continue
         catalog_record = catalog_by_key.get((record.provider, record.id))
         if catalog_record is None:
-            scored.append(record)
-            continue
+            raise ValueError(
+                f"free-pool record {record.provider}:{record.id} отсутствует в каталоге"
+            )
         computed = compute_platform_model_score(
             catalog_record,
             AICapability.LLM_CHAT,
-            hint=hint,
-            scoring_config=scoring_config,
+            overlay=overlay,
         )
         scored.append(replace(record, score=float(computed.score)))
     return scored
@@ -254,10 +224,10 @@ def _sort_provider_records(
 
 
 def platform_free_model_policy_for_provider(provider: str) -> str:
-    return LLM_FREE_MODEL_DISCOVERY_POLICY_BY_PROVIDER.get(
-        provider,
-        "unknown_provider",
-    )
+    policy = LLM_FREE_MODEL_DISCOVERY_POLICY_BY_PROVIDER.get(provider)
+    if policy is None:
+        raise ValueError(f"provider {provider!r} has no free-model discovery policy")
+    return policy
 
 
 def _provider_is_configured_for_free_pool(settings: BaseSettings, provider: str) -> bool:
@@ -275,15 +245,7 @@ def _provider_is_configured_for_free_pool(settings: BaseSettings, provider: str)
             and bool(cfg.api_key.strip())
             and bool(cfg.smoke_model.strip())
         )
-    return False
-
-
-def _configured_account_free_tier_model(settings: BaseSettings, provider: str) -> str | None:
-    cfg = _account_free_tier_provider_config(settings, provider)
-    if cfg is None:
-        return None
-    model = cfg.smoke_model.strip()
-    return model or None
+    raise ValueError(f"provider {provider!r} is not a free-pool candidate")
 
 
 def _text_chat_record(record: AIModelRecord) -> bool:
@@ -296,14 +258,6 @@ def _text_chat_record(record: AIModelRecord) -> bool:
     if output_modalities and "text" not in output_modalities:
         return False
     return True
-
-
-def _raw_name(record: AIModelRecord) -> str:
-    for key in ("name", "label", "display_name"):
-        value = record.raw.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return ""
 
 
 def _record_max_tokens(record: AIModelRecord) -> int | None:
@@ -328,7 +282,7 @@ def platform_free_record_from_model_record(
     return PlatformFreeModelRecord(
         provider=record.provider,
         id=record.model_id,
-        score=_model_size_score(record.model_id, _raw_name(record)),
+        score=0.0,
         context_length=record.context_length,
         max_tokens=_record_max_tokens(record),
         supported_parameters=tuple(sorted(record.supported_parameters)),
@@ -347,10 +301,9 @@ def _free_reason_for_catalog_record(
     if not _text_chat_record(record):
         return None
     if record.provider in ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS:
-        configured_model = _configured_account_free_tier_model(settings, record.provider)
-        if configured_model is not None and record.model_id == configured_model:
-            return "account_free_tier"
-        return None
+        if not _provider_is_configured_for_free_pool(settings, record.provider):
+            return None
+        return "account_free_tier"
     if record.is_free is True:
         if record.free_reason in (None, "zero_price_catalog"):
             return "verified_zero_price"
@@ -374,16 +327,41 @@ def platform_free_records_from_model_records(
     return free_records
 
 
+async def fetch_artificial_analysis_indices(
+    settings: BaseSettings,
+) -> dict[str, ArtificialAnalysisIndices]:
+    registry = create_model_catalog_adapter_registry(settings)
+    if not registry.has("openrouter"):
+        raise ValueError("openrouter adapter отсутствует в registry")
+    adapter = registry.get("openrouter")
+    if not adapter.is_configured():
+        return {}
+    if not isinstance(adapter, OpenRouterModelCatalogAdapter):
+        raise TypeError("openrouter registry entry must be OpenRouterModelCatalogAdapter")
+    return await adapter.list_artificial_analysis()
+
+
+async def persist_catalog_artificial_analysis(
+    repository: AIModelCatalogRepository,
+    records: Sequence[AIModelRecord],
+) -> None:
+    for record in records:
+        if record.artificial_analysis is None:
+            continue
+        _ = await repository.set(record)
+
+
 async def fetch_platform_free_model_records(
     settings: BaseSettings,
     model_catalog_repository: AIModelCatalogRepository,
     *,
     model_score_provider: PlatformModelScoreProvider | None = None,
+    artificial_analysis: Mapping[str, ArtificialAnalysisIndices] | None = None,
+    persist_artificial_analysis: bool = False,
 ) -> list[PlatformFreeModelRecord]:
     pool_config = settings.llm.platform_free_pool
-    scoring_config = settings.llm.model_scoring
-    hints = (
-        await model_score_provider.list_hints(AICapability.LLM_CHAT)
+    overlays = (
+        await model_score_provider.list_overlays(AICapability.LLM_CHAT)
         if model_score_provider is not None
         else None
     )
@@ -396,6 +374,13 @@ async def fetch_platform_free_model_records(
             provider_slug,
             AICapability.LLM_CHAT,
         )
+        if artificial_analysis:
+            catalog_records = attach_artificial_analysis(catalog_records, artificial_analysis)
+            if persist_artificial_analysis:
+                await persist_catalog_artificial_analysis(
+                    model_catalog_repository,
+                    catalog_records,
+                )
         provider_records = platform_free_records_from_model_records(
             catalog_records,
             settings=settings,
@@ -403,8 +388,7 @@ async def fetch_platform_free_model_records(
         provider_records = compute_platform_free_record_scores(
             provider_records,
             catalog_records=catalog_records,
-            hints=hints,
-            scoring_config=scoring_config,
+            overlays=overlays,
         )
         provider_records = _sort_provider_records(
             provider_records,
@@ -452,38 +436,38 @@ def serialize_platform_free_models(records: Sequence[PlatformFreeModelRecord]) -
 
 
 def parse_platform_free_models(raw_cache_payload: str | None) -> list[PlatformFreeModelRecord]:
-    if not raw_cache_payload:
+    if raw_cache_payload is None:
         return []
-    try:
-        cache_payload = parse_json_object(raw_cache_payload, "platform.free_models.cache")
-    except ValueError:
-        logger.warning("platform_free_models.cache_invalid_json")
-        return []
-    if cache_payload.get("version") != PLATFORM_FREE_MODELS_CACHE_VERSION:
-        return []
+    cache_payload = parse_json_object(raw_cache_payload, "platform.free_models.cache")
+    version = cache_payload.get("version")
+    if version != PLATFORM_FREE_MODELS_CACHE_VERSION:
+        raise ValueError(
+            f"platform free-models cache version {version!r} != {PLATFORM_FREE_MODELS_CACHE_VERSION}"
+        )
     models_raw = cache_payload.get("models")
     if not isinstance(models_raw, list):
-        return []
+        raise ValueError("platform free-models cache: models must be an array")
 
     records: list[PlatformFreeModelRecord] = []
-    for raw_item in models_raw:
-        if not isinstance(raw_item, dict):
-            continue
-        item = require_json_object(raw_item, "platform.free_models.cache.models[]")
+    for idx, raw_item in enumerate(models_raw):
+        item = require_json_object(raw_item, f"platform.free_models.cache.models[{idx}]")
         provider = _json_str(item.get("provider"))
         model_id = _json_str(item.get("id"))
         if provider is None or model_id is None:
-            continue
+            raise ValueError(
+                f"platform.free_models.cache.models[{idx}] requires provider and id"
+            )
         score_value = item.get("score")
+        if isinstance(score_value, bool) or not isinstance(score_value, (int, float)):
+            raise ValueError(f"platform.free_models.cache.models[{idx}].score must be numeric")
+        free_reason = _json_str(item.get("free_reason"))
+        if free_reason is None:
+            raise ValueError(f"platform.free_models.cache.models[{idx}].free_reason обязателен")
         records.append(
             PlatformFreeModelRecord(
                 provider=provider,
                 id=model_id,
-                score=(
-                    float(score_value)
-                    if isinstance(score_value, (int, float)) and not isinstance(score_value, bool)
-                    else 0.0
-                ),
+                score=float(score_value),
                 context_length=_json_int(item.get("context_length")),
                 max_tokens=_json_int(item.get("max_tokens")),
                 supported_parameters=tuple(
@@ -508,7 +492,7 @@ def parse_platform_free_models(raw_cache_payload: str | None) -> list[PlatformFr
                     )
                 ),
                 created=_json_int(item.get("created")),
-                free_reason=_json_str(item.get("free_reason")) or "verified_zero_price",
+                free_reason=free_reason,
             )
         )
     return records
@@ -564,70 +548,29 @@ async def read_humanitec_llms_model_options(
     )
 
 
-async def refresh_platform_free_models_cache(
+async def _write_platform_free_models_cache(
     redis_client: RedisClient,
     settings: BaseSettings,
-    model_catalog_repository: AIModelCatalogRepository,
-    *,
-    model_score_provider: PlatformModelScoreProvider | None = None,
-) -> JsonObject:
-    records = await fetch_platform_free_model_records(
-        settings,
-        model_catalog_repository,
-        model_score_provider=model_score_provider,
-    )
-    hints_count = 0
-    if model_score_provider is not None:
-        catalog_records_by_key: dict[tuple[str, str], AIModelRecord] = {}
-        for provider_slug in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER:
-            if not _provider_is_configured_for_free_pool(settings, provider_slug):
-                continue
-            provider_catalog = await model_catalog_repository.list_by_provider_capability(
-                provider_slug,
-                AICapability.LLM_CHAT,
-            )
-            catalog_records_by_key.update(_catalog_record_map(provider_catalog))
-        hints = await model_score_provider.list_hints(AICapability.LLM_CHAT)
-        hints_count = len(hints)
-        scoring_config = settings.llm.model_scoring
-        for record in records:
-            hint = hints.get((record.provider, record.id))
-            if hint is None:
-                continue
-            catalog_record = catalog_records_by_key.get((record.provider, record.id))
-            if catalog_record is None:
-                continue
-            computed = compute_platform_model_score(
-                catalog_record,
-                AICapability.LLM_CHAT,
-                hint=hint,
-                scoring_config=scoring_config,
-            )
-            await model_score_provider.update_computed_score(
-                provider=record.provider,
-                model_id=record.id,
-                capability=AICapability.LLM_CHAT,
-                score=computed.score,
-                score_breakdown=computed.breakdown,
-            )
-    payload = serialize_platform_free_models(records)
+    records: Sequence[PlatformFreeModelRecord],
+) -> None:
+    if not records:
+        raise RuntimeError(
+            "platform free-models: пустой records — Redis cache не затирается"
+        )
     redis_ok = await redis_client.set(
         PLATFORM_FREE_MODELS_CACHE_KEY,
-        payload,
+        serialize_platform_free_models(records),
         ttl=settings.llm.platform_free_pool.cache_ttl_seconds,
     )
-    logger.info(
-        "platform_free_models.cache_refreshed",
-        count=len(records),
-        providers=sorted({record.provider for record in records}),
-        free_policies={
-            provider: platform_free_model_policy_for_provider(provider)
-            for provider in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER
-        },
-        score_overrides_count=hints_count,
-        redis_ok=redis_ok,
-        ttl_seconds=settings.llm.platform_free_pool.cache_ttl_seconds,
-    )
+    if not redis_ok:
+        raise RuntimeError("не удалось записать platform free-models cache в Redis")
+
+
+def _cache_result_payload(
+    records: Sequence[PlatformFreeModelRecord],
+    *,
+    overlay_count: int,
+) -> JsonObject:
     return {
         "count": len(records),
         "providers": sorted({record.provider for record in records}),
@@ -636,9 +579,39 @@ async def refresh_platform_free_models_cache(
             for provider in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER
         },
         "models": [f"{record.provider}:{record.id}" for record in records],
-        "score_overrides_count": hints_count,
-        "redis_ok": bool(redis_ok),
+        "overlay_count": overlay_count,
+        "redis_ok": True,
     }
+
+
+async def refresh_platform_free_models_cache(
+    redis_client: RedisClient,
+    settings: BaseSettings,
+    model_catalog_repository: AIModelCatalogRepository,
+    *,
+    model_score_provider: PlatformModelScoreProvider | None = None,
+) -> JsonObject:
+    artificial_analysis = await fetch_artificial_analysis_indices(settings)
+    records = await fetch_platform_free_model_records(
+        settings,
+        model_catalog_repository,
+        model_score_provider=model_score_provider,
+        artificial_analysis=artificial_analysis,
+        persist_artificial_analysis=True,
+    )
+    overlay_count = 0
+    if model_score_provider is not None:
+        overlays = await model_score_provider.list_overlays(AICapability.LLM_CHAT)
+        overlay_count = len(overlays)
+    await _write_platform_free_models_cache(redis_client, settings, records)
+    logger.info(
+        "platform_free_models.cache_refreshed",
+        count=len(records),
+        providers=sorted({record.provider for record in records}),
+        overlay_count=overlay_count,
+        ttl_seconds=settings.llm.platform_free_pool.cache_ttl_seconds,
+    )
+    return _cache_result_payload(records, overlay_count=overlay_count)
 
 
 async def rescore_cached_platform_free_models(
@@ -653,66 +626,15 @@ async def rescore_cached_platform_free_models(
         model_catalog_repository,
         model_score_provider=model_score_provider,
     )
-    if not records:
-        return {
-            "cache_present": False,
-            "count": 0,
-            "providers": [],
-            "score_overrides_count": 0,
-            "redis_ok": True,
-        }
-
-    hints = await model_score_provider.list_hints(AICapability.LLM_CHAT)
-    catalog_records_by_key: dict[tuple[str, str], AIModelRecord] = {}
-    for provider_slug in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER:
-        if not _provider_is_configured_for_free_pool(settings, provider_slug):
-            continue
-        provider_catalog = await model_catalog_repository.list_by_provider_capability(
-            provider_slug,
-            AICapability.LLM_CHAT,
-        )
-        catalog_records_by_key.update(_catalog_record_map(provider_catalog))
-    scoring_config = settings.llm.model_scoring
-    for record in records:
-        hint = hints.get((record.provider, record.id))
-        if hint is None:
-            continue
-        catalog_record = catalog_records_by_key.get((record.provider, record.id))
-        if catalog_record is None:
-            continue
-        computed = compute_platform_model_score(
-            catalog_record,
-            AICapability.LLM_CHAT,
-            hint=hint,
-            scoring_config=scoring_config,
-        )
-        await model_score_provider.update_computed_score(
-            provider=record.provider,
-            model_id=record.id,
-            capability=AICapability.LLM_CHAT,
-            score=computed.score,
-            score_breakdown=computed.breakdown,
-        )
-
-    redis_ok = await redis_client.set(
-        PLATFORM_FREE_MODELS_CACHE_KEY,
-        serialize_platform_free_models(records),
-        ttl=settings.llm.platform_free_pool.cache_ttl_seconds,
-    )
+    overlays = await model_score_provider.list_overlays(AICapability.LLM_CHAT)
+    await _write_platform_free_models_cache(redis_client, settings, records)
     logger.info(
         "platform_free_models.cache_rescored",
         count=len(records),
         providers=sorted({record.provider for record in records}),
-        score_overrides_count=len(hints),
-        redis_ok=redis_ok,
+        overlay_count=len(overlays),
     )
-    return {
-        "cache_present": True,
-        "count": len(records),
-        "providers": sorted({record.provider for record in records}),
-        "score_overrides_count": len(hints),
-        "redis_ok": bool(redis_ok),
-    }
+    return _cache_result_payload(records, overlay_count=len(overlays))
 
 
 __all__ = [
@@ -720,8 +642,9 @@ __all__ = [
     "PLATFORM_FREE_MODELS_CACHE_KEY",
     "PLATFORM_PAID_FALLBACK_SOURCE",
     "PlatformFreeModelRecord",
-    "apply_platform_model_score_overrides",
+    "catalog_record_map",
     "compute_platform_free_record_scores",
+    "fetch_artificial_analysis_indices",
     "fetch_platform_free_model_records",
     "parse_platform_free_models",
     "platform_free_model_policy_for_provider",

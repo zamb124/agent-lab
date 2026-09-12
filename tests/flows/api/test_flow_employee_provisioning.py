@@ -8,7 +8,10 @@ from __future__ import annotations
 import pytest
 
 from core.identity.flow_employee import flow_employee_user_id, is_flow_employee
-from core.models.identity_models import UserStatus
+from core.models.identity_models import User, UserStatus
+from core.utils.tokens import get_token_service
+from tests.fixtures.ai_provider_defaults import make_test_company
+from tests.fixtures.auth import set_test_company_member_roles
 
 pytestmark = pytest.mark.asyncio
 
@@ -126,13 +129,47 @@ async def test_create_employee_enabled_without_curators_422(client, unique_id):
 async def test_employee_not_visible_in_other_company_members(
     client,
     frontend_client,
+    container,
     unique_id,
-    system_user_id,
-    auth_headers_system,
     auth_headers_company2,
 ):
+    company_id = f"emp_iso_co_{unique_id}"
+    owner_id = f"emp_iso_owner_{unique_id}"
     flow_id = f"emp_iso_{unique_id}"
     emp_id = flow_employee_user_id(flow_id)
+
+    await container.user_repository.set(
+        User(
+            user_id=owner_id,
+            name="Employee Iso Owner",
+            companies={company_id: ["owner", "admin"]},
+            active_company_id=company_id,
+        )
+    )
+    await container.company_repository.set(
+        make_test_company(
+            company_id=company_id,
+            name=f"Employee iso {unique_id}",
+            owner_user_id=owner_id,
+            members={owner_id: ["owner", "admin"]},
+        )
+    )
+    await set_test_company_member_roles(
+        container.company_repository,
+        container.authz_service,
+        company_id=company_id,
+        user_id=owner_id,
+        roles=["owner", "admin"],
+    )
+    owner_headers = {
+        "Authorization": (
+            "Bearer "
+            + get_token_service().create_token(
+                owner_id, company_id=company_id, roles=["owner", "admin"]
+            )
+        )
+    }
+
     create = await client.post(
         "/flows/api/v1/flows/",
         json=_create_body(
@@ -140,18 +177,19 @@ async def test_employee_not_visible_in_other_company_members(
             employee={
                 "enabled": True,
                 "roles": ["member"],
-                "curator_user_ids": [system_user_id],
+                "curator_user_ids": [owner_id],
             },
         ),
+        headers=owner_headers,
     )
     assert create.status_code == 200, create.text
     try:
-        system_members = await frontend_client.get(
+        home_members = await frontend_client.get(
             "/frontend/api/team/members",
-            headers=auth_headers_system,
+            headers=owner_headers,
         )
-        assert system_members.status_code == 200
-        assert emp_id in {m["user_id"] for m in system_members.json()["items"]}
+        assert home_members.status_code == 200
+        assert emp_id in {m["user_id"] for m in home_members.json()["items"]}
 
         other_members = await frontend_client.get(
             "/frontend/api/team/members",
@@ -160,4 +198,4 @@ async def test_employee_not_visible_in_other_company_members(
         assert other_members.status_code == 200
         assert emp_id not in {m["user_id"] for m in other_members.json()["items"]}
     finally:
-        await client.delete(f"/flows/api/v1/flows/{flow_id}")
+        await client.delete(f"/flows/api/v1/flows/{flow_id}", headers=owner_headers)

@@ -6,7 +6,6 @@
 import { uploadPlatformFile } from '@platform/lib/utils/platform-file-upload.js';
 import { buildPlatformAuxiliaryFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 
-const PUBLIC_SEARCH_FALLBACK_MIME_TYPE = 'application/octet-stream';
 
 export const PUBLIC_SEARCH_MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -22,11 +21,6 @@ function _requireFile(file, label) {
         throw new Error(`${label} must be a File`);
     }
     return file;
-}
-
-function _mimeType(file) {
-    const rawType = typeof file.type === 'string' ? file.type.trim() : '';
-    return rawType !== '' ? rawType : PUBLIC_SEARCH_FALLBACK_MIME_TYPE;
 }
 
 export function validatePublicSearchFile(file) {
@@ -81,7 +75,7 @@ export function takePendingPublicSearchRunFiles() {
 }
 
 /**
- * Chunked upload под JWT публичной search-сессии → A2A file parts `{ url, filename, mediaType }`.
+ * Chunked upload под JWT публичной search-сессии → FileRef для file Parts сообщения A2A.
  *
  * @param {File[]} files
  * @param {{
@@ -107,8 +101,7 @@ export async function uploadPublicSearchFilesForA2a(files, auth) {
         Authorization: `${auth.tokenType.trim()} ${auth.token.trim()}`,
     };
     const fetchImpl = typeof auth.fetchImpl === 'function' ? auth.fetchImpl : fetch;
-    /** @type {Array<{ url: string, filename: string, mediaType: string }>} */
-    const parts = [];
+    const fileRefs = [];
     for (const file of files) {
         const item = validatePublicSearchFile(file);
         const uploaded = await uploadPlatformFile({
@@ -122,20 +115,12 @@ export async function uploadPublicSearchFilesForA2a(files, auth) {
             filesApiBase: '/frontend/api/v1/files',
             maxUploadBytes: PUBLIC_SEARCH_MAX_FILE_SIZE,
         });
-        if (typeof uploaded.url !== 'string' || uploaded.url.trim() === '') {
-            throw new Error('uploadPublicSearchFilesForA2a: uploaded.url required');
+        for (const key of ['url', 'original_name', 'content_type']) {
+            if (typeof uploaded[key] !== 'string' || uploaded[key].trim() === '') {
+                throw new Error(`uploadPublicSearchFilesForA2a: uploaded.${key} required`);
+            }
         }
-        parts.push({
-            url: uploaded.url,
-            filename:
-                typeof uploaded.original_name === 'string' && uploaded.original_name.trim() !== ''
-                    ? uploaded.original_name
-                    : item.name,
-            mediaType:
-                typeof uploaded.content_type === 'string' && uploaded.content_type.trim() !== ''
-                    ? uploaded.content_type
-                    : _mimeType(item),
-        });
+        fileRefs.push(uploaded);
     }
-    return parts;
+    return fileRefs;
 }

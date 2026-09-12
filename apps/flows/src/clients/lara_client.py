@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from apps.flows.src.container_state import require_current_container
-from apps.flows.src.runtime_helpers.flow_ui_presenter import present_flow_ui_artifact
+from apps.flows.src.runtime_helpers.flow_ui_cards import show_action_preview, show_action_result
 from core.context import resolve_namespace_or_raise
 from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
@@ -48,17 +48,15 @@ class LaraClient:
             {"type": "text", "text": "Черновик создания заметки готов. Подтвердите применение."},
             {"type": "actions", "buttons": [action_button]},
         ]
-        _ = present_flow_ui_artifact(
+        _ = show_action_preview(
             state,
-            kind="action_preview",
-            data={
-                "action": action_payload,
-                "capability": "crm.note",
-                "operation": "create",
-                "blocks": preview_blocks,
-            },
-            artifact_id=f"crm-note-preview-{action.pending_action_id}",
-            source="lara",
+            card_id=f"crm-note-preview-{action.pending_action_id}",
+            title="Создание заметки CRM",
+            summary="Черновик создания заметки готов. Подтвердите применение.",
+            parameters=action_payload,
+            apply_action="apply_pending_action",
+            apply_payload={"pending_action_id": action.pending_action_id, "capability": "crm.note"},
+            apply_label="Создать заметку",
         )
         return {
             "mode": "propose",
@@ -79,10 +77,6 @@ class LaraClient:
             pending_action_id=pending_action_id,
             state=state,
             idempotency_key=idempotency_key,
-        )
-        action_payload = require_json_object(
-            action.model_dump(mode="json"),
-            "crm.note.apply.action",
         )
         result_payload = action.result
         if result_payload is None:
@@ -115,17 +109,11 @@ class LaraClient:
                 {"type": "actions", "buttons": [open_entity_button]},
             ],
         }
-        _ = present_flow_ui_artifact(
+        _ = show_action_result(
             state,
-            kind="action_result",
-            data={
-                "action": action_payload,
-                "capability": "crm.note",
-                "operation": "create",
-                "entity_id": eid,
-                "blocks": [{"type": "actions", "buttons": [open_entity_button]}],
-            },
-            artifact_id=f"crm-note-apply-{pending_action_id}",
-            source="lara",
+            card_id=f"crm-note-apply-{pending_action_id}",
+            title="Заметка CRM создана",
+            status="success",
+            summary=f"Сущность {eid}",
         )
         return result

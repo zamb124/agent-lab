@@ -97,6 +97,12 @@ Go: runtime = LSP = `GO_ALLOWED_STDLIB_MODULES` (`encoding/json`, `encoding/csv`
 
 Allowlist канон: `core/capabilities/sandbox_libraries.py`. Language server видит те же пакеты через vfs runners; JSON-каталог `/code/completions` удалён.
 
+### Flow UI из sandbox-кода
+
+Интерфейс sandbox-код меняет теми же событиями, что и тулы агента, но только через capability-gateway: `await ui.render(slot_id=..., blocks=[...])` и `await ui.navigate(page_id=...)` (`CapabilityDefinition` `ui.*`, tags `flow-ui`/`trusted-effect`; `channel.send_with_buttons` выдаёт `suggested_prompts` в `conversation` тем же путём). Gateway валидирует блоки грамматикой (`FlowUIRender`/`FlowUINavigate`), подписывает `PlatformEffectEnvelope` (`origin`: `execution_token_sha256`, `capability_call_id`, `company_id`/`flow_id`/`branch_id`/`session_id`/`task_id`/`context_id`, `source_node_id`/`source_tool_call_id`) и возвращает их runner'у; ответ `CodeExecutionResponse.platform_effects` в `flows` проходит `apply_capability_platform_effects` (`core/flow_ui/effects.py`): проверка issuer/origin против `CapabilityExecutionContext`, capability против manifest, `assert_known_slot`/`assert_known_page` по текущему интерфейсу, затем очередь `state` → артефакт `ui` на `flush_ui`. `PlatformEffect = FlowUIEvent` — отдельной модели эффекта нет. Returned `state` не переносит `ui_slots` и другие frozen поля (`FIELDS_COPY_FROM_USER_RETURNED_STATE`). Значения экрана меняются обычной записью `state.<field> = value` — интерфейс читает их через `{field}`.
+
+`html`-блок интерфейса — отдельный browser sandbox, не code-runner: `<iframe sandbox="allow-scripts">` с фиксированным CSP (`core/frontend/static/lib/flow-ui/blocks/html.js`), без cookies/origin платформы и без доступа к DOM хоста; в iframe доступен только мост `window.flowUi` (`state`, `onChange`, `send`, `setValue`, `resize`, `openUrl`) и декларативные `data-bind`/`data-show`. Размер HTML и число `html`-блоков ограничены `FlowUILimits` (`max_html_source_bytes`, `max_html_blocks_per_page`). Канон → **`flow_ui.mdc`**.
+
 ### Code node LSP
 
 Редактор `flows-code-editor` — vendored CodeMirror + `@codemirror/lsp-client`. Бандл (`scripts/build_codemirror_bundle.mjs`) экспортирует `LSPClient`, `languageServerExtensions` и `startCompletion`. Источник правды — `CapabilityManifest` + allowlist → language-native stubs (`.pyi` / `.d.ts` / Go / C#) → language servers в `code-runner-*` (basedpyright / tsserver / gopls / csharp-ls) только на isolated vfs.

@@ -54,34 +54,36 @@ export function dataflowChipLabel(chip) {
 }
 
 /**
+ * Вид чипа по пути state; поля интерфейса — обычные пути, их вид (``interface``) задаёт
+ * backend в ``DataflowCanvasChip.kind`` и в ``source`` дескриптора.
  * @param {string | null | undefined} path
- * @returns {'content' | 'files' | 'variable' | 'trigger' | 'ui_value'}
+ * @returns {'content' | 'files' | 'variable' | 'trigger'}
  */
 export function dataflowPathChipKind(path) {
     if (typeof path !== 'string' || path.length === 0) return 'content';
     if (path === 'files') return 'files';
     if (path.startsWith('variables.')) return 'variable';
     if (path.startsWith('triggers.')) return 'trigger';
-    if (path.startsWith('ui_values.')) return 'ui_value';
     return 'content';
 }
 
 /**
  * @param {unknown} chip
- * @returns {'content' | 'files' | 'variable' | 'trigger' | 'ui_value'}
+ * @returns {'content' | 'files' | 'variable' | 'trigger' | 'interface'}
  */
 export function dataflowChipKind(chip) {
     if (chip && typeof chip.kind === 'string' && chip.kind.length > 0) {
-        return /** @type {'content' | 'files' | 'variable' | 'trigger' | 'ui_value'} */ (chip.kind);
+        return /** @type {'content' | 'files' | 'variable' | 'trigger' | 'interface'} */ (chip.kind);
     }
     return dataflowPathChipKind(dataflowChipLabel(chip));
 }
 
 /**
- * @param {{ label?: string, sourceLabel?: string }} wire
- * @returns {'content' | 'files' | 'variable' | 'trigger' | 'ui_value'}
+ * @param {{ label?: string, sourceLabel?: string, sourceKind?: string }} wire
+ * @returns {'content' | 'files' | 'variable' | 'trigger' | 'interface'}
  */
 export function dataWireChipKind(wire) {
+    if (wire?.sourceKind === 'interface') return 'interface';
     const sourceLabel = typeof wire?.sourceLabel === 'string' && wire.sourceLabel.length > 0
         ? wire.sourceLabel
         : (typeof wire?.label === 'string' ? wire.label : '');
@@ -389,14 +391,15 @@ export function buildDataWires(dataflowNodes, graphNodes) {
     const wires = [];
     const seen = new Set();
 
-    const pushWire = (fromId, toId, sourceLabel, targetParam) => {
+    const pushWire = (fromId, toId, sourceLabel, targetParam, sourceKind) => {
         if (!fromId || !toId || fromId === toId || !graphNodes[fromId] || !graphNodes[toId]) return;
         const label = sourceLabel;
         const key = `${fromId}\u0000${toId}\u0000${label}\u0000${targetParam}`;
         if (seen.has(key)) return;
         seen.add(key);
-        wires.push({ from: fromId, to: toId, label, sourceLabel, targetParam });
+        wires.push({ from: fromId, to: toId, label, sourceLabel, targetParam, sourceKind });
     };
+    const descriptorKind = (desc) => (desc && (desc.source === 'interface' || (Array.isArray(desc.source) && desc.source.includes('interface'))) ? 'interface' : 'state');
 
     for (const [toId, info] of Object.entries(dataflowNodes)) {
         if (!graphNodes[toId]) continue;
@@ -415,8 +418,9 @@ export function buildDataWires(dataflowNodes, graphNodes) {
             const sourceLabel = typeof row.source_path === 'string' && row.source_path.length > 0
                 ? row.source_path
                 : (typeof row.source === 'string' ? row.source : targetParam);
+            const sourceKind = descriptorKind(incomingByPath.get(sourceLabel));
             for (const fromId of producers) {
-                pushWire(fromId, toId, sourceLabel, targetParam);
+                pushWire(fromId, toId, sourceLabel, targetParam, sourceKind);
             }
         }
 
@@ -431,7 +435,7 @@ export function buildDataWires(dataflowNodes, graphNodes) {
             const desc = incomingByPath.get(sourceLabel);
             const producers = desc && Array.isArray(desc.producers) ? desc.producers : [];
             for (const fromId of producers) {
-                pushWire(fromId, toId, sourceLabel, targetParam);
+                pushWire(fromId, toId, sourceLabel, targetParam, descriptorKind(desc));
             }
         }
     }

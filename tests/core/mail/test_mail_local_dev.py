@@ -18,6 +18,7 @@ from core.config.models import (
 )
 from core.db.repositories.company_repository import CompanyRepository
 from core.db.repositories.user_repository import UserRepository
+from core.mail.exceptions import MailConfigError
 from core.mail.models import (
     CompanyMailConnection,
     MailboxBinding,
@@ -185,3 +186,62 @@ async def test_local_dev_bind_existing_mailbox_skips_set_password(
     assert recording_mail_port.set_password_calls == []
     assert recording_mail_port.mailbox_passwords[email] == "server-password-unchanged"
     assert service.binding_secret(binding).password == "from-conf-local"
+
+
+@pytest.mark.asyncio
+async def test_local_dev_bind_existing_mailbox_without_conf_password_raises(
+    mail_connection_repository: CompanyMailConnectionRepository,
+    mailbox_binding_repository: MailboxBindingRepository,
+    recording_mail_port: RecordingMailServerPort,
+    container: object,
+    unique_id: str,
+) -> None:
+    now = datetime.now(timezone.utc)
+    company_id = f"maillocal3_{unique_id}"
+    domain = f"{company_id}.example.com"
+    email = f"desk@{domain}"
+    conn_id = f"mailconn3_{unique_id}"
+    _ = await mail_connection_repository.upsert(
+        CompanyMailConnection(
+            company_mail_connection_id=conn_id,
+            company_id=company_id,
+            mail_domain=domain,
+            provider=MailProvider.ISPMANAGER,
+            imap_host="imap.example.com",
+            imap_port=993,
+            smtp_host="smtp.example.com",
+            smtp_port=465,
+            use_ssl=True,
+            supports_provision=True,
+            status=MailConnectionStatus.ACTIVE,
+            ispmanager=None,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    recording_mail_port.mailboxes[email] = MailboxInfo(
+        email_address=email,
+        local_part="desk",
+        mail_domain=domain,
+    )
+    recording_mail_port.mailbox_passwords[email] = "server-password-unchanged"
+    service = _make_service(
+        mail_connection_repository=mail_connection_repository,
+        mailbox_binding_repository=mailbox_binding_repository,
+        recording_mail_port=recording_mail_port,
+        company_repository=cast(CompanyRepository, getattr(container, "company_repository")),
+        user_repository=cast(UserRepository, getattr(container, "user_repository")),
+        mailbox_passwords={},
+    )
+    with pytest.raises(MailConfigError, match="mailbox_passwords"):
+        _ = await service.bind_mailbox(
+            MailboxBindingCreatePayload(
+                kind=MailboxBindingKind.USER,
+                user_id=f"user_{unique_id}",
+                local_part="desk",
+                provision=True,
+            ),
+            company_id=company_id,
+        )
+    assert recording_mail_port.set_password_calls == []
+    assert recording_mail_port.mailbox_passwords[email] == "server-password-unchanged"

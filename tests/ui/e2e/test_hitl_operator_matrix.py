@@ -18,7 +18,7 @@ from tests.ui.e2e.hitl_e2e_bridge import (
     hitl_api_assert_turn_has_files,
     hitl_api_assert_turn_role,
     hitl_api_wait_conversation_text,
-    hitl_assert_composer_readonly,
+    hitl_assert_composer_absent,
     hitl_assert_work_item_open,
     hitl_trigger_deterministic,
     hitl_wait_work_item_terminal,
@@ -75,7 +75,7 @@ async def test_hitl_operator_without_queue_access(
         editor.get_by_text(re.compile(r"Нужен доступ к очереди|You need queue access"))
     ).to_be_visible()
     chat = await worktracker_hitl_embedded_chat(editor)
-    await hitl_assert_composer_readonly(chat)
+    await hitl_assert_composer_absent(chat)
     await worktracker_hitl_assert_complete_hidden(editor)
 
 
@@ -340,7 +340,7 @@ async def test_hitl_composer_readonly_after_done(
             worktracker_ui.origin, auth_token_system, work_item_id
         )
         chat = await worktracker_hitl_embedded_chat(editor)
-        await hitl_assert_composer_readonly(chat)
+        await hitl_assert_composer_absent(chat)
     finally:
         await wt_page.close()
 

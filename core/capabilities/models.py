@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, ClassVar, Literal, Self, TypeAlias
+from typing import ClassVar, Literal, Self, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from core.state.flow_ui import FlowUICommand
+from core.flow_ui.protocol import FlowUIEvent
 from core.types import JsonObject as JsonObject
 from core.types import JsonScalar as JsonScalar
 from core.types import JsonValue as JsonValue
@@ -267,37 +267,8 @@ class CapabilityInterruptEnvelope(BaseModel):
     correlation_id: str | None = Field(default=None, min_length=1)
 
 
-class UIApplyEffect(BaseModel):
-    """Atomic trusted mutation of the materialized Flow UI document."""
-
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    kind: Literal["ui.apply"] = "ui.apply"
-    commands: list[FlowUICommand] = Field(..., min_length=1)
-    expected_revision: int | None = Field(default=None, ge=1)
-
-
-class UINavigateEffect(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    kind: Literal["ui.navigate"] = "ui.navigate"
-    page_id: str = Field(..., min_length=1)
-    expected_revision: int | None = Field(default=None, ge=1)
-
-
-class UIResetEffect(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    kind: Literal["ui.reset"] = "ui.reset"
-    template_id: str = Field(..., min_length=1)
-    template_version: str = Field(..., min_length=1)
-    expected_revision: int | None = Field(default=None, ge=1)
-
-
-PlatformEffect = Annotated[
-    UIApplyEffect | UINavigateEffect | UIResetEffect,
-    Field(discriminator="kind"),
-]
+# Sandbox-код меняет интерфейс теми же событиями, что и tools агента: render/navigate.
+PlatformEffect = FlowUIEvent
 
 
 class PlatformEffectOrigin(BaseModel):

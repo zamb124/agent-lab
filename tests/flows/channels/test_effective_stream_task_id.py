@@ -1,6 +1,5 @@
 """Инвариант: prepare и process_task используют один и тот же stream task_id."""
 
-
 from apps.flows.src.channels.base import effective_stream_task_id_for_session
 from core.state.execution_state import ExecutionState
 from core.state.interrupt import (
@@ -26,9 +25,7 @@ def _state_with_interrupt(task_id_in_system: str) -> ExecutionState:
 
 
 def test_effective_returns_params_task_id_when_no_state() -> None:
-    assert (
-        effective_stream_task_id_for_session("tid-a", None) == "tid-a"
-    )
+    assert effective_stream_task_id_for_session("tid-a", None) == "tid-a"
 
 
 def test_effective_returns_params_task_id_when_no_interrupt() -> None:
@@ -64,11 +61,10 @@ def test_effective_uses_saved_task_id_when_params_empty() -> None:
     assert effective_stream_task_id_for_session("", s) == "saved-task"
 
 
-def test_flow_ui_submit_does_not_call_effective_helper_contract() -> None:
+def test_ui_action_shares_task_id_with_text_turns() -> None:
     """
-    Documentation guard: Flow UI SUBMIT must keep action-scoped task_id even when
-    interrupt is parked. The helper still prefers interrupt for plain A2A; channel
-    prepare skips it for FlowUIIngressKind.SUBMIT (see base._prepare_task_params).
+    Ui-action и текстовый ход идут одной дорогой: при припаркованном interrupt
+    ход продолжает Task из interrupt, а не заводит собственный task_id.
     """
     s = _state_with_interrupt("from-interrupt")
-    assert effective_stream_task_id_for_session("flow-ui-action-scoped", s) == "from-interrupt"
+    assert effective_stream_task_id_for_session("ui-action-requested", s) == "from-interrupt"

@@ -2,7 +2,7 @@ import { html, css, nothing } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
-import { flowsChatMarkdownToHtml } from '@platform/lib/flow-ui/utils/markdown.js';
+import { markdownToHtml } from '@platform/lib/utils/markdown.js';
 import { applyInlineCitations } from '@platform/lib/flow-ui/utils/citations.js';
 import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
@@ -2319,13 +2319,12 @@ export class PublicSearchPage extends PlatformPage {
         return result.display_url !== '' ? result.display_url : result.url;
     }
 
-    _markdownTemplate(text, streaming) {
-        return unsafeHTML(flowsChatMarkdownToHtml(text, { streaming }));
+    _markdownTemplate(text) {
+        return unsafeHTML(markdownToHtml(text));
     }
 
     _answerTemplate(stream) {
-        const streaming = !stream.completed;
-        let out = flowsChatMarkdownToHtml(stream.answer, { streaming });
+        let out = markdownToHtml(stream.answer);
         if (stream.results.length > 0) {
             const results = stream.results;
             out = applyInlineCitations(out, (index) => {
@@ -2699,7 +2698,7 @@ export class PublicSearchPage extends PlatformPage {
                     <span>AI</span>
                 </p>
                 <div class="source-ai-markdown">
-                    ${this._markdownTemplate(description.answer, !description.completed)}
+                    ${this._markdownTemplate(description.answer)}
                 </div>
             </div>
         `;
@@ -2954,9 +2953,7 @@ export class PublicSearchPage extends PlatformPage {
     }
 
     _researchReportTemplate(stream) {
-        const streaming = !stream.completed;
-        const text = stream.report;
-        let out = flowsChatMarkdownToHtml(text, { streaming });
+        let out = markdownToHtml(stream.report);
         const sources = stream.research_sources;
         if (sources.length > 0) {
             out = applyInlineCitations(out, (index) => {

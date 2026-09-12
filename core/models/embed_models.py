@@ -4,13 +4,9 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import ClassVar, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
-from core.models.flow_interface import (
-    EmbedInterfaceOverride,
-    compact_embed_interface_override,
-)
-from core.types import JsonObject, require_json_object
+from core.flow_ui.document import FlowUIConversationSettings, FlowUIPageId
 
 
 class EmbedStatus(str, Enum):
@@ -20,21 +16,9 @@ class EmbedStatus(str, Enum):
 
 
 EmbedPresentation = Literal["drawer", "page"]
+EmbedPosition = Literal["bottom-right", "bottom-left"]
 
 DEFAULT_EMBED_INPUT_PLACEHOLDER = "Введите сообщение..."
-
-
-def resolve_embed_presentation(
-    *,
-    presentation: EmbedPresentation,
-    position: str,
-) -> EmbedPresentation:
-    """Effective host mount mode; position=fullscreen resolves to page."""
-    if presentation == "page":
-        return "page"
-    if position.strip().lower() == "fullscreen":
-        return "page"
-    return "drawer"
 
 
 class EmbedConfig(BaseModel):
@@ -90,10 +74,10 @@ class EmbedConfig(BaseModel):
         title="Тема",
         description="Тема оформления (dark, light, auto)",
     )
-    position: str = Field(
+    position: EmbedPosition = Field(
         default="bottom-right",
         title="Позиция",
-        description="Позиция FAB на странице (bottom-right, bottom-left); для presentation=page игнорируется",
+        description="Угол страницы для launcher-кнопки drawer; для presentation=page не используется",
     )
     show_launcher: bool = Field(
         default=True,
@@ -177,29 +161,16 @@ class EmbedConfig(BaseModel):
         title="Служебный виджет для одноразовой гостевой ссылки из редактора flow",
         description="Не показывается в списке embed configs консоли; создаётся только через preview-share API.",
     )
-    interface_override: EmbedInterfaceOverride | None = Field(
+    conversation: FlowUIConversationSettings | None = Field(
         default=None,
-        title="Переопределение Flow UI для embed",
-        description=(
-            "Частичный policy/initial-content override; component tree "
-            "наследуется от FlowConfig.interface"
-        ),
+        title="Настройки беседы для embed",
+        description="Полные настройки блока conversation; None — как у flow",
     )
-
-    @field_serializer("interface_override")
-    def _serialize_interface_override(
-        self,
-        value: EmbedInterfaceOverride | None,
-    ) -> JsonObject | None:
-        compact = compact_embed_interface_override(value)
-        return (
-            None
-            if compact is None
-            else require_json_object(
-                compact.model_dump(mode="json", exclude_unset=True),
-                "EmbedInterfaceOverride",
-            )
-        )
+    start_page_id: FlowUIPageId | None = Field(
+        default=None,
+        title="Стартовая страница для embed",
+        description="Страница интерфейса flow, с которой открывается виджет; None — как у flow",
+    )
 
     # Статистика
     usage_count: int = Field(
@@ -234,24 +205,16 @@ class EmbedConfig(BaseModel):
         json_schema_extra={"readonly": True},
     )
 
-    @model_validator(mode="after")
-    def _fullscreen_position_to_page(self) -> "EmbedConfig":
-        if self.presentation == "drawer" and self.position.strip().lower() == "fullscreen":
-            self.presentation = "page"
-            self.position = "bottom-right"
-        return self
-
-
 class EmbedInterfaceLook(BaseModel):
     """
-    Look&feel проекция EmbedConfig для interface-profile.
+    Look&feel проекция EmbedConfig для ответа GET .../interface.
 
     Только host look; документ и values через profile не доставляются.
     """
 
     presentation: EmbedPresentation
     theme: str
-    position: str
+    position: EmbedPosition
     primary_color: str
     assistant_title: str | None
     placeholder: str
@@ -264,24 +227,15 @@ class EmbedInterfaceLook(BaseModel):
 
     @classmethod
     def from_embed_config(cls, config: EmbedConfig) -> "EmbedInterfaceLook":
-        presentation = resolve_embed_presentation(
-            presentation=config.presentation,
-            position=config.position,
-        )
-        position = config.position
-        if presentation == "page":
-            position = "bottom-right"
-        elif position.strip().lower() not in ("bottom-right", "bottom-left"):
-            position = "bottom-right"
         return cls(
-            presentation=presentation,
+            presentation=config.presentation,
             theme=config.theme,
-            position=position,
+            position=config.position,
             primary_color=config.primary_color,
             assistant_title=config.assistant_title,
             placeholder=config.placeholder,
             interface_locale=config.interface_locale,
-            show_launcher=False if presentation == "page" else config.show_launcher,
+            show_launcher=config.show_launcher,
             branding=config.branding,
             voice_enabled=config.voice_enabled,
             voice_default_on=config.voice_default_on,

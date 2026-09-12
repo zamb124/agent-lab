@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import copy
 import json
 import uuid
@@ -27,6 +26,7 @@ from core.models.billing_models import DEFAULT_TARIFF_PRICES, TariffPlan, UsageT
 from core.models.identity_models import Company
 from core.tracing import attributes as trace_attr
 from core.tracing.models import BillingSettlementSpan
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
 def _settlement_span(

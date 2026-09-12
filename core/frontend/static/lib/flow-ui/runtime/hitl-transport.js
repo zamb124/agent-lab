@@ -1,176 +1,115 @@
 /**
- * HITL operator_handoff transport for platform-flow-ui.
- * History: REST snapshot. Live: A2A SubscribeToTask. Send: HITL ask or worktracker complete.
+ * Транспорт оператора (profile ``operator_handoff``): история и live-кадры — A2A Task
+ * пользователя через ``FlowUIClient`` (ListTasks + SubscribeToTask), отправка — HITL REST
+ * (``takeover``) либо завершение WorkItem ответом (``single_reply``).
  */
 
 import { buildWorkItemFileCreateSpecJson } from '../../utils/file-create-spec.js';
-import { runA2aTaskLiveTail } from './a2a-task-live-tail.js';
-import {
-    isPlatformFileRef,
-    uploadPlatformFile,
-} from '../../utils/platform-file-upload.js';
-
-function flowsRoot(baseUrl) {
-    if (typeof baseUrl !== 'string' || baseUrl.trim() === '') {
-        throw new Error('FlowUIHitlTransport: baseUrl is required');
-    }
-    return baseUrl.trim().replace(/\/$/, '');
-}
-
-function randomIdempotencyKey() {
-    // crypto.randomUUID есть только в secure context (HTTPS / localhost).
-    // Локальный стенд и E2E ходят по HTTP company-host — UUID собираем из getRandomValues.
-    if (!globalThis.crypto || typeof globalThis.crypto.getRandomValues !== 'function') {
-        throw new Error('hitl-transport: crypto.getRandomValues is required');
-    }
-    const bytes = new Uint8Array(16);
-    globalThis.crypto.getRandomValues(bytes);
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
+import { isPlatformFileRef, uploadPlatformFile } from '../../utils/platform-file-upload.js';
+import { randomUuid } from '../protocol/a2a-codec.js';
+import { flowUIText } from '../utils/text.js';
+import { templatePaths } from './templating.js';
 
 function isBrowserFile(file) {
     return typeof File !== 'undefined' && file instanceof File;
+}
+
+function fieldValueText(value, locale) {
+    if (Array.isArray(value)) return value.map((item) => fieldValueText(item, locale)).join(', ');
+    if (typeof value === 'boolean') return flowUIText(locale, value ? 'value_yes' : 'value_no');
+    if (isPlatformFileRef(value)) return value.original_name;
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'object') return JSON.stringify(value);
+    return String(value);
+}
+
+/**
+ * Ход оператора из ui-action. HITL REST принимает только текст и файлы, поэтому значения
+ * полей идут строками «подпись: значение» в порядке страницы, файлы ``file_upload`` —
+ * вложениями, а действие без полей уходит своим именем.
+ *
+ * @param {{ name: string }} action
+ * @param {Record<string, unknown>} fields
+ * @param {object[]} inputBlocks блоки активной страницы, пишущие поле state
+ * @param {'ru' | 'en'} locale
+ * @returns {{ text: string, files: object[] }}
+ */
+export function operatorTurnFromAction(action, fields, inputBlocks, locale) {
+    if (!action || typeof action.name !== 'string' || action.name === '') {
+        throw new Error('hitl-transport: operator action requires name');
+    }
+    const lines = [];
+    const files = [];
+    for (const block of inputBlocks) {
+        if (!Object.prototype.hasOwnProperty.call(fields, block.field)) continue;
+        const value = fields[block.field];
+        if (block.type === 'file_upload') {
+            if (Array.isArray(value)) files.push(...value);
+            continue;
+        }
+        const label = typeof block.label === 'string' && block.label !== '' && templatePaths(block.label).length === 0
+            ? block.label
+            : block.field;
+        lines.push(`${label}: ${fieldValueText(value, locale)}`);
+    }
+    return { text: lines.length > 0 ? lines.join('\n') : action.name, files };
 }
 
 export class FlowUIHitlTransport {
     /**
      * @param {{
      *   workItemId: string,
-     *   conversation: {
-     *     session_id: string,
-     *     context_id: string,
-     *     flow_id: string,
-     *     branch_id?: string,
-     *     a2a_task_id: string,
-     *   },
-     *   mode?: 'takeover'|'single_reply',
-     *   baseUrl?: string,
+     *   conversation: { session_id: string, context_id: string, flow_id: string, branch_id?: string, a2a_task_id: string },
+     *   mode?: 'takeover' | 'single_reply',
+     *   baseUrl: string,
      *   credentials?: RequestCredentials,
-     *   getHeaders?: () => Promise<Record<string, string>>|Record<string, string>,
+     *   getHeaders?: () => Promise<Record<string, string>> | Record<string, string>,
      *   fetchImpl?: typeof fetch,
      * }} options
      */
     constructor(options) {
-        if (!options || typeof options !== 'object') {
-            throw new Error('FlowUIHitlTransport: options required');
-        }
+        if (!options || typeof options !== 'object') throw new Error('FlowUIHitlTransport: options required');
         if (typeof options.workItemId !== 'string' || options.workItemId.trim() === '') {
             throw new Error('FlowUIHitlTransport: workItemId required');
         }
-        const conv = options.conversation;
-        if (!conv || typeof conv !== 'object') {
+        const conversation = options.conversation;
+        if (!conversation || typeof conversation !== 'object') {
             throw new Error('FlowUIHitlTransport: conversation required');
         }
         for (const key of ['session_id', 'context_id', 'flow_id', 'a2a_task_id']) {
-            if (typeof conv[key] !== 'string' || conv[key].trim() === '') {
+            if (typeof conversation[key] !== 'string' || conversation[key].trim() === '') {
                 throw new Error(`FlowUIHitlTransport: conversation.${key} required`);
             }
         }
-        const mode = typeof options.mode === 'string' && options.mode.length > 0
-            ? options.mode
-            : 'takeover';
+        const mode = typeof options.mode === 'string' && options.mode !== '' ? options.mode : 'takeover';
         if (mode !== 'takeover' && mode !== 'single_reply') {
             throw new Error(`FlowUIHitlTransport: unsupported mode ${JSON.stringify(mode)}`);
         }
-        this._workItemId = options.workItemId.trim();
-        this._conversation = conv;
-        this._mode = mode;
-        this._a2aTaskId = conv.a2a_task_id.trim();
-        this._root = flowsRoot(options.baseUrl);
-        this._credentials = options.credentials || 'include';
-        this._getHeaders = typeof options.getHeaders === 'function'
-            ? options.getHeaders
-            : async () => ({});
-        this._fetch = typeof options.fetchImpl === 'function'
-            ? options.fetchImpl
-            : globalThis.fetch.bind(globalThis);
-        /** @type {import('./flow-ui-controller.js').FlowUIController|null} */
-        this._controller = null;
-        /** @type {AbortController|null} */
-        this._liveAbort = null;
-        this._seenMessageIds = new Set();
+        if (typeof options.baseUrl !== 'string' || options.baseUrl.trim() === '') {
+            throw new Error('FlowUIHitlTransport: baseUrl is required');
+        }
+        this.workItemId = options.workItemId.trim();
+        this.conversation = conversation;
+        this.mode = mode;
+        this.taskId = conversation.a2a_task_id.trim();
+        this._root = options.baseUrl.trim().replace(/\/$/, '');
+        this._credentials = options.credentials === 'omit' ? 'omit' : 'include';
+        this._getHeaders = typeof options.getHeaders === 'function' ? options.getHeaders : async () => ({});
+        this._fetch = typeof options.fetchImpl === 'function' ? options.fetchImpl : globalThis.fetch.bind(globalThis);
+        this._client = null;
     }
 
-    attach(controller) {
-        if (!controller || typeof controller.applyA2AFrame !== 'function') {
-            throw new Error('FlowUIHitlTransport.attach: FlowUIController required');
-        }
-        this._controller = controller;
-        controller.hitlTransport = this;
-        if (this._conversation.context_id) {
-            controller.contextId = this._conversation.context_id;
-        }
+    /** Открывает контекст пользователя в клиенте и держит live tail задачи оператора. */
+    async attach(client) {
+        if (!client || typeof client.open !== 'function') throw new Error('FlowUIHitlTransport.attach: client required');
+        this._client = client;
+        await client.open({ contextId: this.conversation.context_id });
+        client.tail(this.taskId, { untilTerminal: true });
     }
 
-    async loadHistory() {
-        if (this._controller === null) {
-            throw new Error('FlowUIHitlTransport.loadHistory: not attached');
-        }
-        const headers = await this._getHeaders();
-        const url = `${this._root}/api/v1/hitl/${encodeURIComponent(this._workItemId)}/conversation`;
-        const response = await this._fetch(url, {
-            method: 'GET',
-            headers: { Accept: 'application/json', ...headers },
-            credentials: this._credentials,
-        });
-        if (!response.ok) {
-            throw new Error(`hitl-transport: snapshot HTTP ${response.status}`);
-        }
-        const snapshot = await response.json();
-        const turns = Array.isArray(snapshot.turns) ? snapshot.turns : [];
-        for (const turn of turns) {
-            if (turn && typeof turn === 'object' && typeof turn.message_id === 'string') {
-                this._seenMessageIds.add(turn.message_id);
-            }
-        }
-        this._startLiveTail();
-        return snapshot;
-    }
-
-    _startLiveTail() {
-        this._stopLiveTail();
-        this._liveAbort = new AbortController();
-        void this._runLiveTail(this._liveAbort);
-    }
-
-    _stopLiveTail() {
-        if (this._liveAbort !== null) {
-            this._liveAbort.abort();
-            this._liveAbort = null;
-        }
-    }
-
-    /**
-     * @param {AbortController} abort
-     */
-    async _runLiveTail(abort) {
-        await runA2aTaskLiveTail({
-            target: {
-                baseUrl: this._root,
-                flowId: this._conversation.flow_id,
-            },
-            taskId: this._a2aTaskId,
-            headersFn: () => this._getHeaders(),
-            credentials: this._credentials,
-            signal: abort.signal,
-            onFrame: (frame) => {
-                if (abort.signal.aborted || this._controller === null) return;
-                this._controller.applyA2AFrame(frame);
-            },
-        });
-        if (this._liveAbort === abort) this._liveAbort = null;
-    }
-
-    /**
-     * @param {unknown[]} files
-     */
     async _resolveFileRefs(files) {
-        const list = Array.isArray(files) ? files : [];
         const refs = [];
-        for (const file of list) {
+        for (const file of Array.isArray(files) ? files : []) {
             if (isPlatformFileRef(file)) {
                 refs.push({
                     file_id: file.file_id,
@@ -181,105 +120,68 @@ export class FlowUIHitlTransport {
                 });
                 continue;
             }
-            if (!isBrowserFile(file)) {
-                throw new Error('hitl-transport: files must be File or FileRef');
+            if (!isBrowserFile(file)) throw new Error('hitl-transport: files must be File or FileRef');
+            const headers = await this._getHeaders();
+            const uploaded = await uploadPlatformFile({
+                file,
+                spec: buildWorkItemFileCreateSpecJson({ workItemId: this.workItemId }),
+                credentials: this._credentials,
+                headers,
+                fetchImpl: this._fetch,
+            });
+            if (!uploaded || typeof uploaded.file_id !== 'string') {
+                throw new Error('hitl-transport: file upload result.file_id required');
             }
-            refs.push(await this._uploadBrowserFile(file));
+            refs.push({
+                file_id: uploaded.file_id,
+                original_name: uploaded.original_name,
+                content_type: uploaded.content_type,
+                file_size: uploaded.file_size,
+                url: typeof uploaded.url === 'string' ? uploaded.url : null,
+            });
         }
         return refs;
     }
 
-    async _uploadBrowserFile(file) {
-        const headers = await this._getHeaders();
-        const result = await uploadPlatformFile({
-            file,
-            spec: buildWorkItemFileCreateSpecJson({ workItemId: this._workItemId }),
-            credentials: this._credentials,
-            headers,
-            fetchImpl: this._fetch,
-        });
-        if (!result || typeof result !== 'object' || typeof result.file_id !== 'string') {
-            throw new Error('hitl-transport: file upload result.file_id required');
-        }
-        return {
-            file_id: result.file_id,
-            original_name: typeof result.original_name === 'string' ? result.original_name : file.name,
-            content_type: typeof result.content_type === 'string'
-                ? result.content_type
-                : (file.type || 'application/octet-stream'),
-            file_size: typeof result.file_size === 'number' ? result.file_size : file.size,
-            url: typeof result.url === 'string' ? result.url : null,
-        };
-    }
-
-    /**
-     * @param {{ message?: string, files?: unknown[] }} input
-     */
+    /** @param {{ text?: string, files?: unknown[] }} input */
     async send(input) {
-        const message = input && typeof input.message === 'string' ? input.message.trim() : '';
-        const fileRefs = await this._resolveFileRefs(
-            input && Array.isArray(input.files) ? input.files : [],
+        const text = input && typeof input.text === 'string' ? input.text.trim() : '';
+        const fileRefs = await this._resolveFileRefs(input && Array.isArray(input.files) ? input.files : []);
+        if (text === '' && fileRefs.length === 0) throw new Error('hitl-transport: send requires text or files');
+        const headers = await this._getHeaders();
+        const common = { 'Content-Type': 'application/json', Accept: 'application/json', ...headers };
+        if (this.mode === 'single_reply') {
+            const response = await this._fetch(
+                `/worktracker/api/v1/work-items/${encodeURIComponent(this.workItemId)}/complete`,
+                {
+                    method: 'POST',
+                    headers: common,
+                    credentials: this._credentials,
+                    body: JSON.stringify({ resolution_text: text, resolution_files: fileRefs }),
+                },
+            );
+            if (!response.ok) throw new Error(`hitl-transport: complete HTTP ${response.status}`);
+            return response.json();
+        }
+        const response = await this._fetch(
+            `${this._root}/api/v1/hitl/${encodeURIComponent(this.workItemId)}/conversation/messages`,
+            {
+                method: 'POST',
+                headers: common,
+                credentials: this._credentials,
+                body: JSON.stringify({
+                    text,
+                    idempotency_key: randomUuid(),
+                    file_ids: fileRefs.map((ref) => ref.file_id),
+                }),
+            },
         );
-        if (message === '' && fileRefs.length === 0) {
-            throw new Error('hitl-transport: send requires text or files');
-        }
-        if (this._mode === 'single_reply') {
-            await this._completeWithReply(message, fileRefs);
-            return;
-        }
-        await this._sendAsk(message, fileRefs);
-    }
-
-    async _sendAsk(text, fileRefs) {
-        const headers = await this._getHeaders();
-        const url = `${this._root}/api/v1/hitl/${encodeURIComponent(this._workItemId)}/conversation/messages`;
-        const response = await this._fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...headers },
-            credentials: this._credentials,
-            body: JSON.stringify({
-                text,
-                idempotency_key: randomIdempotencyKey(),
-                file_ids: fileRefs.map((ref) => ref.file_id),
-            }),
-        });
-        if (!response.ok) {
-            throw new Error(`hitl-transport: send HTTP ${response.status}`);
-        }
-        const turn = await response.json();
-        if (turn && typeof turn === 'object' && typeof turn.message_id === 'string') {
-            this._seenMessageIds.add(turn.message_id);
-        }
-        return turn;
-    }
-
-    async _completeWithReply(text, fileRefs) {
-        const headers = await this._getHeaders();
-        const url = `/worktracker/api/v1/work-items/${encodeURIComponent(this._workItemId)}/complete`;
-        const response = await this._fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...headers },
-            credentials: this._credentials,
-            body: JSON.stringify({
-                resolution_text: text,
-                resolution_files: fileRefs,
-            }),
-        });
-        if (!response.ok) {
-            throw new Error(`hitl-transport: complete HTTP ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`hitl-transport: send HTTP ${response.status}`);
         return response.json();
     }
 
-    async cancel() {
-        /* Live tail only; send cancellation is separate CancelTask on the controller. */
-    }
-
     dispose() {
-        this._stopLiveTail();
-        if (this._controller && this._controller.hitlTransport === this) {
-            this._controller.hitlTransport = null;
-        }
-        this._controller = null;
+        if (this._client !== null) this._client.stopTail();
+        this._client = null;
     }
 }

@@ -119,7 +119,7 @@ export async function startFlowUIVoiceSession(host) {
         branchId,
         getHeaders,
         credentials,
-        getContextId: () => host.contextId || host.controller?.contextId || null,
+        getContextId: () => (host.client ? host.client.contextId : null),
         onA2aStreamEvent: (frame) => {
             if (frame && typeof frame === 'object') {
                 host.applyA2AFrame(frame);

@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import pytest
 
 from core.context import clear_context, set_context
@@ -12,6 +11,7 @@ from core.models.context_models import Context
 from core.models.identity_models import Company, User
 from core.worktracker.context_source import WorkItemLLMContextSource
 from core.worktracker.models import SystemActor, WorkItemState
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 pytestmark = pytest.mark.asyncio
 

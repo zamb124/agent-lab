@@ -1,4 +1,4 @@
-"""Playwright E2E: dense Interface editor authoring (plan §25.8 / §25.9)."""
+"""Playwright E2E: Interface editor authoring — add panel, canvas selection, undo/redo, properties."""
 
 from __future__ import annotations
 
@@ -13,6 +13,8 @@ from tests.ui.e2e.flows_e2e_helpers import (
     flows_api_delete_flow,
     flows_doc_flow_id,
     flows_graph_payload,
+    flows_interface_add_block,
+    flows_interface_canvas_block,
     flows_open_interface_editor_workspace,
 )
 from tests.ui.harness import AppUI
@@ -29,7 +31,7 @@ def flows_editor_browser_stack_ready(flows_service, taskiq_worker):
 @pytest.mark.timeout(300)
 @pytest.mark.asyncio
 @pytest.mark.e2e
-async def test_flow_ui_interface_palette_adds_textfield_to_layers(
+async def test_flow_ui_interface_add_panel_inserts_text_input_and_selects_it(
     flows_editor_browser_stack_ready,
     flows_ui: AppUI,
     ui_page_system: Page,
@@ -49,23 +51,25 @@ async def test_flow_ui_interface_palette_adds_textfield_to_layers(
         await flows_open_interface_editor_workspace(page, flows_ui, flow_id)
         editor = page.locator("flows-interface-editor").first
         await expect(editor).to_be_visible(timeout=30_000)
+        await expect(flows_interface_canvas_block(page, "text_input")).to_have_count(0)
 
-        palette = editor.locator("flows-interface-palette").first
-        await expect(palette).to_be_visible(timeout=30_000)
-        add_field = palette.locator("button").filter(has_text=re.compile(r"^TextField$")).first
-        await expect(add_field).to_be_visible(timeout=10_000)
-        await add_field.click()
+        await flows_interface_add_block(page, "Text input")
 
-        layers = editor.locator("flows-interface-layers-tree").first
-        await expect(layers.get_by_text("TextField", exact=False).first).to_be_visible(
-            timeout=15_000
+        inserted = flows_interface_canvas_block(page, "text_input")
+        await expect(inserted).to_have_count(1, timeout=15_000)
+        properties = editor.locator("flows-interface-properties-panel").first
+        await expect(properties).to_be_visible(timeout=15_000)
+        await expect(properties.locator(".head .type")).to_have_text(
+            re.compile(r"Text input|Текстовое поле"), timeout=10_000
         )
-        await expect(editor.locator("flows-interface-canvas").first).to_be_visible(
-            timeout=15_000
+        block_id = await inserted.get_attribute("data-block-id")
+        assert isinstance(block_id, str) and block_id != ""
+        await expect(editor.locator(".selection")).to_be_visible(timeout=10_000)
+        # Поле без действия на странице — предупреждение no_action в списке проблем.
+        await expect(editor.locator(".problems .problem")).to_have_count(1, timeout=15_000)
+        await expect(editor.locator("flows-interface-toolbar .status")).to_have_attribute(
+            "data-dirty", "true", timeout=10_000
         )
-        await expect(
-            editor.locator("flows-interface-toolbar .badge").first
-        ).to_be_attached(timeout=30_000)
     finally:
         await flows_api_delete_flow(flows_ui.origin, auth_token_system, flow_id)
 
@@ -73,7 +77,7 @@ async def test_flow_ui_interface_palette_adds_textfield_to_layers(
 @pytest.mark.timeout(300)
 @pytest.mark.asyncio
 @pytest.mark.e2e
-async def test_flow_ui_interface_editor_undo_redo_after_palette_add(
+async def test_flow_ui_interface_editor_undo_redo_after_add(
     flows_editor_browser_stack_ready,
     flows_ui: AppUI,
     ui_page_system: Page,
@@ -92,32 +96,22 @@ async def test_flow_ui_interface_editor_undo_redo_after_palette_add(
     try:
         await flows_open_interface_editor_workspace(page, flows_ui, flow_id)
         editor = page.locator("flows-interface-editor").first
-        layers = editor.locator("flows-interface-layers-tree").first
-        before = await layers.locator("button").count()
+        badges = flows_interface_canvas_block(page, "badge")
+        await expect(badges).to_have_count(0)
 
-        await editor.locator("flows-interface-palette button").filter(
-            has_text=re.compile(r"^Badge$")
-        ).first.click()
-        await expect(layers.get_by_text("Badge", exact=False).first).to_be_visible(
-            timeout=15_000
-        )
-        after_add = await layers.locator("button").count()
-        assert after_add > before
+        await flows_interface_add_block(page, "Badge")
+        await expect(badges).to_have_count(1, timeout=15_000)
 
         toolbar = editor.locator("flows-interface-toolbar")
-        undo = toolbar.get_by_role(
-            "button", name=re.compile(r"^\s*(Undo|Отменить)\s*$")
-        ).first
+        undo = toolbar.get_by_role("button", name=re.compile(r"^\s*(Undo|Отменить)\s*$")).first
+        await expect(undo).to_be_enabled(timeout=10_000)
         await undo.click()
-        await expect(layers.get_by_text("Badge", exact=False)).to_have_count(0, timeout=15_000)
+        await expect(badges).to_have_count(0, timeout=15_000)
 
-        redo = toolbar.get_by_role(
-            "button", name=re.compile(r"^\s*(Redo|Повторить)\s*$")
-        ).first
+        redo = toolbar.get_by_role("button", name=re.compile(r"^\s*(Redo|Повторить)\s*$")).first
+        await expect(redo).to_be_enabled(timeout=10_000)
         await redo.click()
-        await expect(layers.get_by_text("Badge", exact=False).first).to_be_visible(
-            timeout=15_000
-        )
+        await expect(badges).to_have_count(1, timeout=15_000)
     finally:
         await flows_api_delete_flow(flows_ui.origin, auth_token_system, flow_id)
 
@@ -125,7 +119,7 @@ async def test_flow_ui_interface_editor_undo_redo_after_palette_add(
 @pytest.mark.timeout(300)
 @pytest.mark.asyncio
 @pytest.mark.e2e
-async def test_flow_ui_interface_agent_identity_inspector_has_image_picker(
+async def test_flow_ui_interface_agent_card_properties_expose_image_url(
     flows_editor_browser_stack_ready,
     flows_ui: AppUI,
     ui_page_system: Page,
@@ -145,16 +139,18 @@ async def test_flow_ui_interface_agent_identity_inspector_has_image_picker(
         await flows_open_interface_editor_workspace(page, flows_ui, flow_id)
         editor = page.locator("flows-interface-editor").first
         await expect(editor).to_be_visible(timeout=30_000)
-        layers = editor.locator("flows-interface-layers-tree").first
-        await expect(layers.get_by_text("AgentIdentity", exact=False).first).to_be_visible(
-            timeout=15_000
+        identity = flows_interface_canvas_block(page, "agent_identity").first
+        await expect(identity).to_be_visible(timeout=15_000)
+        await identity.click()
+
+        properties = editor.locator("flows-interface-properties-panel").first
+        await expect(properties).to_be_visible(timeout=10_000)
+        await expect(properties.locator(".head .type")).to_have_text(
+            re.compile(r"Agent card|Карточка агента"), timeout=10_000
         )
-        await layers.get_by_text("AgentIdentity", exact=False).first.click()
-        inspector = editor.locator("flows-interface-inspector").first
-        await expect(inspector).to_be_visible(timeout=10_000)
-        pick = inspector.locator("platform-button").filter(
-            has_text=re.compile(r"Выбрать изображение|Choose image")
-        ).first
-        await expect(pick).to_be_visible(timeout=10_000)
+        image_field = properties.locator("platform-field").filter(
+            has_text=re.compile(r"^\s*(Image|Изображение)\s*$")
+        )
+        await expect(image_field.first).to_be_visible(timeout=10_000)
     finally:
         await flows_api_delete_flow(flows_ui.origin, auth_token_system, flow_id)

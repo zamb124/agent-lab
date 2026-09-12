@@ -5,16 +5,15 @@ from datetime import datetime, timezone
 import pytest
 from httpx import AsyncClient
 
-from core.a2a import PLATFORM_UI_BOOTSTRAP_ACTION
 from core.models.identity_models import Company
 from core.utils.tokens import get_token_service
-from tests.flows._flow_ui_session import (
-    flow_ui_a2a_headers,
-    flow_ui_protojson_message,
-)
+from tests.flows._a2a_v1 import A2A_HEADERS
+from tests.flows._flow_ui_session import ui_action_message
 
 
-async def _create_embed(frontend_client: AsyncClient, auth_headers: dict[str, str], flow_id: str) -> str:
+async def _create_embed(
+    frontend_client: AsyncClient, auth_headers: dict[str, str], flow_id: str
+) -> str:
     response = await frontend_client.post(
         "/frontend/api/embed/configs",
         headers=auth_headers,
@@ -69,7 +68,7 @@ async def test_embed_session_token_streams_via_a2a(
     assert stream_response.status_code == 200
     assert stream_response.headers["content-type"].startswith("text/event-stream")
     assert "data:" in stream_response.text
-    assert "\"jsonrpc\": \"2.0\"" in stream_response.text
+    assert '"jsonrpc": "2.0"' in stream_response.text
     assert "embed-ok:" in stream_response.text
 
     await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
@@ -217,7 +216,9 @@ async def test_embed_session_token_rejects_wrong_embed_id(
     assert "not allowed for this embed" in deny_payload["error"]["message"]
 
     await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
-    await frontend_client.delete(f"/frontend/api/embed/configs/{other_embed_id}", headers=auth_headers)
+    await frontend_client.delete(
+        f"/frontend/api/embed/configs/{other_embed_id}", headers=auth_headers
+    )
 
 
 @pytest.mark.asyncio
@@ -397,13 +398,13 @@ async def test_embed_session_token_allows_list_tasks_with_context_id(
 
 
 @pytest.mark.asyncio
-async def test_embed_session_token_bootstrap_then_list_tasks_hydrate(
+async def test_embed_session_token_interface_then_ui_action_then_list_tasks(
     flows_client: AsyncClient,
     frontend_client: AsyncClient,
     embed_test_auth,
     unique_id,
 ):
-    """Flow UI bootstrap + hydrateContextTasks (ListTasks) must not hit method allowlist."""
+    """Embed-клиент: GET /interface, затем ui-action ход и ListTasks по context — без allowlist-отказов."""
     auth_headers, flow_id, _, _ = embed_test_auth
     embed_id = await _create_embed(frontend_client, auth_headers, flow_id)
     token_response = await frontend_client.post(
@@ -413,35 +414,45 @@ async def test_embed_session_token_bootstrap_then_list_tasks_hydrate(
     )
     assert token_response.status_code == 200
     embed_token = token_response.json()["token"]
-    context_id = f"ctx-embed-bootstrap-{unique_id}"
-    embed_headers = flow_ui_a2a_headers(
-        {
-            "Authorization": f"Bearer {embed_token}",
-            "Origin": "https://larashved.ru",
-        }
-    )
+    context_id = f"ctx-embed-action-{unique_id}"
+    embed_headers = {
+        **A2A_HEADERS,
+        "Authorization": f"Bearer {embed_token}",
+        "Origin": "https://larashved.ru",
+    }
 
-    bootstrap_response = await flows_client.post(
+    interface_response = await flows_client.get(
+        f"/flows/api/v1/embed/{embed_id}/interface", headers=embed_headers
+    )
+    assert interface_response.status_code == 200, interface_response.text
+    interface_payload = interface_response.json()
+    assert interface_payload["flow_id"] == flow_id
+    assert interface_payload["viewer"]["auth_mode"] == "embed"
+    assert interface_payload["document"]["start_page_id"]
+
+    action_response = await flows_client.post(
         f"/flows/api/v1/embed/{embed_id}",
         headers=embed_headers,
         json={
             "jsonrpc": "2.0",
-            "id": f"test-bootstrap-{unique_id}",
+            "id": f"test-action-{unique_id}",
             "method": "SendMessage",
             "params": {
-                "message": flow_ui_protojson_message(
-                    action=PLATFORM_UI_BOOTSTRAP_ACTION,
+                "message": ui_action_message(
                     context_id=context_id,
-                    action_id=f"bootstrap-{unique_id}",
+                    action="send",
+                    source="conversation",
+                    payload={"text": "hello from embed"},
                 ),
                 "metadata": {"branch": "default"},
             },
         },
         timeout=30.0,
     )
-    assert bootstrap_response.status_code == 200
-    bootstrap_payload = bootstrap_response.json()
-    assert "error" not in bootstrap_payload, bootstrap_payload
+    assert action_response.status_code == 200
+    action_payload = action_response.json()
+    assert "error" not in action_payload, action_payload
+    assert action_payload["result"]["contextId"] == context_id
 
     list_response = await flows_client.post(
         f"/flows/api/v1/embed/{embed_id}",
@@ -464,6 +475,7 @@ async def test_embed_session_token_bootstrap_then_list_tasks_hydrate(
     assert isinstance(result, dict)
     tasks = result.get("tasks", [])
     assert isinstance(tasks, list)
+    assert [task["contextId"] for task in tasks] == [context_id]
 
     await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
 
@@ -570,7 +582,9 @@ async def test_embed_session_token_rejects_company_mismatch(
         assert company_id != other_company_id
     finally:
         await frontend_container.company_repository.delete(other_company_id)
-        await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
+        await frontend_client.delete(
+            f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers
+        )
 
 
 @pytest.mark.asyncio
@@ -620,7 +634,9 @@ async def test_embed_session_token_rejects_missing_branch_claim(
         assert deny_payload["error"]["code"] == -32000
         assert "embed_branch_id is required" in deny_payload["error"]["message"]
     finally:
-        await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
+        await frontend_client.delete(
+            f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers
+        )
 
 
 @pytest.mark.asyncio

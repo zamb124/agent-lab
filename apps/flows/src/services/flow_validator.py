@@ -18,10 +18,9 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from apps.flows.src.state.node_files import validate_node_files_list
+from core.flow_ui.templates import default_chat_document
 from core.logging import get_logger
-from core.models.flow_interface import FlowInterfaceConfig
 from core.reflection import default_pass_fail_exits
-from core.state.flow_ui_contract import iter_flow_ui_submit_contract_fields
 from core.types import JsonObject, JsonValue, parse_json_object
 from core.urn import extract_resource_id
 
@@ -38,7 +37,6 @@ _EDGE_ALLOWED_FIELDS = frozenset(
 )
 
 _EVALUATION_ROLES = frozenset({"tester", "judge"})
-_STATE_UI_VALUE_PATTERN = re.compile(r"@state:ui_values\.([a-zA-Z_][a-zA-Z0-9_]*)")
 
 
 def _is_evaluation_node(cfg: JsonObject) -> bool:
@@ -192,7 +190,6 @@ class FlowValidator:
         entry: str,
         variables: JsonObject,
         flow_id: str | None = None,
-        interface: FlowInterfaceConfig | None = None,
     ) -> FlowValidationResult:
         """
         Валидирует конфигурацию flow.
@@ -203,7 +200,6 @@ class FlowValidator:
             entry: ID entry ноды
             variables: Переменные flow
             flow_id: ID flow (опционально, для контекста)
-            interface: Flow UI config; known ui_values.* from submit contract
 
         Возвращает:
             FlowValidationResult с ошибками и предупреждениями
@@ -218,9 +214,6 @@ class FlowValidator:
 
         # 3. Валидация переменных @var:
         self._validate_variables(nodes, variables, result)
-
-        # 3b. @state:ui_values.* против submit contract (когда interface передан)
-        self._validate_ui_value_state_refs(nodes, interface, result)
 
         # 4. Парсинг inline code
         self._parse_inline_code(nodes, result)
@@ -955,52 +948,6 @@ class FlowValidator:
                     require_flow_variable=False,
                 )
 
-    def _validate_ui_value_state_refs(
-        self,
-        nodes: dict[str, JsonObject],
-        interface: FlowInterfaceConfig | None,
-        result: FlowValidationResult,
-    ) -> None:
-        """Known @state:ui_values.* from submit contract; unknown fields warn when interface given."""
-        if interface is None:
-            return
-        known_fields = {
-            field.field
-            for field in iter_flow_ui_submit_contract_fields(interface.template.document)
-        }
-
-        def check_ui_value_refs(value: JsonValue, node_id: str, context: str) -> None:
-            if isinstance(value, str):
-                for match in _STATE_UI_VALUE_PATTERN.finditer(value):
-                    field_name = match.group(1)
-                    state_key = f"ui_values.{field_name}"
-                    result.state_keys_used.add(state_key)
-                    if field_name not in known_fields:
-                        result.add_error(
-                            code="undefined_ui_value",
-                            message=(
-                                f"Поле '@state:ui_values.{field_name}' отсутствует "
-                                "в submit contract интерфейса"
-                            ),
-                            severity=ValidationSeverity.WARNING,
-                            node_id=node_id,
-                            details={"context": context, "field": field_name},
-                        )
-            elif isinstance(value, dict):
-                for key, nested in value.items():
-                    check_ui_value_refs(nested, node_id, f"{context}.{key}")
-            elif isinstance(value, list):
-                for index, nested in enumerate(value):
-                    check_ui_value_refs(nested, node_id, f"{context}[{index}]")
-
-        for node_id, config in nodes.items():
-            mapping = config.get("input_mapping")
-            if mapping is not None:
-                check_ui_value_refs(mapping, node_id, "input_mapping")
-            prompt = config.get("prompt")
-            if isinstance(prompt, str):
-                check_ui_value_refs(prompt, node_id, "prompt")
-
     def _validate_messages_filters(
         self,
         nodes: dict[str, JsonObject],
@@ -1129,12 +1076,14 @@ class FlowValidator:
         if self.flow_builder is None:
             return
         try:
+            # Сборка проверяет граф; документ интерфейса валидируется отдельно при сохранении.
             config: JsonObject = {
                 "flow_id": flow_id or "validation_test",
                 "name": "Validation Test",
                 "entry": entry,
                 "nodes": nodes,
                 "edges": edges,
+                "interface": default_chat_document().model_dump(mode="json"),
             }
 
             _ = await self.flow_builder(config)

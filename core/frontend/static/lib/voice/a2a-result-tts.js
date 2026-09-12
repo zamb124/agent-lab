@@ -5,11 +5,7 @@
  * сервер не дублирует этот текст артефактом `response`.
  */
 
-import {
-    isA2aInterruptedState,
-    isA2aStreamBoundaryState,
-    unwrapA2aStreamResult,
-} from '../flow-ui/protocol/a2a-result-helpers.js';
+import { isInterruptedTaskState, isSettledTaskState, unwrapA2aStreamResult } from '../flow-ui/protocol/a2a-stream.js';
 import { extractSpeakableText } from './speakable.js';
 
 /**
@@ -34,7 +30,7 @@ export function extractSpeakableTextFromFinalStatusUpdate(statusUpdate) {
         typeof meta === 'object' &&
         'platform_interrupt' in meta &&
         meta.platform_interrupt != null;
-    if (!isA2aInterruptedState(taskState) && !hasInterruptMeta) {
+    if (!isInterruptedTaskState(taskState) && !hasInterruptMeta) {
         return null;
     }
     const message = status.message;
@@ -90,7 +86,7 @@ export function feedSpeakableTtsFromA2aResult(media, result, getTtsOutputEnabled
             unwrapped.event.status && typeof unwrapped.event.status.state === 'string'
                 ? unwrapped.event.status.state
                 : '';
-        if (!isA2aStreamBoundaryState(state)) {
+        if (!isSettledTaskState(state)) {
             return;
         }
         if (getTtsOutputEnabled()) {

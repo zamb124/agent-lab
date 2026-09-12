@@ -9,6 +9,13 @@ from apps.flows.src.services.flows_loader import FlowsLoader
 from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
 from apps.flows.tools.builtin_specs import builtin_tool_ids
 from apps.flows.tools.index_search import web_search
+from core.flow_ui.projection import apply_json_patch
+from core.flow_ui.protocol import (
+    JSON_MEDIA_TYPE,
+    JSON_PATCH_MEDIA_TYPE,
+    STATE_ARTIFACT_ID,
+    JsonPatchOperation,
+)
 from core.integrations.mcp import mcp_tool_reference_id
 from core.search import PUBLIC_SEARCH_WALL_TIME_SECONDS
 from core.state import ExecutionState
@@ -28,7 +35,7 @@ _FLOWS_REGISTRY_PATH = _FLOWS_BUNDLES_DIR.parent / "registry.yaml"
 async def _reload_public_search_bundle(container, app) -> None:
     """Подтягивает актуальный public_search/flow.json в БД (research/tools contract)."""
     _ = app
-    from core.context import clear_context, get_context, set_context
+    from core.context import get_context, set_context
     from core.models.context_models import Context
     from core.models.identity_models import User
     from tests.fixtures.ai_provider_defaults import make_test_company
@@ -172,125 +179,62 @@ def _stream_artifact_update(event: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
-def _content_path_value(content: dict[str, Any], path: str) -> object | None:
-    """Читает JSON Pointer вида /content/... из surface data_model.content."""
-    if not path.startswith("/content/"):
-        raise ValueError(f"unsupported Flow UI content path: {path!r}")
-    current: object = content
-    for segment in path[len("/content/") :].split("/"):
-        if not isinstance(current, dict) or segment not in current:
-            return None
-        current = current[segment]
-    return current
-
-
-def _event_type_for_content_path(path: str, payload: dict[str, Any]) -> str:
-    if path == "/content/serp/results":
-        if payload.get("rank_stage") == "refined":
-            return "search/serp/results_refined"
-        return "search/serp/results_ready"
-    if path == "/content/serp/resultsRefined":
-        return "search/serp/results_refined"
-    if path == "/content/serp/suggestions":
-        return "search/serp/suggestions_ready"
-    if path == "/content/serp/insights":
-        return "search/serp/insights_ready"
-    if path == "/content/serp/completed":
-        return "search/serp/completed"
-    if path == "/content/research/plan":
-        return "search/research/plan_ready"
-    if path == "/content/research/search":
-        return "search/research/search_ready"
-    if path == "/content/research/reflection":
-        return "search/research/reflection_ready"
-    if path.startswith("/content/research/sources/"):
-        return "search/research/source_ready"
-    raise ValueError(f"unknown public_search Flow UI path: {path!r}")
-
-
-_PUBLIC_SEARCH_CONTENT_PATHS: tuple[str, ...] = (
-    "/content/serp/results",
-    "/content/serp/resultsRefined",
-    "/content/serp/suggestions",
-    "/content/serp/insights",
-    "/content/serp/completed",
-    "/content/research/plan",
-    "/content/research/search",
-    "/content/research/reflection",
-)
+_STATE_EVENT_TYPES: dict[str, str] = {
+    "serp_results": "search/serp/results_ready",
+    "serp_results_refined": "search/serp/results_refined",
+    "serp_suggestions": "search/serp/suggestions_ready",
+    "serp_insights": "search/serp/insights_ready",
+    "serp_completed": "search/serp/completed",
+    "research_plan": "search/research/plan_ready",
+    "research_search": "search/research/search_ready",
+    "research_reflection": "search/research/reflection_ready",
+}
 
 
 def _collect_ui_events(stream_text: str) -> list[tuple[str, dict[str, Any]]]:
     """
-    Собирает staged public_search updates из Flow UI stream.
+    Собирает staged public_search updates из артефакта ``state``.
 
-    Канон: capability ui.update_data → durable Flow UI document → artifact
-    ui.document / ui.surface.*; special artifact.name=ui_event запрещён.
+    Канон: code-ноды пишут поля state; интерфейс объявляет их в html-блоке ``serp``,
+    поэтому клиент получает snapshot (``application/json``) и патчи RFC 6902
+    (``application/json-patch+json``) ровно по этим путям.
     """
     events: list[tuple[str, dict[str, Any]]] = []
     previous_by_path: dict[str, object] = {}
+    state: dict[str, Any] = {}
     for event in _parse_sse_results(stream_text):
         artifact_update = _stream_artifact_update(event)
         if artifact_update is None:
             continue
         artifact = artifact_update.get("artifact")
-        if not isinstance(artifact, dict):
+        if not isinstance(artifact, dict) or artifact.get("artifactId") != STATE_ARTIFACT_ID:
             continue
-        artifact_name = artifact.get("name")
-        if not isinstance(artifact_name, str):
-            continue
-
-        payloads_by_path: dict[str, dict[str, Any]] = {}
-
-        if artifact_name == "ui.document" or artifact_name.startswith("ui.surface."):
-            flow_ui_payload: dict[str, Any] | None = None
-            a2ui_messages: list[object] | None = None
-            raw_parts = artifact.get("parts")
-            if isinstance(raw_parts, list):
-                for part in raw_parts:
-                    if not isinstance(part, dict):
-                        continue
-                    part_data = part.get("data")
-                    if isinstance(part_data, dict) and isinstance(part_data.get("flowUi"), dict):
-                        flow_ui_payload = part_data
-                    elif isinstance(part_data, list):
-                        a2ui_messages = part_data
-            if flow_ui_payload is not None:
-                flow_ui = flow_ui_payload["flowUi"]
-                assert isinstance(flow_ui, dict)
-                surfaces = flow_ui.get("surfaces")
-                if isinstance(surfaces, dict):
-                    main = surfaces.get("main")
-                    if isinstance(main, dict):
-                        data_model = main.get("data_model")
-                        if isinstance(data_model, dict):
-                            content = data_model.get("content")
-                            if isinstance(content, dict):
-                                for path in _PUBLIC_SEARCH_CONTENT_PATHS:
-                                    value = _content_path_value(content, path)
-                                    if isinstance(value, dict):
-                                        payloads_by_path[path] = value
-            if isinstance(a2ui_messages, list):
-                for message in a2ui_messages:
-                    if not isinstance(message, dict):
-                        continue
-                    update = message.get("updateDataModel")
-                    if not isinstance(update, dict):
-                        continue
-                    path = update.get("path")
-                    value = update.get("value")
-                    if (
-                        isinstance(path, str)
-                        and path in _PUBLIC_SEARCH_CONTENT_PATHS
-                        and isinstance(value, dict)
-                    ):
-                        payloads_by_path[path] = value
-
-        for path, payload in payloads_by_path.items():
-            if previous_by_path.get(path) == payload:
+        raw_parts = artifact.get("parts")
+        assert isinstance(raw_parts, list) and raw_parts, artifact
+        for part in raw_parts:
+            assert isinstance(part, dict), part
+            media_type = part.get("mediaType")
+            if media_type == JSON_MEDIA_TYPE:
+                snapshot = part.get("data")
+                assert isinstance(snapshot, dict), part
+                state = dict(snapshot)
+            elif media_type == JSON_PATCH_MEDIA_TYPE:
+                operations = part.get("data")
+                assert isinstance(operations, list), part
+                state = dict(
+                    apply_json_patch(
+                        state,
+                        [JsonPatchOperation.model_validate(operation) for operation in operations],
+                    )
+                )
+            else:
+                raise AssertionError(f"unexpected state part mediaType: {media_type!r}")
+        for path, event_type in _STATE_EVENT_TYPES.items():
+            payload = state.get(path)
+            if not isinstance(payload, dict) or previous_by_path.get(path) == payload:
                 continue
             previous_by_path[path] = payload
-            events.append((_event_type_for_content_path(path, payload), payload))
+            events.append((event_type, payload))
     return events
 
 
@@ -445,9 +389,7 @@ async def test_public_search_flow_calls_search_mcp_without_monkeypatches(
                 "message": {
                     "messageId": f"public-search-stream-message-{unique_id}",
                     "role": "ROLE_USER",
-                    "parts": [
-                        {"text": query}
-                    ],
+                    "parts": [{"text": query}],
                 },
                 "metadata": {"branch": "quick"},
             },
@@ -549,7 +491,9 @@ def test_public_search_bundle_timeouts_cover_public_search_window() -> None:
             timeout = node.get("node_timeout_seconds")
             if timeout is None:
                 continue
-            assert timeout >= PUBLIC_SEARCH_WALL_TIME_SECONDS, f"{scope}:{node_id} timeout={timeout}"
+            assert timeout >= PUBLIC_SEARCH_WALL_TIME_SECONDS, (
+                f"{scope}:{node_id} timeout={timeout}"
+            )
 
     _assert_node_timeouts(bundle["nodes"], "base")
     for branch_id, branch in bundle.get("branches", {}).items():

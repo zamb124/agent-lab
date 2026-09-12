@@ -95,16 +95,17 @@ describe('variable-refs helpers', () => {
         expect(paths).toContain('context.foo');
     });
 
-    it('findCatalogEntry matches ui_values leaf and root family', () => {
+    it('findCatalogEntry matches exact names, nested leaves and root families', () => {
         const catalog = [
             { name: 'company_name', source: 'system' },
-            { name: 'ui_values.email', source: 'ui_value' },
-            { name: 'ui_values.phone', source: 'ui_value' },
+            { name: 'email', source: 'interface' },
+            { name: 'customer.name', source: 'upstream' },
+            { name: 'customer.phone', source: 'upstream' },
         ];
-        expect(findCatalogEntry('ui_values.email', catalog)?.name).toBe('ui_values.email');
-        expect(findCatalogEntry('ui_values', catalog)?.name).toMatch(/^ui_values\./);
-        expect(findCatalogEntry('ui_values.phone', catalog)?.name).toBe('ui_values.phone');
-        expect(findCatalogEntry('ui_values.missing', catalog)).toBeNull();
+        expect(findCatalogEntry('email', catalog)?.source).toBe('interface');
+        expect(findCatalogEntry('customer.name', catalog)?.name).toBe('customer.name');
+        expect(findCatalogEntry('customer', catalog)?.name).toMatch(/^customer\./);
+        expect(findCatalogEntry('customer.missing', catalog)).toBeNull();
         expect(findCatalogEntry('company_name', catalog)?.name).toBe('company_name');
     });
 });

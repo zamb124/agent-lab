@@ -13,6 +13,7 @@ from core.config import get_settings as core_get_settings
 from core.config import set_settings as core_set_settings
 from core.config.loader import load_merged_config
 from core.config.models import LLMConfig, PushConfig, S3Config
+from core.flow_ui.problems import FlowUILimits
 
 FLOWS_PUBLIC_API_PREFIX = "/flows/api/v1"
 
@@ -67,6 +68,10 @@ class FlowSettings(BaseSettings):
     s3: S3Config = Field(default_factory=S3Config)
     external_flows: ExternalFlowsConfig = Field(default_factory=ExternalFlowsConfig)
     push: PushConfig = Field(default_factory=_default_push_config)
+    flow_ui: FlowUILimits = Field(
+        default_factory=FlowUILimits,
+        description="Лимиты интерфейса flow: страницы, блоки, размер state и html-блоков",
+    )
 
     cors_allow_origins: list[str] = Field(
         default_factory=list,

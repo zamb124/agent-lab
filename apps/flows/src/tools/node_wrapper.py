@@ -391,8 +391,6 @@ class NodeAsToolWrapper(BaseTool):
                 + "'query', 'content' или 'request'"
             )
 
-        # A node invoked as a tool renders inside the parent interface:
-        # the UI document is inherited, not re-materialized.
         nested_state = ExecutionState(
             task_id=parent_state.task_id,
             context_id=parent_state.context_id,
@@ -403,8 +401,6 @@ class NodeAsToolWrapper(BaseTool):
             messages=[],
             branch_id=parent_state.branch_id,
             flow_config_version=parent_state.flow_config_version,
-            ui_document=parent_state.ui_document,
-            ui_template_version=parent_state.ui_template_version,
         )
 
         # Записываем args в nested_state

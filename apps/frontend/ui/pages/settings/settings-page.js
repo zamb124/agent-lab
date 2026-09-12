@@ -448,8 +448,7 @@ export class FrontendSettingsPage extends PlatformPage {
                 color: var(--text-primary);
                 word-break: break-all;
             }
-            .score-provider,
-            .score-source {
+            .score-provider {
                 font-family: var(--font-mono);
                 color: var(--text-secondary);
                 white-space: nowrap;
@@ -542,7 +541,6 @@ export class FrontendSettingsPage extends PlatformPage {
             editorial_prior: 0,
             enabled: true,
             note: '',
-            score_dimensions: {},
         };
         this._agentPairingCode = '';
         this._agentPairingExpires = 0;
@@ -1420,22 +1418,28 @@ export class FrontendSettingsPage extends PlatformPage {
 
     _modelScoreDraft(row) {
         const key = this._modelScoreKey(row);
+        if (typeof row.editorial_prior !== 'number') {
+            throw new Error('model scoring: editorial_prior must be a number');
+        }
+        if (typeof row.enabled !== 'boolean') {
+            throw new Error('model scoring: enabled must be boolean');
+        }
         return this._modelScoreDrafts[key] || {
             provider: row.provider,
             model_id: row.model_id,
             capability: row.capability,
-            enabled: row.enabled !== false,
-            note: row.note || '',
-            editorial_prior: Number(row.editorial_prior || 0),
-            score_dimensions: row.score_dimensions && typeof row.score_dimensions === 'object'
-                ? row.score_dimensions
-                : {},
+            enabled: row.enabled,
+            note: row.note == null ? '' : row.note,
+            editorial_prior: row.editorial_prior,
         };
     }
 
     _formatScoreBreakdown(breakdown) {
-        if (!breakdown || typeof breakdown !== 'object') {
+        if (breakdown == null) {
             return '—';
+        }
+        if (typeof breakdown !== 'object') {
+            throw new Error('model scoring: score_breakdown must be an object');
         }
         const entries = Object.entries(breakdown);
         if (entries.length === 0) {
@@ -1444,6 +1448,16 @@ export class FrontendSettingsPage extends PlatformPage {
         return entries
             .map(([dimension, value]) => `${dimension}: ${Number(value).toFixed(1)}`)
             .join(', ');
+    }
+
+    _formatAaIndex(value) {
+        if (value == null) {
+            return '—';
+        }
+        if (typeof value !== 'number') {
+            throw new Error('model scoring: AA index must be a number');
+        }
+        return value.toFixed(1);
     }
 
     _setModelScoreDraft(row, patch) {
@@ -1463,10 +1477,9 @@ export class FrontendSettingsPage extends PlatformPage {
             provider: draft.provider,
             model_id: draft.model_id,
             capability: draft.capability,
-            enabled: draft.enabled !== false,
-            editorial_prior: Number(draft.editorial_prior || 0),
-            note: draft.note || null,
-            score_dimensions: draft.score_dimensions || {},
+            enabled: draft.enabled,
+            editorial_prior: draft.editorial_prior,
+            note: draft.note === '' ? null : draft.note,
         });
     }
 
@@ -1486,12 +1499,9 @@ export class FrontendSettingsPage extends PlatformPage {
             capability,
             provider,
             model_id: modelId,
-            enabled: draft.enabled !== false,
-            editorial_prior: Number(draft.editorial_prior || 0),
+            enabled: draft.enabled,
+            editorial_prior: draft.editorial_prior,
             note: draft.note ? String(draft.note) : null,
-            score_dimensions: draft.score_dimensions && typeof draft.score_dimensions === 'object'
-                ? draft.score_dimensions
-                : {},
         });
         this._modelScoreNew = {
             capability: 'llm_chat',
@@ -1500,7 +1510,6 @@ export class FrontendSettingsPage extends PlatformPage {
             editorial_prior: 0,
             enabled: true,
             note: '',
-            score_dimensions: {},
         };
     }
 
@@ -1509,7 +1518,10 @@ export class FrontendSettingsPage extends PlatformPage {
         if (!result) {
             return html`<div class="empty"><glass-spinner></glass-spinner></div>`;
         }
-        const items = Array.isArray(result.items) ? result.items : [];
+        if (!Array.isArray(result.items)) {
+            throw new Error('model scoring: items must be an array');
+        }
+        const items = result.items;
         return html`
             <section>
                 <div class="scores-toolbar">
@@ -1535,24 +1547,31 @@ export class FrontendSettingsPage extends PlatformPage {
                                         <th>${this.t('settings_page.model_scoring.col_provider')}</th>
                                         <th>${this.t('settings_page.model_scoring.col_model')}</th>
                                         <th>${this.t('settings_page.model_scoring.col_score')}</th>
+                                        <th>${this.t('settings_page.model_scoring.col_intelligence')}</th>
+                                        <th>${this.t('settings_page.model_scoring.col_coding')}</th>
+                                        <th>${this.t('settings_page.model_scoring.col_agentic')}</th>
                                         <th>${this.t('settings_page.model_scoring.col_breakdown')}</th>
                                         <th>${this.t('settings_page.model_scoring.col_editorial_prior')}</th>
-                                        <th>${this.t('settings_page.model_scoring.col_dimensions')}</th>
                                         <th>${this.t('settings_page.model_scoring.col_enabled')}</th>
-                                        <th>${this.t('settings_page.model_scoring.col_source')}</th>
                                         <th>${this.t('settings_page.model_scoring.col_note')}</th>
                                         <th>${this.t('settings_page.model_scoring.col_actions')}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     ${items.map((row) => {
+                                        if (typeof row.score !== 'number') {
+                                            throw new Error('model scoring: score must be a number');
+                                        }
                                         const draft = this._modelScoreDraft(row);
                                         return html`
                                             <tr>
                                                 <td class="score-provider">${row.capability}</td>
                                                 <td class="score-provider">${row.provider}</td>
                                                 <td class="score-model">${row.model_id}</td>
-                                                <td class="score-computed">${Number(row.score || 0).toFixed(1)}</td>
+                                                <td class="score-computed">${row.score.toFixed(1)}</td>
+                                                <td class="score-computed">${this._formatAaIndex(row.intelligence_index)}</td>
+                                                <td class="score-computed">${this._formatAaIndex(row.coding_index)}</td>
+                                                <td class="score-computed">${this._formatAaIndex(row.agentic_index)}</td>
                                                 <td class="score-breakdown">${this._formatScoreBreakdown(row.score_breakdown)}</td>
                                                 <td>
                                                     <platform-field
@@ -1565,22 +1584,6 @@ export class FrontendSettingsPage extends PlatformPage {
                                                                 throw new Error('model scoring: editorial_prior expects numeric detail.value');
                                                             }
                                                             this._setModelScoreDraft(row, { editorial_prior: e.detail.value });
-                                                        }}
-                                                    ></platform-field>
-                                                </td>
-                                                <td class="score-dimensions">
-                                                    <platform-field
-                                                        type="object"
-                                                        mode="edit"
-                                                        label=""
-                                                        .value=${draft.score_dimensions}
-                                                        @change=${(e) => {
-                                                            if (!e.detail || (e.detail.value !== null && typeof e.detail.value !== 'object')) {
-                                                                throw new Error('model scoring: score_dimensions expects object detail.value');
-                                                            }
-                                                            this._setModelScoreDraft(row, {
-                                                                score_dimensions: e.detail.value || {},
-                                                            });
                                                         }}
                                                     ></platform-field>
                                                 </td>
@@ -1598,7 +1601,6 @@ export class FrontendSettingsPage extends PlatformPage {
                                                         }}
                                                     ></platform-field>
                                                 </td>
-                                                <td class="score-source">${row.source}</td>
                                                 <td>
                                                     <platform-field
                                                         type="string"
@@ -1689,18 +1691,15 @@ export class FrontendSettingsPage extends PlatformPage {
                         }}
                     ></platform-field>
                     <platform-field
-                        type="object"
+                        type="boolean"
                         mode="edit"
-                        label=${this.t('settings_page.model_scoring.col_dimensions')}
-                        .value=${this._modelScoreNew.score_dimensions}
+                        label=${this.t('settings_page.model_scoring.col_enabled')}
+                        .value=${this._modelScoreNew.enabled}
                         @change=${(e) => {
-                            if (!e.detail || (e.detail.value !== null && typeof e.detail.value !== 'object')) {
-                                throw new Error('model scoring: new score_dimensions expects object detail.value');
+                            if (!e.detail || typeof e.detail.value !== 'boolean') {
+                                throw new Error('model scoring: new enabled expects boolean detail.value');
                             }
-                            this._modelScoreNew = {
-                                ...this._modelScoreNew,
-                                score_dimensions: e.detail.value || {},
-                            };
+                            this._modelScoreNew = { ...this._modelScoreNew, enabled: e.detail.value };
                         }}
                     ></platform-field>
                     <platform-field

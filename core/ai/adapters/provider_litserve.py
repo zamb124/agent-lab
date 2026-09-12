@@ -32,7 +32,7 @@ class ProviderLitserveModelCatalogAdapter(BaseModelCatalogAdapter):
     @override
     async def list_models(self, *, probe_embeddings: bool = True) -> list[AIModelRecord]:
         if not self.is_configured():
-            return []
+            raise ValueError("provider_litserve model provider не настроен")
         payload = await self._fetch_provider_catalog_payload(
             url=f"{self._provider_litserve_openai_v1_base_url().rstrip('/')}/models",
             headers=self._provider_litserve_model_list_headers(),

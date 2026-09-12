@@ -7,6 +7,7 @@ import pytest
 
 from apps.flows.src.models import BranchConfig, Edge, FlowConfig, MergeMode
 from apps.flows.src.runtime.flow import Flow
+from core.flow_ui.templates import default_chat_document
 from tests.flows.durable_runtime_harness import run_flow, workflow_state
 
 
@@ -299,6 +300,7 @@ class TestFlowWithSkills:
             config={
                 "flow_id": config.flow_id,
                 "name": config.name,
+                "interface": default_chat_document().model_dump(mode="json"),
                 "entry": config.entry,
                 "nodes": config.nodes,
                 "edges": [
@@ -319,6 +321,7 @@ class TestFlowWithSkills:
             config={
                 "flow_id": config.flow_id,
                 "name": config.name,
+                "interface": default_chat_document().model_dump(mode="json"),
                 "entry": "skill_start",
                 "nodes": config.nodes,
                 "edges": [
@@ -343,6 +346,7 @@ class TestFlowWithSkills:
             config={
                 "flow_id": "var_flow",
                 "name": "Var Agent",
+                "interface": default_chat_document().model_dump(mode="json"),
                 "entry": "main",
                 "nodes": {
                     "main": {

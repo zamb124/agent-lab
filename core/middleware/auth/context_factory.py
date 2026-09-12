@@ -114,7 +114,6 @@ class ContextFactory:
                 "flow_ui_share_flow_id",
                 "flow_ui_share_branch_id",
                 "flow_ui_share_context_id",
-                "flow_ui_share_document_id",
                 "flow_ui_share_origin",
             ):
                 value = token_data.metadata.get(key)

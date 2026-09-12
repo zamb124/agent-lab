@@ -583,7 +583,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if request.method.upper() == "POST" and path in roots:
             return True
         if request.method.upper() in {"GET", "HEAD"} and any(
-            path == f"{root}/interface-profile" for root in roots
+            path == f"{root}/interface" for root in roots
         ):
             return True
         return False

@@ -86,7 +86,7 @@ class TestA2AArtifacts:
         assert "result" in data
         result = data["result"]
 
-        # Flow UI document always present; LLM stream is `response`; extracted JSON is `artifact`.
+        # Снимок state всегда присутствует; поток LLM — `response`; извлечённый JSON — `artifact`.
         assert "artifacts" in result
         assert result["artifacts"] is not None
         assert len(result["artifacts"]) > 0
@@ -94,7 +94,7 @@ class TestA2AArtifacts:
         artifact_by_name = {
             artifact["name"]: artifact for artifact in result["artifacts"] if "name" in artifact
         }
-        assert "ui.document" in artifact_by_name
+        assert "state" in artifact_by_name
         assert "response" in artifact_by_name
         assert "artifact" in artifact_by_name
         json_artifact = artifact_by_name["artifact"]
@@ -109,7 +109,7 @@ class TestA2AArtifacts:
         assert result["history"][0].get("taskId") is not None
 
     async def test_message_send_no_artifact_for_plain_text(self, client, mock_llm_with_queue, sync_tools, unique_id: str):
-        """Plain text: Flow UI + response stream present; no extracted JSON artifact."""
+        """Plain text: state и response присутствуют, извлечённого JSON-артефакта нет."""
         # Мок ответ без JSON
         mock_llm_with_queue([{"type": "text", "content": "Просто текстовый ответ без JSON"}])
 
@@ -140,7 +140,7 @@ class TestA2AArtifacts:
         artifact_by_name = {
             artifact["name"]: artifact for artifact in artifacts if "name" in artifact
         }
-        assert "ui.document" in artifact_by_name
+        assert "state" in artifact_by_name
         assert "response" in artifact_by_name
         assert "artifact" not in artifact_by_name
 

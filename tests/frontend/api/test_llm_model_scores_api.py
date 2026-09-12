@@ -5,7 +5,6 @@ from httpx import AsyncClient
 
 from core.ai.models import AIModelRecord
 from core.ai.providers import AICapability
-from core.ai.scoring import split_score_dimensions
 
 
 @pytest.mark.asyncio
@@ -56,7 +55,6 @@ async def test_llm_model_scores_api_upserts_lists_and_deletes_real_shared_row(
         "capability": "llm_chat",
         "enabled": True,
         "editorial_prior": 1.5,
-        "score_dimensions": {"coding": 77.5, "general_chat": 70.0},
         "note": "unit test",
     }
 
@@ -72,10 +70,13 @@ async def test_llm_model_scores_api_upserts_lists_and_deletes_real_shared_row(
     assert body["item"]["model_id"] == model_id
     assert body["item"]["capability"] == "llm_chat"
     assert body["item"]["score"] > 0.0
-    assert body["item"]["source"] == "manual"
     assert body["item"]["editorial_prior"] == 1.5
-    assert body["item"]["score_dimensions"] == {"coding": 77.5, "general_chat": 70.0}
+    assert body["item"]["note"] == "unit test"
+    assert body["item"]["enabled"] is True
+    assert body["item"]["has_overlay_row"] is True
     assert body["item"]["score_breakdown"]
+    assert "source" not in body["item"]
+    assert "score_dimensions" not in body["item"]
     assert "cache_rescore" in body
 
     row = await frontend_container.llm_model_score_repository.get(
@@ -84,10 +85,9 @@ async def test_llm_model_scores_api_upserts_lists_and_deletes_real_shared_row(
         capability="llm_chat",
     )
     assert row is not None
-    assert row.score > 0.0
-    editorial_prior, hint_dimensions = split_score_dimensions(row.score_dimensions)
-    assert editorial_prior == 1.5
-    assert hint_dimensions == {"coding": 77.5, "general_chat": 70.0}
+    assert row.editorial_prior == 1.5
+    assert row.enabled is True
+    assert row.note == "unit test"
 
     list_response = await frontend_client.get(
         "/frontend/api/platform/llm-model-scores",
@@ -113,69 +113,78 @@ async def test_llm_model_scores_api_upserts_lists_and_deletes_real_shared_row(
 
 
 @pytest.mark.asyncio
-async def test_llm_model_score_seed_is_create_once_unless_forced(
+async def test_llm_model_score_upsert_requires_catalog(
+    frontend_client: AsyncClient,
+    auth_headers_system,
+    unique_id: str,
+) -> None:
+    response = await frontend_client.put(
+        "/frontend/api/platform/llm-model-scores",
+        headers=auth_headers_system,
+        json={
+            "provider": "openrouter",
+            "model_id": f"missing/catalog-{unique_id}",
+            "capability": "llm_chat",
+            "enabled": True,
+            "editorial_prior": 0.0,
+        },
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_llm_model_score_editorial_prior_outside_cap_is_422(
+    frontend_client: AsyncClient,
+    auth_headers_system,
+    unique_id: str,
+) -> None:
+    response = await frontend_client.put(
+        "/frontend/api/platform/llm-model-scores",
+        headers=auth_headers_system,
+        json={
+            "provider": "openrouter",
+            "model_id": f"cap-{unique_id}",
+            "capability": "llm_chat",
+            "enabled": True,
+            "editorial_prior": 6,
+        },
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_llm_model_score_overlay_upsert_updates_existing_row(
     frontend_container,
     unique_id: str,
 ) -> None:
     provider = "github"
-    model_id = f"unit/seed-score-{unique_id}"
+    model_id = f"unit/overlay-{unique_id}"
     repo = frontend_container.llm_model_score_repository
 
-    created = await repo.seed_many(
-        [
-            {
-                "provider": provider,
-                "model_id": model_id,
-                "capability": "llm_chat",
-                "score_dimensions": {"general_chat": 10.0},
-                "enabled": True,
-                "note": "initial",
-            }
-        ],
-        force_refresh=False,
+    created = await repo.upsert_overlay(
+        provider=provider,
+        model_id=model_id,
+        capability="llm_chat",
+        enabled=True,
+        editorial_prior=1.0,
+        note="initial",
     )
-    assert created == {"created": 1, "updated": 0, "skipped": 0}
+    assert created.created is True
+    assert created.row.editorial_prior == 1.0
+    assert created.row.note == "initial"
 
-    skipped = await repo.seed_many(
-        [
-            {
-                "provider": provider,
-                "model_id": model_id,
-                "capability": "llm_chat",
-                "score_dimensions": {"general_chat": 99.0},
-                "enabled": True,
-                "note": "should not overwrite",
-            }
-        ],
-        force_refresh=False,
+    updated = await repo.upsert_overlay(
+        provider=provider,
+        model_id=model_id,
+        capability="llm_chat",
+        enabled=False,
+        editorial_prior=-1.0,
+        note="forced",
     )
     row = await repo.get(provider=provider, model_id=model_id, capability="llm_chat")
-    assert skipped == {"created": 0, "updated": 0, "skipped": 1}
+    assert updated.created is False
     assert row is not None
-    _, hint_dimensions = split_score_dimensions(row.score_dimensions)
-    assert hint_dimensions == {"general_chat": 10.0}
-    assert row.note == "initial"
-
-    forced = await repo.seed_many(
-        [
-            {
-                "provider": provider,
-                "model_id": model_id,
-                "capability": "llm_chat",
-                "score_dimensions": {"general_chat": 99.0},
-                "editorial_prior": -1.0,
-                "enabled": False,
-                "note": "forced",
-            }
-        ],
-        force_refresh=True,
-    )
-    row = await repo.get(provider=provider, model_id=model_id, capability="llm_chat")
-    assert forced == {"created": 0, "updated": 1, "skipped": 0}
-    assert row is not None
-    editorial_prior, hint_dimensions = split_score_dimensions(row.score_dimensions)
-    assert hint_dimensions == {"general_chat": 99.0}
-    assert editorial_prior == -1.0
+    assert row.editorial_prior == -1.0
     assert row.enabled is False
     assert row.note == "forced"
 

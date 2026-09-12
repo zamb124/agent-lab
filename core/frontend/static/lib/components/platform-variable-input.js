@@ -50,6 +50,8 @@ export class PlatformVariableInput extends PlatformElement {
         variableCatalog: { type: Array, attribute: false },
         /** Known `@state:` paths for autocomplete. */
         statePaths: { type: Array, attribute: false },
+        /** `at-ref` (`@var:`/`@state:`), `brace` (`{path}` шаблонов Flow UI) или `both`. */
+        syntax: { type: String },
     };
 
     static styles = [
@@ -132,6 +134,7 @@ export class PlatformVariableInput extends PlatformElement {
         this.statePreview = {};
         this.variableCatalog = [];
         this.statePaths = [];
+        this.syntax = 'at-ref';
         /** @type {object | null} */
         this._cmBundle = null;
         /** @type {object | null} */
@@ -256,7 +259,7 @@ export class PlatformVariableInput extends PlatformElement {
         const cm = this._cmBundle;
         const self = this;
         const variableExtensions = createVariableExtensions(cm, {
-            syntax: 'at-ref',
+            syntax: this.syntax,
             getValues: () => self._mergedValues(),
             getStatePreview: () => (
                 self.statePreview && typeof self.statePreview === 'object' && !Array.isArray(self.statePreview)

@@ -508,6 +508,57 @@ class TestA2AMessageStream:
         ]
         assert len(final_events) > 0, "Stream MUST contain terminal statusUpdate"
 
+    @pytest.mark.asyncio
+    async def test_stream_opens_with_submitted_task_snapshot(
+        self, client, flow_id, mock_llm_with_queue, sync_tools, unique_id
+    ):
+        """Первый кадр — Task (SUBMITTED, history с ходом пользователя, без артефактов);
+        дальше только status/artifact события, текст ответа собирается без дублей."""
+        user_text = f"Snapshot first {unique_id}"
+        reply = f"Reply {unique_id}"
+        mock_llm_with_queue([reply])
+        message = _msg(user_text)
+        resp = await client.post(
+            f"/flows/api/v1/{flow_id}",
+            headers=A2A_HEADERS,
+            json={
+                "jsonrpc": "2.0",
+                "id": "1",
+                "method": "SendStreamingMessage",
+                "params": {"message": message},
+            },
+        )
+        assert resp.status_code == 200
+        events = _parse_sse(resp.text)
+        assert len(events) >= 2
+        first = events[0]["result"]
+        assert set(first.keys()) == {"task"}, f"first frame MUST be Task, got {sorted(first)}"
+        snapshot = first["task"]
+        _validate_task(snapshot, require_history=True)
+        assert snapshot["status"]["state"] == "TASK_STATE_SUBMITTED"
+        assert snapshot.get("artifacts", []) == []
+        user_messages = [m for m in snapshot["history"] if m["role"] == "ROLE_USER"]
+        assert [m["messageId"] for m in user_messages] == [message["messageId"]]
+        assert user_messages[0]["taskId"] == snapshot["id"]
+        assert user_messages[0]["parts"] == [{"text": user_text}]
+        for event in events[1:]:
+            result = event["result"]
+            assert "task" not in result, "Task snapshot MUST be sent exactly once"
+            _, kind = _stream_payload(result)
+            assert (result[kind]["taskId"], result[kind]["contextId"]) == (
+                snapshot["id"],
+                snapshot["contextId"],
+            )
+        response_text = "".join(
+            part["text"]
+            for event in events[1:]
+            if "artifactUpdate" in event["result"]
+            and event["result"]["artifactUpdate"]["artifact"].get("name") == "response"
+            for part in event["result"]["artifactUpdate"]["artifact"]["parts"]
+            if "text" in part
+        )
+        assert response_text == reply
+
 
 class TestA2AInterrupt:
     """Тесты interrupt (input-required) - строгая проверка."""

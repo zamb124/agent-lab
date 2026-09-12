@@ -20,14 +20,31 @@ from a2a.types import (
 )
 from google.protobuf.struct_pb2 import Struct
 
-from apps.flows.src.a2a.representation_service import FlowUIRepresentationService
 from apps.flows.src.runtime.message_author import build_flow_message_author
 from core.a2a import make_task_status
 from core.a2a.codec import struct_from_mapping
+from core.flow_ui.document import FlowUIDocument, iter_blocks
+from core.flow_ui.projection import (
+    block_paths,
+    json_patch_operations,
+    project_state,
+    referenced_paths,
+)
+from core.flow_ui.protocol import (
+    CONVERSATION_SLOT_ID,
+    FLOW_UI_MEDIA_TYPE,
+    JSON_MEDIA_TYPE,
+    JSON_PATCH_MEDIA_TYPE,
+    REASONING_ARTIFACT_NAME,
+    RESPONSE_ARTIFACT_NAME,
+    STATE_ARTIFACT_ID,
+    UI_ARTIFACT_ID,
+    FlowUIEvent,
+    FlowUIRender,
+)
 from core.state import ExecutionState
-from core.state.flow_ui import FlowUITransition
 from core.state.interrupt import InterruptKind
-from core.types import JsonArray, JsonObject, JsonValue, parse_json_object
+from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
 if TYPE_CHECKING:
     from core.state import InterruptData
@@ -68,9 +85,9 @@ class BaseEmitter(ABC):
         self._node_run_counts: dict[str, int] = {}
         self._artifact_stream_ids: dict[str, str] = {}
         self._closed_artifact_streams: set[str] = set()
-        self._flow_ui_representation: FlowUIRepresentationService = (
-            FlowUIRepresentationService()
-        )
+        self._state_projection: JsonObject | None = None
+        self._conversation_paths: set[str] = set()
+        self._ui_artifact_started: bool = False
 
     def next_node_run_index(self, node_id: str) -> int:
         current = self._node_run_counts.get(node_id, 0)
@@ -110,7 +127,7 @@ class BaseEmitter(ABC):
         append: bool = True,
         last_chunk: bool = False,
         *,
-        artifact_name: str = "response",
+        artifact_name: str = RESPONSE_ARTIFACT_NAME,
     ) -> None:
         """Публикует текстовый чанк (LLM: response; оператор: operator_reply)."""
         artifact = Artifact(
@@ -135,46 +152,9 @@ class BaseEmitter(ABC):
         if last_chunk:
             self._closed_artifact_streams.add(artifact_name)
 
-    async def emit_user_message(
-        self,
-        text: str,
-        *,
-        mutation_id: str,
-        files: JsonArray | None = None,
-    ) -> None:
-        """Per-turn user bubble Artifact.
-
-        `metadata.mutation_id` — идентичность submit'а: клиент строго по ней
-        consume'ит optimistic pending turn (никакого текстового сравнения).
-        """
-        if mutation_id.strip() == "":
-            raise ValueError("emit_user_message requires mutation_id")
-        parts: list[Part] = []
-        if text != "":
-            parts.append(_text_part(text))
-        if files:
-            parts.append(_data_part({"files": files}))
-        if not parts:
-            raise ValueError("emit_user_message requires text or files")
-        artifact = Artifact(
-            artifact_id=self._artifact_stream_id("user_message"),
-            name="user_message",
-            parts=parts,
-        )
-        _apply_struct_metadata(artifact.metadata, {"mutation_id": mutation_id})
-        event = TaskArtifactUpdateEvent(
-            task_id=self.state.task_id,
-            context_id=self.state.context_id,
-            artifact=artifact,
-            append=False,
-            last_chunk=True,
-        )
-        await self._publish(event)
-        self._closed_artifact_streams.add("user_message")
-
     async def emit_reasoning(self, text: str) -> None:
         """Публикует чанк reasoning (тот же контракт, что emit_text с именем артефакта reasoning)."""
-        await self.emit_text(text, append=True, last_chunk=False, artifact_name="reasoning")
+        await self.emit_text(text, append=True, last_chunk=False, artifact_name=REASONING_ARTIFACT_NAME)
 
     async def emit_tool_call(
         self,
@@ -576,54 +556,63 @@ class BaseEmitter(ABC):
         if last_chunk and artifact.name.strip() != "":
             self._closed_artifact_streams.add(artifact.name)
 
-    async def emit_flow_ui_transition(self, transition: FlowUITransition) -> None:
-        """Encode one accepted domain transition into exactly one negotiated representation."""
-        artifacts = self._flow_ui_representation.encode_transition(
-            transition,
-            self.state.a2a_representation,
+    async def emit_state(self, interface: FlowUIDocument) -> None:
+        """Проекция state по путям интерфейса: первый вызов в Task — snapshot, дальше — JSON Patch."""
+        paths = set(referenced_paths(interface, self.state.ui_slots)) | self._conversation_paths
+        state_json = require_json_object(
+            self.state.model_dump(mode="json", exclude_none=False),
+            "ExecutionState",
         )
-        for artifact in artifacts:
-            event = TaskArtifactUpdateEvent(
+        projection = project_state(state_json, paths)
+        previous = self._state_projection
+        if previous is None:
+            part = _data_part(projection)
+            part.media_type = JSON_MEDIA_TYPE
+            append = False
+        else:
+            operations = json_patch_operations(previous, projection)
+            if not operations:
+                return
+            part = new_data_part([operation.model_dump(mode="json") for operation in operations])
+            part.media_type = JSON_PATCH_MEDIA_TYPE
+            append = True
+        self._state_projection = projection
+        await self._publish(
+            TaskArtifactUpdateEvent(
                 task_id=self.state.task_id,
                 context_id=self.state.context_id,
-                artifact=artifact,
-                append=False,
+                artifact=Artifact(artifact_id=STATE_ARTIFACT_ID, name=STATE_ARTIFACT_ID, parts=[part]),
+                append=append,
                 last_chunk=False,
-                metadata=struct_from_mapping(
-                    {
-                        "platformEventId": (
-                            f"flow-ui:{transition.transition_id}:{artifact.artifact_id}"
-                        )
-                    }
-                ),
             )
-            await self._publish(event)
+        )
 
-    async def emit_flow_ui_snapshot(self) -> None:
-        """Publish the authoritative current screen for bootstrap/reconnect."""
-        artifacts = self._flow_ui_representation.encode_snapshot(
-            self.state.ui_document,
-            self.state.a2a_representation,
-        )
-        for artifact in artifacts:
-            event = TaskArtifactUpdateEvent(
+    async def emit_ui_event(self, event: FlowUIEvent) -> None:
+        """Render/navigate агента одним Part артефакта ``ui``; рендер в ленту расширяет проекцию state."""
+        if isinstance(event, FlowUIRender) and event.slot_id == CONVERSATION_SLOT_ID:
+            for block in iter_blocks(event.blocks):
+                self._conversation_paths.update(block_paths(block))
+        part = _data_part(event.model_dump(mode="json"))
+        part.media_type = FLOW_UI_MEDIA_TYPE
+        await self._publish(
+            TaskArtifactUpdateEvent(
                 task_id=self.state.task_id,
                 context_id=self.state.context_id,
-                artifact=artifact,
-                append=False,
-                # Stable Flow UI artifact_id is replaced across the Task lifetime;
-                # lastChunk would forbid later document revisions.
+                artifact=Artifact(artifact_id=UI_ARTIFACT_ID, name=UI_ARTIFACT_ID, parts=[part]),
+                append=self._ui_artifact_started,
                 last_chunk=False,
-                metadata=struct_from_mapping(
-                    {
-                        "platformEventId": (
-                            f"flow-ui:snapshot:{self.state.task_id}:"
-                            f"{self.state.ui_document.revision}:{artifact.artifact_id}"
-                        )
-                    }
-                ),
             )
-            await self._publish(event)
+        )
+        self._ui_artifact_started = True
+
+    async def emit_ui_events(self, events: list[FlowUIEvent]) -> None:
+        for event in events:
+            await self.emit_ui_event(event)
+
+    async def flush_ui(self, interface: FlowUIDocument) -> None:
+        """Точка публикации runtime: накопленные ui-события, затем изменения state."""
+        await self.emit_ui_events(self.state.drain_ui_events())
+        await self.emit_state(interface)
 
     async def emit_breakpoint(
         self,

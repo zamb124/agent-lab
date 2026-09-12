@@ -108,10 +108,6 @@ export function dispatchFlowUIWindowToggle(eventName, detail) {
     globalThis.dispatchEvent(new CustomEvent(eventName, { detail: payload }));
 }
 
-export function toggleLinnexFlowUI(detail = {}) {
-    dispatchFlowUIWindowToggle(FLOW_UI_TOGGLE_EVENT, detail);
-}
-
 export function openPlatformLaraAssistant() {
     dispatchFlowUIWindowToggle(PLATFORM_LARA_TOGGLE_EVENT, { open: true });
 }

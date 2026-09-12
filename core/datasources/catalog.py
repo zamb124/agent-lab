@@ -40,7 +40,7 @@ POSTGRES_CONNECTOR = DatasourceConnectorSpec(
     name="PostgreSQL",
     description="SQL query/schema к живой базе Postgres",
     executor=DatasourceExecutorKind.PLATFORM,
-    icon="database",
+    icon="postgres",
     credential_schema=_SQL_CREDENTIAL_SCHEMA,
     operations=list(_SQL_OPERATIONS),
 )
@@ -50,7 +50,7 @@ MYSQL_CONNECTOR = DatasourceConnectorSpec(
     name="MySQL",
     description="SQL query/schema к живой базе MySQL",
     executor=DatasourceExecutorKind.PLATFORM,
-    icon="database",
+    icon="mysql",
     credential_schema=_SQL_CREDENTIAL_SCHEMA,
     operations=list(_SQL_OPERATIONS),
 )
@@ -60,7 +60,7 @@ CLICKHOUSE_CONNECTOR = DatasourceConnectorSpec(
     name="ClickHouse",
     description="SQL query/schema к живой базе ClickHouse",
     executor=DatasourceExecutorKind.PLATFORM,
-    icon="database",
+    icon="clickhouse",
     credential_schema=_SQL_CREDENTIAL_SCHEMA,
     operations=list(_SQL_OPERATIONS),
 )

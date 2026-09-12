@@ -12,13 +12,13 @@
 
 import { createAsyncOp, HttpError, httpRequest } from '@platform/lib/events/index.js';
 import {
-    extractA2aTextFromParts as _extractA2aTextFromParts,
-    isA2aStreamBoundaryState as _isStreamBoundaryState,
+    consumeA2AStream as consumeA2aStream,
+    isSettledTaskState as _isStreamBoundaryState,
     resolveA2aContextId as _resolveStreamContextId,
     resolveA2aTaskId as _resolveStreamTaskId,
     unwrapA2aStreamResult as _unwrapA2aStreamResult,
-} from '@platform/lib/flow-ui/protocol/a2a-result-helpers.js';
-import { consumeA2AStream as consumeA2aStream } from '@platform/lib/flow-ui/protocol/a2a-stream.js';
+} from '@platform/lib/flow-ui/protocol/a2a-stream.js';
+import { textFromParts as _extractA2aTextFromParts } from '@platform/lib/flow-ui/protocol/parts.js';
 
 const EMPTY_LIST = Object.freeze([]);
 const EMPTY_OBJECT = Object.freeze({});

@@ -354,7 +354,7 @@ Ledger также является источником истины для A2A 
 
 Commit/publication order один: validate → append event → update execution/task/artifact/UI projection + outbox atomically → commit → publish Redis/SSE → acknowledge. `GetTask`/`ListTasks`/`SubscribeToTask` читают projection; запрещено восстанавливать Task только из последнего `state.response`.
 
-Flow UI events содержат semantic delta, `mutation_id`, `base_revision`, accepted revision, causation и deterministic hash. Autosync, forced flush перед Submit/share и Submit+sync являются durable commands с OCC/idempotency. Rebuild обязан давать тот же document/artifact order/hash. Share grant фиксирует существующий context/document, но не копирует snapshot и не создаёт workflow branch.
+Flow UI не добавляет своих ledger-событий: `ui-action` записывается в state до durable commit хода (ввод пользователя целиком, не только текст), артефакты `state`/`ui` — обычные `TaskArtifactUpdateEvent` в task/artifact projection. Rebuild обязан давать тот же artifact order/Parts. Share grant фиксирует существующий `context_id`, но не копирует snapshot и не создаёт workflow branch.
 
 ## Запреты
 

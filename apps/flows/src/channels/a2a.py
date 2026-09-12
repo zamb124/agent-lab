@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import uuid
 from collections.abc import AsyncGenerator
 from typing import override
 
@@ -30,12 +29,10 @@ from a2a.types import (
 )
 
 from apps.flows.config import get_settings as get_flows_settings
-from apps.flows.src.a2a.interaction_parser import (
-    FlowUIIngressKind,
-    parse_flow_ui_command,
+from apps.flows.src.a2a.share_task_redaction import (
+    artifact_event_for_share_viewer,
+    task_for_share_viewer,
 )
-from apps.flows.src.a2a.negotiation import A2ARepresentationSelector
-from apps.flows.src.a2a.share_task_redaction import task_with_share_redaction
 from apps.flows.src.channels.base import BaseChannel
 from apps.flows.src.channels.types import ChannelRequestContext, PreparedTaskParams
 from apps.flows.src.container_contracts import FlowRuntimeContainer
@@ -49,10 +46,9 @@ from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.state.cancellation import CANCEL_KEY_TTL
 from apps.flows.src.streaming import Emitter
 from apps.flows.src.streaming.base import StreamEvent
-from apps.flows.src.streaming.subscriber import EventSubscriber
+from apps.flows.src.streaming.subscriber import EventSubscriber, event_platform_sequence
 from apps.idle_worker.tasks.task_names import TASK_SEND_TASK_UPDATE
 from core.a2a import (
-    A2ARepresentation,
     is_interrupted_a2a_task_state,
     is_terminal_a2a_task_state,
     mapping_from_struct,
@@ -63,8 +59,9 @@ from core.context import Context, require_context, set_current_channel
 from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.file_ref import FileRef, file_id_from_download_url
 from core.files.registry import default_retention_for_source
+from core.flow_ui.action import ui_action_from_message
+from core.flow_ui.projection import assert_fields_outside_redacted
 from core.logging import get_logger
-from core.models.flow_interface import EmbedInterfaceOverride
 from core.models.flow_ui_share import FlowUIShareGrant
 from core.state import ExecutionState
 from core.state.interrupt import OperatorTaskInterrupt
@@ -134,16 +131,19 @@ def _branch_id_from_message_metadata(metadata: JsonObject | None) -> str:
     return branch.strip()
 
 
+def _stream_event_for_share_viewer(
+    event: StreamEvent, grant: FlowUIShareGrant | None
+) -> StreamEvent:
+    if isinstance(event, TaskArtifactUpdateEvent):
+        return artifact_event_for_share_viewer(event, grant)
+    return event
+
+
 def _should_return_immediately(params: SendMessageRequest) -> bool:
     """A2A 1.0: SendMessageConfiguration.return_immediately (default false = blocking)."""
     if not params.HasField("configuration"):
         return False
     return bool(params.configuration.return_immediately)
-
-
-def _flow_ui_task_id(context_id: str, action_id: str) -> str:
-    """Stable A2A Task identity for retries of one UI command."""
-    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"linnex:flow-ui:{context_id}:{action_id}"))
 
 
 class A2AChannel(BaseChannel):
@@ -158,17 +158,13 @@ class A2AChannel(BaseChannel):
         flow_config: FlowConfig | None = None,
         *,
         container: FlowRuntimeContainer,
-        activated_extensions: tuple[str, ...] = (),
-        interface_override: EmbedInterfaceOverride | None = None,
     ) -> None:
         super().__init__(
             flow_id,
             context=context,
             flow_config=flow_config,
             container=container,
-            interface_override=interface_override,
         )
-        self._activated_extensions: tuple[str, ...] = activated_extensions
 
     def _share_grant_id(self) -> str | None:
         raw = self.context.metadata.get("flow_ui_share_grant_id") if self.context else None
@@ -178,7 +174,6 @@ class A2AChannel(BaseChannel):
         self,
         *,
         context_id: str,
-        document_id: str | None = None,
         require_editor: bool,
     ) -> FlowUIShareGrant | None:
         grant_id = self._share_grant_id()
@@ -191,28 +186,7 @@ class A2AChannel(BaseChannel):
             company_id=self.context.active_company.company_id,
             flow_id=self.flow_id,
             context_id=context_id,
-            document_id=document_id,
             require_editor=require_editor,
-        )
-
-    async def _task_for_share_viewer(
-        self,
-        task: Task,
-        grant: FlowUIShareGrant | None,
-    ) -> Task:
-        if grant is None or not grant.redacted_value_paths:
-            return task
-        state = await self.container.workflow_runtime.get_state(
-            f"{self.flow_id}:{task.context_id}",
-            company_id=grant.company_id,
-        )
-        if state is None:
-            raise PermissionError("Shared Flow UI session no longer exists")
-        return task_with_share_redaction(
-            task,
-            grant=grant,
-            document=state.ui_document,
-            representation=state.a2a_representation,
         )
 
     async def _authorize_message_or_permissions(
@@ -229,17 +203,11 @@ class A2AChannel(BaseChannel):
                 _branch_id_from_message_metadata(metadata),
             )
             return None
-        command = parse_flow_ui_command(params.message)
-        if command is None:
-            raise PermissionError("Shared sessions accept only Flow UI A2A commands")
+        # Любое сообщение продолжает чужую сессию — нужен editor grant на её context_id.
         context_id = params.message.context_id.strip()
         if not context_id:
-            raise PermissionError("Shared Flow UI commands require context_id")
-        return await self._authorize_share(
-            context_id=context_id,
-            document_id=command.document_id,
-            require_editor=command.kind != FlowUIIngressKind.BOOTSTRAP,
-        )
+            raise PermissionError("Shared sessions require message.context_id")
+        return await self._authorize_share(context_id=context_id, require_editor=True)
 
     def _task_access_scope(self) -> tuple[str, str]:
         context = require_context()
@@ -327,7 +295,7 @@ class A2AChannel(BaseChannel):
                 )
         if task is None:
             return None
-        return await self._task_for_share_viewer(task, grant)
+        return task_for_share_viewer(task, grant)
 
     async def _projected_task(self, task_id: str) -> Task:
         task = await self._load_projected_task(task_id)
@@ -338,8 +306,36 @@ class A2AChannel(BaseChannel):
     async def _prior_projection(self, task_id: str) -> Task | None:
         return await self._load_projected_task(task_id)
 
+    async def _submitted_task_snapshot(
+        self, task_id: str, *, grant: FlowUIShareGrant | None
+    ) -> Task:
+        """Sequence-0 Task хода (SUBMITTED, history, без артефактов) для первого кадра стрима.
+
+        Доступ уже проверен ``_projected_task``; здесь только чтение ledger в scope компании.
+        """
+        company_id, _ = self._task_access_scope()
+        snapshot = await self.container.a2a_task_repository.get_submitted_task(
+            company_id=company_id,
+            task_id=task_id,
+        )
+        if snapshot is None:
+            raise RuntimeError(f"Durable A2A Task {task_id!r} has no submitted snapshot")
+        return task_for_share_viewer(snapshot, grant)
+
+    async def _share_grant_for_context(self, context_id: str) -> FlowUIShareGrant | None:
+        if self._share_grant_id() is None:
+            return None
+        return await self._authorize_share(context_id=context_id, require_editor=False)
+
+    async def _latest_sequence(self, task_id: str) -> int:
+        company_id, _ = self._task_access_scope()
+        return await self.container.a2a_task_repository.get_latest_sequence(
+            company_id=company_id,
+            task_id=task_id,
+        )
+
     async def _replay_durable_stream_events(
-        self, task_id: str, *, after_sequence: int = 0
+        self, task_id: str, *, grant: FlowUIShareGrant | None, after_sequence: int = 0
     ) -> AsyncGenerator[StreamEvent, None]:
         """Yield lossless status/artifact updates from the durable A2A ledger."""
         company_id, _ = self._task_access_scope()
@@ -349,7 +345,7 @@ class A2AChannel(BaseChannel):
             after_sequence=after_sequence,
         )
         for stored in stored_events:
-            yield stored.event
+            yield _stream_event_for_share_viewer(stored.event, grant)
 
     @override
     async def send_to_user(
@@ -528,11 +524,16 @@ class A2AChannel(BaseChannel):
         )
 
     async def _prepare_a2a_params(
-        self, params: SendMessageRequest, metadata: JsonObject | None = None
+        self,
+        params: SendMessageRequest,
+        metadata: JsonObject | None,
+        share_grant: FlowUIShareGrant | None,
     ) -> PreparedTaskParams:
         message = params.message
         content = get_message_text(message)
-        flow_ui_command = parse_flow_ui_command(message)
+        ui_action = ui_action_from_message(message)
+        if ui_action is not None and share_grant is not None:
+            assert_fields_outside_redacted(ui_action.fields, share_grant.redacted_paths)
 
         files_data, files_content_suffix = await self._persist_incoming_a2a_files(message)
         if files_data:
@@ -542,141 +543,16 @@ class A2AChannel(BaseChannel):
         if files_content_suffix:
             content += files_content_suffix
 
-        representation = A2ARepresentationSelector().select(
-            activated_extensions=self._activated_extensions,
-            message_metadata=(
-                mapping_from_struct(message.metadata)
-                if message.HasField("metadata")
-                else {}
-            ),
-            accepted_output_modes=(
-                params.configuration.accepted_output_modes
-                if params.HasField("configuration")
-                else ()
-            ),
-        )
-        if (
-            flow_ui_command is not None
-            and representation.representation != A2ARepresentation.A2UI_0_9_1
-        ):
-            raise ValueError(
-                "Flow UI commands require activated A2UI v0.9.1 capabilities"
-            )
-        resolved_context_id = message.context_id or None
-        resolved_task_id = message.task_id or None
-        if flow_ui_command is not None:
-            if resolved_context_id is None:
-                raise ValueError("Flow UI commands require message.context_id")
-            if resolved_task_id is None:
-                resolved_task_id = _flow_ui_task_id(
-                    resolved_context_id,
-                    flow_ui_command.action_id,
-                )
-
-        prepared = await self._prepare_task_params(
+        return await self._prepare_task_params(
             content=content,
-            context_id=resolved_context_id,
-            task_id=resolved_task_id,
+            context_id=message.context_id or None,
+            task_id=message.task_id or None,
             message=message,
-            metadata=metadata if metadata is not None else _message_metadata(params),
+            metadata=metadata,
             files_data=files_data,
-            a2a_representation=representation,
-            flow_ui_command=flow_ui_command,
-        )
-        return prepared
-
-    async def _process_flow_ui_control(self, prepared: PreparedTaskParams) -> Task:
-        command = prepared.flow_ui_command
-        if command is None or command.kind == FlowUIIngressKind.SUBMIT:
-            raise ValueError("Flow UI control handler requires bootstrap or sync")
-        if self.context is None or self.context.active_company is None:
-            raise ValueError("Flow UI control command requires active company context")
-
-        service = self.container.flow_ui_session_service
-        share_grant = await self._authorize_share(
-            context_id=prepared.context_id,
-            document_id=command.document_id,
-            require_editor=command.kind != FlowUIIngressKind.BOOTSTRAP,
-        )
-        if command.kind == FlowUIIngressKind.BOOTSTRAP:
-            initial_document = await self._initial_flow_ui_document(
-                flow_id=self.flow_id,
-                branch_id=prepared.branch_id,
-                context_id=prepared.context_id,
-            )
-            result = await service.bootstrap(
-                command=command,
-                task_id=prepared.task_id,
-                context_id=prepared.context_id,
-                session_id=prepared.session_id,
-                user_id=self.context.user.user_id,
-                initiator_user_id=self.context.user.user_id,
-                branch_id=prepared.branch_id,
-                initial_document=initial_document,
-                representation=prepared.a2a_representation,
-                share_grant=share_grant,
-            )
-        else:
-            result = await service.sync(
-                command=command,
-                task_id=prepared.task_id,
-                context_id=prepared.context_id,
-                session_id=prepared.session_id,
-                user_id=self.context.user.user_id,
-                share_grant=share_grant,
-            )
-
-        if not result.was_applied:
-            try:
-                return await self._projected_task(prepared.task_id)
-            except RuntimeError:
-                pass
-
-        emission_state = result.state.runtime_copy()
-        emission_state.task_id = prepared.task_id
-        emission_state.context_id = prepared.context_id
-        emission_state.session_id = prepared.session_id
-        emission_state.a2a_representation = prepared.a2a_representation
-        await self._ensure_a2a_task_projection(
-            params=prepared,
-            state=emission_state,
-            company_id=self.context.active_company.company_id,
-        )
-        emitter = Emitter.from_container(self.container, emission_state)
-        if result.transition is None:
-            await emitter.emit_flow_ui_snapshot()
-        else:
-            await emitter.emit_flow_ui_transition(result.transition)
-        await emitter.emit_complete("", has_artifact=True)
-        return await self._projected_task(prepared.task_id)
-
-    async def _apply_flow_ui_submit(self, prepared: PreparedTaskParams) -> bool:
-        command = prepared.flow_ui_command
-        if command is None or command.kind != FlowUIIngressKind.SUBMIT:
-            return True
-        if self.context is None:
-            raise ValueError("Flow UI submit requires request context")
-        share_grant = await self._authorize_share(
-            context_id=prepared.context_id,
-            document_id=command.document_id,
-            require_editor=True,
-        )
-        result = await self.container.flow_ui_session_service.submit(
-            command=command,
-            task_id=prepared.task_id,
-            context_id=prepared.context_id,
-            session_id=prepared.session_id,
-            user_id=self.context.user.user_id,
-            representation=prepared.a2a_representation,
+            ui_action=ui_action,
             share_grant=share_grant,
         )
-        prepared.content = result.content
-        # Ledger may open/assign the action-scoped task_id; stream subscribe and
-        # worker kick must use the same id (not a stale prepare-time override).
-        if result.state.task_id.strip() == "":
-            raise ValueError("Flow UI submit left ExecutionState.task_id empty")
-        prepared.task_id = result.state.task_id
-        return result.was_applied
 
     async def _register_push_from_send_configuration(
         self,
@@ -710,16 +586,10 @@ class A2AChannel(BaseChannel):
         set_current_channel(self)
 
         metadata = _message_metadata(params)
-        _ = await self._authorize_message_or_permissions(params, context, metadata)
+        grant = await self._authorize_message_or_permissions(params, context, metadata)
 
-        prepared = await self._prepare_a2a_params(params, metadata)
+        prepared = await self._prepare_a2a_params(params, metadata, grant)
         await self._register_push_from_send_configuration(params, task_id=prepared.task_id)
-
-        command = prepared.flow_ui_command
-        if command is not None and command.kind != FlowUIIngressKind.SUBMIT:
-            return await self._process_flow_ui_control(prepared)
-        if command is not None and not await self._apply_flow_ui_submit(prepared):
-            return await self._projected_task(prepared.task_id)
 
         if prepared.is_takeover_user_reply:
             closing: TaskStatusUpdateEvent | None = None
@@ -770,34 +640,39 @@ class A2AChannel(BaseChannel):
         set_current_channel(self)
 
         metadata = _message_metadata(params)
-        _ = await self._authorize_message_or_permissions(params, context, metadata)
+        grant = await self._authorize_message_or_permissions(params, context, metadata)
 
-        prepared = await self._prepare_a2a_params(params, metadata)
+        prepared = await self._prepare_a2a_params(params, metadata, grant)
         await self._register_push_from_send_configuration(params, task_id=prepared.task_id)
-
-        command = prepared.flow_ui_command
-        if command is not None and command.kind != FlowUIIngressKind.SUBMIT:
-            yield await self._process_flow_ui_control(prepared)
-            return
-        if command is not None and not await self._apply_flow_ui_submit(prepared):
-            yield await self._projected_task(prepared.task_id)
-            return
 
         if prepared.is_takeover_user_reply:
             async for event in self._handle_takeover_user_reply(prepared):
                 yield event
             return
+        share_grant = await self._share_grant_for_context(prepared.context_id)
 
         logger.info(
             f"[on_message_stream] Prepared task_id={prepared.task_id}, subscribing to Redis..."
         )
+        # A2A 1.0: первый кадр SendStreamingMessage — сам Task, дальше только события с
+        # sequence > snapshot. Новый Task: snapshot sequence 0 (SUBMITTED, history с сообщением
+        # пользователя, без артефактов). Возобновляемый Task (resume после interrupt): прежняя
+        # проекция и события только этого хода. Так клиент собирает Task без дублей независимо
+        # от того, успел ли worker опубликовать события до отправки snapshot.
         prior = await self._prior_projection(prepared.task_id)
+        snapshot_sequence = (
+            0 if prior is None else await self._latest_sequence(prepared.task_id)
+        )
         subscriber = EventSubscriber(self.container.redis_client)
         event_queue: asyncio.Queue[StreamEvent | None] = asyncio.Queue()
         ready_event = asyncio.Event()
 
         async def collect_events() -> None:
-            async for event in subscriber.subscribe(prepared.task_id, ready_event=ready_event):
+            async for event in subscriber.subscribe(
+                prepared.task_id,
+                ready_event=ready_event,
+                after_sequence=snapshot_sequence,
+            ):
                 await event_queue.put(event)
             await event_queue.put(None)
 
@@ -809,6 +684,11 @@ class A2AChannel(BaseChannel):
 
             await self.create_task(prepared)
             projected = await self._projected_task(prepared.task_id)
+            yield (
+                prior
+                if prior is not None
+                else await self._submitted_task_snapshot(prepared.task_id, grant=share_grant)
+            )
             if _this_send_finished_in_process(prior, projected):
                 # In-process enqueue (sync_tools) finishes before the live
                 # listener reads Redis: Pub/Sub is not a queue and drops.
@@ -816,7 +696,11 @@ class A2AChannel(BaseChannel):
                 _ = collect_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await collect_task
-                async for event in self._replay_durable_stream_events(prepared.task_id):
+                async for event in self._replay_durable_stream_events(
+                    prepared.task_id,
+                    grant=share_grant,
+                    after_sequence=snapshot_sequence,
+                ):
                     yield event
                 return
 
@@ -824,7 +708,7 @@ class A2AChannel(BaseChannel):
                 event = await event_queue.get()
                 if event is None:
                     break
-                yield event
+                yield _stream_event_for_share_viewer(event, share_grant)
             await collect_task
         finally:
             if not collect_task.done():
@@ -894,7 +778,7 @@ class A2AChannel(BaseChannel):
             kept = list(task.history)[-params.history_length :]
             del task.history[:]
             task.history.extend(kept)
-        return await self._task_for_share_viewer(task, grant)
+        return task_for_share_viewer(task, grant)
 
     @override
     async def on_cancel_task(
@@ -954,68 +838,70 @@ class A2AChannel(BaseChannel):
         self,
         params: SubscribeToTaskRequest,
         context: ChannelRequestContext = None,
-        *,
-        after_sequence: int = 0,
     ) -> AsyncGenerator[Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent, None]:
-        """Snapshot Task, durable replay (afterSequence, N], then live Redis tail."""
+        """Snapshot Task (sequence S), then live Redis tail of events with sequence > S.
+
+        Подписка на Redis открывается до чтения snapshot: между snapshot и хвостом нет окна
+        потери, а события с sequence <= S уже учтены в snapshot и не отдаются повторно —
+        клиент собирает Task из snapshot и хвоста без дублей частей артефактов.
+        """
         _ = context
-        if after_sequence < 0:
-            raise ValueError("after_sequence must be >= 0")
         set_current_channel(self)
         task = await self.on_get_task(GetTaskRequest(id=params.id))
         if task is None:
             return
-        yield task
-
-        grant_id = self._share_grant_id()
-        if grant_id is not None:
-            grant = await self._authorize_share(
-                context_id=task.context_id,
-                require_editor=False,
-            )
-            if grant is not None and grant.redacted_value_paths:
-                # Raw durable/live Artifact events still carry owner-truthful
-                # values. Share viewers with redaction receive only the
-                # redacted snapshot Task above — never unfiltered replay/tail.
-                return
-
-        ctx = require_context()
-        if ctx.active_company is None:
-            raise ValueError("SubscribeToTask requires active_company")
-        company_id = ctx.active_company.company_id
-        stored_events = await self.container.a2a_task_repository.list_events_after_sequence(
-            company_id=company_id,
-            task_id=task.id,
-            after_sequence=after_sequence,
-        )
-        latest_sequence = 0
-        for stored in stored_events:
-            latest_sequence = stored.sequence
-            yield stored.event
-
         if not _task_needs_live_subscribe_tail(task):
+            yield task
             return
 
+        grant = await self._share_grant_for_context(task.context_id)
+        company_id, _ = self._task_access_scope()
         timeout = (
             120.0 if is_testing() else float(get_flows_settings().default_flow_timeout_seconds)
         )
         subscriber = EventSubscriber(self.container.redis_client)
-        live_after_sequence = latest_sequence if stored_events else after_sequence
-        logger.info(
-            "a2a.subscribe.live_tail",
-            task_id=task.id,
-            task_state=task.status.state if task.HasField("status") else None,
-            after_sequence=after_sequence,
-            live_after_sequence=live_after_sequence,
-            replayed_events=len(stored_events),
-            timeout_seconds=timeout,
-        )
-        async for event in subscriber.subscribe(
-            task.id,
-            timeout=timeout,
-            after_sequence=live_after_sequence,
-        ):
-            yield event
+        event_queue: asyncio.Queue[StreamEvent | None] = asyncio.Queue()
+        ready_event = asyncio.Event()
+
+        async def collect_events() -> None:
+            async for event in subscriber.subscribe(
+                task.id, timeout=timeout, ready_event=ready_event
+            ):
+                await event_queue.put(event)
+            await event_queue.put(None)
+
+        collect_task = asyncio.create_task(collect_events())
+        try:
+            _ = await ready_event.wait()
+            snapshot, snapshot_sequence = (
+                await self.container.a2a_task_repository.get_task_with_sequence(
+                    company_id=company_id,
+                    task_id=task.id,
+                )
+            )
+            yield task_for_share_viewer(snapshot, grant)
+            if not _task_needs_live_subscribe_tail(snapshot):
+                return
+            logger.info(
+                "a2a.subscribe.live_tail",
+                task_id=task.id,
+                task_state=snapshot.status.state if snapshot.HasField("status") else None,
+                live_after_sequence=snapshot_sequence,
+                timeout_seconds=timeout,
+            )
+            while True:
+                event = await event_queue.get()
+                if event is None:
+                    break
+                sequence = event_platform_sequence(event)
+                if sequence is not None and sequence <= snapshot_sequence:
+                    continue
+                yield _stream_event_for_share_viewer(event, grant)
+        finally:
+            if not collect_task.done():
+                _ = collect_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await collect_task
 
     @override
     async def on_list_tasks(
@@ -1103,7 +989,7 @@ class A2AChannel(BaseChannel):
                 kept = list(task.history)[-params.history_length :]
                 del task.history[:]
                 task.history.extend(kept)
-            response.tasks.append(await self._task_for_share_viewer(task, share_grant))
+            response.tasks.append(task_for_share_viewer(task, share_grant))
 
         next_offset = offset + len(tasks)
         if next_offset < total:

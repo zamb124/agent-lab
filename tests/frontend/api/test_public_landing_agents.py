@@ -24,7 +24,6 @@ from core.models.embed_models import EmbedConfig, EmbedMapping, EmbedStatus
 from core.models.identity_models import User
 from core.utils.tokens import get_token_service
 
-
 pytestmark = [pytest.mark.timeout(120, func_only=True)]
 
 

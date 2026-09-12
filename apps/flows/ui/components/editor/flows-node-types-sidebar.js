@@ -543,7 +543,17 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 <div class="category-items">
                     ${items.map((it) => {
                         const meta = getNodeTypeMeta(it.type);
-                        const iconName = meta.icon !== 'box' ? meta.icon : (typeof it.icon === 'string' && it.icon.length > 0 ? it.icon : 'box');
+                        const isDatasource = it.type === 'datasource';
+                        let iconName;
+                        if (isDatasource) {
+                            if (typeof it.icon !== 'string' || it.icon.length === 0) {
+                                throw new Error('FlowsNodeTypesSidebar: datasource palette icon required');
+                            }
+                            iconName = it.icon;
+                        } else {
+                            iconName = meta.icon !== 'box' ? meta.icon : (typeof it.icon === 'string' && it.icon.length > 0 ? it.icon : 'box');
+                        }
+                        const brandIcon = isDatasource && iconName !== 'database';
                         const tokenColor = getCategoryToken(meta.category) !== getCategoryToken('core') || categoryKey === 'core'
                             ? getCategoryToken(meta.category)
                             : categoryToken;
@@ -559,7 +569,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                                 @dragstart=${(e) => dragHandler.call(this, e, it)}
                             >
                                 <div class="node-icon" style=${style}>
-                                    <platform-icon name=${iconName} size="16"></platform-icon>
+                                    <platform-icon name=${iconName} size="16" ?colored=${brandIcon}></platform-icon>
                                 </div>
                                 <div class="node-name">${it.name || it.type}</div>
                             </div>

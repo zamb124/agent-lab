@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from core.authz.factory import build_authz_service
-
 import secrets
 from collections.abc import AsyncIterator, Iterator
 from contextlib import suppress
@@ -12,6 +10,7 @@ from datetime import datetime, timezone
 import pytest
 
 from core.ai.company_settings import encrypt_secret
+from core.authz.factory import build_authz_service
 from core.config import get_settings
 from core.config.models import MailConfig
 from core.mail.exceptions import MailDeleteDeniedError, MailError

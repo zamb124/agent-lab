@@ -239,39 +239,6 @@ export const flowPreviewShareOp = createAsyncOp({
     },
 });
 
-/**
- * Flow contract of the edited screen: flat values and `state.content` markdown.
- * The server projector is the only source, so the editor preview equals runtime.
- */
-export const flowInterfaceContractPreviewOp = createAsyncOp({
-    name: 'flows/interface_contract_preview',
-    silent: true,
-    restMirror: {
-        method: 'POST',
-        path: '/flows/api/v1/flows/{flow_id}/interface/contract-preview',
-    },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.flow_id !== 'string' || payload.flow_id.length === 0) {
-            throw new Error('flowInterfaceContractPreviewOp: { flow_id, document } required');
-        }
-        if (!payload.document || typeof payload.document !== 'object') {
-            throw new Error('flowInterfaceContractPreviewOp: document required');
-        }
-        const body = { document: payload.document };
-        if (typeof payload.surface_id === 'string' && payload.surface_id !== '') {
-            body.surface_id = payload.surface_id;
-        }
-        if (payload.values && typeof payload.values === 'object') {
-            body.values = payload.values;
-        }
-        return httpRequest({
-            method: 'POST',
-            url: `/flows/api/v1/flows/${encodeURIComponent(payload.flow_id)}/interface/contract-preview`,
-            body,
-        });
-    },
-});
-
 // Ветки графа (HTTP в `apps/flows/src/api/a2a.py`, тот же prefix `/flows/api/v1`).
 export const branchCreateOp = createAsyncOp({
     name: 'flows/branch_create',

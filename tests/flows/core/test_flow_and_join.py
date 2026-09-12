@@ -10,6 +10,7 @@ from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import BaseNode
 from core.clients.llm import LLMToolCall
 from core.errors import FlowPrematureCompletionError
+from core.flow_ui.templates import default_chat_document
 from tests.flows.durable_runtime_harness import run_flow, workflow_state
 
 
@@ -76,6 +77,7 @@ async def test_incoming_policy_all_waits_all_predecessors(
             {"from_node": "2", "to_node": "3"},
             {"from_node": "3", "to_node": None},
         ],
+        interface=default_chat_document(),
         container=container,
     )
     state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id)
@@ -104,6 +106,7 @@ async def test_parallel_wave_interrupt_keeps_completed_sibling_state(
             {"from_node": "left", "to_node": None},
             {"from_node": "right", "to_node": None},
         ],
+        interface=default_chat_document(),
         container=container,
     )
 
@@ -141,6 +144,7 @@ async def test_incoming_policy_any_allows_double_join_when_waves_split(
             {"from_node": "2", "to_node": "3"},
             {"from_node": "3", "to_node": None},
         ],
+        interface=default_chat_document(),
         container=container,
     )
     state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id)
@@ -177,6 +181,7 @@ async def test_premature_completion_on_incomplete_and_join(
             {"from_node": "1", "to_node": None},
             {"from_node": "3", "to_node": None},
         ],
+        interface=default_chat_document(),
         container=container,
     )
     state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id)
@@ -215,6 +220,7 @@ async def test_all_conditional_outgoing_false_raises_no_conditional_match(
             },
             {"from_node": "2", "to_node": None},
         ],
+        interface=default_chat_document(),
         container=container,
     )
     state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, variables={"route": "stop"})
@@ -264,6 +270,7 @@ async def test_router_with_second_branch_reaches_end(
             {"from_node": "2", "to_node": None},
             {"from_node": "3", "to_node": None},
         ],
+        interface=default_chat_document(),
         container=container,
     )
     state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, variables={"route": "stop"})
@@ -294,6 +301,7 @@ def test_join_required_skips_edge_with_contributes_to_join_false(
             {"from_node": "6", "to_node": "5", "contributes_to_join": False},
             {"from_node": "5", "to_node": None},
         ],
+        interface=default_chat_document(),
         container=container,
     )
     assert flow._join_required["5"] == frozenset({"4"})

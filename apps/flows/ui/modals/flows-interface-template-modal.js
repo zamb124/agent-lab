@@ -1,23 +1,19 @@
 /**
- * Flow UI page template gallery for the Interface Editor.
- * Browse (search + categories + live preview cards) → detail → apply.
- * Applying a template replaces the page surface as one undoable transaction —
- * the caller owns the document mutation.
+ * Галерея шаблонов документа Flow UI (``GET /flows/api/v1/flow-ui/templates``): поиск, категории,
+ * живые карточки → детальный просмотр → «Применить». Применение заменяет весь документ одной
+ * командой истории; мутацию выполняет вызывающий через ``onApply(document)``.
  */
+
 import { css, html, nothing } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
-import {
-    FLOW_UI_PAGE_TEMPLATE_CATEGORIES,
-    filterFlowUIPageTemplates,
-    flowUIPageTemplate,
-} from '@platform/lib/flow-ui/templates/page-templates.js';
-import { buildFlowUIPageTemplatePreviewDocument } from '@platform/lib/flow-ui/templates/gallery/preview-document.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/flow-ui/components/platform-flow-ui.js';
 import '../components/interface-editor/flows-interface-template-card.js';
+
+const CATEGORIES = Object.freeze(['all', 'conversation', 'forms', 'dashboards', 'content', 'utility']);
 
 export class FlowsInterfaceTemplateModal extends PlatformModal {
     static modalKind = 'flows.interface_template';
@@ -27,148 +23,28 @@ export class FlowsInterfaceTemplateModal extends PlatformModal {
         onApply: { attribute: false },
         _query: { type: String, state: true },
         _category: { type: String, state: true },
-        _detailTemplateId: { type: String, state: true },
-        _detailDocument: { attribute: false, state: true },
+        _detailId: { type: String, state: true },
     };
 
-    static styles = [
-        PlatformModal.styles,
-        css`
-            :host {
-                --platform-modal-xl-body-min-block-size: min(72vh, 640px);
-            }
-            .gallery {
-                display: grid;
-                gap: var(--space-4);
-                min-height: min(64vh, 560px);
-            }
-            .toolbar {
-                display: grid;
-                gap: var(--space-3);
-            }
-            .chips {
-                display: flex;
-                flex-wrap: wrap;
-                gap: var(--space-2);
-            }
-            .chip {
-                display: inline-flex;
-                align-items: center;
-                border: 1px solid var(--border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-secondary);
-                border-radius: var(--radius-full);
-                padding: 6px 12px;
-                font: inherit;
-                font-size: var(--text-xs);
-                font-weight: 600;
-                cursor: pointer;
-                user-select: none;
-                transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
-            }
-            .chip:hover {
-                border-color: var(--accent);
-                color: var(--text-primary);
-            }
-            .chip[aria-pressed='true'] {
-                border-color: var(--accent);
-                background: color-mix(in srgb, var(--accent) 16%, transparent);
-                color: var(--text-primary);
-            }
-            .chip:focus-visible {
-                outline: 2px solid var(--accent);
-                outline-offset: 2px;
-            }
-            .grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-                gap: var(--space-4);
-            }
-            .empty {
-                display: grid;
-                place-items: center;
-                gap: var(--space-2);
-                min-height: 220px;
-                color: var(--text-tertiary);
-                text-align: center;
-                padding: var(--space-6);
-                border: 1px dashed var(--border-subtle);
-                border-radius: var(--radius-lg);
-                background:
-                    radial-gradient(80% 60% at 50% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 70%),
-                    var(--glass-solid-subtle);
-            }
-            .detail {
-                display: grid;
-                grid-template-columns: minmax(0, 1.4fr) minmax(240px, 0.7fr);
-                gap: var(--space-5);
-                min-height: min(64vh, 560px);
-            }
-            @media (max-width: 900px) {
-                .detail {
-                    grid-template-columns: 1fr;
-                }
-            }
-            .detail-preview {
-                position: relative;
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-lg);
-                overflow: hidden;
-                background:
-                    radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 50%),
-                    var(--bg-secondary, var(--glass-tint-medium));
-                min-height: 360px;
-            }
-            .detail-preview platform-flow-ui {
-                display: block;
-                width: 100%;
-                height: 100%;
-                min-height: 420px;
-                pointer-events: none;
-                background: var(--flow-ui-page-background, var(--bg-primary));
-            }
-            .detail-side {
-                display: grid;
-                align-content: start;
-                gap: var(--space-4);
-            }
-            .detail-title {
-                margin: 0;
-                font-size: var(--text-lg);
-                font-weight: 700;
-                color: var(--text-primary);
-            }
-            .detail-desc {
-                margin: 0;
-                color: var(--text-secondary);
-                font-size: var(--text-sm);
-                line-height: 1.5;
-            }
-            .detail-meta {
-                display: flex;
-                flex-wrap: wrap;
-                gap: var(--space-2);
-            }
-            .tag {
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-full);
-                padding: 4px 10px;
-                background: var(--glass-solid-subtle);
-            }
-            .hint {
-                color: var(--text-tertiary);
-                font-size: var(--text-xs);
-                line-height: 1.45;
-            }
-            .detail-actions {
-                display: flex;
-                flex-wrap: wrap;
-                gap: var(--space-2);
-            }
-        `,
-    ];
+    static styles = [PlatformModal.styles, css`
+        :host { --platform-modal-xl-body-min-block-size: min(72vh, 640px); }
+        .gallery { display: grid; gap: var(--space-4); min-height: min(64vh, 560px); align-content: start; }
+        .toolbar { display: grid; gap: var(--space-3); }
+        .chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+        .chip { display: inline-flex; align-items: center; border: 1px solid var(--border-subtle); background: var(--glass-solid-subtle); color: var(--text-secondary); border-radius: var(--radius-full); padding: 4px 12px; font-size: 12px; cursor: pointer; }
+        .chip[aria-pressed='true'] { border-color: var(--accent); color: var(--text-primary); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--space-3); }
+        .empty { display: grid; place-items: center; gap: var(--space-2); padding: var(--space-8); color: var(--text-tertiary); }
+        .detail { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr); gap: var(--space-4); min-height: min(64vh, 560px); }
+        .detail-preview { border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); overflow: auto; background: var(--bg-secondary, var(--glass-tint-medium)); padding: var(--space-4); }
+        .detail-preview platform-flow-ui { display: block; pointer-events: none; }
+        .detail-side { display: grid; gap: var(--space-3); align-content: start; }
+        .detail-title { margin: 0; font-size: 18px; font-weight: 650; color: var(--text-primary); }
+        .detail-desc { margin: 0; color: var(--text-secondary); line-height: 1.5; }
+        .hint { margin: 0; font-size: 12px; color: var(--text-tertiary); }
+        .detail-actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
+        @media (max-width: 900px) { .detail { grid-template-columns: 1fr; } }
+    `];
 
     constructor() {
         super();
@@ -176,147 +52,79 @@ export class FlowsInterfaceTemplateModal extends PlatformModal {
         this.size = 'xl';
         this._query = '';
         this._category = 'all';
-        this._detailTemplateId = null;
-        this._detailDocument = null;
+        this._detailId = '';
+        this._templates = this.useOp('flows/flow_ui_templates');
     }
 
-    _locale() {
-        return this.select((state) => state.i18n.locale).value === 'ru' ? 'ru' : 'en';
+    connectedCallback() {
+        super.connectedCallback();
+        void this._templates.run(null);
     }
 
-    _filtered() {
-        return filterFlowUIPageTemplates({
-            category: this._category,
-            query: this._query,
-            locale: this._locale(),
-        });
+    _items() {
+        const page = this._templates.lastResult;
+        const items = page === null || page === undefined ? [] : page.items;
+        const query = this._query.trim().toLowerCase();
+        return items.filter((template) => (this._category === 'all' || template.category === this._category)
+            && (query === '' || template.title.toLowerCase().includes(query) || template.description.toLowerCase().includes(query)));
     }
 
-    _openDetail(templateId) {
-        const locale = this._locale();
-        this._detailTemplateId = templateId;
-        this._detailDocument = buildFlowUIPageTemplatePreviewDocument(templateId, locale);
-    }
-
-    _closeDetail() {
-        this._detailTemplateId = null;
-        this._detailDocument = null;
-    }
-
-    _apply(templateId) {
-        if (typeof this.onApply !== 'function') {
-            throw new Error('flows.interface_template: onApply callback is required');
-        }
-        this.onApply(templateId);
+    _apply(template) {
+        if (typeof this.onApply !== 'function') throw new Error('flows.interface_template: onApply callback is required');
+        this.onApply(template.document);
         this.close();
     }
 
-    _categoryLabel(category) {
-        if (category === 'all') {
-            return this.t('interface_editor.template_category_all');
-        }
-        return this.t(`interface_editor.template_category_${category}`);
-    }
-
     renderHeader() {
-        if (this._detailTemplateId) {
-            return this.t('interface_editor.template_detail_title');
-        }
-        return this.t('interface_editor.template_modal_title');
+        return this.t(this._detailId === '' ? 'interface_editor.template_modal_title' : 'interface_editor.template_detail_title');
     }
 
     renderBody() {
-        if (this._detailTemplateId) {
-            return this._renderDetail();
+        if (this._detailId !== '') {
+            return this._renderDetail(this._templates.lastResult.items.find((item) => item.template_id === this._detailId));
         }
         return this._renderBrowse();
     }
 
     _renderBrowse() {
-        const locale = this._locale();
-        const templates = this._filtered();
-        const categories = ['all', ...FLOW_UI_PAGE_TEMPLATE_CATEGORIES];
+        const templates = this._items();
         return html`<div class="gallery">
             <div class="toolbar">
-                <platform-modal-search-field
-                    layout="fill"
-                    .value=${this._query}
-                    placeholder=${this.t('interface_editor.template_search')}
-                    @change=${(event) => {
-                        const value = event.detail?.value;
-                        this._query = typeof value === 'string' ? value : '';
-                    }}
-                ></platform-modal-search-field>
+                <platform-modal-search-field layout="fill" .value=${this._query} placeholder=${this.t('interface_editor.template_search')}
+                    @change=${(event) => { this._query = event.detail.value; }}></platform-modal-search-field>
                 <div class="chips" role="toolbar" aria-label=${this.t('interface_editor.template_categories')}>
-                    ${categories.map((category) => html`
-                        <span
-                            class="chip"
-                            role="button"
-                            tabindex="0"
-                            aria-pressed=${this._category === category ? 'true' : 'false'}
-                            @click=${() => { this._category = category; }}
-                            @keydown=${(event) => {
-                                if (event.key === 'Enter' || event.key === ' ') {
-                                    event.preventDefault();
-                                    this._category = category;
-                                }
-                            }}
-                        >${this._categoryLabel(category)}</span>
-                    `)}
+                    ${CATEGORIES.map((category) => html`<span class="chip" role="button" tabindex="0" aria-pressed=${this._category === category ? 'true' : 'false'}
+                        @click=${() => { this._category = category; }}
+                        @keydown=${(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this._category = category; } }}
+                    >${this.t(`interface_editor.template_category_${category}`)}</span>`)}
                 </div>
             </div>
-            ${templates.length === 0
-                ? html`<div class="empty">
-                    <platform-icon name="search" size="24"></platform-icon>
-                    <div>${this.t('interface_editor.template_empty')}</div>
-                </div>`
+            ${this._templates.busy ? html`<div class="empty">${this.t('interface_editor.loading')}</div>` : nothing}
+            ${!this._templates.busy && templates.length === 0
+                ? html`<div class="empty"><platform-icon name="search" size="24"></platform-icon><div>${this.t('interface_editor.template_empty')}</div></div>`
                 : html`<div class="grid">
-                    ${templates.map((template) => html`
-                        <flows-interface-template-card
-                            .template=${template}
-                            locale=${locale}
-                            @template-select=${(event) => this._openDetail(event.detail.templateId)}
-                        ></flows-interface-template-card>
-                    `)}
+                    ${templates.map((template) => html`<flows-interface-template-card .template=${template}
+                        @template-select=${(event) => { this._detailId = event.detail.templateId; }}></flows-interface-template-card>`)}
                 </div>`}
         </div>`;
     }
 
-    _renderDetail() {
-        const locale = this._locale();
-        const template = flowUIPageTemplate(this._detailTemplateId);
+    _renderDetail(template) {
         return html`<div class="detail">
-            <div class="detail-preview">
-                ${this._detailDocument
-                    ? html`<platform-flow-ui
-                        profile="editor_test"
-                        .initialDocument=${this._detailDocument}
-                        theme="auto"
-                    ></platform-flow-ui>`
-                    : nothing}
-            </div>
+            <div class="detail-preview"><platform-flow-ui editing theme="auto" .initialDocument=${template.document} .sampleState=${{}}></platform-flow-ui></div>
             <div class="detail-side">
-                <div class="detail-meta">
-                    <span class="tag">${this._categoryLabel(template.category)}</span>
-                    ${template.tags.map((tag) => html`<span class="tag">${tag}</span>`)}
-                </div>
-                <h3 class="detail-title">${template.title[locale]}</h3>
-                <p class="detail-desc">${template.description[locale]}</p>
+                <span class="chip" aria-pressed="true">${this.t(`interface_editor.template_category_${template.category}`)}</span>
+                <h3 class="detail-title">${template.title}</h3>
+                <p class="detail-desc">${template.description}</p>
                 <p class="hint">${this.t('interface_editor.template_replace_hint')}</p>
                 <div class="detail-actions">
-                    <platform-button variant="ghost" @click=${() => this._closeDetail()}>
-                        ${this.t('interface_editor.template_back')}
-                    </platform-button>
-                    <platform-button variant="primary" @click=${() => this._apply(template.template_id)}>
-                        ${this.t('interface_editor.template_apply')}
-                    </platform-button>
+                    <platform-button ghost @click=${() => { this._detailId = ''; }}>${this.t('interface_editor.template_back')}</platform-button>
+                    <platform-button primary @click=${() => this._apply(template)}>${this.t('interface_editor.template_apply')}</platform-button>
                 </div>
             </div>
         </div>`;
     }
 }
 
-if (!customElements.get('flows-interface-template-modal')) {
-    customElements.define('flows-interface-template-modal', FlowsInterfaceTemplateModal);
-}
+if (!customElements.get('flows-interface-template-modal')) customElements.define('flows-interface-template-modal', FlowsInterfaceTemplateModal);
 registerModalKind(FlowsInterfaceTemplateModal.modalKind, 'flows-interface-template-modal');

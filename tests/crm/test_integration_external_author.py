@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import json
 from typing import cast
 
@@ -16,6 +15,7 @@ from core.identity.integration_external_author import (
 )
 from core.models.identity_models import Company, User
 from tests.crm.e2e._json_helpers import json_object
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 pytestmark = pytest.mark.timeout(30, func_only=True)
 

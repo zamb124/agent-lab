@@ -9,10 +9,12 @@ from pydantic import TypeAdapter
 from apps.flows.src.models import Edge, FlowVariableConfig, GraphNodeConfig, TriggerConfig
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.services.flow_dataflow_inspector import inspect_flow_dataflow
-from core.models.flow_interface import FlowInterfaceConfig
+from core.flow_ui.document import FlowUIDocument
 from core.types import JsonObject
 
-_GRAPH_NODES_ADAPTER: TypeAdapter[dict[str, GraphNodeConfig]] = TypeAdapter(dict[str, GraphNodeConfig])
+_GRAPH_NODES_ADAPTER: TypeAdapter[dict[str, GraphNodeConfig]] = TypeAdapter(
+    dict[str, GraphNodeConfig]
+)
 
 
 def nodes(payload: dict[str, object]) -> dict[str, GraphNodeConfig]:
@@ -28,16 +30,22 @@ def variables(payload: dict[str, object]) -> dict[str, FlowVariableConfig]:
 
 
 def node_of(node_type: NodeType | str, node_id: str = "n1", **kwargs: object) -> dict[str, object]:
-    base: dict[str, object] = {"type": str(node_type.value if isinstance(node_type, NodeType) else node_type)}
+    base: dict[str, object] = {
+        "type": str(node_type.value if isinstance(node_type, NodeType) else node_type)
+    }
     base.update(kwargs)
     return {node_id: base}
 
 
-def chain(*node_ids: str, node_type: str = "llm_node") -> tuple[dict[str, object], list[dict[str, object]]]:
+def chain(
+    *node_ids: str, node_type: str = "llm_node"
+) -> tuple[dict[str, object], list[dict[str, object]]]:
     nodes_payload: dict[str, object] = {}
     edges_payload: list[dict[str, object]] = []
     for nid in node_ids:
-        nodes_payload[nid] = {"type": node_type, "prompt": "ok"} if node_type == "llm_node" else {"type": node_type}
+        nodes_payload[nid] = (
+            {"type": node_type, "prompt": "ok"} if node_type == "llm_node" else {"type": node_type}
+        )
     for idx in range(len(node_ids) - 1):
         edges_payload.append({"from_node": node_ids[idx], "to_node": node_ids[idx + 1]})
     return nodes_payload, edges_payload
@@ -75,7 +83,7 @@ def inspect(
     triggers_payload: dict[str, object] | None = None,
     sample_state: dict[str, object] | None = None,
     observed_runs: dict[str, object] | None = None,
-    interface: FlowInterfaceConfig | None = None,
+    interface: FlowUIDocument | None = None,
 ):
     return inspect_flow_dataflow(
         flow_id=flow_id,
@@ -106,7 +114,9 @@ def issue_assert(
         and (target is None or issue.target == target)
         and (path is None or issue.path == path)
     ]
-    assert matched, f"Expected issue {code!r} target={target!r} path={path!r}, got {[i.code for i in node_info.issues]}"
+    assert matched, (
+        f"Expected issue {code!r} target={target!r} path={path!r}, got {[i.code for i in node_info.issues]}"
+    )
     if severity is not None:
         assert matched[0].severity == severity
 
@@ -129,7 +139,11 @@ MINIMAL_NODE_CONFIGS: dict[str, dict[str, object]] = {
         "url": "https://example.test/a2a",
         "branch_id": "default",
     },
-    NodeType.EXTERNAL_API.value: {"type": "external_api", "url": "https://example.test", "method": "GET"},
+    NodeType.EXTERNAL_API.value: {
+        "type": "external_api",
+        "url": "https://example.test",
+        "method": "GET",
+    },
     NodeType.MCP.value: {"type": "mcp", "server_id": "srv", "tool_name": "tool"},
     NodeType.DATASOURCE.value: {
         "type": "datasource",

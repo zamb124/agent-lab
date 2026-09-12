@@ -73,6 +73,10 @@ export class SyncMessageBubble extends PlatformElement {
     static styles = css`
         :host {
             display: block;
+            box-sizing: border-box;
+            width: 100%;
+            height: auto;
+            flex: 0 0 auto;
             margin: 1px 0;
             min-width: 0;
             transition: opacity 200ms ease, transform 200ms ease;
@@ -82,8 +86,11 @@ export class SyncMessageBubble extends PlatformElement {
         :host([data-deleting]) { opacity: 0; transform: translateY(-4px); pointer-events: none; }
         .row {
             display: flex;
+            flex-direction: row;
+            justify-content: flex-start;
             gap: var(--space-2);
             align-items: flex-end;
+            width: 100%;
             min-width: 0;
         }
         @media (max-width: 767px) {
@@ -159,13 +166,16 @@ export class SyncMessageBubble extends PlatformElement {
             background: var(--glass-solid-soft, var(--glass-solid));
             border: 1px solid var(--glass-border-subtle, var(--glass-border));
             border-radius: var(--radius-2xl, 18px);
-            padding: 10px var(--space-4);
-            display: inline-flex;
+            padding: 8px 12px 6px;
+            display: flex;
             flex-direction: column;
-            align-items: stretch;
-            width: fit-content;
-            max-width: 70%;
+            align-items: flex-start;
+            box-sizing: border-box;
+            flex: 0 1 auto;
+            width: max-content;
+            max-width: min(70%, 36rem);
             min-width: 0;
+            height: auto;
             position: relative;
             overflow: visible;
             color: var(--text-primary);
@@ -203,6 +213,8 @@ export class SyncMessageBubble extends PlatformElement {
             margin-bottom: var(--space-1);
             color: var(--text-secondary);
             cursor: pointer;
+            max-width: 100%;
+            overflow-wrap: anywhere;
         }
         :host([data-own]) .sender { display: none; }
         .reply-quote {
@@ -247,8 +259,9 @@ export class SyncMessageBubble extends PlatformElement {
             white-space: pre-wrap;
             word-break: break-word;
             overflow-wrap: anywhere;
+            max-width: 100%;
             font-size: var(--text-base, 16px);
-            line-height: 1.5;
+            line-height: 1.45;
         }
         .body--speech {
             display: flex;
@@ -268,10 +281,10 @@ export class SyncMessageBubble extends PlatformElement {
             flex-direction: row;
             align-items: center;
             gap: var(--space-2);
-            align-self: stretch;
+            align-self: flex-end;
             min-width: 0;
-            margin-top: 4px;
-            justify-content: space-between;
+            margin-top: 2px;
+            justify-content: flex-end;
             flex-wrap: wrap;
         }
         .tail-row--meta-only {
@@ -434,7 +447,7 @@ export class SyncMessageBubble extends PlatformElement {
         }
         .audio-attachment {
             display: block;
-            align-self: stretch;
+            align-self: flex-start;
             width: min(360px, 100%);
             max-width: 100%;
             min-width: 0;
@@ -444,9 +457,12 @@ export class SyncMessageBubble extends PlatformElement {
         }
         .image-wrap {
             margin: -2px 0;
+            max-width: 100%;
         }
         .image-wrap img {
-            max-width: 320px;
+            width: auto;
+            height: auto;
+            max-width: min(320px, 100%);
             max-height: 360px;
             border-radius: var(--radius-lg, 12px);
             display: block;

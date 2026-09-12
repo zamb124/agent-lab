@@ -154,6 +154,19 @@ export class ChatPage extends PlatformPage {
             status: typeof detail.status === 'string' ? detail.status : '',
         });
     }
+    /** Кнопки «трейс»/«логи» у ответа ассистента: модалки по session_id и task_id хода. */
+    _onOpenObservability(event) {
+        const detail = event.detail;
+        if (!detail || (detail.kind !== 'tracing' && detail.kind !== 'logs')) {
+            throw new Error('chat-page: flow-ui-open-observability requires kind tracing|logs');
+        }
+        if (typeof detail.contextId !== 'string' || detail.contextId === '') {
+            throw new Error('chat-page: flow-ui-open-observability requires contextId');
+        }
+        const props = { sessionId: `${this.flowId}:${detail.contextId}` };
+        if (typeof detail.taskId === 'string' && detail.taskId !== '') props.taskId = detail.taskId;
+        this.openModal(detail.kind === 'tracing' ? 'flows.tracing' : 'flows.logs', props);
+    }
     _editor() {
         if (this.branchId && this.branchId !== 'base') this.navigate('flow_editor_branch', { flowId: this.flowId, branchId: this.branchId });
         else this.navigate('flow_editor', { flowId: this.flowId });
@@ -238,6 +251,7 @@ export class ChatPage extends PlatformPage {
                 theme="auto"
                 @flow-ui-ready=${this._onReady}
                 @browser-preview-open=${this._onBrowserPreviewOpen}
+                @flow-ui-open-observability=${this._onOpenObservability}
             ></platform-flow-ui>
         `;
     }

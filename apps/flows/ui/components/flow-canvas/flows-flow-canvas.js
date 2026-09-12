@@ -34,7 +34,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { resolveUiIconFile } from '@platform/lib/utils/file-icons.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
-import { getNodeTypeMeta, getCategoryToken } from '../../constants/node-icons.js';
+import { getNodeTypeMeta, getCategoryToken, datasourceIconName } from '../../constants/node-icons.js';
 import { renderEdgeLabel } from './flows-edge-label.js';
 import './flows-canvas-context-menu.js';
 import './flows-sticky-note.js';
@@ -766,13 +766,13 @@ export class FlowsFlowCanvas extends PlatformElement {
                 line-height: 1.1;
                 box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
             }
-            .node-dataflow-chip[data-chip-kind="ui_value"] {
+            .node-dataflow-chip[data-chip-kind="interface"] {
                 --flows-dataflow-ui-value: var(--info);
                 border-color: color-mix(in oklab, var(--flows-dataflow-ui-value) 34%, var(--glass-border-subtle));
                 background: color-mix(in oklab, var(--glass-solid-strong) 86%, var(--flows-dataflow-ui-value) 14%);
                 color: color-mix(in oklab, var(--flows-dataflow-ui-value) 52%, var(--text-secondary));
             }
-            .node-dataflow-chip[data-chip-kind="ui_value"] .req {
+            .node-dataflow-chip[data-chip-kind="interface"] .req {
                 color: var(--flows-dataflow-ui-value);
             }
             .node-dataflow-chip[data-has-producer="true"] {
@@ -786,7 +786,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             .node-dataflow-chip[data-required="true"] {
                 border-color: color-mix(in oklab, var(--node-accent) 46%, var(--glass-border-subtle));
             }
-            .node-dataflow-chip[data-chip-kind="ui_value"][data-required="true"] {
+            .node-dataflow-chip[data-chip-kind="interface"][data-required="true"] {
                 border-color: color-mix(in oklab, var(--flows-dataflow-ui-value) 52%, var(--glass-border-subtle));
             }
             .node-dataflow-chip .body {
@@ -956,7 +956,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                     stroke var(--motion-duration-micro) var(--motion-ease-standard),
                     stroke-width var(--motion-duration-micro) var(--motion-ease-standard);
             }
-            .data-wire-path[data-wire-kind="ui_value"] {
+            .data-wire-path[data-wire-kind="interface"] {
                 stroke: color-mix(in oklab, var(--info) 72%, transparent);
             }
             .data-wire-path[data-dimmed] {
@@ -969,7 +969,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 stroke-dasharray: none;
                 filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 35%, transparent));
             }
-            .data-wire-path[data-wire-kind="ui_value"][data-highlighted] {
+            .data-wire-path[data-wire-kind="interface"][data-highlighted] {
                 stroke: var(--info);
                 filter: drop-shadow(0 0 6px color-mix(in srgb, var(--info) 35%, transparent));
             }
@@ -982,7 +982,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 background: color-mix(in oklab, var(--accent) 18%, var(--glass-solid-strong));
                 box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 40%, transparent);
             }
-            .node-dataflow-chip[data-chip-kind="ui_value"][data-wire-highlight="true"] {
+            .node-dataflow-chip[data-chip-kind="interface"][data-wire-highlight="true"] {
                 border-color: color-mix(in oklab, var(--info) 65%, var(--glass-border-subtle));
                 background: color-mix(in oklab, var(--info) 18%, var(--glass-solid-strong));
                 box-shadow: 0 0 0 1px color-mix(in oklab, var(--info) 40%, transparent);
@@ -3245,9 +3245,15 @@ export class FlowsFlowCanvas extends PlatformElement {
         const meta = getNodeTypeMeta(node.type);
         const nodeStyle = `--node-accent: ${getCategoryToken(meta.category)};`;
         const isCodeNode = node.type === 'code';
+        const isDatasourceNode = node.type === 'datasource';
         const nodeIcon = isCodeNode
             ? this._renderCodeLanguageIcon(node.language, 28)
-            : this._renderCanvasIcon(meta.icon, 18);
+            : this._renderCanvasIcon(
+                isDatasourceNode
+                    ? datasourceIconName(typeof node.connector_id === 'string' ? node.connector_id : '')
+                    : meta.icon,
+                18,
+            );
         const state = this._state();
         const multi = asArray(state.multiSelection);
         const isSelected = state.selectedNodeId === id;

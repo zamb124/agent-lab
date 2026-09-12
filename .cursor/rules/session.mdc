@@ -63,11 +63,11 @@ await container.workflow_runtime.save_state(
 
 ## Flow UI continuity и A2A Tasks
 
-Один `context_id` — одна durable conversation/UI document identity; каждый Submit создаёт новый `task_id` в этом context. Последний Task не заменяет историю прежних Tasks. `GetTask` адресует task projection; session bootstrap возвращает current acknowledged `FlowUIDocument` и values.
+Один `context_id` — одна durable conversation; каждый ход (`text` или `ui-action`) создаёт новый `task_id` в этом context. Последний Task не заменяет историю прежних Tasks. `GetTask` адресует task projection; документ интерфейса — design-time (`GET /flows/api/v1/{flow_id}/interface`), значения — артефакт `state` последнего Task.
 
-Reload/reopen/new tab/device сначала hydrates authoritative A2A snapshot, затем подключает live tail; default template не рендерится поверх существующей session. Debounced `platform.ui.sync` сохраняет values до Submit, а `pagehide`, share и Submit выполняют forced flush с acknowledgement.
+Reload/reopen/new tab/device сначала hydrates документ и `GetTask` (`state` snapshot + patches), затем подключает live tail (`SubscribeToTask`); незавершённые значения input-блоков живут только в памяти клиента (`FlowUIStore.edits`) и уходят на сервер целиком в `fields` следующего `ui-action`. Промежуточной синхронизации значений нет.
 
-Live share использует revocable scoped grant на тот же context/document/revision. Grant выдаётся только после подтверждения requested minimum revision, не создаёт новую conversation и проверяется на каждом bootstrap/sync/submit/subscribe. Local recovery journal содержит только unacknowledged semantic mutations и не становится источником истины. Канон → **`flow_ui.mdc`**.
+Live share использует revocable scoped grant (`FlowUIShareGrant`) на тот же `context_id`: не создаёт новую conversation, проверяется на каждом `GetTask`/`SubscribeToTask`/`SendMessage` viewer'а, а `redacted_paths` вырезаются из артефакта `state` (`share_task_redaction.py`). Канон → **`flow_ui.mdc`**.
 
 ## Interrupt и resume
 

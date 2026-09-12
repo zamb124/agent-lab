@@ -6,13 +6,13 @@
 
 from __future__ import annotations
 
-from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import pytest
 from sqlalchemy import select
 
 from core.db.models import VectorDocument
 from core.models.identity_models import Company, User
 from core.rag.reembed_stale_documents import _run_reembed_round, execute_reembed_tick
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
 async def _seed_solvent_company(frontend_container, *, cid: str, balance: float = 50.0) -> str:

@@ -13,8 +13,7 @@ from pydantic import Field
 from apps.flows.config import FLOWS_PUBLIC_API_PREFIX, get_settings
 from apps.flows.src.models.mcp import MCPCallResult, MCPServerConfig
 from apps.flows.src.runtime.tool_call_context import get_active_tool_call_context
-from apps.flows.src.runtime_helpers.flow_ui_presenter import present_flow_ui_artifact
-from apps.flows.src.streaming.flow_ui import emit_flow_ui_transitions
+from apps.flows.src.runtime_helpers.flow_ui_cards import card_block_id, show_browser_preview
 from core.clients.redis_client import RedisClient
 from core.logging import get_logger
 from core.models.base import StrictBaseModel
@@ -190,20 +189,6 @@ def _session_id_from(tool_name: str, args: JsonObject, result: MCPCallResult | N
     return str(sid).strip() if isinstance(sid, str) else ""
 
 
-def _safe_args_preview(args: JsonObject) -> JsonObject:
-    allowed = {
-        "session_id",
-        "url",
-        "wait_policy",
-        "selector",
-        "load_state",
-        "key",
-        "ref",
-        "page_mode",
-    }
-    return {key: args[key] for key in allowed if key in args}
-
-
 async def emit_browser_preview_mcp_event(
     *,
     config: MCPServerConfig,
@@ -251,45 +236,25 @@ async def _emit_browser_preview_mcp_event(
 
     state = ctx.state
     task_id = state.task_id
-    context_id = state.context_id
     session_id = _session_id_from(tool_name, arguments, result)
     result_json = _mcp_result_json(result)
 
-    payload: JsonObject = {
-        "server_id": config.server_id,
-        "browser_tool_name": tool_name,
-        "top_level_tool_name": ctx.tool_name,
-        "tool_call_id": ctx.tool_call_id,
-        "parent_tool_call_id": ctx.tool_call_id,
-        "task_id": task_id,
-        "context_id": context_id,
-        "phase": phase,
-        "status": "failed" if phase == "failed" else "running" if phase == "started" else "finished",
-        "args": _safe_args_preview(arguments),
-    }
     if session_id:
-        payload["session_id"] = session_id
-        payload["browser_session_id"] = session_id
-        payload.update(build_browser_preview_urls(session_id=session_id, task_id=task_id))
-    if "url" in arguments and isinstance(arguments["url"], str):
-        payload["url"] = arguments["url"]
-    if "final_url" in result_json and isinstance(result_json["final_url"], str):
-        payload["final_url"] = result_json["final_url"]
-    if "status_code" in result_json:
-        payload["status_code"] = result_json["status_code"]
-    if error:
-        payload["error"] = error
-
-    _ = present_flow_ui_artifact(
-        state,
-        kind="browser_preview",
-        data=payload,
-        source="browser",
-        artifact_id=f"browser:{ctx.tool_call_id}",
-    )
-    # Live turn: publish accepted document deltas immediately (handoff pattern),
-    # otherwise conversation chips never see viewer_url until (or never after) node end.
-    await emit_flow_ui_transitions(emitter=ctx.emitter, state=state)
+        preview_urls = build_browser_preview_urls(session_id=session_id, task_id=task_id)
+        page_url = arguments.get("url")
+        final_url = result_json.get("final_url")
+        current_url = final_url if isinstance(final_url, str) else page_url if isinstance(page_url, str) else ""
+        title = f"{tool_name}: {error}" if error else current_url or tool_name
+        _ = show_browser_preview(
+            state,
+            card_id=card_block_id("browser", ctx.tool_call_id),
+            url=preview_urls["viewer_url"],
+            title=title,
+            screenshot_url=preview_urls["screenshot_url"],
+            status="failed" if phase == "failed" else "running" if phase == "started" else "finished",
+        )
+        # Карточка нужна сразу, пока браузер работает, а не по завершении ноды.
+        await ctx.emitter.emit_ui_events(state.drain_ui_events())
 
     # Viewer следит за задачей, а не за одной сессией: поддерживаем в Redis
     # маппинг task_id -> активная browser-сессия, чтобы после закрытия сессии

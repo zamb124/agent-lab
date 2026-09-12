@@ -22,8 +22,7 @@ def test_tool_context_view_includes_user_extras() -> None:
     assert view["secret"] == "my-secret"
     assert view["messages"] == []
     assert view["tool_results"] == {}
-    assert view["ui_document"] == state.ui_document.model_dump(mode="json")
-    assert view["ui_effect_cursor"] == 0
+    assert view["ui_slots"] == {}
     assert "flow_timeout_effective_seconds" not in view
     assert "flow_deadline_monotonic" not in view
     assert "node_history" not in view

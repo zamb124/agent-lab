@@ -23,6 +23,8 @@ spec:
             - postgres
             - "-c"
             - "max_connections={{ .Values.postgres.maxConnections }}"
+            - "-c"
+            - "shared_buffers={{ required "postgres.sharedBuffers is required" .Values.postgres.sharedBuffers }}"
           env:
             - name: POSTGRES_DB
               value: platform_shared

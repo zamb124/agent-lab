@@ -271,27 +271,6 @@ async def _seed_platform_pronunciation_rules(container: FrontendContainer) -> No
     logger.info("frontend.pronunciation_seed_applied")
 
 
-async def _seed_llm_model_scores(container: FrontendContainer) -> None:
-    """Засевает shared скоринг LLM-моделей из конфигурации."""
-    scoring = get_settings().llm.model_scoring
-    if not scoring.seed_enabled or len(scoring.items) == 0:
-        return
-    result = await container.llm_model_score_repository.seed_many(
-        (
-            item.model_dump(mode="json", exclude_none=True)
-            for item in scoring.items
-        ),
-        force_refresh=scoring.force_seed_refresh,
-    )
-    logger.info(
-        "frontend.llm_model_scores_seed_applied",
-        created=result["created"],
-        updated=result["updated"],
-        skipped=result["skipped"],
-        force_seed_refresh=scoring.force_seed_refresh,
-    )
-
-
 async def on_startup(app: FastAPI, container: FrontendContainer, settings: FrontendSettings) -> None:
     _ = settings
     await container.redis_client.connect()
@@ -321,9 +300,10 @@ async def on_startup(app: FastAPI, container: FrontendContainer, settings: Front
             connection_ensured=reconcile_result.connection_ensured,
             role_count=len(reconcile_result.role_mailboxes_ensured),
             user_count=len(reconcile_result.user_bindings_ensured),
+            role_missing_password_count=len(reconcile_result.role_mailboxes_missing_password),
+            user_missing_password_count=len(reconcile_result.user_bindings_missing_password),
         )
     await _seed_platform_pronunciation_rules(container)
-    await _seed_llm_model_scores(container)
     n = await container.billing_service.ensure_settlement_rules_materialized_for_all_companies()
     logger.info("Биллинг: правила settlement проверены/записаны для компаний: %s", n)
 

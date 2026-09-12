@@ -54,7 +54,7 @@ services:
 
   minio-test:
     platform: "linux/amd64"
-    image: minio/minio:latest
+    image: pgsty/silo:RELEASE.2026-09-03T13-18-01Z
     container_name: agentlab_minio_test
     ports:
       - "19002:9000"

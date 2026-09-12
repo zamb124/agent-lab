@@ -7,7 +7,7 @@ Hard cut: только PascalCase методы из core.a2a.methods; 0.3 names 
 import hashlib
 import json
 from collections.abc import AsyncGenerator, Mapping
-from typing import Literal, TypeVar, cast
+from typing import TypeVar, cast
 
 from a2a.types import (
     CancelTaskRequest,
@@ -30,7 +30,6 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.message import DecodeError
 from google.protobuf.message import Message as ProtoMessage
-from pydantic import BaseModel
 
 from apps.flows.src.channels import PermissionDenied
 from apps.flows.src.channels.a2a import A2AChannel
@@ -62,18 +61,15 @@ from core.a2a import (
     A2AErrorCode,
 )
 from core.a2a.codec import stream_response_from_event, stream_response_to_json_dict
-from core.a2a.extensions import (
-    A2A_EXTENSIONS_HEADER,
-    A2UI_EXTENSION_URI,
-    A2UI_PLATFORM_CATALOG_ID,
-    A2UI_VERSION,
-    extract_subscribe_after_sequence,
-    parse_a2a_extensions_header,
-    strip_subscribe_platform_metadata,
-)
 from core.authz.models import AuthzObject
 from core.context import get_context, require_active_company, require_context
 from core.events import publish_event_to_user
+from core.flow_ui.interface import (
+    FlowInterfaceCapabilities,
+    FlowInterfaceIdentity,
+    FlowInterfaceResponse,
+    FlowInterfaceViewer,
+)
 from core.identity.embed_guest_turns import (
     EMBED_GUEST_USER_TURNS_REDIS_PREFIX,
     EMBED_GUEST_USER_TURNS_TTL_SECONDS,
@@ -81,12 +77,6 @@ from core.identity.embed_guest_turns import (
 )
 from core.logging import get_logger
 from core.middleware.auth.company_resolver import build_service_base_url
-from core.models.embed_models import EmbedInterfaceLook
-from core.models.flow_interface import (
-    apply_embed_interface_override,
-    flow_ui_agent_identity_image_url,
-    resolve_flow_interface_config,
-)
 from core.models.identity_models import User
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 from core.utils.tokens import TokenData, TokenType
@@ -270,7 +260,6 @@ def _validate_flow_ui_share_claims(
         "flow_ui_share_flow_id": None,
         "flow_ui_share_branch_id": None,
         "flow_ui_share_context_id": None,
-        "flow_ui_share_document_id": None,
         "flow_ui_share_origin": None,
     }
     for key, allowed in expected.items():
@@ -478,9 +467,13 @@ def _validate_embed_session_claims(
         return "Embed session token is not allowed for this flow"
 
     allowed_origin = metadata.get("allowed_origin")
-    origin = request.headers.get("origin", "")
     if isinstance(allowed_origin, str) and allowed_origin.strip():
-        if origin != allowed_origin.strip():
+        # Браузер не шлёт Origin на same-origin GET: тогда origin запроса — сам сервис.
+        request_origin = (
+            request.headers.get("origin", "").strip()
+            or build_service_base_url(request).rstrip("/")
+        )
+        if request_origin != allowed_origin.strip():
             return "Origin is not allowed for this embed session token"
 
     allowed_branch_id = _embed_session_branch_from_token_metadata(metadata)
@@ -679,10 +672,8 @@ async def _handle_subscribe_streaming(
     handler: A2AChannel,
     params: SubscribeToTaskRequest,
     rpc_id: JsonRpcId,
-    *,
-    after_sequence: int,
 ) -> AsyncGenerator[str, None]:
-    async for event in handler.on_subscribe_to_task(params, after_sequence=after_sequence):
+    async for event in handler.on_subscribe_to_task(params):
         response = {
             "jsonrpc": "2.0",
             "id": rpc_id,
@@ -861,12 +852,6 @@ async def _json_rpc_handler_internal(
         context=context,
         flow_config=config,
         container=as_flow_runtime_container(container),
-        activated_extensions=parse_a2a_extensions_header(
-            request.headers.get(A2A_EXTENSIONS_HEADER)
-        ),
-        interface_override=(
-            None if embed_target is None else embed_target.interface_override
-        ),
     )
 
     # Группы пользователя для проверки прав доступа
@@ -945,18 +930,9 @@ async def _json_rpc_handler_internal(
             return {"jsonrpc": "2.0", "id": rpc_id, "result": _proto_result(result)}
 
         if method == SUBSCRIBE_TO_TASK:
-            after_sequence = extract_subscribe_after_sequence(params_dict)
-            params = _parse_proto_params(
-                strip_subscribe_platform_metadata(params_dict),
-                SubscribeToTaskRequest,
-            )
+            params = _parse_proto_params(params_dict, SubscribeToTaskRequest)
             return StreamingResponse(
-                _handle_subscribe_streaming(
-                    handler,
-                    params,
-                    rpc_id,
-                    after_sequence=after_sequence,
-                ),
+                _handle_subscribe_streaming(handler, params, rpc_id),
                 media_type="text/event-stream",
                 headers=_SSE_HEADERS,
             )
@@ -1104,55 +1080,14 @@ async def json_rpc_embed_handler(
     )
 
 
-class InterfaceProfileViewer(BaseModel):
-    """Control-plane permissions; runtime state is intentionally absent."""
-
-    can_edit_flow: bool
-    can_interact: bool
-    can_share: bool
-    auth_mode: Literal["platform", "embed", "share"]
-
-
-class InterfaceCatalogProfile(BaseModel):
-    extension_uri: str = A2UI_EXTENSION_URI
-    version: str = A2UI_VERSION
-    platform_catalog_id: str = A2UI_PLATFORM_CATALOG_ID
-
-
-class InterfaceCapabilitiesProfile(BaseModel):
-    bootstrap: bool = True
-    autosync: bool = True
-    cancel: bool
-    files: bool
-    voice: bool
-
-
-class InterfaceFlowIdentity(BaseModel):
-    title: str
-    image_url: str | None = None
-
-
-class InterfaceProfileResponse(BaseModel):
-    """Narrow control plane; document, values and artifacts travel only in A2A."""
-
-    flow_id: str
-    branch_id: str
-    viewer: InterfaceProfileViewer
-    look: EmbedInterfaceLook | None = None
-    catalog: InterfaceCatalogProfile
-    capabilities: InterfaceCapabilitiesProfile
-    flow_identity: InterfaceFlowIdentity
-
-
-async def _interface_profile_internal(
+async def _flow_interface_internal(
     *,
     flow_id: str,
     branch_id: str,
     request: Request,
     container: FlowContainer,
     embed_target: EmbedTarget | None = None,
-) -> InterfaceProfileResponse:
-    """Resolve host controls without exposing a second runtime UI representation."""
+) -> FlowInterfaceResponse:
     token_data_raw = _request_state_mapping(request).get("token_data")
     token_data = token_data_raw if isinstance(token_data_raw, TokenData) else None
     is_embed_session = _is_embed_session_token(token_data)
@@ -1193,28 +1128,25 @@ async def _interface_profile_internal(
                 company_id=token_data.company_id,
                 flow_id=flow_id,
                 context_id=str(token_data.metadata["flow_ui_share_context_id"]),
-                document_id=str(token_data.metadata["flow_ui_share_document_id"]),
                 require_editor=False,
             )
         except PermissionError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         share_permission = grant.permission
 
-    branch = config.branches.get(branch_id)
-    effective_interface = resolve_flow_interface_config(
-        config.interface,
-        branch_override=None if branch is None else branch.interface_override,
-    )
-    effective_interface = apply_embed_interface_override(
-        effective_interface,
-        None if embed_target is None else embed_target.interface_override,
-    )
-    policy = effective_interface.policy
+    document = config.interface_for_branch(branch_id)
+    if embed_target is not None:
+        document = document.with_embed_overrides(
+            conversation=embed_target.conversation,
+            start_page_id=embed_target.start_page_id,
+        )
+    settings = document.conversation_settings()
     look = embed_target.look if embed_target is not None else None
-    return InterfaceProfileResponse(
+    return FlowInterfaceResponse(
         flow_id=flow_id,
         branch_id=branch_id,
-        viewer=InterfaceProfileViewer(
+        document=document,
+        viewer=FlowInterfaceViewer(
             can_edit_flow=not is_embed_session and not is_share_session,
             can_interact=share_permission != "viewer",
             can_share=(
@@ -1233,33 +1165,31 @@ async def _interface_profile_internal(
             ),
         ),
         look=look,
-        catalog=InterfaceCatalogProfile(),
-        capabilities=InterfaceCapabilitiesProfile(
-            autosync=share_permission != "viewer",
-            cancel=policy.allow_cancel and share_permission != "viewer",
-            files=policy.show_files_panel and not is_share_session,
+        capabilities=FlowInterfaceCapabilities(
+            cancel=settings.allow_cancel and share_permission != "viewer",
+            files=settings.show_files_panel and not is_share_session,
             voice=(
-                policy.allow_voice
+                settings.allow_voice
                 and share_permission != "viewer"
                 and (look is None or look.voice_enabled)
             ),
         ),
-        flow_identity=InterfaceFlowIdentity(
+        flow_identity=FlowInterfaceIdentity(
             title=config.name,
-            image_url=flow_ui_agent_identity_image_url(effective_interface.template.document),
+            image_url=document.agent_identity_image_url(),
         ),
     )
 
 
-@router.get("/{flow_id}/interface-profile", response_model=InterfaceProfileResponse)
-async def get_flow_interface_profile(
+@router.get("/{flow_id}/interface", response_model=FlowInterfaceResponse)
+async def get_flow_interface(
     flow_id: str,
     request: Request,
     container: ContainerDep,
     branch_id: str = "default",
-) -> InterfaceProfileResponse:
-    """Control plane for an authenticated platform surface."""
-    return await _interface_profile_internal(
+) -> FlowInterfaceResponse:
+    """Документ интерфейса и права для авторизованной поверхности платформы."""
+    return await _flow_interface_internal(
         flow_id=flow_id,
         branch_id=branch_id,
         request=request,
@@ -1267,19 +1197,19 @@ async def get_flow_interface_profile(
     )
 
 
-@router.get("/embed/{embed_id}/interface-profile", response_model=InterfaceProfileResponse)
-async def get_embed_interface_profile(
+@router.get("/embed/{embed_id}/interface", response_model=FlowInterfaceResponse)
+async def get_embed_interface(
     embed_id: str,
     request: Request,
     container: ContainerDep,
-) -> InterfaceProfileResponse:
-    """Control plane for an embed surface; runtime document still comes from A2A."""
+) -> FlowInterfaceResponse:
+    """Документ интерфейса embed-поверхности с настройками EmbedConfig."""
     embed_target = await resolve_embed_target(container, embed_id)
     if embed_target is None:
         raise HTTPException(status_code=404, detail=f"Embed not found: {embed_id}")
     if not embed_target.active:
         raise HTTPException(status_code=403, detail=f"Embed disabled: {embed_id}")
-    return await _interface_profile_internal(
+    return await _flow_interface_internal(
         flow_id=embed_target.flow_id,
         branch_id=embed_target.branch_id,
         request=request,

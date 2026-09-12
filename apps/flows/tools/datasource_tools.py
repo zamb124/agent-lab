@@ -72,7 +72,7 @@ async def db_query(
     tags=_TAGS,
     permission=_PERM,
     parameters_model=DatasourceSqlCallArgs,
-    effects=["write"],
+    effects=["create", "update", "delete"],
     confirmation_floor="approval",
 )
 async def db_execute(

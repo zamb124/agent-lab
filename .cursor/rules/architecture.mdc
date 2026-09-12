@@ -185,14 +185,13 @@ config = await get_container().flow_repository.get(flow_id)
 
 ```text
 core/a2a (wire primitives, no UI domain)
-  ← core/a2ui codec/catalog identity
-  ← core/state/flow_ui domain + semantic delta
-  ← apps/flows A2A negotiation/representation/session/projection services
-  ← core/frontend flow-ui protocol/state/layout/catalog/renderer
-  ← apps/flows Interface editor hosts
+  ← core/flow_ui (document — грамматика блоков, protocol, projection, action, runtime/effects, problems, templates, interface)
+  ← apps/flows streaming emitter / channels / flow_ui_tools / api (interface, flow-ui schema|templates|assist)
+  ← core/frontend/static/lib/flow-ui (protocol/runtime/blocks/components/shell) + core/clients/flow_ui_client.py
+  ← apps/flows/ui interface-editor
 ```
 
-Backend domain не импортирует frontend; `core/a2a` не импортирует Flow UI/A2UI. Capability runners возвращают typed `PlatformEffect`, но не знают renderer. A2A durable projection commit предшествует Redis/SSE publish. Chat-specific parallel layers, service locator и host-specific grids запрещены. Канон → **`flow_ui.mdc`**.
+Backend domain не импортирует frontend; `core/a2a` не импортирует Flow UI. Capability runners возвращают typed `PlatformEffect`, но не знают renderer. A2A durable projection commit предшествует Redis/SSE publish. Chat-specific parallel layers, service locator и host-specific renderers запрещены. Канон → **`flow_ui.mdc`**.
 
 ## LLM, мультимодал, NanoBanana
 

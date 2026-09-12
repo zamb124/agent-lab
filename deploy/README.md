@@ -75,8 +75,8 @@ MicroK8s (одна нода)
 
 | Зона | Источник | Проверка после деплоя |
 |------|----------|------------------------|
-| HTTP-приложения | `applications.*` → Deployments/Services из **`templates/30-apps/`** | Имена в **`EXPECTED_DEPLOYMENTS`** в [`deploy/scripts/cluster-health.sh`](scripts/cluster-health.sh) должны совпадать с включёнными сервисами |
-| Воркеры TaskIQ | `workers.*` → **`templates/40-workers/`** | Те же имена (ключ YAML = имя Deployment, например `flows-worker`) в **`EXPECTED_DEPLOYMENTS`** |
+| HTTP-приложения | `applications.*` → Deployments/Services из **`templates/30-apps/`** | Имена в **`EXPECTED_DEPLOYMENTS`** в [`deploy/scripts/cluster-health.sh`](scripts/cluster-health.sh) должны совпадать с включёнными сервисами (включая `secrets`, `wiki`, `worktracker`, `search`) |
+| Воркеры TaskIQ | `workers.*` → **`templates/40-workers/`** | Те же имена в **`EXPECTED_DEPLOYMENTS`** (`flows-worker`, `scheduler`, `rag-worker`, `sync-worker`, `crm-worker`, `crm-summary-worker`, `idle-worker`, `search-worker`). Health также ловит OOM/`worker-0 is dead` у idle/search |
 | LitServe | `litserve.*` → **`templates/50-gpu/litserve.yaml`** | `provider-litserve` в **`EXPECTED_DEPLOYMENTS`**; при **`litserve.enabled: false`** уберите его из списка и из Ingress (правила **`/litserve`** рендерятся только если LitServe включён) |
 | Прочие деплойменты | livekit, onlyoffice, grafana и т.д. в **`templates/60-external/`**, **`70-observability/`** | Уже перечислены в **`EXPECTED_DEPLOYMENTS`** / **`EXPECTED_STATEFULSETS`** / **`EXPECTED_DAEMONSETS`** |
 

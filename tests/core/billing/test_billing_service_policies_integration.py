@@ -6,7 +6,6 @@ BillingService: can_use_resource, stats, reset_monthly_billing, ошибки mer
 
 from __future__ import annotations
 
-from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import json
 
 import pytest
@@ -20,6 +19,7 @@ from core.billing.service import (
 )
 from core.models.billing_models import DEFAULT_TARIFF_PRICES, UsageType
 from core.models.identity_models import Company
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
 def _minimal_base_prices() -> dict:

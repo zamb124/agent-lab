@@ -38,12 +38,15 @@
 10. ``llm.platform_free_pool.providers`` запрещён: Humanitec LLMs free pool
     строится из canonical ``core.ai.providers``, а не из config provider-list.
 
-11. UI/i18n не должен показывать внутреннее имя ``LitServe`` /
+11. ``llm.model_scoring`` в conf запрещён: мировые рейтинги — AA, overlay только в БД.
+
+12. UI/i18n не должен показывать внутреннее имя ``LitServe`` /
     ``provider_litserve`` как продуктовый provider. Публичный label — Humanitec.
 """
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -68,6 +71,10 @@ _FORBIDDEN_LEGACY_SYMBOLS: tuple[str, ...] = (
     "parse_rag_rerank_override",
     "parse_crm_summarize_provider",
     "resolve_crm_summarize_llm_pair",
+    "LLMModelScoringConfig",
+    "LLMModelScoreSeedItem",
+    "PlatformModelScoreHint",
+    "split_score_dimensions",
 )
 
 
@@ -496,7 +503,11 @@ def main() -> int:
                 "use core.ai.adapters"
             )
 
-    for config_name in ("conf.json", "conf.local.json"):
+    for config_name in (
+        "conf.json",
+        "conf.local.json",
+        "deploy/helm/agent-lab/files/app-conf.json",
+    ):
         config_path = REPO_ROOT / config_name
         if not config_path.exists():
             continue
@@ -508,6 +519,17 @@ def main() -> int:
             failures.append(
                 f"{config_name}: llm.platform_free_pool.providers is forbidden; "
                 "free-pool providers come from core.ai.providers"
+            )
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError as exc:
+            failures.append(f"{config_name}: invalid JSON: {exc}")
+            continue
+        llm_section = parsed.get("llm") if isinstance(parsed, dict) else None
+        if isinstance(llm_section, dict) and "model_scoring" in llm_section:
+            failures.append(
+                f"{config_name}: llm.model_scoring is forbidden; "
+                "AA/heuristic score is computed, overlay lives in llm_model_scores"
             )
 
     for path in _company_ai_ui_files():

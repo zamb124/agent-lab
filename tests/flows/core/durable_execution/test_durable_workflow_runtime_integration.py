@@ -43,6 +43,7 @@ from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.db.storage import Storage
 from core.errors import FlowPrematureCompletionError
+from core.flow_ui.templates import default_chat_document
 from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 
@@ -582,6 +583,7 @@ async def test_parallel_superstep_retry_preserves_successful_pending_writes(
             "bad": _FailingNode("bad", {"type": "function"}, container=container),
         },
         edges=[],
+        interface=default_chat_document(),
         container=container,
     )
 
@@ -677,6 +679,7 @@ async def test_node_activity_id_uses_durable_schedule_sequence_for_loop_visits(
                 },
             },
         ],
+        interface=default_chat_document(),
         container=container,
     )
 
@@ -827,6 +830,7 @@ async def test_code_edge_condition_replays_from_activity_journal_for_same_edge_s
                 },
             },
         ],
+        interface=default_chat_document(),
         container=container,
     )
 
@@ -1415,6 +1419,7 @@ async def test_flow_node_records_child_workflow_as_separate_durable_history(
         },
         edges=[],
         config={"version": "child-v1"},
+        interface=default_chat_document(),
         container=container,
     )
     factory.set_flow(child_flow)
@@ -1434,6 +1439,7 @@ async def test_flow_node_records_child_workflow_as_separate_durable_history(
             )
         },
         edges=[],
+        interface=default_chat_document(),
         container=container,
     )
     state = create_initial_state(
@@ -1525,6 +1531,7 @@ async def test_flow_node_replay_reuses_completed_child_workflow_history(
         },
         edges=[],
         config={"version": "child-v1"},
+        interface=default_chat_document(),
         container=container,
     )
     factory.set_flow(child_flow)
@@ -1640,6 +1647,7 @@ async def test_flow_node_resume_uses_same_child_workflow_session_after_interrupt
         },
         edges=[],
         config={"version": "child-v1"},
+        interface=default_chat_document(),
         container=container,
     )
     factory.set_flow(child_flow)
@@ -1659,6 +1667,7 @@ async def test_flow_node_resume_uses_same_child_workflow_session_after_interrupt
             )
         },
         edges=[],
+        interface=default_chat_document(),
         container=container,
     )
     state = create_initial_state(

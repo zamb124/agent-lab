@@ -534,12 +534,10 @@ async def _send_embed_message(page: Page, user_line: str, network_events: list[s
     root = page.locator(
         "flow-ui-drawer platform-flow-ui, flow-ui-page-host platform-flow-ui, platform-flow-ui"
     ).first
-    textarea = root.locator(
-        '[data-flow-ui-component="message-input"] textarea, textarea'
-    ).first
+    textarea = root.locator('textarea[data-canon="composer"]').first
     await expect(textarea).to_be_visible(timeout=5_000)
     await textarea.fill(user_line)
-    send_btn = root.get_by_role("button", name=re.compile(r"Submit|Отправить|Send")).first
+    send_btn = root.get_by_role("button", name=re.compile(r"^(Send|Отправить)$")).first
     await expect(send_btn).to_be_enabled(timeout=5_000)
     await send_btn.click()
     try:
@@ -1056,7 +1054,8 @@ async def test_embed_site_all_live_attrs_host_api_and_message(
                 """() => {
                     const flowUi = window.linnexFlowUI.element.shadowRoot
                         .querySelector('platform-flow-ui');
-                    const last = flowUi.shadowRoot.querySelector('.top-actions').lastElementChild;
+                    const drawerControls = flowUi.shadowRoot.querySelector('.top-actions').lastElementChild;
+                    const last = drawerControls.shadowRoot.querySelector('button:last-of-type');
                     return last.getAttribute('aria-label');
                 }"""
             )

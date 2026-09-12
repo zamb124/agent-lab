@@ -20,7 +20,6 @@ from core.variables.models import (
     variable_map_to_prompt_values,
 )
 from core.variables.resolver import (
-    UnmatchedBracesError,
     VariableResolutionError,
     VariableResolver,
     VarResolver,
@@ -30,7 +29,9 @@ from core.variables.resolver import (
 from core.variables.template_scan import (
     TemplateScanResult,
     TemplateVariableRef,
+    UnmatchedBracesError,
     scan_prompt_template,
+    unmatched_brace_message,
 )
 
 __all__ = [
@@ -57,5 +58,6 @@ __all__ = [
     "normalize_variables_map",
     "scan_prompt_template",
     "set_state_in_context",
+    "unmatched_brace_message",
     "variable_map_to_prompt_values",
 ]

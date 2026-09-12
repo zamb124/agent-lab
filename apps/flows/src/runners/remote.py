@@ -11,6 +11,7 @@ from apps.flows.src.constants.execution_limits import get_remote_code_runner_htt
 from apps.flows.src.runners.base import BaseCodeRunner
 from apps.flows.src.runners.tool_context_view import build_tool_context_view
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.runtime.flow_interface_context import current_flow_interface
 from apps.flows.src.runtime.tool_call_context import get_active_tool_call_context
 from core.capabilities import (
     CapabilityExecutionContext,
@@ -36,9 +37,9 @@ from core.capabilities.tokens import (
 from core.clients.service_client import ServiceClient
 from core.context import get_context
 from core.errors import CodeExecutionRuntimeError, FrozenStateFieldError
+from core.flow_ui.effects import apply_capability_platform_effects
 from core.logging import get_log_context, get_logger
 from core.state import ExecutionState, parse_interrupt_body_from_external_dict
-from core.state.flow_ui_effects import apply_capability_platform_effects
 from core.state.mutation_policy import (
     USER_RETURN_FORBIDDEN_FROZEN_FIELDS,
     should_skip_field_on_user_returned_state_copy,
@@ -280,12 +281,16 @@ class RemoteCodeRunner(BaseCodeRunner):
         if response.status == "failed":
             self._raise_execution_failed(response)
         self._apply_returned_state(state, response, frozen_snapshot)
-        _ = apply_capability_platform_effects(
-            state,
-            response.platform_effects,
-            context=context,
-            manifest=manifest,
-        )
+        if response.platform_effects:
+            # UI-эффекты адресуют слоты и страницы интерфейса, поэтому допустимы
+            # только внутри исполнения Flow; standalone-запуск tool без эффектов легален.
+            apply_capability_platform_effects(
+                state,
+                response.platform_effects,
+                context=context,
+                manifest=manifest,
+                interface=current_flow_interface(),
+            )
         if response.status == "interrupted":
             self._raise_interrupted(response)
         return response

@@ -1,336 +1,130 @@
-import { createSlice } from '@platform/lib/events/index.js';
+/**
+ * Состояние редактора интерфейса: черновик документа с историей (undo/redo, коалесценция
+ * по ``block_id:property``, лимит 80), выделение, активная страница, ширина холста, режим предпросмотра.
+ *
+ * Документ меняется только командами домена (`interface-editor-domain.js`); slice хранит результат.
+ */
 
-function requirePayloadObject(event) {
+import { createSlice } from '@platform/lib/events/index.js';
+import {
+    EDITOR_VIEWPORTS,
+    commitHistory,
+    createHistory,
+    redoHistory,
+    undoHistory,
+} from '../../components/interface-editor/interface-editor-domain.js';
+
+function requirePayload(event) {
     const payload = event.payload;
-    if (payload === undefined || payload === null) {
-        return {};
-    }
-    if (typeof payload !== 'object' || Array.isArray(payload)) {
+    if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
         throw new Error(`flows/interface_editor: payload must be object for ${event.type}`);
     }
     return payload;
 }
 
-function requireString(payload, key, eventType) {
-    const value = payload[key];
-    if (typeof value !== 'string' || value.length === 0) {
-        throw new Error(`flows/interface_editor: ${key} required for ${eventType}`);
+function requireDocument(payload, eventType) {
+    const document = payload.document;
+    if (document === null || typeof document !== 'object' || !Array.isArray(document.pages)) {
+        throw new Error(`flows/interface_editor: document required for ${eventType}`);
     }
-    return value;
+    return document;
 }
 
-function requireNumber(payload, key, eventType, fallback) {
-    if (!(key in payload)) {
-        if (fallback === undefined) {
-            throw new Error(`flows/interface_editor: ${key} required for ${eventType}`);
-        }
-        return fallback;
-    }
-    const value = Number(payload[key]);
-    if (!Number.isFinite(value)) {
-        throw new Error(`flows/interface_editor: ${key} must be finite number for ${eventType}`);
-    }
-    return value;
+function requireHistory(state, eventType) {
+    if (state.history === null) throw new Error(`flows/interface_editor: no document opened for ${eventType}`);
+    return state.history;
 }
-
-const HISTORY_LIMIT = 80;
-const HISTORY_COALESCE_MS = 1200;
 
 export const interfaceEditorSlice = createSlice({
     name: 'flows/interface_editor',
     extraInitial: {
-        selectedComponentId: 'root',
-        selectedComponentIds: Object.freeze(['root']),
-        hoveredComponentId: '',
-        lockedComponentIds: Object.freeze([]),
-        selectedPageId: 'main',
-        targetSurface: 'page',
-        viewportProfile: 'desktop-wide',
-        customWidth: 1440,
-        customHeight: 900,
-        zoom: 1,
-        editBand: 'wide',
-        gridVisible: false,
-        baselineVisible: false,
-        rulersVisible: false,
-        guidesVisible: true,
-        guides: Object.freeze([]),
-        snapEnabled: true,
-        dataFlowVisible: false,
-        previewMode: false,
-        runMode: false,
-        openPanel: 'properties',
-        lastMeasuredRevision: 0,
-        history: Object.freeze({ past: Object.freeze([]), future: Object.freeze([]) }),
+        /** ``flow_id:branch_id`` открытого документа. */
+        documentKey: '',
+        history: null,
+        pageId: '',
+        selectedBlockId: '',
+        viewport: 'desktop',
+        preview: false,
+        sidebarTab: 'add',
+    },
+    extraEvents: {
+        DOCUMENT_OPENED: 'document_opened',
+        DOCUMENT_COMMITTED: 'document_committed',
+        HISTORY_UNDONE: 'history_undone',
+        HISTORY_REDONE: 'history_redone',
+        PAGE_SELECTED: 'page_selected',
+        BLOCK_SELECTED: 'block_selected',
+        VIEWPORT_SET: 'viewport_set',
+        PREVIEW_SET: 'preview_set',
+        SIDEBAR_TAB_SET: 'sidebar_tab_set',
     },
     actions: {
-        selectComponent: 'component_selected',
-        selectComponents: 'components_selected',
-        hoverComponent: 'component_hovered',
-        toggleLock: 'lock_toggled',
+        openDocument: 'document_opened',
+        commitDocument: 'document_committed',
+        undo: 'history_undone',
+        redo: 'history_redone',
         selectPage: 'page_selected',
-        setTarget: 'target_set',
+        selectBlock: 'block_selected',
         setViewport: 'viewport_set',
-        setZoom: 'zoom_set',
-        setEditBand: 'edit_band_set',
-        toggleGrid: 'grid_toggled',
-        toggleBaseline: 'baseline_toggled',
-        toggleRulers: 'rulers_toggled',
-        toggleGuides: 'guides_toggled',
-        setGuides: 'guides_set',
-        toggleSnap: 'snap_toggled',
-        toggleDataFlow: 'data_flow_toggled',
         setPreview: 'preview_set',
-        setRunMode: 'run_mode_set',
-        setPanel: 'panel_set',
-        setMeasuredRevision: 'measured_revision_set',
-        historyPush: 'history_pushed',
-        historyUndo: 'history_undone',
-        historyRedo: 'history_redone',
-        historyClear: 'history_cleared',
-        reset: 'reset',
+        setSidebarTab: 'sidebar_tab_set',
     },
     extraReducer: (state, event) => {
-        const payload = requirePayloadObject(event);
-        if (event.type === 'flows/interface_editor/component_selected') {
-            const componentId = requireString(payload, 'componentId', event.type);
-            const additive = payload.additive === true;
-            const current = Array.isArray(state.selectedComponentIds)
-                ? state.selectedComponentIds
-                : [state.selectedComponentId];
-            let selectedComponentIds;
-            if (!additive) {
-                selectedComponentIds = [componentId];
-            } else if (current.includes(componentId)) {
-                selectedComponentIds = current.filter((id) => id !== componentId);
-                if (!selectedComponentIds.length) selectedComponentIds = [componentId];
-            } else {
-                selectedComponentIds = [...current, componentId];
+        const type = event.type;
+        if (type === 'flows/interface_editor/document_opened') {
+            const payload = requirePayload(event);
+            const document = requireDocument(payload, type);
+            if (typeof payload.documentKey !== 'string' || payload.documentKey === '') {
+                throw new Error(`flows/interface_editor: documentKey required for ${type}`);
             }
             return {
                 ...state,
-                selectedComponentId: selectedComponentIds[selectedComponentIds.length - 1],
-                selectedComponentIds: Object.freeze(selectedComponentIds),
+                documentKey: payload.documentKey,
+                history: createHistory(document),
+                pageId: document.start_page_id,
+                selectedBlockId: '',
+                preview: false,
             };
         }
-        if (event.type === 'flows/interface_editor/components_selected') {
-            const ids = payload.componentIds;
-            if (!Array.isArray(ids) || !ids.length) {
-                throw new Error(`flows/interface_editor: componentIds required for ${event.type}`);
-            }
-            return {
-                ...state,
-                selectedComponentId: String(ids[ids.length - 1]),
-                selectedComponentIds: Object.freeze(ids.map(String)),
-            };
+        if (type === 'flows/interface_editor/document_committed') {
+            const payload = requirePayload(event);
+            const document = requireDocument(payload, type);
+            const coalesceKey = typeof payload.coalesceKey === 'string' ? payload.coalesceKey : null;
+            const history = commitHistory(requireHistory(state, type), document, coalesceKey);
+            const pageId = document.pages.some((page) => page.page_id === state.pageId) ? state.pageId : document.start_page_id;
+            return { ...state, history, pageId };
         }
-        if (event.type === 'flows/interface_editor/component_hovered') {
-            const hovered = typeof payload.componentId === 'string' ? payload.componentId : '';
-            return { ...state, hoveredComponentId: hovered };
+        if (type === 'flows/interface_editor/history_undone' || type === 'flows/interface_editor/history_redone') {
+            const current = requireHistory(state, type);
+            const history = type.endsWith('undone') ? undoHistory(current) : redoHistory(current);
+            const document = history.present;
+            const pageId = document.pages.some((page) => page.page_id === state.pageId) ? state.pageId : document.start_page_id;
+            return { ...state, history, pageId, selectedBlockId: '' };
         }
-        if (event.type === 'flows/interface_editor/lock_toggled') {
-            const componentId = requireString(payload, 'componentId', event.type);
-            const locked = Array.isArray(state.lockedComponentIds) ? state.lockedComponentIds : [];
-            return {
-                ...state,
-                lockedComponentIds: Object.freeze(locked.includes(componentId)
-                    ? locked.filter((id) => id !== componentId)
-                    : [...locked, componentId]),
-            };
+        if (type === 'flows/interface_editor/page_selected') {
+            const payload = requirePayload(event);
+            if (typeof payload.pageId !== 'string' || payload.pageId === '') throw new Error(`flows/interface_editor: pageId required for ${type}`);
+            return { ...state, pageId: payload.pageId, selectedBlockId: '' };
         }
-        if (event.type === 'flows/interface_editor/page_selected') {
-            return {
-                ...state,
-                selectedPageId: requireString(payload, 'pageId', event.type),
-                selectedComponentId: 'root',
-                selectedComponentIds: Object.freeze(['root']),
-            };
+        if (type === 'flows/interface_editor/block_selected') {
+            const payload = requirePayload(event);
+            if (typeof payload.blockId !== 'string') throw new Error(`flows/interface_editor: blockId must be string for ${type}`);
+            return { ...state, selectedBlockId: payload.blockId, sidebarTab: payload.blockId === '' ? state.sidebarTab : 'properties' };
         }
-        if (event.type === 'flows/interface_editor/guides_set') {
-            const guides = payload.guides;
-            if (!Array.isArray(guides)) {
-                throw new Error(`flows/interface_editor: guides array required for ${event.type}`);
-            }
-            for (const guide of guides) {
-                if (!guide || (guide.axis !== 'x' && guide.axis !== 'y') || !Number.isFinite(guide.offset)) {
-                    throw new Error(`flows/interface_editor: invalid guide for ${event.type}`);
-                }
-            }
-            return {
-                ...state,
-                guides: Object.freeze(guides.map((guide) => Object.freeze({
-                    axis: guide.axis,
-                    offset: Math.round(guide.offset),
-                }))),
-            };
+        if (type === 'flows/interface_editor/viewport_set') {
+            const payload = requirePayload(event);
+            if (!Object.hasOwn(EDITOR_VIEWPORTS, payload.viewport)) throw new Error(`flows/interface_editor: unknown viewport ${String(payload.viewport)}`);
+            return { ...state, viewport: payload.viewport };
         }
-        if (event.type === 'flows/interface_editor/edit_band_set') {
-            const band = requireString(payload, 'band', event.type);
-            if (!['compact', 'medium', 'wide'].includes(band)) {
-                throw new Error(`flows/interface_editor: unknown band ${band}`);
-            }
-            return { ...state, editBand: band };
+        if (type === 'flows/interface_editor/preview_set') {
+            const payload = requirePayload(event);
+            if (typeof payload.preview !== 'boolean') throw new Error(`flows/interface_editor: preview must be boolean for ${type}`);
+            return { ...state, preview: payload.preview };
         }
-        if (event.type === 'flows/interface_editor/history_pushed') {
-            if (!('config' in payload)) {
-                throw new Error(`flows/interface_editor: config required for ${event.type}`);
-            }
-            const label = requireString(payload, 'label', event.type);
-            const coalesceKey = typeof payload.coalesceKey === 'string' ? payload.coalesceKey : '';
-            const now = Date.now();
-            const past = state.history.past;
-            const top = past.length ? past[past.length - 1] : null;
-            if (coalesceKey !== ''
-                && top
-                && top.coalesceKey === coalesceKey
-                && now - top.at < HISTORY_COALESCE_MS) {
-                // Same gesture continues: keep the original "before" snapshot,
-                // refresh the coalesce window, drop redo branch.
-                return {
-                    ...state,
-                    history: Object.freeze({
-                        past: Object.freeze([...past.slice(0, -1), { ...top, at: now }]),
-                        future: Object.freeze([]),
-                    }),
-                };
-            }
-            const entry = Object.freeze({
-                label,
-                coalesceKey,
-                at: now,
-                config: payload.config,
-            });
-            return {
-                ...state,
-                history: Object.freeze({
-                    past: Object.freeze([...past, entry].slice(-HISTORY_LIMIT)),
-                    future: Object.freeze([]),
-                }),
-            };
-        }
-        if (event.type === 'flows/interface_editor/history_undone') {
-            if (!('config' in payload)) {
-                throw new Error(`flows/interface_editor: config required for ${event.type}`);
-            }
-            const past = state.history.past;
-            if (!past.length) return state;
-            const entry = Object.freeze({
-                label: past[past.length - 1].label,
-                coalesceKey: '',
-                at: Date.now(),
-                config: payload.config,
-            });
-            return {
-                ...state,
-                history: Object.freeze({
-                    past: Object.freeze(past.slice(0, -1)),
-                    future: Object.freeze([entry, ...state.history.future].slice(0, HISTORY_LIMIT)),
-                }),
-            };
-        }
-        if (event.type === 'flows/interface_editor/history_redone') {
-            if (!('config' in payload)) {
-                throw new Error(`flows/interface_editor: config required for ${event.type}`);
-            }
-            const future = state.history.future;
-            if (!future.length) return state;
-            const entry = Object.freeze({
-                label: future[0].label,
-                coalesceKey: '',
-                at: Date.now(),
-                config: payload.config,
-            });
-            return {
-                ...state,
-                history: Object.freeze({
-                    past: Object.freeze([...state.history.past, entry].slice(-HISTORY_LIMIT)),
-                    future: Object.freeze(future.slice(1)),
-                }),
-            };
-        }
-        if (event.type === 'flows/interface_editor/history_cleared') {
-            return {
-                ...state,
-                history: Object.freeze({ past: Object.freeze([]), future: Object.freeze([]) }),
-            };
-        }
-        if (event.type === 'flows/interface_editor/target_set') {
-            return {
-                ...state,
-                targetSurface: requireString(payload, 'target', event.type),
-            };
-        }
-        if (event.type === 'flows/interface_editor/viewport_set') {
-            return {
-                ...state,
-                viewportProfile: requireString(payload, 'profile', event.type),
-                customWidth: requireNumber(payload, 'width', event.type, state.customWidth),
-                customHeight: requireNumber(payload, 'height', event.type, state.customHeight),
-            };
-        }
-        if (event.type === 'flows/interface_editor/zoom_set') {
-            if (payload.zoom === 'fit') {
-                return { ...state, zoom: 'fit' };
-            }
-            const zoom = requireNumber(payload, 'zoom', event.type);
-            return {
-                ...state,
-                zoom: Math.min(2, Math.max(0.5, zoom)),
-            };
-        }
-        if (event.type === 'flows/interface_editor/grid_toggled') {
-            return { ...state, gridVisible: !state.gridVisible };
-        }
-        if (event.type === 'flows/interface_editor/baseline_toggled') {
-            return { ...state, baselineVisible: !state.baselineVisible };
-        }
-        if (event.type === 'flows/interface_editor/rulers_toggled') {
-            return { ...state, rulersVisible: !state.rulersVisible };
-        }
-        if (event.type === 'flows/interface_editor/guides_toggled') {
-            return { ...state, guidesVisible: !state.guidesVisible };
-        }
-        if (event.type === 'flows/interface_editor/snap_toggled') {
-            return { ...state, snapEnabled: !state.snapEnabled };
-        }
-        if (event.type === 'flows/interface_editor/data_flow_toggled') {
-            return { ...state, dataFlowVisible: !state.dataFlowVisible };
-        }
-        if (event.type === 'flows/interface_editor/preview_set') {
-            if (!('value' in payload)) {
-                throw new Error(`flows/interface_editor: value required for ${event.type}`);
-            }
-            return { ...state, previewMode: Boolean(payload.value), runMode: false };
-        }
-        if (event.type === 'flows/interface_editor/run_mode_set') {
-            if (!('value' in payload)) {
-                throw new Error(`flows/interface_editor: value required for ${event.type}`);
-            }
-            return { ...state, runMode: Boolean(payload.value), previewMode: false };
-        }
-        if (event.type === 'flows/interface_editor/panel_set') {
-            return {
-                ...state,
-                openPanel: requireString(payload, 'panel', event.type),
-            };
-        }
-        if (event.type === 'flows/interface_editor/measured_revision_set') {
-            return {
-                ...state,
-                lastMeasuredRevision: requireNumber(payload, 'revision', event.type),
-            };
-        }
-        if (event.type === 'flows/interface_editor/reset') {
-            return {
-                ...state,
-                selectedComponentId: 'root',
-                selectedComponentIds: Object.freeze(['root']),
-                hoveredComponentId: '',
-                selectedPageId: 'main',
-                previewMode: false,
-                runMode: false,
-                history: Object.freeze({ past: Object.freeze([]), future: Object.freeze([]) }),
-            };
+        if (type === 'flows/interface_editor/sidebar_tab_set') {
+            const payload = requirePayload(event);
+            if (payload.tab !== 'add' && payload.tab !== 'properties') throw new Error(`flows/interface_editor: unknown sidebar tab ${String(payload.tab)}`);
+            return { ...state, sidebarTab: payload.tab };
         }
         return state;
     },

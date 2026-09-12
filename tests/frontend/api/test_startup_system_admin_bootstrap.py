@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-
-from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 from unittest.mock import AsyncMock
 
 import pytest
@@ -12,6 +10,7 @@ from core.identity.system_bootstrap import (
     ensure_system_company_exists,
 )
 from core.models.identity_models import Company, User
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
 def _fake_authz() -> AuthzService:

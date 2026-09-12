@@ -53,8 +53,8 @@ files/                          # ConfigMap источники (loki, tempo, all
 - образ `image.repository=ghcr.io/zamb124/agent-lab`; production deploy задаёт уникальный immutable `image.tag` (CI: `--set image.tag=$SHA`). `latest` для production запрещён: он ломает `SERVER__DEPLOYMENT_VERSION` и PWA-инвалидацию статики;
 - `masterNodeName: master` — куда прибиваются Postgres/Redis/Loki/Tempo;
 - `gpuNodeSelectorKey/Value: accelerator=nvidia-gpu` — куда прибивается LitServe;
-- `applications.<name>` (11 сервисов: flows/frontend/crm/rag/sync/worktracker/office/scheduler-api/voice/browser/search) — порт, реплики, command;
-- `workers.<name>` (6 воркеров) — реплики и command для TaskIQ;
+- `applications.<name>` (flows/frontend/crm/rag/sync/worktracker/wiki/office/scheduler-api/voice/browser/search/secrets/capability-gateway/code-runner-*) — порт, реплики, command;
+- `workers.<name>` (flows-worker, scheduler, rag-worker, sync-worker, crm-worker, crm-summary-worker, idle-worker, search-worker) — реплики и command для TaskIQ;
 - `litserve`, `livekit`, `livekitEgress`, `coturn`, `onlyoffice`, `observability.{loki,tempo,grafana,alloy}`, `ingress.*`;
 - `platformSecrets` + `platformSecretName: platform-secrets` — Helm создаёт Secret из `templates/01-platform-secrets.yaml` при `platformSecrets.create=true`. Значения через `--set-json platformSecrets=...` из `deploy/scripts/helm_platform_secrets_json.sh` и CI. Namespace релиза создаётся `helm upgrade --install ... --create-namespace`.
 
@@ -94,10 +94,18 @@ Free-threaded build (cp314t) даёт shared interpreter без fork-копир�
 | rag | 8004 | 1 | `granian --interface asgi apps.rag.main:app …` |
 | sync | 8005 | 1 | `granian --interface asgi apps.sync.main:app …` |
 | worktracker | 8021 | 1 | `granian --interface asgi apps.worktracker.main:app …` |
+| wiki | 8023 | 1 | `granian --interface asgi apps.wiki.main:app …` |
 | scheduler-api | 8006 | 1 | `granian --interface asgi apps.scheduler.main:app …` |
 | office | 8008 | 1 | `granian --interface asgi apps.office.main:app …` |
 | voice | 8015 | 1 | `granian --interface asgi apps.voice.main:app …` |
 | browser | 8009 | 1 | `granian --interface asgi apps.browser.main:app …` + sidecar `zenika/alpine-chrome` (CDP 9222 в Pod) |
+| search | 8010 | 1 | `granian --interface asgi apps.search.main:app …` |
+| secrets | 8022 | 1 | `granian --interface asgi apps.secrets.main:app …` |
+| capability-gateway | 8016 | 1 | `granian --interface asgi apps.capability_gateway.main:app …` |
+| code-runner-python | 8017 | 1 | isolated Python runner |
+| code-runner-node | 8018 | 1 | isolated Node runner |
+| code-runner-go | 8019 | 1 | isolated Go runner |
+| code-runner-csharp | 8020 | 1 | isolated C# runner |
 | provider-litserve (GPU) | 8014 | 1 | `granian --interface asgi apps.provider_litserve.main:app …` (nodeSelector; ML GIL resurrection) |
 | flows-worker | — | 2 | `taskiq worker apps.flows_worker.worker:worker_app --workers 4` |
 | scheduler | — | 1 | `taskiq scheduler apps.scheduler.scheduler:scheduler` |
@@ -106,6 +114,7 @@ Free-threaded build (cp314t) даёт shared interpreter без fork-копир�
 | crm-worker | — | 1 | `taskiq worker apps.crm_worker.worker:worker_app --workers 2` |
 | crm-summary-worker | — | 1 | `taskiq worker apps.crm_worker.summary_worker:worker_app --workers 2` |
 | idle-worker | — | 1 | `taskiq worker apps.idle_worker.worker:worker_app --workers 2` |
+| search-worker | — | 1 | `taskiq worker apps.search_worker.worker:worker_app --workers 1` |
 
 Один immutable образ `ghcr.io/zamb124/agent-lab:<image.tag>`, разные `command:` (полная строка granian с `--static-path-route`/`--static-path-mount`) через `values.yaml`.
 
@@ -117,7 +126,7 @@ Free-threaded build (cp314t) даёт shared interpreter без fork-копир�
 
 ## БД и миграции
 
-`postgres` — StatefulSet с PVC 50Gi на master (`storageClassName: microk8s-hostpath`). Все 7 сервисных БД создаются через `ConfigMap postgres-init-scripts` (mounted в `/docker-entrypoint-initdb.d/01-init-databases.sql` при первом старте; источник — `migrations/postgres/init.sql`).
+`postgres` — StatefulSet с PVC 50Gi на master (`storageClassName: microk8s-hostpath`). Args: `max_connections` и `shared_buffers` из `values.yaml` (`postgres.maxConnections`, `postgres.sharedBuffers`). Все сервисные БД создаются через `ConfigMap postgres-init-scripts` (mounted в `/docker-entrypoint-initdb.d/01-init-databases.sql` при первом старте; источник — `migrations/postgres/init.sql`).
 
 `redis` — StatefulSet с PVC 10Gi на master, AOF включён.
 

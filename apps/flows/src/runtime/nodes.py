@@ -69,7 +69,7 @@ from apps.flows.src.runtime.llm_resource_config import (
     resolve_llm_config_with_resource_key,
 )
 from apps.flows.src.runtime.runners import LlmNodeRunner
-from apps.flows.src.runtime_helpers.flow_ui_presenter import present_flow_ui_artifact
+from apps.flows.src.runtime_helpers.flow_ui_cards import card_block_id, show_reflection
 from apps.flows.src.services.hitl_work_item_service import HANDOFF_PREVIEW_MAX_LEN
 from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
 from apps.flows.src.state.interrupt_manager import InterruptManager
@@ -862,10 +862,9 @@ class BaseNode(ABC):
             if field_name in source_fields:
                 target[field_name] = source_fields[field_name]
 
-        # PrivateAttr queue is not in model_fields; without this merge, Flow UI
-        # presenter deltas (browser preview, skill activity, …) never reach
-        # superstep emit_flow_ui_transitions.
-        target.queue_ui_transitions(source.drain_ui_transitions())
+        # Очередь ui-событий — PrivateAttr, не model field: без переноса карточки
+        # инструментов не дошли бы до flush в конце superstep.
+        target.queue_ui_events(source.drain_ui_events())
 
         extra_src = require_json_object(
             source.__pydantic_extra__ or {},
@@ -2172,7 +2171,6 @@ class RemoteFlowNode(BaseNode):
             state.response = result.response
             state["remote_status"] = result.status
             state["remote_artifacts"] = result.artifacts
-            state["remote_negotiated_extensions"] = result.negotiated_extensions
 
             emitter = await Emitter.create_ensured(self.container, state)
             for artifact_payload in result.artifacts:
@@ -2938,32 +2936,15 @@ class ReflectionNode(BaseNode):
             if exit_item.exit_id == result.exit_id:
                 exit_label = exit_item.label
                 break
-        issues_payload: list[JsonObject] = []
+        lines = [f"**{exit_label}** — {result.critique.decision}", result.critique.summary]
         for issue in result.critique.issues[:5]:
-            issues_payload.append(
-                {
-                    "criterion_id": issue.criterion_id,
-                    "severity": issue.severity,
-                    "finding": issue.finding,
-                }
-            )
-        _ = present_flow_ui_artifact(
+            lines.append(f"- {issue.severity}: {issue.finding}")
+        for reason in result.blocked_reasons:
+            lines.append(f"- {reason}")
+        _ = show_reflection(
             state,
-            kind="reflection_result",
-            data={
-                "node_id": self.node_id,
-                "policy_id": result.policy_id,
-                "gate": result.gate,
-                "exit_id": result.exit_id,
-                "exit_label": exit_label,
-                "approved": result.approved,
-                "decision": result.critique.decision,
-                "summary": result.critique.summary,
-                "blocked_reasons": list(result.blocked_reasons),
-                "issues": issues_payload,
-            },
-            source="reflection",
-            artifact_id=f"{self.node_id}:{result.exit_id}",
+            card_id=card_block_id("reflection", f"{self.node_id}-{result.exit_id}"),
+            text="\n".join(line for line in lines if line.strip() != ""),
         )
 
     def _resolve_target_snapshot(self, state: ExecutionState) -> ReflectionTargetSnapshot:

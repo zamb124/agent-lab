@@ -20,7 +20,7 @@ export class FlowUITurnToasts extends LitElement {
             inset: auto 12px 12px auto;
             z-index: 20;
             display: grid;
-            gap: 8px;
+            gap: var(--flow-ui-space-2, 8px);
             width: min(360px, calc(100% - 24px));
             pointer-events: none;
         }
@@ -30,7 +30,7 @@ export class FlowUITurnToasts extends LitElement {
             gap: 6px;
             padding: 12px 14px;
             border: 1px solid var(--flow-ui-border, var(--border-subtle));
-            border-radius: var(--flow-ui-radius-lg, var(--radius-lg, 12px));
+            border-radius: var(--flow-ui-radius-lg, 16px);
             background: var(--flow-ui-panel-strong, var(--glass-solid-medium, rgba(22, 33, 62, 0.94)));
             color: var(--flow-ui-text, var(--text-primary));
             box-shadow: var(--flow-ui-panel-shadow, 0 10px 28px color-mix(in srgb, #000 28%, transparent));
@@ -38,7 +38,7 @@ export class FlowUITurnToasts extends LitElement {
             animation: toast-in 160ms ease;
         }
         .toast[data-kind='error'] {
-            border-color: color-mix(in srgb, var(--error, #ff718d) 55%, transparent);
+            border-color: color-mix(in srgb, var(--flow-ui-danger, var(--error, #ff718d)) 55%, transparent);
         }
         .toast[data-kind='response'] {
             border-color: color-mix(in srgb, var(--flow-ui-accent, var(--accent)) 45%, transparent);
@@ -55,7 +55,7 @@ export class FlowUITurnToasts extends LitElement {
             gap: 8px;
             min-width: 0;
             font-weight: 700;
-            font-size: 12px;
+            font-size: var(--flow-ui-font-size-xs, 12px);
             letter-spacing: 0.01em;
             color: var(--flow-ui-heading, var(--text-primary));
         }
@@ -75,8 +75,8 @@ export class FlowUITurnToasts extends LitElement {
         .body {
             margin: 0;
             color: var(--flow-ui-muted, var(--text-secondary));
-            font-size: 12px;
-            line-height: 1.45;
+            font-size: var(--flow-ui-font-size-xs, 12px);
+            line-height: var(--flow-ui-line-height, 1.6);
             white-space: pre-wrap;
             overflow-wrap: anywhere;
             max-height: 9.5em;
@@ -92,13 +92,14 @@ export class FlowUITurnToasts extends LitElement {
             min-height: 30px;
             padding: 5px 10px;
             border: 1px solid var(--flow-ui-border, var(--border-subtle));
-            border-radius: 9px;
+            border-radius: var(--flow-ui-radius-sm, 8px);
             background: transparent;
             color: var(--flow-ui-text, var(--text-primary));
             cursor: pointer;
             font: inherit;
             font-size: 11px;
             font-weight: 650;
+            transition: var(--flow-ui-transition);
         }
         button.primary {
             background: var(--flow-ui-accent, var(--accent));
@@ -106,8 +107,8 @@ export class FlowUITurnToasts extends LitElement {
             color: var(--flow-ui-on-accent, #fff);
         }
         button:focus-visible {
-            outline: 2px solid var(--flow-ui-accent, var(--accent));
-            outline-offset: 2px;
+            outline: none;
+            box-shadow: var(--flow-ui-focus-ring);
         }
         @keyframes toast-in {
             from { opacity: 0; transform: translateY(8px) scale(0.98); }
@@ -117,6 +118,11 @@ export class FlowUITurnToasts extends LitElement {
             0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--flow-ui-accent, var(--accent)) 45%, transparent); }
             70% { box-shadow: 0 0 0 8px transparent; }
             100% { box-shadow: 0 0 0 0 transparent; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .toast { animation: none; }
+            .pulse { animation: none; }
+            button { transition: none; }
         }
     `;
 

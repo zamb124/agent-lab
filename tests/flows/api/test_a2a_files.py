@@ -9,7 +9,6 @@
 import base64
 import uuid
 from typing import Any, Dict
-from tests.files.chunked_upload_helpers import chunked_upload_file, platform_auxiliary_upload_spec_json
 
 import pytest
 
@@ -17,6 +16,10 @@ from apps.flows.src.container import get_container
 from core.context import Context, clear_context, set_context
 from core.files.file_ref import FileRef
 from core.models.identity_models import Company, User
+from tests.files.chunked_upload_helpers import (
+    chunked_upload_file,
+    platform_auxiliary_upload_spec_json,
+)
 from tests.flows._a2a_v1 import A2A_HEADERS
 from tests.sync.api._helpers import platform_auxiliary_file_spec_json
 

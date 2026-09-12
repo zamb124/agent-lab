@@ -6,10 +6,7 @@ from core.ai.adapters.openai_compatible import OpenAICompatibleModelCatalogAdapt
 from core.ai.models import AIModelRecord
 from core.ai.providers import AICapability
 from core.config import BaseSettings
-from core.logging import get_logger
 from core.types import JsonValue
-
-logger = get_logger(__name__)
 
 _HUGGINGFACE_FEATURE_EXTRACTION_MODELS_URL = (
     "https://huggingface.co/api/models"
@@ -39,8 +36,7 @@ class HuggingFaceModelCatalogAdapter(OpenAICompatibleModelCatalogAdapter):
     @override
     async def list_models(self, *, probe_embeddings: bool = True) -> list[AIModelRecord]:
         if not self.is_configured():
-            logger.warning("huggingface model provider не настроен")
-            return []
+            raise ValueError("huggingface model provider не настроен")
         cfg = self._configured_llm_provider()
         if cfg is None:
             raise ValueError("huggingface provider config не настроен")

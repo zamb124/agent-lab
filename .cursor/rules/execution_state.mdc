@@ -101,19 +101,17 @@ def execute(args, state):
 - Управление графом: `current_nodes`, `join_arrived_preds`.
 - HITL: `interrupt`, `interrupt_path`, `hitl_handoff_correlation_id`.
 - Аудит/отладка: `node_history`, `execution_exceptions`, `prompt_history`, `reasoning_history`, `pending_reasoning`, `breakpoints`, `breakpoint_hit`, `breakpoint_state`, `triggers`, `scheduled_tasks`, `nested_states`, `user_groups`.
-- Flow UI: `ui_document`, `ui_document_revision`, `ui_interaction`, `ui_negotiation`, `ui_effect_dedup` и task/artifact projection cursors.
+- Flow UI: `ui_action` (последний принятый `ui-action`: `name`, `source`, `payload`; новый ход сбрасывает в `None`), `ui_slots` (последний рендер каждого именованного `slot`).
 
 Каноничный список — `core/state/mutation_policy.py::FROZEN_STATE_FIELDS`. Исключение — `FrozenStateFieldError` (`core.errors`).
 
 HITL для пользователя — через `ask_user` / `InterruptManager`, не прямой записью в `interrupt`.
 
-`ui_events_pending`/`PendingUIEvent` отсутствуют. CodeNode/inline tools не получают mutable `ui_document`; UI изменяется только typed `PlatformEffect` через capability boundary или validated `FlowInteraction` на A2A command boundary.
+## Flow UI и state
 
-## Flow UI document
+Документ интерфейса в state не хранится — он design-time (`FlowConfig.interface` / `BranchConfig.interface`). Поля input-блоков — обычные top-level поля state: `ui-action` на входе канала (`core/flow_ui/action.py::apply_flow_ui_action`) пишет `fields` по их путям, ставит `ui_action` и `content` (Markdown-проекция с подписями блоков), файлы `file_upload` — в `files`. Клиенту уходит проекция state только по путям документа (`referenced_paths` → артефакт `state`).
 
-`ExecutionState.ui_document` содержит полный materialized `FlowUIDocument`: pages/components/layout/values/active page/revision. Это authoritative server-owned projection, которая сохраняется в durable ledger/snapshots и возвращается при reopen/share. `ui_interaction` — typed snapshot принятого Submit, включающий `interaction_id`, component/action identity и acknowledged revision; original A2A Message сохраняется отдельно.
-
-Semantic UI delta применяется только к exact `base_revision`, увеличивает revision один раз и входит в state hash/replay. Default template используется только при создании нового context и никогда не заменяет уже существующий document при hydration.
+События агента `ui_render`/`ui_navigate` ставятся в очередь `queue_ui_events` (private, не сериализуется), runtime забирает их `drain_ui_events()` на `flush_ui`; рендер в именованный `slot` дополнительно запоминается в `ui_slots`, `conversation` в state не копится. `ui_slots` — frozen: пишет только доверенный runtime (`FIELDS_COPY_FROM_RUNTIME_NODE_STATE`), user/eval-код его не меняет; UI из capabilities — только typed `PlatformEffect` (`core/flow_ui/effects.py`).
 
 ## Merge при параллельном выполнении
 
@@ -137,5 +135,4 @@ new_state.current_nodes = []
 - `core/state/mutation_policy.py` — `FROZEN_STATE_FIELDS`.
 - `core/state/interrupt.py` — `InterruptData`, `InterruptSystemContext`.
 - `apps/flows/src/durable_execution/**` — canonical durable history, reducer, snapshots и projection cache.
-- `core/state/flow_ui.py`, `flow_ui_delta.py` — Flow UI domain/revision/delta.
-- `apps/flows/src/durable_execution/**` — ledger/reducer/snapshots/rehydration для canonical execution history.
+- `core/flow_ui/` — Flow UI: `document.py` (грамматика), `protocol.py` (wire), `projection.py` (проекция state и патчи), `action.py` (`ui-action`), `runtime.py`/`effects.py` (события агента и sandbox-кода).

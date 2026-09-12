@@ -56,11 +56,16 @@ export class PlatformPopover extends PlatformElement {
     static styles = [
         PlatformElement.styles,
         css`
-            /* Сброс браузерных стилей top layer: рамка, фон и авто-центрирование
-               мешают позиционировать слой самостоятельно. */
+            /* UA [popover]: inset:0 + margin:auto центрирует слой. top/left 0 —
+               начало containing block, от него reposition считает дельту.
+               inset:auto без top/left оставляет static position — внутри
+               glass-modal (transform на .modal) список рисуется в углу панели. */
             :host {
                 position: fixed;
-                inset: auto;
+                top: 0;
+                left: 0;
+                right: auto;
+                bottom: auto;
                 margin: 0;
                 padding: 0;
                 border: none;
@@ -68,7 +73,6 @@ export class PlatformPopover extends PlatformElement {
                 overflow: visible;
                 width: max-content;
                 max-width: 100vw;
-                will-change: transform;
             }
 
             /* Явный display при открытии: иначе после снятия display:none
@@ -208,6 +212,9 @@ export class PlatformPopover extends PlatformElement {
         if (!this.open) {
             return;
         }
+        if (this.anchor instanceof Element && !this.anchor.isConnected) {
+            return;
+        }
         const anchorRect = resolveAnchorRect(this.anchor);
         if (!anchorRect) {
             return;
@@ -220,6 +227,16 @@ export class PlatformPopover extends PlatformElement {
         // Ограничение высоты снимается перед замером: иначе слой «запоминает»
         // прошлый лимит и не может вырасти, когда места стало больше.
         surface.style.maxHeight = '';
+        if (this.matchWidth) {
+            surface.style.width = `${anchorRect.width}px`;
+        }
+
+        // Начало containing block (viewport или предок с transform/contain).
+        // Дельта от фактического origin до viewport-точки якоря.
+        this.style.top = '0px';
+        this.style.left = '0px';
+        this.style.transform = 'none';
+        const origin = this.getBoundingClientRect();
         const rect = surface.getBoundingClientRect();
 
         const position = computeFloatingPosition({
@@ -234,7 +251,8 @@ export class PlatformPopover extends PlatformElement {
             viewportPadding: this.viewportPadding,
         });
 
-        this.style.transform = `translate3d(${position.x}px, ${position.y}px, 0)`;
+        this.style.left = `${Math.round(position.x - origin.left)}px`;
+        this.style.top = `${Math.round(position.y - origin.top)}px`;
         this._placement = position.placement;
         this.setAttribute('data-placement', position.placement);
         if (position.width !== null) {
@@ -283,6 +301,8 @@ export class PlatformPopover extends PlatformElement {
         }
         this.hidePopover();
         this.style.transform = '';
+        this.style.top = '';
+        this.style.left = '';
     }
 
     // --- подписки ---

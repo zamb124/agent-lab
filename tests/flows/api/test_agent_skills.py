@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 import pytest
 
+from apps.flows.src.container import get_container
 from apps.flows.src.models.agent_skill import AgentSkill, parse_stored_agent_skill
 from apps.flows.src.models.tool_reference import ToolReference
 from apps.flows.src.runtime.agent_skill_runtime import (
@@ -20,14 +21,14 @@ from apps.flows.src.services.agent_skill_service import (
 )
 from apps.flows.src.services.platform_assistant_skills import PLATFORM_ASSISTANT_SEED_SKILL_IDS
 from apps.flows.tools.agent_skill_tools import load_agent_skill, read_agent_skill_reference
-from apps.flows.src.container import get_container
 from core.authz.company_sync import sync_company_member_roles
 from core.context import Context, clear_context, get_context, set_context
 from core.files.create_spec import FileCreateSpec
 from core.files.file_ref import FileRef
+from core.flow_ui.document import FlowUISkillActivity
 from core.models.identity_models import Company, User
 from core.state import ExecutionState
-from tests.flows._flow_ui import flow_ui_artifacts
+from tests.flows._flow_ui import conversation_blocks
 from tests.flows.agent_skills_harness import company_scope
 
 
@@ -270,9 +271,7 @@ async def test_load_agent_skill_tool_injects_body_and_tools(
         )
         host = AgentSkillRuntimeHost(
             attached_ids=frozenset({root_id}),
-            index_entries=tuple(
-                await container.agent_skill_service.resolve_index([root_id])
-            ),
+            index_entries=tuple(await container.agent_skill_service.resolve_index([root_id])),
         )
         host.ensure_index_block()
         assert any(b.stable_key == "agent_skills.index" for b in host.context_blocks)
@@ -289,28 +288,28 @@ async def test_load_agent_skill_tool_injects_body_and_tools(
         assert result["success"] is True
         assert result["already_loaded"] is False
         assert result["tools_unlocked"] == ["calculator"]
-        assert any(
-            b.stable_key == f"agent_skills.body.{root_id}" for b in host.context_blocks
-        )
+        assert any(b.stable_key == f"agent_skills.body.{root_id}" for b in host.context_blocks)
         assert len(host.pending_tool_refs) == 1
         assert host.pending_tool_refs[0].tool_id == "calculator"
-        loaded = flow_ui_artifacts(state, kind="skill_activity")
+        loaded = conversation_blocks(state, block_type="skill_activity")
         assert len(loaded) == 1
-        assert loaded[0].component_type == "SkillActivity"
-        assert loaded[0].data["agent_skill_id"] == root_id
-        assert loaded[0].data["name"] == root_id
-        assert loaded[0].data["tools_unlocked"] == ["calculator"]
+        assert isinstance(loaded[0], FlowUISkillActivity)
+        assert loaded[0].agent_skill_id == root_id
+        assert loaded[0].title == root_id
+        assert loaded[0].status == "loaded"
 
         with agent_skill_runtime_host_scope(host):
             dep_result = await load_agent_skill.run({"agent_skill_id": dep_id}, state)
         assert dep_result["depth"] == 1
-        loaded = flow_ui_artifacts(state, kind="skill_activity")
-        assert [view.data["agent_skill_id"] for view in loaded] == [root_id, dep_id]
+        loaded = conversation_blocks(state, block_type="skill_activity")
+        assert [
+            block.agent_skill_id for block in loaded if isinstance(block, FlowUISkillActivity)
+        ] == [root_id, dep_id]
 
         with agent_skill_runtime_host_scope(host):
             reload = await load_agent_skill.run({"agent_skill_id": root_id}, state)
         assert reload["already_loaded"] is True
-        assert len(flow_ui_artifacts(state, kind="skill_activity")) == 2
+        assert len(conversation_blocks(state, block_type="skill_activity")) == 2
 
         foreign_id = f"skill-foreign-{unique_id}"
         await container.agent_skill_service.create(
@@ -383,9 +382,7 @@ async def test_depends_on_arbitrary_depth_and_cycles(container, unique_id: str) 
         )
         host = AgentSkillRuntimeHost(
             attached_ids=frozenset({a_id}),
-            index_entries=tuple(
-                await container.agent_skill_service.resolve_index([a_id])
-            ),
+            index_entries=tuple(await container.agent_skill_service.resolve_index([a_id])),
         )
         state = ExecutionState(
             task_id=f"task_{unique_id}",
@@ -464,9 +461,7 @@ async def test_read_agent_skill_reference_returns_utf8(
         )
         host = AgentSkillRuntimeHost(
             attached_ids=frozenset({skill_id}),
-            index_entries=tuple(
-                await container.agent_skill_service.resolve_index([skill_id])
-            ),
+            index_entries=tuple(await container.agent_skill_service.resolve_index([skill_id])),
         )
         state = ExecutionState(
             task_id=f"task_{unique_id}",
@@ -611,9 +606,4 @@ async def test_agent_skills_unknown_tool_ref_rejected(client, unique_id: str) ->
     )
     assert response.status_code == 400
     detail = response.text.lower()
-    assert (
-        "tool" in detail
-        or "не найден" in detail
-        or "not found" in detail
-        or "unknown" in detail
-    )
+    assert "tool" in detail or "не найден" in detail or "not found" in detail or "unknown" in detail

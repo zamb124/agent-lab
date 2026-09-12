@@ -14,22 +14,13 @@ import httpx
 from playwright.async_api import Locator, Page, expect
 
 from apps.flows.src.services.hitl_demo_queue import EXAMPLE_HITL_SLUG
-from core.a2a.extensions import A2UI_PLATFORM_CATALOG_ID, PLATFORM_UI_SUBMIT_ACTION
-from core.models.flow_interface import (
-    FlowInterfaceConfig,
-    FlowInterfacePolicy,
-    FlowUIDocumentTemplate,
-)
-from core.state.flow_ui import (
-    FlowUIAction,
-    FlowUIComponent,
-    FlowUIContainerLayout,
-    FlowUIDataModel,
+from core.flow_ui.document import (
+    FlowUIActionSpec,
+    FlowUIButton,
     FlowUIDocument,
-    FlowUIFlexDefinition,
+    FlowUIMarkdownText,
     FlowUIPage,
-    FlowUISurface,
-    LocalizedText,
+    FlowUITextInput,
 )
 from core.types import JsonObject
 from tests.flows._a2a_v1 import A2A_HEADERS, a2a_send_message
@@ -559,26 +550,30 @@ async def hitl_wait_host_input_required(host: Locator) -> str:
     return work_item_id
 
 
+HITL_COMPOSER_SELECTOR = 'textarea[data-canon="composer"]'
+
+
 async def hitl_assert_composer_readonly(host: Locator) -> None:
-    textarea = host.locator(
-        '[data-flow-ui-component="message-input"] textarea, textarea[data-canon="composer"], textarea'
-    ).first
+    """Пользователь ждёт оператора (single_reply): composer на месте, но только для чтения."""
+    textarea = host.locator(HITL_COMPOSER_SELECTOR).first
     await expect(textarea).to_be_visible(timeout=30_000)
     await expect(textarea).not_to_be_editable(timeout=20_000)
 
 
+async def hitl_assert_composer_absent(host: Locator) -> None:
+    """Без права хода (нет доступа к очереди, задача закрыта) composer не рендерится."""
+    await expect(host.locator("flow-ui-page")).to_be_visible(timeout=30_000)
+    await expect(host.locator(HITL_COMPOSER_SELECTOR)).to_have_count(0, timeout=30_000)
+
+
 async def hitl_assert_composer_editable(host: Locator) -> None:
-    textarea = host.locator(
-        '[data-flow-ui-component="message-input"] textarea, textarea[data-canon="composer"], textarea'
-    ).first
+    textarea = host.locator(HITL_COMPOSER_SELECTOR).first
     await expect(textarea).to_be_visible(timeout=30_000)
     await expect(textarea).to_be_editable(timeout=20_000)
 
 
 async def hitl_host_send(host: Locator, text: str) -> None:
-    textarea = host.locator(
-        '[data-flow-ui-component="message-input"] textarea, textarea[data-canon="composer"], textarea'
-    ).first
+    textarea = host.locator(HITL_COMPOSER_SELECTOR).first
     await expect(textarea).to_be_visible(timeout=30_000)
     await textarea.fill(text)
     send_btn = host.get_by_role(
@@ -677,155 +672,57 @@ async def hitl_api_assert_turn_has_files(
     )
 
 
-def _column_layout() -> FlowUIContainerLayout:
-    return FlowUIContainerLayout(
-        mode="flex",
-        flex=FlowUIFlexDefinition(direction="column", gap_token="space.3"),
-    )
+def _interface_dump(document: FlowUIDocument) -> JsonObject:
+    dumped = document.model_dump(mode="json")
+    if not isinstance(dumped, dict):
+        raise RuntimeError("FlowUIDocument dump must be an object")
+    return dumped
 
 
 def hitl_host_composer_interface_config() -> JsonObject:
-    """Interface без message composer: оператор видит host-composer."""
-    policy = FlowInterfacePolicy()
-    note = FlowUIComponent(
-        component_id="note",
-        type="Text",
-        properties={"text": "Operator form"},
+    """Interface без conversation: оператор видит host-composer."""
+    return _interface_dump(
+        FlowUIDocument(
+            start_page_id="main",
+            pages=[
+                FlowUIPage(
+                    page_id="main",
+                    title="HITL",
+                    blocks=[
+                        FlowUIMarkdownText(block_id="note", markdown="Operator form"),
+                        FlowUIButton(
+                            block_id="submit",
+                            label="Send",
+                            action=FlowUIActionSpec(name="submit"),
+                        ),
+                    ],
+                )
+            ],
+        )
     )
-    submit = FlowUIComponent(
-        component_id="submit",
-        type="Button",
-        properties={"label": "Send", "variant": "primary"},
-        actions={
-            "press": FlowUIAction(
-                kind="event",
-                name=PLATFORM_UI_SUBMIT_ACTION,
-                context={},
-            ),
-        },
-    )
-    root = FlowUIComponent(
-        component_id="root",
-        type="PageShell",
-        kind="container",
-        children=["note", "submit"],
-        container_layout=_column_layout(),
-    )
-    document = FlowUIDocument(
-        document_id="template:hitl.host-composer:1.0.0",
-        template_version="1.0.0",
-        catalog_id=A2UI_PLATFORM_CATALOG_ID,
-        active_page_id="main",
-        pages={
-            "main": FlowUIPage(
-                page_id="main",
-                title=LocalizedText(default="HITL"),
-                route="/",
-                root_surface_id="main",
-            )
-        },
-        surfaces={
-            "main": FlowUISurface(
-                surface_id="main",
-                catalog_id=A2UI_PLATFORM_CATALOG_ID,
-                components={"root": root, "note": note, "submit": submit},
-                data_model=FlowUIDataModel(values={}),
-            )
-        },
-        policy=policy,
-    )
-    config = FlowInterfaceConfig(
-        template=FlowUIDocumentTemplate(
-            template_id="hitl.host-composer",
-            version="1.0.0",
-            document=document,
-        ),
-        catalog_id=A2UI_PLATFORM_CATALOG_ID,
-        policy=policy,
-    )
-    dumped = config.model_dump(mode="json")
-    if not isinstance(dumped, dict):
-        raise RuntimeError("FlowInterfaceConfig dump must be an object")
-    return dumped
 
 
 def hitl_form_submit_interface_config() -> JsonObject:
-    """Кастомная форма с Submit без chat-composer."""
-    policy = FlowInterfacePolicy()
-    submit = FlowUIComponent(
-        component_id="submit",
-        type="Button",
-        properties={"label": "Send", "variant": "primary"},
-        actions={
-            "press": FlowUIAction(
-                kind="event",
-                name=PLATFORM_UI_SUBMIT_ACTION,
-                context={"formId": "operator-form"},
-            ),
-        },
+    """Кастомная форма с Submit без conversation."""
+    return _interface_dump(
+        FlowUIDocument(
+            start_page_id="main",
+            pages=[
+                FlowUIPage(
+                    page_id="main",
+                    title="HITL form",
+                    blocks=[
+                        FlowUITextInput(block_id="note-field", field="message", label="Reply"),
+                        FlowUIButton(
+                            block_id="submit",
+                            label="Send",
+                            action=FlowUIActionSpec(name="submit"),
+                        ),
+                    ],
+                )
+            ],
+        )
     )
-    note_field = FlowUIComponent(
-        component_id="note-field",
-        type="TextField",
-        bindings={"value": "/values/message"},
-        properties={"label": "Reply"},
-    )
-    form = FlowUIComponent(
-        component_id="operator-form",
-        type="Form",
-        kind="container",
-        children=["note-field", "submit"],
-        container_layout=_column_layout(),
-        properties={"formId": "operator-form"},
-    )
-    root = FlowUIComponent(
-        component_id="root",
-        type="PageShell",
-        kind="container",
-        children=["operator-form"],
-        container_layout=_column_layout(),
-    )
-    document = FlowUIDocument(
-        document_id="template:hitl.form-submit:1.0.0",
-        template_version="1.0.0",
-        catalog_id=A2UI_PLATFORM_CATALOG_ID,
-        active_page_id="main",
-        pages={
-            "main": FlowUIPage(
-                page_id="main",
-                title=LocalizedText(default="HITL form"),
-                route="/",
-                root_surface_id="main",
-            )
-        },
-        surfaces={
-            "main": FlowUISurface(
-                surface_id="main",
-                catalog_id=A2UI_PLATFORM_CATALOG_ID,
-                components={
-                    "root": root,
-                    "operator-form": form,
-                    "note-field": note_field,
-                    "submit": submit,
-                },
-                data_model=FlowUIDataModel(values={"message": ""}),
-            )
-        },
-        policy=policy,
-    )
-    config = FlowInterfaceConfig(
-        template=FlowUIDocumentTemplate(
-            template_id="hitl.form-submit",
-            version="1.0.0",
-            document=document,
-        ),
-        catalog_id=A2UI_PLATFORM_CATALOG_ID,
-        policy=policy,
-    )
-    dumped = config.model_dump(mode="json")
-    if not isinstance(dumped, dict):
-        raise RuntimeError("FlowInterfaceConfig dump must be an object")
-    return dumped
 
 
 def hitl_custom_ui_flow_payload(

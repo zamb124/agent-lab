@@ -14,10 +14,10 @@ from apps.flows.src.services.embed_target_resolver import resolve_embed_target
 
 
 class EmbedDynamicCorsMiddleware(BaseHTTPMiddleware):
-    """Обрабатывает CORS для embed A2A и его узкого interface-profile."""
+    """Обрабатывает CORS для embed A2A и документа интерфейса embed-поверхности."""
 
     _EMBED_PREFIX: str = "/flows/api/v1/embed/"
-    _EMBED_SUBPATHS: frozenset[str] = frozenset({"interface-profile"})
+    _EMBED_SUBPATHS: frozenset[str] = frozenset({"interface"})
 
     def __init__(self, app: ASGIApp, *, container: FlowContainer) -> None:
         super().__init__(app)

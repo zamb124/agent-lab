@@ -75,7 +75,7 @@ uv run pytest tests/ui/design-system/components/platform-mail-modal/playwright.s
 }
 ```
 
-`mail.local_dev`: пароли ящиков только локально (не в git). `mutate_remote_passwords=false` — локалка **не** крутит пароли на ISP (прод не падает). IMAP логин читает `mailbox_passwords`.
+`mail.local_dev`: пароли ящиков только локально (не в git). `mutate_remote_passwords=false` — локалка **не** крутит пароли на ISP и **не** создаёт новые ящики на панели. `reconcile_system` биндит только email из `mailbox_passwords`; остальные члены system — в `user_bindings_missing_password`, процесс не падает. IMAP логин читает `mailbox_passwords`. Явный `bind_mailbox` существующего ящика без ключа в карте — `MailConfigError`.
 
 `imap_host`/`smtp_host` = hostname панели ISPmanager.  
 `mail.linnex.io` сейчас указывает на IP платформы — для IMAP/SMTP не использовать, пока DNS/MX не укажут на mail-сервер.

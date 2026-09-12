@@ -1,7 +1,7 @@
 ---
 name: flows-editor
 description: Point-fetch Flows graph by ids and apply confirm-first node/flow patches plus chat embed blocks. Use when editing a flow graph from Lara.
-allowed-tools: flows_get_node flows_list_nodes flows_read_context flows_patch_node flows_patch_flow push_embed_blocks
+allowed-tools: flows_get_node flows_list_nodes flows_read_context flows_patch_node flows_patch_flow ui_render
 ---
 
 # Flows editor
@@ -23,7 +23,7 @@ There is **no** standing `*_payload_json` / full FlowConfig dump. Bodies come fr
 3. Use `flows_read_context` for a light overview (flow summary + `nodes_index`, optional one `node`).
 4. Node changes — `flows_patch_node`: `mode=propose` then after explicit user confirm `mode=apply` with the same `pending_action_id`.
 5. Flow-level changes (e.g. rename) — `flows_patch_flow` with the same confirm-first lifecycle.
-6. Structured UI — `push_embed_blocks` when helpful.
+6. Structured UI — `ui_render` (slot_id `conversation`) when helpful.
 
 ## Rules
 

@@ -1,9 +1,54 @@
 /**
- * A2A JSON-RPC and SSE transport for Flow UI.
+ * A2A JSON-RPC and SSE transport for Flow UI plus frame helpers.
  * AbortSignal cancellation is fail-closed for callers, but must not leave
  * uncaught BodyStreamBuffer AbortError when dispose() cancels mid-read.
  */
 import { a2aRequestHeaders } from './a2a-codec.js';
+import { INTERRUPTED_TASK_STATES, TERMINAL_TASK_STATES } from './constants.js';
+
+/**
+ * ``result`` кадра SendStreamingMessage/SubscribeToTask → ``{frameKind, event}``.
+ * Кадры: ``statusUpdate``, ``artifactUpdate``, ``task`` (snapshot), ``message``.
+ */
+export function unwrapA2aStreamResult(result) {
+    if (!result || typeof result !== 'object') return null;
+    for (const frameKind of ['statusUpdate', 'artifactUpdate', 'task', 'message']) {
+        const event = result[frameKind];
+        if (event && typeof event === 'object') return { frameKind, event };
+    }
+    if (typeof result.id === 'string' && result.status && typeof result.status === 'object') {
+        return { frameKind: 'task', event: result };
+    }
+    return null;
+}
+
+export function resolveA2aTaskId(result, current = null) {
+    const unwrapped = unwrapA2aStreamResult(result);
+    if (!unwrapped) return current;
+    const { frameKind, event } = unwrapped;
+    const taskId = frameKind === 'task' ? event.id : event.taskId;
+    return typeof taskId === 'string' && taskId !== '' ? taskId : current;
+}
+
+export function resolveA2aContextId(result, current = null) {
+    const unwrapped = unwrapA2aStreamResult(result);
+    if (!unwrapped) return current;
+    const contextId = unwrapped.event.contextId;
+    return typeof contextId === 'string' && contextId !== '' ? contextId : current;
+}
+
+export function isTerminalTaskState(state) {
+    return TERMINAL_TASK_STATES.has(state);
+}
+
+export function isInterruptedTaskState(state) {
+    return INTERRUPTED_TASK_STATES.has(state);
+}
+
+/** Task больше не стримит: завершён или ждёт ввода/авторизации. */
+export function isSettledTaskState(state) {
+    return isTerminalTaskState(state) || isInterruptedTaskState(state);
+}
 
 /**
  * @param {unknown} error

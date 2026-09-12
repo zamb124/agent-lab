@@ -66,13 +66,14 @@ describe('prompt variable catalog', () => {
         expect(result.catalog.find((entry) => entry.name === 'topic').source).toBe('local');
     });
 
-    it('catalogs ui_values.* from incoming_state as nested values', () => {
+    it('catalogs interface fields from incoming_state as plain top-level values', () => {
         const result = buildPromptVariableContext({
             dataflowNode: {
                 incoming_state: [
                     {
-                        path: 'ui_values.email',
+                        path: 'email',
                         type: 'string',
+                        source: 'interface',
                         sample_value: 'lead@example.com',
                         availability: 'guaranteed',
                     },
@@ -83,24 +84,27 @@ describe('prompt variable catalog', () => {
             now: new Date(2026, 0, 2, 3, 4, 5),
         });
 
-        expect(result.values.ui_values).toEqual({ email: 'lead@example.com' });
-        expect(result.values['ui_values.email']).toBeUndefined();
+        expect(result.values.email).toBe('lead@example.com');
         expect(result.values.topic).toBeUndefined();
-        const emailEntry = result.catalog.find((entry) => entry.name === 'ui_values.email');
-        expect(emailEntry).toMatchObject({
-            source: 'ui_value',
+        expect(result.catalog.find((entry) => entry.name === 'email')).toMatchObject({
+            source: 'interface',
             availability: 'guaranteed',
             hasValue: true,
         });
     });
 
-    it('merges previewExecutionState.ui_values into nested values', () => {
+    it('takes observed interface values from previewExecutionState top-level paths', () => {
         const result = buildPromptVariableContext({
-            previewExecutionState: { ui_values: { email: 'preview@example.com' } },
+            dataflowNode: {
+                incoming_state: [{ path: 'email', type: 'string', source: 'interface', availability: 'guaranteed' }],
+                input_mapping: [],
+            },
+            previewExecutionState: { email: 'preview@example.com', content: 'ignored' },
             now: new Date(2026, 0, 2, 3, 4, 5),
         });
-        expect(result.values.ui_values.email).toBe('preview@example.com');
-        expect(result.catalog.find((entry) => entry.name === 'ui_values.email')?.source).toBe('ui_value');
+        expect(result.values.email).toBe('preview@example.com');
+        expect(result.catalog.find((entry) => entry.name === 'email')).toMatchObject({ source: 'interface', availability: 'observed' });
+        expect(result.catalog.find((entry) => entry.name === 'content')).toBeUndefined();
     });
 
     it('catalogs context variables without inventing preview values', () => {

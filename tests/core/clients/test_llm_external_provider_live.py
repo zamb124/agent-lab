@@ -43,6 +43,9 @@ from tests.core.clients.live_llm_provider_helpers import (
     catalog_id_candidates_for_runtime_model,
     configured_provider,
     disable_testing_mode,
+    discover_live_catalog,
+    fetch_live_model_ids,
+    fetch_live_model_records,
     is_provider_rate_limit,
     is_provider_transient_unavailable,
     live_chat_smoke_prompt,
@@ -50,7 +53,6 @@ from tests.core.clients.live_llm_provider_helpers import (
     live_smoke_model,
     live_smoke_model_candidates,
     skip_openrouter_post_route_issue,
-    skip_provider_auth_error,
     skip_provider_content_filter,
     skip_provider_rate_limit,
     skip_provider_transient_unavailable,
@@ -67,12 +69,7 @@ async def test_live_provider_model_catalog_returns_configured_smoke_model(provid
     _ = configured_provider(provider)
     service = live_model_service()
 
-    try:
-        models = await service.fetch_models_by_provider(provider)
-    except httpx.HTTPStatusError as exc:
-        skip_provider_rate_limit(provider, exc)
-        skip_provider_auth_error(provider, exc)
-        raise
+    models = await fetch_live_model_ids(provider)
 
     assert isinstance(models, list)
     assert models, f"{provider}: models catalog вернул пустой список"
@@ -93,12 +90,7 @@ async def test_live_provider_catalog_records_normalize_algorithm(provider: str) 
     _ = configured_provider(provider)
     service = live_model_service()
 
-    try:
-        records = await service.discover_model_records_by_provider(provider)
-    except httpx.HTTPStatusError as exc:
-        skip_provider_rate_limit(provider, exc)
-        skip_provider_auth_error(provider, exc)
-        raise
+    records = await discover_live_catalog(provider)
 
     assert records, f"{provider}: live catalog вернул пустой список"
     assert all(record.provider == provider for record in records)
@@ -194,13 +186,7 @@ async def test_live_provider_chat_completion_smoke(provider: str) -> None:
 async def test_live_embedding_provider_probe_dimension_and_storage_policy(provider: str) -> None:
     _ = configured_provider(provider)
     service = live_model_service()
-
-    try:
-        records = await service.fetch_model_records_by_provider(provider)
-    except httpx.HTTPStatusError as exc:
-        skip_provider_rate_limit(provider, exc)
-        skip_provider_auth_error(provider, exc)
-        raise
+    records = await fetch_live_model_records(provider)
 
     embedding_records = [
         record for record in records if AICapability.EMBEDDING in record.capabilities

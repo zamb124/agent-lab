@@ -6,7 +6,7 @@ import os
 import uuid
 from collections.abc import Generator, Iterable, Mapping, Sequence
 from contextlib import contextmanager
-from typing import cast
+from typing import NoReturn, cast
 
 import httpx
 import pytest
@@ -16,9 +16,11 @@ from a2a.types.a2a_pb2 import (
 )
 
 from apps.flows.src.services.llm_models_service import LLMModelsService
+from core.ai.adapters.catalog_base import AIProviderAdapterError
 from core.ai.free_pool import (
     PlatformFreeModelRecord,
     compute_platform_free_record_scores,
+    fetch_artificial_analysis_indices,
     platform_free_records_from_model_records,
     sort_platform_free_records,
 )
@@ -29,13 +31,12 @@ from core.ai.providers import (
     PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER,
     AICapability,
 )
-from core.ai.scoring import PlatformModelScoreHint
+from core.ai.scoring import PlatformModelScoreOverlay, attach_artificial_analysis
 from core.clients.redis_client import RedisClient
 from core.clients.scheduler_client import SchedulerClient
 from core.clients.service_client import ServiceClient
 from core.config import get_settings
 from core.config.base import BaseSettings
-from core.config.models import LLMModelScoreSeedItem
 from core.db.storage import Storage
 
 PLACEHOLDER_PREFIXES = ("YOUR_",)
@@ -75,7 +76,18 @@ def skip_provider_auth_error(provider: str, exc: httpx.HTTPStatusError) -> None:
 
 
 def is_provider_transient_unavailable(exc: httpx.HTTPStatusError) -> bool:
-    return exc.response.status_code in (502, 503, 504)
+    return exc.response.status_code in (500, 502, 503, 504)
+
+
+def skip_catalog_http_error(provider: str, exc: AIProviderAdapterError) -> None:
+    if exc.status_code in (401, 403):
+        pytest.skip(f"{provider}: catalog API rejected credentials ({exc.status_code})")
+    if exc.status_code == 429:
+        pytest.skip(f"{provider}: provider rate limit")
+    if exc.status_code == 410:
+        pytest.skip(f"{provider}: catalog endpoint gone ({exc.status_code})")
+    if exc.status_code in (500, 502, 503, 504):
+        pytest.skip(f"{provider}: catalog temporarily unavailable ({exc.status_code})")
 
 
 def skip_provider_transient_unavailable(provider: str, exc: httpx.HTTPStatusError) -> None:
@@ -178,6 +190,41 @@ def live_model_service() -> LLMModelsService:
     return LLMModelsService(repository, scheduler_client, redis_client)
 
 
+def _skip_or_raise_catalog_error(provider: str, exc: BaseException) -> NoReturn:
+    if isinstance(exc, httpx.HTTPStatusError):
+        skip_provider_rate_limit(provider, exc)
+        skip_provider_auth_error(provider, exc)
+        raise
+    if isinstance(exc, AIProviderAdapterError):
+        skip_catalog_http_error(provider, exc)
+        raise
+    raise exc
+
+
+async def discover_live_catalog(provider: str) -> list[AIModelRecord]:
+    service = live_model_service()
+    try:
+        return await service.discover_model_records_by_provider(provider)
+    except (httpx.HTTPStatusError, AIProviderAdapterError) as exc:
+        _skip_or_raise_catalog_error(provider, exc)
+
+
+async def fetch_live_model_ids(provider: str) -> list[str]:
+    service = live_model_service()
+    try:
+        return await service.fetch_models_by_provider(provider)
+    except (httpx.HTTPStatusError, AIProviderAdapterError) as extra:
+        _skip_or_raise_catalog_error(provider, extra)
+
+
+async def fetch_live_model_records(provider: str) -> list[AIModelRecord]:
+    service = live_model_service()
+    try:
+        return await service.fetch_model_records_by_provider(provider)
+    except (httpx.HTTPStatusError, AIProviderAdapterError) as extra:
+        _skip_or_raise_catalog_error(provider, extra)
+
+
 def configured_smoke_model(provider: str) -> str | None:
     _ = configured_provider(provider)
     cfg = getattr(get_settings().llm, provider, None)
@@ -185,30 +232,6 @@ def configured_smoke_model(provider: str) -> str | None:
     if isinstance(smoke_model, str) and smoke_model.strip():
         return smoke_model.strip()
     return None
-
-
-def hint_from_seed_item(item: LLMModelScoreSeedItem) -> PlatformModelScoreHint:
-    editorial_prior = float(item.editorial_prior)
-    score_dimensions = {key: float(value) for key, value in item.score_dimensions.items()}
-    if not score_dimensions and item.score is not None:
-        score_dimensions = {"general_chat": float(item.score)}
-    return PlatformModelScoreHint(
-        editorial_prior=editorial_prior,
-        score_dimensions=score_dimensions,
-        enabled=bool(item.enabled),
-        source="config_seed",
-        note=item.note,
-    )
-
-
-def hints_from_settings(settings: BaseSettings | None = None) -> dict[tuple[str, str], PlatformModelScoreHint]:
-    resolved_settings = settings or get_settings()
-    hints: dict[tuple[str, str], PlatformModelScoreHint] = {}
-    for item in resolved_settings.llm.model_scoring.items:
-        if item.capability != AICapability.LLM_CHAT:
-            continue
-        hints[(item.provider, item.model_id)] = hint_from_seed_item(item)
-    return hints
 
 
 def sort_provider_free_records(
@@ -245,13 +268,11 @@ def build_scored_free_pool(
     records_by_provider: Mapping[str, Sequence[AIModelRecord]],
     settings: BaseSettings | None = None,
     *,
-    hints: Mapping[tuple[str, str], PlatformModelScoreHint] | None = None,
+    overlays: Mapping[tuple[str, str], PlatformModelScoreOverlay] | None = None,
     providers: Sequence[str] | None = None,
 ) -> list[PlatformFreeModelRecord]:
     resolved_settings = settings or get_settings()
     pool_config = resolved_settings.llm.platform_free_pool
-    scoring_config = resolved_settings.llm.model_scoring
-    hint_map = hints if hints is not None else hints_from_settings(resolved_settings)
     provider_order = providers or PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER
 
     all_records: list[PlatformFreeModelRecord] = []
@@ -266,8 +287,7 @@ def build_scored_free_pool(
         provider_records = compute_platform_free_record_scores(
             provider_records,
             catalog_records=catalog_records,
-            hints=hint_map,
-            scoring_config=scoring_config,
+            overlays=overlays,
         )
         provider_records = sort_provider_free_records(
             provider_records,
@@ -282,6 +302,15 @@ def build_scored_free_pool(
     )
 
 
+async def attach_live_artificial_analysis(
+    records: Sequence[AIModelRecord],
+) -> list[AIModelRecord]:
+    if not provider_api_key_configured("openrouter"):
+        return list(records)
+    indices = await fetch_artificial_analysis_indices(get_settings())
+    return attach_artificial_analysis(list(records), indices)
+
+
 async def live_smoke_model(provider: str, service: LLMModelsService) -> str:
     configured = configured_smoke_model(provider)
     if provider == "openrouter" and configured == OPENROUTER_ROUTER_MODEL_ID:
@@ -290,7 +319,7 @@ async def live_smoke_model(provider: str, service: LLMModelsService) -> str:
         return configured
     if provider != "yandex":
         pytest.fail(f"{provider}: llm.{provider}.smoke_model должен быть непустой строкой")
-    records = await service.discover_model_records_by_provider(provider)
+    records = await discover_live_catalog(provider)
     for record in records:
         if AICapability.LLM_CHAT in record.capabilities:
             return record.model_id
@@ -298,7 +327,8 @@ async def live_smoke_model(provider: str, service: LLMModelsService) -> str:
 
 
 async def openrouter_live_free_smoke_models(service: LLMModelsService) -> tuple[str, ...]:
-    records = await service.discover_model_records_by_provider("openrouter")
+    _ = service
+    records = await discover_live_catalog("openrouter")
     text_records = [
         record
         for record in records

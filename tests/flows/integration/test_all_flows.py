@@ -216,6 +216,7 @@ class TestAllFlowConfigs:
             "description": config.description or "",
             "tags": config.tags,
             "entry": config.entry,
+            "interface": config.interface.model_dump(mode="json"),
             "nodes": config.nodes,
             "edges": [
                 {

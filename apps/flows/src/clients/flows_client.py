@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 from apps.flows.src.container_state import require_current_container
 from apps.flows.src.models.flow_config import FlowConfig
-from apps.flows.src.runtime_helpers.flow_ui_presenter import present_flow_ui_artifact
+from apps.flows.src.runtime_helpers.flow_ui_cards import show_action_preview, show_action_result
 from apps.flows.src.services.lara_facade import flow_config_from_flow_api_response
 from core.clients.service_client import ServiceClient
 from core.context import get_context
@@ -260,12 +260,20 @@ class FlowsClient:
             "flows.node.preview.blocks",
         )
         preview_payload["blocks"] = preview_blocks
-        _ = present_flow_ui_artifact(
+        _ = show_action_preview(
             state,
-            kind="action_preview",
-            data=preview_payload,
-            artifact_id=f"flows-node-preview-{action.pending_action_id}",
-            source="flows_editor",
+            card_id=f"flows-node-preview-{action.pending_action_id}",
+            title=f"Изменение ноды {node_id}",
+            summary="Черновик готов. Подтвердите применение.",
+            parameters=preview_payload,
+            apply_action="apply_pending_action",
+            apply_payload={
+                "pending_action_id": action.pending_action_id,
+                "flow_id": flow_id,
+                "branch_id": resolved_branch_id,
+                "node_id": node_id,
+            },
+            apply_label="Применить изменение",
         )
         ctx = get_context()
         if ctx is None:
@@ -312,10 +320,6 @@ class FlowsClient:
             state=state,
             idempotency_key=idempotency_key,
         )
-        action_payload = require_json_object(
-            action.model_dump(mode="json"),
-            "flows.node.apply.action",
-        )
         target = action.target
         flow_resolved = target.get("flow_id")
         node_resolved = target.get("node_id")
@@ -331,25 +335,12 @@ class FlowsClient:
         preview_data = action.preview
         node_before = preview_data.get("node_before")
         node_after = preview_data.get("node_after")
-        patch_raw = action.payload.get("patch")
-        if not isinstance(patch_raw, dict):
-            raise ValueError("Pending action payload.patch is missing")
-        patch_restored = require_json_object(patch_raw, "flows.node.apply.patch")
-        event_payload: JsonObject = {
-            "action": action_payload,
-            "patch_kind": "node",
-            "flow_id": flow_resolved,
-            "branch_id": resolved_branch_id,
-            "node_id": node_resolved,
-            "changes": patch_restored,
-            "open_editor": True,
-        }
-        _ = present_flow_ui_artifact(
+        _ = show_action_result(
             state,
-            kind="action_result",
-            data=event_payload,
-            artifact_id=f"flows-node-apply-{pending_action_id}",
-            source="flows_editor",
+            card_id=f"flows-node-apply-{pending_action_id}",
+            title=f"Нода {node_resolved} обновлена",
+            status="success",
+            summary=f"Изменение применено во flow {flow_resolved}.",
         )
         return {
             "success": True,
@@ -428,12 +419,15 @@ class FlowsClient:
             "flows.flow.preview.blocks",
         )
         preview_payload["blocks"] = preview_blocks
-        _ = present_flow_ui_artifact(
+        _ = show_action_preview(
             state,
-            kind="action_preview",
-            data=preview_payload,
-            artifact_id=f"flows-flow-preview-{action.pending_action_id}",
-            source="flows_editor",
+            card_id=f"flows-flow-preview-{action.pending_action_id}",
+            title=f"Изменение flow {flow_id}",
+            summary="Черновик готов. Подтвердите применение.",
+            parameters=preview_payload,
+            apply_action="apply_pending_action",
+            apply_payload={"pending_action_id": action.pending_action_id, "flow_id": flow_id},
+            apply_label="Применить изменение",
         )
         return {
             "success": True,
@@ -459,10 +453,6 @@ class FlowsClient:
             state=state,
             idempotency_key=idempotency_key,
         )
-        action_payload = require_json_object(
-            action.model_dump(mode="json"),
-            "flows.flow.apply.action",
-        )
         target = action.target
         flow_resolved = target.get("flow_id")
         if not isinstance(flow_resolved, str) or not flow_resolved.strip():
@@ -472,24 +462,12 @@ class FlowsClient:
         flow_before = preview_data.get("flow_before")
         flow_after = preview_data.get("flow_after")
 
-        patch_raw = action.payload.get("patch")
-        if not isinstance(patch_raw, dict):
-            raise ValueError("Pending action payload.patch is missing")
-        patch_restored = require_json_object(patch_raw, "flows.flow.apply.patch")
-
-        apply_payload: JsonObject = {
-            "action": action_payload,
-            "patch_kind": "flow",
-            "flow_id": flow_resolved,
-            "flow_changes": patch_restored,
-            "open_editor": True,
-        }
-        _ = present_flow_ui_artifact(
+        _ = show_action_result(
             state,
-            kind="action_result",
-            data=apply_payload,
-            artifact_id=f"flows-flow-apply-{pending_action_id}",
-            source="flows_editor",
+            card_id=f"flows-flow-apply-{pending_action_id}",
+            title=f"Flow {flow_resolved} обновлён",
+            status="success",
+            summary="Изменение применено.",
         )
         return {
             "success": True,

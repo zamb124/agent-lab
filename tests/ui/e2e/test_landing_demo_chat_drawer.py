@@ -35,7 +35,8 @@ async def test_landing_demo_drawer_opens_platform_chat(
     page = ui_page_anonymous
     page.set_default_timeout(45_000)
 
-    await page.goto(f"{frontend_ui.origin}/", wait_until="domcontentloaded")
+    # Demo-виджеты принадлежат company `system`: их embed-сессия работает только на apex-host платформы.
+    await page.goto(f"{frontend_ui.apex_origin}/", wait_until="domcontentloaded")
     await expect(page.locator("frontend-app")).to_be_visible(timeout=30_000)
 
     demo_section = page.locator("landing-home-demo-agents").first

@@ -90,7 +90,7 @@
       "name": "Emit Search Results SSE Event",
       "language": "python",
       "entrypoint": "run",
-      "code": "VALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _mode(state):\n    variables = state[\"variables\"]\n    if not isinstance(variables, dict):\n        raise TypeError(\"public_search results event: state.variables must be object\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search results event: variables.search_mode is invalid\")\n    return mode\n\n\ndef _require_int(value, label):\n    if not isinstance(value, int):\n        raise TypeError(f\"public_search results event: {label} must be int\")\n    return value\n\n\ndef _optional_string(value, label):\n    if value is None:\n        return None\n    if not isinstance(value, str):\n        raise TypeError(f\"public_search results event: {label} must be string or null\")\n    text = value.strip()\n    if text == \"\":\n        return None\n    return text\n\n\nasync def run(args, state):\n    payload = {\n        \"kind\": \"public_search_serp_update\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"phase\": \"results\",\n        \"mode\": _mode(state),\n        \"query\": state[\"search_user_query\"],\n        \"results\": state[\"search_results\"],\n        \"providers\": state[\"search_providers_status\"],\n        \"total_count\": _require_int(state[\"search_serp_total_count\"], \"search_serp_total_count\"),\n        \"has_more\": state[\"search_serp_has_more\"] is True,\n        \"serp_cache_key\": _optional_string(state[\"search_serp_cache_key\"], \"search_serp_cache_key\"),\n        \"offset\": _require_int(state[\"search_serp_offset\"], \"search_serp_offset\"),\n        \"limit\": _require_int(state[\"search_serp_page_limit\"], \"search_serp_page_limit\"),\n        \"rank_stage\": \"preview\",\n    }\n    await capability(\n        \"ui.update_data\",\n        surface_id=\"main\",\n        path=\"/content/serp/results\",\n        value=payload,\n    )\n    return {\"search_serp_has_pool\": payload[\"serp_cache_key\"] is not None}\n",
+      "code": "VALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _mode(state):\n    variables = state[\"variables\"]\n    if not isinstance(variables, dict):\n        raise TypeError(\"public_search results event: state.variables must be object\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search results event: variables.search_mode is invalid\")\n    return mode\n\n\ndef _require_int(value, label):\n    if not isinstance(value, int):\n        raise TypeError(f\"public_search results event: {label} must be int\")\n    return value\n\n\ndef _optional_string(value, label):\n    if value is None:\n        return None\n    if not isinstance(value, str):\n        raise TypeError(f\"public_search results event: {label} must be string or null\")\n    text = value.strip()\n    if text == \"\":\n        return None\n    return text\n\n\nasync def run(args, state):\n    payload = {\n        \"kind\": \"public_search_serp_update\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"phase\": \"results\",\n        \"mode\": _mode(state),\n        \"query\": state[\"search_user_query\"],\n        \"results\": state[\"search_results\"],\n        \"providers\": state[\"search_providers_status\"],\n        \"total_count\": _require_int(state[\"search_serp_total_count\"], \"search_serp_total_count\"),\n        \"has_more\": state[\"search_serp_has_more\"] is True,\n        \"serp_cache_key\": _optional_string(state[\"search_serp_cache_key\"], \"search_serp_cache_key\"),\n        \"offset\": _require_int(state[\"search_serp_offset\"], \"search_serp_offset\"),\n        \"limit\": _require_int(state[\"search_serp_page_limit\"], \"search_serp_page_limit\"),\n        \"rank_stage\": \"preview\",\n    }\n    return {\n        \"serp_results\": payload,\n        \"search_serp_has_pool\": payload[\"serp_cache_key\"] is not None,\n    }\n",
       "node_timeout_seconds": 300
     },
     "refine_search": {
@@ -120,7 +120,7 @@
       "name": "Emit Search Refined SSE Event",
       "language": "python",
       "entrypoint": "run",
-      "code": "VALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _mode(state):\n    variables = state[\"variables\"]\n    if not isinstance(variables, dict):\n        raise TypeError(\"public_search refined event: state.variables must be object\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search refined event: variables.search_mode is invalid\")\n    return mode\n\n\ndef _optional_string(value, label):\n    if value is None:\n        return None\n    if not isinstance(value, str):\n        raise TypeError(f\"public_search refined event: {label} must be string or null\")\n    text = value.strip()\n    if text == \"\":\n        return None\n    return text\n\n\nasync def run(args, state):\n    results = state[\"search_results_refined\"]\n    if not isinstance(results, list):\n        raise TypeError(\"public_search refined event: search_results_refined must be array\")\n    payload = {\n        \"kind\": \"public_search_serp_update\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"phase\": \"results\",\n        \"mode\": _mode(state),\n        \"query\": state[\"search_user_query\"],\n        \"results\": results,\n        \"serp_cache_key\": _optional_string(state[\"search_serp_cache_key_refined\"], \"search_serp_cache_key_refined\"),\n        \"rank_stage\": \"refined\",\n    }\n    await capability(\n        \"ui.update_data\",\n        surface_id=\"main\",\n        path=\"/content/serp/resultsRefined\",\n        value=payload,\n    )\n    return {}\n",
+      "code": "VALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _mode(state):\n    variables = state[\"variables\"]\n    if not isinstance(variables, dict):\n        raise TypeError(\"public_search refined event: state.variables must be object\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search refined event: variables.search_mode is invalid\")\n    return mode\n\n\ndef _optional_string(value, label):\n    if value is None:\n        return None\n    if not isinstance(value, str):\n        raise TypeError(f\"public_search refined event: {label} must be string or null\")\n    text = value.strip()\n    if text == \"\":\n        return None\n    return text\n\n\nasync def run(args, state):\n    results = state[\"search_results_refined\"]\n    if not isinstance(results, list):\n        raise TypeError(\"public_search refined event: search_results_refined must be array\")\n    payload = {\n        \"kind\": \"public_search_serp_update\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"phase\": \"results\",\n        \"mode\": _mode(state),\n        \"query\": state[\"search_user_query\"],\n        \"results\": results,\n        \"serp_cache_key\": _optional_string(state[\"search_serp_cache_key_refined\"], \"search_serp_cache_key_refined\"),\n        \"rank_stage\": \"refined\",\n    }\n    return {\"serp_results_refined\": payload}\n",
       "node_timeout_seconds": 300
     },
     "search_suggestions": {
@@ -146,7 +146,7 @@
       "name": "Emit Search Suggestions SSE Event",
       "language": "python",
       "entrypoint": "run",
-      "code": "VALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _mode(state):\n    variables = state[\"variables\"]\n    if not isinstance(variables, dict):\n        raise TypeError(\"public_search suggestions event: state.variables must be object\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search suggestions event: variables.search_mode is invalid\")\n    return mode\n\n\nasync def run(args, state):\n    payload = {\n        \"kind\": \"public_search_serp_update\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"phase\": \"suggestions\",\n        \"mode\": _mode(state),\n        \"query\": state[\"search_user_query\"],\n        \"suggestions\": state[\"search_suggestions\"],\n        \"followups\": state[\"search_followups\"],\n    }\n    await capability(\n        \"ui.update_data\",\n        surface_id=\"main\",\n        path=\"/content/serp/suggestions\",\n        value=payload,\n    )\n    return {}\n",
+      "code": "VALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _mode(state):\n    variables = state[\"variables\"]\n    if not isinstance(variables, dict):\n        raise TypeError(\"public_search suggestions event: state.variables must be object\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search suggestions event: variables.search_mode is invalid\")\n    return mode\n\n\nasync def run(args, state):\n    payload = {\n        \"kind\": \"public_search_serp_update\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"phase\": \"suggestions\",\n        \"mode\": _mode(state),\n        \"query\": state[\"search_user_query\"],\n        \"suggestions\": state[\"search_suggestions\"],\n        \"followups\": state[\"search_followups\"],\n    }\n    return {\"serp_suggestions\": payload}\n",
       "node_timeout_seconds": 300
     },
     "search_result_insights": {
@@ -170,7 +170,7 @@
       "name": "Emit Search Insights SSE Event",
       "language": "python",
       "entrypoint": "run",
-      "code": "VALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _mode(state):\n    variables = state[\"variables\"]\n    if not isinstance(variables, dict):\n        raise TypeError(\"public_search insights event: state.variables must be object\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search insights event: variables.search_mode is invalid\")\n    return mode\n\n\nasync def run(args, state):\n    payload = {\n        \"kind\": \"public_search_serp_update\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"phase\": \"insights\",\n        \"mode\": _mode(state),\n        \"query\": state[\"search_user_query\"],\n        \"result_insights\": state[\"search_result_insights\"],\n    }\n    await capability(\n        \"ui.update_data\",\n        surface_id=\"main\",\n        path=\"/content/serp/insights\",\n        value=payload,\n    )\n    return {}\n",
+      "code": "VALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _mode(state):\n    variables = state[\"variables\"]\n    if not isinstance(variables, dict):\n        raise TypeError(\"public_search insights event: state.variables must be object\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search insights event: variables.search_mode is invalid\")\n    return mode\n\n\nasync def run(args, state):\n    payload = {\n        \"kind\": \"public_search_serp_update\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"phase\": \"insights\",\n        \"mode\": _mode(state),\n        \"query\": state[\"search_user_query\"],\n        \"result_insights\": state[\"search_result_insights\"],\n    }\n    return {\"serp_insights\": payload}\n",
       "node_timeout_seconds": 300
     },
     "prepare_search_prompt": {
@@ -200,7 +200,7 @@
       "name": "Build Public Search SERP Artifact",
       "language": "python",
       "entrypoint": "run",
-      "code": "import json\n\nVALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _require_dict(state, key):\n    if key not in state:\n        raise ValueError(f\"public_search artifact: state.{key} is required\")\n    value = state[key]\n    if not isinstance(value, dict):\n        raise TypeError(f\"public_search artifact: state.{key} must be object\")\n    return value\n\n\ndef _require_list(state, key):\n    if key not in state:\n        raise ValueError(f\"public_search artifact: state.{key} is required\")\n    value = state[key]\n    if not isinstance(value, list):\n        raise TypeError(f\"public_search artifact: state.{key} must be array\")\n    return value\n\n\ndef _require_bool(state, key):\n    if key not in state:\n        raise ValueError(f\"public_search artifact: state.{key} is required\")\n    value = state[key]\n    if not isinstance(value, bool):\n        raise TypeError(f\"public_search artifact: state.{key} must be boolean\")\n    return value\n\n\ndef _require_string(state, key):\n    if key not in state:\n        raise ValueError(f\"public_search artifact: state.{key} is required\")\n    value = state[key]\n    if not isinstance(value, str):\n        raise TypeError(f\"public_search artifact: state.{key} must be string\")\n    return value.strip()\n\n\ndef _require_str(state, key):\n    text = _require_string(state, key)\n    if text == \"\":\n        raise ValueError(f\"public_search artifact: state.{key} must be non-empty\")\n    return text\n\n\nasync def run(args, state):\n    variables = _require_dict(state, \"variables\")\n    if \"search_mode\" not in variables:\n        raise ValueError(\"public_search artifact: variables.search_mode is required\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search artifact: variables.search_mode is invalid\")\n    has_files = _require_bool(state, \"search_has_files\")\n    refined_results = state.get(\"search_results_refined\")\n    if isinstance(refined_results, list) and refined_results:\n        results = refined_results\n    else:\n        results = _require_list(state, \"search_results\")\n\n    artifact = {\n        \"kind\": \"public_search_serp\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"mode\": mode,\n        \"query\": _require_str(state, \"search_user_query\"),\n        \"effective_query\": _require_str(state, \"search_effective_query\"),\n        \"file_context\": _require_string(state, \"search_file_context\") if has_files else \"\",\n        \"answer\": _require_str(state, \"response\"),\n        \"markdown_sources\": _require_str(state, \"search_markdown_sources\"),\n        \"results\": results,\n        \"providers\": _require_dict(state, \"search_providers_status\"),\n        \"suggestions\": _require_list(state, \"search_suggestions\"),\n        \"followups\": _require_list(state, \"search_followups\"),\n        \"result_insights\": _require_list(state, \"search_result_insights\"),\n    }\n    await capability(\n        \"ui.update_data\",\n        surface_id=\"main\",\n        path=\"/content/serp/completed\",\n        value=artifact,\n    )\n    response = json.dumps(artifact, ensure_ascii=False, separators=(\",\", \":\"))\n    return {\"response\": response}\n",
+      "code": "import json\n\nVALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _require_dict(state, key):\n    if key not in state:\n        raise ValueError(f\"public_search artifact: state.{key} is required\")\n    value = state[key]\n    if not isinstance(value, dict):\n        raise TypeError(f\"public_search artifact: state.{key} must be object\")\n    return value\n\n\ndef _require_list(state, key):\n    if key not in state:\n        raise ValueError(f\"public_search artifact: state.{key} is required\")\n    value = state[key]\n    if not isinstance(value, list):\n        raise TypeError(f\"public_search artifact: state.{key} must be array\")\n    return value\n\n\ndef _require_bool(state, key):\n    if key not in state:\n        raise ValueError(f\"public_search artifact: state.{key} is required\")\n    value = state[key]\n    if not isinstance(value, bool):\n        raise TypeError(f\"public_search artifact: state.{key} must be boolean\")\n    return value\n\n\ndef _require_string(state, key):\n    if key not in state:\n        raise ValueError(f\"public_search artifact: state.{key} is required\")\n    value = state[key]\n    if not isinstance(value, str):\n        raise TypeError(f\"public_search artifact: state.{key} must be string\")\n    return value.strip()\n\n\ndef _require_str(state, key):\n    text = _require_string(state, key)\n    if text == \"\":\n        raise ValueError(f\"public_search artifact: state.{key} must be non-empty\")\n    return text\n\n\nasync def run(args, state):\n    variables = _require_dict(state, \"variables\")\n    if \"search_mode\" not in variables:\n        raise ValueError(\"public_search artifact: variables.search_mode is required\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search artifact: variables.search_mode is invalid\")\n    has_files = _require_bool(state, \"search_has_files\")\n    refined_results = state.get(\"search_results_refined\")\n    if isinstance(refined_results, list) and refined_results:\n        results = refined_results\n    else:\n        results = _require_list(state, \"search_results\")\n\n    artifact = {\n        \"kind\": \"public_search_serp\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"mode\": mode,\n        \"query\": _require_str(state, \"search_user_query\"),\n        \"effective_query\": _require_str(state, \"search_effective_query\"),\n        \"file_context\": _require_string(state, \"search_file_context\") if has_files else \"\",\n        \"answer\": _require_str(state, \"response\"),\n        \"markdown_sources\": _require_str(state, \"search_markdown_sources\"),\n        \"results\": results,\n        \"providers\": _require_dict(state, \"search_providers_status\"),\n        \"suggestions\": _require_list(state, \"search_suggestions\"),\n        \"followups\": _require_list(state, \"search_followups\"),\n        \"result_insights\": _require_list(state, \"search_result_insights\"),\n    }\n    response = json.dumps(artifact, ensure_ascii=False, separators=(\",\", \":\"))\n    return {\"serp_completed\": artifact, \"response\": response}\n",
       "node_timeout_seconds": 300
     }
   },
@@ -385,33 +385,33 @@
         "research_init": {
           "type": "code",
           "entrypoint": "run",
-          "code": "import json\n\n\ndef _clean_json(raw):\n    text = raw.strip()\n    if text.startswith('```'):\n        text = text.strip('`')\n        nl = text.find('\\n')\n        if nl != -1:\n            text = text[nl + 1:]\n    return text.strip()\n\n\ndef _str_list(value, limit):\n    out = []\n    if isinstance(value, list):\n        for item in value:\n            if isinstance(item, str):\n                s = item.strip()\n                if s != '':\n                    out.append(s)\n            if len(out) >= limit:\n                break\n    return out\n\n\nasync def run(args, state):\n    response = state.get('response')\n    if not isinstance(response, str) or response.strip() == '':\n        raise ValueError('research plan: empty response')\n    payload = json.loads(_clean_json(response))\n    if not isinstance(payload, dict):\n        raise TypeError('research plan: JSON object expected')\n    query = state.get('research_query')\n    brief = payload.get('brief')\n    if not isinstance(brief, str) or brief.strip() == '':\n        brief = query\n    brief = brief.strip()\n    sub_questions = _str_list(payload.get('sub_questions'), 6)\n    outline = _str_list(payload.get('outline'), 6)\n    queries = _str_list(payload.get('queries'), 6)\n    if len(queries) == 0:\n        queries = [query]\n    max_queries = int(state['variables'].get('research_max_queries_per_wave', 5))\n    pending = queries[:max_queries]\n    if sub_questions:\n        subquestions_text = '\\n'.join('- ' + q for q in sub_questions)\n    else:\n        subquestions_text = '- (под-вопросы не выделены)'\n    await capability(\n        'ui.update_data',\n        surface_id='main',\n        path='/content/research/plan',\n        value={\n            'kind': 'public_search_research_update',\n            'version': 1,\n            'flow_id': 'public_search',\n            'phase': 'plan',\n            'mode': 'research',\n            'query': query,\n            'brief': brief,\n            'sub_questions': sub_questions,\n            'outline': outline,\n            'queries': pending,\n        },\n    )\n    variables = dict(state['variables'])\n    variables['research_brief'] = brief\n    variables['research_subquestions_text'] = subquestions_text\n    return {\n        'variables': variables,\n        'research_brief': brief,\n        'research_sub_questions': sub_questions,\n        'research_subquestions_text': subquestions_text,\n        'research_outline': outline,\n        'research_pending_queries': pending,\n        'research_iteration': 0,\n        'research_sources': [],\n        'research_seen_urls': [],\n        'research_candidates': [],\n        'research_sources_digest': 'Пока нет прочитанных источников.',\n        'research_coverage_note': '',\n    }\n"
+          "code": "import json\n\n\ndef _clean_json(raw):\n    text = raw.strip()\n    if text.startswith('```'):\n        text = text.strip('`')\n        nl = text.find('\\n')\n        if nl != -1:\n            text = text[nl + 1:]\n    return text.strip()\n\n\ndef _str_list(value, limit):\n    out = []\n    if isinstance(value, list):\n        for item in value:\n            if isinstance(item, str):\n                s = item.strip()\n                if s != '':\n                    out.append(s)\n            if len(out) >= limit:\n                break\n    return out\n\n\nasync def run(args, state):\n    response = state.get('response')\n    if not isinstance(response, str) or response.strip() == '':\n        raise ValueError('research plan: empty response')\n    payload = json.loads(_clean_json(response))\n    if not isinstance(payload, dict):\n        raise TypeError('research plan: JSON object expected')\n    query = state.get('research_query')\n    brief = payload.get('brief')\n    if not isinstance(brief, str) or brief.strip() == '':\n        brief = query\n    brief = brief.strip()\n    sub_questions = _str_list(payload.get('sub_questions'), 6)\n    outline = _str_list(payload.get('outline'), 6)\n    queries = _str_list(payload.get('queries'), 6)\n    if len(queries) == 0:\n        queries = [query]\n    max_queries = int(state['variables'].get('research_max_queries_per_wave', 5))\n    pending = queries[:max_queries]\n    if sub_questions:\n        subquestions_text = '\\n'.join('- ' + q for q in sub_questions)\n    else:\n        subquestions_text = '- (под-вопросы не выделены)'\n    state['research_plan'] = {\n        'kind': 'public_search_research_update',\n        'version': 1,\n        'flow_id': 'public_search',\n        'phase': 'plan',\n        'mode': 'research',\n        'query': query,\n        'brief': brief,\n        'sub_questions': sub_questions,\n        'outline': outline,\n        'queries': pending,\n    }\n    variables = dict(state['variables'])\n    variables['research_brief'] = brief\n    variables['research_subquestions_text'] = subquestions_text\n    return {\n        'variables': variables,\n        'research_brief': brief,\n        'research_sub_questions': sub_questions,\n        'research_subquestions_text': subquestions_text,\n        'research_outline': outline,\n        'research_pending_queries': pending,\n        'research_iteration': 0,\n        'research_sources': [],\n        'research_seen_urls': [],\n        'research_candidates': [],\n        'research_sources_digest': 'Пока нет прочитанных источников.',\n        'research_coverage_note': '',\n    }\n"
         },
         "research_search_wave": {
           "type": "code",
           "entrypoint": "run",
           "max_visits_per_run": 4,
           "node_timeout_seconds": 300,
-          "code": "import asyncio\n\nTRACKING_KEYS = {'fbclid', 'gclid', 'yclid', 'ref', 'ref_src'}\n\n\ndef _canonical_url(url):\n    u = url.strip()\n    if '://' in u:\n        _, rest = u.split('://', 1)\n    else:\n        rest = u\n    rest = rest.split('#', 1)[0]\n    if '?' in rest:\n        path, query = rest.split('?', 1)\n    else:\n        path, query = rest, ''\n    path = path.lower()\n    if path.endswith('/') and len(path) > 1:\n        path = path.rstrip('/')\n    kept = []\n    for pair in query.split('&'):\n        if pair == '':\n            continue\n        key = pair.split('=', 1)[0].lower()\n        if key in TRACKING_KEYS or key.startswith('utm_'):\n            continue\n        kept.append(pair)\n    if kept:\n        return path + '?' + '&'.join(sorted(kept))\n    return path\n\n\nasync def _search_one(query, limit, providers, strategy, language, region):\n    raw = await tools.web_search(\n        query=query,\n        limit=limit,\n        providers=providers,\n        provider_strategy=strategy,\n        language=language,\n        region=region,\n        mode='research',\n    )\n    results = raw.get('results')\n    if not isinstance(results, list):\n        err = raw.get('error')\n        if isinstance(err, str) and err.strip() != '':\n            return {'query': query, 'results': [], 'error': err.strip()}\n        return {'query': query, 'results': [], 'error': 'web_search: results is not a list'}\n    return {'query': query, 'results': results, 'error': ''}\n\n\nasync def run(args, state):\n    if state.get('research_continue') is False:\n        return {'research_candidates': []}\n    pending = state.get('research_pending_queries')\n    if not isinstance(pending, list):\n        raise TypeError('research search: research_pending_queries must be array')\n    queries = []\n    for item in pending:\n        s = str(item).strip()\n        if s != '':\n            queries.append(s)\n    if len(queries) == 0:\n        return {'research_candidates': []}\n    variables = state['variables']\n    limit = int(variables.get('research_search_limit_per_query', 8))\n    strategy = variables.get('search_provider_strategy', 'merge')\n    providers = variables.get('search_providers', ['auto'])\n    language = variables.get('search_language', 'ru')\n    region = variables.get('search_region', 'ru')\n    outcomes = await asyncio.gather(*[\n        _search_one(q, limit, providers, strategy, language, region) for q in queries\n    ])\n    seen = state.get('research_seen_urls')\n    seen_set = set(seen) if isinstance(seen, list) else set()\n    scores = {}\n    candidates = {}\n    for outcome in outcomes:\n        for item in outcome['results']:\n            if not isinstance(item, dict):\n                continue\n            url = str(item.get('url', '')).strip()\n            title = str(item.get('title', '')).strip()\n            if url == '' or title == '':\n                continue\n            key = _canonical_url(url)\n            if key == '' or key in seen_set:\n                continue\n            rank = item.get('provider_rank')\n            rank_val = rank if isinstance(rank, int) and rank >= 1 else 50\n            score = 1.0 / (60.0 + float(rank_val))\n            if key not in candidates:\n                provider = str(item.get('provider', '')).strip()\n                if provider == '':\n                    provider = 'web'\n                candidates[key] = {\n                    'url': url,\n                    'title': title,\n                    'snippet': str(item.get('snippet', '')).strip(),\n                    'provider': provider,\n                    'site_name': str(item.get('site_name', '')).strip(),\n                }\n                scores[key] = score\n            else:\n                scores[key] += score\n    ranked_keys = sorted(candidates.keys(), key=lambda k: -scores[k])\n    ranked = [candidates[k] for k in ranked_keys]\n    query_stats = [\n        {'query': o['query'], 'count': len(o['results']), 'error': o['error']}\n        for o in outcomes\n    ]\n    await capability(\n        'ui.update_data',\n        surface_id='main',\n        path='/content/research/search',\n        value={\n            'kind': 'public_search_research_update',\n            'version': 1,\n            'flow_id': 'public_search',\n            'phase': 'search',\n            'mode': 'research',\n            'query': state.get('research_query'),\n            'iteration': int(state.get('research_iteration', 0)),\n            'queries': query_stats,\n            'found': len(ranked),\n            'candidates': [\n                {'url': c['url'], 'title': c['title'], 'provider': c['provider'], 'site_name': c['site_name']}\n                for c in ranked[:12]\n            ],\n        },\n    )\n    return {'research_candidates': ranked}\n"
+          "code": "import asyncio\n\nTRACKING_KEYS = {'fbclid', 'gclid', 'yclid', 'ref', 'ref_src'}\n\n\ndef _canonical_url(url):\n    u = url.strip()\n    if '://' in u:\n        _, rest = u.split('://', 1)\n    else:\n        rest = u\n    rest = rest.split('#', 1)[0]\n    if '?' in rest:\n        path, query = rest.split('?', 1)\n    else:\n        path, query = rest, ''\n    path = path.lower()\n    if path.endswith('/') and len(path) > 1:\n        path = path.rstrip('/')\n    kept = []\n    for pair in query.split('&'):\n        if pair == '':\n            continue\n        key = pair.split('=', 1)[0].lower()\n        if key in TRACKING_KEYS or key.startswith('utm_'):\n            continue\n        kept.append(pair)\n    if kept:\n        return path + '?' + '&'.join(sorted(kept))\n    return path\n\n\nasync def _search_one(query, limit, providers, strategy, language, region):\n    raw = await tools.web_search(\n        query=query,\n        limit=limit,\n        providers=providers,\n        provider_strategy=strategy,\n        language=language,\n        region=region,\n        mode='research',\n    )\n    results = raw.get('results')\n    if not isinstance(results, list):\n        err = raw.get('error')\n        if isinstance(err, str) and err.strip() != '':\n            return {'query': query, 'results': [], 'error': err.strip()}\n        return {'query': query, 'results': [], 'error': 'web_search: results is not a list'}\n    return {'query': query, 'results': results, 'error': ''}\n\n\nasync def run(args, state):\n    if state.get('research_continue') is False:\n        return {'research_candidates': []}\n    pending = state.get('research_pending_queries')\n    if not isinstance(pending, list):\n        raise TypeError('research search: research_pending_queries must be array')\n    queries = []\n    for item in pending:\n        s = str(item).strip()\n        if s != '':\n            queries.append(s)\n    if len(queries) == 0:\n        return {'research_candidates': []}\n    variables = state['variables']\n    limit = int(variables.get('research_search_limit_per_query', 8))\n    strategy = variables.get('search_provider_strategy', 'merge')\n    providers = variables.get('search_providers', ['auto'])\n    language = variables.get('search_language', 'ru')\n    region = variables.get('search_region', 'ru')\n    outcomes = await asyncio.gather(*[\n        _search_one(q, limit, providers, strategy, language, region) for q in queries\n    ])\n    seen = state.get('research_seen_urls')\n    seen_set = set(seen) if isinstance(seen, list) else set()\n    scores = {}\n    candidates = {}\n    for outcome in outcomes:\n        for item in outcome['results']:\n            if not isinstance(item, dict):\n                continue\n            url = str(item.get('url', '')).strip()\n            title = str(item.get('title', '')).strip()\n            if url == '' or title == '':\n                continue\n            key = _canonical_url(url)\n            if key == '' or key in seen_set:\n                continue\n            rank = item.get('provider_rank')\n            rank_val = rank if isinstance(rank, int) and rank >= 1 else 50\n            score = 1.0 / (60.0 + float(rank_val))\n            if key not in candidates:\n                provider = str(item.get('provider', '')).strip()\n                if provider == '':\n                    provider = 'web'\n                candidates[key] = {\n                    'url': url,\n                    'title': title,\n                    'snippet': str(item.get('snippet', '')).strip(),\n                    'provider': provider,\n                    'site_name': str(item.get('site_name', '')).strip(),\n                }\n                scores[key] = score\n            else:\n                scores[key] += score\n    ranked_keys = sorted(candidates.keys(), key=lambda k: -scores[k])\n    ranked = [candidates[k] for k in ranked_keys]\n    query_stats = [\n        {'query': o['query'], 'count': len(o['results']), 'error': o['error']}\n        for o in outcomes\n    ]\n    research_search = {\n        'kind': 'public_search_research_update',\n        'version': 1,\n        'flow_id': 'public_search',\n        'phase': 'search',\n        'mode': 'research',\n        'query': state.get('research_query'),\n        'iteration': int(state.get('research_iteration', 0)),\n        'queries': query_stats,\n        'found': len(ranked),\n        'candidates': [\n            {'url': c['url'], 'title': c['title'], 'provider': c['provider'], 'site_name': c['site_name']}\n            for c in ranked[:12]\n        ],\n    }\n    return {'research_candidates': ranked, 'research_search': research_search}\n"
         },
         "research_read_wave": {
           "type": "code",
           "entrypoint": "run",
           "max_visits_per_run": 4,
           "node_timeout_seconds": 300,
-          "code": "import asyncio\n\n\nasync def _read_one(candidate, max_chars):\n    try:\n        raw = await tools.browser_page_markdown(\n            url=candidate['url'],\n            max_markdown_chars=max_chars,\n            navigation_timeout_ms=20000,\n        )\n    except Exception as exc:\n        return {'candidate': candidate, 'ok': False, 'content': '', 'truncated': False, 'error': str(exc)}\n    if not isinstance(raw, dict) or raw.get('success') is not True:\n        return {'candidate': candidate, 'ok': False, 'content': '', 'truncated': False}\n    markdown = raw.get('markdown')\n    if not isinstance(markdown, str) or markdown.strip() == '':\n        return {'candidate': candidate, 'ok': False, 'content': '', 'truncated': False}\n    return {'candidate': candidate, 'ok': True, 'content': markdown.strip(), 'truncated': raw.get('truncated') is True}\n\n\nasync def run(args, state):\n    candidates = state.get('research_candidates')\n    if not isinstance(candidates, list):\n        candidates = []\n    sources = state.get('research_sources')\n    if not isinstance(sources, list):\n        sources = []\n    seen = state.get('research_seen_urls')\n    seen_set = set(seen) if isinstance(seen, list) else set()\n    variables = state['variables']\n    max_sources = int(variables.get('research_max_sources', 8))\n    remaining = max_sources - len(sources)\n    if remaining < 0:\n        remaining = 0\n    to_read = candidates[:remaining]\n    max_chars = int(variables.get('research_page_max_chars', 6000))\n    if to_read:\n        read_results = await asyncio.gather(*[_read_one(c, max_chars) for c in to_read])\n    else:\n        read_results = []\n    new_sources = []\n    for r in read_results:\n        cand = r['candidate']\n        seen_set.add(cand['url'])\n        if r['ok']:\n            index = len(sources) + len(new_sources) + 1\n            source = {\n                'index': index,\n                'url': cand['url'],\n                'title': cand['title'],\n                'provider': cand['provider'],\n                'site_name': cand['site_name'],\n                'snippet': cand['snippet'],\n                'content': r['content'],\n                'truncated': r['truncated'],\n            }\n            new_sources.append(source)\n            await capability(\n                'ui.update_data',\n                surface_id='main',\n                path='/content/research/sources/' + str(index),\n                value={\n                    'kind': 'public_search_research_update',\n                    'version': 1,\n                    'flow_id': 'public_search',\n                    'phase': 'read',\n                    'mode': 'research',\n                    'index': index,\n                    'url': cand['url'],\n                    'title': cand['title'],\n                    'provider': cand['provider'],\n                    'site_name': cand['site_name'],\n                },\n            )\n    all_sources = sources + new_sources\n    digest_lines = []\n    for s in all_sources:\n        snippet = s['snippet']\n        if len(snippet) > 200:\n            snippet = snippet[:200]\n        label = s['site_name'] if s['site_name'] != '' else s['provider']\n        digest_lines.append(str(s['index']) + '. ' + s['title'] + ' (' + label + '): ' + snippet)\n    if digest_lines:\n        digest = '\\n'.join(digest_lines)\n    else:\n        digest = 'Пока нет прочитанных источников.'\n    variables = dict(state['variables'])\n    variables['research_sources_digest'] = digest\n    return {\n        'variables': variables,\n        'research_sources': all_sources,\n        'research_seen_urls': list(seen_set),\n        'research_candidates': [],\n        'research_sources_digest': digest,\n    }\n"
+          "code": "import asyncio\n\n\nasync def _read_one(candidate, max_chars):\n    try:\n        raw = await tools.browser_page_markdown(\n            url=candidate['url'],\n            max_markdown_chars=max_chars,\n            navigation_timeout_ms=20000,\n        )\n    except Exception as exc:\n        return {'candidate': candidate, 'ok': False, 'content': '', 'truncated': False, 'error': str(exc)}\n    if not isinstance(raw, dict) or raw.get('success') is not True:\n        return {'candidate': candidate, 'ok': False, 'content': '', 'truncated': False}\n    markdown = raw.get('markdown')\n    if not isinstance(markdown, str) or markdown.strip() == '':\n        return {'candidate': candidate, 'ok': False, 'content': '', 'truncated': False}\n    return {'candidate': candidate, 'ok': True, 'content': markdown.strip(), 'truncated': raw.get('truncated') is True}\n\n\nasync def run(args, state):\n    candidates = state.get('research_candidates')\n    if not isinstance(candidates, list):\n        candidates = []\n    sources = state.get('research_sources')\n    if not isinstance(sources, list):\n        sources = []\n    seen = state.get('research_seen_urls')\n    seen_set = set(seen) if isinstance(seen, list) else set()\n    variables = state['variables']\n    max_sources = int(variables.get('research_max_sources', 8))\n    remaining = max_sources - len(sources)\n    if remaining < 0:\n        remaining = 0\n    to_read = candidates[:remaining]\n    max_chars = int(variables.get('research_page_max_chars', 6000))\n    if to_read:\n        read_results = await asyncio.gather(*[_read_one(c, max_chars) for c in to_read])\n    else:\n        read_results = []\n    new_sources = []\n    sources_read = list(state.get('research_sources_read', []))\n    for r in read_results:\n        cand = r['candidate']\n        seen_set.add(cand['url'])\n        if r['ok']:\n            index = len(sources) + len(new_sources) + 1\n            source = {\n                'index': index,\n                'url': cand['url'],\n                'title': cand['title'],\n                'provider': cand['provider'],\n                'site_name': cand['site_name'],\n                'snippet': cand['snippet'],\n                'content': r['content'],\n                'truncated': r['truncated'],\n            }\n            new_sources.append(source)\n            sources_read.append({\n                'kind': 'public_search_research_update',\n                'version': 1,\n                'flow_id': 'public_search',\n                'phase': 'read',\n                'mode': 'research',\n                'index': index,\n                'url': cand['url'],\n                'title': cand['title'],\n                'provider': cand['provider'],\n                'site_name': cand['site_name'],\n            })\n    all_sources = sources + new_sources\n    digest_lines = []\n    for s in all_sources:\n        snippet = s['snippet']\n        if len(snippet) > 200:\n            snippet = snippet[:200]\n        label = s['site_name'] if s['site_name'] != '' else s['provider']\n        digest_lines.append(str(s['index']) + '. ' + s['title'] + ' (' + label + '): ' + snippet)\n    if digest_lines:\n        digest = '\\n'.join(digest_lines)\n    else:\n        digest = 'Пока нет прочитанных источников.'\n    variables = dict(state['variables'])\n    variables['research_sources_digest'] = digest\n    return {\n        'variables': variables,\n        'research_sources': all_sources,\n        'research_sources_read': sources_read,\n        'research_seen_urls': list(seen_set),\n        'research_candidates': [],\n        'research_sources_digest': digest,\n    }\n"
         },
         "research_search_wave_2": {
           "type": "code",
           "entrypoint": "run",
           "node_timeout_seconds": 300,
-          "code": "import asyncio\n\nTRACKING_KEYS = {'fbclid', 'gclid', 'yclid', 'ref', 'ref_src'}\n\n\ndef _canonical_url(url):\n    u = url.strip()\n    if '://' in u:\n        _, rest = u.split('://', 1)\n    else:\n        rest = u\n    rest = rest.split('#', 1)[0]\n    if '?' in rest:\n        path, query = rest.split('?', 1)\n    else:\n        path, query = rest, ''\n    path = path.lower()\n    if path.endswith('/') and len(path) > 1:\n        path = path.rstrip('/')\n    kept = []\n    for pair in query.split('&'):\n        if pair == '':\n            continue\n        key = pair.split('=', 1)[0].lower()\n        if key in TRACKING_KEYS or key.startswith('utm_'):\n            continue\n        kept.append(pair)\n    if kept:\n        return path + '?' + '&'.join(sorted(kept))\n    return path\n\n\nasync def _search_one(query, limit, providers, strategy, language, region):\n    raw = await tools.web_search(\n        query=query,\n        limit=limit,\n        providers=providers,\n        provider_strategy=strategy,\n        language=language,\n        region=region,\n        mode='research',\n    )\n    results = raw.get('results')\n    if not isinstance(results, list):\n        err = raw.get('error')\n        if isinstance(err, str) and err.strip() != '':\n            return {'query': query, 'results': [], 'error': err.strip()}\n        return {'query': query, 'results': [], 'error': 'web_search: results is not a list'}\n    return {'query': query, 'results': results, 'error': ''}\n\n\nasync def run(args, state):\n    if state.get('research_continue') is not True:\n        return {'research_candidates': []}\n    pending = state.get('research_pending_queries')\n    if not isinstance(pending, list):\n        raise TypeError('research search: research_pending_queries must be array')\n    queries = []\n    for item in pending:\n        s = str(item).strip()\n        if s != '':\n            queries.append(s)\n    if len(queries) == 0:\n        return {'research_candidates': []}\n    variables = state['variables']\n    limit = int(variables.get('research_search_limit_per_query', 8))\n    strategy = variables.get('search_provider_strategy', 'merge')\n    providers = variables.get('search_providers', ['auto'])\n    language = variables.get('search_language', 'ru')\n    region = variables.get('search_region', 'ru')\n    outcomes = await asyncio.gather(*[\n        _search_one(q, limit, providers, strategy, language, region) for q in queries\n    ])\n    seen = state.get('research_seen_urls')\n    seen_set = set(seen) if isinstance(seen, list) else set()\n    scores = {}\n    candidates = {}\n    for outcome in outcomes:\n        for item in outcome['results']:\n            if not isinstance(item, dict):\n                continue\n            url = str(item.get('url', '')).strip()\n            title = str(item.get('title', '')).strip()\n            if url == '' or title == '':\n                continue\n            key = _canonical_url(url)\n            if key == '' or key in seen_set:\n                continue\n            rank = item.get('provider_rank')\n            rank_val = rank if isinstance(rank, int) and rank >= 1 else 50\n            score = 1.0 / (60.0 + float(rank_val))\n            if key not in candidates:\n                provider = str(item.get('provider', '')).strip()\n                if provider == '':\n                    provider = 'web'\n                candidates[key] = {\n                    'url': url,\n                    'title': title,\n                    'snippet': str(item.get('snippet', '')).strip(),\n                    'provider': provider,\n                    'site_name': str(item.get('site_name', '')).strip(),\n                }\n                scores[key] = score\n            else:\n                scores[key] += score\n    ranked_keys = sorted(candidates.keys(), key=lambda k: -scores[k])\n    ranked = [candidates[k] for k in ranked_keys]\n    query_stats = [\n        {'query': o['query'], 'count': len(o['results']), 'error': o['error']}\n        for o in outcomes\n    ]\n    await capability(\n        'ui.update_data',\n        surface_id='main',\n        path='/content/research/search',\n        value={\n            'kind': 'public_search_research_update',\n            'version': 1,\n            'flow_id': 'public_search',\n            'phase': 'search',\n            'mode': 'research',\n            'query': state.get('research_query'),\n            'iteration': int(state.get('research_iteration', 0)),\n            'queries': query_stats,\n            'found': len(ranked),\n            'candidates': [\n                {'url': c['url'], 'title': c['title'], 'provider': c['provider'], 'site_name': c['site_name']}\n                for c in ranked[:12]\n            ],\n        },\n    )\n    return {'research_candidates': ranked}\n"
+          "code": "import asyncio\n\nTRACKING_KEYS = {'fbclid', 'gclid', 'yclid', 'ref', 'ref_src'}\n\n\ndef _canonical_url(url):\n    u = url.strip()\n    if '://' in u:\n        _, rest = u.split('://', 1)\n    else:\n        rest = u\n    rest = rest.split('#', 1)[0]\n    if '?' in rest:\n        path, query = rest.split('?', 1)\n    else:\n        path, query = rest, ''\n    path = path.lower()\n    if path.endswith('/') and len(path) > 1:\n        path = path.rstrip('/')\n    kept = []\n    for pair in query.split('&'):\n        if pair == '':\n            continue\n        key = pair.split('=', 1)[0].lower()\n        if key in TRACKING_KEYS or key.startswith('utm_'):\n            continue\n        kept.append(pair)\n    if kept:\n        return path + '?' + '&'.join(sorted(kept))\n    return path\n\n\nasync def _search_one(query, limit, providers, strategy, language, region):\n    raw = await tools.web_search(\n        query=query,\n        limit=limit,\n        providers=providers,\n        provider_strategy=strategy,\n        language=language,\n        region=region,\n        mode='research',\n    )\n    results = raw.get('results')\n    if not isinstance(results, list):\n        err = raw.get('error')\n        if isinstance(err, str) and err.strip() != '':\n            return {'query': query, 'results': [], 'error': err.strip()}\n        return {'query': query, 'results': [], 'error': 'web_search: results is not a list'}\n    return {'query': query, 'results': results, 'error': ''}\n\n\nasync def run(args, state):\n    if state.get('research_continue') is not True:\n        return {'research_candidates': []}\n    pending = state.get('research_pending_queries')\n    if not isinstance(pending, list):\n        raise TypeError('research search: research_pending_queries must be array')\n    queries = []\n    for item in pending:\n        s = str(item).strip()\n        if s != '':\n            queries.append(s)\n    if len(queries) == 0:\n        return {'research_candidates': []}\n    variables = state['variables']\n    limit = int(variables.get('research_search_limit_per_query', 8))\n    strategy = variables.get('search_provider_strategy', 'merge')\n    providers = variables.get('search_providers', ['auto'])\n    language = variables.get('search_language', 'ru')\n    region = variables.get('search_region', 'ru')\n    outcomes = await asyncio.gather(*[\n        _search_one(q, limit, providers, strategy, language, region) for q in queries\n    ])\n    seen = state.get('research_seen_urls')\n    seen_set = set(seen) if isinstance(seen, list) else set()\n    scores = {}\n    candidates = {}\n    for outcome in outcomes:\n        for item in outcome['results']:\n            if not isinstance(item, dict):\n                continue\n            url = str(item.get('url', '')).strip()\n            title = str(item.get('title', '')).strip()\n            if url == '' or title == '':\n                continue\n            key = _canonical_url(url)\n            if key == '' or key in seen_set:\n                continue\n            rank = item.get('provider_rank')\n            rank_val = rank if isinstance(rank, int) and rank >= 1 else 50\n            score = 1.0 / (60.0 + float(rank_val))\n            if key not in candidates:\n                provider = str(item.get('provider', '')).strip()\n                if provider == '':\n                    provider = 'web'\n                candidates[key] = {\n                    'url': url,\n                    'title': title,\n                    'snippet': str(item.get('snippet', '')).strip(),\n                    'provider': provider,\n                    'site_name': str(item.get('site_name', '')).strip(),\n                }\n                scores[key] = score\n            else:\n                scores[key] += score\n    ranked_keys = sorted(candidates.keys(), key=lambda k: -scores[k])\n    ranked = [candidates[k] for k in ranked_keys]\n    query_stats = [\n        {'query': o['query'], 'count': len(o['results']), 'error': o['error']}\n        for o in outcomes\n    ]\n    research_search = {\n        'kind': 'public_search_research_update',\n        'version': 1,\n        'flow_id': 'public_search',\n        'phase': 'search',\n        'mode': 'research',\n        'query': state.get('research_query'),\n        'iteration': int(state.get('research_iteration', 0)),\n        'queries': query_stats,\n        'found': len(ranked),\n        'candidates': [\n            {'url': c['url'], 'title': c['title'], 'provider': c['provider'], 'site_name': c['site_name']}\n            for c in ranked[:12]\n        ],\n    }\n    return {'research_candidates': ranked, 'research_search': research_search}\n"
         },
         "research_read_wave_2": {
           "type": "code",
           "entrypoint": "run",
           "node_timeout_seconds": 300,
-          "code": "import asyncio\n\n\nasync def _read_one(candidate, max_chars):\n    try:\n        raw = await tools.browser_page_markdown(\n            url=candidate['url'],\n            max_markdown_chars=max_chars,\n            navigation_timeout_ms=20000,\n        )\n    except Exception as exc:\n        return {'candidate': candidate, 'ok': False, 'content': '', 'truncated': False, 'error': str(exc)}\n    if not isinstance(raw, dict) or raw.get('success') is not True:\n        return {'candidate': candidate, 'ok': False, 'content': '', 'truncated': False}\n    markdown = raw.get('markdown')\n    if not isinstance(markdown, str) or markdown.strip() == '':\n        return {'candidate': candidate, 'ok': False, 'content': '', 'truncated': False}\n    return {'candidate': candidate, 'ok': True, 'content': markdown.strip(), 'truncated': raw.get('truncated') is True}\n\n\nasync def run(args, state):\n    candidates = state.get('research_candidates')\n    if not isinstance(candidates, list):\n        candidates = []\n    sources = state.get('research_sources')\n    if not isinstance(sources, list):\n        sources = []\n    seen = state.get('research_seen_urls')\n    seen_set = set(seen) if isinstance(seen, list) else set()\n    variables = state['variables']\n    max_sources = int(variables.get('research_max_sources', 8))\n    remaining = max_sources - len(sources)\n    if remaining < 0:\n        remaining = 0\n    to_read = candidates[:remaining]\n    max_chars = int(variables.get('research_page_max_chars', 6000))\n    if to_read:\n        read_results = await asyncio.gather(*[_read_one(c, max_chars) for c in to_read])\n    else:\n        read_results = []\n    new_sources = []\n    for r in read_results:\n        cand = r['candidate']\n        seen_set.add(cand['url'])\n        if r['ok']:\n            index = len(sources) + len(new_sources) + 1\n            source = {\n                'index': index,\n                'url': cand['url'],\n                'title': cand['title'],\n                'provider': cand['provider'],\n                'site_name': cand['site_name'],\n                'snippet': cand['snippet'],\n                'content': r['content'],\n                'truncated': r['truncated'],\n            }\n            new_sources.append(source)\n            await capability(\n                'ui.update_data',\n                surface_id='main',\n                path='/content/research/sources/' + str(index),\n                value={\n                    'kind': 'public_search_research_update',\n                    'version': 1,\n                    'flow_id': 'public_search',\n                    'phase': 'read',\n                    'mode': 'research',\n                    'index': index,\n                    'url': cand['url'],\n                    'title': cand['title'],\n                    'provider': cand['provider'],\n                    'site_name': cand['site_name'],\n                },\n            )\n    all_sources = sources + new_sources\n    digest_lines = []\n    for s in all_sources:\n        snippet = s['snippet']\n        if len(snippet) > 200:\n            snippet = snippet[:200]\n        label = s['site_name'] if s['site_name'] != '' else s['provider']\n        digest_lines.append(str(s['index']) + '. ' + s['title'] + ' (' + label + '): ' + snippet)\n    if digest_lines:\n        digest = '\\n'.join(digest_lines)\n    else:\n        digest = 'Пока нет прочитанных источников.'\n    variables = dict(state['variables'])\n    variables['research_sources_digest'] = digest\n    return {\n        'variables': variables,\n        'research_sources': all_sources,\n        'research_seen_urls': list(seen_set),\n        'research_candidates': [],\n        'research_sources_digest': digest,\n    }\n"
+          "code": "import asyncio\n\n\nasync def _read_one(candidate, max_chars):\n    try:\n        raw = await tools.browser_page_markdown(\n            url=candidate['url'],\n            max_markdown_chars=max_chars,\n            navigation_timeout_ms=20000,\n        )\n    except Exception as exc:\n        return {'candidate': candidate, 'ok': False, 'content': '', 'truncated': False, 'error': str(exc)}\n    if not isinstance(raw, dict) or raw.get('success') is not True:\n        return {'candidate': candidate, 'ok': False, 'content': '', 'truncated': False}\n    markdown = raw.get('markdown')\n    if not isinstance(markdown, str) or markdown.strip() == '':\n        return {'candidate': candidate, 'ok': False, 'content': '', 'truncated': False}\n    return {'candidate': candidate, 'ok': True, 'content': markdown.strip(), 'truncated': raw.get('truncated') is True}\n\n\nasync def run(args, state):\n    candidates = state.get('research_candidates')\n    if not isinstance(candidates, list):\n        candidates = []\n    sources = state.get('research_sources')\n    if not isinstance(sources, list):\n        sources = []\n    seen = state.get('research_seen_urls')\n    seen_set = set(seen) if isinstance(seen, list) else set()\n    variables = state['variables']\n    max_sources = int(variables.get('research_max_sources', 8))\n    remaining = max_sources - len(sources)\n    if remaining < 0:\n        remaining = 0\n    to_read = candidates[:remaining]\n    max_chars = int(variables.get('research_page_max_chars', 6000))\n    if to_read:\n        read_results = await asyncio.gather(*[_read_one(c, max_chars) for c in to_read])\n    else:\n        read_results = []\n    new_sources = []\n    sources_read = list(state.get('research_sources_read', []))\n    for r in read_results:\n        cand = r['candidate']\n        seen_set.add(cand['url'])\n        if r['ok']:\n            index = len(sources) + len(new_sources) + 1\n            source = {\n                'index': index,\n                'url': cand['url'],\n                'title': cand['title'],\n                'provider': cand['provider'],\n                'site_name': cand['site_name'],\n                'snippet': cand['snippet'],\n                'content': r['content'],\n                'truncated': r['truncated'],\n            }\n            new_sources.append(source)\n            sources_read.append({\n                'kind': 'public_search_research_update',\n                'version': 1,\n                'flow_id': 'public_search',\n                'phase': 'read',\n                'mode': 'research',\n                'index': index,\n                'url': cand['url'],\n                'title': cand['title'],\n                'provider': cand['provider'],\n                'site_name': cand['site_name'],\n            })\n    all_sources = sources + new_sources\n    digest_lines = []\n    for s in all_sources:\n        snippet = s['snippet']\n        if len(snippet) > 200:\n            snippet = snippet[:200]\n        label = s['site_name'] if s['site_name'] != '' else s['provider']\n        digest_lines.append(str(s['index']) + '. ' + s['title'] + ' (' + label + '): ' + snippet)\n    if digest_lines:\n        digest = '\\n'.join(digest_lines)\n    else:\n        digest = 'Пока нет прочитанных источников.'\n    variables = dict(state['variables'])\n    variables['research_sources_digest'] = digest\n    return {\n        'variables': variables,\n        'research_sources': all_sources,\n        'research_sources_read': sources_read,\n        'research_seen_urls': list(seen_set),\n        'research_candidates': [],\n        'research_sources_digest': digest,\n    }\n"
         },
         "research_reflect": {
           "type": "llm_node",
@@ -429,7 +429,7 @@
           "type": "code",
           "entrypoint": "run",
           "max_visits_per_run": 4,
-          "code": "import json\n\n\ndef _clean_json(raw):\n    text = raw.strip()\n    if text.startswith('```'):\n        text = text.strip('`')\n        nl = text.find('\\n')\n        if nl != -1:\n            text = text[nl + 1:]\n    return text.strip()\n\n\ndef _str_list(value, limit):\n    out = []\n    if isinstance(value, list):\n        for item in value:\n            if isinstance(item, str):\n                s = item.strip()\n                if s != '':\n                    out.append(s)\n            if len(out) >= limit:\n                break\n    return out\n\n\nasync def run(args, state):\n    response = state.get('response')\n    if not isinstance(response, str) or response.strip() == '':\n        raise ValueError('research reflect: empty response')\n    payload = json.loads(_clean_json(response))\n    if not isinstance(payload, dict):\n        raise TypeError('research reflect: JSON object expected')\n    variables = state['variables']\n    iteration = int(state.get('research_iteration', 0)) + 1\n    max_iter = int(variables.get('research_max_iterations', 2))\n    max_queries = int(variables.get('research_max_queries_per_wave', 5))\n    max_sources = int(variables.get('research_max_sources', 8))\n    sources = state.get('research_sources')\n    source_count = len(sources) if isinstance(sources, list) else 0\n    need_more = payload.get('need_more') is True\n    gap = _str_list(payload.get('gap_queries'), max_queries)\n    coverage = payload.get('coverage_note')\n    coverage_text = coverage.strip() if isinstance(coverage, str) else ''\n    has_room = source_count < max_sources\n    should_continue = need_more and len(gap) > 0 and iteration < max_iter and has_room\n    await capability(\n        'ui.update_data',\n        surface_id='main',\n        path='/content/research/reflection',\n        value={\n            'kind': 'public_search_research_update',\n            'version': 1,\n            'flow_id': 'public_search',\n            'phase': 'reflect',\n            'mode': 'research',\n            'query': state.get('research_query'),\n            'iteration': iteration,\n            'need_more': should_continue,\n            'coverage_note': coverage_text,\n            'gap_queries': gap if should_continue else [],\n            'source_count': source_count,\n        },\n    )\n    return {\n        'research_iteration': iteration,\n        'research_continue': should_continue,\n        'research_pending_queries': gap[:max_queries] if should_continue else [],\n        'research_coverage_note': coverage_text,\n    }\n"
+          "code": "import json\n\n\ndef _clean_json(raw):\n    text = raw.strip()\n    if text.startswith('```'):\n        text = text.strip('`')\n        nl = text.find('\\n')\n        if nl != -1:\n            text = text[nl + 1:]\n    return text.strip()\n\n\ndef _str_list(value, limit):\n    out = []\n    if isinstance(value, list):\n        for item in value:\n            if isinstance(item, str):\n                s = item.strip()\n                if s != '':\n                    out.append(s)\n            if len(out) >= limit:\n                break\n    return out\n\n\nasync def run(args, state):\n    response = state.get('response')\n    if not isinstance(response, str) or response.strip() == '':\n        raise ValueError('research reflect: empty response')\n    payload = json.loads(_clean_json(response))\n    if not isinstance(payload, dict):\n        raise TypeError('research reflect: JSON object expected')\n    variables = state['variables']\n    iteration = int(state.get('research_iteration', 0)) + 1\n    max_iter = int(variables.get('research_max_iterations', 2))\n    max_queries = int(variables.get('research_max_queries_per_wave', 5))\n    max_sources = int(variables.get('research_max_sources', 8))\n    sources = state.get('research_sources')\n    source_count = len(sources) if isinstance(sources, list) else 0\n    need_more = payload.get('need_more') is True\n    gap = _str_list(payload.get('gap_queries'), max_queries)\n    coverage = payload.get('coverage_note')\n    coverage_text = coverage.strip() if isinstance(coverage, str) else ''\n    has_room = source_count < max_sources\n    should_continue = need_more and len(gap) > 0 and iteration < max_iter and has_room\n    research_reflection = {\n        'kind': 'public_search_research_update',\n        'version': 1,\n        'flow_id': 'public_search',\n        'phase': 'reflect',\n        'mode': 'research',\n        'query': state.get('research_query'),\n        'iteration': iteration,\n        'need_more': should_continue,\n        'coverage_note': coverage_text,\n        'gap_queries': gap if should_continue else [],\n        'source_count': source_count,\n    }\n    return {\n        'research_reflection': research_reflection,\n        'research_iteration': iteration,\n        'research_continue': should_continue,\n        'research_pending_queries': gap[:max_queries] if should_continue else [],\n        'research_coverage_note': coverage_text,\n    }\n"
         },
         "research_prepare_prompt": {
           "type": "code",
@@ -450,7 +450,7 @@
         "research_build_artifact": {
           "type": "code",
           "entrypoint": "run",
-          "code": "import json\n\n\nasync def run(args, state):\n    report = state.get('response')\n    if not isinstance(report, str) or report.strip() == '':\n        raise ValueError('research artifact: empty report')\n    sources = state.get('research_sources')\n    if not isinstance(sources, list):\n        sources = []\n    public_sources = [\n        {\n            'index': s['index'],\n            'url': s['url'],\n            'title': s['title'],\n            'provider': s['provider'],\n            'site_name': s['site_name'],\n            'snippet': s['snippet'],\n        }\n        for s in sources\n    ]\n    markdown_sources = state.get('research_markdown_sources')\n    if not isinstance(markdown_sources, str):\n        markdown_sources = ''\n    brief = state.get('research_brief')\n    if not isinstance(brief, str):\n        brief = ''\n    coverage = state.get('research_coverage_note')\n    if not isinstance(coverage, str):\n        coverage = ''\n    outline = state.get('research_outline')\n    if not isinstance(outline, list):\n        outline = []\n    sub_questions = state.get('research_sub_questions')\n    if not isinstance(sub_questions, list):\n        sub_questions = []\n    artifact = {\n        'kind': 'public_search_research_report',\n        'version': 1,\n        'flow_id': 'public_search',\n        'mode': 'research',\n        'query': state.get('research_query'),\n        'brief': brief,\n        'outline': outline,\n        'sub_questions': sub_questions,\n        'report': report.strip(),\n        'markdown_sources': markdown_sources,\n        'sources': public_sources,\n        'coverage_note': coverage,\n        'iterations': int(state.get('research_iteration', 0)),\n    }\n    await capability(\n        'ui.update_data',\n        surface_id='main',\n        path='/content/serp/completed',\n        value=artifact,\n    )\n    return {'response': json.dumps(artifact, ensure_ascii=False, separators=(',', ':'))}\n"
+          "code": "import json\n\n\nasync def run(args, state):\n    report = state.get('response')\n    if not isinstance(report, str) or report.strip() == '':\n        raise ValueError('research artifact: empty report')\n    sources = state.get('research_sources')\n    if not isinstance(sources, list):\n        sources = []\n    public_sources = [\n        {\n            'index': s['index'],\n            'url': s['url'],\n            'title': s['title'],\n            'provider': s['provider'],\n            'site_name': s['site_name'],\n            'snippet': s['snippet'],\n        }\n        for s in sources\n    ]\n    markdown_sources = state.get('research_markdown_sources')\n    if not isinstance(markdown_sources, str):\n        markdown_sources = ''\n    brief = state.get('research_brief')\n    if not isinstance(brief, str):\n        brief = ''\n    coverage = state.get('research_coverage_note')\n    if not isinstance(coverage, str):\n        coverage = ''\n    outline = state.get('research_outline')\n    if not isinstance(outline, list):\n        outline = []\n    sub_questions = state.get('research_sub_questions')\n    if not isinstance(sub_questions, list):\n        sub_questions = []\n    artifact = {\n        'kind': 'public_search_research_report',\n        'version': 1,\n        'flow_id': 'public_search',\n        'mode': 'research',\n        'query': state.get('research_query'),\n        'brief': brief,\n        'outline': outline,\n        'sub_questions': sub_questions,\n        'report': report.strip(),\n        'markdown_sources': markdown_sources,\n        'sources': public_sources,\n        'coverage_note': coverage,\n        'iterations': int(state.get('research_iteration', 0)),\n    }\n    return {\n        'serp_completed': artifact,\n        'response': json.dumps(artifact, ensure_ascii=False, separators=(',', ':')),\n    }\n"
         }
       },
       "edges": [
@@ -556,575 +556,60 @@
     }
   },
   "interface": {
-    "schema_version": 1,
-    "template": {
-      "template_id": "linnex.default-chat",
-      "version": "1.0.0",
-      "document": {
-        "schema_version": 1,
-        "document_id": "template:linnex.default-chat:1.0.0",
-        "revision": 1,
-        "template_version": "1.0.0",
-        "catalog_id": "https://linnex.io/a2ui/catalog/platform/v1",
-        "active_page_id": "main",
-        "session_view_state": {},
-        "last_accepted_client_mutation_id": null,
-        "pages": {
-          "main": {
-            "page_id": "main",
-            "title": {
-              "default": "Conversation",
-              "translations": {}
-            },
-            "route": "/",
-            "root_surface_id": "main",
-            "navigation": {
-              "visible": true,
-              "allow_back": true,
-              "allow_direct": true
-            },
-            "default_target_profile_id": "runtime"
+    "pages": [
+      {
+        "page_id": "main",
+        "title": "Conversation",
+        "blocks": [
+          {
+            "block_id": "agent-identity",
+            "visible_when": null,
+            "type": "agent_identity",
+            "title": "",
+            "image_url": ""
+          },
+          {
+            "type": "html",
+            "block_id": "serp",
+            "source": "<style>\n  :root { color-scheme: light dark; }\n  body { margin: 0; font: 14px/1.45 var(--font-family, system-ui, sans-serif); color: var(--text-primary, #1c1c1e); }\n  .serp { display: grid; gap: 12px; }\n  .serp[hidden] { display: none; }\n  .phase { font-size: 12px; color: var(--text-secondary, #6b6b70); }\n  .result { display: grid; gap: 2px; padding: 10px 12px; border-radius: 12px; background: var(--surface-elevated, rgba(127,127,127,.08)); }\n  .result a { color: var(--accent, #2f6fed); font-weight: 600; text-decoration: none; cursor: pointer; }\n  .result .site { font-size: 12px; color: var(--text-secondary, #6b6b70); }\n  .result .snippet { color: var(--text-primary, #1c1c1e); }\n  .chips { display: flex; flex-wrap: wrap; gap: 6px; }\n  .chip { padding: 4px 10px; border-radius: 999px; background: var(--surface-elevated, rgba(127,127,127,.12)); font-size: 12px; }\n  .insight { font-size: 12px; color: var(--text-secondary, #6b6b70); }\n  .research { display: grid; gap: 6px; }\n</style>\n<section class=\"serp\" id=\"serp\" hidden>\n  <div class=\"phase\" id=\"phase\"></div>\n  <div class=\"research\" id=\"research\" hidden></div>\n  <div id=\"results\"></div>\n  <div class=\"chips\" id=\"suggestions\"></div>\n  <div id=\"insights\"></div>\n</section>\n<script>\n  const el = (id) => document.getElementById(id);\n  const text = (value) => document.createTextNode(String(value));\n  const clear = (node) => { while (node.firstChild) node.removeChild(node.firstChild); };\n\n  function resultNode(item, insight) {\n    const box = document.createElement('article');\n    box.className = 'result';\n    const link = document.createElement('a');\n    link.appendChild(text(item.title));\n    link.addEventListener('click', () => flowUi.openUrl(item.url));\n    const site = document.createElement('div');\n    site.className = 'site';\n    site.appendChild(text(item.site_name || item.display_url || item.url));\n    const snippet = document.createElement('div');\n    snippet.className = 'snippet';\n    snippet.appendChild(text(item.snippet));\n    box.append(link, site, snippet);\n    if (insight) {\n      const hint = document.createElement('div');\n      hint.className = 'insight';\n      hint.appendChild(text(insight.relevance_hint));\n      box.appendChild(hint);\n    }\n    return box;\n  }\n\n  function render(state) {\n    const completed = state.serp_completed;\n    const refined = state.serp_results_refined;\n    const preview = state.serp_results;\n    const results = completed && Array.isArray(completed.results) ? completed.results\n      : refined && Array.isArray(refined.results) ? refined.results\n      : preview && Array.isArray(preview.results) ? preview.results : [];\n    const insights = state.serp_insights && Array.isArray(state.serp_insights.result_insights)\n      ? state.serp_insights.result_insights : [];\n    const suggestions = state.serp_suggestions && Array.isArray(state.serp_suggestions.suggestions)\n      ? state.serp_suggestions.suggestions : [];\n    const plan = state.research_plan;\n    const search = state.research_search;\n    const read = Array.isArray(state.research_sources_read) ? state.research_sources_read : [];\n    const reflection = state.research_reflection;\n    const hasAnything = results.length > 0 || suggestions.length > 0 || plan || search || read.length > 0 || reflection;\n    el('serp').hidden = !hasAnything;\n    if (!hasAnything) { flowUi.resize(); return; }\n\n    const byUrl = new Map(insights.map((item) => [item.url, item]));\n    clear(el('phase'));\n    el('phase').appendChild(text(completed ? 'Поиск завершён' : refined ? 'Результаты уточнены' : results.length > 0 ? 'Первые результаты' : 'Идёт исследование'));\n\n    const research = el('research');\n    clear(research);\n    research.hidden = !(plan || search || read.length > 0 || reflection);\n    if (plan) { const p = document.createElement('div'); p.appendChild(text('План: ' + plan.brief)); research.appendChild(p); }\n    if (search) { const s = document.createElement('div'); s.appendChild(text('Найдено кандидатов: ' + search.found)); research.appendChild(s); }\n    read.forEach((source) => { const r = document.createElement('div'); r.appendChild(text(source.index + '. ' + source.title)); research.appendChild(r); });\n    if (reflection) { const f = document.createElement('div'); f.appendChild(text(reflection.coverage_note)); research.appendChild(f); }\n\n    clear(el('results'));\n    results.forEach((item) => el('results').appendChild(resultNode(item, byUrl.get(item.url))));\n\n    clear(el('suggestions'));\n    suggestions.forEach((item) => { const chip = document.createElement('span'); chip.className = 'chip'; chip.appendChild(text(item.text)); el('suggestions').appendChild(chip); });\n    flowUi.resize();\n  }\n\n  flowUi.onChange(render);\n  render(flowUi.state);\n</script>\n",
+            "height": "auto",
+            "fields": [
+              "serp_results",
+              "serp_results_refined",
+              "serp_suggestions",
+              "serp_insights",
+              "serp_completed",
+              "research_plan",
+              "research_search",
+              "research_sources_read",
+              "research_reflection"
+            ]
+          },
+          {
+            "block_id": "conversation",
+            "visible_when": null,
+            "type": "conversation",
+            "settings": {
+              "greeting": "Структурированный разбор по праву РФ и ориентиры, где свериться с НПА и реестрами. ИИ не заменяет юриста — перед решениями проверьте актуальные источники.",
+              "suggested_prompts": [],
+              "placeholder": "",
+              "show_reasoning": false,
+              "tool_calls": "compact",
+              "show_activity": true,
+              "show_skill_loads": true,
+              "show_reflection": true,
+              "errors": "generic",
+              "show_run_trace": false,
+              "show_trace_actions": false,
+              "show_browser_previews": true,
+              "show_files_panel": true,
+              "allow_cancel": true,
+              "allow_voice": true
+            }
           }
-        },
-        "surfaces": {
-          "main": {
-            "surface_id": "main",
-            "catalog_id": "https://linnex.io/a2ui/catalog/platform/v1",
-            "root_component_id": "root",
-            "components": {
-              "root": {
-                "component_id": "root",
-                "type": "PageShell",
-                "kind": "container",
-                "properties": {},
-                "children": [
-                  "header",
-                  "conversation",
-                  "greeting",
-                  "suggestions",
-                  "message-form"
-                ],
-                "container_layout": {
-                  "mode": "grid",
-                  "grid": {
-                    "columns_by_band": {
-                      "compact": 4,
-                      "medium": 8,
-                      "wide": 12
-                    },
-                    "column_gap_token": "space.4",
-                    "row_gap_token": "space.4",
-                    "outer_padding_inline_token": "space.4",
-                    "outer_padding_block_token": "space.4",
-                    "max_content_width_token": "content.wide",
-                    "auto_rows": "content",
-                    "auto_flow": "row",
-                    "align_items": "stretch",
-                    "justify_items": "stretch",
-                    "baseline_step_token": "space.1"
-                  },
-                  "stack": null,
-                  "flex": null
-                },
-                "placement": {
-                  "base": {
-                    "column_start": "auto",
-                    "column_span": "full",
-                    "row_start": "auto",
-                    "row_span": 1,
-                    "order": 0,
-                    "align_self": "auto",
-                    "justify_self": "auto",
-                    "min_inline_size_token": null,
-                    "max_inline_size_token": null
-                  },
-                  "overrides": {}
-                },
-                "bindings": {},
-                "actions": {},
-                "visibility": null,
-                "checks": [],
-                "provenance": null
-              },
-              "header": {
-                "component_id": "header",
-                "type": "Section",
-                "kind": "container",
-                "properties": {},
-                "children": [
-                  "agent-identity",
-                  "task-controls"
-                ],
-                "container_layout": {
-                  "mode": "flex",
-                  "grid": null,
-                  "stack": null,
-                  "flex": {
-                    "direction": "row",
-                    "wrap": true,
-                    "gap_token": "space.4",
-                    "align_items": "stretch",
-                    "justify_content": "space-between"
-                  }
-                },
-                "placement": {
-                  "base": {
-                    "column_start": "auto",
-                    "column_span": "full",
-                    "row_start": "auto",
-                    "row_span": 1,
-                    "order": 0,
-                    "align_self": "auto",
-                    "justify_self": "auto",
-                    "min_inline_size_token": null,
-                    "max_inline_size_token": null
-                  },
-                  "overrides": {}
-                },
-                "bindings": {},
-                "actions": {},
-                "visibility": null,
-                "checks": [],
-                "provenance": null
-              },
-              "agent-identity": {
-                "component_id": "agent-identity",
-                "type": "AgentIdentity",
-                "kind": "leaf",
-                "properties": {},
-                "children": [],
-                "container_layout": null,
-                "placement": {
-                  "base": {
-                    "column_start": "auto",
-                    "column_span": "full",
-                    "row_start": "auto",
-                    "row_span": 1,
-                    "order": 0,
-                    "align_self": "auto",
-                    "justify_self": "auto",
-                    "min_inline_size_token": null,
-                    "max_inline_size_token": null
-                  },
-                  "overrides": {}
-                },
-                "bindings": {
-                  "agent": "/system/agent"
-                },
-                "actions": {},
-                "visibility": null,
-                "checks": [],
-                "provenance": null
-              },
-              "task-controls": {
-                "component_id": "task-controls",
-                "type": "TaskControls",
-                "kind": "leaf",
-                "properties": {},
-                "children": [],
-                "container_layout": null,
-                "placement": {
-                  "base": {
-                    "column_start": "auto",
-                    "column_span": "full",
-                    "row_start": "auto",
-                    "row_span": 1,
-                    "order": 0,
-                    "align_self": "auto",
-                    "justify_self": "auto",
-                    "min_inline_size_token": null,
-                    "max_inline_size_token": null
-                  },
-                  "overrides": {}
-                },
-                "bindings": {
-                  "task": "/system/activeTask"
-                },
-                "actions": {},
-                "visibility": null,
-                "checks": [],
-                "provenance": null
-              },
-              "conversation": {
-                "component_id": "conversation",
-                "type": "ConversationFeed",
-                "kind": "container",
-                "properties": {},
-                "children": [
-                  "artifact-feed"
-                ],
-                "container_layout": {
-                  "mode": "stack",
-                  "grid": null,
-                  "stack": {
-                    "direction": "vertical",
-                    "gap_token": "space.3",
-                    "align": "stretch"
-                  },
-                  "flex": null
-                },
-                "placement": {
-                  "base": {
-                    "column_start": "auto",
-                    "column_span": "full",
-                    "row_start": "auto",
-                    "row_span": 1,
-                    "order": 0,
-                    "align_self": "auto",
-                    "justify_self": "auto",
-                    "min_inline_size_token": null,
-                    "max_inline_size_token": null
-                  },
-                  "overrides": {}
-                },
-                "bindings": {},
-                "actions": {},
-                "visibility": null,
-                "checks": [],
-                "provenance": null
-              },
-              "artifact-feed": {
-                "component_id": "artifact-feed",
-                "type": "ArtifactFeed",
-                "kind": "container",
-                "properties": {
-                  "presentation": "conversation"
-                },
-                "children": [],
-                "container_layout": {
-                  "mode": "stack",
-                  "grid": null,
-                  "stack": {
-                    "direction": "vertical",
-                    "gap_token": "space.3",
-                    "align": "stretch"
-                  },
-                  "flex": null
-                },
-                "placement": {
-                  "base": {
-                    "column_start": "auto",
-                    "column_span": "full",
-                    "row_start": "auto",
-                    "row_span": 1,
-                    "order": 0,
-                    "align_self": "auto",
-                    "justify_self": "auto",
-                    "min_inline_size_token": null,
-                    "max_inline_size_token": null
-                  },
-                  "overrides": {}
-                },
-                "bindings": {
-                  "tasks": "/system/tasks"
-                },
-                "actions": {},
-                "visibility": null,
-                "checks": [],
-                "provenance": null
-              },
-              "greeting": {
-                "component_id": "greeting",
-                "type": "EmptyState",
-                "kind": "leaf",
-                "properties": {},
-                "children": [],
-                "container_layout": null,
-                "placement": {
-                  "base": {
-                    "column_start": "auto",
-                    "column_span": "full",
-                    "row_start": "auto",
-                    "row_span": 1,
-                    "order": 0,
-                    "align_self": "auto",
-                    "justify_self": "auto",
-                    "min_inline_size_token": null,
-                    "max_inline_size_token": null
-                  },
-                  "overrides": {}
-                },
-                "bindings": {
-                  "message": "/content/greeting"
-                },
-                "actions": {},
-                "visibility": null,
-                "checks": [],
-                "provenance": null
-              },
-              "suggestions": {
-                "component_id": "suggestions",
-                "type": "SuggestedPrompts",
-                "kind": "leaf",
-                "properties": {},
-                "children": [],
-                "container_layout": null,
-                "placement": {
-                  "base": {
-                    "column_start": "auto",
-                    "column_span": "full",
-                    "row_start": "auto",
-                    "row_span": 1,
-                    "order": 0,
-                    "align_self": "auto",
-                    "justify_self": "auto",
-                    "min_inline_size_token": null,
-                    "max_inline_size_token": null
-                  },
-                  "overrides": {}
-                },
-                "bindings": {
-                  "items": "/content/suggestedPrompts",
-                  "value": "/values/message"
-                },
-                "actions": {
-                  "select": {
-                    "kind": "local",
-                    "name": "values.set",
-                    "context": {}
-                  }
-                },
-                "visibility": null,
-                "checks": [],
-                "provenance": null
-              },
-              "message-form": {
-                "component_id": "message-form",
-                "type": "Form",
-                "kind": "container",
-                "properties": {
-                  "formId": "message-form"
-                },
-                "children": [
-                  "file-upload",
-                  "message-input",
-                  "submit"
-                ],
-                "container_layout": {
-                  "mode": "stack",
-                  "grid": null,
-                  "stack": {
-                    "direction": "vertical",
-                    "gap_token": "space.3",
-                    "align": "stretch"
-                  },
-                  "flex": null
-                },
-                "placement": {
-                  "base": {
-                    "column_start": "auto",
-                    "column_span": "full",
-                    "row_start": "auto",
-                    "row_span": 1,
-                    "order": 0,
-                    "align_self": "auto",
-                    "justify_self": "auto",
-                    "min_inline_size_token": null,
-                    "max_inline_size_token": null
-                  },
-                  "overrides": {}
-                },
-                "bindings": {},
-                "actions": {},
-                "visibility": null,
-                "checks": [],
-                "provenance": null
-              },
-              "file-upload": {
-                "component_id": "file-upload",
-                "type": "FileUpload",
-                "kind": "leaf",
-                "properties": {},
-                "children": [],
-                "container_layout": null,
-                "placement": {
-                  "base": {
-                    "column_start": "auto",
-                    "column_span": "full",
-                    "row_start": "auto",
-                    "row_span": 1,
-                    "order": 0,
-                    "align_self": "auto",
-                    "justify_self": "auto",
-                    "min_inline_size_token": null,
-                    "max_inline_size_token": null
-                  },
-                  "overrides": {}
-                },
-                "bindings": {
-                  "value": "/values/files"
-                },
-                "actions": {},
-                "visibility": null,
-                "checks": [],
-                "provenance": null
-              },
-              "message-input": {
-                "component_id": "message-input",
-                "type": "TextArea",
-                "kind": "leaf",
-                "properties": {
-                  "label": "Message",
-                  "rows": 3
-                },
-                "children": [],
-                "container_layout": null,
-                "placement": {
-                  "base": {
-                    "column_start": "auto",
-                    "column_span": "full",
-                    "row_start": "auto",
-                    "row_span": 1,
-                    "order": 0,
-                    "align_self": "auto",
-                    "justify_self": "auto",
-                    "min_inline_size_token": null,
-                    "max_inline_size_token": null
-                  },
-                  "overrides": {}
-                },
-                "bindings": {
-                  "value": "/values/message"
-                },
-                "actions": {},
-                "visibility": null,
-                "checks": [],
-                "provenance": null
-              },
-              "submit": {
-                "component_id": "submit",
-                "type": "Button",
-                "kind": "leaf",
-                "properties": {
-                  "label": "Submit",
-                  "variant": "primary"
-                },
-                "children": [],
-                "container_layout": null,
-                "placement": {
-                  "base": {
-                    "column_start": "auto",
-                    "column_span": "full",
-                    "row_start": "auto",
-                    "row_span": 1,
-                    "order": 0,
-                    "align_self": "auto",
-                    "justify_self": "auto",
-                    "min_inline_size_token": null,
-                    "max_inline_size_token": null
-                  },
-                  "overrides": {}
-                },
-                "bindings": {},
-                "actions": {
-                  "press": {
-                    "kind": "event",
-                    "name": "platform.ui.submit",
-                    "context": {
-                      "formId": "message-form"
-                    }
-                  }
-                },
-                "visibility": null,
-                "checks": [],
-                "provenance": null
-              }
-            },
-            "data_model": {
-              "content": {
-                "greeting": "Структурированный разбор по праву РФ и ориентиры, где свериться с НПА и реестрами. ИИ не заменяет юриста — перед решениями проверьте актуальные источники.",
-                "suggestedPrompts": []
-              },
-              "values": {
-                "message": "",
-                "files": []
-              },
-              "system": {
-                "tasks": [],
-                "activeTask": null,
-                "agent": {}
-              }
-            },
-            "owner": "platform",
-            "send_data_model": true
-          }
-        },
-        "global_data_model": {
-          "content": {},
-          "values": {},
-          "system": {}
-        },
-        "policy": {
-          "show_reasoning": false,
-          "tool_calls_display": "compact",
-          "show_activity": true,
-          "show_skill_loads": true,
-          "show_reflection": true,
-          "errors_display": "generic",
-          "show_run_trace": false,
-          "show_trace_actions": false,
-          "show_browser_previews": true,
-          "show_files_panel": true,
-          "allow_cancel": true,
-          "allow_voice": true,
-          "embed_safe_mode": false,
-          "allowed_catalog_ids": [
-            "https://linnex.io/a2ui/catalog/platform/v1"
-          ],
-          "allowed_actions": [
-            "platform.ui.submit"
-          ],
-          "allowed_functions": [
-            "required",
-            "email",
-            "regex",
-            "minLength",
-            "maxLength"
-          ],
-          "max_pages": 24,
-          "max_surfaces": 48,
-          "max_components_per_surface": 500,
-          "max_patch_bytes": 1000000
-        }
+        ]
       }
-    },
-    "catalog_id": "https://linnex.io/a2ui/catalog/platform/v1",
-    "policy": {
-      "show_reasoning": false,
-      "tool_calls_display": "compact",
-      "show_activity": true,
-      "show_skill_loads": true,
-      "show_reflection": true,
-      "errors_display": "generic",
-      "show_run_trace": false,
-      "show_trace_actions": false,
-      "show_browser_previews": true,
-      "show_files_panel": true,
-      "allow_cancel": true,
-      "allow_voice": true,
-      "embed_safe_mode": false,
-      "allowed_catalog_ids": [
-        "https://linnex.io/a2ui/catalog/platform/v1"
-      ],
-      "allowed_actions": [
-        "platform.ui.submit"
-      ],
-      "allowed_functions": [
-        "required",
-        "email",
-        "regex",
-        "minLength",
-        "maxLength"
-      ],
-      "max_pages": 24,
-      "max_surfaces": 48,
-      "max_components_per_surface": 500,
-      "max_patch_bytes": 1000000
-    },
-    "submit_action_name": "platform.ui.submit",
-    "fallback_policy": {
-      "unsupported_component": "artifact-card",
-      "unsupported_catalog": "ordinary-artifact"
-    }
+    ],
+    "start_page_id": "main"
   }
 }

@@ -35,10 +35,10 @@ async def test_ensure_system_connection_and_roles_idempotent(
 
     roles_first = await mail_live_service.ensure_system_role_mailboxes()
     roles_second = await mail_live_service.ensure_system_role_mailboxes()
-    assert sorted(roles_first) == sorted(roles_second)
+    assert sorted(roles_first.ensured) == sorted(roles_second.ensured)
     for local_part in mail_live_settings.system.role_mailboxes:
         assert f"{local_part}@{mail_live_settings.system.mail_domain}".lower() in {
-            item.lower() for item in roles_second
+            item.lower() for item in roles_second.ensured
         }
 
     second_conn = await mail_live_service.ensure_system_mail_connection()

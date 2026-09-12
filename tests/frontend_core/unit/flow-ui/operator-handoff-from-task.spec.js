@@ -7,13 +7,16 @@ function operatorTask({ mode = 'single_reply', workItemId = 'wi_1' } = {}) {
         id: 'task-1',
         status: {
             state: 'TASK_STATE_INPUT_REQUIRED',
-            metadata: {
-                platform_interrupt: {
-                    body: {
-                        kind: 'operator_task',
-                        handoff_mode: mode,
-                        work_item_id: workItemId,
+            message: {
+                parts: [{ text: 'wait' }],
+                metadata: {
+                    platform_interrupt: {
                         question: 'wait',
+                        body: {
+                            kind: 'operator_task',
+                            handoff_mode: mode,
+                            work_item_id: workItemId,
+                        },
                     },
                 },
             },
@@ -47,7 +50,7 @@ describe('operatorHandoffFromTask', () => {
 
     it('throws on unsupported operator_task handoff_mode', () => {
         expect(() => operatorHandoffFromTask(operatorTask({ mode: 'unknown' }))).toThrow(
-            /unsupported handoffMode/,
+            /unsupported handoff_mode/,
         );
     });
 

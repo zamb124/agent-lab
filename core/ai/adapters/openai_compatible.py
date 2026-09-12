@@ -23,8 +23,7 @@ class OpenAICompatibleModelCatalogAdapter(BaseModelCatalogAdapter):
     @override
     async def list_models(self, *, probe_embeddings: bool = True) -> list[AIModelRecord]:
         if not self.is_configured():
-            logger.warning("%s model provider не настроен", self.provider)
-            return []
+            raise ValueError(f"{self.provider} model provider не настроен")
         cfg = self._configured_llm_provider()
         if cfg is None:
             raise ValueError(f"{self.provider} provider config не настроен")

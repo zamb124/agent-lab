@@ -44,6 +44,7 @@ from core.clients.llm.openai_compat import (
     merge_openai_compatible_usage_into_usage_data as _merge_openai_compatible_usage_into_usage_data,
 )
 from core.clients.llm.platform_pool import (
+    _first_non_humanitec_fallback,
     _make_humanitec_llms_candidate_chain_resolver,
     _make_platform_default_candidate_resolver,
     bootstrap_humanitec_llms_config,
@@ -250,11 +251,8 @@ def create_llm_transport_client(
                 "humanitec_llm: api_key/base_url/folder_id не задаются — это виртуальный "
                 + "провайдер платформы"
             )
-        if not _platform_default_pool_is_configured(settings):
-            raise ValueError(
-                "humanitec_llm недоступен: включите llm.platform_free_pool и настройте "
-                + "credentials хотя бы одного free-pool провайдера из core.ai.providers"
-            )
+        pool_configured = _platform_default_pool_is_configured(settings)
+        authored_fallback = _first_non_humanitec_fallback(fallback_models)
         resolved_temperature = temperature if temperature is not None else settings.llm.temperature
         resolved_max_tokens = max_tokens if max_tokens is not None else settings.llm.max_tokens
         primary_config = LLMCallConfig(
@@ -272,11 +270,24 @@ def create_llm_transport_client(
             extra_request_headers=extra_request_headers,
             source=PLATFORM_FREE_MODEL_SOURCE,
         )
-        primary_candidate = bootstrap_humanitec_llms_config(
-            primary_config,
-            settings=settings,
-            state=state,
-        )
+        if pool_configured:
+            primary_candidate = bootstrap_humanitec_llms_config(
+                primary_config,
+                settings=settings,
+                state=state,
+            )
+        elif authored_fallback is None:
+            raise ValueError(
+                "humanitec_llm недоступен: включите llm.platform_free_pool и настройте "
+                + "credentials хотя бы одного free-pool провайдера из core.ai.providers"
+            )
+        else:
+            primary_candidate = _resolve_llm_call_config(
+                authored_fallback,
+                settings=settings,
+                state=state,
+                source="fallback",
+            )
         return LLMClient(
             model=str(primary_candidate.model),
             api_key=str(primary_candidate.api_key),

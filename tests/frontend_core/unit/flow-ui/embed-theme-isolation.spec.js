@@ -10,6 +10,10 @@ const HOST_SOURCE = readFileSync(
     path.join(REPO_ROOT, 'core/frontend/static/lib/flow-ui/components/platform-flow-ui.js'),
     'utf8',
 );
+const HOST_STYLES = readFileSync(
+    path.join(REPO_ROOT, 'core/frontend/static/lib/flow-ui/components/platform-flow-ui.styles.js'),
+    'utf8',
+);
 
 describe('embed theme isolation', () => {
     it('resolves auto to dark when the host page has no data-theme', () => {
@@ -24,12 +28,12 @@ describe('embed theme isolation', () => {
     });
 
     it('paints dark and light palettes on the widget, not host --text-primary', () => {
-        expect(HOST_SOURCE).toContain('data-resolved-theme="dark"');
-        expect(HOST_SOURCE).toContain('data-resolved-theme="light"');
-        expect(HOST_SOURCE).toContain("this.setAttribute('data-resolved-theme', this._resolvedTheme())");
-        const darkBlock = HOST_SOURCE.slice(
-            HOST_SOURCE.indexOf(':host([data-resolved-theme="dark"])'),
-            HOST_SOURCE.indexOf(':host([data-resolved-theme="light"])'),
+        expect(HOST_STYLES).toContain(':host([data-resolved-theme="dark"])');
+        expect(HOST_STYLES).toContain(':host([data-resolved-theme="light"])');
+        expect(HOST_SOURCE).toContain("this.setAttribute('data-resolved-theme', resolveFlowUITheme(this.theme, globalThis.document))");
+        const darkBlock = HOST_STYLES.slice(
+            HOST_STYLES.indexOf(':host([data-resolved-theme="dark"])'),
+            HOST_STYLES.indexOf(':host([data-resolved-theme="light"])'),
         );
         expect(darkBlock).toContain('--flow-ui-text: rgba(255, 255, 255, 0.95)');
         expect(darkBlock).not.toContain('var(--text-primary');

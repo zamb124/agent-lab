@@ -9,7 +9,7 @@ from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
 from core.authz.types import AuthzRelation, AuthzSubjectKind
 from core.logging import get_logger
-from core.worktracker.models import UserActor
+from core.worktracker.models import UserActor, WorkQueue
 from core.worktracker.service import WorkItemService
 
 EXAMPLE_HITL_SLUG = "example_hitl"
@@ -33,19 +33,24 @@ async def hitl_demo_operator_user_ids(authz: AuthzService, company_id: str) -> l
     return user_ids
 
 
+async def _existing_example_hitl_queue(
+    work_item_service: WorkItemService,
+    company_id: str,
+) -> WorkQueue | None:
+    try:
+        return await work_item_service.get_queue_by_slug(company_id, EXAMPLE_HITL_SLUG)
+    except ValueError:
+        return None
+
+
 async def ensure_example_hitl_queue(
     work_item_service: WorkItemService,
     company_id: str,
     *,
     member_user_ids: list[str] | None = None,
 ) -> None:
-    queue = None
-    try:
-        queue = await work_item_service.get_queue_by_slug(company_id, EXAMPLE_HITL_SLUG)
-    except ValueError:
-        queue = None
-
     members = [uid.strip() for uid in (member_user_ids or []) if uid.strip()]
+    queue = await _existing_example_hitl_queue(work_item_service, company_id)
     if queue is None:
         if not members:
             logger.info(
@@ -55,17 +60,22 @@ async def ensure_example_hitl_queue(
             )
             return
         creator = UserActor(user_id=members[0])
-        queue = await work_item_service.create_queue(
-            company_id=company_id,
-            name="Demo HITL (example_hitl)",
-            slug=EXAMPLE_HITL_SLUG,
-            description=(
-                "Демо-очередь для сценариев HITL в example_react и example_graph. "
-                "Company admins добавляются автоматически при ensure."
-            ),
-            creator=creator,
-        )
-        members = members[1:]
+        try:
+            queue = await work_item_service.create_queue(
+                company_id=company_id,
+                name="Demo HITL (example_hitl)",
+                slug=EXAMPLE_HITL_SLUG,
+                description=(
+                    "Демо-очередь для сценариев HITL в example_react и example_graph. "
+                    "Company admins добавляются автоматически при ensure."
+                ),
+                creator=creator,
+            )
+            members = members[1:]
+        except ValueError:
+            queue = await _existing_example_hitl_queue(work_item_service, company_id)
+            if queue is None:
+                raise
 
     for user_id in members:
         actor = UserActor(user_id=user_id)

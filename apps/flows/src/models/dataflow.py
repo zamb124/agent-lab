@@ -79,7 +79,7 @@ DataflowCanvasChipKind: TypeAlias = Literal[
     "files",
     "variable",
     "trigger",
-    "ui_value",
+    "interface",
 ]
 
 

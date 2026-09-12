@@ -97,6 +97,22 @@ describe('embed script data-* → host config', () => {
             'linnex-flow-ui-toggle',
         );
     });
+
+    it('normalizes case and whitespace but rejects unknown corners and empty-vs-missing differently', () => {
+        expect(resolvePresentation(scriptFrom({ presentation: '  PAGE ' }))).toBe('page');
+        expect(resolveLauncherPosition(scriptFrom({ position: ' Bottom-Left ' }))).toBe('bottom-left');
+        expect(() => resolveLauncherPosition(scriptFrom({ position: 'top-right' }))).toThrow(
+            /invalid data-position "top-right"/,
+        );
+        expect(() => resolveLauncherPosition(scriptFrom({ position: 'fullscreen' }))).toThrow(/invalid data-position/);
+        // Пустой атрибут — это тоже «дефолт», как и отсутствующий
+        expect(resolvePresentation(scriptFrom({ presentation: '' }))).toBe('drawer');
+        expect(resolveLauncherPosition(scriptFrom({ position: '' }))).toBe('bottom-right');
+        expect(resolveShowLauncher(scriptFrom({ showLauncher: '' }))).toBe(true);
+        expect(resolveShowLauncher(scriptFrom({ showLauncher: 'FALSE' }))).toBe(true);
+        expect(resolveCredentials(scriptFrom({ useCredentials: 'omit' }))).toBe('include');
+        expect(resolveToggleEventName(scriptFrom({ toggleEventName: ' my-toggle ' }))).toBe('my-toggle');
+    });
 });
 
 describe('bearerFor', () => {
@@ -148,5 +164,29 @@ describe('bearerFor', () => {
                 expires_in_seconds: 120,
             }),
         });
+    });
+
+    it('defaults expiry to 300 seconds and prefers a static bearer over token-url', async () => {
+        const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ token: 'minted' }) }));
+        vi.stubGlobal('fetch', fetchMock);
+        vi.stubGlobal('location', { origin: 'https://shop.example' });
+        await bearerFor(scriptFrom({ embedId: 'emb_6', tokenUrl: '/api/flow-ui-token', tokenExpiresSeconds: '' }));
+        expect(JSON.parse(fetchMock.mock.calls[0][1].body).expires_in_seconds).toBe(300);
+        await expect(bearerFor(scriptFrom({ staticBearer: 'static', tokenUrl: '/api/flow-ui-token' }))).resolves.toBe('static');
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        await expect(bearerFor(scriptFrom({ staticBearer: '   ', embedId: 'emb_7' }))).rejects.toThrow(/requires data-token-url/);
+    });
+
+    it('rejects non-numeric expiry, HTTP failures and responses without a token', async () => {
+        await expect(
+            bearerFor(scriptFrom({ embedId: 'emb_8', tokenUrl: '/t', tokenExpiresSeconds: 'soon' })),
+        ).rejects.toThrow(/invalid data-token-expires-seconds/);
+        vi.stubGlobal('location', { origin: 'https://shop.example' });
+        vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 403, json: async () => ({}) })));
+        await expect(bearerFor(scriptFrom({ embedId: 'emb_9', tokenUrl: '/t' }))).rejects.toThrow(/token: HTTP 403/);
+        vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ token: '  ' }) })));
+        await expect(bearerFor(scriptFrom({ embedId: 'emb_9', tokenUrl: '/t' }))).rejects.toThrow(/response has no token/);
+        vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => null })));
+        await expect(bearerFor(scriptFrom({ embedId: 'emb_9', tokenUrl: '/t' }))).rejects.toThrow(/response has no token/);
     });
 });

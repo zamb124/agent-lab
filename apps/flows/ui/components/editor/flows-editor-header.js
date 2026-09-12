@@ -31,6 +31,7 @@ import {
     buildFlowPublishBody,
     getBranchNodes,
 } from '../../_helpers/flows-resolvers.js';
+import { saveEditorFlow } from '../../_helpers/flow-editor-save.js';
 import { openPlatformLaraAssistant } from '@platform/lib/flow-ui/shell/preferences.js';
 
 const MENU_PORTAL_GAP_PX = 4;
@@ -618,14 +619,7 @@ export class FlowsEditorHeader extends PlatformElement {
     }
 
     async _save() {
-        const state = this._editor.state;
-        if (!state || !state.flowConfig || !this.flowId) return;
-        const body = buildFlowPublishBody(state);
-        if (!body) return;
-        this._editor.setSaving({ saving: true });
-        await this._update.run({ flow_id: this.flowId, body });
-        this._editor.setSaving({ saving: false });
-        this._editor.setDirty({ dirty: false });
+        await saveEditorFlow(this._editor, this._update, this.flowId);
     }
 
     async _reloadBundle() {

@@ -23,10 +23,15 @@ FIXTURES_DIR = REPO_ROOT / "tests" / "core" / "ai" / "fixtures" / "scoring"
 sys.path.insert(0, str(REPO_ROOT))
 
 from apps.flows.src.services.llm_models_service import LLMModelsService  # noqa: E402
-from core.ai.free_pool import platform_free_records_from_model_records  # noqa: E402
+from core.ai.adapters.catalog_base import AIProviderAdapterError  # noqa: E402
+from core.ai.free_pool import (  # noqa: E402
+    fetch_artificial_analysis_indices,
+    platform_free_records_from_model_records,
+)
 from core.ai.model_catalog_repository import AIModelCatalogRepository  # noqa: E402
 from core.ai.models import AIModelRecord  # noqa: E402
 from core.ai.providers import AICapability  # noqa: E402
+from core.ai.scoring import attach_artificial_analysis  # noqa: E402
 from core.clients.redis_client import RedisClient  # noqa: E402
 from core.clients.scheduler_client import SchedulerClient  # noqa: E402
 from core.clients.service_client import ServiceClient  # noqa: E402
@@ -34,6 +39,7 @@ from core.config import get_settings  # noqa: E402
 from core.db.storage import Storage  # noqa: E402
 from tests.core.ai.scoring_fixture_support import (  # noqa: E402
     POOL_RANKING_PATH,
+    PoolRankingSnapshot,
     ScoringFixtureBuildResult,
     catalog_by_key,
     catalog_fixture_path,
@@ -50,6 +56,8 @@ from tests.core.clients.live_llm_provider_helpers import (  # noqa: E402
     is_provider_rate_limit,
     provider_api_key_configured,
 )
+
+_SKIP_CATALOG_STATUS_CODES = frozenset({401, 403, 410, 429, 500, 502, 503, 504})
 
 
 def _model_service() -> LLMModelsService:
@@ -78,18 +86,45 @@ def _free_pool_catalog_records(records: list[AIModelRecord], provider: str) -> l
     ]
 
 
-async def _fetch_provider_catalog(provider: str, service: LLMModelsService) -> list[AIModelRecord]:
+async def _fetch_provider_catalog(
+    provider: str,
+    service: LLMModelsService,
+) -> list[AIModelRecord] | None:
     try:
         records = await service.discover_model_records_by_provider(provider)
-    except httpx.HTTPStatusError as exc:
-        if is_provider_rate_limit(provider, exc):
+    except httpx.HTTPStatusError as status_error:
+        if is_provider_rate_limit(provider, status_error):
             print(f"generate_llm_scoring_fixtures: skip {provider} — rate limit")
-            return []
-        if exc.response.status_code in (401, 403):
-            print(f"generate_llm_scoring_fixtures: skip {provider} — auth error")
-            return []
+            return None
+        if status_error.response.status_code in _SKIP_CATALOG_STATUS_CODES:
+            print(
+                "generate_llm_scoring_fixtures: skip "
+                f"{provider} — HTTP {status_error.response.status_code}"
+            )
+            return None
+        raise
+    except AIProviderAdapterError as adapter_error:
+        if adapter_error.status_code in _SKIP_CATALOG_STATUS_CODES:
+            print(
+                "generate_llm_scoring_fixtures: skip "
+                f"{provider} — HTTP {adapter_error.status_code}"
+            )
+            return None
         raise
     return _free_pool_catalog_records(records, provider)
+
+
+def _committed_snapshot_for_fetched_providers(
+    committed: PoolRankingSnapshot,
+    fetched_providers: tuple[str, ...],
+) -> PoolRankingSnapshot:
+    fetched = set(fetched_providers)
+    return PoolRankingSnapshot(
+        generated_at=committed.generated_at,
+        providers=tuple(provider for provider in committed.providers if provider in fetched),
+        settings_hash=committed.settings_hash,
+        models=tuple(entry for entry in committed.models if entry.provider in fetched),
+    )
 
 
 async def _build_snapshot() -> ScoringFixtureBuildResult:
@@ -100,15 +135,31 @@ async def _build_snapshot() -> ScoringFixtureBuildResult:
     service = _model_service()
     records_by_provider: dict[str, list[AIModelRecord]] = {}
     for provider in providers:
-        records_by_provider[provider] = await _fetch_provider_catalog(provider, service)
+        fetched = await _fetch_provider_catalog(provider, service)
+        if fetched is None:
+            continue
+        records_by_provider[provider] = fetched
+
+    if not records_by_provider:
+        raise RuntimeError("ни один free-pool провайдер не вернул каталог")
 
     settings = get_settings()
-    pool_records = build_scored_free_pool(records_by_provider, settings, providers=providers)
+    artificial_analysis = await fetch_artificial_analysis_indices(settings)
+    records_by_provider = {
+        provider: attach_artificial_analysis(records, artificial_analysis)
+        for provider, records in records_by_provider.items()
+    }
+    fetched_providers = tuple(records_by_provider)
+    pool_records = build_scored_free_pool(
+        records_by_provider,
+        settings,
+        providers=fetched_providers,
+    )
     catalog_index = catalog_by_key(records_by_provider)
     rows = pool_rows_from_records(pool_records, catalog_index, settings=settings)
     ranking = pool_ranking_snapshot_from_rows(
         generated_at=datetime.now(timezone.utc).isoformat(),
-        providers=providers,
+        providers=fetched_providers,
         settings_hash_value=settings_hash(settings),
         rows=rows,
     )
@@ -147,7 +198,10 @@ async def _main_async(check_only: bool) -> int:
         if not POOL_RANKING_PATH.is_file():
             print("generate_llm_scoring_fixtures: pool_ranking.json отсутствует")
             return 1
-        committed = load_pool_ranking_snapshot()
+        committed = _committed_snapshot_for_fetched_providers(
+            load_pool_ranking_snapshot(),
+            build_result.ranking.providers,
+        )
         errors = compare_pool_ranking_snapshots(committed, build_result.ranking)
         if errors:
             for error in errors:

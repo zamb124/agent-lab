@@ -25,7 +25,6 @@ from core.config.base import BaseSettings
 from core.config.llm_openai_compat import (
     collect_provider_api_keys,
     llm_provider_block,
-    resolve_provider_api_keys,
 )
 from core.types import JsonObject
 
@@ -244,24 +243,12 @@ async def _expand_humanitec_llms_config(
                     state=state,
                 )
             )
-        if not candidates:
-            raise RuntimeError(
-                (
-                    "humanitec_llm auto: нет кандидатов — задайте api_key хотя бы "
-                    "для одного провайдера из free-pool (обычно llm.openrouter) "
-                    "или включите paid_fallback."
-                )
-            )
         return candidates
 
     provider, model_id = _humanitec_llms_ref_or_raise(model)
     record = _find_platform_free_record(records, provider=provider, model_id=model_id)
     if record is None:
-        raise RuntimeError(
-            "humanitec_llm model не найден в verified free-pool cache: "
-            + f"{provider}:{model_id}. Обновите llm.platform_free_pool cache."
-        )
-    api_keys = resolve_provider_api_keys(settings.llm, provider)
+        return []
     return [
         _with_authoring_overrides(
             _candidate_from_platform_free_record(
@@ -272,8 +259,46 @@ async def _expand_humanitec_llms_config(
             config,
             state=state,
         )
-        for api_key in api_keys
+        for api_key in _api_keys_for_free_pool_provider(settings, provider)
     ]
+
+
+def _first_non_humanitec_fallback(
+    fallback_models: Sequence[LLMCallConfig | JsonObject] | None,
+) -> LLMCallConfig | None:
+    for raw_fallback in fallback_models or ():
+        fallback = _fallback_to_config(raw_fallback)
+        if fallback.provider != HUMANITEC_LLM_PROVIDER:
+            return fallback
+    return None
+
+
+def _humanitec_empty_chain_error(
+    primary_config: LLMCallConfig,
+    *,
+    settings: BaseSettings,
+    had_fallback_models: bool,
+) -> RuntimeError:
+    if had_fallback_models:
+        return RuntimeError(
+            "humanitec_llm: нет кандидатов после primary и fallback_models — "
+            + "пустой free-pool cache и fallbacks не дали конфигов."
+        )
+    if primary_config.provider == HUMANITEC_LLM_PROVIDER:
+        model = _humanitec_llms_model(primary_config, settings)
+        if model != HUMANITEC_LLM_AUTO_MODEL:
+            parsed = split_humanitec_llms_model_ref(model)
+            if parsed is not None:
+                provider, model_id = parsed
+                return RuntimeError(
+                    "humanitec_llm model не найден в verified free-pool cache: "
+                    + f"{provider}:{model_id}. Обновите llm.platform_free_pool cache."
+                )
+    return RuntimeError(
+        "humanitec_llm auto: нет кандидатов — задайте api_key хотя бы "
+        + "для одного провайдера из free-pool (обычно llm.openrouter) "
+        + "или включите paid_fallback."
+    )
 
 
 def _fallback_to_config(raw_fallback: LLMCallConfig | JsonObject) -> LLMCallConfig:
@@ -336,6 +361,12 @@ def _make_humanitec_llms_candidate_chain_resolver(
                     source="fallback",
                 )
             )
+        if not candidates:
+            raise _humanitec_empty_chain_error(
+                primary_config,
+                settings=settings,
+                had_fallback_models=bool(fallback_models),
+            )
         return candidates
 
     return _resolve
@@ -364,11 +395,9 @@ def _make_platform_default_candidate_resolver(
             candidates.append(_platform_paid_fallback_candidate(settings))
         if not candidates:
             raise RuntimeError(
-                (
-                    "platform free-pool: нет кандидатов — задайте api_key хотя бы "
-                    "для одного провайдера из free-pool (обычно llm.openrouter) "
-                    "или включите paid_fallback."
-                )
+                "platform free-pool: нет кандидатов — задайте api_key хотя бы "
+                + "для одного провайдера из free-pool (обычно llm.openrouter) "
+                + "или включите paid_fallback."
             )
         return candidates
 
@@ -376,6 +405,7 @@ def _make_platform_default_candidate_resolver(
 
 
 __all__ = [
+    "_first_non_humanitec_fallback",
     "_make_platform_default_candidate_resolver",
     "_make_humanitec_llms_candidate_chain_resolver",
     "bootstrap_humanitec_llms_config",

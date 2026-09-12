@@ -37,14 +37,14 @@
  * в модулях friend'ах.
  */
 
-import { unwrapA2aStreamResult } from '../flow-ui/protocol/a2a-result-helpers.js';
 import {
     a2aEndpointUrl,
-    buildA2aSendStreamingMessageBody,
+    a2aRequestHeaders,
     buildCancelTaskBody,
+    buildSendMessageBody,
+    buildUserMessage,
 } from '../flow-ui/protocol/a2a-codec.js';
-import { A2A_PROTOCOL_VERSION } from '../flow-ui/protocol/constants.js';
-import { consumeA2AStream } from '../flow-ui/protocol/a2a-stream.js';
+import { consumeA2AStream, unwrapA2aStreamResult } from '../flow-ui/protocol/a2a-stream.js';
 import { isVoiceClientDebugEnabled } from './voice-media-session.js';
 
 /** Минимальная длительность сегмента речи (VAD open) до client barge-in, мс — как `vad_speech_seconds < 0.3` в `BargeInController`. */
@@ -335,11 +335,9 @@ export class VoiceAgentBridge extends EventTarget {
                         flowId: this._flowId,
                         embedId: this._embedId,
                     }),
-                    body: buildA2aSendStreamingMessageBody({
-                        message: text,
-                        contextId: this._contextId,
+                    body: buildSendMessageBody(buildUserMessage({ contextId: this._contextId, text }), {
                         branchId: this._branchId,
-                        metadata,
+                        variables: metadata !== null && 'variables' in metadata ? metadata.variables : null,
                     }),
                     headers: extraHeaders,
                     credentials: this._credentials,
@@ -441,11 +439,7 @@ export class VoiceAgentBridge extends EventTarget {
             await fetch(url, {
                 method: 'POST',
                 credentials: this._credentials,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'A2A-Version': A2A_PROTOCOL_VERSION,
-                    ...extraHeaders,
-                },
+                headers: a2aRequestHeaders(extraHeaders),
                 body: JSON.stringify(buildCancelTaskBody(taskId)),
             });
         } catch (err) {

@@ -53,8 +53,8 @@ fi
 # При отключении компонента через Helm (*.enabled: false) уберите имя отсюда (см. deploy/README.md
 # «Состав приложений: Helm и cluster-health»).
 EXPECTED_DEPLOYMENTS=(
-  flows frontend crm rag sync worktracker office wiki scheduler-api voice browser search capability-gateway code-runner-python code-runner-node code-runner-go code-runner-csharp
-  flows-worker scheduler rag-worker sync-worker crm-worker idle-worker
+  flows frontend crm rag sync worktracker office wiki scheduler-api voice browser search secrets capability-gateway code-runner-python code-runner-node code-runner-go code-runner-csharp
+  flows-worker scheduler rag-worker sync-worker crm-worker crm-summary-worker idle-worker search-worker
   livekit livekit-egress onlyoffice grafana provider-litserve openfga
 )
 EXPECTED_STATEFULSETS=(postgres redis loki tempo)
@@ -140,6 +140,18 @@ if [ -z "$NOT_BOUND" ]; then
 else
   log_error "не Bound:"
   printf '%s\n' "$NOT_BOUND" | sed 's/^/    /'
+fi
+
+POSTGRES_PVC_USE=$($K exec -n "$PLATFORM_NS" postgres-0 -- \
+  df -P /var/lib/postgresql/data 2>/dev/null | awk 'NR==2 {gsub(/%/, "", $5); print $5}')
+if ! printf '%s' "$POSTGRES_PVC_USE" | grep -Eq '^[0-9]+$'; then
+  log_warn "не удалось прочитать заполнение PVC postgres"
+elif [ "$POSTGRES_PVC_USE" -ge 90 ]; then
+  log_error "PVC postgres заполнен на ${POSTGRES_PVC_USE}% (>= 90)"
+elif [ "$POSTGRES_PVC_USE" -ge 70 ]; then
+  log_warn "PVC postgres заполнен на ${POSTGRES_PVC_USE}% (>= 70)"
+else
+  log_ok "PVC postgres заполнен на ${POSTGRES_PVC_USE}%"
 fi
 
 # 8. Ingress address
@@ -347,6 +359,57 @@ else
     "code-runner-python GET /health (in-cluster)" \
     "$K exec -n $PLATFORM_NS $CODE_RUNNER_PYTHON_POD -- \
       curl -fsS --max-time 15 http://127.0.0.1:8017/health >/dev/null"
+fi
+
+# 19. TaskIQ workers: K8s Ready маскирует внутренний process-manager death-loop и OOM.
+log_section "19) TaskIQ workers (рестарты / OOM / death-loop)"
+check_taskiq_worker_pod() {
+  local app_name="$1"
+  local max_restarts="$2"
+  local worker_pod
+  worker_pod=$($K get pod -n "$PLATFORM_NS" -l "app=${app_name}" \
+    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+  if [ -z "$worker_pod" ]; then
+    log_error "${app_name}: под не найден"
+    return 1
+  fi
+  local restarts last_reason
+  restarts=$($K get pod "$worker_pod" -n "$PLATFORM_NS" \
+    -o jsonpath="{.status.containerStatuses[0].restartCount}" 2>/dev/null || echo "")
+  last_reason=$($K get pod "$worker_pod" -n "$PLATFORM_NS" \
+    -o jsonpath="{.status.containerStatuses[0].lastState.terminated.reason}" 2>/dev/null || echo "")
+  if [ -z "$restarts" ]; then
+    log_error "${app_name}: restartCount недоступен"
+  elif [ "$restarts" -le "$max_restarts" ]; then
+    log_ok "${app_name} рестартов: $restarts (<= ${max_restarts})"
+  else
+    log_error "${app_name} рестартов: $restarts (> ${max_restarts})"
+  fi
+  if [ -n "$last_reason" ] && [ "$last_reason" = "OOMKilled" ]; then
+    log_error "${app_name} lastState: OOMKilled"
+  elif [ -n "$last_reason" ]; then
+    log_warn "${app_name} lastState reason: $last_reason"
+  else
+    log_ok "${app_name} lastState: clean"
+  fi
+}
+
+check_taskiq_worker_pod idle-worker 3
+check_taskiq_worker_pod search-worker 3
+
+SEARCH_WORKER_POD=$($K get pod -n "$PLATFORM_NS" -l app=search-worker \
+  -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+if [ -z "$SEARCH_WORKER_POD" ]; then
+  log_error "search-worker: под не найден для проверки логов"
+else
+  SEARCH_WORKER_LOGS=$($K logs -n "$PLATFORM_NS" "$SEARCH_WORKER_POD" --since=5m --tail=200 2>/dev/null || true)
+  if printf '%s\n' "$SEARCH_WORKER_LOGS" | grep -q 'worker-0 is dead'; then
+    log_error "search-worker: TaskIQ worker-0 is dead за последние 5 мин"
+  elif printf '%s\n' "$SEARCH_WORKER_LOGS" | grep -q 'enqueue: вне request-скоупа'; then
+    log_error "search-worker: enqueue без background_kind на startup"
+  else
+    log_ok "search-worker: нет death-loop в логах за 5 мин"
+  fi
 fi
 
 # Итог

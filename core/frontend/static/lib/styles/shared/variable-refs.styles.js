@@ -19,8 +19,8 @@ export const variableRefsStyles = css`
         color: var(--accent);
     }
 
-    /* Same tint as Logic canvas dataflow chip kind=ui_value */
-    .cm-variable-ui-value {
+    /* Same tint as Logic canvas dataflow chip kind=interface */
+    .cm-variable-interface {
         color: var(--info);
         font-weight: 500;
     }
@@ -98,7 +98,7 @@ export const variableRefsStyles = css`
         color: #7c8af4;
     }
 
-    :host-context([data-theme="light"]) .cm-variable-ui-value {
+    :host-context([data-theme="light"]) .cm-variable-interface {
         color: var(--info);
     }
 

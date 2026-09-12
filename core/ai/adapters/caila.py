@@ -45,8 +45,7 @@ class CailaModelCatalogAdapter(OpenAICompatibleModelCatalogAdapter):
     @override
     async def list_models(self, *, probe_embeddings: bool = True) -> list[AIModelRecord]:
         if not self.is_configured():
-            logger.warning("caila model provider не настроен")
-            return []
+            raise ValueError("caila model provider не настроен")
         cfg = self._configured_llm_provider()
         if cfg is None:
             raise ValueError("caila provider config не настроен")

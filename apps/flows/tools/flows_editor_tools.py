@@ -1,4 +1,4 @@
-"""Flows editor tools — thin wrappers over FlowsClient + push_embed_blocks.
+"""Flows editor tools — thin wrappers over FlowsClient.
 
 LLM `mode=propose|apply` is a workflow switch, not authorization: apply requires a prior
 propose and a server-validated pending_action_id (LaraActionEngine). Phase 3 will move
@@ -15,20 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from apps.flows.src.clients.flows_client import FlowsClient
 from apps.flows.src.tools.decorator import tool
 from core.state import ExecutionState
-from core.types import JsonValue, parse_json_array
-
-
-class PushEmbedBlocksArgs(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    blocks_json: str = Field(
-        ...,
-        min_length=2,
-        description=(
-            "Одна JSON-строка: массив объектов блоков UI. У каждого объекта поле type: "
-            "card | table | actions | file_card | text и поля по схеме блока."
-        ),
-    )
+from core.types import JsonValue
 
 
 class FlowsReadContextArgs(BaseModel):
@@ -173,21 +160,6 @@ class FlowsPatchFlowArgs(BaseModel):
         if self.patch_json is None or not str(self.patch_json).strip():
             raise ValueError("patch_json is required when mode='propose'")
         return self
-
-
-@tool(
-    name="push_embed_blocks",
-    description=(
-        "Отображает блоки UI в чате. Передай blocks_json — JSON-массив объектов "
-        "с полем type: card | table | actions | file_card | text и полями схемы."
-    ),
-    tags=["flows"],
-    parameters_model=PushEmbedBlocksArgs,
-)
-async def push_embed_blocks(blocks_json: str, *, state: ExecutionState) -> str:
-    _ = state
-    parsed = parse_json_array(blocks_json, "blocks_json")
-    return json.dumps({"blocks": parsed}, ensure_ascii=False)
 
 
 @tool(

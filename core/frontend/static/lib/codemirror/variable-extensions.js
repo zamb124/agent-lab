@@ -123,7 +123,7 @@ function _createHighlighter(cm, ctx) {
         required: cm.Decoration.mark({ class: 'cm-variable-required' }),
         optional: cm.Decoration.mark({ class: 'cm-variable-optional' }),
         default: cm.Decoration.mark({ class: 'cm-variable-default' }),
-        uiValue: cm.Decoration.mark({ class: 'cm-variable-ui-value' }),
+        interfaceField: cm.Decoration.mark({ class: 'cm-variable-interface' }),
         undefined: cm.Decoration.mark({ class: 'cm-variable-undefined' }),
         forKeyword: cm.Decoration.mark({ class: 'cm-for-keyword' }),
         loopVar: cm.Decoration.mark({ class: 'cm-loop-var' }),
@@ -190,7 +190,7 @@ function _createHighlighter(cm, ctx) {
                 const refStateRegex = /@state:([\w.]+)/g;
                 while ((match = refStateRegex.exec(doc)) !== null) {
                     const statePath = match[1];
-                    const mark = _isUiValuePath(statePath) ? decoClasses.uiValue : decoClasses.refState;
+                    const mark = _isInterfacePath(statePath, catalog) ? decoClasses.interfaceField : decoClasses.refState;
                     builder.push(mark.range(match.index, match.index + match[0].length));
                 }
             }
@@ -200,21 +200,21 @@ function _createHighlighter(cm, ctx) {
                 let match;
                 while ((match = optionalWithDefaultRegex.exec(doc)) !== null) {
                     const varName = match[1];
-                    const mark = _isUiValuePath(varName) ? decoClasses.uiValue : decoClasses.optional;
+                    const mark = _isInterfacePath(varName, catalog) ? decoClasses.interfaceField : decoClasses.optional;
                     builder.push(mark.range(match.index, match.index + match[0].length));
                 }
 
                 const optionalRegex = /\{\?([\w.]+)\}/g;
                 while ((match = optionalRegex.exec(doc)) !== null) {
                     const varName = match[1];
-                    const mark = _isUiValuePath(varName) ? decoClasses.uiValue : decoClasses.optional;
+                    const mark = _isInterfacePath(varName, catalog) ? decoClasses.interfaceField : decoClasses.optional;
                     builder.push(mark.range(match.index, match.index + match[0].length));
                 }
 
                 const defaultRegex = /\{([\w.]+)\|([^}]+)\}/g;
                 while ((match = defaultRegex.exec(doc)) !== null) {
                     const varName = match[1];
-                    const mark = _isUiValuePath(varName) ? decoClasses.uiValue : decoClasses.default;
+                    const mark = _isInterfacePath(varName, catalog) ? decoClasses.interfaceField : decoClasses.default;
                     builder.push(mark.range(match.index, match.index + match[0].length));
                     if (
                         !_variableKnown(varName, values, catalog)
@@ -233,11 +233,8 @@ function _createHighlighter(cm, ctx) {
                     const isLoopVar = loopVars.has(varName) || _isLoopProperty(varName, loopVars);
                     if (isLoopVar) {
                         builder.push(decoClasses.loopVar.range(match.index, match.index + match[0].length));
-                    } else if (_isUiValuePath(varName)) {
-                        builder.push(decoClasses.uiValue.range(match.index, match.index + match[0].length));
-                        if (!_variableKnown(varName, values, catalog)) {
-                            builder.push(decoClasses.undefined.range(match.index, match.index + match[0].length));
-                        }
+                    } else if (_isInterfacePath(varName, catalog)) {
+                        builder.push(decoClasses.interfaceField.range(match.index, match.index + match[0].length));
                     } else if (_variableKnown(varName, values, catalog)) {
                         builder.push(decoClasses.required.range(match.index, match.index + match[0].length));
                     } else {
@@ -530,12 +527,14 @@ function unwrapForNesting(value) {
 }
 
 /**
+ * Поле интерфейса — обычный путь state, который каталог dataflow помечает `source: "interface"`.
  * @param {string} path
+ * @param {unknown} catalog
  * @returns {boolean}
  */
-function _isUiValuePath(path) {
-    return typeof path === 'string'
-        && (path === 'ui_values' || path.startsWith('ui_values.'));
+function _isInterfacePath(path, catalog) {
+    const entry = findCatalogEntry(path, catalog);
+    return entry !== null && entry.source === 'interface';
 }
 
 /**

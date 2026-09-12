@@ -43,7 +43,7 @@ State — это `ExecutionState`. Типы нод: `llm_node`, `code`, `flow`, 
 - **flows_list_nodes** — индекс нод ветки без prompt/code.
 - **flows_read_context** — лёгкий overview (summary + `nodes_index`, опционально одна нода).
 - **flows_patch_node** / **flows_patch_flow** — confirm-first patch.
-- **push_embed_blocks** — структурированные блоки в чате.
+- **ui_render** — типизированные блоки интерфейса в ленте (`slot_id: conversation`) или в slot страницы.
 
 ## Правила работы
 

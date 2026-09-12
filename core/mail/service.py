@@ -102,6 +102,7 @@ from core.mail.models import (
     MailSyncLagStats,
     MailSyncNowPayload,
     MailSyncNowResult,
+    MailSystemEnsureResult,
     MailThreadMessagePublic,
     MailThreadPayload,
     MailThreadResult,
@@ -2835,6 +2836,12 @@ class MailService:
             return True
         return local_dev.mutate_remote_passwords
 
+    def _local_dev_requires_known_password(self) -> bool:
+        local_dev = self._mail_local_dev()
+        if local_dev is None or not local_dev.enabled:
+            return False
+        return not local_dev.mutate_remote_passwords
+
     def _local_dev_mailbox_password(self, email_address: str) -> str | None:
         local_dev = self._mail_local_dev()
         if local_dev is None or not local_dev.enabled:
@@ -3804,46 +3811,69 @@ class MailService:
         )
         return stored
 
-    async def ensure_system_role_mailboxes(self) -> list[str]:
+    async def ensure_system_role_mailboxes(self) -> MailSystemEnsureResult:
         connection = await self.ensure_system_mail_connection()
         if connection is None:
-            return []
+            return MailSystemEnsureResult(ensured=[], missing_password=[])
         ensured: list[str] = []
+        missing_password: list[str] = []
+        inventory = self._local_dev_requires_known_password()
         for local_part_raw in self._mail_config.system.role_mailboxes:
             local_part = local_part_raw.strip().lower()
             if not local_part:
                 raise MailConfigError("mail.system.role_mailboxes contains empty local_part")
+            email_address = f"{local_part}@{connection.mail_domain}"
+            if inventory:
+                existing = await self._binding_repository.get_by_email(
+                    SYSTEM_COMPANY_ID, email_address
+                )
+                if existing is not None:
+                    ensured.append(existing.email_address)
+                    continue
+                if self._local_dev_mailbox_password(email_address) is None:
+                    missing_password.append(email_address)
+                    continue
             binding = await self.bind_mailbox(
                 MailboxBindingCreatePayload(
                     kind=MailboxBindingKind.ROLE,
                     local_part=local_part,
-                    provision=True,
+                    provision=not inventory,
                     sync_enabled=True,
                 ),
                 company_id=SYSTEM_COMPANY_ID,
             )
             ensured.append(binding.email_address)
-        return ensured
+        return MailSystemEnsureResult(ensured=ensured, missing_password=missing_password)
 
-    async def ensure_system_user_bindings(self) -> list[str]:
+    async def ensure_system_user_bindings(self) -> MailSystemEnsureResult:
         connection = await self.ensure_system_mail_connection()
         if connection is None:
-            return []
+            return MailSystemEnsureResult(ensured=[], missing_password=[])
         company = await self._company_repository.get(SYSTEM_COMPANY_ID)
         if company is None:
             raise MailConfigError("system company not found")
         member_ids = set(company.members)
         ensured: list[str] = []
+        missing_password: list[str] = []
+        inventory = self._local_dev_requires_known_password()
         for user_id in company.members:
             existing = await self._binding_repository.get_by_user(SYSTEM_COMPANY_ID, user_id)
             if existing is not None:
                 ensured.append(existing.email_address)
                 continue
+            if inventory:
+                user = await self._user_repository.get(user_id)
+                if user is None:
+                    raise ValueError(f"User not found: {user_id}")
+                email_address = f"{_slug_local_part(user)}@{connection.mail_domain}"
+                if self._local_dev_mailbox_password(email_address) is None:
+                    missing_password.append(email_address)
+                    continue
             binding = await self.bind_mailbox(
                 MailboxBindingCreatePayload(
                     user_id=user_id,
                     kind=MailboxBindingKind.USER,
-                    provision=True,
+                    provision=not inventory,
                     sync_enabled=True,
                 ),
                 company_id=SYSTEM_COMPANY_ID,
@@ -3866,15 +3896,23 @@ class MailService:
                 company_id=SYSTEM_COMPANY_ID,
                 acting_as_admin=True,
             )
-        return ensured
+        return MailSystemEnsureResult(ensured=ensured, missing_password=missing_password)
 
     async def reconcile_system(self) -> MailReconcileResult:
         connection = await self.ensure_system_mail_connection()
-        role_mailboxes = await self.ensure_system_role_mailboxes()
-        user_bindings = await self.ensure_system_user_bindings()
+        role_result = await self.ensure_system_role_mailboxes()
+        user_result = await self.ensure_system_user_bindings()
         _ = await self.apply_local_dev_mailbox_passwords()
+        if role_result.missing_password or user_result.missing_password:
+            logger.warning(
+                "mail.local_dev.bindings_missing_password",
+                role_mailboxes=role_result.missing_password,
+                user_bindings=user_result.missing_password,
+            )
         return MailReconcileResult(
             connection_ensured=connection is not None,
-            role_mailboxes_ensured=role_mailboxes,
-            user_bindings_ensured=user_bindings,
+            role_mailboxes_ensured=role_result.ensured,
+            user_bindings_ensured=user_result.ensured,
+            role_mailboxes_missing_password=role_result.missing_password,
+            user_bindings_missing_password=user_result.missing_password,
         )

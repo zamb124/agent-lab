@@ -15,6 +15,7 @@ from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import BaseNode, NodeInputs, NodeRunResult
 from core.errors import FlowPrematureCompletionError
+from core.flow_ui.templates import default_chat_document
 from core.state import ExecutionState
 from core.types import JsonObject, JsonValue, require_json_object
 from tests.flows.durable_runtime_harness import run_flow
@@ -80,6 +81,7 @@ def make_flow(
         entry="start",
         nodes=runtime_nodes,
         edges=edges,
+        interface=default_chat_document(),
         container=container,
     )
 

@@ -37,13 +37,13 @@ add_set() {
 }
 
 # ---------- apps ----------
-APPS=(flows frontend crm rag sync scheduler-api office voice browser search capability-gateway code-runner-python code-runner-node code-runner-go code-runner-csharp)
+APPS=(flows frontend crm rag sync worktracker wiki scheduler-api office voice browser search secrets capability-gateway code-runner-python code-runner-node code-runner-go code-runner-csharp)
 for app in "${APPS[@]}"; do
   add_set "applications.${app}" "$APPS_NODE"
 done
 
 # ---------- workers ----------
-WORKERS=(flows-worker scheduler rag-worker sync-worker crm-worker idle-worker search-worker)
+WORKERS=(flows-worker scheduler rag-worker sync-worker crm-worker crm-summary-worker idle-worker search-worker)
 for w in "${WORKERS[@]}"; do
   add_set "workers.${w}" "$WORKERS_NODE"
 done
@@ -81,6 +81,9 @@ svc_to_helm_path() {
     voice)           echo "applications.voice" ;;
     browser)         echo "applications.browser" ;;
     search)          echo "applications.search" ;;
+    secrets)         echo "applications.secrets" ;;
+    wiki)            echo "applications.wiki" ;;
+    worktracker)     echo "applications.worktracker" ;;
     capability-gateway) echo "applications.capability-gateway" ;;
     code-runner-python) echo "applications.code-runner-python" ;;
     code-runner-node) echo "applications.code-runner-node" ;;
@@ -91,6 +94,7 @@ svc_to_helm_path() {
     rag-worker)      echo "workers.rag-worker" ;;
     sync-worker)     echo "workers.sync-worker" ;;
     crm-worker)      echo "workers.crm-worker" ;;
+    crm-summary-worker) echo "workers.crm-summary-worker" ;;
     idle-worker)     echo "workers.idle-worker" ;;
     search-worker)   echo "workers.search-worker" ;;
     postgres)        echo "postgres" ;;

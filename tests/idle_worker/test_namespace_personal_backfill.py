@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import pytest
 
 from apps.idle_worker.container import reset_container, set_container
@@ -14,6 +13,7 @@ from core.context import clear_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import Company, NamespaceKind, User, UserStatus
 from core.namespace import personal_namespace_name
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
 @pytest.fixture(autouse=True)

@@ -38,6 +38,7 @@ from apps.flows.src.durable_execution import (
     create_initial_state,
 )
 from apps.flows.src.models.node_config import GraphNodeConfig
+from apps.flows.src.runtime.flow_interface_context import flow_interface_scope
 from apps.flows.src.runtime.nodes import create_node
 from apps.flows.src.runtime.state_diff import DiffItem as StateDiffItem
 from apps.flows.src.runtime.state_diff import compute_state_diff
@@ -56,6 +57,8 @@ from core.docs.models import (
 )
 from core.errors import CodeExecutionRuntimeError, ImanBaseError
 from core.files.file_ref import FileRef
+from core.flow_ui.document import FlowUIDocument
+from core.flow_ui.templates import default_chat_document
 from core.logging import get_logger
 from core.state import ExecutionState
 from core.types import (
@@ -936,10 +939,11 @@ async def _merge_execute_state_with_flow(
     flow_id: str,
     branch_id: str,
     container: "FlowContainer",
-) -> None:
+) -> FlowUIDocument:
     """
     Приближает state к реальному старту flow: файлы из всех нод графа + резолвнутые variables flow.
     Записи state.files из запроса, которых нет среди файлов графа, дописываются в конец.
+    Возвращает интерфейс ветки — цели ``ui.render``/``ui.navigate`` проверяются по нему.
     """
     runtime_flow = await container.flow_factory.get_flow(flow_id, branch_id)
     if runtime_flow is None:
@@ -985,6 +989,7 @@ async def _merge_execute_state_with_flow(
     cfg_ver = runtime_flow.config.get("version")
     if cfg_ver:
         input_state["flow_config_version"] = str(cfg_ver)
+    return runtime_flow.interface
 
 
 @router.post("/validate", response_model=ValidateResponse)
@@ -1136,8 +1141,11 @@ async def execute_code(container: ContainerDep, request: ExecuteRequest) -> Exec
         if raw_branch_id is not None and not isinstance(raw_branch_id, str):
             raise ValueError("execute.state.branch_id must be a string")
         resolved_branch_id = request.branch_id or raw_branch_id or "default"
+        # Нода вне сохранённого flow исполняется с интерфейсом чата по умолчанию —
+        # тем же, что получает новый FlowConfig.
+        interface = default_chat_document()
         if resolved_flow_id and resolved_flow_id not in ("", "test-flow"):
-            await _merge_execute_state_with_flow(
+            interface = await _merge_execute_state_with_flow(
                 input_state_normalized,
                 flow_id=resolved_flow_id,
                 branch_id=resolved_branch_id,
@@ -1146,7 +1154,11 @@ async def execute_code(container: ContainerDep, request: ExecuteRequest) -> Exec
 
         node_config = await _build_node_config(request)
         output_state = await _execute_node(
-            node_config, input_state_normalized, container, flow_id=resolved_flow_id
+            node_config,
+            input_state_normalized,
+            container,
+            flow_id=resolved_flow_id,
+            interface=interface,
         )
 
         duration_ms = int((time.time() - start_time) * 1000)
@@ -1348,7 +1360,8 @@ async def _execute_node(
     node_config: JsonObject,
     input_state: JsonObject,
     container: FlowContainer,
-    flow_id: str = "test-flow",
+    flow_id: str,
+    interface: FlowUIDocument,
 ) -> JsonObject:
     """Выполняет ноду используя унифицированную фабрику."""
     state_data = require_json_object(copy.deepcopy(input_state), "execute.state")
@@ -1421,7 +1434,8 @@ async def _execute_node(
         company_id=context.active_company.company_id,
         state=state,
     )
-    result_state = await node.run(state)
+    with flow_interface_scope(interface):
+        result_state = await node.run(state)
     _ = await runtime.record_state_event(
         result_state.session_id,
         result_state,

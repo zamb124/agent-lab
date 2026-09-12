@@ -7,6 +7,7 @@ import pytest
 from apps.flows.src.models import Edge
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import DatasourceNode
+from core.flow_ui.templates import default_chat_document
 from tests.fixtures.auth import service_client_asgi_auth_context
 from tests.fixtures.datasources import CustomerDatasource
 from tests.flows.durable_runtime_harness import run_flow, workflow_state
@@ -39,6 +40,7 @@ async def test_datasource_standalone_flow_query_exact_rows(
         entry="orders",
         nodes={"orders": node},
         edges=[Edge(from_node="orders", to_node=None)],
+        interface=default_chat_document(),
         container=container,
     )
     state = workflow_state(

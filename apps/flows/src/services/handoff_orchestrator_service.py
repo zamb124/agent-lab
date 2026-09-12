@@ -23,14 +23,13 @@ from apps.flows.src.durable_execution import (
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.observability.handoff_timing import maybe_record_handoff_wall_time
 from apps.flows.src.runtime.a2a_messages import build_tool_result_message
-from apps.flows.src.runtime_helpers.flow_ui_presenter import present_flow_ui_artifact
+from apps.flows.src.runtime_helpers.flow_ui_cards import card_block_id, show_activity
 from apps.flows.src.services.handoff_context_service import (
     HandoffContextService,
     handoff_context_resource_key_from_body,
 )
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming.emitter import Emitter
-from apps.flows.src.streaming.flow_ui import emit_flow_ui_transitions
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from apps.flows.src.tools.json_schema_parameters import validate_tool_args_against_parameters_schema
 from apps.flows.src.tracing.handoff_tracing import (
@@ -434,24 +433,15 @@ class HandoffOrchestratorService:
         if child_flow_config is not None:
             child_flow_name = child_flow_config.name
 
-        handback_payload: JsonObject = {
-            "activity": "handback_completed",
-            "response": handback_response,
-            "handoff_depth": child_state.handoff_depth,
-            "child_flow_id": child_state.session_flow_id,
-            "child_flow_name": child_flow_name,
-            "parent_flow_name": parent_flow_name,
-        }
-        if handoff_trace_id is not None:
-            handback_payload["trace_id"] = handoff_trace_id
-        _ = present_flow_ui_artifact(
+        _ = show_activity(
             parent_state,
-            kind="activity",
-            data=handback_payload,
-            source="handoff",
-            artifact_id=(
-                f"handback:{child_state.session_flow_id}:{child_state.handoff_depth}"
+            card_id=card_block_id(
+                "handback",
+                f"{child_state.session_flow_id}-{child_state.handoff_depth}",
             ),
+            title=f"{child_flow_name} вернул управление {parent_flow_name}",
+            status="completed",
+            detail=handback_response,
         )
 
         _ = await self._workflow_runtime.save_state(
@@ -474,10 +464,7 @@ class HandoffOrchestratorService:
             parent_state,
             company_id=company_id,
         )
-        await emit_flow_ui_transitions(
-            emitter=parent_emitter,
-            state=parent_state,
-        )
+        await parent_emitter.emit_ui_events(parent_state.drain_ui_events())
 
         parent_trace_payload: JsonObject | None = None
         if trace_context is not None:

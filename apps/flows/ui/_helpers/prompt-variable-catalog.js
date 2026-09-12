@@ -82,9 +82,9 @@ function sampleFromDescriptor(descriptor) {
 
 /**
  * Builds the exact prompt namespace for one LLM node.
- * Precedence mirrors runtime: system < flow/state variables < ui_values < input_mapping < node locals.
- * Flow UI fields appear as nested `values.ui_values` and catalog names `ui_values.<field>`
- * (inserts `{ui_values.field}` — same path as ExecutionState / Logic chips).
+ * Precedence mirrors runtime: system < flow/state variables < interface fields < input_mapping < node locals.
+ * Interface inputs write plain top-level state paths (`field: "email"` → `{email}`), the dataflow
+ * inspector marks them with `source: "interface"`.
  */
 export function buildPromptVariableContext({
     flowVariables = {},
@@ -103,14 +103,9 @@ export function buildPromptVariableContext({
         else delete values[name];
     };
 
-    const putUiValue = (field, { value, hasValue = true, source, type = 'any', availability = 'guaranteed' }) => {
-        if (typeof field !== 'string' || field.length === 0 || field.includes('.')) return;
-        const name = `ui_values.${field}`;
-        entries.set(name, { name, source, type: typeOf(value, type), availability, hasValue });
-        if (!isObject(values.ui_values)) values.ui_values = {};
-        if (hasValue) values.ui_values[field] = value;
-        else delete values.ui_values[field];
-    };
+    const isInterfaceDescriptor = (descriptor) => descriptor.source === 'interface'
+        || (Array.isArray(descriptor.source) && descriptor.source.includes('interface'));
+    const interfaceFields = [];
 
     const previewTimezone = isObject(previewExecutionState?.store)
         && typeof previewExecutionState.store.timezone === 'string'
@@ -153,14 +148,15 @@ export function buildPromptVariableContext({
             });
             continue;
         }
-        if (descriptor.path.startsWith('ui_values.')) {
-            const field = descriptor.path.slice('ui_values.'.length);
-            if (!field || field.includes('.')) continue;
+        if (isInterfaceDescriptor(descriptor)) {
+            const field = descriptor.path;
+            if (field.includes('.')) continue;
+            interfaceFields.push(field);
             const sample = sampleFromDescriptor(descriptor);
-            putUiValue(field, {
+            put(field, {
                 value: sample.value,
                 hasValue: sample.hasValue,
-                source: 'ui_value',
+                source: 'interface',
                 type: typeof descriptor.type === 'string' ? descriptor.type : 'any',
                 availability: descriptor.availability || 'guaranteed',
             });
@@ -173,14 +169,11 @@ export function buildPromptVariableContext({
         }
     }
 
-    if (isObject(previewExecutionState) && isObject(previewExecutionState.ui_values)) {
-        for (const [field, value] of Object.entries(previewExecutionState.ui_values)) {
-            putUiValue(field, {
-                value: unwrapFlowVariable(value),
-                source: 'ui_value',
-                type: typeOf(value),
-                availability: 'observed',
-            });
+    if (isObject(previewExecutionState)) {
+        for (const field of interfaceFields) {
+            if (!Object.hasOwn(previewExecutionState, field)) continue;
+            const value = previewExecutionState[field];
+            put(field, { value, source: 'interface', type: typeOf(value), availability: 'observed' });
         }
     }
 
@@ -211,7 +204,7 @@ export function buildPromptVariableContext({
             const sourceOrder = {
                 local: 0,
                 input: 1,
-                ui_value: 2,
+                interface: 2,
                 upstream: 2,
                 preview: 2,
                 flow: 3,
