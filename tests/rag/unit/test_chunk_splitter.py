@@ -76,12 +76,27 @@ def test_fixed_tokens_profile_uses_plain_tiktoken_strategy() -> None:
 
 
 def test_semantic_strategy_uses_recursive_chunker() -> None:
-    text = "First block.\n\nSecond block here.\n\nThird."
-    chunks = _split(text, IndexProfileSplitConfig(strategy="semantic", chunk_size=8, chunk_overlap=0))
-    assert len(chunks) >= 1
-    joined = "\n".join(chunks)
+    text = "First block.\n\nSecond block here.\n\nThird. " + ("word " * 80)
+    semantic = _split(
+        text,
+        IndexProfileSplitConfig(strategy="semantic", chunk_size=8, chunk_overlap=0),
+    )
+    recursive = _split(
+        text,
+        IndexProfileSplitConfig(strategy="recursive", chunk_size=8, chunk_overlap=0),
+    )
+    assert semantic == recursive
+    assert len(semantic) >= 1
+    joined = "\n".join(semantic)
     assert "First" in joined
     assert "Third" in joined
+
+    with_overlap = _split(
+        text,
+        IndexProfileSplitConfig(strategy="semantic", chunk_size=32, chunk_overlap=4),
+    )
+    assert len(with_overlap) >= 1
+    assert "First" in "\n".join(with_overlap)
 
 
 def test_structure_splits_per_block() -> None:

@@ -45,7 +45,7 @@ Ownership: `apps/search` + `apps/search_worker` + `platform_search`.
 ## Indexing profile `runet_web`
 
 - Ключ в `search_indexes.indexing_profile_key` → `core.rag.index_profile_registry.resolve_index_profile`.
-- Конфиг: `conf.json` → `rag.index_profiles.runet_web` (semantic split, lexical enabled).
+- Конфиг: `conf.json` → `rag.index_profiles.runet_web` (`split.strategy=semantic` = RecursiveChunker, lexical enabled). In-process SemanticChunker/sentence-transformers на ingest запрещены.
 - Ingest: `CrawlIngestService` кладёт `metadata.index_profile_config` для `pgvector_provider`; при enrichment — filter metadata (`content_type`, dates, `primary_topic`, `topic_tags`, `category_path`, `language`, `audience`, `freshness_relevance`, `page_title`, `page_summary`), `enrichment_model`, `enriched_content_hash`. Questions/keywords/contextual_prefix — только embed-текст (`to_ingest_markdown`), не RAG metadata.
 
 ## Crawl cycle

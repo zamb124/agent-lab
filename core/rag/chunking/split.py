@@ -8,7 +8,6 @@ from typing import Protocol
 import tiktoken
 from chonkie import (
     RecursiveChunker,
-    SemanticChunker,
     SentenceChunker,
     TableChunker,
     TokenChunker,
@@ -71,6 +70,22 @@ def split_plain_text_fixed_tokens(
 def _chunker_to_texts(chunker: _TextChunker, text: str) -> list[str]:
     parts = chunker(text)
     return [c.text for c in parts]
+
+
+def _recursive_texts(text: str, split_config: IndexProfileSplitConfig) -> list[str]:
+    chunker = RecursiveChunker(
+        tokenizer=_ENCODING_NAME,
+        chunk_size=split_config.chunk_size,
+    )
+    parts = chunker(text)
+    if split_config.chunk_overlap <= 0:
+        return [c.text for c in parts]
+    refinery = OverlapRefinery(
+        tokenizer=_ENCODING_NAME,
+        context_size=split_config.chunk_overlap,
+    )
+    refined = refinery(parts)
+    return [c.text for c in refined]
 
 
 def resolve_split_config(extract: FileExtract, profile: IndexProfileConfig) -> IndexProfileSplitConfig:
@@ -154,16 +169,7 @@ def _texts_for_strategy(
             split_config.chunk_overlap,
         )
     if strategy == "semantic":
-        chunker = SemanticChunker(chunk_size=split_config.chunk_size)
-        parts = chunker(raw)
-        if split_config.chunk_overlap <= 0:
-            return [c.text for c in parts]
-        refinery = OverlapRefinery(
-            tokenizer=_ENCODING_NAME,
-            context_size=split_config.chunk_overlap,
-        )
-        refined = refinery(parts)
-        return [c.text for c in refined]
+        return _recursive_texts(raw, split_config)
     if strategy == "recursive":
         chunker = RecursiveChunker(
             tokenizer=_ENCODING_NAME,
