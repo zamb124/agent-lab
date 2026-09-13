@@ -48,15 +48,17 @@ Ownership: `apps/search` + `apps/search_worker` + `platform_search`.
 - Конфиг: `conf.json` → `rag.index_profiles.runet_web` (semantic split, lexical enabled).
 - Ingest: `CrawlIngestService` кладёт `metadata.index_profile_config` для `pgvector_provider`; при enrichment — filter metadata (`content_type`, dates, `primary_topic`, `topic_tags`, `category_path`, `language`, `audience`, `freshness_relevance`, `page_title`, `page_summary`), `enrichment_model`, `enriched_content_hash`. Questions/keywords/contextual_prefix — только embed-текст (`to_ingest_markdown`), не RAG metadata.
 
-## Infinite crawl cycle
+## Crawl cycle
 
-- Основной loop — **self-re-enqueue через TaskIQ `kiq`**, не cron: tick/fetch/reclaim/worker startup ставят следующую задачу, пока `count_pending_for_profile > 0`.
-- `run_tick`: после tick при pending backlog → `kiq crawl_orchestrator_tick` (без условия «была ли работа в этом tick»).
+- Частота тика = cron + один startup-tick при pending + handoff из fetch, когда домен вычерпан. Tight loop `run_tick → enqueue tick` при `pending_urls > 0` запрещён.
+- `run_tick`: планирует домены (`list_with_pending_urls`, затем `list_due`), enqueue discover/fetch. Pending в профиле **не** ставит следующий tick.
 - `fetch_one_url`: domain `pending==0`, profile `pending>0` → `kiq crawl_orchestrator_tick` (handoff на следующий домен).
 - `fetch_one_url`: domain `pending>0` → `kiq crawl_fetch_url` (цепочка внутри домена).
-- `CrawlBootstrapService`: worker startup → `finish_stale_running_jobs`; при `skipped_seed` и pending → `kiq crawl_orchestrator_tick`.
+- `CrawlBootstrapService`: worker startup → `finish_stale_running_jobs`; при pending → один `kiq crawl_orchestrator_tick`.
 - `crawl_reclaim_stale_fetching`: reclaim + requeue failed + `finish_stale_running_jobs`; pending → `kiq crawl_orchestrator_tick`.
-- Cron **только backup**: `crawl_orchestrator_tick` (`0 * * * *`), `crawl_reclaim_stale_fetching` (`*/15 * * * *`) — idempotent bootstrap в `apps/scheduler/crawl_schedule_bootstrap.py` (`reconcile_cron`, `company_id=system`).
+- Cron: `crawl_orchestrator_tick` (`0 * * * *`), `crawl_reclaim_stale_fetching` (`*/15 * * * *`) — idempotent bootstrap в `apps/scheduler/crawl_schedule_bootstrap.py` (`reconcile_cron`, `company_id=system`).
+- `ensure_rag_namespace`: POST create один раз на `rag_namespace_id` за жизнь процесса воркера (memo на инстансе оркестратора). Не list всех namespace.
+- Worker context: `_enter_worker_context` → `load_system_admin_membership` (read-only, без FGA Write). `run_tick` контекст не ставит и не сбрасывает.
 - `CrawlDomainRepository.list_due` — домены с `next_crawl_after <= now`; backlog-first через `list_with_pending_urls`.
 - После tick/fetch домен уходит в «сон» (`schedule_next` + adaptive refresh, см. ниже).
 - Tranco seed — append-only (`upsert_seed_batch` не сбрасывает `next_crawl_after` у existing domains).

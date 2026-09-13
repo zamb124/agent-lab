@@ -78,7 +78,6 @@ async def test_enqueue_domain_fetch_respects_http_concurrency(monkeypatch: pytes
             wait_for_fetch_slot=AsyncMock(return_value=0.0),
         ),
         rag_client=AsyncMock(),
-        build_system_context=AsyncMock(),
         crawl_config=get_search_settings().crawl,
     )
 

@@ -5,10 +5,7 @@ from typing import TypedDict
 from apps.idle_worker.container import IdleWorkerContainer, get_container
 from apps.idle_worker.tasks.task_names import TASK_SYNC_LLM_MODELS
 from core.context import Context, clear_context, set_context
-from core.identity.system_bootstrap import (
-    SYSTEM_ADMIN_EMAIL,
-    ensure_system_admin_membership,
-)
+from core.identity.system_bootstrap import load_system_admin_membership
 from core.logging import get_logger
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
@@ -27,16 +24,10 @@ async def build_scheduler_auth_context(
     container: IdleWorkerContainer, trace_id: str, session_id: str
 ) -> Context:
     """Создаёт системный контекст для фоновых задач с авторизацией."""
-    company, user = await ensure_system_admin_membership(
+    company, user = await load_system_admin_membership(
         company_repository=container.company_repository,
-        subdomain_repository=container.subdomain_repository,
         user_repository=container.user_repository,
-        authz=container.authz_service,
     )
-    if user is None:
-        raise ValueError(
-            f"Нет пользователя с email {SYSTEM_ADMIN_EMAIL}: контекст для фоновых задач не собрать"
-        )
     roles = user.companies.get(company.company_id, [])
     auth_token = get_token_service().create_token(
         user_id=user.user_id,

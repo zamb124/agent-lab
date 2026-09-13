@@ -21,7 +21,7 @@ Taint `dedicated=gpu` не ставится. `ytai.tech` живёт на `84.38.
 
 Связь внутри кластера — через CNI. Postgres и Redis — ClusterIP `postgres.platform.svc.cluster.local:5432` / `redis.platform.svc.cluster.local:6379`.
 
-**OpenFGA:** deploy/config (store, model, API URL, credentials) — **`authorization.mdc`** + Helm/`conf.json` секция `openfga`. Не дублировать ACL-логику в приложении.
+**OpenFGA:** deploy/config (store, model, API URL, credentials, probes) — **`authorization.mdc`** + Helm/`conf.json` секция `openfga`. Helm `/healthz`: `timeoutSeconds: 5`, liveness `failureThreshold: 6`; `checkQueryCacheEnabled` off. Не дублировать ACL-логику в приложении.
 
 Домены apex (multi-brand): **primary** `linnex.io`, **legacy** `humanitec.ru` (и другие из `platform_brands`). DNS `@` и `*` на оба apex → `31.192.111.33`. Smoke: [`deploy/docs/multi-brand-prod-smoke.md`](../../deploy/docs/multi-brand-prod-smoke.md).
 

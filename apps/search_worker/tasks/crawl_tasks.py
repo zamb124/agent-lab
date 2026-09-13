@@ -28,9 +28,7 @@ async def _enter_worker_context(*, trace_id: str) -> None:
         await build_search_system_context(
             trace_id=trace_id,
             company_repository=container.company_repository,
-            subdomain_repository=container.subdomain_repository,
             user_repository=container.user_repository,
-            authz=container.authz_service,
         )
     )
 

@@ -87,9 +87,7 @@ class SearchContainer(BaseContainer):
         return await build_search_system_context(
             trace_id=trace_id,
             company_repository=self.company_repository,
-            subdomain_repository=self.subdomain_repository,
             user_repository=self.user_repository,
-            authz=self.authz_service,
         )
 
     @lazy
@@ -181,7 +179,6 @@ class SearchContainer(BaseContainer):
             page_enrichment_service=self.crawl_page_enrichment_service,
             politeness_service=self.crawl_politeness_service,
             rag_client=self.rag_client,
-            build_system_context=self._build_index_system_context,
             crawl_config=get_search_settings().crawl,
         )
 

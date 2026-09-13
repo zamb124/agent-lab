@@ -115,7 +115,6 @@ async def test_fetch_one_url_skips_filter_rejected_without_fetch() -> None:
             wait_for_fetch_slot=AsyncMock(return_value=0.0),
         ),
         rag_client=AsyncMock(),
-        build_system_context=AsyncMock(),
         crawl_config=get_search_settings().crawl,
     )
 

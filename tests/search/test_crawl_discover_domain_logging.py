@@ -81,7 +81,6 @@ async def test_discover_domain_logs_structured_failure_on_generic_exception() ->
             wait_for_fetch_slot=AsyncMock(return_value=0.0),
         ),
         rag_client=AsyncMock(),
-        build_system_context=AsyncMock(),
         crawl_config=get_search_settings().crawl,
     )
 

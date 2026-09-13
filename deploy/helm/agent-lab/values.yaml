@@ -59,6 +59,17 @@ openfga:
   # Без лимита 50 параллельных Check × unbounded datastore reads валят Postgres/healthz.
   maxConcurrentChecksPerBatchCheck: "10"
   maxConcurrentReadsForCheck: "16"
+  # kubelet default timeoutSeconds=1; /healthz при медленном datastore не укладывается → Killing.
+  readinessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 5
+    failureThreshold: 3
+  livenessProbe:
+    initialDelaySeconds: 15
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
   resources:
     requests:
       cpu: 100m

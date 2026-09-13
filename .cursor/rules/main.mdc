@@ -322,7 +322,9 @@ response = await client.get("flows", "/flows/api/v1/flows/")
 
 ## Bootstrap
 
-При старте `frontend`: компания `system` создаётся при отсутствии. Если в хранилище есть пользователь с email `zambas124@yandex.ru` без `admin` в `system` — обновляются `company.members` и `user.companies`. Нет такого пользователя — старт не падает (предупреждение в логе).
+При старте `frontend`: `ensure_system_admin_membership` создаёт компанию `system` при отсутствии. Если есть пользователь с email `zambas124@yandex.ru` без `admin` в roster — grant + `sync_company_member_roles`. Already-admin → без FGA Write. Нет пользователя — warning, старт не падает.
+
+Hot path (`search-worker`, `idle_worker`): `load_system_admin_membership` — read-only `company_repository.get("system")` + `find_all_by_email_ci`. Нет компании/юзера/admin в roster → `raise`. Нет `list(10000)`, нет `set_mapping`, нет FGA.
 
 ## Конфигурация
 

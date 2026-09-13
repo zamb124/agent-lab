@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
@@ -30,7 +29,6 @@ from apps.search_worker.tasks.task_names import (
     CRAWL_ORCHESTRATOR_TICK,
 )
 from core.clients.rag_client import RagClient
-from core.context import Context, clear_context, set_context
 from core.crawl.enrichment_skip import (
     compute_enriched_content_hash,
     should_skip_crawl_url_after_fetch,
@@ -85,7 +83,6 @@ class CrawlOrchestratorService:
         page_enrichment_service: CrawlPageEnrichmentService,
         politeness_service: CrawlPolitenessService,
         rag_client: RagClient,
-        build_system_context: Callable[[str], Awaitable[Context]],
         crawl_config: SearchCrawlConfig,
     ) -> None:
         self._crawl_profile_repository: CrawlProfileRepository = crawl_profile_repository
@@ -97,14 +94,18 @@ class CrawlOrchestratorService:
         self._politeness_service: CrawlPolitenessService = politeness_service
         self._ingest_service: CrawlIngestService = CrawlIngestService(rag_client)
         self._rag_client: RagClient = rag_client
-        self._build_system_context: Callable[[str], Awaitable[Context]] = build_system_context
         self._crawl_config: SearchCrawlConfig = crawl_config
+        self._ensured_rag_namespace_ids: set[str] = set()
 
     async def ensure_rag_namespace(self, search_index: SearchIndexDefinition) -> None:
+        rag_namespace_id = search_index.rag_namespace_id
+        if rag_namespace_id in self._ensured_rag_namespace_ids:
+            return
         _ = await self._rag_client.create_namespace(
-            search_index.rag_namespace_id,
+            rag_namespace_id,
             description=search_index.description or search_index.display_name,
         )
+        self._ensured_rag_namespace_ids.add(rag_namespace_id)
 
     async def run_tick(
         self,
@@ -117,8 +118,6 @@ class CrawlOrchestratorService:
         if not profile_bundle.profile.enabled:
             raise ValueError(f"crawl profile disabled: {crawl_profile_id}")
         job = await self._crawl_job_repository.start(crawl_profile_id, trigger, schedule_task_id)
-        trace_id = f"crawl:tick:{job.crawl_job_id}"
-        _ = set_context(await self._build_system_context(trace_id))
         search_index_id = profile_bundle.search_index.search_index_id
         log_crawl_tick_started(
             crawl_profile_id=crawl_profile_id,
@@ -182,8 +181,6 @@ class CrawlOrchestratorService:
                 domains_scheduled=len(domains),
                 pending_urls=pending_urls,
             )
-            if pending_urls > 0:
-                _ = await enqueue(CRAWL_ORCHESTRATOR_TICK, crawl_profile_id)
             return {
                 "crawl_job_id": job.crawl_job_id,
                 "crawl_profile_id": crawl_profile_id,
@@ -201,8 +198,6 @@ class CrawlOrchestratorService:
                 exception_message=str(exc),
             )
             raise
-        finally:
-            clear_context()
 
     async def discover_domain(
         self,

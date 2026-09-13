@@ -124,7 +124,6 @@ async def test_fetch_layer1_never_calls_enrichment_synchronously(
             wait_for_fetch_slot=AsyncMock(return_value=0.0),
         ),
         rag_client=AsyncMock(),
-        build_system_context=AsyncMock(),
         crawl_config=get_search_settings().crawl,
     )
     orchestrator._ingest_service.ingest_page = AsyncMock(return_value="doc-1")  # pyright: ignore[reportAttributeAccessIssue]
@@ -179,7 +178,6 @@ async def test_fetch_layer1_skips_enrich_kiq_when_llm_disabled(
             wait_for_fetch_slot=AsyncMock(return_value=0.0),
         ),
         rag_client=AsyncMock(),
-        build_system_context=AsyncMock(),
         crawl_config=get_search_settings().crawl,
     )
     orchestrator._ingest_service.ingest_page = AsyncMock(return_value="doc-1")  # pyright: ignore[reportAttributeAccessIssue]
@@ -225,7 +223,6 @@ async def test_fetch_marks_skipped_on_extract_too_short() -> None:
             wait_for_fetch_slot=AsyncMock(return_value=0.0),
         ),
         rag_client=AsyncMock(),
-        build_system_context=AsyncMock(),
         crawl_config=get_search_settings().crawl,
     )
 
@@ -301,7 +298,6 @@ async def test_enrich_one_url_reads_snapshot_not_http(
             wait_for_fetch_slot=AsyncMock(return_value=0.0),
         ),
         rag_client=AsyncMock(),
-        build_system_context=AsyncMock(),
         crawl_config=get_search_settings().crawl,
     )
     orchestrator._ingest_service.reingest_enriched_page = AsyncMock(return_value="doc-1")  # pyright: ignore[reportAttributeAccessIssue]
@@ -372,7 +368,6 @@ async def test_enrich_failure_keeps_indexed_status(
             wait_for_fetch_slot=AsyncMock(return_value=0.0),
         ),
         rag_client=AsyncMock(),
-        build_system_context=AsyncMock(),
         crawl_config=get_search_settings().crawl,
     )
 
@@ -422,7 +417,6 @@ async def test_enqueue_enrichment_backfill_enqueues_missing_urls(
             wait_for_fetch_slot=AsyncMock(return_value=0.0),
         ),
         rag_client=AsyncMock(),
-        build_system_context=AsyncMock(),
         crawl_config=get_search_settings().crawl,
     )
 

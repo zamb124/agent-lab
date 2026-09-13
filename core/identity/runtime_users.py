@@ -113,15 +113,6 @@ async def ensure_persisted_runtime_user(
                     _ = await container.user_repository.set(previous_user)
                     raise
             return existing
-        if _dual_write_runtime_authz(
-            user_id=existing.user_id, attributes=existing.attributes
-        ):
-            await sync_company_member_roles(
-                container.authz_service,
-                company_id=clean_company_id,
-                user_id=existing.user_id,
-                roles=list(existing.companies[clean_company_id]),
-            )
         return existing
 
     clean_email = email.strip() if email is not None else ""

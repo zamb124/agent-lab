@@ -79,7 +79,6 @@ def _orchestrator(
             wait_for_fetch_slot=AsyncMock(return_value=0.0),
         ),
         rag_client=AsyncMock(create_namespace=AsyncMock()),
-        build_system_context=AsyncMock(),
         crawl_config=get_search_settings().crawl,
     )
 
@@ -162,7 +161,7 @@ async def test_run_tick_prioritizes_backlog_over_cooldown(monkeypatch: pytest.Mo
     assert fetch_tasks[0][1] == "dom-backlog"
     assert len(discover_tasks) == 1
     assert discover_tasks[0][1] == "dom-due"
-    assert len(orchestrator_ticks) == 1
+    assert orchestrator_ticks == []
 
 
 @pytest.mark.asyncio
@@ -293,7 +292,7 @@ async def test_fetch_one_url_enqueues_tick_when_domain_drained_but_profile_pendi
 
 
 @pytest.mark.asyncio
-async def test_run_tick_reenqueues_while_profile_pending_even_without_new_fetch(
+async def test_run_tick_does_not_reenqueue_when_no_domains_scheduled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     enqueued: list[tuple[object, ...]] = []
@@ -337,14 +336,63 @@ async def test_run_tick_reenqueues_while_profile_pending_even_without_new_fetch(
         job_repo=job_repo,
     )
 
-    await orchestrator.run_tick(
+    result = await orchestrator.run_tick(
         crawl_profile_id="cr_test",
         trigger="manual",
         schedule_task_id=None,
     )
 
     orchestrator_ticks = [item for item in enqueued if item[0] == "crawl_orchestrator_tick"]
-    assert orchestrator_ticks == [("crawl_orchestrator_tick", "cr_test")]
+    assert result["domains_scheduled"] == 0
+    assert orchestrator_ticks == []
+
+
+@pytest.mark.asyncio
+async def test_run_tick_creates_rag_namespace_once_per_worker() -> None:
+    profile_bundle = _profile_bundle(max_domains_per_tick=1)
+
+    class _DomainRepo:
+        async def list_with_pending_urls(self, crawl_profile_id: str, *, limit: int) -> list[CrawlDomain]:
+            return []
+
+        async def list_due(self, crawl_profile_id: str, *, now: datetime, limit: int) -> list[CrawlDomain]:
+            return []
+
+    class _UrlRepo:
+        async def count_pending_for_profile(self, crawl_profile_id: str) -> int:
+            return 0
+
+    job = CrawlJob(
+        crawl_job_id="job-1",
+        crawl_profile_id="cr_test",
+        trigger="manual",
+        status="running",
+        started_at=datetime.now(UTC),
+    )
+    job_repo = AsyncMock()
+    job_repo.start = AsyncMock(return_value=job)
+    job_repo.finish = AsyncMock()
+    job_repo.increment = AsyncMock()
+
+    orchestrator = _orchestrator(
+        profile_bundle=profile_bundle,
+        domain_repo=_DomainRepo(),
+        url_repo=_UrlRepo(),
+        job_repo=job_repo,
+    )
+
+    await orchestrator.run_tick(
+        crawl_profile_id="cr_test",
+        trigger="manual",
+        schedule_task_id=None,
+    )
+    await orchestrator.run_tick(
+        crawl_profile_id="cr_test",
+        trigger="manual",
+        schedule_task_id=None,
+    )
+
+    orchestrator._rag_client.create_namespace.assert_awaited_once()  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
 
 
 @pytest.mark.asyncio

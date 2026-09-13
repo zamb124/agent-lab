@@ -49,6 +49,37 @@ async def ensure_system_company_exists(
     return company
 
 
+async def _users_for_admin_email(user_repository: UserRepository, user_email: str) -> list[User]:
+    matched_users = await user_repository.find_all_by_email_ci(user_email)
+    if len(matched_users) > 1:
+        matched_user_ids = ", ".join(user.user_id for user in matched_users)
+        raise ValueError(f"Multiple users found for {user_email}: {matched_user_ids}")
+    return matched_users
+
+
+async def load_system_admin_membership(
+    *,
+    company_repository: CompanyRepository,
+    user_repository: UserRepository,
+    user_email: str = SYSTEM_ADMIN_EMAIL,
+) -> tuple[Company, User]:
+    """Читает system-компанию и admin-пользователя. Без FGA и без roster-мутаций."""
+    company = await company_repository.get(SYSTEM_COMPANY_ID)
+    if company is None:
+        raise ValueError("system company is required")
+    matched_users = await _users_for_admin_email(user_repository, user_email)
+    if not matched_users:
+        raise ValueError(f"system admin user {user_email} not found")
+    target_user = matched_users[0]
+    company_roles = company.members.get(target_user.user_id, [])
+    user_roles = target_user.companies.get(company.company_id, [])
+    if ADMIN_ROLE not in company_roles or ADMIN_ROLE not in user_roles:
+        raise ValueError(
+            f"system admin roster missing admin role for {user_email} in {company.company_id}"
+        )
+    return company, target_user
+
+
 async def ensure_system_admin_membership(
     *,
     company_repository: CompanyRepository,
@@ -63,17 +94,13 @@ async def ensure_system_admin_membership(
         subdomain_repository=subdomain_repository,
     )
 
-    users = await user_repository.list(limit=10000)
-    matched_users = [user for user in users if user_email in user.emails]
+    matched_users = await _users_for_admin_email(user_repository, user_email)
     if not matched_users:
         logger.warning(
             "Bootstrap skipped admin grant: user with email %s not found",
             user_email,
         )
         return system_company, None
-    if len(matched_users) > 1:
-        matched_user_ids = ", ".join(user.user_id for user in matched_users)
-        raise ValueError(f"Multiple users found for {user_email}: {matched_user_ids}")
 
     target_user = matched_users[0]
     company_roles = system_company.members.get(target_user.user_id, [])
@@ -97,18 +124,6 @@ async def ensure_system_admin_membership(
         )
         logger.info(
             "Bootstrap updated: granted admin role for %s in company %s",
-            user_email,
-            system_company.company_id,
-        )
-    else:
-        await sync_company_member_roles(
-            authz,
-            company_id=system_company.company_id,
-            user_id=target_user.user_id,
-            roles=system_company.members.get(target_user.user_id, [ADMIN_ROLE]),
-        )
-        logger.info(
-            "Bootstrap check passed: %s already has admin rights in %s",
             user_email,
             system_company.company_id,
         )
