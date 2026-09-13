@@ -1,6 +1,7 @@
 /**
- * Редактор блока ``html``: preview-first (кадр холста + исходник), inspector State/Events/Help,
- * сниппеты в курсор. Apply отдаёт ``source``; test-state в документ не пишется.
+ * Редактор блока ``html``: preview-first (кадр холста + исходник), inspector State/Events/Help.
+ * Viewport/theme/Reload — тулбар превью; сниппеты/replace/layout — тулбар исходника.
+ * Apply отдаёт ``source``; test-state в документ не пишется.
  */
 
 import { css, html, nothing } from 'lit';
@@ -12,7 +13,6 @@ import {
     FLOW_UI_API,
     HTML_EDITOR_LIVE_MS,
     HTML_EDITOR_SNIPPETS,
-    HTML_EDITOR_VIEWPORTS,
     mergeTestState,
     parseTestState,
     previewBlock,
@@ -29,13 +29,31 @@ import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/flow-ui/blocks/html.js';
 
 const LAYOUT_KEY = platformStorageKey('flows', 'html_editor_layout');
+const PANELS_KEY = platformStorageKey('flows', 'html_editor_panels');
+const PANEL_NAMES = Object.freeze(['preview', 'source', 'inspector']);
+const DEFAULT_PANELS = Object.freeze({ preview: true, source: true, inspector: true });
+
+function readStoredPanels() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(PANELS_KEY));
+        if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return { ...DEFAULT_PANELS };
+        const next = { ...DEFAULT_PANELS };
+        for (const name of PANEL_NAMES) {
+            if (typeof raw[name] === 'boolean') next[name] = raw[name];
+        }
+        if (!next.preview && !next.source && !next.inspector) return { ...DEFAULT_PANELS };
+        return next;
+    } catch {
+        return { ...DEFAULT_PANELS };
+    }
+}
 
 export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
     static modalKind = 'flows.interface_html_editor';
     static i18nNamespace = 'flows';
 
     static properties = {
-        source: { type: String },
+        source: { type: String, attribute: false },
         block: { attribute: false },
         sampleState: { attribute: false },
         statePaths: { attribute: false },
@@ -52,24 +70,54 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
         _layout: { type: String, state: true },
         _snippetsOpen: { type: Boolean, state: true },
         _replaceConfirm: { type: Boolean, state: true },
+        _panels: { attribute: false, state: true },
     };
 
     static styles = [PlatformModal.styles, htmlEditorStageStyles, htmlEditorInspectorStyles, css`
-        .workspace { display: grid; grid-template-rows: minmax(0, 1fr) minmax(160px, 280px); gap: var(--space-3); height: 100%; min-height: 60vh; min-width: 0; }
-        .panes { display: grid; gap: var(--space-3); min-height: 0; }
+        .modal-content { overflow: hidden; display: flex; flex-direction: column; }
+        .workspace {
+            display: grid; grid-template-rows: auto minmax(0, 1fr) minmax(160px, 280px); gap: var(--space-3);
+            flex: 1 1 auto; height: 100%; min-height: 60vh; min-width: 0; overflow: hidden; isolation: isolate;
+        }
+        .workspace[data-inspector='off'] { grid-template-rows: auto minmax(0, 1fr); }
+        .workspace[data-preview='off'][data-source='off'] { grid-template-rows: auto minmax(0, 1fr); }
+        .panel-switch { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+        .panel-switch .panel-toggle.is-on {
+            background: color-mix(in srgb, var(--accent) 18%, transparent);
+            color: var(--accent);
+        }
+        .panes { display: grid; gap: var(--space-3); min-height: 0; overflow: hidden; max-height: 100%; }
         .workspace[data-layout='preview'] .panes { grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr); }
         .workspace[data-layout='split'] .panes { grid-template-columns: 1fr 1fr; }
-        .pane { display: grid; min-height: 0; min-width: 0; }
+        .workspace[data-preview='off'] .panes,
+        .workspace[data-source='off'] .panes,
+        .workspace[data-preview='off'][data-layout='preview'] .panes,
+        .workspace[data-source='off'][data-layout='preview'] .panes,
+        .workspace[data-preview='off'][data-layout='split'] .panes,
+        .workspace[data-source='off'][data-layout='split'] .panes { grid-template-columns: minmax(0, 1fr); }
+        .workspace[data-preview='off'] .preview-pane { display: none; }
+        .workspace[data-source='off'] .pane { display: none; }
+        .workspace[data-inspector='off'] .inspector { display: none; }
+        .workspace[data-preview='off'][data-source='off'] .panes { display: none; }
+        .pane {
+            display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+            min-height: 0; min-width: 0; overflow: hidden;
+        }
+        .source-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; padding-bottom: 6px; }
+        .source-toolbar .confirm { font-size: 11px; color: var(--text-secondary); }
+        .source-toolbar .collapse { margin-left: auto; }
         platform-code-editor { min-height: 0; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); overflow: hidden; }
-        .header-buttons { flex-wrap: wrap; }
-        .tools { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
         .pane .hint { font-size: 11px; color: var(--text-tertiary); }
         .snippets { display: grid; gap: 4px; width: min(280px, 90vw); padding: 8px; }
         .snippets platform-button { width: 100%; }
-        .snippets .confirm { font-size: 11px; color: var(--text-secondary); padding: 4px 10px; }
         .dirty { margin-right: 6px; color: var(--warning); }
-        @media (max-width: 1200px) { .workspace { grid-template-rows: minmax(0, 1fr) auto; } }
-        @media (max-width: 900px) { .panes, .workspace[data-layout='preview'] .panes, .workspace[data-layout='split'] .panes { grid-template-columns: 1fr; } }
+        @media (max-width: 1200px) {
+            .workspace { grid-template-rows: auto minmax(0, 1fr) auto; }
+            .workspace[data-inspector='off'], .workspace[data-preview='off'][data-source='off'] { grid-template-rows: auto minmax(0, 1fr); }
+        }
+        @media (max-width: 900px) {
+            .panes, .workspace[data-layout='preview'] .panes, .workspace[data-layout='split'] .panes { grid-template-columns: 1fr; }
+        }
     `];
 
     constructor() {
@@ -92,18 +140,40 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
         this._layout = 'preview';
         this._snippetsOpen = false;
         this._replaceConfirm = false;
+        this._panels = { ...DEFAULT_PANELS };
         this._lastGoodState = {};
         this._cachedPreview = null;
         this._liveTimer = 0;
         this._snippetsAnchor = null;
+        this._hydrated = false;
+        this._originalSource = '';
     }
 
     connectedCallback() {
         super.connectedCallback();
-        this._draft = this.source;
-        this._liveSource = this.source;
+        this._hydrateDraft();
+    }
+
+    willUpdate(changed) {
+        super.willUpdate?.(changed);
+        if (!this._hydrated && (changed.has('source') || changed.has('block'))) this._hydrateDraft();
+    }
+
+    _resolvedSource() {
+        if (typeof this.source === 'string' && this.source !== '') return this.source;
+        return typeof this.block?.source === 'string' ? this.block.source : '';
+    }
+
+    _hydrateDraft() {
+        if (this._hydrated || this.block === null) return;
+        const next = this._resolvedSource();
+        this._draft = next;
+        this._liveSource = next;
+        this._originalSource = next;
+        this._hydrated = true;
         const stored = localStorage.getItem(LAYOUT_KEY);
         if (stored === 'split' || stored === 'preview') this._layout = stored;
+        this._panels = readStoredPanels();
         this._setStateText(JSON.stringify(this._initialTestState(), null, 2));
     }
 
@@ -228,7 +298,7 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
     }
 
     _replaceSource() {
-        if (this._draft.trim() !== '' && this._draft !== this.source && this._replaceConfirm !== true) {
+        if (this._draft.trim() !== '' && this._draft !== this._originalSource && this._replaceConfirm !== true) {
             this._replaceConfirm = true;
             return;
         }
@@ -254,20 +324,47 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
         localStorage.setItem(LAYOUT_KEY, layout);
     }
 
-    renderHeader() {
-        return this.t('interface_editor.html_editor_title', { block_id: this.block.block_id });
+    _visiblePanelCount() {
+        return PANEL_NAMES.filter((name) => this._panels[name]).length;
     }
 
-    renderHeaderActions() {
-        const t = (key) => this.t(key);
-        return html`<div class="tools">
-            <platform-segmented-control density="compact" icon-only .value=${this._viewport}
-                .items=${Object.keys(HTML_EDITOR_VIEWPORTS).map((value) => ({ value, icon: value === 'desktop' ? 'monitor' : (value === 'tablet' ? 'tablet' : 'smartphone'), title: t(`interface_editor.viewport_${value}`) }))}
-                aria-label=${t('interface_editor.viewport')}
-                @change=${(event) => { this._viewport = event.detail.value; }}></platform-segmented-control>
-            <platform-segmented-control density="compact" .value=${this._previewTheme}
-                .items=${[{ value: 'dark', label: t('interface_editor.html_theme_dark') }, { value: 'light', label: t('interface_editor.html_theme_light') }]}
-                @change=${(event) => { this._previewTheme = event.detail.value; }}></platform-segmented-control>
+    _setPanel(name, visible) {
+        if (!PANEL_NAMES.includes(name)) return;
+        if (visible !== true && this._visiblePanelCount() <= 1 && this._panels[name]) return;
+        const next = { ...this._panels, [name]: visible === true };
+        this._panels = next;
+        localStorage.setItem(PANELS_KEY, JSON.stringify(next));
+        if (visible === true && name === 'preview') {
+            this.updateComplete.then(() => this.renderRoot.querySelector('flow-ui-html-block')?.pushHost());
+        }
+    }
+
+    _togglePanel(name) {
+        this._setPanel(name, this._panels[name] !== true);
+    }
+
+    _reloadPreview() {
+        this.renderRoot.querySelector('flow-ui-html-block')?.reload();
+    }
+
+    _renderPanelSwitch(t) {
+        const last = this._visiblePanelCount() <= 1;
+        return html`<div class="panel-switch" role="group" aria-label=${t('interface_editor.html_panels')}>
+            ${PANEL_NAMES.map((name) => {
+                const on = this._panels[name] === true;
+                const label = t(`interface_editor.html_panel_${name}`);
+                return html`<platform-button ghost density="compact"
+                    class="panel-toggle ${on ? 'is-on' : ''}"
+                    data-panel=${name} data-on=${on ? 'true' : 'false'}
+                    ?disabled=${last && on}
+                    title=${t(on ? 'interface_editor.html_panel_hide' : 'interface_editor.html_panel_show', { name: label })}
+                    @click=${() => this._togglePanel(name)}>${label}</platform-button>`;
+            })}
+        </div>`;
+    }
+
+    _renderSourceToolbar(t) {
+        return html`<div class="source-toolbar">
             <platform-button ghost density="compact" class="snippets-trigger" @click=${(event) => {
                 this._snippetsAnchor = event.currentTarget;
                 this._snippetsOpen = !this._snippetsOpen;
@@ -275,43 +372,70 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
             }}>
                 <platform-icon name="sparkle" size="13"></platform-icon>${t('interface_editor.html_snippets')}
             </platform-button>
-            <platform-popover trigger="manual" .anchor=${this._snippetsAnchor} ?open=${this._snippetsOpen}
-                placement="bottom-end" dismiss-on-outside @popover-dismiss=${() => { this._snippetsOpen = false; this._replaceConfirm = false; }}>
+            <platform-popover class="snippets-popover" trigger="manual" .anchor=${this._snippetsAnchor} ?open=${this._snippetsOpen}
+                placement="bottom-start" dismiss-on-outside @popover-dismiss=${() => { this._snippetsOpen = false; }}>
                 <div class="snippets">
                     ${HTML_EDITOR_SNIPPETS.map((item) => html`<platform-button ghost density="compact" block data-snippet=${item.id} @click=${() => this._insertSnippet(item.id)}>${t(`interface_editor.html_snippet_${item.id}`)}</platform-button>`)}
-                    ${this._replaceConfirm
-                        ? html`<div class="confirm">${t('interface_editor.html_replace_confirm')}</div>
-                            <platform-button ghost density="compact" block data-replace-yes @click=${() => this._replaceSource()}>${t('interface_editor.html_replace_source')}</platform-button>
-                            <platform-button ghost density="compact" block @click=${() => { this._replaceConfirm = false; }}>${t('interface_editor.cancel')}</platform-button>`
-                        : html`<platform-button ghost density="compact" block data-replace @click=${() => this._replaceSource()}>${t('interface_editor.html_replace_source')}</platform-button>`}
-                    <platform-button ghost density="compact" block data-layout @click=${() => this._setLayout(this._layout === 'split' ? 'preview' : 'split')}>${t(`interface_editor.html_layout_${this._layout === 'split' ? 'preview' : 'split'}`)}</platform-button>
                 </div>
             </platform-popover>
-            <platform-button ghost density="compact" @click=${() => this.renderRoot.querySelector('flow-ui-html-block')?.reload()}>
-                <platform-icon name="refresh" size="13"></platform-icon>${t('interface_editor.html_reload')}
+            ${this._replaceConfirm
+                ? html`<span class="confirm">${t('interface_editor.html_replace_confirm')}</span>
+                    <platform-button ghost density="compact" data-replace-yes @click=${() => this._replaceSource()}>${t('interface_editor.html_replace_source')}</platform-button>
+                    <platform-button ghost density="compact" data-replace-cancel @click=${() => { this._replaceConfirm = false; }}>${t('interface_editor.cancel')}</platform-button>`
+                : html`<platform-button ghost density="compact" data-replace @click=${() => this._replaceSource()}>${t('interface_editor.html_replace_source')}</platform-button>`}
+            ${this._panels.preview && this._panels.source ? html`<platform-segmented-control class="layout-control" density="compact" .value=${this._layout}
+                .items=${[
+                    { value: 'preview', label: t('interface_editor.html_layout_preview') },
+                    { value: 'split', label: t('interface_editor.html_layout_split') },
+                ]}
+                @change=${(event) => this._setLayout(event.detail.value)}></platform-segmented-control>` : nothing}
+            <platform-button ghost density="compact" class="collapse" data-collapse="source"
+                ?disabled=${this._visiblePanelCount() <= 1}
+                title=${t('interface_editor.html_panel_hide', { name: t('interface_editor.html_panel_source') })}
+                @click=${() => this._setPanel('source', false)}>
+                <platform-icon name="minimize" size="13"></platform-icon>
             </platform-button>
         </div>`;
     }
 
+    renderHeader() {
+        return this.t('interface_editor.html_editor_title', { block_id: this.block?.block_id ?? '' });
+    }
+
     renderBody() {
+        if (this.block === null) return nothing;
         const parsed = parseTestState(this._stateText);
         const previewState = parsed.ok ? parsed.value : this._lastGoodState;
         const meta = this._readMeta();
         const empty = this._liveSource.trim() === '';
-        const t = (key) => this.t(key);
-        return html`<div class="workspace" data-layout=${this._layout}>
+        const t = (key, vars) => this.t(key, vars);
+        return html`<div class="workspace" data-layout=${this._layout}
+            data-preview=${this._panels.preview ? 'on' : 'off'}
+            data-source=${this._panels.source ? 'on' : 'off'}
+            data-inspector=${this._panels.inspector ? 'on' : 'off'}>
+            ${this._renderPanelSwitch(t)}
             <div class="panes">
                 ${renderHtmlEditorStage({
                     viewport: this._viewport, theme: this._previewTheme, empty, error: meta.error, t,
                     onSnippet: (id) => this._insertSnippet(id),
-                    canvas: html`<flow-ui-html-block .block=${this._previewBlock()} .state=${previewState} .readonly=${true}
-                        .onBridgeEvent=${(event) => this._onBridgeEvent(event)}></flow-ui-html-block>`,
+                    onViewport: (value) => { this._viewport = value; },
+                    onTheme: (value) => { this._previewTheme = value; },
+                    onReload: () => this._reloadPreview(),
+                    onCollapse: () => this._setPanel('preview', false),
+                    collapseDisabled: this._visiblePanelCount() <= 1,
+                    canvas: this._panels.preview
+                        ? html`<flow-ui-html-block .block=${this._previewBlock()} .state=${previewState} .readonly=${true}
+                            .onBridgeEvent=${(event) => this._onBridgeEvent(event)}></flow-ui-html-block>`
+                        : nothing,
                 })}
                 <div class="pane">
-                    <platform-code-editor data-html-source language="html" fill-parent line-wrapping .readonly=${false} .value=${this._draft}
-                        .extensionsFactory=${(cm) => this._extensions(cm)}
-                        @change=${(event) => this._setDraft(event.detail.value, false)}></platform-code-editor>
-                    <div class="hint">${t('interface_editor.html_api_hint')}</div>
+                    ${this._panels.source ? html`
+                        ${this._renderSourceToolbar(t)}
+                        <platform-code-editor data-html-source language="html" fill-parent line-wrapping .readonly=${false} .value=${this._draft}
+                            .extensionsFactory=${(cm) => this._extensions(cm)}
+                            @change=${(event) => this._setDraft(event.detail.value, false)}></platform-code-editor>
+                        <div class="hint">${t('interface_editor.html_api_hint')}</div>
+                    ` : nothing}
                 </div>
             </div>
             ${renderHtmlEditorInspector({
@@ -324,6 +448,8 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
                 onField: (path, value, error) => this._onField(path, value, error),
                 onClear: () => { this._log = []; },
                 onToken: (token) => this._insertToken(token),
+                onCollapse: () => this._setPanel('inspector', false),
+                collapseDisabled: this._visiblePanelCount() <= 1,
             })}
         </div>`;
     }
@@ -333,7 +459,7 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
         return html`
             <platform-button ghost @click=${() => this.close()}>${this.t('interface_editor.cancel')}</platform-button>
             <platform-button primary ?disabled=${empty} title=${empty ? this.t('interface_editor.html_apply_empty') : ''} @click=${() => this._apply()}>
-                ${this._draft !== this.source ? html`<span class="dirty">●</span>` : nothing}${this.t('interface_editor.html_apply')}
+                ${this._draft !== this._originalSource ? html`<span class="dirty">●</span>` : nothing}${this.t('interface_editor.html_apply')}
             </platform-button>
         `;
     }

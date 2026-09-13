@@ -66,8 +66,9 @@ export class FlowUIRunTrace extends LitElement {
         .compact li { padding: 5px 8px; }
         li[data-tone='error'] { border-color: color-mix(in srgb, var(--error, #ff718d) 45%, transparent); }
         li[data-tone='ok'] .glyph { opacity: .8; }
-        .glyph { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 6px; background: var(--flow-ui-chip, var(--accent-subtle)); }
+        .glyph { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 6px; background: var(--flow-ui-chip, var(--accent-subtle)); color: var(--flow-ui-text, var(--text-primary)); }
         .glyph img { width: 12px; height: 12px; filter: var(--flow-ui-glyph-filter, brightness(0) saturate(100%) invert(88%) opacity(.92)); }
+        .glyph svg.fu-glyph { width: 12px; height: 12px; }
         .title { display: flex; justify-content: space-between; gap: 8px; font-weight: 500; }
         .kind { font-family: var(--font-mono); font-size: 11px; color: var(--flow-ui-muted, var(--text-tertiary)); }
         .meta { font-size: 11.5px; color: var(--flow-ui-muted, var(--text-tertiary)); margin-top: 2px; }

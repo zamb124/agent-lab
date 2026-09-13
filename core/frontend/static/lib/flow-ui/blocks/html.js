@@ -1,7 +1,8 @@
 /**
  * Блок ``html``: ``<flow-ui-html-block>`` держит iframe sandbox и мост. Новый ``source`` —
  * новый ``srcdoc``; новое состояние — сообщение ``state`` без перезагрузки iframe.
- * Мост вешается при каждом подключении: модалка-портал в ``document.body`` перезагружает iframe.
+ * Мост вешается при каждом подключении: модалка-портал в ``document.body`` перезагружает iframe,
+ * поэтому ``connectedCallback`` заново ставит ``srcdoc`` (иначе кадр остаётся пустым).
  */
 
 import { css, html, LitElement } from '../../lit-shim.js';
@@ -65,16 +66,19 @@ export class FlowUIHtmlBlock extends LitElement {
         }
     }
 
-    /** Принудительный новый ``srcdoc`` даже при том же ``source`` (зависший скрипт автора). */
+    /** Принудительный новый ``srcdoc`` даже при том же ``source`` (портал модалки, зависший скрипт). */
     reload() {
         this._reloadSeq += 1;
         this._sourceKey = '';
         this._refreshSrcdoc();
+        this.requestUpdate();
     }
 
     connectedCallback() {
         super.connectedCallback();
-        if (this.hasUpdated) this._bindFrame();
+        if (!this.hasUpdated) return;
+        this._bindFrame();
+        this.reload();
     }
 
     disconnectedCallback() {
@@ -82,9 +86,12 @@ export class FlowUIHtmlBlock extends LitElement {
         super.disconnectedCallback();
     }
 
+    willUpdate(changed) {
+        if (changed.has('block') || this._srcdoc === '') this._refreshSrcdoc();
+    }
+
     firstUpdated() {
         this._bindFrame();
-        this._refreshSrcdoc();
     }
 
     updated(changed) {
@@ -144,13 +151,13 @@ export class FlowUIHtmlBlock extends LitElement {
     }
 
     _refreshSrcdoc() {
-        const key = this.block.source;
+        if (this.block === null || typeof this.block.source !== 'string') return;
+        const key = `${this.block.source}\0${this._reloadSeq}`;
         if (key === this._sourceKey) return;
         this._sourceKey = key;
         this._error = '';
         const stamp = this._reloadSeq > 0 ? `<!--r${this._reloadSeq}-->` : '';
         this._srcdoc = `${buildHtmlSrcdoc({ source: this.block.source, tokens: readThemeTokens(this) })}${stamp}`;
-        this.requestUpdate();
     }
 
     render() {

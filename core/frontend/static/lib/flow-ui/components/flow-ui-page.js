@@ -20,6 +20,7 @@ export class FlowUIPage extends LitElement {
         page: { attribute: false },
         showTitle: { type: Boolean, attribute: 'show-title' },
         editing: { type: Boolean, reflect: true },
+        fluid: { type: Boolean, reflect: true },
         selectedBlockId: { attribute: false },
     };
 
@@ -42,16 +43,22 @@ export class FlowUIPage extends LitElement {
             display: none;
         }
         .content { display: grid; gap: var(--flow-ui-space-4); max-width: var(--flow-ui-content-medium, 960px); margin: 0 auto; width: 100%; box-sizing: border-box; }
-        :host([editing]), :host([editing]) .page { height: auto; min-height: 0; overflow: visible; flex: none; }
-        :host([editing]) .content { min-height: 120px; }
-        :host([editing]) .page[data-fill='true'] { overflow: visible; }
-        :host([editing]) .page[data-fill='true'] > .content {
+        /* Холст редактора и live-тест в рамке: страница растёт с блоками, иначе overflow:hidden срезает html/form. */
+        :host([editing]), :host([editing]) .page,
+        :host([fluid]), :host([fluid]) .page { height: auto; min-height: 0; overflow: visible; flex: none; }
+        :host([editing]) .content, :host([fluid]) .content { min-height: 120px; }
+        :host([editing]) .page[data-fill='true'],
+        :host([fluid]) .page[data-fill='true'] { overflow: visible; }
+        :host([editing]) .page[data-fill='true'] > .content,
+        :host([fluid]) .page[data-fill='true'] > .content {
             flex: none; min-height: auto; gap: 16px; padding: 8px 16px 20px;
         }
-        :host([editing]) .page[data-fill='true'] .fu-block[data-block-type='conversation'] {
+        :host([editing]) .page[data-fill='true'] .fu-block[data-block-type='conversation'],
+        :host([fluid]) .page[data-fill='true'] .fu-block[data-block-type='conversation'] {
             flex: none; min-height: 0; height: auto;
         }
-        :host([editing]) .page[data-fill='true'] .fu-block[data-block-type='agent_identity'] { position: relative; }
+        :host([editing]) .page[data-fill='true'] .fu-block[data-block-type='agent_identity'],
+        :host([fluid]) .page[data-fill='true'] .fu-block[data-block-type='agent_identity'] { position: relative; }
         h1.page-title { margin: 0 0 8px; font-size: var(--flow-ui-font-size-hero, 22px); font-weight: 650; letter-spacing: -.02em; color: var(--flow-ui-heading); }
     `];
 
@@ -61,6 +68,7 @@ export class FlowUIPage extends LitElement {
         this.page = null;
         this.showTitle = false;
         this.editing = false;
+        this.fluid = false;
         this.selectedBlockId = '';
         this._unsubscribe = null;
     }

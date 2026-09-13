@@ -144,13 +144,21 @@ export class FlowUIConversation extends LitElement {
         return interrupt.question !== '' ? html`<div class="interrupt-card">${interrupt.question}</div>` : nothing;
     }
 
+    _actionButton(className, label, glyph, onClick, extra = {}) {
+        const origin = this.host.platformUiOrigin;
+        return html`<button type="button" class="msg-action ${className}" title=${label} aria-label=${label}
+            data-kind=${extra.kind ?? nothing} ?data-copied=${extra.copied === true} @click=${onClick}>
+            ${flowUIGlyph(glyph, 18, origin)}
+        </button>`;
+    }
+
     _observabilityButtons(turn) {
         if (this.settings.show_trace_actions !== true) return nothing;
         const open = (kind) => this.host.dispatchEvent(new CustomEvent('flow-ui-open-observability', {
             bubbles: true, composed: true, detail: { kind, taskId: turn.taskId, contextId: this.host.contextId },
         }));
-        return html`<button type="button" class="tracing-btn" @click=${() => open('tracing')}>${flowUIText(this._locale, 'open_tracing')}</button>
-            <button type="button" class="tracing-btn" @click=${() => open('logs')}>${flowUIText(this._locale, 'open_logs')}</button>`;
+        return html`${this._actionButton('tracing-btn', flowUIText(this._locale, 'open_tracing'), 'git-branch', () => open('tracing'), { kind: 'tracing' })}
+            ${this._actionButton('tracing-btn', flowUIText(this._locale, 'open_logs'), 'list', () => open('logs'), { kind: 'logs' })}`;
     }
 
     _assistant(turn) {
@@ -162,7 +170,13 @@ export class FlowUIConversation extends LitElement {
             ${author !== '' ? html`<div class="author">${author}</div>` : ''}
             <div class="assistant-response fu-prose ${streaming ? 'streaming' : ''}">${unsafeHTML(markdownToHtml(turn.text))}</div>
             ${turn.settled ? html`<div class="bubble-observability-actions">
-                <button type="button" class="copy-btn" @click=${() => this._copy(turn)}>${flowUIText(this._locale, this._copiedTaskId === turn.taskId ? 'message_copied' : 'message_copy')}</button>
+                ${this._actionButton(
+                    'copy-btn',
+                    flowUIText(this._locale, this._copiedTaskId === turn.taskId ? 'message_copied' : 'message_copy'),
+                    this._copiedTaskId === turn.taskId ? 'check' : 'copy',
+                    () => this._copy(turn),
+                    { copied: this._copiedTaskId === turn.taskId },
+                )}
                 ${this._observabilityButtons(turn)}
             </div>` : ''}
         </div>`;

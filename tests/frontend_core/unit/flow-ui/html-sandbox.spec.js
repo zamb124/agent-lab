@@ -9,6 +9,7 @@ import {
     FLOW_UI_HTML_CSP,
     FLOW_UI_HTML_MAX_HEIGHT,
     FLOW_UI_HTML_MIN_HEIGHT,
+    FLOW_UI_HTML_THEME_FALLBACKS,
     FLOW_UI_HTML_THEME_TOKENS,
     buildHtmlSrcdoc,
     htmlBlockState,
@@ -90,6 +91,8 @@ describe('buildHtmlSrcdoc', () => {
         expect(srcdoc.endsWith('</body></html>')).toBe(true);
         expect(srcdoc).toContain('if (!originals.has(el)) originals.set(el, el.textContent)');
         expect(srcdoc).toContain('value === undefined || value === null ? originals.get(el)');
+        expect(srcdoc).toContain('document.documentElement.scrollHeight');
+        expect(srcdoc).toContain('html,body{margin:0;height:auto;');
     });
 
     it('keeps only css custom property names and strips angle brackets from values', () => {
@@ -117,5 +120,6 @@ describe('sandbox constants', () => {
         expect(Object.isFrozen(FLOW_UI_HTML_THEME_TOKENS)).toBe(true);
         expect(FLOW_UI_HTML_THEME_TOKENS.every((name) => name.startsWith('--flow-ui-'))).toBe(true);
         expect(new Set(FLOW_UI_HTML_THEME_TOKENS).size).toBe(FLOW_UI_HTML_THEME_TOKENS.length);
+        expect(FLOW_UI_HTML_THEME_TOKENS.every((name) => name in FLOW_UI_HTML_THEME_FALLBACKS)).toBe(true);
     });
 });

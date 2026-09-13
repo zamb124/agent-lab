@@ -26,6 +26,24 @@ export const FLOW_UI_HTML_THEME_TOKENS = Object.freeze([
     '--flow-ui-accent-muted', '--flow-ui-radius', '--flow-ui-radius-md', '--flow-ui-page-background',
 ]);
 
+/** Тёмная тема хоста: модалка и первый кадр iframe часто ещё без computed tokens. */
+export const FLOW_UI_HTML_THEME_FALLBACKS = Object.freeze({
+    '--flow-ui-text': 'rgba(255, 255, 255, 0.95)',
+    '--flow-ui-heading': 'rgba(255, 255, 255, 0.95)',
+    '--flow-ui-muted': 'rgba(255, 255, 255, 0.45)',
+    '--flow-ui-border': 'rgba(255, 255, 255, 0.1)',
+    '--flow-ui-panel': 'rgba(35, 35, 55, 0.85)',
+    '--flow-ui-surface': 'rgba(35, 35, 55, 0.85)',
+    '--flow-ui-input': 'rgba(0, 0, 0, 0.22)',
+    '--flow-ui-accent': '#99A6F9',
+    '--flow-ui-accent-hover': '#8794F0',
+    '--flow-ui-on-accent': '#0f0f1a',
+    '--flow-ui-accent-muted': 'rgba(153, 166, 249, 0.15)',
+    '--flow-ui-radius': '24px',
+    '--flow-ui-radius-md': '12px',
+    '--flow-ui-page-background': '#16213e',
+});
+
 const BINDING_ATTRIBUTES = new Set(['data-bind', 'data-show']);
 // Разметка, которую HTML-парсер не читает как теги: комментарии, CDATA/декларации/PI
 // и тела raw-text элементов (сами открывающие теги остаются — их атрибуты считаются).
@@ -89,21 +107,38 @@ export function htmlBlockState(block, state) {
     return projection;
 }
 
-export function readThemeTokens(element) {
-    const tokens = {};
-    const sources = [element];
-    if (typeof document !== 'undefined' && document.documentElement && document.documentElement !== element) {
+function themeTokenSources(element) {
+    const sources = [];
+    const seen = new Set();
+    let node = element;
+    while (node && !seen.has(node)) {
+        seen.add(node);
+        sources.push(node);
+        if (typeof document !== 'undefined' && node === document.documentElement) break;
+        if (node.parentElement) {
+            node = node.parentElement;
+            continue;
+        }
+        const root = typeof node.getRootNode === 'function' ? node.getRootNode() : null;
+        node = root instanceof ShadowRoot ? root.host : null;
+    }
+    if (typeof document !== 'undefined' && document.documentElement && !seen.has(document.documentElement)) {
         sources.push(document.documentElement);
     }
+    return sources;
+}
+
+export function readThemeTokens(element) {
+    const tokens = {};
+    const sources = themeTokenSources(element);
     for (const name of FLOW_UI_HTML_THEME_TOKENS) {
+        let value = '';
         for (const source of sources) {
             if (!source || typeof getComputedStyle !== 'function') continue;
-            const value = getComputedStyle(source).getPropertyValue(name).trim();
-            if (value !== '') {
-                tokens[name] = value;
-                break;
-            }
+            value = getComputedStyle(source).getPropertyValue(name).trim();
+            if (value !== '') break;
         }
+        tokens[name] = value !== '' ? value : FLOW_UI_HTML_THEME_FALLBACKS[name];
     }
     return tokens;
 }
@@ -115,6 +150,7 @@ function themeCss(tokens) {
     return `:root{${declarations.join(';')}}`;
 }
 
+/** Высота кадра — ``scrollHeight``: ``getBoundingClientRect`` html часто равен вьюпорту iframe и залипает на min-height. */
 const BOOTSTRAP = `
 (() => {
   const listeners = new Set();
@@ -133,7 +169,7 @@ const BOOTSTRAP = `
       el.hidden = !present(walk(state, el.getAttribute('data-show')));
     }
   };
-  const resize = () => post({ type: 'resize', height: Math.ceil(document.documentElement.getBoundingClientRect().height) });
+  const resize = () => post({ type: 'resize', height: Math.ceil(Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0, document.documentElement.getBoundingClientRect().height)) });
   window.flowUi = Object.freeze({
     get state() { return state; },
     onChange(cb) { if (typeof cb !== 'function') throw new TypeError('flowUi.onChange expects a function'); listeners.add(cb); return () => listeners.delete(cb); },
@@ -144,7 +180,7 @@ const BOOTSTRAP = `
   });
   window.addEventListener('message', (event) => {
     if (event.source !== parent || !event.data || typeof event.data !== 'object') return;
-    if (event.data.type === 'state') { state = event.data.state && typeof event.data.state === 'object' ? event.data.state : {}; render(); for (const cb of listeners) cb(state); return; }
+    if (event.data.type === 'state') { state = event.data.state && typeof event.data.state === 'object' ? event.data.state : {}; render(); for (const cb of listeners) cb(state); resize(); return; }
     if (event.data.type === 'theme') { const style = document.getElementById('flow-ui-theme'); if (style) style.textContent = event.data.css; }
   });
   window.addEventListener('error', (event) => post({ type: 'error', message: String(event.message || 'error'), stack: event.error && event.error.stack ? String(event.error.stack) : '' }));
@@ -159,7 +195,7 @@ export function buildHtmlSrcdoc({ source, tokens = {} }) {
     return `<!doctype html><html><head><meta charset="utf-8">`
         + `<meta http-equiv="Content-Security-Policy" content="${FLOW_UI_HTML_CSP}">`
         + `<style id="flow-ui-theme">${themeCss(tokens)}</style>`
-        + `<style>html,body{margin:0;background:transparent;color:var(--flow-ui-text,inherit);font:14px/1.45 system-ui,sans-serif}</style>`
+        + `<style>html,body{margin:0;height:auto;background:transparent;color:var(--flow-ui-text,inherit);font:14px/1.45 system-ui,sans-serif}</style>`
         + `<script>${BOOTSTRAP}</script></head><body>${source}</body></html>`;
 }
 

@@ -38,6 +38,7 @@ export const blockStyles = css`
     /* iframe sandbox ест клики — без этого html-блок на холсте нельзя выделить. */
     :host([editing]) flow-ui-html-block { pointer-events: none; }
     img.fu-glyph { display: block; filter: var(--flow-ui-glyph-filter); }
+    svg.fu-glyph { display: block; flex: none; fill: none; stroke: currentColor; }
 
     /* Раскладка */
     .fu-section { display: grid; gap: var(--flow-ui-space-3); }

@@ -186,7 +186,7 @@ describe('platform-flow-ui editing canvas', () => {
         const innerRight = parent.right - parseFloat(style.paddingRight);
         const innerWidth = innerRight - innerLeft;
         const box = block.getBoundingClientRect();
-        expect(style.display).to.equal('flex');
+        expect(style.display).to.equal('grid');
         expect(box.width).to.be.closeTo(innerWidth / 2, innerWidth * 0.08);
         expect(box.left).to.be.greaterThan(innerLeft + innerWidth * 0.3);
         expect(box.right).to.be.closeTo(innerRight, 8);

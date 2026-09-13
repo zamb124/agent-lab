@@ -153,14 +153,14 @@ export class PlatformFlowUI extends LitElement {
         if (this.editing) {
             if (changed.has('initialDocument') && this.initialDocument !== null) this.store.setDocument(this.initialDocument);
             if (changed.has('sampleState')) this.store.setState(this.sampleState ?? {});
-            this._syncEditingPage();
+            this._syncHostPage();
             return;
         }
         if (!this.client) return;
         if (changed.has('initialDocument') && this.initialDocument !== null && this._status === 'ready') {
             this.store.setDocument(this.initialDocument);
-            return;
         }
+        if (changed.has('pageId')) this._syncHostPage();
         const target = this.client.target;
         const hostContextId = typeof this.contextId === 'string' ? this.contextId.trim() : '';
         const drift = (changed.has('flowId') && (this.flowId || '') !== (target.flowId || ''))
@@ -201,15 +201,19 @@ export class PlatformFlowUI extends LitElement {
         if (this.initialDocument === null) throw new Error('platform-flow-ui: editing requires initialDocument');
         this.store.setState(this.sampleState ?? {});
         this.store.setDocument(this.initialDocument);
-        this._syncEditingPage();
+        this._syncHostPage();
         this._status = 'ready';
     }
 
-    /** Вкладка страницы редактора — после setDocument: store ещё может держать предыдущий pageId. */
-    _syncEditingPage() {
-        if (!this.editing || this.pageId === '' || this.store.document === null) return;
+    /** Вкладка страницы редактора — после setDocument store ещё может держать start_page_id. */
+    _syncHostPage() {
+        if (this.pageId === '' || this.store.document === null) return;
         if (this.store.pageId === this.pageId || !this.store.page(this.pageId)) return;
         this.store.navigate(this.pageId);
+    }
+
+    _fitsDocument() {
+        return this.editing === true || this.initialDocument !== null;
     }
 
     async _start() {
@@ -258,6 +262,7 @@ export class PlatformFlowUI extends LitElement {
             }
             if (generation !== this._generation || this.client !== client) return;
             this.contextId = client.contextId;
+            this._syncHostPage();
             this._status = 'ready';
             this._emit('flow-ui-ready', { contextId: client.contextId });
             this._emit('flow-ui-identity-changed', { image_url: this._identityImageUrl() });
@@ -561,7 +566,9 @@ export class PlatformFlowUI extends LitElement {
         }
         const page = this.store.page(this.store.pageId);
         const chromeMode = this._chromeMode();
+        const fitDocument = this._fitsDocument();
         this.setAttribute('data-chrome', chromeMode);
+        this.setAttribute('data-fit', fitDocument ? 'document' : 'viewport');
         const topActions = this._topActions(chromeMode, locale);
         const showTopbar = chromeMode === 'full' || topActions !== nothing;
         const settings = this.store.conversationSettings();
@@ -582,7 +589,7 @@ export class PlatformFlowUI extends LitElement {
             </header>` : nothing}
             <main class="viewport">
                 ${this._waitingBanner(locale)}
-                <flow-ui-page .host=${this} .page=${page} .selectedBlockId=${this.editing ? this.selectedBlockId : ''} ?editing=${this.editing} ?show-title=${chromeMode !== 'full' && !pageFillsViewport(page)}></flow-ui-page>
+                <flow-ui-page .host=${this} .page=${page} .selectedBlockId=${this.editing ? this.selectedBlockId : ''} ?editing=${this.editing} ?fluid=${fitDocument} ?show-title=${chromeMode !== 'full' && !pageFillsViewport(page)}></flow-ui-page>
                 ${this._hostComposer(locale, page)}
             </main>
             ${chromeMode === 'full' ? html`<footer class="statusbar"><span class="status"><span class="dot ${this.store.error ? 'error' : ''}"></span>${statusLabel}</span></footer>` : nothing}

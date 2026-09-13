@@ -174,7 +174,10 @@ export const platformFlowUIStyles = css`
         }
         :host([editing]),
         :host([editing]) .shell,
-        :host([editing]) .viewport {
+        :host([editing]) .viewport,
+        :host([data-fit='document']),
+        :host([data-fit='document']) .shell,
+        :host([data-fit='document']) .viewport {
             height: auto;
             min-height: 0;
             overflow: visible;
@@ -332,20 +335,31 @@ export const platformFlowUIStyles = css`
             border-radius: inherit;
             overflow: hidden;
         }
+        :host([data-fit='document'][display="panel"]) .shell,
+        :host([data-fit='document'][display="drawer"]) .shell,
+        :host([data-fit='document'][display="inline"]) .shell {
+            overflow: visible;
+        }
         /*
-         * Editing canvas: chrome none/minimal otherwise forces .viewport to height 100%
-         * and clips the page to the visible card. Grow with the document; .canvas scrolls.
+         * Editing canvas and interface-editor live test: chrome none/minimal otherwise
+         * forces .viewport to height 100% and clips html/form blocks. Grow with the
+         * document; the editor .canvas scrolls.
          */
         :host([editing][data-chrome="none"]) .shell,
         :host([editing][data-chrome="minimal"]) .shell,
         :host([editing][data-chrome="none"]) .viewport,
-        :host([editing][data-chrome="minimal"]) .viewport {
+        :host([editing][data-chrome="minimal"]) .viewport,
+        :host([data-fit='document'][data-chrome="none"]) .shell,
+        :host([data-fit='document'][data-chrome="minimal"]) .shell,
+        :host([data-fit='document'][data-chrome="none"]) .viewport,
+        :host([data-fit='document'][data-chrome="minimal"]) .viewport {
             height: auto;
             min-height: 0;
             overflow: visible;
             flex: none;
         }
-        :host([editing]) flow-ui-page {
+        :host([editing]) flow-ui-page,
+        :host([data-fit='document']) flow-ui-page {
             flex: none;
             height: auto;
             min-height: 0;

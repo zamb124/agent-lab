@@ -96,8 +96,7 @@ export class FlowsInterfaceEditor extends PlatformElement {
         .canvas { position: relative; min-width: 0; min-height: 0; overflow: auto; padding: 28px 24px 120px; background:
             radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--text-tertiary) 22%, transparent) 1px, transparent 0) 0 0 / 22px 22px; }
         .frame { position: relative; margin: 0 auto; min-height: 480px; border-radius: 16px; border: 1px solid var(--border-subtle); background: var(--bg-primary); box-shadow: var(--shadow-lg); transition: width 180ms ease; overflow: visible; }
-        .frame platform-flow-ui { display: block; height: auto; border-radius: inherit; overflow: visible; }
-        .frame[data-preview='true'] platform-flow-ui { height: 720px; overflow: hidden; }
+        .frame platform-flow-ui { display: block; height: auto; min-height: 480px; border-radius: inherit; overflow: visible; }
         .selection { position: absolute; pointer-events: none; border: 2px solid var(--flow-ui-editor-select); border-radius: 8px; z-index: 3; }
         .selection .label { position: absolute; top: -26px; left: -2px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px 6px 6px 0; background: var(--flow-ui-editor-select); color: var(--flow-ui-editor-label-fg); font-size: 11px; font-weight: 650; white-space: nowrap; pointer-events: auto; }
         .selection .label .handle { cursor: grab; display: inline-grid; place-items: center; }
@@ -281,10 +280,25 @@ export class FlowsInterfaceEditor extends PlatformElement {
     _blockMenuAction(blockId, action) {
         this._menuOpen = false;
         const pageId = this._ui.value.pageId;
+        if (action === 'edit_html') { this._openHtmlEditor(blockId); return; }
         if (action === 'duplicate') this._commit(duplicateBlock(this._draft, pageId, blockId));
         else if (action === 'wrap') this._commit(wrapInSection(this._draft, pageId, blockId));
         else if (action === 'remove') this._remove(blockId);
         else throw new Error(`interface editor: unknown block action ${action}`);
+    }
+
+    _openHtmlEditor(blockId) {
+        const { block } = locateBlock(this._page, blockId);
+        if (block.type !== 'html') throw new Error('interface editor: edit_html requires html block');
+        const statePaths = statePathCatalog({ dataflow: this._editor.state.dataflow, sampleState: this._sampleState, document: this._draft })
+            .filter((entry) => !entry.protected).map((entry) => entry.path);
+        this.openModal('flows.interface_html_editor', {
+            source: typeof block.source === 'string' ? block.source : '',
+            block,
+            sampleState: this._sampleState,
+            statePaths,
+            onApply: (source) => this._setProperty(block.block_id, 'source', source),
+        });
     }
 
     _pageCommand(event) {
@@ -478,6 +492,7 @@ export class FlowsInterfaceEditor extends PlatformElement {
         if (frame === null || blockId === '' || this._page === null) return nothing;
         const { block } = locateBlock(this._page, blockId);
         const items = [
+            ...(block.type === 'html' ? [{ id: 'edit_html', label: this.t('interface_editor.html_open_editor'), icon: 'code' }] : []),
             { id: 'duplicate', label: this.t('interface_editor.block_duplicate'), icon: 'copy', hint: '⌘D' },
             { id: 'wrap', label: this.t('interface_editor.block_wrap_section'), icon: 'square' },
             { id: 'remove', label: this.t('interface_editor.block_remove'), icon: 'trash', hint: '⌫', danger: true },
@@ -556,7 +571,7 @@ export class FlowsInterfaceEditor extends PlatformElement {
                     @scroll=${() => this._scheduleFrame()}>
                     <div class="frame" data-preview=${ui.preview ? 'true' : 'false'} style=${`width:min(100%, ${EDITOR_VIEWPORTS[ui.viewport]}px)`}>
                         ${ui.preview
-                            ? html`<platform-flow-ui profile="editor_test" display="panel" theme="auto" flow-id=${this.flowId} branch-id=${this.branchId} base-url="/flows" .initialDocument=${draft}></platform-flow-ui>`
+                            ? html`<platform-flow-ui profile="editor_test" display="panel" theme="auto" flow-id=${this.flowId} branch-id=${this.branchId} page-id=${ui.pageId} base-url="/flows" .initialDocument=${draft}></platform-flow-ui>`
                             : html`<platform-flow-ui editing theme="auto" flow-id=${this.flowId} page-id=${ui.pageId} .initialDocument=${draft} .sampleState=${this._sampleState}
                                 selected-block-id=${ui.selectedBlockId}
                                 @flow-ui-navigation=${(event) => { if (event.detail.pageId !== ui.pageId) this._ui.selectPage({ pageId: event.detail.pageId }); }}></platform-flow-ui>`}

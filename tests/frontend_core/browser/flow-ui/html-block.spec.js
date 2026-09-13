@@ -6,7 +6,7 @@
 
 import { elementUpdated, expect, fixture, fixtureCleanup, html, waitUntil } from '../helpers/render.js';
 import '@platform/lib/flow-ui/blocks/html.js';
-import { FLOW_UI_HTML_CSP, FLOW_UI_HTML_MIN_HEIGHT, FLOW_UI_HTML_SANDBOX, readThemeTokens } from '@platform/lib/flow-ui/runtime/html-sandbox.js';
+import { FLOW_UI_HTML_CSP, FLOW_UI_HTML_MIN_HEIGHT, FLOW_UI_HTML_SANDBOX, FLOW_UI_HTML_THEME_FALLBACKS, readThemeTokens } from '@platform/lib/flow-ui/runtime/html-sandbox.js';
 
 function htmlBlock(source, { field = null, height = 'auto', fields = [] } = {}) {
     return { block_id: 'custom', type: 'html', visible_when: null, source, height, fields, field };
@@ -90,6 +90,14 @@ describe('flow-ui-html-block', function () {
         holder.remove();
     });
 
+    it('reports content height even when an overflow:hidden ancestor is shorter than the document', async () => {
+        const wrap = await fixture(html`<div style="height:40px;overflow:hidden;width:640px">
+            <flow-ui-html-block .block=${htmlBlock('<p>title</p><div style="height:96px">pad</div>')} .state=${{}}></flow-ui-html-block>
+        </div>`);
+        const element = wrap.querySelector('flow-ui-html-block');
+        await waitUntil(() => element._height > 40, 'iframe stayed at the clipped host height', { timeout: 4000 });
+    });
+
     it('keeps author placeholder text when the bound path is missing from state', async () => {
         const probes = [];
         const source = '<h3 id="t" data-bind="title">Заголовок</h3>'
@@ -117,13 +125,25 @@ describe('flow-ui-html-block', function () {
         expect(element.renderRoot.querySelector('iframe').srcdoc).to.contain('<p data-bind="title"></p>');
     });
 
-    it('readThemeTokens falls back to documentElement when the host has no tokens', () => {
+    it('writes srcdoc on the first paint so a later portal cannot clear a blank iframe', async () => {
+        const { iframe } = await mount(htmlBlock('<p id="card">hello-card</p>'));
+        expect(iframe.srcdoc).to.contain('<p id="card">hello-card</p>');
+        expect(iframe.srcdoc).to.contain(`--flow-ui-text:${FLOW_UI_HTML_THEME_FALLBACKS['--flow-ui-text']}`);
+    });
+
+    it('readThemeTokens prefers an ancestor token over the dark fallbacks', () => {
         document.documentElement.style.setProperty('--flow-ui-text', 'rgb(1, 2, 3)');
         const host = document.createElement('div');
         try {
             expect(readThemeTokens(host)['--flow-ui-text']).to.equal('rgb(1, 2, 3)');
+            expect(readThemeTokens(host)['--flow-ui-surface']).to.equal(FLOW_UI_HTML_THEME_FALLBACKS['--flow-ui-surface']);
         } finally {
             document.documentElement.style.removeProperty('--flow-ui-text');
         }
+    });
+
+    it('readThemeTokens fills missing tokens with dark fallbacks', () => {
+        const host = document.createElement('div');
+        expect(readThemeTokens(host)['--flow-ui-surface']).to.equal(FLOW_UI_HTML_THEME_FALLBACKS['--flow-ui-surface']);
     });
 });

@@ -9,8 +9,18 @@ import { FLOW_UI_API, fieldControlKind, fieldEditorValue, parseFieldEditorValue,
 // static i18nNamespace = 'flows'; host modal passes t()
 
 export const htmlEditorInspectorStyles = css`
-    .inspector { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; border-top: 1px solid var(--border-subtle); }
-    .inspector .tabs { padding: 6px 0 8px; }
+    .inspector {
+        display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0;
+        position: relative; z-index: 1; isolation: isolate; overflow: hidden;
+        background: var(--bg-elevated, var(--glass-solid-medium, #253659));
+        border-top: 1px solid var(--border-subtle);
+        border-radius: 0 0 var(--radius-md) var(--radius-md);
+        padding: 0 var(--space-2) var(--space-2);
+        box-sizing: border-box;
+    }
+    .inspector .tabs { padding: 6px 0 8px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .inspector .tabs .inspector-tabs { flex: 1; min-width: 0; }
+    .inspector .tabs .collapse { flex-shrink: 0; }
     .inspector .body { min-height: 0; overflow: auto; display: grid; gap: 8px; }
     .inspector .fields { display: grid; gap: 8px; }
     .inspector .hint { font-size: 11px; color: var(--text-tertiary); }
@@ -54,7 +64,7 @@ function renderStateFields({ paths, state, t, onField }) {
 
 export function renderHtmlEditorInspector({
     tab, stateMode, paths, bindError, state, stateText, stateError, log, writes,
-    t, onTab, onStateMode, onStateText, onField, onClear, onToken,
+    t, onTab, onStateMode, onStateText, onField, onClear, onToken, onCollapse, collapseDisabled,
 }) {
     const items = [
         { value: 'state', label: t('interface_editor.html_inspector_state'), indicator: stateError !== '' },
@@ -63,12 +73,18 @@ export function renderHtmlEditorInspector({
     ];
     return html`<section class="inspector">
         <div class="tabs">
-            <platform-segmented-control density="compact" .value=${tab} .items=${items} aria-label=${t('interface_editor.html_inspector')}
+            <platform-segmented-control class="inspector-tabs" density="compact" .value=${tab} .items=${items} aria-label=${t('interface_editor.html_inspector')}
                 @change=${(event) => onTab(event.detail.value)}></platform-segmented-control>
+            <platform-button ghost density="compact" class="collapse" data-collapse="inspector"
+                ?disabled=${collapseDisabled === true}
+                title=${t('interface_editor.html_panel_hide', { name: t('interface_editor.html_panel_inspector') })}
+                @click=${onCollapse}>
+                <platform-icon name="minimize" size="13"></platform-icon>
+            </platform-button>
         </div>
         <div class="body">
             ${tab === 'state' ? html`
-                <platform-segmented-control density="compact" .value=${stateMode}
+                <platform-segmented-control class="state-mode" density="compact" .value=${stateMode}
                     .items=${[{ value: 'fields', label: t('interface_editor.html_state_fields') }, { value: 'json', label: t('interface_editor.html_state_json') }]}
                     @change=${(event) => onStateMode(event.detail.value)}></platform-segmented-control>
                 ${stateError !== '' ? html`<div class="badge">${t('interface_editor.html_state_invalid')}: ${stateError}</div>` : nothing}
@@ -79,7 +95,7 @@ export function renderHtmlEditorInspector({
             ` : nothing}
             ${tab === 'events' ? html`
                 <div class="hint">${t('interface_editor.html_log_readonly_hint')}</div>
-                <div class="toolbar"><platform-button ghost density="dense" ?disabled=${log.length === 0} @click=${onClear}>${t('interface_editor.html_log_clear')}</platform-button></div>
+                <div class="toolbar"><platform-button ghost density="dense" data-log-clear ?disabled=${log.length === 0} @click=${onClear}>${t('interface_editor.html_log_clear')}</platform-button></div>
                 <div class="log">
                     ${log.length === 0 ? html`<div class="empty">${t('interface_editor.html_log_empty')}</div>`
                         : log.map((entry) => html`<div class="entry" data-kind=${entry.kind}>${entry.text}</div>`)}

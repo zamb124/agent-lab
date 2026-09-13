@@ -197,6 +197,25 @@ describe('flows-interface-editor', () => {
         expect(inserted.fields).to.deep.equal(['items']);
     });
 
+    it('opens the html editor from the canvas menu with the block source', async () => {
+        const element = await mountEditor();
+        paletteItem(element, 'html').click();
+        await elementUpdated(element);
+        const canvas = element.renderRoot.querySelector('platform-flow-ui');
+        await waitUntil(() => blockElement(canvas, 'html') !== null, 'html block did not render');
+        await waitUntil(() => element.renderRoot.querySelector('.kebab') !== null, 'selection menu missing');
+        const opened = [];
+        element.openModal = (kind, props) => { opened.push({ kind, props }); };
+        element.renderRoot.querySelector('.kebab').click();
+        await elementUpdated(element);
+        element.renderRoot.querySelector('platform-menu').dispatchEvent(new CustomEvent('menu-select', { detail: { id: 'edit_html' }, bubbles: true, composed: true }));
+        expect(opened[0].kind).to.equal('flows.interface_html_editor');
+        expect(opened[0].props.source).to.equal(flowsEn.interface_editor.default_text_html_source);
+        opened[0].props.onApply('<p>from-menu</p>');
+        await elementUpdated(element);
+        expect(editorState().history.present.pages[0].blocks.find((block) => block.type === 'html').source).to.equal('<p>from-menu</p>');
+    });
+
     it('uploads an agent identity icon and writes the file URL into the draft', async () => {
         const element = await mountEditor();
         paletteItem(element, 'agent_identity').click();
@@ -272,6 +291,35 @@ describe('flows-interface-editor', () => {
         await waitUntil(() => canvas._status === 'ready', 'test chat did not open the interface');
         expect(canvas.client).to.not.equal(null);
         expect(blockElement(canvas, 'title')).to.not.equal(null);
+    });
+
+    it('keeps an inserted html block visible in the live test frame', async () => {
+        fetchMock.respondJson('GET', (url) => url.includes('/flows/api/v1/flow-1/interface'), {
+            flow_id: 'flow-1',
+            branch_id: 'default',
+            document: INTERFACE,
+            viewer: { can_edit_flow: true, can_interact: true, can_share: false, auth_mode: 'platform' },
+            look: null,
+            capabilities: { cancel: true, files: false, voice: false },
+            flow_identity: { title: 'Flow', image_url: null },
+        });
+        const element = await mountEditor();
+        paletteItem(element, 'html').click();
+        await elementUpdated(element);
+        await waitUntil(() => blockElement(element.renderRoot.querySelector('platform-flow-ui'), 'html') !== null, 'html block did not insert');
+        element.renderRoot.querySelector('flows-interface-toolbar').dispatchEvent(new CustomEvent('editor-preview', { detail: { preview: true } }));
+        await elementUpdated(element);
+        const canvas = element.renderRoot.querySelector('platform-flow-ui');
+        expect(canvas.hasAttribute('editing')).to.equal(false);
+        await waitUntil(() => canvas._status === 'ready', 'test chat did not open the interface');
+        await waitUntil(() => blockElement(canvas, 'html') !== null, 'html block disappeared in test');
+        const host = blockElement(canvas, 'html').querySelector('flow-ui-html-block');
+        await waitUntil(() => host.getBoundingClientRect().height > 80, 'html block collapsed in test', { timeout: 4000 });
+        const frame = element.renderRoot.querySelector('.frame').getBoundingClientRect();
+        const box = host.getBoundingClientRect();
+        expect(box.top).to.be.at.least(frame.top - 2);
+        expect(box.bottom).to.be.at.most(frame.bottom + 2);
+        expect(canvas.store.document.pages[0].blocks.some((block) => block.type === 'html')).to.equal(true);
     });
 
     it('grows the white frame with the form instead of clipping the last button', async () => {

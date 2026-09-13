@@ -111,22 +111,30 @@ export const conversationStyles = css`
         background: var(--flow-ui-code-bg); color: var(--flow-ui-text-secondary);
     }
     .bubble-observability-actions {
-        display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px;
-        opacity: 1; transition: opacity 120ms cubic-bezier(0.4, 0, 0.2, 1);
+        display: flex; align-items: center; flex-wrap: wrap; gap: 2px;
+        margin-top: 4px; margin-left: -6px;
+        opacity: 1; transition: opacity 160ms ease;
     }
     @media (hover: hover) and (pointer: fine) {
         .bubble.assistant .bubble-observability-actions { opacity: 0; }
         .bubble.assistant:hover .bubble-observability-actions,
         .bubble.assistant:focus-within .bubble-observability-actions { opacity: 1; }
     }
-    .tracing-btn, .copy-btn {
-        border: 1px solid transparent; background: transparent; color: var(--flow-ui-muted);
-        border-radius: var(--flow-ui-radius-full, 9999px); padding: 4px 10px;
-        font: inherit; font-size: var(--flow-ui-font-size-xs, 12px); cursor: pointer;
-        display: inline-flex; align-items: center; gap: 5px; transition: var(--flow-ui-transition);
+    .msg-action {
+        width: 32px; height: 32px; padding: 0; margin: 0; border: 0; flex: none;
+        border-radius: 8px; background: transparent; color: var(--flow-ui-muted);
+        display: inline-grid; place-items: center; cursor: pointer;
+        transition: background-color 120ms ease, color 120ms ease;
     }
-    .tracing-btn:hover, .copy-btn:hover { color: var(--flow-ui-text); background: var(--flow-ui-surface-hover); }
-    .tracing-btn:focus-visible, .copy-btn:focus-visible { outline: none; box-shadow: var(--flow-ui-focus-ring); }
+    .msg-action:hover {
+        color: var(--flow-ui-text); background: color-mix(in srgb, var(--flow-ui-text) 8%, transparent);
+    }
+    .msg-action:active {
+        background: color-mix(in srgb, var(--flow-ui-text) 12%, transparent);
+    }
+    .msg-action:focus-visible { outline: none; box-shadow: var(--flow-ui-focus-ring); }
+    .msg-action .fu-glyph { display: block; }
+    .copy-btn[data-copied] { color: var(--flow-ui-success); }
     .typing {
         align-self: flex-start; display: inline-flex; align-items: center; gap: 5px;
         padding: 8px 14px; border-radius: var(--flow-ui-radius-full, 9999px);
@@ -180,6 +188,6 @@ export const conversationStyles = css`
     @media (prefers-reduced-motion: reduce) {
         .task-feed { scroll-behavior: auto; }
         .streaming::after, .typing i { animation: none; }
-        .composer, .icon-btn, .tracing-btn, .copy-btn, .bubble-observability-actions { transition: none; }
+        .composer, .icon-btn, .msg-action, .bubble-observability-actions { transition: none; }
     }
 `;

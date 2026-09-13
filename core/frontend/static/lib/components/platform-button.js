@@ -10,6 +10,8 @@ export class PlatformButton extends PlatformElement {
     static styles = css`
         :host {
             display: inline-flex;
+            max-width: 100%;
+            box-sizing: border-box;
         }
 
         :host([icon-only]) {
@@ -27,12 +29,14 @@ export class PlatformButton extends PlatformElement {
         :host([block]) button {
             width: 100%;
             max-width: 100%;
+            min-width: 0;
             justify-content: flex-start;
             white-space: normal;
             text-align: left;
             border-radius: var(--radius-md);
+            overflow: hidden;
         }
-        
+
         button {
             display: inline-flex;
             align-items: center;
@@ -49,6 +53,14 @@ export class PlatformButton extends PlatformElement {
             transition: var(--motion-transition-interactive);
             white-space: nowrap;
             box-sizing: border-box;
+            min-width: 0;
+            max-width: 100%;
+        }
+
+        button ::slotted(span) {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         :host([density="compact"]) button {

@@ -40,13 +40,13 @@ function pageWith(blocks) {
     return { page_id: 'main', title: 'Main', blocks };
 }
 
-async function mountPanel(block, { page = null, pages = null, problems = [], statePaths = [], sampleState = {} } = {}) {
+async function mountPanel(block, { page = null, pages = null, problems = [], statePaths = [], sampleState = {}, width = 360 } = {}) {
     const resolvedPage = page ?? pageWith(block === null ? [] : [block]);
     const document = { start_page_id: 'main', pages: pages ?? [resolvedPage] };
     const element = await fixture(html`<flows-interface-properties-panel
         .block=${block} .page=${resolvedPage} .document=${document} .catalog=${catalog} .schema=${schema}
         .frozen=${frozen} .statePaths=${statePaths} .sampleState=${sampleState} .problems=${problems}
-        style="display:block;width:360px"
+        style=${`display:block;width:${width}px`}
     ></flows-interface-properties-panel>`);
     await elementUpdated(element);
     return element;
@@ -224,21 +224,18 @@ describe('flows-interface-properties-panel', function () {
         expect(await fieldChanged(htmlPanel, heightBoxFixed.querySelectorAll('platform-field')[1], 480)).to.deep.equal({ blockId: 'card', property: 'height', value: 480 });
         expect(htmlPanel.renderRoot.querySelector('.html-preview')).to.exist;
         expect(htmlPanel.renderRoot.querySelector('.html-source platform-code-editor')).to.equal(null);
-        expect(buttonByText(htmlPanel, T.html_open_editor)).to.exist;
+        expect(htmlPanel.renderRoot.querySelector('.html-open')).to.exist;
+        expect(htmlPanel.renderRoot.querySelector('.html-open').textContent).to.contain(T.html_open_editor);
+        expect(htmlPanel.renderRoot.querySelector('.head').nextElementSibling.classList.contains('html-open')).to.equal(true);
+        expect(htmlPanel.renderRoot.querySelector('.html-source platform-button')).to.equal(null);
     });
 
-    it('applies html source to the block that opened the editor', async () => {
+    it('opens the html editor from the top control for the selected block', async () => {
         const htmlBlock = defaultBlock(catalogEntry(catalog, 'html'), 'card', labels);
         const element = await mountPanel(htmlBlock);
-        const opened = [];
-        element.openModal = (kind, props) => { opened.push({ kind, props }); };
-        buttonByText(element, T.html_open_editor).click();
-        expect(opened[0].kind).to.equal('flows.interface_html_editor');
-        element.block = defaultBlock(catalogEntry(catalog, 'html'), 'other', labels);
-        await elementUpdated(element);
-        const listened = oneEvent(element, 'property-change');
-        opened[0].props.onApply('<p>saved</p>');
-        expect((await listened).detail).to.deep.equal({ blockId: 'card', property: 'source', value: '<p>saved</p>' });
+        const listened = oneEvent(element, 'block-action');
+        element.renderRoot.querySelector('.html-open').click();
+        expect((await listened).detail).to.deep.equal({ blockId: 'card', action: 'edit_html' });
     });
 
     it('renders block problems next to their property and emits block actions', async () => {
@@ -265,6 +262,17 @@ describe('flows-interface-properties-panel', function () {
             expect((await listened).detail).to.deep.equal({ blockId: 'f', action });
         }
         expect(element.renderRoot.querySelector('[data-action="remove"]').hasAttribute('danger')).to.equal(true);
+    });
+
+    it('keeps block action buttons in separate columns in a narrow sidebar', async () => {
+        const block = defaultBlock(catalogEntry(catalog, 'text_input'), 'name', labels);
+        const element = await mountPanel(block, { width: 280 });
+        await elementUpdated(element);
+        const buttons = [...element.renderRoot.querySelectorAll('.actions platform-button')];
+        expect(buttons).to.have.length(3);
+        const boxes = buttons.map((button) => button.renderRoot.querySelector('button').getBoundingClientRect());
+        expect(boxes[0].right, 'duplicate overlaps wrap').to.be.at.most(boxes[1].left + 1);
+        expect(boxes[1].right, 'wrap overlaps remove').to.be.at.most(boxes[2].left + 1);
     });
 
     it('picks an agent identity image by file instead of a string field', async () => {

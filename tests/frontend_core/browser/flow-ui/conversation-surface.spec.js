@@ -153,4 +153,49 @@ describe('flow-ui conversation surface', () => {
         expect(conversation.hasAttribute('data-empty')).to.equal(false);
         expect(conversation.shadowRoot.querySelector('.typing')).to.not.equal(null);
     });
+
+    it('shows icon-only copy, tracing and logs actions on a settled assistant turn', async () => {
+        const document = {
+            ...CHAT_DOCUMENT,
+            pages: [{
+                ...CHAT_DOCUMENT.pages[0],
+                blocks: [
+                    CHAT_DOCUMENT.pages[0].blocks[0],
+                    {
+                        ...CHAT_DOCUMENT.pages[0].blocks[1],
+                        settings: { ...CHAT_DOCUMENT.pages[0].blocks[1].settings, show_trace_actions: true },
+                    },
+                ],
+            }],
+        };
+        const element = await fixture(html`<platform-flow-ui editing locale="en" .initialDocument=${document}></platform-flow-ui>`);
+        await waitUntil(() => conversationEl(element)?.shadowRoot?.querySelector('.task-feed') !== null, 'feed did not render');
+        element.store.resetContext('c1');
+        element.store.applyFrame({
+            result: {
+                task: {
+                    id: 't1',
+                    contextId: 'c1',
+                    status: { state: 'TASK_STATE_COMPLETED' },
+                    artifacts: [{ artifactId: 'response', name: 'response', parts: [{ text: 'Hello there' }] }],
+                    history: [{ role: 'ROLE_USER', taskId: 't1', parts: [{ text: 'hi' }] }],
+                },
+            },
+        });
+        await elementUpdated(element);
+        const root = conversationEl(element).shadowRoot;
+        const copy = root.querySelector('.copy-btn');
+        const tracing = root.querySelector('.tracing-btn[data-kind="tracing"]');
+        const logs = root.querySelector('.tracing-btn[data-kind="logs"]');
+        expect(copy, 'copy action').to.exist;
+        expect(copy.getAttribute('aria-label')).to.equal('Copy');
+        expect(copy.querySelector('svg.fu-glyph path, svg.fu-glyph rect'), 'copy stroke icon').to.exist;
+        expect(copy.textContent.trim()).to.equal('');
+        expect(tracing.getAttribute('aria-label')).to.equal('Tracing');
+        expect(tracing.querySelector('svg.fu-glyph path, svg.fu-glyph circle, svg.fu-glyph line'), 'tracing stroke icon').to.exist;
+        expect(logs.getAttribute('aria-label')).to.equal('Logs');
+        expect(logs.querySelector('svg.fu-glyph path'), 'logs stroke icon').to.exist;
+        expect(getComputedStyle(copy).width).to.equal('32px');
+        expect(getComputedStyle(copy).borderRadius).to.equal('8px');
+    });
 });
