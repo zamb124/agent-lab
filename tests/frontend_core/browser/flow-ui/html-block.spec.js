@@ -90,6 +90,18 @@ describe('flow-ui-html-block', function () {
         holder.remove();
     });
 
+    it('keeps author placeholder text when the bound path is missing from state', async () => {
+        const probes = [];
+        const source = '<h3 id="t" data-bind="title">Заголовок</h3>'
+            + '<script>flowUi.onChange(() => { flowUi.send("probe", { text: document.getElementById("t").textContent }); });</script>';
+        await mount(htmlBlock(source), {
+            state: {},
+            onAction: (_name, payload) => probes.push(payload),
+        });
+        await waitUntil(() => probes.length > 0, 'bind probe did not arrive', { timeout: 4000 });
+        expect(probes[0].text).to.equal('Заголовок');
+    });
+
     it('reload() rebuilds srcdoc even when source is unchanged', async () => {
         const { element } = await mount(
             htmlBlock('<p data-bind="title"></p><div style="height:48px">pad</div>'),

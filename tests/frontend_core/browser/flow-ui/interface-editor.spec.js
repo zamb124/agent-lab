@@ -183,6 +183,20 @@ describe('flows-interface-editor', () => {
         expect(detail.config.pages[0].blocks.map((block) => block.type)).to.deep.equal(['heading', 'text_input', 'button']);
     });
 
+    it('publishes an inserted html block with its source', async () => {
+        const element = await mountEditor();
+        paletteItem(element, 'html').click();
+        await elementUpdated(element);
+        const canvas = element.renderRoot.querySelector('platform-flow-ui');
+        await waitUntil(() => blockElement(canvas, 'html') !== null, 'html block did not render');
+        const published = oneEvent(element, 'interface-change');
+        element.renderRoot.querySelector('flows-interface-toolbar').dispatchEvent(new CustomEvent('editor-publish'));
+        const { detail } = await published;
+        const inserted = detail.config.pages[0].blocks.find((block) => block.type === 'html');
+        expect(inserted.source).to.equal(flowsEn.interface_editor.default_text_html_source);
+        expect(inserted.fields).to.deep.equal(['items']);
+    });
+
     it('uploads an agent identity icon and writes the file URL into the draft', async () => {
         const element = await mountEditor();
         paletteItem(element, 'agent_identity').click();

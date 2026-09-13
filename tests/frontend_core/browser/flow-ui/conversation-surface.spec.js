@@ -123,6 +123,23 @@ describe('flow-ui conversation surface', () => {
         expect(conversation.scrollHeight).to.be.at.most(conversation.clientHeight + 2);
     });
 
+    it('does not fill the viewport when a conversation page has an html sibling', async () => {
+        const document = {
+            ...CHAT_DOCUMENT,
+            pages: [{
+                ...CHAT_DOCUMENT.pages[0],
+                blocks: [
+                    ...CHAT_DOCUMENT.pages[0].blocks,
+                    { block_id: 'card', type: 'html', visible_when: null, source: '<p>hello</p>', height: 'auto', fields: [], field: 'card' },
+                ],
+            }],
+        };
+        const element = await fixture(html`<platform-flow-ui editing locale="en" .initialDocument=${document}></platform-flow-ui>`);
+        await waitUntil(() => conversationEl(element) !== null && pageRenderRoot(element)?.querySelector('.page') !== null, 'page did not render');
+        expect(pageRenderRoot(element).querySelector('.page').getAttribute('data-fill')).to.equal('false');
+        expect(blockElement(element, 'card')).to.not.equal(null);
+    });
+
     it('keeps the user bubble on the right after a local pending turn', async () => {
         const element = await fixture(html`<platform-flow-ui editing locale="en" .initialDocument=${CHAT_DOCUMENT}></platform-flow-ui>`);
         await waitUntil(() => conversationEl(element)?.shadowRoot?.querySelector('.task-feed') !== null, 'feed did not render');

@@ -227,6 +227,20 @@ describe('flows-interface-properties-panel', function () {
         expect(buttonByText(htmlPanel, T.html_open_editor)).to.exist;
     });
 
+    it('applies html source to the block that opened the editor', async () => {
+        const htmlBlock = defaultBlock(catalogEntry(catalog, 'html'), 'card', labels);
+        const element = await mountPanel(htmlBlock);
+        const opened = [];
+        element.openModal = (kind, props) => { opened.push({ kind, props }); };
+        buttonByText(element, T.html_open_editor).click();
+        expect(opened[0].kind).to.equal('flows.interface_html_editor');
+        element.block = defaultBlock(catalogEntry(catalog, 'html'), 'other', labels);
+        await elementUpdated(element);
+        const listened = oneEvent(element, 'property-change');
+        opened[0].props.onApply('<p>saved</p>');
+        expect((await listened).detail).to.deep.equal({ blockId: 'card', property: 'source', value: '<p>saved</p>' });
+    });
+
     it('renders block problems next to their property and emits block actions', async () => {
         const block = { ...defaultBlock(catalogEntry(catalog, 'text_input'), 'f', labels), field: 'task_id' };
         const element = await mountPanel(block, {

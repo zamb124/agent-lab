@@ -88,6 +88,8 @@ describe('buildHtmlSrcdoc', () => {
         expect(srcdoc).toContain('window.flowUi = Object.freeze({');
         expect(srcdoc.indexOf('</script></head><body><h1 data-bind="title"></h1></body></html>')).toBeGreaterThan(0);
         expect(srcdoc.endsWith('</body></html>')).toBe(true);
+        expect(srcdoc).toContain('if (!originals.has(el)) originals.set(el, el.textContent)');
+        expect(srcdoc).toContain('value === undefined || value === null ? originals.get(el)');
     });
 
     it('keeps only css custom property names and strips angle brackets from values', () => {

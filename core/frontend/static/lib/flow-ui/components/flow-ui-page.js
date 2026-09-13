@@ -7,8 +7,11 @@ import { LitElement, css, html, nothing } from '../../lit-shim.js';
 import { blockStyles, renderBlocks } from '../blocks/registry.js';
 import { blockText } from '../runtime/templating.js';
 
+/** Чат на весь экран только если на странице нет других блоков: иначе overflow:hidden их срезает. */
 export function pageFillsViewport(page) {
-    return Array.isArray(page.blocks) && page.blocks.some((block) => block.type === 'conversation');
+    return Array.isArray(page.blocks)
+        && page.blocks.some((block) => block.type === 'conversation')
+        && page.blocks.every((block) => block.type === 'conversation' || block.type === 'agent_identity');
 }
 
 export class FlowUIPage extends LitElement {

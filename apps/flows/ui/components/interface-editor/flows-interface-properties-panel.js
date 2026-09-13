@@ -127,8 +127,8 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
         this.problems = [];
     }
 
-    _change(property, value) {
-        this.emit('property-change', { blockId: this.block.block_id, property, value });
+    _change(property, value, blockId = this.block.block_id) {
+        this.emit('property-change', { blockId, property, value });
     }
 
     _pageChange(property, value) {
@@ -391,10 +391,13 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
         const preview = String(value ?? '').split('\n').slice(0, 8).join('\n');
         return html`<div class="html-source">
             <div class="sub-title"><span>${this._label('source')}</span>
-                <platform-button secondary density="compact" @click=${() => this.openModal('flows.interface_html_editor', {
-                    source: value, block: this.block, sampleState: this.sampleState, statePaths: this._pathSuggestions(),
-                    onApply: (source) => this._change('source', source),
-                })}><platform-icon name="fullscreen" size="13"></platform-icon>${this.t('interface_editor.html_open_editor')}</platform-button>
+                <platform-button secondary density="compact" @click=${() => {
+                    const blockId = this.block.block_id;
+                    this.openModal('flows.interface_html_editor', {
+                        source: value, block: this.block, sampleState: this.sampleState, statePaths: this._pathSuggestions(),
+                        onApply: (source) => this._change('source', source, blockId),
+                    });
+                }}><platform-icon name="fullscreen" size="13"></platform-icon>${this.t('interface_editor.html_open_editor')}</platform-button>
             </div>
             <pre class="html-preview">${preview}</pre>
             <div class="hint">${this.t('interface_editor.html_hint')}</div>

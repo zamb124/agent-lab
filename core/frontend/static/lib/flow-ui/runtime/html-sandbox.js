@@ -118,14 +118,16 @@ function themeCss(tokens) {
 const BOOTSTRAP = `
 (() => {
   const listeners = new Set();
+  const originals = new WeakMap();
   let state = {};
   const post = (message) => parent.postMessage(message, '*');
   const walk = (value, path) => path.split('.').reduce((acc, key) => (acc && typeof acc === 'object' ? acc[key] : undefined), value);
   const present = (value) => value !== undefined && value !== null && value !== '' && value !== false && !(Array.isArray(value) && value.length === 0);
   const render = () => {
     for (const el of document.querySelectorAll('[data-bind]')) {
+      if (!originals.has(el)) originals.set(el, el.textContent);
       const value = walk(state, el.getAttribute('data-bind'));
-      el.textContent = value === undefined || value === null ? '' : (typeof value === 'object' ? JSON.stringify(value) : String(value));
+      el.textContent = value === undefined || value === null ? originals.get(el) : (typeof value === 'object' ? JSON.stringify(value) : String(value));
     }
     for (const el of document.querySelectorAll('[data-show]')) {
       el.hidden = !present(walk(state, el.getAttribute('data-show')));
