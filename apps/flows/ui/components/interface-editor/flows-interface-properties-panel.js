@@ -11,7 +11,6 @@ import { css, html, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-variable-input.js';
-import '@platform/lib/components/platform-code-editor.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import { INPUT_BLOCK_TYPES } from '@platform/lib/flow-ui/protocol/constants.js';
@@ -58,10 +57,20 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
         .contract { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-subtle); display: grid; gap: 6px; font-size: 12px; color: var(--text-secondary); }
         .contract .title { font-weight: 650; color: var(--text-primary); }
         .contract code { color: var(--text-primary); }
-        .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
+        .actions {
+            display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px;
+            margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border-subtle);
+        }
+        .actions platform-button { width: 100%; min-width: 0; }
+        .actions platform-button span { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .empty { padding: 32px 8px; text-align: center; color: var(--text-tertiary); font-size: 12.5px; }
         .html-source { display: grid; gap: 6px; }
-        .html-source platform-code-editor { --code-editor-min-height: 160px; border: 1px solid var(--border-subtle); border-radius: 10px; overflow: hidden; }
+        .html-source .html-preview {
+            margin: 0; max-height: 8.5em; overflow: hidden; padding: 8px 10px;
+            border: 1px solid var(--border-subtle); border-radius: 10px;
+            font-size: 11.5px; font-family: var(--font-mono); color: var(--text-secondary);
+            white-space: pre-wrap; background: var(--glass-solid-subtle);
+        }
         .hint { font-size: 11px; color: var(--text-tertiary); }
         .image-field { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--glass-solid-subtle); }
         .image-row { display: flex; align-items: center; gap: 10px; }
@@ -80,16 +89,11 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
             display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px; padding: 3px;
             border-radius: 999px; border: 1px solid var(--border-subtle); background: var(--glass-solid-subtle);
         }
-        .align-picker button {
-            display: grid; place-items: center; min-height: 32px; margin: 0; padding: 0; border: 0; border-radius: 999px;
-            background: transparent; color: var(--text-secondary); cursor: pointer;
-        }
-        .align-picker button:hover { color: var(--text-primary); background: var(--glass-solid-medium); }
-        .align-picker button[aria-pressed='true'] {
-            background: var(--accent-subtle); color: var(--accent);
+        .align-picker platform-button { width: 100%; min-width: 0; color: var(--text-secondary); }
+        .align-picker platform-button[aria-pressed='true'] {
+            background: var(--accent-subtle); color: var(--accent); border-radius: 999px;
             box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
         }
-        .align-picker button:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent); }
         .align-glyph { width: 16px; height: 14px; display: grid; gap: 2px; pointer-events: none; }
         .align-glyph i { display: block; background: currentColor; border-radius: 1px; }
         .align-glyph[data-axis='align'] { align-content: center; }
@@ -344,6 +348,12 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
         if (input instanceof HTMLInputElement) input.click();
     }
 
+    _onImagePreviewKey(event) {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        this._pickImage();
+    }
+
     _onImageFile(name, event) {
         const input = event.currentTarget;
         const file = input.files && input.files[0];
@@ -361,9 +371,10 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
         return html`<div class="image-field">
             <div class="sub-title"><span>${this._label(name)}</span></div>
             <div class="image-row">
-                <button type="button" class="image-preview" aria-label=${this.t('interface_editor.image_upload')} @click=${() => this._pickImage()}>
+                <article class="image-preview" role="button" tabindex="0" aria-label=${this.t('interface_editor.image_upload')}
+                    @click=${() => this._pickImage()} @keydown=${(event) => this._onImagePreviewKey(event)}>
                     ${url !== '' ? html`<img src=${url} alt="">` : html`<platform-icon name="image" size="22"></platform-icon>`}
-                </button>
+                </article>
                 <div class="image-actions">
                     <input type="file" accept="image/*" class="visually-hidden" data-image-input @change=${(event) => this._onImageFile(name, event)}>
                     <platform-button secondary density="compact" @click=${() => this._pickImage()}>
@@ -377,6 +388,7 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
     }
 
     _htmlSource(value) {
+        const preview = String(value ?? '').split('\n').slice(0, 8).join('\n');
         return html`<div class="html-source">
             <div class="sub-title"><span>${this._label('source')}</span>
                 <platform-button secondary density="compact" @click=${() => this.openModal('flows.interface_html_editor', {
@@ -384,7 +396,7 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
                     onApply: (source) => this._change('source', source),
                 })}><platform-icon name="fullscreen" size="13"></platform-icon>${this.t('interface_editor.html_open_editor')}</platform-button>
             </div>
-            <platform-code-editor language="html" line-wrapping .value=${value} @change=${(event) => this._change('source', event.detail.value)}></platform-code-editor>
+            <pre class="html-preview">${preview}</pre>
             <div class="hint">${this.t('interface_editor.html_hint')}</div>
         </div>`;
     }
@@ -399,12 +411,12 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
         return html`<div class="align-field" data-align-axis=${axis}>
             <div class="align-label">${this._label(axis)}</div>
             <div class="align-picker" role="group" aria-label=${this._label(axis)}>
-                ${items.map((item) => html`<button type="button" data-value=${item.value}
+                ${items.map((item) => html`<platform-button ghost density="compact" data-value=${item.value}
                     aria-pressed=${current === item.value ? 'true' : 'false'}
                     aria-label=${item.title} title=${item.title}
                     @click=${() => this._change(axis, item.value)}>
                     <span class="align-glyph" data-axis=${axis} data-value=${item.value}><i></i><i></i><i></i></span>
-                </button>`)}
+                </platform-button>`)}
             </div>
             ${axis === 'valign' ? html`<div class="hint">${this.t('interface_editor.prop_valign_hint')}</div>` : nothing}
         </div>`;
@@ -471,6 +483,24 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
         </div>`;
     }
 
+    _blockAction(action) {
+        this.emit('block-action', { blockId: this.block.block_id, action });
+    }
+
+    _renderBlockActions() {
+        const items = [
+            { action: 'duplicate', icon: 'copy', caption: this.t('interface_editor.block_duplicate'), label: this.t('interface_editor.block_duplicate') },
+            { action: 'wrap', icon: 'square', caption: this.t('interface_editor.block_wrap'), label: this.t('interface_editor.block_wrap_section') },
+            { action: 'remove', icon: 'trash', caption: this.t('interface_editor.block_remove'), label: this.t('interface_editor.block_remove'), danger: true },
+        ];
+        return html`<div class="actions" role="group" aria-label=${this.t('interface_editor.block_menu')}>
+            ${items.map((item) => html`<platform-button ghost density="compact" data-action=${item.action} ?danger=${item.danger === true}
+                title=${item.label} aria-label=${item.label} @click=${() => this._blockAction(item.action)}>
+                <platform-icon name=${item.icon} size="15"></platform-icon><span>${item.caption}</span>
+            </platform-button>`)}
+        </div>`;
+    }
+
     render() {
         if (this.page === null) return html`<div class="empty">${this.t('interface_editor.properties_empty')}</div>`;
         if (this.block === null) return html`${this._renderPage()}${this._renderContract()}`;
@@ -483,11 +513,7 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
                 ${this._problemsFor('block_id')}
                 ${entry.properties.filter((property) => !HIDDEN_PROPERTIES.has(property.name) && property.name !== 'block_id').map((property) => html`${this._editor(property)}${this._problemsFor(property.name)}`)}
             </div>
-            <div class="actions">
-                <platform-button secondary density="compact" @click=${() => this.emit('block-action', { blockId: this.block.block_id, action: 'duplicate' })}><platform-icon name="copy" size="13"></platform-icon>${this.t('interface_editor.block_duplicate')}</platform-button>
-                <platform-button secondary density="compact" @click=${() => this.emit('block-action', { blockId: this.block.block_id, action: 'wrap' })}><platform-icon name="square" size="13"></platform-icon>${this.t('interface_editor.block_wrap_section')}</platform-button>
-                <platform-button danger density="compact" @click=${() => this.emit('block-action', { blockId: this.block.block_id, action: 'remove' })}><platform-icon name="trash" size="13"></platform-icon>${this.t('interface_editor.block_remove')}</platform-button>
-            </div>
+            ${this._renderBlockActions()}
             ${this._renderContract()}
         `;
     }

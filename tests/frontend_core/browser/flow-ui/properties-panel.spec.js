@@ -222,7 +222,8 @@ describe('flows-interface-properties-panel', function () {
         await elementUpdated(htmlPanel);
         const heightBoxFixed = [...htmlPanel.renderRoot.querySelectorAll('.sub')].find((box) => box.querySelector('.sub-title span').textContent === T.prop_height);
         expect(await fieldChanged(htmlPanel, heightBoxFixed.querySelectorAll('platform-field')[1], 480)).to.deep.equal({ blockId: 'card', property: 'height', value: 480 });
-        expect(htmlPanel.renderRoot.querySelector('platform-code-editor')).to.exist;
+        expect(htmlPanel.renderRoot.querySelector('.html-preview')).to.exist;
+        expect(htmlPanel.renderRoot.querySelector('.html-source platform-code-editor')).to.equal(null);
         expect(buttonByText(htmlPanel, T.html_open_editor)).to.exist;
     });
 
@@ -243,9 +244,13 @@ describe('flows-interface-properties-panel', function () {
         ]);
         for (const action of ['duplicate', 'wrap', 'remove']) {
             const listened = oneEvent(element, 'block-action');
-            buttonByText(element, T[`block_${action === 'wrap' ? 'wrap_section' : action}`]).click();
+            const button = element.renderRoot.querySelector(`[data-action="${action}"]`);
+            expect(button, action).to.exist;
+            expect(button.tagName).to.equal('PLATFORM-BUTTON');
+            button.click();
             expect((await listened).detail).to.deep.equal({ blockId: 'f', action });
         }
+        expect(element.renderRoot.querySelector('[data-action="remove"]').hasAttribute('danger')).to.equal(true);
     });
 
     it('picks an agent identity image by file instead of a string field', async () => {
@@ -297,10 +302,10 @@ describe('flows-interface-properties-panel', function () {
         expect(vertical).to.not.equal(null);
         expect(horizontal.querySelectorAll('.align-glyph i').length).to.equal(9);
         const changed = oneEvent(element, 'property-change');
-        horizontal.querySelector('button[data-value="center"]').click();
+        horizontal.querySelector('[data-value="center"]').click();
         expect((await changed).detail).to.deep.equal({ blockId: 'h', property: 'align', value: 'center' });
         const valign = oneEvent(element, 'property-change');
-        vertical.querySelector('button[data-value="end"]').click();
+        vertical.querySelector('[data-value="end"]').click();
         expect((await valign).detail).to.deep.equal({ blockId: 'h', property: 'valign', value: 'end' });
     });
 

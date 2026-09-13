@@ -1,4 +1,4 @@
-"""Ревизия 20260910_0035: DataTable из A2UI становится блоком data_table."""
+"""Ревизия 20260910_0035: DataTable становится блоком data_table."""
 
 from __future__ import annotations
 

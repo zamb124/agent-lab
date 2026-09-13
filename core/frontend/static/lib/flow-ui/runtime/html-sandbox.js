@@ -91,10 +91,19 @@ export function htmlBlockState(block, state) {
 
 export function readThemeTokens(element) {
     const tokens = {};
-    const computed = getComputedStyle(element);
+    const sources = [element];
+    if (typeof document !== 'undefined' && document.documentElement && document.documentElement !== element) {
+        sources.push(document.documentElement);
+    }
     for (const name of FLOW_UI_HTML_THEME_TOKENS) {
-        const value = computed.getPropertyValue(name).trim();
-        if (value !== '') tokens[name] = value;
+        for (const source of sources) {
+            if (!source || typeof getComputedStyle !== 'function') continue;
+            const value = getComputedStyle(source).getPropertyValue(name).trim();
+            if (value !== '') {
+                tokens[name] = value;
+                break;
+            }
+        }
     }
     return tokens;
 }

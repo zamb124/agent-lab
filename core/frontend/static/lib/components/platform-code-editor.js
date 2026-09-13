@@ -379,6 +379,19 @@ export class PlatformCodeEditor extends PlatformElement {
         });
     }
 
+    insertAtCursor(text) {
+        const insert = typeof text === 'string' ? text : '';
+        if (this._editorView && this._cm) {
+            this._editorView.dispatch(this._editorView.state.replaceSelection(insert));
+            const next = this._editorView.state.doc.toString();
+            this.value = next;
+            this.emit('change', { value: next });
+            return;
+        }
+        this.value = `${this.value}${insert}`;
+        this.emit('change', { value: this.value });
+    }
+
     render() {
         return html`
             <div class="editor-root">

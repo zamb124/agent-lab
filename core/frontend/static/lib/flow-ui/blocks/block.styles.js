@@ -35,6 +35,8 @@ export const blockStyles = css`
     :host([editing]) .fu-button,
     :host([editing]) .fu-link,
     :host([editing]) .fu-prompts button { pointer-events: none; }
+    /* iframe sandbox ест клики — без этого html-блок на холсте нельзя выделить. */
+    :host([editing]) flow-ui-html-block { pointer-events: none; }
     img.fu-glyph { display: block; filter: var(--flow-ui-glyph-filter); }
 
     /* Раскладка */

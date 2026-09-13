@@ -5,7 +5,7 @@
 
 import { elementUpdated, expect, fixture, fixtureCleanup, html, waitUntil } from '../helpers/render.js';
 import '@platform/lib/flow-ui/components/platform-flow-ui.js';
-import { blockElement, pageRenderRoot } from '@platform/lib/flow-ui/editor/selection.js';
+import { blockElement, blockIdFromEvent, pageRenderRoot } from '@platform/lib/flow-ui/editor/selection.js';
 
 const DOCUMENT = {
     start_page_id: 'main',
@@ -306,5 +306,32 @@ describe('platform-flow-ui editing canvas', () => {
         const control = blockElement(element, 'next').querySelector('.fu-button');
         expect(control.getAttribute('data-page-id')).to.equal('done');
         expect(control.hasAttribute('data-action')).to.equal(false);
+    });
+
+    it('lets the author select an html block whose iframe would otherwise eat clicks', async () => {
+        const document = {
+            start_page_id: 'main',
+            pages: [{
+                page_id: 'main',
+                title: '',
+                blocks: [{
+                    block_id: 'card', type: 'html', visible_when: null,
+                    source: '<p data-bind="title"></p><div style="height:48px">pad</div>',
+                    height: 'auto', fields: [], field: null,
+                }],
+            }],
+        };
+        const element = await fixture(html`<platform-flow-ui editing locale="en" style="display:block;width:1100px" .initialDocument=${document} .sampleState=${{ title: 'Hi' }}></platform-flow-ui>`);
+        await waitUntil(() => blockElement(element, 'card') !== null, 'html block did not render');
+        const block = blockElement(element, 'card');
+        const host = block.querySelector('flow-ui-html-block');
+        expect(getComputedStyle(host).pointerEvents).to.equal('none');
+        await waitUntil(() => host.getBoundingClientRect().height > 0, 'html host has no size');
+        const box = host.getBoundingClientRect();
+        const hit = pageRenderRoot(element).elementFromPoint(box.left + Math.min(24, box.width / 2), box.top + 8);
+        expect(hit?.closest('.fu-block')?.dataset.blockId).to.equal('card');
+        const event = new MouseEvent('click', { bubbles: true, composed: true });
+        Object.defineProperty(event, 'composedPath', { value: () => [hit, block] });
+        expect(blockIdFromEvent(event)).to.equal('card');
     });
 });

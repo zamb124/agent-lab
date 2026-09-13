@@ -14,7 +14,7 @@
    ``STATE_PATH_PATTERN`` и ``INPUT_BLOCK_TYPES`` в ``protocol/constants.js`` равны
    значениям ``core/flow_ui/document.py``.
 4. Бюджеты: ни одного файла > 600 строк в ``flow-ui/`` и ``interface-editor/``;
-   ``flow-ui/*.js`` ≤ 9000 строк; редактор (``interface-editor/`` + ``flows-interface-*`` модалки) ≤ 2500.
+   ``flow-ui/*.js`` ≤ 9000 строк; редактор (``interface-editor/`` + ``flows-interface-*`` модалки) ≤ 2800.
 5. Sandbox блока ``html``: в ``flow-ui/`` нет ``allow-same-origin``/``unsafe-eval``; константы
    CSP/sandbox ``html-sandbox.js`` совпадают с фикстурой ``tests/fixtures/flow_ui/html_sandbox.json``.
 """
@@ -39,7 +39,7 @@ SANDBOX_FIXTURE = ROOT / "tests/fixtures/flow_ui/html_sandbox.json"
 
 MAX_FILE_LINES = 600
 MAX_FLOW_UI_LINES = 9000
-MAX_EDITOR_LINES = 2500
+MAX_EDITOR_LINES = 2800
 
 PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     (

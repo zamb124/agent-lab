@@ -6,7 +6,7 @@
 
 import { elementUpdated, expect, fixture, fixtureCleanup, html, waitUntil } from '../helpers/render.js';
 import '@platform/lib/flow-ui/blocks/html.js';
-import { FLOW_UI_HTML_CSP, FLOW_UI_HTML_MIN_HEIGHT, FLOW_UI_HTML_SANDBOX } from '@platform/lib/flow-ui/runtime/html-sandbox.js';
+import { FLOW_UI_HTML_CSP, FLOW_UI_HTML_MIN_HEIGHT, FLOW_UI_HTML_SANDBOX, readThemeTokens } from '@platform/lib/flow-ui/runtime/html-sandbox.js';
 
 function htmlBlock(source, { field = null, height = 'auto', fields = [] } = {}) {
     return { block_id: 'custom', type: 'html', visible_when: null, source, height, fields, field };
@@ -74,5 +74,44 @@ describe('flow-ui-html-block', function () {
         const { element } = await mount(htmlBlock('<script>throw new Error("boom")</script>'));
         await waitUntil(() => element.renderRoot.querySelector('.error') !== null, 'error was not reported', { timeout: 4000 });
         expect(element.renderRoot.querySelector('.error').textContent).to.contain('boom');
+    });
+
+    it('reattaches the sandbox after the host is moved in the document', async () => {
+        const { element } = await mount(
+            htmlBlock('<p data-bind="title"></p><div style="height:72px">pad</div>'),
+            { state: { title: 'Hi' } },
+        );
+        await waitUntil(() => element._height > FLOW_UI_HTML_MIN_HEIGHT, 'iframe did not report its height', { timeout: 4000 });
+        const holder = document.createElement('div');
+        document.body.appendChild(holder);
+        holder.appendChild(element);
+        await waitUntil(() => element._bridge !== null, 'bridge was not reattached after move');
+        await waitUntil(() => element._height > FLOW_UI_HTML_MIN_HEIGHT, 'iframe did not report height after move', { timeout: 4000 });
+        holder.remove();
+    });
+
+    it('reload() rebuilds srcdoc even when source is unchanged', async () => {
+        const { element } = await mount(
+            htmlBlock('<p data-bind="title"></p><div style="height:48px">pad</div>'),
+            { state: { title: 'Hi' } },
+        );
+        element.reload();
+        await elementUpdated(element);
+        await waitUntil(
+            () => (element.renderRoot.querySelector('iframe')?.srcdoc || '').includes('<!--r1-->'),
+            'reload did not rewrite srcdoc',
+            { timeout: 4000 },
+        );
+        expect(element.renderRoot.querySelector('iframe').srcdoc).to.contain('<p data-bind="title"></p>');
+    });
+
+    it('readThemeTokens falls back to documentElement when the host has no tokens', () => {
+        document.documentElement.style.setProperty('--flow-ui-text', 'rgb(1, 2, 3)');
+        const host = document.createElement('div');
+        try {
+            expect(readThemeTokens(host)['--flow-ui-text']).to.equal('rgb(1, 2, 3)');
+        } finally {
+            document.documentElement.style.removeProperty('--flow-ui-text');
+        }
     });
 });

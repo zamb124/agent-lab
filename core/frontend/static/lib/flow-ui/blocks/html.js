@@ -1,6 +1,7 @@
 /**
  * Блок ``html``: ``<flow-ui-html-block>`` держит iframe sandbox и мост. Новый ``source`` —
  * новый ``srcdoc``; новое состояние — сообщение ``state`` без перезагрузки iframe.
+ * Мост вешается при каждом подключении: модалка-портал в ``document.body`` перезагружает iframe.
  */
 
 import { css, html, LitElement } from '../../lit-shim.js';
@@ -27,8 +28,11 @@ export class FlowUIHtmlBlock extends LitElement {
     };
 
     static styles = css`
-        :host { display: block; }
-        iframe { display: block; width: 100%; border: 0; border-radius: var(--flow-ui-radius-md, 12px); background: transparent; }
+        :host { display: block; min-height: var(--flow-ui-html-min-height, 0); }
+        iframe {
+            display: block; width: 100%; min-height: var(--flow-ui-html-min-height, 0);
+            border: 0; border-radius: var(--flow-ui-radius-md, 12px); background: transparent;
+        }
         .error { margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--error, #ff718d) 14%, transparent); color: var(--error, #ff718d); font-size: 12px; white-space: pre-wrap; font-family: var(--font-mono); }
     `;
 
@@ -46,16 +50,57 @@ export class FlowUIHtmlBlock extends LitElement {
         this._bridge = null;
         this._srcdoc = '';
         this._sourceKey = '';
+        this._reloadSeq = 0;
+        this._onFrameLoad = () => this.pushHost();
+    }
+
+    /** Тема и state в уже загруженный iframe; безопасна при битых ``data-bind``. */
+    pushHost() {
+        if (this._bridge === null || this.block === null) return;
+        this._bridge.sendTheme(readThemeTokens(this));
+        try {
+            this._bridge.sendState(htmlBlockState(this.block, this.state));
+        } catch (error) {
+            this._error = error.message;
+        }
+    }
+
+    /** Принудительный новый ``srcdoc`` даже при том же ``source`` (зависший скрипт автора). */
+    reload() {
+        this._reloadSeq += 1;
+        this._sourceKey = '';
+        this._refreshSrcdoc();
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        if (this.hasUpdated) this._bindFrame();
     }
 
     disconnectedCallback() {
+        this._unbindFrame();
         super.disconnectedCallback();
-        if (this._bridge) this._bridge.dispose();
-        this._bridge = null;
     }
 
     firstUpdated() {
-        const iframe = this.renderRoot.querySelector('iframe');
+        this._bindFrame();
+        this._refreshSrcdoc();
+    }
+
+    updated(changed) {
+        if (!this._bridge) return;
+        if (changed.has('block')) this._refreshSrcdoc();
+        if (changed.has('state') || changed.has('block')) this.pushHost();
+    }
+
+    _iframe() {
+        return this.renderRoot.querySelector('iframe');
+    }
+
+    _bindFrame() {
+        const iframe = this._iframe();
+        if (!(iframe instanceof HTMLIFrameElement)) return;
+        this._unbindFrame();
         this._bridge = new HtmlSandboxBridge({
             iframe,
             onAction: (name, payload) => {
@@ -78,22 +123,20 @@ export class FlowUIHtmlBlock extends LitElement {
                 this._emit('error', error);
             },
             onOpenUrl: (url) => {
-                if (typeof this.onOpenUrl !== 'function') throw new Error('flow-ui: html block has no open_url handler');
                 this._emit('open_url', { url });
+                if (this.readonly) return;
+                if (typeof this.onOpenUrl !== 'function') throw new Error('flow-ui: html block has no open_url handler');
                 this.onOpenUrl(url);
             },
         });
-        iframe.addEventListener('load', () => {
-            this._bridge.sendTheme(readThemeTokens(this));
-            this._bridge.sendState(htmlBlockState(this.block, this.state));
-        });
-        this._refreshSrcdoc();
+        iframe.addEventListener('load', this._onFrameLoad);
     }
 
-    updated(changed) {
-        if (!this._bridge) return;
-        if (changed.has('block')) this._refreshSrcdoc();
-        if (changed.has('state') || changed.has('block')) this._bridge.sendState(htmlBlockState(this.block, this.state));
+    _unbindFrame() {
+        const iframe = this._iframe();
+        if (iframe) iframe.removeEventListener('load', this._onFrameLoad);
+        if (this._bridge) this._bridge.dispose();
+        this._bridge = null;
     }
 
     _emit(kind, detail) {
@@ -105,7 +148,8 @@ export class FlowUIHtmlBlock extends LitElement {
         if (key === this._sourceKey) return;
         this._sourceKey = key;
         this._error = '';
-        this._srcdoc = buildHtmlSrcdoc({ source: this.block.source, tokens: readThemeTokens(this) });
+        const stamp = this._reloadSeq > 0 ? `<!--r${this._reloadSeq}-->` : '';
+        this._srcdoc = `${buildHtmlSrcdoc({ source: this.block.source, tokens: readThemeTokens(this) })}${stamp}`;
         this.requestUpdate();
     }
 
