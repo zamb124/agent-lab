@@ -52,7 +52,7 @@ async def test_flow_ui_interface_editor_opens_with_canvas_and_problems(
         await flows_open_interface_editor_workspace(page, flows_ui, flow_id)
         editor = page.locator("flows-interface-editor").first
         await expect(editor).to_be_visible(timeout=30_000)
-        toolbar = editor.locator("flows-interface-toolbar")
+        toolbar = page.locator("flow-editor-page flows-interface-toolbar")
         await expect(toolbar).to_be_visible(timeout=30_000)
         await expect(
             toolbar.get_by_role("button", name=re.compile(r"^\s*(Undo|Отменить)\s*$"))
@@ -60,8 +60,10 @@ async def test_flow_ui_interface_editor_opens_with_canvas_and_problems(
         await expect(
             toolbar.get_by_role("button", name=re.compile(r"^\s*(Redo|Повторить)\s*$"))
         ).to_be_visible(timeout=10_000)
-        await expect(toolbar.locator(".status")).to_have_attribute("data-dirty", "false")
-        await expect(toolbar.locator(".status")).to_have_attribute("data-errors", "false")
+        await expect(toolbar.locator(".status")).to_have_count(0)
+        await expect(page.locator("flows-editor-header .status-badge")).to_have_count(1)
+        await expect(page.locator("flows-editor-header [data-action='publish']")).to_have_count(1)
+        await expect(toolbar.locator("platform-button").filter(has_text=re.compile(r"^\s*(Publish|Опубликовать)\s*$"))).to_have_count(0)
         await expect(editor.locator(INTERFACE_PAGE_TAB_SELECTOR)).to_have_count(1, timeout=30_000)
         await expect(editor.locator("flows-interface-add-panel").first).to_be_visible(timeout=30_000)
         # Шаблон чата по умолчанию рендерится тем же <platform-flow-ui>, что и runtime.
@@ -74,6 +76,7 @@ async def test_flow_ui_interface_editor_opens_with_canvas_and_problems(
         await flows_switch_editor_workspace(page, "logic")
         await expect(page.locator("flows-flow-canvas").first).to_be_visible(timeout=30_000)
         await expect(page.locator("flows-interface-editor")).to_have_count(0)
+        await expect(page.locator("flow-editor-page flows-interface-toolbar")).to_have_count(0)
 
         await flows_switch_editor_workspace(page, "run")
         await expect(page.locator("flow-editor-page platform-flow-ui").first).to_be_visible(

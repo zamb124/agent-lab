@@ -106,6 +106,11 @@ def test_free_model_policy_is_explicit_for_every_provider():
     assert LLM_FREE_MODEL_DISCOVERY_POLICY_BY_PROVIDER["openrouter"] == "zero_price_catalog"
     assert LLM_FREE_MODEL_DISCOVERY_POLICY_BY_PROVIDER["bothub"] == "zero_price_catalog"
     assert LLM_FREE_MODEL_DISCOVERY_POLICY_BY_PROVIDER["groq"] == "account_free_tier"
+    assert LLM_FREE_MODEL_DISCOVERY_POLICY_BY_PROVIDER["cerebras"] == "account_free_tier"
+    assert LLM_FREE_MODEL_DISCOVERY_POLICY_BY_PROVIDER["nvidia"] == "account_free_tier"
+    assert LLM_FREE_MODEL_DISCOVERY_POLICY_BY_PROVIDER["mistral"] == "account_free_tier"
+    assert LLM_FREE_MODEL_DISCOVERY_POLICY_BY_PROVIDER["zai"] == "account_free_tier"
+    assert LLM_FREE_MODEL_DISCOVERY_POLICY_BY_PROVIDER["sambanova"] == "account_free_tier"
     assert PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS == (
         ZERO_PRICE_LLM_PROVIDER_SLUGS | ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS
     )
@@ -216,3 +221,187 @@ def test_resolve_provider_api_keys_filters_empty_and_placeholders():
     )
     keys = resolve_provider_api_keys(llm, "openrouter")
     assert keys == ["sk-main", "sk-extra"]
+
+
+def test_platform_free_candidate_order_includes_new_account_free_tier_providers():
+    assert PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER == (
+        "openrouter",
+        "bothub",
+        "groq",
+        "cerebras",
+        "google",
+        "github",
+        "huggingface",
+        "nvidia",
+        "mistral",
+        "zai",
+        "sambanova",
+    )
+    assert ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS == frozenset(
+        {
+            "groq",
+            "cerebras",
+            "google",
+            "github",
+            "huggingface",
+            "nvidia",
+            "mistral",
+            "zai",
+            "sambanova",
+        }
+    )
+
+
+def test_llm_provider_block_covers_every_openai_compat_slug():
+    from core.config.llm_openai_compat import llm_provider_block
+    from core.config.models import LLMConfig
+
+    llm = LLMConfig()
+    for slug in OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER:
+        block = llm_provider_block(llm, slug)
+        assert block is None
+
+
+def test_llm_provider_block_rejects_unknown_slug():
+    from core.config.llm_openai_compat import llm_provider_block
+    from core.config.models import LLMConfig
+
+    with pytest.raises(ValueError, match="не поддержан для OpenAI-совместимого API"):
+        llm_provider_block(LLMConfig(), "cloudflare")
+
+
+def test_placeholder_api_key_is_not_configured_for_free_pool():
+    from core.config.llm_openai_compat import provider_is_configured_for_free_pool
+    from core.config.models import GroqProviderConfig, LLMConfig, NvidiaProviderConfig
+
+    llm = LLMConfig(
+        groq=GroqProviderConfig(api_key="YOUR_GROQ_API_KEY"),
+        nvidia=NvidiaProviderConfig(api_key="YOUR_NVIDIA_API_KEY", api_keys=["YOUR_NVIDIA_API_KEY"]),
+    )
+    assert provider_is_configured_for_free_pool(llm, "groq") is False
+    assert provider_is_configured_for_free_pool(llm, "nvidia") is False
+
+
+def test_conf_json_openai_compat_blocks_match_specs():
+    import json
+    from pathlib import Path
+
+    from core.ai.providers import (
+        LLM_PROVIDER_DEFAULT_BASE_URLS,
+        LLM_PROVIDER_DEFAULT_MODELS_URLS,
+        LLM_PROVIDER_SMOKE_MODELS,
+    )
+
+    conf_path = Path(__file__).resolve().parents[3] / "conf.json"
+    payload = json.loads(conf_path.read_text(encoding="utf-8"))
+    llm = payload["llm"]
+    for slug in OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER:
+        if slug == "openai":
+            continue
+        assert slug in llm, f"conf.json llm.{slug} отсутствует"
+        block = llm[slug]
+        assert block["base_url"] == LLM_PROVIDER_DEFAULT_BASE_URLS[slug]
+        if slug != "yandex":
+            assert block["models_url"] == LLM_PROVIDER_DEFAULT_MODELS_URLS[slug]
+        if slug in ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS:
+            assert block["smoke_model"] == LLM_PROVIDER_SMOKE_MODELS[slug]
+
+
+def test_zai_openai_compat_root_keeps_v4_suffix():
+    from core.config.llm_openai_compat import (
+        openai_compat_http_root,
+        resolve_provider_openai_v1_base_url,
+    )
+    from core.config.models import LLMConfig, ZAIProviderConfig
+
+    assert openai_compat_http_root("https://api.z.ai/api/paas/v4/") == "https://api.z.ai/api/paas/v4"
+    assert openai_compat_http_root(
+        "https://generativelanguage.googleapis.com/v1beta/openai"
+    ) == "https://generativelanguage.googleapis.com/v1beta/openai"
+    llm = LLMConfig(zai=ZAIProviderConfig(api_key="sk-zai"))
+    assert resolve_provider_openai_v1_base_url(llm, "zai") == "https://api.z.ai/api/paas/v4"
+
+
+def test_candidate_supports_request_vision_and_json():
+    from core.ai.llm_config import LLMCallConfig
+    from core.clients.llm.candidates import candidate_supports_request
+
+    text_only = LLMCallConfig(
+        provider="groq",
+        model="text-only",
+        source="platform_free",
+        input_modalities=frozenset({"text"}),
+        supported_parameters=frozenset({"temperature"}),
+        capability_metadata_verified=True,
+    )
+    vision = text_only.model_copy(
+        update={"input_modalities": frozenset({"text", "image"})}
+    )
+    json_schema = text_only.model_copy(
+        update={"supported_parameters": frozenset({"json_schema"})}
+    )
+    structured = text_only.model_copy(
+        update={"supported_parameters": frozenset({"structured_outputs"})}
+    )
+    assert (
+        candidate_supports_request(
+            text_only, has_files=True, has_tools=False, has_response_format=False
+        )
+        is False
+    )
+    assert (
+        candidate_supports_request(
+            vision, has_files=True, has_tools=False, has_response_format=False
+        )
+        is True
+    )
+    assert (
+        candidate_supports_request(
+            text_only, has_files=False, has_tools=False, has_response_format=True
+        )
+        is False
+    )
+    assert (
+        candidate_supports_request(
+            json_schema, has_files=False, has_tools=False, has_response_format=True
+        )
+        is True
+    )
+    assert (
+        candidate_supports_request(
+            structured, has_files=False, has_tools=False, has_response_format=True
+        )
+        is True
+    )
+
+
+def test_retry_after_ttl_seconds_http_date():
+    from datetime import datetime, timedelta, timezone
+    from email.utils import format_datetime
+
+    import httpx
+
+    from core.clients.llm.candidate_cooldown import retry_after_ttl_seconds
+
+    future = datetime.now(timezone.utc) + timedelta(seconds=45)
+    response = httpx.Response(
+        429,
+        headers={"Retry-After": format_datetime(future, usegmt=True)},
+        request=httpx.Request("POST", "https://example.test/v1/chat/completions"),
+    )
+    ttl = retry_after_ttl_seconds(response)
+    assert 40 <= ttl <= 50
+
+
+def test_retry_after_ttl_seconds_empty_header_raises():
+    import httpx
+
+    from core.clients.llm.candidate_cooldown import retry_after_ttl_seconds
+
+    response = httpx.Response(
+        429,
+        headers={"Retry-After": "  "},
+        request=httpx.Request("POST", "https://example.test/v1/chat/completions"),
+    )
+    with pytest.raises(ValueError, match="Retry-After header пустой"):
+        retry_after_ttl_seconds(response)

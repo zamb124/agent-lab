@@ -49,12 +49,22 @@ jq -n \
   --arg llmBothubApiKeys "${LLM__BOTHUB__API_KEYS:-}" \
   --arg llmGroqApiKey "${LLM__GROQ__API_KEY:-}" \
   --arg llmGroqApiKeys "${LLM__GROQ__API_KEYS:-}" \
+  --arg llmCerebrasApiKey "${LLM__CEREBRAS__API_KEY:-}" \
+  --arg llmCerebrasApiKeys "${LLM__CEREBRAS__API_KEYS:-}" \
   --arg llmGoogleApiKey "${LLM__GOOGLE__API_KEY:-}" \
   --arg llmGoogleApiKeys "${LLM__GOOGLE__API_KEYS:-}" \
   --arg llmGithubApiKey "${LLM__GITHUB__API_KEY:-}" \
   --arg llmGithubApiKeys "${LLM__GITHUB__API_KEYS:-}" \
   --arg llmHuggingfaceApiKey "${LLM__HUGGINGFACE__API_KEY:-}" \
   --arg llmHuggingfaceApiKeys "${LLM__HUGGINGFACE__API_KEYS:-}" \
+  --arg llmNvidiaApiKey "${LLM__NVIDIA__API_KEY:-}" \
+  --arg llmNvidiaApiKeys "${LLM__NVIDIA__API_KEYS:-}" \
+  --arg llmMistralApiKey "${LLM__MISTRAL__API_KEY:-}" \
+  --arg llmMistralApiKeys "${LLM__MISTRAL__API_KEYS:-}" \
+  --arg llmZaiApiKey "${LLM__ZAI__API_KEY:-}" \
+  --arg llmZaiApiKeys "${LLM__ZAI__API_KEYS:-}" \
+  --arg llmSambanovaApiKey "${LLM__SAMBANOVA__API_KEY:-}" \
+  --arg llmSambanovaApiKeys "${LLM__SAMBANOVA__API_KEYS:-}" \
   --arg llmDeepinfraApiKey "${LLM__DEEPINFRA__API_KEY:-}" \
   --arg llmDeepinfraApiKeys "${LLM__DEEPINFRA__API_KEYS:-}" \
   --arg llmCailaApiKey "${LLM__CAILA__API_KEY:-}" \
@@ -118,12 +128,22 @@ jq -n \
     llmBothubApiKeys: $llmBothubApiKeys,
     llmGroqApiKey: $llmGroqApiKey,
     llmGroqApiKeys: $llmGroqApiKeys,
+    llmCerebrasApiKey: $llmCerebrasApiKey,
+    llmCerebrasApiKeys: $llmCerebrasApiKeys,
     llmGoogleApiKey: $llmGoogleApiKey,
     llmGoogleApiKeys: $llmGoogleApiKeys,
     llmGithubApiKey: $llmGithubApiKey,
     llmGithubApiKeys: $llmGithubApiKeys,
     llmHuggingfaceApiKey: $llmHuggingfaceApiKey,
     llmHuggingfaceApiKeys: $llmHuggingfaceApiKeys,
+    llmNvidiaApiKey: $llmNvidiaApiKey,
+    llmNvidiaApiKeys: $llmNvidiaApiKeys,
+    llmMistralApiKey: $llmMistralApiKey,
+    llmMistralApiKeys: $llmMistralApiKeys,
+    llmZaiApiKey: $llmZaiApiKey,
+    llmZaiApiKeys: $llmZaiApiKeys,
+    llmSambanovaApiKey: $llmSambanovaApiKey,
+    llmSambanovaApiKeys: $llmSambanovaApiKeys,
     llmDeepinfraApiKey: $llmDeepinfraApiKey,
     llmDeepinfraApiKeys: $llmDeepinfraApiKeys,
     llmCailaApiKey: $llmCailaApiKey,

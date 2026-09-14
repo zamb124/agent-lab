@@ -1,6 +1,7 @@
 /**
- * Сохранение flow из редактора: одно место для кнопки «Сохранить» в шапке и «Опубликовать»
- * редактора интерфейса. Тело запроса — ``buildFlowPublishBody`` из состояния ``flows/editor``.
+ * Сохранение flow из редактора: одно место для кнопки «Опубликовать» в шапке
+ * на всех ракурсах. Тело запроса — ``buildFlowPublishBody`` из состояния ``flows/editor``.
+ * UI-черновик коммитится в flowConfig до вызова (``commitDraft`` / slice).
  */
 
 import { buildFlowPublishBody } from './flows-resolvers.js';

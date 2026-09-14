@@ -146,9 +146,14 @@ class TestDetectProvider:
         ("url", "provider"),
         [
             ("https://api.groq.com/openai/v1", "groq"),
+            ("https://api.cerebras.ai/v1", "cerebras"),
             ("https://generativelanguage.googleapis.com/v1beta/openai", "google"),
             ("https://models.github.ai/inference", "github"),
             ("https://router.huggingface.co/v1", "huggingface"),
+            ("https://integrate.api.nvidia.com/v1", "nvidia"),
+            ("https://api.mistral.ai/v1", "mistral"),
+            ("https://api.z.ai/api/paas/v4", "zai"),
+            ("https://api.sambanova.ai/v1", "sambanova"),
             ("https://api.deepinfra.com/v1/openai", "deepinfra"),
         ],
     )
@@ -920,6 +925,7 @@ class TestLLMTransportYandex:
                 mock_settings.return_value.llm.openrouter = None
                 mock_settings.return_value.llm.bothub = None
                 mock_settings.return_value.llm.openai = None
+                mock_settings.return_value.llm.platform_free_pool.enabled = False
                 client = create_transport_llm_client(model_name="yandexgpt")
                 assert isinstance(client, LLMClient)
                 assert client.default_headers["Authorization"] == "Api-Key AQVN-key"
@@ -943,6 +949,7 @@ class TestLLMTransportYandex:
                 mock_settings.return_value.llm.openrouter = None
                 mock_settings.return_value.llm.bothub = None
                 mock_settings.return_value.llm.openai = None
+                mock_settings.return_value.llm.platform_free_pool.enabled = False
                 with pytest.raises(ValueError, match="folder_id"):
                     create_transport_llm_client(model_name="m")
 
@@ -1068,9 +1075,14 @@ class TestGetDefaultBaseUrl:
         ("provider", "url"),
         [
             ("groq", "https://api.groq.com/openai/v1"),
+            ("cerebras", "https://api.cerebras.ai/v1"),
             ("google", "https://generativelanguage.googleapis.com/v1beta/openai"),
             ("github", "https://models.github.ai/inference"),
             ("huggingface", "https://router.huggingface.co/v1"),
+            ("nvidia", "https://integrate.api.nvidia.com/v1"),
+            ("mistral", "https://api.mistral.ai/v1"),
+            ("zai", "https://api.z.ai/api/paas/v4"),
+            ("sambanova", "https://api.sambanova.ai/v1"),
             ("deepinfra", "https://api.deepinfra.com/v1/openai"),
         ],
     )

@@ -10,6 +10,20 @@ import pytest
 _ORIGINAL_ASYNC_CLIENT = httpx.AsyncClient
 
 
+def unread_json_response(
+    request: httpx.Request,
+    status_code: int,
+    body: bytes,
+) -> httpx.Response:
+    """HTTP-ответ со stream-телом, которое ещё не прочитали через aread()."""
+    return httpx.Response(
+        status_code,
+        headers={"content-type": "application/json"},
+        stream=httpx.ByteStream(body),
+        request=request,
+    )
+
+
 def install_mock_httpx_client(
     monkeypatch: pytest.MonkeyPatch,
     handler: Callable[[httpx.Request], httpx.Response],

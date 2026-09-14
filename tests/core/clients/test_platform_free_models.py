@@ -19,17 +19,34 @@ from core.ai.models import AIModelRecord, ArtificialAnalysisIndices
 from core.ai.providers import OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER, AICapability
 from core.ai.scoring import PlatformModelScoreOverlay
 from core.config.base import BaseSettings
+from core.config.models import (
+    CerebrasProviderConfig,
+    GitHubModelsProviderConfig,
+    GoogleLLMProviderConfig,
+    GroqProviderConfig,
+    HuggingFaceProviderConfig,
+    LLMConfig,
+    MistralProviderConfig,
+    NvidiaProviderConfig,
+    SambaNovaProviderConfig,
+    ZAIProviderConfig,
+)
 
 
 def _settings_stub() -> BaseSettings:
     return cast(
         BaseSettings,
         SimpleNamespace(
-            llm=SimpleNamespace(
-                groq=SimpleNamespace(api_key="test-key", smoke_model="llama-3.1-8b-instant"),
-                google=SimpleNamespace(api_key="test-key", smoke_model="gemini-2.5-flash-lite"),
-                github=SimpleNamespace(api_key="test-key", smoke_model="openai/gpt-4o-mini"),
-                huggingface=SimpleNamespace(api_key="test-key", smoke_model="meta-llama/Llama-3.1-8B-Instruct"),
+            llm=LLMConfig(
+                groq=GroqProviderConfig(api_key="test-key"),
+                cerebras=CerebrasProviderConfig(api_key="test-key"),
+                google=GoogleLLMProviderConfig(api_key="test-key"),
+                github=GitHubModelsProviderConfig(api_key="test-key"),
+                huggingface=HuggingFaceProviderConfig(api_key="test-key"),
+                nvidia=NvidiaProviderConfig(api_key="test-key"),
+                mistral=MistralProviderConfig(api_key="test-key"),
+                zai=ZAIProviderConfig(api_key="test-key"),
+                sambanova=SambaNovaProviderConfig(api_key="test-key"),
             )
         ),
     )
@@ -401,6 +418,13 @@ def test_account_free_tier_includes_all_text_chat_catalog_models() -> None:
                 input_modalities=("text",),
                 output_modalities=("text",),
             ),
+            AIModelRecord(
+                provider="cerebras",
+                model_id="gpt-oss-120b",
+                capabilities=(AICapability.LLM_CHAT,),
+                input_modalities=("text",),
+                output_modalities=("text",),
+            ),
         ],
         settings=_settings_stub(),
     )
@@ -408,6 +432,7 @@ def test_account_free_tier_includes_all_text_chat_catalog_models() -> None:
     assert {(record.provider, record.id) for record in records} == {
         ("groq", "llama-3.1-8b-instant"),
         ("groq", "other-free-tier-model"),
+        ("cerebras", "gpt-oss-120b"),
     }
     assert all(record.free_reason == "account_free_tier" for record in records)
 
@@ -429,3 +454,66 @@ def test_account_free_tier_includes_non_smoke_google_text_chat() -> None:
     assert len(records) == 1
     assert records[0].id == "gemini-2.5-pro"
     assert records[0].free_reason == "account_free_tier"
+
+
+def test_account_free_tier_includes_new_openai_compat_providers() -> None:
+    records = platform_free_records_from_model_records(
+        [
+            AIModelRecord(
+                provider="nvidia",
+                model_id="openai/gpt-oss-20b",
+                capabilities=(AICapability.LLM_CHAT,),
+                input_modalities=("text",),
+                output_modalities=("text",),
+            ),
+            AIModelRecord(
+                provider="mistral",
+                model_id="mistral-small-latest",
+                capabilities=(AICapability.LLM_CHAT,),
+                input_modalities=("text",),
+                output_modalities=("text",),
+            ),
+            AIModelRecord(
+                provider="zai",
+                model_id="glm-5.3",
+                capabilities=(AICapability.LLM_CHAT,),
+                input_modalities=("text",),
+                output_modalities=("text",),
+            ),
+            AIModelRecord(
+                provider="sambanova",
+                model_id="gpt-oss-120b",
+                capabilities=(AICapability.LLM_CHAT,),
+                input_modalities=("text",),
+                output_modalities=("text",),
+            ),
+        ],
+        settings=_settings_stub(),
+    )
+    assert {(record.provider, record.id) for record in records} == {
+        ("nvidia", "openai/gpt-oss-20b"),
+        ("mistral", "mistral-small-latest"),
+        ("zai", "glm-5.3"),
+        ("sambanova", "gpt-oss-120b"),
+    }
+    assert all(record.free_reason == "account_free_tier" for record in records)
+
+
+def test_sort_platform_free_records_max_candidates_zero_keeps_full_list() -> None:
+    records = [
+        PlatformFreeModelRecord(
+            provider="openrouter",
+            id=f"m-{index}",
+            score=float(index),
+            context_length=4096,
+            supported_parameters=(),
+            input_modalities=("text",),
+            output_modalities=("text",),
+            free_reason="verified_zero_price",
+        )
+        for index in range(60)
+    ]
+    ranked = sort_platform_free_records(records, max_candidates=0)
+    assert len(ranked) == 60
+    assert ranked[0].id == "m-59"
+    assert ranked[-1].id == "m-0"

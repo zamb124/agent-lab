@@ -15,7 +15,12 @@ from core.ai.adapters.openrouter import OpenRouterModelCatalogAdapter
 from core.ai.models import AIModelRecord
 from core.ai.providers import AICapability
 from core.config import BaseSettings
-from core.config.models import GroqProviderConfig, LLMConfig, OpenRouterProviderConfig
+from core.config.models import (
+    GroqProviderConfig,
+    LLMConfig,
+    NvidiaProviderConfig,
+    OpenRouterProviderConfig,
+)
 
 
 class _UnknownProviderAdapter(BaseModelCatalogAdapter):
@@ -94,7 +99,10 @@ def _unconfigured_settings() -> BaseSettings:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider", ["openrouter", "bothub", "groq"])
+@pytest.mark.parametrize(
+    "provider",
+    ["openrouter", "bothub", "groq", "cerebras", "nvidia", "mistral", "zai", "sambanova"],
+)
 async def test_list_models_unconfigured_raises(provider: str) -> None:
     settings = _unconfigured_settings()
     if provider == "openrouter":
@@ -106,9 +114,37 @@ async def test_list_models_unconfigured_raises(provider: str) -> None:
         await adapter.list_models(probe_embeddings=False)
 
 
+def test_groq_adapter_is_configured_with_api_keys_only() -> None:
+    settings = BaseSettings(
+        testing=False,
+        llm=LLMConfig(
+            groq=GroqProviderConfig(
+                api_keys=["sk-extra"],
+                smoke_model="openai/gpt-oss-20b",
+            ),
+        ),
+    )
+    adapter = OpenAICompatibleModelCatalogAdapter("groq", settings)
+    assert adapter.is_configured() is True
+
+
+def test_nvidia_adapter_is_configured_with_api_keys_only() -> None:
+    settings = BaseSettings(
+        testing=False,
+        llm=LLMConfig(
+            nvidia=NvidiaProviderConfig(
+                api_keys=["nvapi-extra"],
+                smoke_model="openai/gpt-oss-20b",
+            ),
+        ),
+    )
+    adapter = OpenAICompatibleModelCatalogAdapter("nvidia", settings)
+    assert adapter.is_configured() is True
+
+
 def test_configured_llm_provider_unknown_raises() -> None:
     adapter = _UnknownProviderAdapter(_unconfigured_settings())
-    with pytest.raises(ValueError, match="unknown LLM provider"):
+    with pytest.raises(ValueError, match="не поддержан для OpenAI-совместимого API"):
         adapter._configured_llm_provider()
 
 

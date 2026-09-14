@@ -12,7 +12,6 @@ AIAvailabilityStatus = Literal[
     "unknown",
     "available",
     "unavailable",
-    "rate_limited",
     "disabled",
 ]
 AIModelMetadataStatus = Literal["discovered", "verified"]

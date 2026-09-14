@@ -34,7 +34,7 @@ function editorState(getState) {
 }
 
 describe('flows/interface_editor slice', () => {
-    it('starts closed, on the add tab and desktop viewport', () => {
+        it('starts closed, on the add tab and desktop viewport', () => {
         const { getState } = build();
         expect(editorState(getState)).toMatchObject({
             documentKey: '',
@@ -44,7 +44,17 @@ describe('flows/interface_editor slice', () => {
             viewport: 'desktop',
             preview: false,
             sidebarTab: 'add',
+            problems: [],
         });
+    });
+
+    it('stores document problems for the shared header flyout', () => {
+        const { dispatch, getState } = build();
+        dispatch('flows/interface_editor/document_opened', { documentKey: 'flow-1:default', document: EMPTY_DOCUMENT });
+        const problems = [{ code: 'inputs_without_action', severity: 'error', pageId: 'main', blockId: null, property: null, params: {} }];
+        dispatch('flows/interface_editor/problems_set', { problems });
+        expect(editorState(getState).problems).toEqual(problems);
+        expect(() => dispatch('flows/interface_editor/problems_set', { problems: null })).toThrow(/problems array required/);
     });
 
     it('opens a document on its start page and rejects commits without a document', () => {

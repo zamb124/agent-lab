@@ -135,6 +135,7 @@ import {
     llmModelScoreUpsertOp,
     llmModelScoreDeleteOp,
     llmModelScoresRefreshCacheOp,
+    llmModelScoresProbeProvidersOp,
 } from '../events/resources/llm-model-scores.resource.js';
 import { acceptInviteOp, previewInviteOp } from '../events/resources/invites.resource.js';
 import { servicesStatusLoadOp } from '../events/resources/services-status.resource.js';
@@ -405,6 +406,7 @@ export class FrontendApp extends PlatformApp {
         llmModelScoreUpsertOp,
         llmModelScoreDeleteOp,
         llmModelScoresRefreshCacheOp,
+        llmModelScoresProbeProvidersOp,
         acceptInviteOp,
         previewInviteOp,
         servicesStatusLoadOp,

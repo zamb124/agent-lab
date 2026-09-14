@@ -17,7 +17,7 @@ from core.http.client import (
     get_httpx_client,
     request_public_oauth,
 )
-from tests.core.http_proxy_helpers import install_mock_httpx_client
+from tests.core.http_proxy_helpers import install_mock_httpx_client, unread_json_response
 
 
 def _proxy_settings(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
@@ -868,3 +868,28 @@ async def test_stream_proxy_only_rotates(monkeypatch: pytest.MonkeyPatch) -> Non
         async with client.stream("GET", "https://p-only.example/s") as resp:
             assert resp.status_code == 200
     assert outer.calls == 3
+
+
+@pytest.mark.asyncio
+async def test_stream_plain_400_does_not_raise_response_not_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SMART stream: обычный 400 с непрочитанным телом не падает ResponseNotRead и не уходит в proxy."""
+    error_body = b'{"error":{"message":"The model nvidia/NVIDIA-Nemotron is not supported"}}'
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return unread_json_response(request, 400, error_body)
+
+    install_mock_httpx_client(monkeypatch, handler)
+    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=False))
+    monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
+    _proxy_settings(monkeypatch)
+
+    async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
+        async with client.stream("POST", "https://router.huggingface.co/v1/chat/completions") as resp:
+            assert resp.status_code == 400
+            assert "NVIDIA-Nemotron" in resp.text
+
+    assert calls["n"] == 1

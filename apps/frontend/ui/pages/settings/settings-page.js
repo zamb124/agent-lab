@@ -10,8 +10,9 @@
  * Все взаимодействие с AI-настройками — через resource-операции
  * apps/frontend/ui/events/resources/settings.resource.js.
  */
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { formatDurationSeconds } from '@platform/lib/utils/format-duration.js';
 import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
@@ -19,6 +20,11 @@ import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/llm/llm-config-editor.js';
 import '@platform/lib/components/llm/llm-context-editor.js';
+import '@platform/lib/components/platform-help-hint.js';
+import {
+    llmProviderErrorClassIsBlocking,
+    llmProviderErrorClassLabel,
+} from '../../components/llm-provider-status-strip.js';
 
 const INTEGRATION_LIST = Object.freeze([
     { id: 'crm', route: '/crm' },
@@ -419,6 +425,24 @@ export class FrontendSettingsPage extends PlatformPage {
                 flex-wrap: wrap;
                 margin-bottom: var(--space-2);
             }
+            .scores-toolbar-actions {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-2);
+                align-items: center;
+            }
+            .score-filter {
+                display: flex;
+                gap: var(--space-1);
+            }
+            .score-filter glass-button[data-active="true"] {
+                color: var(--text-primary);
+                border-color: var(--accent);
+            }
+            llm-provider-status-strip {
+                display: block;
+                margin: var(--space-2) 0;
+            }
             .scores-table-wrap {
                 overflow-x: auto;
                 border: 1px solid var(--glass-border-subtle);
@@ -427,8 +451,36 @@ export class FrontendSettingsPage extends PlatformPage {
             .scores-table {
                 width: 100%;
                 border-collapse: collapse;
-                min-width: 920px;
+                min-width: 1080px;
                 font-size: var(--text-xs);
+            }
+            .scores-table tr.score-row-cooldown td {
+                background: var(--warning-bg);
+            }
+            .scores-table tr.score-row-error td {
+                background: var(--error-bg);
+            }
+            .score-status {
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
+                white-space: nowrap;
+            }
+            .score-status-pill {
+                display: inline-flex;
+                align-items: center;
+                padding: 0 var(--space-2);
+                height: 1.5rem;
+                border-radius: var(--radius-full);
+                background: var(--glass-solid-subtle);
+                color: var(--text-secondary);
+                font-size: var(--text-xs);
+            }
+            .scores-table tr.score-row-cooldown .score-status-pill {
+                color: var(--warning);
+            }
+            .scores-table tr.score-row-error .score-status-pill {
+                color: var(--error);
             }
             .scores-table th,
             .scores-table td {
@@ -485,6 +537,7 @@ export class FrontendSettingsPage extends PlatformPage {
         _searchProviderOrder: { state: true },
         _modelScoreDrafts: { state: true },
         _modelScoreNew: { state: true },
+        _scoreStatusFilter: { state: true },
         _agentPairingCode: { state: true },
         _agentPairingExpires: { state: true },
         _agentPairingCountdown: { state: true },
@@ -509,6 +562,7 @@ export class FrontendSettingsPage extends PlatformPage {
         this._scoreUpsert = this.useOp('frontend/llm_model_score_upsert');
         this._scoreDelete = this.useOp('frontend/llm_model_score_delete');
         this._scoreRefreshCache = this.useOp('frontend/llm_model_scores_refresh_cache');
+        this._scoreProbe = this.useOp('frontend/llm_model_scores_probe_providers');
         this._agentPairing = this.useOp('frontend/agent_pairing_create');
         this._agentDevices = this.useOp('frontend/agent_devices_load');
         this._agentRevoke = this.useOp('frontend/agent_device_revoke');
@@ -534,6 +588,7 @@ export class FrontendSettingsPage extends PlatformPage {
         this._searchProviderDrafts = {};
         this._searchProviderOrder = [];
         this._modelScoreDrafts = {};
+        this._scoreStatusFilter = 'all';
         this._modelScoreNew = {
             capability: 'llm_chat',
             provider: 'openrouter',
@@ -1513,6 +1568,60 @@ export class FrontendSettingsPage extends PlatformPage {
         };
     }
 
+    _scoreErrorClassLabel(errorClass) {
+        return llmProviderErrorClassLabel((key) => this.t(key), errorClass);
+    }
+
+    _scoreAvailabilityLabel(row) {
+        if (row.availability === 'available') {
+            return this.t('settings_page.model_scoring.status_available');
+        }
+        if (row.availability === 'disabled') {
+            return this.t('settings_page.model_scoring.status_disabled');
+        }
+        if (row.availability === 'not_configured') {
+            return this.t('settings_page.model_scoring.status_not_configured');
+        }
+        if (row.availability === 'cooldown') {
+            if (typeof row.cooldown_seconds === 'number') {
+                return `${this.t('settings_page.model_scoring.status_cooldown')} ${formatDurationSeconds(row.cooldown_seconds)}`;
+            }
+            return this.t('settings_page.model_scoring.status_cooldown');
+        }
+        throw new Error(`model scoring: unknown availability ${row.availability}`);
+    }
+
+    _scoreRowClass(row) {
+        if (row.availability !== 'cooldown') {
+            return '';
+        }
+        if (llmProviderErrorClassIsBlocking(row.error_class)) {
+            return 'score-row-error';
+        }
+        return 'score-row-cooldown';
+    }
+
+    _scoreStatusHint(row) {
+        const parts = [];
+        if (row.error_class !== null) {
+            parts.push(this._scoreErrorClassLabel(row.error_class));
+        }
+        if (typeof row.error_text === 'string' && row.error_text !== '') {
+            parts.push(row.error_text);
+        }
+        return parts.join('\n');
+    }
+
+    _filteredScoreItems(items) {
+        if (this._scoreStatusFilter === 'all') {
+            return items;
+        }
+        if (this._scoreStatusFilter === 'blocked') {
+            return items.filter((row) => row.availability === 'cooldown');
+        }
+        throw new Error(`model scoring: unknown status filter ${this._scoreStatusFilter}`);
+    }
+
     _renderModelScoringTab() {
         const result = this._scoreLoad.lastResult;
         if (!result) {
@@ -1521,7 +1630,11 @@ export class FrontendSettingsPage extends PlatformPage {
         if (!Array.isArray(result.items)) {
             throw new Error('model scoring: items must be an array');
         }
+        if (!Array.isArray(result.providers)) {
+            throw new Error('model scoring: providers must be an array');
+        }
         const items = result.items;
+        const visibleItems = this._filteredScoreItems(items);
         return html`
             <section>
                 <div class="scores-toolbar">
@@ -1529,15 +1642,41 @@ export class FrontendSettingsPage extends PlatformPage {
                         <h3>${this.t('settings_page.model_scoring.title')}</h3>
                         <div class="section-help">${this.t('settings_page.model_scoring.help')}</div>
                     </div>
-                    <glass-button
-                        size="sm"
-                        variant="ghost"
-                        ?disabled=${this._scoreRefreshCache.busy}
-                        @click=${() => this._scoreRefreshCache.run()}
-                    >${this.t('settings_page.model_scoring.refresh_cache')}</glass-button>
+                    <div class="scores-toolbar-actions">
+                        <div class="score-filter">
+                            <glass-button
+                                size="sm"
+                                variant="ghost"
+                                data-active=${this._scoreStatusFilter === 'all' ? 'true' : 'false'}
+                                @click=${() => { this._scoreStatusFilter = 'all'; }}
+                            >${this.t('settings_page.model_scoring.filter_all')}</glass-button>
+                            <glass-button
+                                size="sm"
+                                variant="ghost"
+                                data-active=${this._scoreStatusFilter === 'blocked' ? 'true' : 'false'}
+                                @click=${() => { this._scoreStatusFilter = 'blocked'; }}
+                            >${this.t('settings_page.model_scoring.filter_blocked')}</glass-button>
+                        </div>
+                        <glass-button
+                            size="sm"
+                            variant="ghost"
+                            ?disabled=${this._scoreProbe.busy}
+                            @click=${() => this._scoreProbe.run()}
+                        >${this.t('settings_page.model_scoring.probe_now')}</glass-button>
+                        <glass-button
+                            size="sm"
+                            variant="ghost"
+                            ?disabled=${this._scoreRefreshCache.busy}
+                            @click=${() => this._scoreRefreshCache.run()}
+                        >${this.t('settings_page.model_scoring.refresh_cache')}</glass-button>
+                    </div>
                 </div>
+                <llm-provider-status-strip .providers=${result.providers}></llm-provider-status-strip>
+                <div class="section-help">${this.t('settings_page.model_scoring.providers_help')}</div>
                 ${items.length === 0
                     ? html`<div class="empty">${this.t('settings_page.model_scoring.empty')}</div>`
+                    : visibleItems.length === 0
+                    ? html`<div class="empty">${this.t('settings_page.model_scoring.empty_blocked')}</div>`
                     : html`
                         <div class="scores-table-wrap">
                             <table class="scores-table">
@@ -1546,6 +1685,7 @@ export class FrontendSettingsPage extends PlatformPage {
                                         <th>${this.t('settings_page.model_scoring.col_capability')}</th>
                                         <th>${this.t('settings_page.model_scoring.col_provider')}</th>
                                         <th>${this.t('settings_page.model_scoring.col_model')}</th>
+                                        <th>${this.t('settings_page.model_scoring.col_status')}</th>
                                         <th>${this.t('settings_page.model_scoring.col_score')}</th>
                                         <th>${this.t('settings_page.model_scoring.col_intelligence')}</th>
                                         <th>${this.t('settings_page.model_scoring.col_coding')}</th>
@@ -1558,16 +1698,25 @@ export class FrontendSettingsPage extends PlatformPage {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    ${items.map((row) => {
+                                    ${visibleItems.map((row) => {
                                         if (typeof row.score !== 'number') {
                                             throw new Error('model scoring: score must be a number');
                                         }
                                         const draft = this._modelScoreDraft(row);
+                                        const statusHint = this._scoreStatusHint(row);
                                         return html`
-                                            <tr>
+                                            <tr class=${this._scoreRowClass(row)}>
                                                 <td class="score-provider">${row.capability}</td>
                                                 <td class="score-provider">${row.provider}</td>
                                                 <td class="score-model">${row.model_id}</td>
+                                                <td>
+                                                    <div class="score-status">
+                                                        <span class="score-status-pill">${this._scoreAvailabilityLabel(row)}</span>
+                                                        ${statusHint === ''
+                                                            ? nothing
+                                                            : html`<platform-help-hint .text=${statusHint}></platform-help-hint>`}
+                                                    </div>
+                                                </td>
                                                 <td class="score-computed">${row.score.toFixed(1)}</td>
                                                 <td class="score-computed">${this._formatAaIndex(row.intelligence_index)}</td>
                                                 <td class="score-computed">${this._formatAaIndex(row.coding_index)}</td>

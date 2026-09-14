@@ -7,7 +7,7 @@ class LLMStreamUserCancelledError(Exception):
     """Отмена flow обнаружена при чтении LLM stream."""
 
 
-class LLMStreamIdleTimeoutError(Exception):
+class LLMStreamIdleTimeoutError(TimeoutError):
     """SSE stream не отдавал чанки дольше настроенного idle-лимита."""
 
     def __init__(self, idle_seconds: float, chunks_received: int):

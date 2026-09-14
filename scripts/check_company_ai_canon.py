@@ -42,6 +42,9 @@
 
 12. UI/i18n не должен показывать внутреннее имя ``LitServe`` /
     ``provider_litserve`` как продуктовый provider. Публичный label — Humanitec.
+
+13. Классификация ошибок провайдера — только ``core.ai.provider_error``.
+    JS ERROR_CLASS / i18n ``error_*`` / ``AIProviderErrorClass`` совпадают.
 """
 
 from __future__ import annotations
@@ -74,7 +77,9 @@ _FORBIDDEN_LEGACY_SYMBOLS: tuple[str, ...] = (
     "LLMModelScoringConfig",
     "LLMModelScoreSeedItem",
     "PlatformModelScoreHint",
-    "split_score_dimensions",
+    "LLMCandidateErrorClass",
+    "classify_llm_provider_error",
+    "LLMCandidateCooldownRecord",
 )
 
 
@@ -88,8 +93,9 @@ _FORBIDDEN_METADATA_KEYS: tuple[str, ...] = (
 
 _VENDOR_URL_RE = re.compile(
     r"https?://(api\.openai\.com|openrouter\.ai|bothub\.chat|llm\.api\.cloud\.yandex\.net|"
-    r"huggingface\.co|router\.huggingface\.co|api\.groq\.com|generativelanguage\.googleapis\.com|"
-    r"models\.github\.ai|api\.deepinfra\.com|caila\.io)"
+    r"huggingface\.co|router\.huggingface\.co|api\.groq\.com|api\.cerebras\.ai|generativelanguage\.googleapis\.com|"
+    r"models\.github\.ai|api\.deepinfra\.com|caila\.io|integrate\.api\.nvidia\.com|api\.mistral\.ai|"
+    r"api\.z\.ai|api\.sambanova\.ai)"
 )
 
 
@@ -336,12 +342,128 @@ def _humanitec_models_ui_surface_files() -> list[Path]:
     return out
 
 
+_JS_ERROR_CLASS_SET_RE = re.compile(
+    r"const ERROR_CLASS = new Set\(\[(.*?)\]\)",
+    re.DOTALL,
+)
+_JS_AVAILABILITY_SET_RE = re.compile(
+    r"const AVAILABILITY = new Set\(\[(.*?)\]\)",
+    re.DOTALL,
+)
+_JS_ERROR_CLASS_I18N_RE = re.compile(
+    r"export const LLM_PROVIDER_ERROR_CLASS_I18N = Object\.freeze\(\{(.*?)\}\)",
+    re.DOTALL,
+)
+_JS_QUOTED_RE = re.compile(r"['\"]([^'\"]+)['\"]")
+_OPENROUTER_RATE_LIMIT_MARKER = "Missing Authentication header"
+_BILLING_MARKER_CANON_SAMPLE = "NOT_ENOUGH_TOKENS"
+_OLD_PROVIDER_ERROR_IMPORT_RE = re.compile(
+    r"from\s+core\.clients\.llm\.provider_error\s+import|import\s+core\.clients\.llm\.provider_error\b"
+)
+
+
+def _quoted_js_values(blob: str) -> set[str]:
+    return set(_JS_QUOTED_RE.findall(blob))
+
+
+def _check_ai_provider_error_canon(failures: list[str]) -> None:
+    from core.ai.provider_error import AIProviderErrorClass
+    from core.clients.llm.provider_runtime_status import LLMModelAvailability
+
+    error_classes = {member.value for member in AIProviderErrorClass}
+    availabilities = {member.value for member in LLMModelAvailability}
+
+    resource_path = REPO_ROOT / "apps/frontend/ui/events/resources/llm-model-scores.resource.js"
+    strip_path = REPO_ROOT / "apps/frontend/ui/components/llm-provider-status-strip.js"
+    resource_text = resource_path.read_text(encoding="utf-8")
+    strip_text = strip_path.read_text(encoding="utf-8")
+
+    error_set_match = _JS_ERROR_CLASS_SET_RE.search(resource_text)
+    availability_set_match = _JS_AVAILABILITY_SET_RE.search(resource_text)
+    i18n_map_match = _JS_ERROR_CLASS_I18N_RE.search(strip_text)
+    if error_set_match is None:
+        failures.append("llm-model-scores.resource.js: ERROR_CLASS set not found")
+        return
+    if availability_set_match is None:
+        failures.append("llm-model-scores.resource.js: AVAILABILITY set not found")
+        return
+    if i18n_map_match is None:
+        failures.append("llm-provider-status-strip.js: LLM_PROVIDER_ERROR_CLASS_I18N not found")
+        return
+
+    js_error_classes = _quoted_js_values(error_set_match.group(1))
+    js_availabilities = _quoted_js_values(availability_set_match.group(1))
+    js_i18n_keys = {
+        key.strip()
+        for key in re.findall(r"^\s*([a-z_]+)\s*:", i18n_map_match.group(1), re.MULTILINE)
+    }
+    if js_error_classes != error_classes:
+        failures.append(
+            "JS ERROR_CLASS != AIProviderErrorClass: "
+            f"python={sorted(error_classes)} js={sorted(js_error_classes)}"
+        )
+    if js_availabilities != availabilities:
+        failures.append(
+            "JS AVAILABILITY != LLMModelAvailability: "
+            f"python={sorted(availabilities)} js={sorted(js_availabilities)}"
+        )
+    if js_i18n_keys != error_classes:
+        failures.append(
+            "LLM_PROVIDER_ERROR_CLASS_I18N keys != AIProviderErrorClass: "
+            f"python={sorted(error_classes)} js={sorted(js_i18n_keys)}"
+        )
+
+    expected_i18n = {f"error_{value}" for value in error_classes}
+    for locale in ("en", "ru"):
+        bundle = json.loads(
+            (REPO_ROOT / f"core/i18n/translations/{locale}/frontend.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        scoring = bundle["settings_page"]["model_scoring"]
+        missing = sorted(key for key in expected_i18n if key not in scoring)
+        if missing:
+            failures.append(
+                f"core/i18n/translations/{locale}/frontend.json missing scoring error keys: {missing}"
+            )
+
+    for path in _iter_python_files():
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        if rel == "scripts/check_company_ai_canon.py":
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        if _OLD_PROVIDER_ERROR_IMPORT_RE.search(text):
+            failures.append(
+                f"{rel}: core.clients.llm.provider_error is forbidden; "
+                "use core.ai.provider_error"
+            )
+        if rel.startswith("core/") or rel.startswith("apps/"):
+            if (
+                _OPENROUTER_RATE_LIMIT_MARKER in text
+                and rel != "core/ai/provider_error.py"
+            ):
+                failures.append(
+                    f"{rel}: OpenRouter missing-auth marker must live only in core.ai.provider_error"
+                )
+            if (
+                _BILLING_MARKER_CANON_SAMPLE in text
+                and rel != "core/ai/provider_error.py"
+            ):
+                failures.append(
+                    f"{rel}: billing error markers must live only in core.ai.provider_error"
+                )
+
+
 def _path_starts_with_any(rel: str, prefixes: tuple[str, ...]) -> bool:
     return any(rel.startswith(p) for p in prefixes)
 
 
 def main() -> int:
     failures: list[str] = []
+    _check_ai_provider_error_canon(failures)
     for path in _iter_python_files():
         rel = path.relative_to(REPO_ROOT).as_posix()
         try:

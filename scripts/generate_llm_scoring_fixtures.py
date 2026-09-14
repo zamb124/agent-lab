@@ -30,6 +30,7 @@ from core.ai.free_pool import (  # noqa: E402
 )
 from core.ai.model_catalog_repository import AIModelCatalogRepository  # noqa: E402
 from core.ai.models import AIModelRecord  # noqa: E402
+from core.ai.provider_error import AIProviderErrorClass, classify_ai_provider_http  # noqa: E402
 from core.ai.providers import AICapability  # noqa: E402
 from core.ai.scoring import attach_artificial_analysis  # noqa: E402
 from core.clients.redis_client import RedisClient  # noqa: E402
@@ -53,11 +54,8 @@ from tests.core.ai.scoring_fixture_support import (  # noqa: E402
 from tests.core.clients.live_llm_provider_helpers import (  # noqa: E402
     build_scored_free_pool,
     configured_free_pool_providers,
-    is_provider_rate_limit,
     provider_api_key_configured,
 )
-
-_SKIP_CATALOG_STATUS_CODES = frozenset({401, 403, 410, 429, 500, 502, 503, 504})
 
 
 def _model_service() -> LLMModelsService:
@@ -93,21 +91,45 @@ async def _fetch_provider_catalog(
     try:
         records = await service.discover_model_records_by_provider(provider)
     except httpx.HTTPStatusError as status_error:
-        if is_provider_rate_limit(provider, status_error):
-            print(f"generate_llm_scoring_fixtures: skip {provider} — rate limit")
-            return None
-        if status_error.response.status_code in _SKIP_CATALOG_STATUS_CODES:
+        error_class = classify_ai_provider_http(
+            provider,
+            status_error.response.status_code,
+            status_error.response.text,
+        )
+        if (
+            error_class
+            in {
+                AIProviderErrorClass.RATE_LIMITED,
+                AIProviderErrorClass.AUTH_REJECTED,
+                AIProviderErrorClass.TRANSIENT,
+            }
+            or status_error.response.status_code == 410
+        ):
             print(
                 "generate_llm_scoring_fixtures: skip "
-                f"{provider} — HTTP {status_error.response.status_code}"
+                f"{provider} — {error_class.value} HTTP {status_error.response.status_code}"
             )
             return None
         raise
     except AIProviderAdapterError as adapter_error:
-        if adapter_error.status_code in _SKIP_CATALOG_STATUS_CODES:
+        if adapter_error.status_code == 410:
+            print(f"generate_llm_scoring_fixtures: skip {provider} — HTTP 410")
+            return None
+        if adapter_error.status_code is None:
+            raise
+        error_class = classify_ai_provider_http(
+            provider,
+            adapter_error.status_code,
+            str(adapter_error),
+        )
+        if error_class in {
+            AIProviderErrorClass.RATE_LIMITED,
+            AIProviderErrorClass.AUTH_REJECTED,
+            AIProviderErrorClass.TRANSIENT,
+        }:
             print(
                 "generate_llm_scoring_fixtures: skip "
-                f"{provider} — HTTP {adapter_error.status_code}"
+                f"{provider} — {error_class.value} HTTP {adapter_error.status_code}"
             )
             return None
         raise

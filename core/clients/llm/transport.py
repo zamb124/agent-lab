@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 import time
 import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
@@ -218,36 +217,8 @@ async def stream_once(
                 "POST", f"{client.base_url}/chat/completions", headers=headers, json=body
             ) as http_response:
                 if http_response.status_code != 200:
-                    # Для stream response пытаемся прочитать тело ошибки
-                    error_text = f"HTTP {http_response.status_code}"
-                    try:
-                        # Читаем первые байты ответа для получения деталей ошибки
-                        error_chunks: list[bytes] = []
-                        async for chunk in http_response.aiter_bytes():
-                            error_chunks.append(chunk)
-                            if len(b"".join(error_chunks)) > 2000:  # Ограничиваем размер
-                                break
-                        if error_chunks:
-                            full_error = b"".join(error_chunks).decode("utf-8", errors="ignore")
-                            # Пытаемся найти JSON в ответе
-                            json_match = re.search(r"\{.*\}", full_error, re.DOTALL)
-                            if json_match:
-                                error_json = parse_json_object(
-                                    json_match.group(),
-                                    "llm.error_response",
-                                )
-                                error_text = json.dumps(
-                                    error_json, indent=2, ensure_ascii=False
-                                )
-                            else:
-                                error_text = full_error[:1000]
-                    except (httpx.HTTPError, OSError, UnicodeDecodeError) as exc:
-                        logger.debug(
-                            "llm.error_body_read_failed",
-                            error=str(exc),
-                            error_type=type(exc).__name__,
-                        )
-
+                    _ = await http_response.aread()
+                    error_text = http_response.text[:1000]
                     logger.error(
                         "llm.api_error",
                         status_code=http_response.status_code,

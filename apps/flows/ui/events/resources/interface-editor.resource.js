@@ -46,6 +46,7 @@ export const interfaceEditorSlice = createSlice({
         viewport: 'desktop',
         preview: false,
         sidebarTab: 'add',
+        problems: Object.freeze([]),
     },
     extraEvents: {
         DOCUMENT_OPENED: 'document_opened',
@@ -57,6 +58,7 @@ export const interfaceEditorSlice = createSlice({
         VIEWPORT_SET: 'viewport_set',
         PREVIEW_SET: 'preview_set',
         SIDEBAR_TAB_SET: 'sidebar_tab_set',
+        PROBLEMS_SET: 'problems_set',
     },
     actions: {
         openDocument: 'document_opened',
@@ -68,6 +70,7 @@ export const interfaceEditorSlice = createSlice({
         setViewport: 'viewport_set',
         setPreview: 'preview_set',
         setSidebarTab: 'sidebar_tab_set',
+        setProblems: 'problems_set',
     },
     extraReducer: (state, event) => {
         const type = event.type;
@@ -84,6 +87,7 @@ export const interfaceEditorSlice = createSlice({
                 pageId: document.start_page_id,
                 selectedBlockId: '',
                 preview: false,
+                problems: Object.freeze([]),
             };
         }
         if (type === 'flows/interface_editor/document_committed') {
@@ -125,6 +129,13 @@ export const interfaceEditorSlice = createSlice({
             const payload = requirePayload(event);
             if (payload.tab !== 'add' && payload.tab !== 'properties') throw new Error(`flows/interface_editor: unknown sidebar tab ${String(payload.tab)}`);
             return { ...state, sidebarTab: payload.tab };
+        }
+        if (type === 'flows/interface_editor/problems_set') {
+            const payload = requirePayload(event);
+            if (!Array.isArray(payload.problems)) {
+                throw new Error(`flows/interface_editor: problems array required for ${type}`);
+            }
+            return { ...state, problems: Object.freeze(payload.problems.slice()) };
         }
         return state;
     },

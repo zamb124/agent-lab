@@ -1,23 +1,10 @@
 /**
  * FlowEditorPage — визуальный редактор flow.
  *
- * Макет (canvas, workspace logic и run):
- *   <flows-editor-header />          — chrome: actions + branch tabs
- *   .editor-shell:
- *     <flows-node-types-sidebar />    — drag-source типов нод
- *     .canvas-host:
- *       <flows-flow-canvas />
- *       <flows-bottom-toolbar />
- *       <flows-execution-panel />     — Test Run; workspace=run открывает панель
- *       <flows-floating-panel /> — chrome property/resource panel (drag, resize, collapse)
- *     .editor-right-rail:
- *       <flows-flow-property-panel /> — лимиты и речь (по кнопке в сайдбаре)
- *
- * Макет (agent focus, ровно 1 llm_node):
- *   header + <flows-agent-focus-studio /> вместо сайдбара/канвы
- *
- * Workspace interface — редактор Flow UI. Полноэкранный platform-flow-ui вместо
- * канвы в run запрещён: визуализация графа живёт на канве + панели.
+ * Макет:
+ *   breadcrumbs + единая chrome-bar (``flows-editor-header`` + слот Interface-инструментов)
+ *   .editor-shell: канва / Interface editor (tabs+canvas) / Run
+ * Глобальные Publish и статус — только в шапке, на все ракурсы.
  */
 
 import { html, css, nothing } from 'lit';
@@ -57,7 +44,9 @@ import {
     writeEditorLayoutPreference,
 } from '../_helpers/flow-editor-layout.js';
 import '../components/editor/flows-agent-focus-studio.js';
-import '../components/interface-editor/flows-interface-editor.js';
+import '../components/interface-editor/flows-interface-toolbar.js';
+import { clearStoredInterfaceDraft } from '../components/interface-editor/flows-interface-editor.js';
+import { hasBlockingProblems } from '../components/interface-editor/interface-editor-domain.js';
 import '../modals/flows-interface-template-modal.js';
 import '../modals/flows-interface-html-editor-modal.js';
 import { saveEditorFlow } from '../_helpers/flow-editor-save.js';
@@ -164,6 +153,9 @@ export class FlowEditorPage extends PlatformPage {
                 z-index: 91;
             }
             .interface-host { flex: 1; min-width: 0; min-height: 0; }
+            .editor-chrome-bar {
+                min-width: 0;
+            }
         `,
     ];
 
@@ -178,6 +170,8 @@ export class FlowEditorPage extends PlatformPage {
         this._flows = this.useResource('flows/flows');
         this._editorStateOp = this.useOp('flows/code_editor_state');
         this._dataflowInspectOp = this.useOp('flows/dataflow_inspect');
+        this._interfaceUi = this.useSlice('flows/interface_editor');
+        this._assistOp = this.useOp('flows/flow_ui_assist');
         this._dataflowTimer = null;
         this._lastDataflowKey = '';
         this._pendingDataflowKey = '';
@@ -532,15 +526,29 @@ export class FlowEditorPage extends PlatformPage {
         return branch !== null && isPlainObject(branch.interface) ? branch.interface : flow.interface;
     }
 
-    /** «Опубликовать» в редакторе интерфейса: документ ветки в flowConfig и сразу сохранение flow. */
-    async _onInterfaceChange(event) {
-        const config = event.detail?.config;
+    _interfaceDocumentKey() {
+        const branch = !this.branchId || this.branchId === 'base' ? 'default' : this.branchId;
+        return `${this.flowId}:${branch}`;
+    }
+
+    _interfaceHost() {
+        return this.renderRoot.querySelector('flows-interface-editor');
+    }
+
+    _interfaceDraftDirty() {
+        const ui = this._interfaceUi.value;
+        if (ui.history === null) return false;
+        const published = this._resolvedInterfaceConfig(asObject(this._editor.state));
+        return stableStringify(ui.history.present) !== stableStringify(published);
+    }
+
+    _patchInterfaceConfig(config) {
         const state = asObject(this._editor.state);
         if (!isPlainObject(config)) {
-            throw new Error('flow-editor-page: interface-change config must be a plain object');
+            throw new Error('flow-editor-page: interface config must be a plain object');
         }
         if (!isPlainObject(state.flowConfig)) {
-            throw new Error('flow-editor-page: interface-change requires loaded flowConfig');
+            throw new Error('flow-editor-page: interface patch requires loaded flowConfig');
         }
         if (!this.branchId || this.branchId === 'base') {
             this._editor.patchFlowConfig({ patch: { interface: config } });
@@ -550,8 +558,81 @@ export class FlowEditorPage extends PlatformPage {
             this._editor.patchFlowConfig({ patch: { branches: { ...branches, [this.branchId]: { ...branch, interface: config } } } });
         }
         this._scheduleDataflowRefresh(asObject(this._editor.state));
-        const saved = await saveEditorFlow(this._editor, this._flowUpdate, this.flowId);
-        if (saved) this.toast('interface_editor.published');
+    }
+
+    /** Коммит UI-черновика в flowConfig без PUT. */
+    _onInterfaceChange(event) {
+        this._patchInterfaceConfig(event.detail.config);
+    }
+
+    async _saveFlow() {
+        return saveEditorFlow(this._editor, this._flowUpdate, this.flowId);
+    }
+
+    _commitInterfaceFromSlice() {
+        const ui = this._interfaceUi.value;
+        if (ui.history === null) return true;
+        if (!this._interfaceDraftDirty()) return true;
+        const problems = Array.isArray(ui.problems) ? ui.problems : [];
+        if (hasBlockingProblems(problems)) {
+            this.toast('interface_editor.publish_blocked', { type: 'error' });
+            this._editor.setWorkspace({ workspace: 'interface' });
+            return false;
+        }
+        this._patchInterfaceConfig(structuredClone(ui.history.present));
+        clearStoredInterfaceDraft(this._interfaceDocumentKey());
+        return true;
+    }
+
+    _commitInterfaceDraft() {
+        const host = this._interfaceHost();
+        if (host) return host.commitDraft();
+        return this._commitInterfaceFromSlice();
+    }
+
+    _onEditorSave(event) {
+        event.preventDefault();
+        void this._publishEditor();
+    }
+
+    async _publishEditor() {
+        const hadInterfaceDraft = this._interfaceDraftDirty();
+        if (!this._commitInterfaceDraft()) return;
+        const saved = await this._saveFlow();
+        if (saved && hadInterfaceDraft) this.toast('interface_editor.published');
+    }
+
+    _onInterfaceProblemSelect(event) {
+        const pageId = event.detail && event.detail.pageId;
+        const blockId = event.detail && event.detail.blockId;
+        if (typeof pageId === 'string' && pageId.length > 0) this._interfaceUi.selectPage({ pageId });
+        if (typeof blockId === 'string' && blockId.length > 0) this._interfaceUi.selectBlock({ blockId });
+    }
+
+    _renderInterfaceToolbar() {
+        const ui = this._interfaceUi.value;
+        const history = ui.history;
+        const canUndo = history !== null && history.past.length > 0;
+        const canRedo = history !== null && history.future.length > 0;
+        const hasSelection = typeof ui.selectedBlockId === 'string' && ui.selectedBlockId !== '';
+        const host = () => this._interfaceHost();
+        return html`
+            <flows-interface-toolbar
+                slot="workspace-tools"
+                .canUndo=${canUndo}
+                .canRedo=${canRedo}
+                .viewport=${ui.viewport}
+                .preview=${ui.preview}
+                .hasSelection=${hasSelection}
+                .assistBusy=${this._assistOp.busy}
+                @editor-undo=${() => host()?.undo()}
+                @editor-redo=${() => host()?.redo()}
+                @editor-viewport=${(event) => host()?.setViewport(event.detail.viewport)}
+                @editor-preview=${(event) => { void host()?.setCanvasPreview(event.detail.preview); }}
+                @editor-templates=${() => host()?.openTemplates()}
+                @editor-assist=${(event) => { void host()?.assist(event.detail.instruction, event.detail.scope); }}
+            ></flows-interface-toolbar>
+        `;
     }
 
     _renderWorkspaceShell(state) {
@@ -566,6 +647,7 @@ export class FlowEditorPage extends PlatformPage {
                         .flowId=${this.flowId}
                         .branchId=${this.branchId === 'base' ? 'default' : this.branchId}
                         @interface-change=${this._onInterfaceChange}
+                        @interface-save-request=${() => { void this._saveFlow(); }}
                     ></flows-interface-editor></div>
                 `;
         }
@@ -618,11 +700,17 @@ export class FlowEditorPage extends PlatformPage {
                 <div class="editor-breadcrumbs">
                     <platform-breadcrumbs compact current-label=${this._branchDisplayLabel()}></platform-breadcrumbs>
                 </div>
-                <flows-editor-header
-                    class="editor-chrome-panel ${dismissSafe}"
-                    .flowId=${this.flowId}
-                    .branchId=${this.branchId}
-                ></flows-editor-header>
+                <div class="editor-chrome-bar">
+                    <flows-editor-header
+                        class="editor-chrome-panel ${dismissSafe}"
+                        .flowId=${this.flowId}
+                        .branchId=${this.branchId}
+                        .interfaceDirty=${this._interfaceDraftDirty()}
+                        .interfaceProblems=${Array.isArray(this._interfaceUi.value.problems) ? this._interfaceUi.value.problems : []}
+                        @editor-save=${this._onEditorSave}
+                        @interface-problem-select=${this._onInterfaceProblemSelect}
+                    >${state.workspace === 'interface' ? this._renderInterfaceToolbar() : nothing}</flows-editor-header>
+                </div>
             </div>
             <div class="editor-shell">
                 ${this._renderWorkspaceShell(state)}

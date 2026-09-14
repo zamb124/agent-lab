@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from core.ai.company_settings import CompanyAIProviders
+from core.ai.company_settings.resolver import CompanyResolvedLLM
 from core.ai.providers import (
     AICapability,
     platform_provider_specs_for_capability,
@@ -22,6 +23,7 @@ def test_embedding_catalog_is_provider_capability_registry_not_model_source() ->
     assert "deepinfra" in providers
     assert "provider_litserve" in providers
     assert "groq" not in providers
+    assert "cerebras" not in providers
     assert "github" not in providers
 
 
@@ -96,19 +98,17 @@ def test_company_rerank_override_requires_model_for_enabled_provider() -> None:
     assert aip.rerank.model == "openrouter/rerank-test"
 
 
-def test_company_llm_override_accepts_api_key_encrypted_extra() -> None:
-    aip = CompanyAIProviders.model_validate(
-        {
-            "llm_chat": {
-                "provider": "openrouter",
-                "api_key_encrypted": "enc-main",
-                "api_key_encrypted_extra": ["enc-extra-1", "enc-extra-2"],
-            }
-        },
-    )
-    assert aip.llm_chat is not None
-    assert aip.llm_chat.api_key_encrypted == "enc-main"
-    assert aip.llm_chat.api_key_encrypted_extra == ["enc-extra-1", "enc-extra-2"]
+def test_company_llm_override_rejects_api_key_encrypted_extra() -> None:
+    with pytest.raises(ValidationError):
+        _ = CompanyAIProviders.model_validate(
+            {
+                "llm_chat": {
+                    "provider": "openrouter",
+                    "api_key_encrypted": "enc-main",
+                    "api_key_encrypted_extra": ["enc-extra-1"],
+                }
+            },
+        )
 
 
 def test_company_llm_override_rejects_api_key_encrypted_extra_on_custom_provider() -> None:
@@ -147,3 +147,22 @@ def test_company_llm_override_rejects_api_key_encrypted_extra_on_humanitec_llm()
                 }
             }
         )
+
+
+def test_llm_chat_catalog_includes_google() -> None:
+    providers = {
+        spec.provider
+        for spec in platform_provider_specs_for_capability(AICapability.LLM_CHAT)
+    }
+    assert "google" in providers
+    assert "groq" in providers
+    assert "nvidia" in providers
+    assert "mistral" in providers
+    assert "zai" in providers
+    assert "sambanova" in providers
+    assert "humanitec_llm" in providers
+
+
+def test_company_resolved_llm_has_single_api_key() -> None:
+    assert "api_key" in CompanyResolvedLLM.model_fields
+    assert "api_keys" not in CompanyResolvedLLM.model_fields

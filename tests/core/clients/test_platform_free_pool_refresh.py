@@ -24,11 +24,16 @@ from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.config.models import (
     BothubProviderConfig,
+    CerebrasProviderConfig,
     GitHubModelsProviderConfig,
     GoogleLLMProviderConfig,
     GroqProviderConfig,
     HuggingFaceProviderConfig,
+    MistralProviderConfig,
+    NvidiaProviderConfig,
     OpenRouterProviderConfig,
+    SambaNovaProviderConfig,
+    ZAIProviderConfig,
 )
 
 
@@ -129,21 +134,28 @@ def _free_record(*, unique_id: str) -> PlatformFreeModelRecord:
     )
 
 
+def _llm_update_without_free_pool_keys(**provider_overrides: object) -> dict[str, object]:
+    update: dict[str, object] = {
+        "openrouter": OpenRouterProviderConfig(api_key=None),
+        "bothub": BothubProviderConfig(api_key=None),
+        "groq": GroqProviderConfig(api_key=None),
+        "cerebras": CerebrasProviderConfig(api_key=None),
+        "google": GoogleLLMProviderConfig(api_key=None),
+        "github": GitHubModelsProviderConfig(api_key=None),
+        "huggingface": HuggingFaceProviderConfig(api_key=None),
+        "nvidia": NvidiaProviderConfig(api_key=None),
+        "mistral": MistralProviderConfig(api_key=None),
+        "zai": ZAIProviderConfig(api_key=None),
+        "sambanova": SambaNovaProviderConfig(api_key=None),
+    }
+    update.update(provider_overrides)
+    return update
+
+
 def _settings_without_free_pool_keys():
     live = get_settings()
     return live.model_copy(
-        update={
-            "llm": live.llm.model_copy(
-                update={
-                    "openrouter": OpenRouterProviderConfig(api_key=None),
-                    "bothub": BothubProviderConfig(api_key=None),
-                    "groq": GroqProviderConfig(api_key=None),
-                    "google": GoogleLLMProviderConfig(api_key=None),
-                    "github": GitHubModelsProviderConfig(api_key=None),
-                    "huggingface": HuggingFaceProviderConfig(api_key=None),
-                }
-            )
-        }
+        update={"llm": live.llm.model_copy(update=_llm_update_without_free_pool_keys())}
     )
 
 
@@ -259,17 +271,12 @@ async def test_rescore_empty_records_does_not_write_redis(
     settings = live.model_copy(
         update={
             "llm": live.llm.model_copy(
-                update={
-                    "openrouter": OpenRouterProviderConfig(api_key=None),
-                    "bothub": BothubProviderConfig(api_key=None),
-                    "groq": GroqProviderConfig(
+                update=_llm_update_without_free_pool_keys(
+                    groq=GroqProviderConfig(
                         api_key="sk-test",
                         smoke_model="llama-3.1-8b-instant",
                     ),
-                    "google": GoogleLLMProviderConfig(api_key=None),
-                    "github": GitHubModelsProviderConfig(api_key=None),
-                    "huggingface": HuggingFaceProviderConfig(api_key=None),
-                }
+                )
             )
         }
     )
@@ -317,17 +324,12 @@ async def test_fetch_skips_unconfigured_provider_and_keeps_configured(
     settings = live.model_copy(
         update={
             "llm": live.llm.model_copy(
-                update={
-                    "openrouter": OpenRouterProviderConfig(api_key=None),
-                    "bothub": BothubProviderConfig(api_key=None),
-                    "groq": GroqProviderConfig(
+                update=_llm_update_without_free_pool_keys(
+                    groq=GroqProviderConfig(
                         api_key="sk-test",
                         smoke_model="llama-3.1-8b-instant",
                     ),
-                    "google": GoogleLLMProviderConfig(api_key=None),
-                    "github": GitHubModelsProviderConfig(api_key=None),
-                    "huggingface": HuggingFaceProviderConfig(api_key=None),
-                }
+                )
             )
         }
     )

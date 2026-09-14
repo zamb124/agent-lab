@@ -1818,6 +1818,16 @@ class GroqProviderConfig(BaseModel):
     smoke_model: str = Field(default=LLM_PROVIDER_SMOKE_MODELS["groq"])
 
 
+class CerebrasProviderConfig(BaseModel):
+    """OpenAI-compatible Cerebras Inference provider."""
+
+    api_key: str | None = Field(default=None)
+    api_keys: list[str] | None = Field(default=None)
+    base_url: str = Field(default=LLM_PROVIDER_DEFAULT_BASE_URLS["cerebras"])
+    models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["cerebras"])
+    smoke_model: str = Field(default=LLM_PROVIDER_SMOKE_MODELS["cerebras"])
+
+
 class GoogleLLMProviderConfig(BaseModel):
     """Google Gemini API через OpenAI-compatible chat endpoint и native models catalog."""
 
@@ -1847,6 +1857,46 @@ class HuggingFaceProviderConfig(BaseModel):
     base_url: str = Field(default=LLM_PROVIDER_DEFAULT_BASE_URLS["huggingface"])
     models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["huggingface"])
     smoke_model: str = Field(default=LLM_PROVIDER_SMOKE_MODELS["huggingface"])
+
+
+class NvidiaProviderConfig(BaseModel):
+    """NVIDIA NIM hosted OpenAI-compatible API (integrate.api.nvidia.com)."""
+
+    api_key: str | None = Field(default=None)
+    api_keys: list[str] | None = Field(default=None)
+    base_url: str = Field(default=LLM_PROVIDER_DEFAULT_BASE_URLS["nvidia"])
+    models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["nvidia"])
+    smoke_model: str = Field(default=LLM_PROVIDER_SMOKE_MODELS["nvidia"])
+
+
+class MistralProviderConfig(BaseModel):
+    """Mistral AI OpenAI-compatible API."""
+
+    api_key: str | None = Field(default=None)
+    api_keys: list[str] | None = Field(default=None)
+    base_url: str = Field(default=LLM_PROVIDER_DEFAULT_BASE_URLS["mistral"])
+    models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["mistral"])
+    smoke_model: str = Field(default=LLM_PROVIDER_SMOKE_MODELS["mistral"])
+
+
+class ZAIProviderConfig(BaseModel):
+    """Z.AI GLM OpenAI-compatible API (api.z.ai/api/paas/v4)."""
+
+    api_key: str | None = Field(default=None)
+    api_keys: list[str] | None = Field(default=None)
+    base_url: str = Field(default=LLM_PROVIDER_DEFAULT_BASE_URLS["zai"])
+    models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["zai"])
+    smoke_model: str = Field(default=LLM_PROVIDER_SMOKE_MODELS["zai"])
+
+
+class SambaNovaProviderConfig(BaseModel):
+    """SambaNova Cloud OpenAI-compatible API."""
+
+    api_key: str | None = Field(default=None)
+    api_keys: list[str] | None = Field(default=None)
+    base_url: str = Field(default=LLM_PROVIDER_DEFAULT_BASE_URLS["sambanova"])
+    models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["sambanova"])
+    smoke_model: str = Field(default=LLM_PROVIDER_SMOKE_MODELS["sambanova"])
 
 
 class DeepInfraProviderConfig(BaseModel):
@@ -1937,7 +1987,7 @@ class PlatformFreePoolConfig(BaseModel):
     candidate_cooldown_seconds: float = Field(
         default=60.0,
         ge=0.0,
-        description="Per-process cooldown модели после отказа до первого чанка.",
+        description="Redis TTL cooldown модели после отказа до первого чанка; 429 берёт Retry-After.",
     )
     paid_fallback: PlatformFreePoolPaidFallbackConfig = Field(
         default_factory=PlatformFreePoolPaidFallbackConfig
@@ -1962,7 +2012,8 @@ class LLMConfig(BaseModel):
         default=HUMANITEC_LLM_PROVIDER,
         description=(
             "Провайдер: humanitec_llm, openai, openrouter, bothub, "
-            "yandex, groq, google, github, huggingface, deepinfra, caila"
+            "yandex, groq, cerebras, google, github, huggingface, nvidia, mistral, "
+            "zai, sambanova, deepinfra, caila"
         ),
     )
     default_model: str = Field(default=HUMANITEC_LLM_AUTO_MODEL)
@@ -1978,9 +2029,14 @@ class LLMConfig(BaseModel):
     bothub: BothubProviderConfig | None = Field(default=None)
     yandex: YandexLLMProviderConfig | None = Field(default=None)
     groq: GroqProviderConfig | None = Field(default=None)
+    cerebras: CerebrasProviderConfig | None = Field(default=None)
     google: GoogleLLMProviderConfig | None = Field(default=None)
     github: GitHubModelsProviderConfig | None = Field(default=None)
     huggingface: HuggingFaceProviderConfig | None = Field(default=None)
+    nvidia: NvidiaProviderConfig | None = Field(default=None)
+    mistral: MistralProviderConfig | None = Field(default=None)
+    zai: ZAIProviderConfig | None = Field(default=None)
+    sambanova: SambaNovaProviderConfig | None = Field(default=None)
     deepinfra: DeepInfraProviderConfig | None = Field(default=None)
     caila: CailaProviderConfig | None = Field(default=None)
     models: dict[str, ModelConfig] = Field(default_factory=dict)

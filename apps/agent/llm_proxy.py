@@ -17,7 +17,6 @@ from dataclasses import dataclass, field
 from typing import ClassVar, Literal
 from urllib.parse import urlparse
 
-import httpx
 from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.exception_handlers import http_exception_handler
@@ -39,6 +38,7 @@ from core.a2a import (
     part_has_text,
 )
 from core.ai.models import ResolvedAIModel
+from core.ai.provider_error import AIProviderErrorClass, classify_ai_provider_error
 from core.ai.providers import (
     HUMANITEC_LLM_AUTO_MODEL,
     HUMANITEC_LLM_PROVIDER,
@@ -412,28 +412,6 @@ def _stream_extra_body(body: AgentOpenAIChatCompletionsRequest) -> JsonObject | 
     return {"tool_choice": body.tool_choice}
 
 
-def _is_rate_limit_error(exc: Exception) -> bool:
-    if isinstance(exc, httpx.HTTPStatusError):
-        return exc.response.status_code == 429
-    if isinstance(exc, RuntimeError):
-        error_text = str(exc).lower()
-        return (
-            "cooldown" in error_text
-            or "нет доступных" in error_text
-            or "free-pool" in error_text
-        )
-    return False
-
-
-def _agent_llm_error_message(exc: Exception, model: str) -> str:
-    if _is_rate_limit_error(exc):
-        return (
-            f"Превышен лимит запросов для модели {model}. "
-            "Попробуйте позже или выберите модель auto."
-        )
-    return "Модель временно недоступна, попробуйте ещё раз или смените модель."
-
-
 def _build_usage_payload(
     *,
     input_tokens: int,
@@ -485,6 +463,46 @@ class _AgentLlmCallState:
             )
             for tool_call in parsed
         ]
+
+
+def _require_agent_error_provider(provider: str | None) -> str:
+    if provider is None or not provider.strip():
+        raise ValueError("agent llm_proxy: provider обязателен для классификации ошибки")
+    return provider
+
+
+def _agent_error_provider(state: _AgentLlmCallState, resolved: ResolvedAIModel) -> str:
+    runtime_provider = state.resolved_llm_provider
+    if runtime_provider is not None and runtime_provider.strip():
+        return runtime_provider
+    return _require_agent_error_provider(resolved.provider)
+
+
+def _agent_pool_exhausted(exc: Exception) -> bool:
+    if not isinstance(exc, RuntimeError):
+        return False
+    error_text = str(exc).lower()
+    return (
+        "cooldown" in error_text
+        or "нет доступных" in error_text
+        or "free-pool" in error_text
+    )
+
+
+def _is_rate_limit_error(exc: Exception, *, provider: str) -> bool:
+    if _agent_pool_exhausted(exc):
+        return True
+    record = classify_ai_provider_error(provider, exc)
+    return record.error_class == AIProviderErrorClass.RATE_LIMITED
+
+
+def _agent_llm_error_message(exc: Exception, model: str, *, provider: str) -> str:
+    if _is_rate_limit_error(exc, provider=provider):
+        return (
+            f"Превышен лимит запросов для модели {model}. "
+            "Попробуйте позже или выберите модель auto."
+        )
+    return "Модель временно недоступна, попробуйте ещё раз или смените модель."
 
 
 def _apply_status_metadata(state: _AgentLlmCallState, metadata: JsonObject) -> None:
@@ -690,7 +708,11 @@ async def _stream_agent_llm_sse(
                 completion_id=completion_id,
                 model_id=response_model_id,
                 delta={
-                    "content": _agent_llm_error_message(state.stream_error, response_model_id),
+                    "content": _agent_llm_error_message(
+                        state.stream_error,
+                        response_model_id,
+                        provider=_agent_error_provider(state, resolved),
+                    ),
                 },
             )
         )
@@ -886,10 +908,11 @@ async def _dispatch_chat_completions(
             error=str(exc),
             error_type=type(exc).__name__,
         )
-        status_code = 429 if _is_rate_limit_error(exc) else 502
+        error_provider = _require_agent_error_provider(resolved.provider)
+        status_code = 429 if _is_rate_limit_error(exc, provider=error_provider) else 502
         raise HTTPException(
             status_code=status_code,
-            detail=_agent_llm_error_message(exc, response_model_id),
+            detail=_agent_llm_error_message(exc, response_model_id, provider=error_provider),
         ) from exc
     finish_reason = "tool_calls" if tool_calls_json else "stop"
     return JSONResponse(

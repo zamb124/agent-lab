@@ -119,8 +119,9 @@ def create_llm_transport_client(
     Аргументы:
         model_name: Имя модели
         temperature: Температура
-        provider: Провайдер (openai, openrouter, bothub, yandex, groq, google,
-            github, huggingface, deepinfra, humanitec_llm)
+        provider: Провайдер (openai, openrouter, bothub, yandex, groq, cerebras, google,
+            github, huggingface, nvidia, mistral, zai, sambanova, deepinfra, caila,
+            humanitec_llm)
         api_key: API ключ (напрямую или @var:my_key)
         base_url: Base URL провайдера (напрямую или @var:my_url)
         folder_id: Каталог Yandex Cloud (yandex); иначе из llm.yandex.folder_id
@@ -219,6 +220,7 @@ def create_llm_transport_client(
             candidate_resolver=candidate_resolver,
             first_token_timeout=free_pool_config.first_token_timeout_seconds,
             candidate_cooldown_seconds=free_pool_config.candidate_cooldown_seconds,
+            max_candidates_total=free_pool_config.max_candidates_total,
             platform_default_free_pool=True,
             platform_paid_fallback_enabled=allow_platform_paid_fallback,
             top_p=top_p,
@@ -307,6 +309,7 @@ def create_llm_transport_client(
             ),
             first_token_timeout=settings.llm.platform_free_pool.first_token_timeout_seconds,
             candidate_cooldown_seconds=settings.llm.platform_free_pool.candidate_cooldown_seconds,
+            max_candidates_total=settings.llm.platform_free_pool.max_candidates_total,
             platform_default_free_pool=True,
             platform_paid_fallback_enabled=allow_platform_paid_fallback,
             top_p=top_p,
@@ -412,6 +415,7 @@ def create_llm_transport_client(
         candidate_resolver=candidate_resolver,
         first_token_timeout=settings.llm.platform_free_pool.first_token_timeout_seconds,
         candidate_cooldown_seconds=settings.llm.platform_free_pool.candidate_cooldown_seconds,
+        max_candidates_total=settings.llm.platform_free_pool.max_candidates_total,
         top_p=top_p,
         top_k=top_k,
         frequency_penalty=frequency_penalty,

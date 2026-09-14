@@ -11,16 +11,19 @@ import httpx
 from core.ai.adapters.base import AIProviderAdapter
 from core.ai.models import AIModelRecord, AIRuntimeEndpoint
 from core.ai.providers import (
-    ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS,
     GITHUB_MODELS_API_VERSION,
     LLM_CAPABILITIES,
     LLM_PROVIDER_DEFAULT_MODELS_URLS,
+    PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS,
     PROVIDER_LITSERVE,
     AICapability,
 )
 from core.config import BaseSettings, get_settings
 from core.config.llm_openai_compat import (
-    normalize_llm_api_key,
+    collect_provider_api_keys,
+    first_provider_api_key,
+    llm_provider_block,
+    provider_is_configured_for_free_pool,
     resolve_provider_openai_v1_base_url,
     yandex_llm_openai_root_from_provider_cfg,
     yandex_provider_http_headers,
@@ -28,14 +31,19 @@ from core.config.llm_openai_compat import (
 from core.config.models import (
     BothubProviderConfig,
     CailaProviderConfig,
+    CerebrasProviderConfig,
     DeepInfraProviderConfig,
     GitHubModelsProviderConfig,
     GoogleLLMProviderConfig,
     GroqProviderConfig,
     HuggingFaceProviderConfig,
+    MistralProviderConfig,
+    NvidiaProviderConfig,
     OpenAIProviderConfig,
     OpenRouterProviderConfig,
+    SambaNovaProviderConfig,
     YandexLLMProviderConfig,
+    ZAIProviderConfig,
 )
 from core.http import ProxyStrategy
 from core.http.client import request_with_strategy
@@ -51,9 +59,14 @@ _ConfiguredLLMProvider = (
     | BothubProviderConfig
     | YandexLLMProviderConfig
     | GroqProviderConfig
+    | CerebrasProviderConfig
     | GoogleLLMProviderConfig
     | GitHubModelsProviderConfig
     | HuggingFaceProviderConfig
+    | NvidiaProviderConfig
+    | MistralProviderConfig
+    | ZAIProviderConfig
+    | SambaNovaProviderConfig
     | DeepInfraProviderConfig
     | CailaProviderConfig
 )
@@ -522,22 +535,7 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
         return parse_json_value(response.content, response_label)
 
     def _configured_llm_provider(self) -> _ConfiguredLLMProvider | None:
-        llm = self._settings.llm
-        by_provider: dict[str, _ConfiguredLLMProvider | None] = {
-            "openrouter": llm.openrouter,
-            "bothub": llm.bothub,
-            "groq": llm.groq,
-            "google": llm.google,
-            "github": llm.github,
-            "huggingface": llm.huggingface,
-            "deepinfra": llm.deepinfra,
-            "caila": llm.caila,
-            "openai": llm.openai,
-            "yandex": llm.yandex,
-        }
-        if self.provider not in by_provider:
-            raise ValueError(f"unknown LLM provider {self.provider!r}")
-        return by_provider[self.provider]
+        return llm_provider_block(self._settings.llm, self.provider)
 
     def _provider_models_url(self, cfg: _ConfiguredLLMProvider) -> str:
         configured_models_url = cfg.models_url
@@ -558,9 +556,7 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
         cfg = self._configured_llm_provider()
         if cfg is None:
             raise ValueError(f"{self.provider} provider config не настроен")
-        api_key = normalize_llm_api_key(cfg.api_key)
-        if not api_key:
-            raise ValueError(f"{self.provider} API key не настроен")
+        api_key = first_provider_api_key(cfg)
         headers = {"Content-Type": "application/json"}
         if self.provider == "yandex":
             yandex_config = cast(YandexLLMProviderConfig, cfg)
@@ -596,16 +592,15 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
             except (AttributeError, ValueError):
                 return False
             return True
+        if self.provider in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS:
+            return provider_is_configured_for_free_pool(self._settings.llm, self.provider)
         cfg = self._configured_llm_provider()
-        if cfg is None or not normalize_llm_api_key(cfg.api_key):
+        if cfg is None or not collect_provider_api_keys(cfg):
             return False
         if self.provider == "yandex":
             yandex_config = cast(YandexLLMProviderConfig, cfg)
             folder_id = yandex_config.folder_id
             return isinstance(folder_id, str) and bool(folder_id.strip())
-        if self.provider in ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS:
-            smoke_model = cfg.smoke_model
-            return isinstance(smoke_model, str) and bool(smoke_model.strip())
         return True
 
     def embedding_probe_url(self) -> str:
@@ -620,9 +615,7 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
         if cfg is None:
             raise ValueError(f"{self.provider} provider config не настроен")
         if self.provider == "google":
-            api_key = normalize_llm_api_key(cfg.api_key)
-            if not api_key:
-                raise ValueError("google provider api_key не настроен")
+            api_key = first_provider_api_key(cfg)
             return {
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",

@@ -14,6 +14,8 @@ import json
 import os
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime
 from typing import Any, Callable
 
 import httpx
@@ -205,6 +207,7 @@ def _candidate(
     supported_parameters: frozenset[str] = frozenset(),
     source: str = "test",
     context_length: int | None = None,
+    input_modalities: frozenset[str] = frozenset({"text"}),
 ) -> LLMCallConfig:
     return LLMCallConfig(
         provider=provider,
@@ -213,7 +216,7 @@ def _candidate(
         base_url=base_url,
         source=source,
         supported_parameters=supported_parameters,
-        input_modalities=frozenset({"text"}),
+        input_modalities=input_modalities,
         output_modalities=frozenset({"text"}),
         context_length=context_length,
     )
@@ -1073,7 +1076,7 @@ def test_explicit_platform_provider_accepts_humanitec_llms_fallback() -> None:
 
 
 def test_platform_free_pool_provider_is_configured_with_api_keys_only() -> None:
-    from core.clients.llm.provider_resolution import _platform_free_pool_provider_is_configured
+    from core.config.llm_openai_compat import provider_is_configured_for_free_pool
 
     old_settings = get_settings()
     settings = BaseSettings(
@@ -1089,13 +1092,13 @@ def test_platform_free_pool_provider_is_configured_with_api_keys_only() -> None:
     )
     try:
         set_settings(settings)
-        assert _platform_free_pool_provider_is_configured(settings, "openrouter") is True
+        assert provider_is_configured_for_free_pool(settings.llm, "openrouter") is True
     finally:
         set_settings(old_settings)
 
 
 def test_platform_free_pool_provider_not_configured_without_keys() -> None:
-    from core.clients.llm.provider_resolution import _platform_free_pool_provider_is_configured
+    from core.config.llm_openai_compat import provider_is_configured_for_free_pool
 
     old_settings = get_settings()
     settings = BaseSettings(
@@ -1110,7 +1113,7 @@ def test_platform_free_pool_provider_not_configured_without_keys() -> None:
     )
     try:
         set_settings(settings)
-        assert _platform_free_pool_provider_is_configured(settings, "openrouter") is False
+        assert provider_is_configured_for_free_pool(settings.llm, "openrouter") is False
     finally:
         set_settings(old_settings)
 
@@ -1485,4 +1488,346 @@ async def test_empty_candidates_platform_pool_without_paid_raises() -> None:
     )
     with pytest.raises(RuntimeError, match="нет доступных бесплатных моделей"):
         await client.chat([_message("hello")])
+
+
+@pytest.mark.asyncio
+async def test_filter_then_cap_keeps_tool_capable_platform_free_beyond_global_rank() -> None:
+    server = _OpenAICompatibleTestServer(
+        {
+            "no-tools-0": lambda writer: _write_sse_text(writer, "unexpected-0"),
+            "no-tools-1": lambda writer: _write_sse_text(writer, "unexpected-1"),
+            "tools-late": lambda writer: _write_sse_text(writer, "tools-ok"),
+        }
+    )
+    await server.start()
+    try:
+        client = LLMClient(
+            model="no-tools-0",
+            api_key="test-key",
+            base_url=server.base_url,
+            llm_provider="openai",
+            candidates=[
+                _candidate(
+                    "no-tools-0",
+                    base_url=server.base_url,
+                    supported_parameters=frozenset(),
+                    source="platform_free",
+                ),
+                _candidate(
+                    "no-tools-1",
+                    base_url=server.base_url,
+                    supported_parameters=frozenset(),
+                    source="platform_free",
+                ),
+                _candidate(
+                    "tools-late",
+                    base_url=server.base_url,
+                    supported_parameters=frozenset({"tools"}),
+                    source="platform_free",
+                ),
+            ],
+            first_token_timeout=0.5,
+            candidate_cooldown_seconds=0.0,
+            timeout=5.0,
+            max_candidates_total=2,
+            platform_default_free_pool=True,
+            platform_paid_fallback_enabled=False,
+        )
+        message = await client.chat([_message("hello")], tools=_tools_payload())
+        assert get_message_text(message) == "tools-ok"
+        assert [request.model for request in server.requests] == ["tools-late"]
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_filter_then_cap_keeps_file_capable_platform_free_beyond_global_rank() -> None:
+    server = _OpenAICompatibleTestServer(
+        {
+            "text-0": lambda writer: _write_sse_text(writer, "unexpected-0"),
+            "text-1": lambda writer: _write_sse_text(writer, "unexpected-1"),
+            "vision-late": lambda writer: _write_sse_text(writer, "vision-ok"),
+        }
+    )
+    await server.start()
+    try:
+        client = LLMClient(
+            model="text-0",
+            api_key="test-key",
+            base_url=server.base_url,
+            llm_provider="openai",
+            candidates=[
+                _candidate(
+                    "text-0",
+                    base_url=server.base_url,
+                    source="platform_free",
+                ),
+                _candidate(
+                    "text-1",
+                    base_url=server.base_url,
+                    source="platform_free",
+                ),
+                _candidate(
+                    "vision-late",
+                    base_url=server.base_url,
+                    source="platform_free",
+                    input_modalities=frozenset({"text", "image"}),
+                ),
+            ],
+            first_token_timeout=0.5,
+            candidate_cooldown_seconds=0.0,
+            timeout=5.0,
+            max_candidates_total=2,
+            platform_default_free_pool=True,
+            platform_paid_fallback_enabled=False,
+        )
+        message = await client.chat(
+            [
+                Message(
+                    message_id="file-msg",
+                    role=ROLE_USER,
+                    parts=[
+                        Part(raw=b"image", filename="image.png", media_type="image/png"),
+                    ],
+                )
+            ]
+        )
+        assert get_message_text(message) == "vision-ok"
+        assert [request.model for request in server.requests] == ["vision-late"]
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_filter_then_cap_keeps_json_capable_platform_free_beyond_global_rank() -> None:
+    server = _OpenAICompatibleTestServer(
+        {
+            "plain-0": lambda writer: _write_sse_text(writer, "unexpected-0"),
+            "plain-1": lambda writer: _write_sse_text(writer, "unexpected-1"),
+            "json-late": lambda writer: _write_sse_text(writer, "json-ok"),
+        }
+    )
+    await server.start()
+    try:
+        client = LLMClient(
+            model="plain-0",
+            api_key="test-key",
+            base_url=server.base_url,
+            llm_provider="openai",
+            candidates=[
+                _candidate(
+                    "plain-0",
+                    base_url=server.base_url,
+                    supported_parameters=frozenset({"temperature"}),
+                    source="platform_free",
+                ),
+                _candidate(
+                    "plain-1",
+                    base_url=server.base_url,
+                    supported_parameters=frozenset({"temperature"}),
+                    source="platform_free",
+                ),
+                _candidate(
+                    "json-late",
+                    base_url=server.base_url,
+                    supported_parameters=frozenset({"json_schema"}),
+                    source="platform_free",
+                ),
+            ],
+            first_token_timeout=0.5,
+            candidate_cooldown_seconds=0.0,
+            timeout=5.0,
+            max_candidates_total=2,
+            platform_default_free_pool=True,
+            platform_paid_fallback_enabled=False,
+        )
+        message_events: list[object] = []
+        async for event in client.stream(
+            [_message("hello")],
+            response_format={"type": "json_object"},
+        ):
+            message_events.append(event)
+        assert message_events
+        assert [request.model for request in server.requests] == ["json-late"]
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_filter_then_cap_limits_matching_platform_free_candidates() -> None:
+    server = _OpenAICompatibleTestServer(
+        {
+            "tools-0": lambda writer: _write_json_response(writer, 500, {"error": "0"}),
+            "tools-1": lambda writer: _write_json_response(writer, 500, {"error": "1"}),
+            "tools-2": lambda writer: _write_sse_text(writer, "should-not-run"),
+            "paid": lambda writer: _write_sse_text(writer, "paid-ok"),
+        }
+    )
+    await server.start()
+    try:
+        client = LLMClient(
+            model="tools-0",
+            api_key="test-key",
+            base_url=server.base_url,
+            llm_provider="openai",
+            candidates=[
+                _candidate(
+                    "tools-0",
+                    base_url=server.base_url,
+                    supported_parameters=frozenset({"tools"}),
+                    source="platform_free",
+                ),
+                _candidate(
+                    "tools-1",
+                    base_url=server.base_url,
+                    supported_parameters=frozenset({"tools"}),
+                    source="platform_free",
+                ),
+                _candidate(
+                    "tools-2",
+                    base_url=server.base_url,
+                    supported_parameters=frozenset({"tools"}),
+                    source="platform_free",
+                ),
+                _candidate(
+                    "paid",
+                    base_url=server.base_url,
+                    supported_parameters=frozenset({"tools"}),
+                    source="platform_paid_fallback",
+                ),
+            ],
+            first_token_timeout=0.5,
+            candidate_cooldown_seconds=0.0,
+            timeout=5.0,
+            max_candidates_total=2,
+            platform_default_free_pool=True,
+            platform_paid_fallback_enabled=True,
+        )
+        message = await client.chat([_message("hello")], tools=_tools_payload())
+        assert get_message_text(message) == "paid-ok"
+        assert [request.model for request in server.requests] == ["tools-0", "tools-1", "paid"]
+    finally:
+        await server.close()
+
+
+async def _write_429_retry_after(writer: asyncio.StreamWriter, seconds: int) -> None:
+    body = b'{"error":"rate_limited"}'
+    writer.write(
+        (
+            "HTTP/1.1 429 Too Many Requests\r\n"
+            "Content-Type: application/json\r\n"
+            f"Retry-After: {seconds}\r\n"
+            f"Content-Length: {len(body)}\r\n"
+            "Connection: close\r\n"
+            "\r\n"
+        ).encode("ascii")
+        + body
+    )
+    await writer.drain()
+
+
+async def _write_429_retry_after_http_date(writer: asyncio.StreamWriter, seconds: int) -> None:
+    body = b'{"error":"rate_limited"}'
+    retry_at = datetime.now(timezone.utc) + timedelta(seconds=seconds)
+    writer.write(
+        (
+            "HTTP/1.1 429 Too Many Requests\r\n"
+            "Content-Type: application/json\r\n"
+            f"Retry-After: {format_datetime(retry_at, usegmt=True)}\r\n"
+            f"Content-Length: {len(body)}\r\n"
+            "Connection: close\r\n"
+            "\r\n"
+        ).encode("ascii")
+        + body
+    )
+    await writer.drain()
+
+
+@pytest.mark.asyncio
+async def test_stream_uses_redis_cooldown_and_retry_after(unique_id: str) -> None:
+    from core.ai.provider_error import AIProviderErrorClass
+    from core.clients.llm.candidate_cooldown import (
+        cooldown_redis_key,
+        parse_candidate_cooldown_payload,
+    )
+    from core.clients.redis_client import RedisClient
+
+    fail_model = f"fail-429-{unique_id}"
+    ok_model = f"ok-{unique_id}"
+    redis = RedisClient(get_settings().database.redis_url)
+    server = _OpenAICompatibleTestServer(
+        {
+            fail_model: lambda writer: _write_429_retry_after(writer, 30),
+            ok_model: lambda writer: _write_sse_text(writer, "ok"),
+        }
+    )
+    await server.start()
+    fail_on_server = _candidate(fail_model, base_url=server.base_url)
+    ok_on_server = _candidate(ok_model, base_url=server.base_url)
+    try:
+        client = LLMClient(
+            model=fail_model,
+            api_key="test-key",
+            base_url=server.base_url,
+            llm_provider="openai",
+            candidates=[fail_on_server, ok_on_server],
+            first_token_timeout=0.5,
+            candidate_cooldown_seconds=5.0,
+            timeout=5.0,
+        )
+        message = await client.chat([_message("hello")])
+        assert get_message_text(message) == "ok"
+        ttl = await redis.ttl(cooldown_redis_key(fail_on_server))
+        assert 20 <= ttl <= 30
+        raw_cooldown = await redis.get(cooldown_redis_key(fail_on_server))
+        assert raw_cooldown is not None
+        record = parse_candidate_cooldown_payload(raw_cooldown)
+        assert record.error_class == AIProviderErrorClass.RATE_LIMITED
+        assert record.http_status == 429
+        second = await client.chat([_message("hello")])
+        assert get_message_text(second) == "ok"
+        assert [request.model for request in server.requests] == [fail_model, ok_model, ok_model]
+    finally:
+        _ = await redis.delete(cooldown_redis_key(fail_on_server))
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_stream_uses_redis_cooldown_and_http_date_retry_after(unique_id: str) -> None:
+    from core.clients.llm.candidate_cooldown import cooldown_redis_key
+    from core.clients.redis_client import RedisClient
+
+    fail_model = f"fail-429-date-{unique_id}"
+    ok_model = f"ok-date-{unique_id}"
+    redis = RedisClient(get_settings().database.redis_url)
+    server = _OpenAICompatibleTestServer(
+        {
+            fail_model: lambda writer: _write_429_retry_after_http_date(writer, 30),
+            ok_model: lambda writer: _write_sse_text(writer, "ok"),
+        }
+    )
+    await server.start()
+    fail_on_server = _candidate(fail_model, base_url=server.base_url)
+    ok_on_server = _candidate(ok_model, base_url=server.base_url)
+    try:
+        client = LLMClient(
+            model=fail_model,
+            api_key="test-key",
+            base_url=server.base_url,
+            llm_provider="openai",
+            candidates=[fail_on_server, ok_on_server],
+            first_token_timeout=0.5,
+            candidate_cooldown_seconds=5.0,
+            timeout=5.0,
+        )
+        message = await client.chat([_message("hello")])
+        assert get_message_text(message) == "ok"
+        ttl = await redis.ttl(cooldown_redis_key(fail_on_server))
+        assert 20 <= ttl <= 30
+        second = await client.chat([_message("hello")])
+        assert get_message_text(second) == "ok"
+        assert [request.model for request in server.requests] == [fail_model, ok_model, ok_model]
+    finally:
+        _ = await redis.delete(cooldown_redis_key(fail_on_server))
+        await server.close()
 

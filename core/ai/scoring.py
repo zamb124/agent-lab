@@ -105,7 +105,7 @@ def catalog_heuristic(
 
     modality_penalty = _modality_mismatch_penalty(record, capability)
     availability_penalty = 0.0
-    if record.availability_status in {"disabled", "unavailable", "rate_limited"}:
+    if record.availability_status in {"disabled", "unavailable"}:
         availability_penalty = 1000.0
     elif record.availability_status == "available":
         availability_penalty = -1.0

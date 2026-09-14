@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, cast
 
 from core.ai.llm_config import LLMCallConfig
 from core.ai.providers import (
-    ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS,
     GITHUB_MODELS_API_VERSION,
     HUMANITEC_LLM_AUTO_MODEL,
     HUMANITEC_LLM_PROVIDER,
@@ -16,25 +15,31 @@ from core.ai.providers import (
     LLM_ROUTING_PROVIDER_SLUGS,
     OPENAI_COMPATIBLE_LLM_PROVIDER_SLUGS,
     PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER,
-    PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS,
     PROVIDER_LITSERVE,
 )
 from core.config.base import BaseSettings
 from core.config.llm_openai_compat import (
     collect_provider_api_keys,
+    llm_provider_block,
+    provider_is_configured_for_free_pool,
     yandex_llm_openai_root_from_provider_cfg,
 )
 from core.config.models import (
     BothubProviderConfig,
     CailaProviderConfig,
+    CerebrasProviderConfig,
     DeepInfraProviderConfig,
     GitHubModelsProviderConfig,
     GoogleLLMProviderConfig,
     GroqProviderConfig,
     HuggingFaceProviderConfig,
+    MistralProviderConfig,
+    NvidiaProviderConfig,
     OpenAIProviderConfig,
     OpenRouterProviderConfig,
+    SambaNovaProviderConfig,
     YandexLLMProviderConfig,
+    ZAIProviderConfig,
 )
 from core.config.openai_v1_base_url import normalize_openai_v1_base_url
 from core.types import JsonObject
@@ -50,9 +55,14 @@ _OpenAICompatibleProviderConfig = (
     | BothubProviderConfig
     | YandexLLMProviderConfig
     | GroqProviderConfig
+    | CerebrasProviderConfig
     | GoogleLLMProviderConfig
     | GitHubModelsProviderConfig
     | HuggingFaceProviderConfig
+    | NvidiaProviderConfig
+    | MistralProviderConfig
+    | ZAIProviderConfig
+    | SambaNovaProviderConfig
     | DeepInfraProviderConfig
     | CailaProviderConfig
 )
@@ -62,27 +72,9 @@ def _configured_provider_config(
     settings: BaseSettings,
     provider: str,
 ) -> _OpenAICompatibleProviderConfig | None:
-    if provider == "openai":
-        return settings.llm.openai
-    if provider == "openrouter":
-        return settings.llm.openrouter
-    if provider == "bothub":
-        return settings.llm.bothub
-    if provider == "yandex":
-        return settings.llm.yandex
-    if provider == "groq":
-        return settings.llm.groq
-    if provider == "google":
-        return settings.llm.google
-    if provider == "github":
-        return settings.llm.github
-    if provider == "huggingface":
-        return settings.llm.huggingface
-    if provider == "deepinfra":
-        return settings.llm.deepinfra
-    if provider == "caila":
-        return settings.llm.caila
-    return None
+    if provider not in OPENAI_COMPATIBLE_LLM_PROVIDER_SLUGS:
+        return None
+    return llm_provider_block(settings.llm, provider)
 
 
 def _yandex_openai_root(settings: BaseSettings) -> str:
@@ -208,11 +200,16 @@ def _provider_display_name(provider: str) -> str:
     return {
         "bothub": "Bothub",
         "caila": "Caila",
+        "cerebras": "Cerebras",
         "deepinfra": "DeepInfra",
         "github": "GitHub Models",
         "google": "Google LLM",
         "groq": "Groq",
         "huggingface": "Hugging Face",
+        "nvidia": "NVIDIA NIM",
+        "mistral": "Mistral",
+        "zai": "Z.AI",
+        "sambanova": "SambaNova",
         "openai": "OpenAI",
         "openrouter": "OpenRouter",
         "yandex": "Yandex LLM",
@@ -445,27 +442,10 @@ def _resolved_llm_configs(
     return resolved_configs
 
 
-def _platform_free_pool_provider_is_configured(
-    settings: BaseSettings,
-    provider: str,
-) -> bool:
-    if provider not in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS:
-        return False
-    provider_config = _configured_provider_config(settings, provider)
-    if provider_config is None:
-        return False
-    if not collect_provider_api_keys(provider_config):
-        return False
-    if provider in ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS:
-        smoke_model = provider_config.smoke_model
-        return isinstance(smoke_model, str) and bool(smoke_model.strip())
-    return True
-
-
 def _platform_default_pool_is_configured(settings: BaseSettings) -> bool:
     free_pool_config = settings.llm.platform_free_pool
     return free_pool_config.enabled and any(
-        _platform_free_pool_provider_is_configured(settings, provider)
+        provider_is_configured_for_free_pool(settings.llm, provider)
         for provider in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER
     )
 

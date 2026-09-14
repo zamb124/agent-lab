@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
-import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import suppress
 from typing import (
@@ -12,7 +10,6 @@ from typing import (
     overload,
 )
 
-import httpx
 from a2a.helpers.proto_helpers import get_message_text
 from a2a.types import (
     Message,
@@ -24,7 +21,14 @@ from a2a.types import (
 from pydantic import BaseModel
 
 from core.a2a.codec import mapping_from_struct, part_has_text, struct_from_mapping
+from core.ai.free_pool import PLATFORM_FREE_MODEL_SOURCE
 from core.ai.llm_config import LLMCallConfig, ReasoningEffort
+from core.ai.provider_error import AI_PROVIDER_IO_ERRORS
+from core.clients.llm.candidate_cooldown import (
+    candidate_cooldown_ttl_map,
+    cooldown_ttl_from_error,
+    set_candidate_cooldown,
+)
 from core.clients.llm.candidates import (
     candidate_key as _candidate_key,
 )
@@ -36,9 +40,6 @@ from core.clients.llm.context_layer import (
     llm_context_trace_metadata,
     merge_provider_cache_hints,
     prepare_messages_for_context_layer,
-)
-from core.clients.llm.errors import (
-    LLMStreamIdleTimeoutError,
 )
 from core.clients.llm.messages import (
     MessageInput,
@@ -76,7 +77,6 @@ from core.types import (
 logger = get_logger(__name__)
 T = TypeVar("T", bound=BaseModel)
 V = TypeVar("V")
-_CANDIDATE_COOLDOWN_UNTIL: dict[str, float] = {}
 
 
 class LLMClient:
@@ -111,6 +111,7 @@ class LLMClient:
         extra_request_body: JsonObject | None = None,
         extra_request_headers: dict[str, str] | None = None,
         context_length: int | None = None,
+        max_candidates_total: int | None = None,
     ):
         self.model: str = model
         self.api_key: str = api_key
@@ -163,6 +164,7 @@ class LLMClient:
         self.candidate_cooldown_seconds: float = candidate_cooldown_seconds
         self.platform_default_free_pool: bool = platform_default_free_pool
         self.platform_paid_fallback_enabled: bool = platform_paid_fallback_enabled
+        self.max_candidates_total: int | None = max_candidates_total
 
     def _client_for_candidate(self, candidate: LLMCallConfig) -> "LLMClient":
         if not candidate.model or not candidate.api_key:
@@ -191,6 +193,7 @@ class LLMClient:
             extra_request_body=candidate.extra_request_body,
             extra_request_headers=candidate.extra_request_headers,
             context_length=candidate.context_length,
+            max_candidates_total=self.max_candidates_total,
         )
 
     def _candidate_with_client_defaults(self, candidate: LLMCallConfig) -> LLMCallConfig:
@@ -292,7 +295,7 @@ class LLMClient:
         has_files = _messages_have_non_text_parts(openai_messages)
         has_tools = bool(tools)
         has_response_format = bool(response_format)
-        current_time = time.monotonic()
+        cooldown_left = await candidate_cooldown_ttl_map(candidates)
         filtered_candidates: list[LLMCallConfig] = []
         seen_candidate_keys: set[str] = set()
         for candidate in candidates:
@@ -300,13 +303,13 @@ class LLMClient:
             if candidate_cache_key in seen_candidate_keys:
                 continue
             seen_candidate_keys.add(candidate_cache_key)
-            cooldown_until = _CANDIDATE_COOLDOWN_UNTIL.get(candidate_cache_key, 0.0)
-            if cooldown_until > current_time:
+            cooldown_ttl = cooldown_left.get(candidate_cache_key, -2)
+            if cooldown_ttl > 0 or cooldown_ttl == -1:
                 logger.info(
                     "llm.candidate_skipped_cooldown",
                     provider=candidate.provider,
                     model=candidate.model,
-                    cooldown_left_seconds=round(cooldown_until - current_time, 1),
+                    cooldown_left_seconds=cooldown_ttl if cooldown_ttl > 0 else None,
                 )
                 continue
             if not _candidate_supports_request(
@@ -325,6 +328,16 @@ class LLMClient:
                 )
                 continue
             filtered_candidates.append(candidate)
+        if self.max_candidates_total is not None:
+            free_kept = 0
+            capped_candidates: list[LLMCallConfig] = []
+            for candidate in filtered_candidates:
+                if candidate.source == PLATFORM_FREE_MODEL_SOURCE:
+                    if free_kept >= self.max_candidates_total:
+                        continue
+                    free_kept += 1
+                capped_candidates.append(candidate)
+            filtered_candidates = capped_candidates
         if filtered_candidates:
             return filtered_candidates
         if self.platform_default_free_pool and candidates:
@@ -344,12 +357,15 @@ class LLMClient:
             )
         return candidates[:1]
 
-    def _cooldown_candidate(self, candidate: LLMCallConfig) -> None:
-        if self.candidate_cooldown_seconds <= 0:
+    async def _cooldown_candidate(
+        self,
+        candidate: LLMCallConfig,
+        error: BaseException | None = None,
+    ) -> None:
+        ttl = cooldown_ttl_from_error(error, self.candidate_cooldown_seconds)
+        if ttl is None:
             return
-        _CANDIDATE_COOLDOWN_UNTIL[_candidate_key(candidate)] = (
-            time.monotonic() + self.candidate_cooldown_seconds
-        )
+        await set_candidate_cooldown(candidate, ttl, error=error)
 
     @staticmethod
     def _merge_optional_dicts(
@@ -496,46 +512,34 @@ class LLMClient:
                         )
             except StopAsyncIteration:
                 return
-            except asyncio.TimeoutError as exc:
+            except AI_PROVIDER_IO_ERRORS as exc:
                 last_error = exc
                 if yielded_any:
                     raise
-                self._cooldown_candidate(candidate)
+                await self._cooldown_candidate(candidate, exc)
                 with suppress(Exception):
                     await agen.aclose()
-                logger.warning(
-                    "llm.candidate_first_token_timeout",
-                    provider=candidate.provider,
-                    model=candidate.model,
-                    source=candidate.source,
-                    timeout_seconds=self.first_token_timeout,
-                    attempt=candidate_index + 1,
-                    remaining=len(candidates) - candidate_index - 1,
-                )
-                continue
-            except (
-                LLMStreamIdleTimeoutError,
-                httpx.HTTPError,
-                OSError,
-                json.JSONDecodeError,
-                ValueError,
-            ) as exc:
-                last_error = exc
-                if yielded_any:
-                    raise
-                self._cooldown_candidate(candidate)
-                with suppress(Exception):
-                    await agen.aclose()
-                logger.warning(
-                    "llm.candidate_failed_before_first_event",
-                    provider=candidate.provider,
-                    model=candidate.model,
-                    source=candidate.source,
-                    attempt=candidate_index + 1,
-                    remaining=len(candidates) - candidate_index - 1,
-                    error=str(exc),
-                    error_type=type(exc).__name__,
-                )
+                if type(exc) is TimeoutError:
+                    logger.warning(
+                        "llm.candidate_first_token_timeout",
+                        provider=candidate.provider,
+                        model=candidate.model,
+                        source=candidate.source,
+                        timeout_seconds=self.first_token_timeout,
+                        attempt=candidate_index + 1,
+                        remaining=len(candidates) - candidate_index - 1,
+                    )
+                else:
+                    logger.warning(
+                        "llm.candidate_failed_before_first_event",
+                        provider=candidate.provider,
+                        model=candidate.model,
+                        source=candidate.source,
+                        attempt=candidate_index + 1,
+                        remaining=len(candidates) - candidate_index - 1,
+                        error=str(exc),
+                        error_type=type(exc).__name__,
+                    )
                 continue
 
         if last_error is not None:
@@ -638,9 +642,9 @@ class LLMClient:
                     extra_body=merged_extra_body,
                     extra_headers=merged_extra_headers,
                 )
-            except (httpx.HTTPError, OSError, json.JSONDecodeError, ValueError) as exc:
+            except AI_PROVIDER_IO_ERRORS as exc:
                 last_error = exc
-                self._cooldown_candidate(candidate)
+                await self._cooldown_candidate(candidate, exc)
                 logger.warning(
                     "llm.invoke_candidate_failed",
                     provider=candidate.provider,

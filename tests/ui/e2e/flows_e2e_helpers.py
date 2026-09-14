@@ -943,27 +943,11 @@ def flows_interface_canvas_block(page: Page, block_type: str) -> Locator:
 
 
 async def flows_interface_publish(page: Page) -> None:
-    """Publish from the Interface editor toolbar: the page saves the flow with the new document."""
-    toolbar = page.locator("flows-interface-editor flows-interface-toolbar").first
-    publish = (
-        toolbar.locator("platform-button")
-        .filter(has_text=re.compile(r"^\s*(Publish|Опубликовать)\s*$"))
-        .first
-    )
-    await expect(publish.locator("button")).to_be_enabled(timeout=10_000)
-    async with page.expect_response(
-        lambda response: (
-            response.request.method == "PUT" and "/flows/api/v1/flows/" in response.url
-        ),
-        timeout=30_000,
-    ) as publish_response:
-        await publish.locator("button").click()
-    response = await publish_response.value
-    if response.status >= 400:
-        raise AssertionError(
-            f"flows_interface_publish: PUT failed with {response.status}: {await response.text()}"
-        )
-    await expect(toolbar.locator(".status")).to_have_attribute("data-dirty", "false", timeout=15_000)
+    """Publish from the shared editor header — the only Publish on Logic / Interface / Run."""
+    await flows_publish_editor(page)
+    await expect(
+        page.locator("flows-editor-header .status-badge[data-status='dirty']")
+    ).to_have_count(0, timeout=15_000)
 
 
 async def flows_open_interface_editor_workspace(

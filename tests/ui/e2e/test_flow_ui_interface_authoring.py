@@ -67,8 +67,8 @@ async def test_flow_ui_interface_add_panel_inserts_text_input_and_selects_it(
         await expect(editor.locator(".selection")).to_be_visible(timeout=10_000)
         # Поле без действия на странице — предупреждение no_action в списке проблем.
         await expect(editor.locator(".problems .problem")).to_have_count(1, timeout=15_000)
-        await expect(editor.locator("flows-interface-toolbar .status")).to_have_attribute(
-            "data-dirty", "true", timeout=10_000
+        await expect(page.locator("flows-editor-header .status-badge")).to_have_attribute(
+            "data-status", "dirty", timeout=10_000
         )
     finally:
         await flows_api_delete_flow(flows_ui.origin, auth_token_system, flow_id)
@@ -102,7 +102,7 @@ async def test_flow_ui_interface_editor_undo_redo_after_add(
         await flows_interface_add_block(page, "Badge")
         await expect(badges).to_have_count(1, timeout=15_000)
 
-        toolbar = editor.locator("flows-interface-toolbar")
+        toolbar = page.locator("flow-editor-page flows-interface-toolbar")
         undo = toolbar.get_by_role("button", name=re.compile(r"^\s*(Undo|Отменить)\s*$")).first
         await expect(undo).to_be_enabled(timeout=10_000)
         await undo.click()

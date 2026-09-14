@@ -217,13 +217,18 @@ def test_is_rate_limit_error_detects_429_and_cooldown() -> None:
     request = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
     response = httpx.Response(429, request=request)
     assert _is_rate_limit_error(
-        httpx.HTTPStatusError("429", request=request, response=response)
+        httpx.HTTPStatusError("429", request=request, response=response),
+        provider="openrouter",
     )
-    assert _is_rate_limit_error(RuntimeError("LLM stream: нет доступных model candidates"))
-    assert not _is_rate_limit_error(ValueError("weird"))
+    assert _is_rate_limit_error(
+        RuntimeError("LLM stream: нет доступных model candidates"),
+        provider="openrouter",
+    )
+    assert not _is_rate_limit_error(ValueError("weird"), provider="openrouter")
     ok_response = httpx.Response(500, request=request)
     assert not _is_rate_limit_error(
-        httpx.HTTPStatusError("500", request=request, response=ok_response)
+        httpx.HTTPStatusError("500", request=request, response=ok_response),
+        provider="openrouter",
     )
 
 
@@ -233,10 +238,11 @@ def test_agent_llm_error_message_rate_limit_and_generic() -> None:
     rate_limited = _agent_llm_error_message(
         httpx.HTTPStatusError("429", request=request, response=response),
         "openrouter:qwen/qwen3-coder:free",
+        provider="openrouter",
     )
     assert "Превышен лимит запросов" in rate_limited
     assert "openrouter:qwen/qwen3-coder:free" in rate_limited
-    generic = _agent_llm_error_message(ValueError("weird"), "auto")
+    generic = _agent_llm_error_message(ValueError("weird"), "auto", provider="openrouter")
     assert "временно недоступна" in generic
 
 

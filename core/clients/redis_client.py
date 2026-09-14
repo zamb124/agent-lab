@@ -64,6 +64,8 @@ class _RedisPubSubMessage(TypedDict):
 class _RedisPipeline(Protocol):
     def ttl(self, key: str) -> object: ...
 
+    def get(self, key: str) -> object: ...
+
     def execute(self) -> Awaitable[list[object]]: ...
 
 
@@ -431,6 +433,24 @@ class RedisClient:
                 return False
         return False
 
+    async def set_persist(self, key: str, value: str) -> None:
+        """SET без expiry. Redis недоступен — RedisOperationError."""
+        if not await self._ensure_connected():
+            raise RedisOperationError(f"set_persist({key}): Redis недоступен после retry")
+        try:
+            client = self._require_client()
+            _ = await client.set(key, value)
+        except (RedisError, OSError, asyncio.TimeoutError) as primary_error:
+            if not await self._ensure_connected():
+                raise RedisOperationError(
+                    f"set_persist({key}): Redis недоступен после retry"
+                ) from primary_error
+            try:
+                client = self._require_client()
+                _ = await client.set(key, value)
+            except (RedisError, OSError, asyncio.TimeoutError) as retry_error:
+                raise RedisOperationError(f"set_persist({key}): {retry_error}") from retry_error
+
     async def set_nx(self, key: str, value: str, ttl_seconds: int) -> bool:
         """
         `SET key value NX EX ttl`. True только если ключ раньше отсутствовал.
@@ -621,6 +641,43 @@ class RedisClient:
             if not isinstance(ttl_value, int):
                 raise RedisOperationError("ttl_batch: non-int ttl in pipeline result")
             parsed.append(ttl_value)
+        return parsed
+
+    async def get_batch(self, keys: list[str]) -> list[str | None]:
+        """GET для списка ключей одним pipeline. Redis недоступен — RedisOperationError."""
+        if not keys:
+            return []
+        if not await self._ensure_connected():
+            raise RedisOperationError("get_batch: Redis недоступен после retry")
+        try:
+            client = self._require_client()
+            pipeline = client.pipeline()
+            for key in keys:
+                _ = pipeline.get(key)
+            get_results = await pipeline.execute()
+        except (RedisError, OSError, asyncio.TimeoutError) as primary_error:
+            if not await self._ensure_connected():
+                raise RedisOperationError(
+                    "get_batch: Redis недоступен после retry"
+                ) from primary_error
+            try:
+                client = self._require_client()
+                pipeline = client.pipeline()
+                for key in keys:
+                    _ = pipeline.get(key)
+                get_results = await pipeline.execute()
+            except (RedisError, OSError, asyncio.TimeoutError) as retry_error:
+                raise RedisOperationError(f"get_batch: {retry_error}") from retry_error
+        parsed: list[str | None] = []
+        for value in get_results:
+            if value is None:
+                parsed.append(None)
+                continue
+            if not isinstance(value, str):
+                raise RedisOperationError(
+                    f"get_batch: non-str value in pipeline result: {type(value).__name__}"
+                )
+            parsed.append(value)
         return parsed
 
     async def xlen(self, stream: str) -> int:

@@ -21,12 +21,30 @@ from core.ai.free_pool import (
     serialize_platform_free_models,
 )
 from core.ai.providers import (
-    ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS,
     HUMANITEC_LLM_AUTO_MODEL,
     HUMANITEC_LLM_PROVIDER,
     HUMANITEC_LLMS_DISPLAY_LABEL,
     OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER,
     AICapability,
+)
+from core.config.models import (
+    BothubProviderConfig,
+    CailaProviderConfig,
+    CerebrasProviderConfig,
+    DeepInfraProviderConfig,
+    GitHubModelsProviderConfig,
+    GoogleLLMProviderConfig,
+    GroqProviderConfig,
+    HuggingFaceProviderConfig,
+    LLMConfig,
+    MistralProviderConfig,
+    NvidiaProviderConfig,
+    OpenAIProviderConfig,
+    OpenRouterProviderConfig,
+    PlatformFreePoolConfig,
+    SambaNovaProviderConfig,
+    YandexLLMProviderConfig,
+    ZAIProviderConfig,
 )
 
 
@@ -112,23 +130,24 @@ async def test_humanitec_llm_models_are_virtual_and_not_read_from_repository():
 
 
 def test_configured_providers_follow_canonical_provider_order(monkeypatch):
-    provider_configs = {
-        provider: SimpleNamespace(api_key="test-key")
-        for provider in OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER
-    }
-    for provider in ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS:
-        provider_configs[provider] = SimpleNamespace(
-            api_key="test-key",
-            smoke_model=f"{provider}/smoke",
-        )
-    provider_configs["yandex"] = SimpleNamespace(api_key="test-key", folder_id="folder")
     settings = SimpleNamespace(
-        llm=SimpleNamespace(
-            **provider_configs,
-            platform_free_pool=SimpleNamespace(
-                enabled=True,
-                providers=OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER,
-            ),
+        llm=LLMConfig(
+            openrouter=OpenRouterProviderConfig(api_key="test-key"),
+            bothub=BothubProviderConfig(api_key="test-key"),
+            groq=GroqProviderConfig(api_key="test-key"),
+            cerebras=CerebrasProviderConfig(api_key="test-key"),
+            google=GoogleLLMProviderConfig(api_key="test-key"),
+            github=GitHubModelsProviderConfig(api_key="test-key"),
+            huggingface=HuggingFaceProviderConfig(api_key="test-key"),
+            nvidia=NvidiaProviderConfig(api_key="test-key"),
+            mistral=MistralProviderConfig(api_key="test-key"),
+            zai=ZAIProviderConfig(api_key="test-key"),
+            sambanova=SambaNovaProviderConfig(api_key="test-key"),
+            deepinfra=DeepInfraProviderConfig(api_key="test-key"),
+            caila=CailaProviderConfig(api_key="test-key"),
+            openai=OpenAIProviderConfig(api_key="test-key"),
+            yandex=YandexLLMProviderConfig(api_key="test-key", folder_id="folder"),
+            platform_free_pool=PlatformFreePoolConfig(enabled=True),
         )
     )
     monkeypatch.setattr("apps.flows.src.services.llm_models_service.get_settings", lambda: settings)
@@ -141,21 +160,9 @@ def test_configured_providers_follow_canonical_provider_order(monkeypatch):
 
 def test_humanitec_llm_available_with_account_free_tier_provider(monkeypatch):
     settings = SimpleNamespace(
-        llm=SimpleNamespace(
-            openrouter=None,
-            bothub=None,
-            groq=SimpleNamespace(api_key="test-key", smoke_model="llama-3.1-8b-instant"),
-            google=None,
-            github=None,
-            huggingface=None,
-            deepinfra=None,
-            caila=None,
-            openai=None,
-            yandex=None,
-            platform_free_pool=SimpleNamespace(
-                enabled=True,
-                providers=OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER,
-            ),
+        llm=LLMConfig(
+            groq=GroqProviderConfig(api_key="test-key"),
+            platform_free_pool=PlatformFreePoolConfig(enabled=True),
         )
     )
     monkeypatch.setattr("apps.flows.src.services.llm_models_service.get_settings", lambda: settings)

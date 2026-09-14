@@ -97,7 +97,7 @@ class CompanyLLMOverride(BaseModel):
     """Override LLM-провайдера для одной capability компании.
 
     - ``provider`` платформенный (см. ``PLATFORM_LLM_PROVIDERS``) или ``custom:<id>``.
-    - ``api_key_encrypted`` / ``api_key_encrypted_extra`` / ``base_url`` имеют смысл только
+    - ``api_key_encrypted`` / ``base_url`` имеют смысл только
       для платформенных провайдеров (BYOK). Для ``custom:<id>`` эти поля игнорируются —
       URL и ключ берутся из ``custom_providers[id]``.
     - ``model`` опционален и используется только для capability без жёстко фиксированной
@@ -108,7 +108,6 @@ class CompanyLLMOverride(BaseModel):
 
     provider: str
     api_key_encrypted: str | None = None
-    api_key_encrypted_extra: list[str] | None = None
     base_url: str | None = None
     folder_id: str | None = None
     extra_request_headers: dict[str, str] | None = None
@@ -143,25 +142,23 @@ class CompanyLLMOverride(BaseModel):
         if _is_custom_ref(self.provider):
             if (
                 self.api_key_encrypted
-                or self.api_key_encrypted_extra
                 or self.base_url
                 or self.extra_request_headers
             ):
                 raise ValueError(
-                    "Для provider=custom:<id> поля api_key_encrypted/api_key_encrypted_extra/base_url/"
+                    "Для provider=custom:<id> поля api_key_encrypted/base_url/"
                     + "extra_request_headers не используются — задайте их в custom_providers"
                 )
         if self.provider == HUMANITEC_LLM_PROVIDER:
             if (
                 self.api_key_encrypted
-                or self.api_key_encrypted_extra
                 or self.base_url
                 or self.folder_id
                 or self.extra_request_headers
             ):
                 raise ValueError(
                     "provider=humanitec_llm — виртуальный платформенный провайдер; "
-                    + "api_key_encrypted/api_key_encrypted_extra/base_url/folder_id/"
+                    + "api_key_encrypted/base_url/folder_id/"
                     + "extra_request_headers не задаются"
                 )
             if (

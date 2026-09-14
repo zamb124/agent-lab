@@ -42,6 +42,28 @@ def _api_keys_for_free_pool_provider(settings: BaseSettings, provider: str) -> l
     return collect_provider_api_keys(cfg)
 
 
+def llm_call_configs_for_provider_model(
+    *,
+    provider: str,
+    model_id: str,
+    settings: BaseSettings,
+) -> list[LLMCallConfig]:
+    """Те же candidate keys, что runtime free-pool: provider × model × каждый api_key."""
+    return [
+        _resolve_llm_call_config(
+            LLMCallConfig(
+                provider=provider,
+                model=model_id,
+                api_key=api_key,
+                source=PLATFORM_FREE_MODEL_SOURCE,
+            ),
+            settings=settings,
+            source=PLATFORM_FREE_MODEL_SOURCE,
+        )
+        for api_key in _api_keys_for_free_pool_provider(settings, provider)
+    ]
+
+
 def _candidate_from_platform_free_record(
     record: PlatformFreeModelRecord,
     *,
@@ -410,4 +432,5 @@ __all__ = [
     "_make_humanitec_llms_candidate_chain_resolver",
     "bootstrap_humanitec_llms_config",
     "candidate_chain_uses_humanitec_llms",
+    "llm_call_configs_for_provider_model",
 ]

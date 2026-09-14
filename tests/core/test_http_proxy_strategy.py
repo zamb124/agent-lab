@@ -414,6 +414,7 @@ class TestProxyStrategy:
             '{"error":{"code":400,"message":"User location is not supported for the API use.",'
             '"status":"FAILED_PRECONDITION"}}'
         )
+        first.aread = AsyncMock()
         first.aclose = AsyncMock()
 
         second = MagicMock()
@@ -463,6 +464,7 @@ class TestProxyStrategy:
         first = MagicMock()
         first.status_code = 400
         first.text = '{"error":{"message":"bad request"}}'
+        first.aread = AsyncMock()
         first.aclose = AsyncMock()
 
         class FakeAsyncClient:

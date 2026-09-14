@@ -1,9 +1,11 @@
 /**
- * Панель инструментов редактора интерфейса: Undo/Redo, режим холста Desktop/Tablet/Mobile,
- * Тест (живой прогон черновика), Шаблоны, AI-помощник и Опубликовать.
+ * Контекстные инструменты Interface в единой chrome-bar: Undo/Redo, viewport,
+ * предпросмотр холста, шаблоны и AI-помощник страницы.
  *
- * События: ``editor-undo``, ``editor-redo``, ``editor-viewport {viewport}``, ``editor-preview {preview}``,
- * ``editor-templates``, ``editor-publish``, ``editor-assist {instruction, scope}``.
+ * Publish, статус и Lara здесь не живут — они общие в ``flows-editor-header``.
+ *
+ * События: ``editor-undo``, ``editor-redo``, ``editor-viewport {viewport}``,
+ * ``editor-preview {preview}``, ``editor-templates``, ``editor-assist {instruction, scope}``.
  */
 
 import { css, html } from 'lit';
@@ -22,8 +24,6 @@ export class FlowsInterfaceToolbar extends PlatformElement {
         canRedo: { type: Boolean },
         viewport: { type: String },
         preview: { type: Boolean },
-        dirty: { type: Boolean },
-        problemCount: { type: Number },
         hasSelection: { type: Boolean },
         assistBusy: { type: Boolean },
         _assistOpen: { state: true },
@@ -31,12 +31,16 @@ export class FlowsInterfaceToolbar extends PlatformElement {
     };
 
     static styles = [PlatformElement.styles, css`
-        :host { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border-subtle); background: var(--glass-solid-medium); min-width: 0; }
-        .group { display: inline-flex; align-items: center; gap: 4px; }
-        .spacer { flex: 1; }
-        .status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-tertiary); white-space: nowrap; }
-        .status[data-dirty='true'] { color: var(--warning); }
-        .status[data-errors='true'] { color: var(--error); }
+        :host {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-2);
+            min-width: 0;
+            padding: 0;
+            background: transparent;
+            border: none;
+        }
+        .group { display: inline-flex; align-items: center; gap: 2px; }
         .assist { display: grid; gap: 10px; width: min(420px, 90vw); padding: 12px; }
         .assist-actions { display: flex; gap: 8px; justify-content: flex-end; }
         .assist-hint { font-size: 12px; color: var(--text-tertiary); }
@@ -48,8 +52,6 @@ export class FlowsInterfaceToolbar extends PlatformElement {
         this.canRedo = false;
         this.viewport = 'desktop';
         this.preview = false;
-        this.dirty = false;
-        this.problemCount = 0;
         this.hasSelection = false;
         this.assistBusy = false;
         this._assistOpen = false;
@@ -90,28 +92,24 @@ export class FlowsInterfaceToolbar extends PlatformElement {
     }
 
     render() {
-        const statusKey = this.problemCount > 0 ? 'interface_editor.status_problems' : (this.dirty ? 'interface_editor.status_draft' : 'interface_editor.status_published');
+        const previewLabel = this.t(this.preview ? 'interface_editor.back_to_editing' : 'interface_editor.preview');
         return html`
             <div class="group">
-                <platform-button ghost icon-only density="compact" aria-label=${this.t('interface_editor.undo')} title="⌘Z" ?disabled=${!this.canUndo} @click=${() => this.emit('editor-undo')}><platform-icon name="undo" size="16"></platform-icon></platform-button>
-                <platform-button ghost icon-only density="compact" aria-label=${this.t('interface_editor.redo')} title="⇧⌘Z" ?disabled=${!this.canRedo} @click=${() => this.emit('editor-redo')}><platform-icon name="redo" size="16"></platform-icon></platform-button>
+                <platform-button variant="ghost" icon-only density="dense" aria-label=${this.t('interface_editor.undo')} title="⌘Z" ?disabled=${!this.canUndo} @click=${() => this.emit('editor-undo')}><platform-icon name="undo" size="16"></platform-icon></platform-button>
+                <platform-button variant="ghost" icon-only density="dense" aria-label=${this.t('interface_editor.redo')} title="⇧⌘Z" ?disabled=${!this.canRedo} @click=${() => this.emit('editor-redo')}><platform-icon name="redo" size="16"></platform-icon></platform-button>
             </div>
-            <platform-segmented-control density="compact" icon-only .value=${this.viewport} .items=${this._viewportItems()} aria-label=${this.t('interface_editor.viewport')}
+            <platform-segmented-control density="dense" icon-only .value=${this.viewport} .items=${this._viewportItems()} aria-label=${this.t('interface_editor.viewport')}
                 @change=${(event) => this.emit('editor-viewport', { viewport: event.detail.value })}></platform-segmented-control>
-            <platform-button ?accent=${this.preview} ?secondary=${!this.preview} density="compact" @click=${() => this.emit('editor-preview', { preview: !this.preview })}>
-                <platform-icon name=${this.preview ? 'edit' : 'play'} size="14"></platform-icon>${this.t(this.preview ? 'interface_editor.back_to_editing' : 'interface_editor.test')}
+            <platform-button variant="ghost" density="dense" ?accent=${this.preview} aria-label=${previewLabel} title=${previewLabel} @click=${() => this.emit('editor-preview', { preview: !this.preview })}>
+                <platform-icon name=${this.preview ? 'edit' : 'play'} size="14"></platform-icon>${previewLabel}
             </platform-button>
-            <span class="spacer"></span>
-            <span class="status" data-dirty=${this.dirty ? 'true' : 'false'} data-errors=${this.problemCount > 0 ? 'true' : 'false'}>
-                <platform-icon name=${this.problemCount > 0 ? 'notification-error' : (this.dirty ? 'fiber-manual-record' : 'done-all')} size="13"></platform-icon>
-                ${this.t(statusKey, { count: this.problemCount })}
-            </span>
-            <platform-button secondary density="compact" @click=${() => this.emit('editor-templates')}><platform-icon name="layers" size="14"></platform-icon>${this.t('interface_editor.templates')}</platform-button>
-            <platform-button class="assist-trigger" secondary density="compact" ?loading=${this.assistBusy} @click=${() => { this._assistOpen = !this._assistOpen; }}>
-                <platform-icon name="sparkle" size="14"></platform-icon>${this.t('interface_editor.assist')}
+            <platform-button variant="ghost" icon-only density="dense" aria-label=${this.t('interface_editor.templates')} title=${this.t('interface_editor.templates')} @click=${() => this.emit('editor-templates')}>
+                <platform-icon name="layers" size="14"></platform-icon>
+            </platform-button>
+            <platform-button class="assist-trigger" variant="ghost" icon-only density="dense" ?loading=${this.assistBusy} aria-label=${this.t('interface_editor.assist')} title=${this.t('interface_editor.assist')} @click=${() => { this._assistOpen = !this._assistOpen; }}>
+                <platform-icon name="sparkle" size="14"></platform-icon>
             </platform-button>
             ${this._renderAssist()}
-            <platform-button primary density="compact" ?disabled=${!this.dirty} @click=${() => this.emit('editor-publish')}>${this.t('interface_editor.publish')}</platform-button>
         `;
     }
 }

@@ -4,7 +4,7 @@
 
 import { fixture, fixtureCleanup, html, expect, elementUpdated, nextFrame } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
-import { collectFactories } from '@platform/lib/events/factories/register.js';
+import { collectFactories, getPlatformBus } from '@platform/lib/events/index.js';
 import { registerFactory } from '@platform/lib/events/factory-registry.js';
 import { editorResource } from '../../../../apps/flows/ui/events/resources/editor.resource.js';
 import {
@@ -14,9 +14,11 @@ import {
     branchRemoveOp,
 } from '../../../../apps/flows/ui/events/resources/flows.resource.js';
 import '../../../../apps/flows/ui/components/editor/flows-editor-header.js';
+import '../../../../apps/flows/ui/components/interface-editor/flows-interface-toolbar.js';
+import { interfaceEditorSlice } from '../../../../apps/flows/ui/events/resources/interface-editor.resource.js';
 import '../../../../apps/flows/ui/components/evaluation/flows-evaluation-run-toolbar.js';
 
-const FACTORIES = [editorResource, flowsResource, flowUpdateOp, flowReloadFromBundleOp, branchRemoveOp];
+const FACTORIES = [editorResource, flowsResource, flowUpdateOp, flowReloadFromBundleOp, branchRemoveOp, interfaceEditorSlice];
 
 function buttonHeight(platformButton) {
     return platformButton.shadowRoot.querySelector('button').getBoundingClientRect().height;
@@ -77,6 +79,36 @@ describe('flows chrome height canon', () => {
 
         const branches = el.shadowRoot.querySelector('.branches-slot platform-segmented-control');
         expect(branches).to.not.equal(null);
+        expect(el.shadowRoot.querySelectorAll('.status-badge').length).to.equal(1);
+        expect(el.shadowRoot.querySelectorAll('[data-action="publish"]').length).to.equal(1);
+    });
+
+    it('unified chrome with interface tools stays one bar (≤64px) without a second publish', async () => {
+        for (const factory of FACTORIES) {
+            registerFactory(factory);
+        }
+        const collected = collectFactories(FACTORIES);
+        bootstrapTestBus({ slices: collected.slices, effects: [] });
+        getPlatformBus().dispatch('flows/editor/workspace_set', { workspace: 'interface' });
+
+        const wrap = await fixture(html`
+            <div style="width: 1440px;">
+                <flows-editor-header flow-id="flow-demo" branch-id="base">
+                    <flows-interface-toolbar slot="workspace-tools"></flows-interface-toolbar>
+                </flows-editor-header>
+            </div>
+        `);
+        await elementUpdated(wrap);
+        await nextFrame();
+
+        const el = wrap.querySelector('flows-editor-header');
+        expect(el.getBoundingClientRect().height).to.be.at.most(64);
+        expect(el.shadowRoot.querySelectorAll('.status-badge').length).to.equal(1);
+        expect(el.shadowRoot.querySelectorAll('[data-action="publish"]').length).to.equal(1);
+        const toolbar = el.querySelector('flows-interface-toolbar');
+        expect(toolbar).to.not.equal(null);
+        expect(toolbar.renderRoot.querySelector('.status')).to.equal(null);
+        expect(el.querySelectorAll('[data-action="publish"]').length + el.shadowRoot.querySelectorAll('[data-action="publish"]').length).to.equal(1);
     });
 
     it('evaluation run toolbar shell uses flows toolbar min-height token', async () => {

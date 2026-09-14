@@ -1,10 +1,12 @@
 /**
  * Редактор интерфейса flow (модель Odoo Studio): слева «Добавить» / «Свойства», в центре холст
- * ``<platform-flow-ui editing>`` на реальном рендере, сверху вкладки страниц и панель инструментов.
+ * ``<platform-flow-ui editing>`` на реальном рендере, сверху вкладки страниц.
  *
  * Хост-контракт: ``.interfaceConfig`` (FlowUIDocument ветки), ``.flowId``, ``.branchId``;
- * ``interface-change {config}`` — публикация валидного черновика. Черновик и история живут
- * в slice ``flows/interface_editor``; структура меняется только командами домена.
+ * ``interface-change {config}`` — коммит валидного черновика в flowConfig (без PUT).
+ * ``interface-save-request`` — страница сохраняет flow после коммита (Preview).
+ * Черновик и история живут в slice ``flows/interface_editor``; структура меняется только командами домена.
+ * Глобальные Publish/статус — в ``flows-editor-header``, не здесь.
  */
 
 import { css, html, nothing } from 'lit';
@@ -49,7 +51,6 @@ import {
     withColumns,
     wrapInSection,
 } from './interface-editor-domain.js';
-import './flows-interface-toolbar.js';
 import './flows-interface-pages-tabs.js';
 import './flows-interface-add-panel.js';
 import './flows-interface-properties-panel.js';
@@ -74,6 +75,10 @@ function writeDraft(documentKey, document) {
     globalThis.localStorage.setItem(DRAFTS_STORAGE_KEY, JSON.stringify(drafts));
 }
 
+export function clearStoredInterfaceDraft(documentKey) {
+    writeDraft(documentKey, null);
+}
+
 export class FlowsInterfaceEditor extends PlatformElement {
     static i18nNamespace = 'flows';
 
@@ -89,7 +94,7 @@ export class FlowsInterfaceEditor extends PlatformElement {
     };
 
     static styles = [PlatformElement.styles, flowUIEditorChromeTokens, css`
-        :host { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; min-width: 0; min-height: 0; height: 100%; background: var(--bg-elevated); outline: none; }
+        :host { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0; min-height: 0; height: 100%; background: var(--bg-elevated); outline: none; }
         .body { display: grid; grid-template-columns: minmax(280px, 320px) minmax(0, 1fr); min-height: 0; }
         .sidebar { min-height: 0; overflow: auto; border-right: 1px solid var(--border-subtle); background: var(--glass-solid-medium); display: grid; grid-template-rows: auto minmax(0, 1fr); }
         .sidebar-tabs { display: block; margin: 8px 10px 0; }
@@ -133,17 +138,32 @@ export class FlowsInterfaceEditor extends PlatformElement {
         this._frameRaf = 0;
         this._resizeObserver = null;
         this._onKeyDown = (event) => this._handleKeydown(event);
+        this._onHostEditorEvent = (event) => this._handleHostEditorEvent(event);
     }
 
     connectedCallback() {
         super.connectedCallback();
         this.tabIndex = 0;
         this.addEventListener('keydown', this._onKeyDown);
+        this.addEventListener('editor-undo', this._onHostEditorEvent);
+        this.addEventListener('editor-redo', this._onHostEditorEvent);
+        this.addEventListener('editor-viewport', this._onHostEditorEvent);
+        this.addEventListener('editor-preview', this._onHostEditorEvent);
+        this.addEventListener('editor-templates', this._onHostEditorEvent);
+        this.addEventListener('editor-assist', this._onHostEditorEvent);
+        this.addEventListener('editor-publish', this._onHostEditorEvent);
         void this._loadSchema();
     }
 
     disconnectedCallback() {
         this.removeEventListener('keydown', this._onKeyDown);
+        this.removeEventListener('editor-undo', this._onHostEditorEvent);
+        this.removeEventListener('editor-redo', this._onHostEditorEvent);
+        this.removeEventListener('editor-viewport', this._onHostEditorEvent);
+        this.removeEventListener('editor-preview', this._onHostEditorEvent);
+        this.removeEventListener('editor-templates', this._onHostEditorEvent);
+        this.removeEventListener('editor-assist', this._onHostEditorEvent);
+        this.removeEventListener('editor-publish', this._onHostEditorEvent);
         if (this._resizeObserver) this._resizeObserver.disconnect();
         cancelAnimationFrame(this._frameRaf);
         super.disconnectedCallback();
@@ -167,6 +187,7 @@ export class FlowsInterfaceEditor extends PlatformElement {
         if (changed.has('interfaceConfig') || changed.has('flowId') || changed.has('branchId')) this._openDocument();
         this._syncCanvasPage();
         this._scheduleFrame();
+        this._syncProblems();
     }
 
     /** Активная вкладка страницы — источник правды для страницы холста. */
@@ -220,6 +241,53 @@ export class FlowsInterfaceEditor extends PlatformElement {
     get _problems() {
         const draft = this._draft;
         return draft === null || this._schema === null ? [] : documentProblems(draft, this._catalog, this._frozen);
+    }
+
+    _syncProblems() {
+        const problems = this._problems;
+        const current = Array.isArray(this._ui.value.problems) ? this._ui.value.problems : [];
+        if (stableStringify(current) === stableStringify(problems)) return;
+        this._ui.setProblems({ problems });
+    }
+
+    _handleHostEditorEvent(event) {
+        const type = event.type;
+        if (type === 'editor-undo') this.undo();
+        else if (type === 'editor-redo') this.redo();
+        else if (type === 'editor-viewport') this.setViewport(event.detail && event.detail.viewport);
+        else if (type === 'editor-preview') void this.setCanvasPreview(Boolean(event.detail && event.detail.preview));
+        else if (type === 'editor-templates') this.openTemplates();
+        else if (type === 'editor-assist') {
+            const instruction = event.detail && event.detail.instruction;
+            const scope = event.detail && event.detail.scope;
+            void this.assist(instruction, scope);
+        }
+        else if (type === 'editor-publish') this.commitDraft();
+        else throw new Error(`interface editor: unknown host event ${type}`);
+    }
+
+    undo() {
+        if (this._ui.value.history === null) return;
+        this._ui.undo(null);
+    }
+
+    redo() {
+        if (this._ui.value.history === null) return;
+        this._ui.redo(null);
+    }
+
+    setViewport(viewport) {
+        if (this._ui.value.history === null) return;
+        if (typeof viewport !== 'string') return;
+        this._ui.setViewport({ viewport });
+    }
+
+    openTemplates() {
+        this.openModal('flows.interface_template', { onApply: (document) => this._applyTemplate(document) });
+    }
+
+    focusProblem(problem) {
+        this._focusProblem(problem);
     }
 
     _labels() {
@@ -326,7 +394,7 @@ export class FlowsInterfaceEditor extends PlatformElement {
         this._ui.selectPage({ pageId: document.start_page_id });
     }
 
-    async _assist(instruction, scope) {
+    async assist(instruction, scope) {
         const draft = this._draft;
         const pageId = this._ui.value.pageId;
         const blockId = scope === 'block' ? this._ui.value.selectedBlockId : null;
@@ -344,34 +412,42 @@ export class FlowsInterfaceEditor extends PlatformElement {
         this._ui.selectBlock({ blockId: result.blocks[0].block_id });
     }
 
-    /** @returns {boolean} опубликовано ли; при блокирующих проблемах фокусирует первую. */
-    _publish() {
+    /**
+     * Коммит UI-черновика в flowConfig. PUT делает страница / Preview.
+     * @returns {boolean} можно продолжать save; при blocking problems — false.
+     */
+    commitDraft() {
+        const draft = this._draft;
+        if (draft === null) return true;
+        if (!this._dirty) return true;
+        if (this._schema === null) return false;
         const problems = this._problems;
         if (hasBlockingProblems(problems)) {
             const first = problems.find((problem) => problem.severity === 'error');
-            this._focusProblem(first);
+            if (first) this._focusProblem(first);
             this.toast('interface_editor.publish_blocked', { type: 'error' });
             return false;
         }
-        this.emit('interface-change', { config: structuredClone(this._draft) });
+        this.emit('interface-change', { config: structuredClone(draft) });
         writeDraft(this._documentKey, null);
         return true;
     }
 
     /**
-     * Тест — реальный Task на том же документе, что проверяет сервер: несохранённый черновик
-     * публикуется перед запуском, иначе поля черновика отклонит ingress ui-action.
+     * Предпросмотр холста — живой Task на том же документе, что проверяет сервер:
+     * несохранённый черновик коммитится и сохраняется перед запуском.
      */
-    async _setPreview(preview) {
+    async setCanvasPreview(preview) {
         if (preview && this._dirty) {
-            if (!this._publish()) return;
+            if (!this.commitDraft()) return;
+            this.emit('interface-save-request');
             await this._flowSaved();
             if (this._editor.state.isDirty) return;
         }
         this._ui.setPreview({ preview });
     }
 
-    /** Страница сохраняет flow по ``interface-change``; ждём завершения этого сохранения. */
+    /** Страница сохраняет flow по ``interface-save-request``; ждём завершения этого сохранения. */
     _flowSaved() {
         if (!this._editor.state.isSaving) return Promise.resolve();
         return new Promise((resolve) => {
@@ -533,18 +609,6 @@ export class FlowsInterfaceEditor extends PlatformElement {
         const catalogPaths = statePathCatalog({ dataflow: this._editor.state.dataflow, sampleState: this._sampleState, document: draft });
         const selected = ui.selectedBlockId !== '' ? locateBlock(page, ui.selectedBlockId).block : null;
         return html`
-            <flows-interface-toolbar
-                .canUndo=${ui.history.past.length > 0} .canRedo=${ui.history.future.length > 0}
-                .viewport=${ui.viewport} .preview=${ui.preview} .dirty=${this._dirty}
-                .problemCount=${problems.filter((problem) => problem.severity === 'error').length}
-                .hasSelection=${selected !== null} .assistBusy=${this._assistOp.busy}
-                @editor-undo=${() => this._ui.undo(null)} @editor-redo=${() => this._ui.redo(null)}
-                @editor-viewport=${(event) => this._ui.setViewport({ viewport: event.detail.viewport })}
-                @editor-preview=${(event) => this._setPreview(event.detail.preview)}
-                @editor-templates=${() => this.openModal('flows.interface_template', { onApply: (document) => this._applyTemplate(document) })}
-                @editor-publish=${() => this._publish()}
-                @editor-assist=${(event) => this._assist(event.detail.instruction, event.detail.scope)}
-            ></flows-interface-toolbar>
             <flows-interface-pages-tabs .document=${draft} .pageId=${ui.pageId}
                 @page-select=${(event) => this._ui.selectPage({ pageId: event.detail.pageId })}
                 @page-command=${(event) => this._pageCommand(event)}

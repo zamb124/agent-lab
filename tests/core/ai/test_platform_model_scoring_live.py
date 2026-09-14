@@ -13,6 +13,7 @@ from core.ai.free_pool import (
     platform_free_records_from_model_records,
 )
 from core.ai.models import AIModelRecord
+from core.ai.provider_error import AIProviderErrorClass
 from core.ai.providers import PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER, AICapability
 from core.clients.llm.client import LLMClient
 from core.clients.llm.runtime import create_llm_transport_client as create_transport_llm_client
@@ -32,12 +33,11 @@ from tests.core.clients.live_llm_provider_helpers import (
     SMOKE_MAX_TOKENS,
     attach_live_artificial_analysis,
     build_scored_free_pool,
+    classify_http_status_error,
     configured_provider,
     configured_smoke_model,
     disable_testing_mode,
     discover_live_catalog,
-    is_provider_rate_limit,
-    is_provider_transient_unavailable,
     live_chat_smoke_prompt,
     skip_provider_content_filter,
     skip_provider_rate_limit,
@@ -215,16 +215,17 @@ async def test_live_free_pool_top_n_chat_smoke(provider: str) -> None:
         try:
             result = await llm.invoke([smoke_message(prompt)], max_tokens=SMOKE_MAX_TOKENS)
         except httpx.HTTPStatusError as status_error:
-            if is_provider_rate_limit(provider, status_error):
+            error_class = classify_http_status_error(provider, status_error)
+            if error_class == AIProviderErrorClass.RATE_LIMITED:
                 last_rate_limit = status_error
                 continue
-            if is_provider_transient_unavailable(status_error):
+            if error_class == AIProviderErrorClass.TRANSIENT:
                 last_unavailable = status_error
                 continue
             if status_error.response.status_code in (400, 403, 404):
                 continue
             skip_provider_content_filter(provider, status_error)
-            if status_error.response.status_code == 402:
+            if error_class == AIProviderErrorClass.PAYMENT_REQUIRED:
                 pytest.skip(f"{provider}: inference requires positive balance")
             raise
 

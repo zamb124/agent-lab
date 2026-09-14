@@ -5,10 +5,12 @@ Routes:
     PUT    /api/platform/llm-model-scores
     DELETE /api/platform/llm-model-scores/{capability}/{provider}/{model_id:path}
     POST   /api/platform/llm-model-scores/refresh-cache
+    POST   /api/platform/llm-model-scores/probe-providers
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from typing import ClassVar
 
@@ -30,6 +32,12 @@ from core.ai.scoring import (
     PlatformModelScoreOverlay,
     compute_platform_model_score,
 )
+from core.clients.llm.provider_runtime_status import (
+    LLMModelRuntimeStatus,
+    LLMProviderRuntimeStatus,
+    collect_free_pool_runtime_status,
+    probe_platform_free_providers,
+)
 from core.config import get_settings
 from core.db.models.platform import LLMModelScore
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
@@ -45,11 +53,7 @@ router = APIRouter(
 )
 
 
-class LLMModelScoreItem(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    provider: str
-    model_id: str
+class LLMModelScoreItem(LLMModelRuntimeStatus):
     capability: AICapability
     score: float
     enabled: bool
@@ -65,10 +69,18 @@ class LLMModelScoreItem(BaseModel):
     updated_at: datetime | None = None
 
 
+@dataclass(frozen=True)
+class _ScoreCatalogRow:
+    catalog_record: AIModelRecord
+    overlay: PlatformModelScoreOverlay | None
+    overlay_row: LLMModelScore | None
+
+
 class LLMModelScoreListResponse(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     items: list[LLMModelScoreItem]
+    providers: list[LLMProviderRuntimeStatus]
 
 
 class LLMModelScoreUpsertRequest(BaseModel):
@@ -118,6 +130,7 @@ def _item_from_catalog(
     *,
     overlay: PlatformModelScoreOverlay | None,
     overlay_row: LLMModelScore | None,
+    runtime: LLMModelRuntimeStatus,
 ) -> LLMModelScoreItem:
     computed = compute_platform_model_score(
         catalog_record,
@@ -127,8 +140,13 @@ def _item_from_catalog(
     aa = catalog_record.artificial_analysis
     enabled = overlay.enabled if overlay is not None else True
     return LLMModelScoreItem(
-        provider=catalog_record.provider,
-        model_id=catalog_record.model_id,
+        provider=runtime.provider,
+        model_id=runtime.model_id,
+        availability=runtime.availability,
+        cooldown_seconds=runtime.cooldown_seconds,
+        error_class=runtime.error_class,
+        error_text=runtime.error_text,
+        http_status=runtime.http_status,
         capability=AICapability.LLM_CHAT,
         score=computed.score,
         enabled=enabled,
@@ -162,7 +180,7 @@ async def _catalog_records_for_capability(
     return records
 
 
-async def _build_merged_score_items(container: ContainerDep) -> list[LLMModelScoreItem]:
+async def _build_score_catalog_rows(container: ContainerDep) -> list[_ScoreCatalogRow]:
     settings = get_settings()
     capability = AICapability.LLM_CHAT
     catalog_records = await _catalog_records_for_capability(container, capability)
@@ -180,7 +198,7 @@ async def _build_merged_score_items(container: ContainerDep) -> list[LLMModelSco
         model_score_provider=container.llm_model_score_repository,
     )
     seen: set[tuple[str, str]] = set()
-    items: list[LLMModelScoreItem] = []
+    rows: list[_ScoreCatalogRow] = []
 
     for pool_record in pool_records:
         key = (pool_record.provider, pool_record.id)
@@ -188,9 +206,9 @@ async def _build_merged_score_items(container: ContainerDep) -> list[LLMModelSco
         catalog_record = catalog_by_key.get(key)
         if catalog_record is None:
             raise ValueError(f"free-pool record {pool_record.provider}:{pool_record.id} отсутствует в каталоге")
-        items.append(
-            _item_from_catalog(
-                catalog_record,
+        rows.append(
+            _ScoreCatalogRow(
+                catalog_record=catalog_record,
                 overlay=overlays.get(key),
                 overlay_row=db_rows.get(key),
             )
@@ -202,16 +220,51 @@ async def _build_merged_score_items(container: ContainerDep) -> list[LLMModelSco
         catalog_record = catalog_by_key.get(key)
         if catalog_record is None:
             continue
-        items.append(
-            _item_from_catalog(
-                catalog_record,
+        rows.append(
+            _ScoreCatalogRow(
+                catalog_record=catalog_record,
                 overlay=overlays.get(key),
                 overlay_row=row,
             )
         )
+    return rows
 
+
+def _overlay_enabled(overlay: PlatformModelScoreOverlay | None) -> bool:
+    if overlay is None:
+        return True
+    return overlay.enabled
+
+
+async def _score_list_response(rows: list[_ScoreCatalogRow]) -> LLMModelScoreListResponse:
+    status_by_key, providers = await collect_free_pool_runtime_status(
+        [
+            (
+                row.catalog_record.provider,
+                row.catalog_record.model_id,
+                _overlay_enabled(row.overlay),
+            )
+            for row in rows
+        ],
+        settings=get_settings(),
+    )
+    items: list[LLMModelScoreItem] = []
+    for row in rows:
+        status = status_by_key.get((row.catalog_record.provider, row.catalog_record.model_id))
+        if status is None:
+            raise ValueError(
+                f"runtime status отсутствует для {row.catalog_record.provider}:{row.catalog_record.model_id}"
+            )
+        items.append(
+            _item_from_catalog(
+                row.catalog_record,
+                overlay=row.overlay,
+                overlay_row=row.overlay_row,
+                runtime=status,
+            )
+        )
     items.sort(key=lambda item: item.score, reverse=True)
-    return items
+    return LLMModelScoreListResponse(items=items, providers=providers)
 
 
 async def _rescore_cache(container: ContainerDep) -> JsonObject:
@@ -226,7 +279,7 @@ async def _rescore_cache(container: ContainerDep) -> JsonObject:
 @router.get("", response_model=LLMModelScoreListResponse)
 async def list_llm_model_scores(container: ContainerDep) -> LLMModelScoreListResponse:
     _ = await _require_system_admin(container)
-    return LLMModelScoreListResponse(items=await _build_merged_score_items(container))
+    return await _score_list_response(await _build_score_catalog_rows(container))
 
 
 @router.put("", response_model=LLMModelScoreMutationResponse)
@@ -256,10 +309,20 @@ async def upsert_llm_model_score(
         editorial_prior=float(result.row.editorial_prior),
         note=result.row.note,
     )
+    status_by_key, _providers = await collect_free_pool_runtime_status(
+        [(payload.provider, payload.model_id, payload.enabled)],
+        settings=get_settings(),
+    )
+    runtime = status_by_key.get((payload.provider, payload.model_id))
+    if runtime is None:
+        raise ValueError(
+            f"runtime status отсутствует для {payload.provider}:{payload.model_id}"
+        )
     item = _item_from_catalog(
         catalog_record,
         overlay=overlay,
         overlay_row=result.row,
+        runtime=runtime,
     )
     logger.info(
         "frontend.llm_model_score_upserted",
@@ -312,3 +375,15 @@ async def refresh_llm_model_scores_cache(container: ContainerDep) -> JsonObject:
         providers=result.get("providers"),
     )
     return result
+
+
+@router.post("/probe-providers", response_model=LLMModelScoreListResponse)
+async def probe_llm_model_score_providers(container: ContainerDep) -> LLMModelScoreListResponse:
+    user = await _require_system_admin(container)
+    snapshots = await probe_platform_free_providers(settings=get_settings())
+    logger.info(
+        "frontend.llm_model_score_providers_probed",
+        actor_user_id=user.user_id,
+        count=len(snapshots),
+    )
+    return await _score_list_response(await _build_score_catalog_rows(container))

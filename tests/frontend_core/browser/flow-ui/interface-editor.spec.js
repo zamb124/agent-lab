@@ -15,6 +15,7 @@ import { editorResource } from '../../../../apps/flows/ui/events/resources/edito
 import { secretsVariablesResource } from '@platform/lib/events/resources/secrets-variables.resource.js';
 import { flowUiAssistOp, flowUiSchemaOp } from '../../../../apps/flows/ui/events/resources/flow-ui.resource.js';
 import '../../../../apps/flows/ui/components/interface-editor/flows-interface-editor.js';
+import '../../../../apps/flows/ui/components/interface-editor/flows-interface-toolbar.js';
 
 const INTERFACE = {
     start_page_id: 'main',
@@ -147,16 +148,16 @@ describe('flows-interface-editor', () => {
         expect(element.renderRoot.querySelector('.selection')).to.not.equal(null);
     });
 
-    it('undoes and redoes through the toolbar events and keeps the draft in local storage', async () => {
+    it('undoes and redoes the draft history and keeps it in local storage', async () => {
         const element = await mountEditor();
         paletteItem(element, 'button').click();
         await elementUpdated(element);
         expect(editorState().history.past).to.have.length(1);
 
-        element.renderRoot.querySelector('flows-interface-toolbar').dispatchEvent(new CustomEvent('editor-undo'));
+        element.undo();
         await elementUpdated(element);
         expect(editorState().history.present).to.deep.equal(INTERFACE);
-        element.renderRoot.querySelector('flows-interface-toolbar').dispatchEvent(new CustomEvent('editor-redo'));
+        element.redo();
         await elementUpdated(element);
         expect(editorState().history.present.pages[0].blocks).to.have.length(2);
 
@@ -170,6 +171,7 @@ describe('flows-interface-editor', () => {
         await elementUpdated(element);
         await waitUntil(() => element.renderRoot.querySelector('.problems .problem[data-severity="error"]') !== null, 'publish gate did not report');
         expect(element.renderRoot.querySelector('.problems').textContent).to.contain(flowsEn.interface_editor.problem_inputs_without_action);
+        expect(element.commitDraft()).to.equal(false);
 
         await showPalette(element);
         expect(editorState().sidebarTab).to.equal('add');
@@ -178,7 +180,7 @@ describe('flows-interface-editor', () => {
         await waitUntil(() => element.renderRoot.querySelector('.problems .ok') !== null, 'problems did not clear');
 
         const published = oneEvent(element, 'interface-change');
-        element.renderRoot.querySelector('flows-interface-toolbar').dispatchEvent(new CustomEvent('editor-publish'));
+        expect(element.commitDraft()).to.equal(true);
         const { detail } = await published;
         expect(detail.config.pages[0].blocks.map((block) => block.type)).to.deep.equal(['heading', 'text_input', 'button']);
     });
@@ -190,7 +192,7 @@ describe('flows-interface-editor', () => {
         const canvas = element.renderRoot.querySelector('platform-flow-ui');
         await waitUntil(() => blockElement(canvas, 'html') !== null, 'html block did not render');
         const published = oneEvent(element, 'interface-change');
-        element.renderRoot.querySelector('flows-interface-toolbar').dispatchEvent(new CustomEvent('editor-publish'));
+        expect(element.commitDraft()).to.equal(true);
         const { detail } = await published;
         const inserted = detail.config.pages[0].blocks.find((block) => block.type === 'html');
         expect(inserted.source).to.equal(flowsEn.interface_editor.default_text_html_source);
@@ -282,7 +284,7 @@ describe('flows-interface-editor', () => {
             flow_identity: { title: 'Flow', image_url: null },
         });
         const element = await mountEditor();
-        element.renderRoot.querySelector('flows-interface-toolbar').dispatchEvent(new CustomEvent('editor-preview', { detail: { preview: true } }));
+        await element.setCanvasPreview(true);
         await elementUpdated(element);
         const canvas = element.renderRoot.querySelector('platform-flow-ui');
         expect(canvas.hasAttribute('editing')).to.equal(false);
@@ -307,7 +309,7 @@ describe('flows-interface-editor', () => {
         paletteItem(element, 'html').click();
         await elementUpdated(element);
         await waitUntil(() => blockElement(element.renderRoot.querySelector('platform-flow-ui'), 'html') !== null, 'html block did not insert');
-        element.renderRoot.querySelector('flows-interface-toolbar').dispatchEvent(new CustomEvent('editor-preview', { detail: { preview: true } }));
+        await element.setCanvasPreview(true);
         await elementUpdated(element);
         const canvas = element.renderRoot.querySelector('platform-flow-ui');
         expect(canvas.hasAttribute('editing')).to.equal(false);
@@ -375,5 +377,17 @@ describe('flows-interface-editor', () => {
         await waitUntil(() => element.renderRoot.querySelector('.selection') !== null, 'selection chrome did not render');
         const frame = element.renderRoot.querySelector('.selection').getBoundingClientRect();
         expect(frame.width).to.be.at.least(visible.width - 2);
+    });
+
+    it('does not render a second publish or status chip; contextual toolbar has no primary', async () => {
+        const element = await mountEditor();
+        expect(element.renderRoot.querySelector('flows-interface-toolbar')).to.equal(null);
+        expect(element.renderRoot.querySelector('.status')).to.equal(null);
+
+        const toolbar = await fixture(html`<flows-interface-toolbar></flows-interface-toolbar>`);
+        await elementUpdated(toolbar);
+        expect(toolbar.renderRoot.querySelector('.status')).to.equal(null);
+        expect(toolbar.renderRoot.textContent).to.not.contain(flowsEn.interface_editor.publish);
+        expect(toolbar.renderRoot.textContent).to.contain(flowsEn.interface_editor.preview);
     });
 });

@@ -1,7 +1,8 @@
 /**
  * flows-editor-header — шапка редактора flow.
  *
- * Desktop: одна chrome-row (~60px) — back / title / branches / workspace / actions.
+ * Desktop: одна chrome-row (~60px) — back / title / branches / workspace / contextual tools / actions.
+ * Interface-инструменты приходят слотом ``workspace-tools``; Publish и статус общие на все ракурсы.
  * Mobile: branches — вторая строка; overflow-menu для tiered actions.
  *
  * Источники state:
@@ -103,6 +104,8 @@ export class FlowsEditorHeader extends PlatformElement {
     static properties = {
         flowId: { type: String, attribute: 'flow-id' },
         branchId: { type: String, attribute: 'branch-id' },
+        interfaceDirty: { type: Boolean },
+        interfaceProblems: { attribute: false },
         _isMobile: { state: true },
         _overflowOpen: { state: true },
         _problemsOpen: { state: true },
@@ -279,6 +282,12 @@ export class FlowsEditorHeader extends PlatformElement {
                 isolation: isolate;
             }
 
+            .workspace-tools {
+                display: inline-flex;
+                align-items: center;
+                min-width: 0;
+            }
+
             .overflow-anchor {
                 position: relative;
             }
@@ -388,6 +397,8 @@ export class FlowsEditorHeader extends PlatformElement {
         super();
         this.flowId = '';
         this.branchId = 'base';
+        this.interfaceDirty = false;
+        this.interfaceProblems = [];
         this._isMobile =
             typeof window !== 'undefined' &&
             typeof window.matchMedia === 'function' &&
@@ -569,8 +580,8 @@ export class FlowsEditorHeader extends PlatformElement {
                     role="button"
                     tabindex="0"
                     data-severity=${item.severity}
-                    @click=${() => this._goToProblem(item.nodeId)}
-                    @keydown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._goToProblem(item.nodeId); } }}
+                    @click=${() => this._goToProblem(item)}
+                    @keydown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._goToProblem(item); } }}
                 >
                     <platform-icon name=${item.severity === 'error' ? 'notification-error' : 'alert-triangle'} size="12"></platform-icon>
                     <span class="problem-body">
@@ -583,7 +594,7 @@ export class FlowsEditorHeader extends PlatformElement {
     }
 
     _resolveStatusBadge(state) {
-        if (state && state.isDirty) return { key: 'dirty', textKey: 'editor_header.status_draft' };
+        if ((state && state.isDirty) || this.interfaceDirty) return { key: 'dirty', textKey: 'editor_header.status_draft' };
         if (state && state.publishedAt) return { key: 'published', textKey: 'editor_header.status_published' };
         return { key: 'idle', textKey: 'editor_header.status_draft' };
     }
@@ -619,6 +630,9 @@ export class FlowsEditorHeader extends PlatformElement {
     }
 
     async _save() {
+        const event = new CustomEvent('editor-save', { bubbles: true, composed: true, cancelable: true });
+        this.dispatchEvent(event);
+        if (event.defaultPrevented) return;
         await saveEditorFlow(this._editor, this._update, this.flowId);
     }
 
@@ -858,6 +872,29 @@ export class FlowsEditorHeader extends PlatformElement {
         return out;
     }
 
+    _chromeIssues(state) {
+        const graph = this._dataflowIssues(state).map((item) => ({ ...item, kind: 'dataflow' }));
+        const uiIssues = (Array.isArray(this.interfaceProblems) ? this.interfaceProblems : []).map((problem) => {
+            const nodeName = typeof problem.blockId === 'string' && problem.blockId.length > 0
+                ? problem.blockId
+                : (typeof problem.pageId === 'string' && problem.pageId.length > 0
+                    ? problem.pageId
+                    : this.t('editor_header.mode_interface'));
+            return {
+                kind: 'interface',
+                nodeId: nodeName,
+                nodeName,
+                severity: problem.severity,
+                message: this.t(`interface_editor.problem_${problem.code}`, problem.params),
+                pageId: problem.pageId,
+                blockId: problem.blockId,
+            };
+        });
+        const out = [...graph, ...uiIssues];
+        out.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'error' ? -1 : 1));
+        return out;
+    }
+
     _toggleProblems(e) {
         e.stopPropagation();
         const next = !this._problemsOpen;
@@ -867,10 +904,15 @@ export class FlowsEditorHeader extends PlatformElement {
         this._problemsOpen = next;
     }
 
-    _goToProblem(nodeId) {
+    _goToProblem(item) {
         this._problemsOpen = false;
-        if (typeof nodeId === 'string' && nodeId.length > 0) {
-            this._editor.selectNode({ nodeId });
+        if (item.kind === 'interface') {
+            this._editor.setWorkspace({ workspace: 'interface' });
+            this.emit('interface-problem-select', { pageId: item.pageId, blockId: item.blockId });
+            return;
+        }
+        if (typeof item.nodeId === 'string' && item.nodeId.length > 0) {
+            this._editor.selectNode({ nodeId: item.nodeId });
         }
     }
 
@@ -1050,6 +1092,9 @@ export class FlowsEditorHeader extends PlatformElement {
                             .docLabel=${this.t('help_hints.open_scenario')}
                         ></platform-help-hint>
                         ${this._renderProblemsButton(issues)}
+                        ${workspace === 'interface'
+                            ? html`<div class="workspace-tools"><slot name="workspace-tools"></slot></div>`
+                            : nothing}
                         <div class="desktop-only-actions">
                             ${typeof this.flowId === 'string' && this.flowId.length > 0
                                 ? this._renderEmployeeChip(employeeActive)
@@ -1067,7 +1112,7 @@ export class FlowsEditorHeader extends PlatformElement {
                             })}
                         </div>
                         ${this._renderOverflowMenu(hasBundleUpdate)}
-                        <platform-button variant="primary" density="compact" ?disabled=${saving} @click=${this._save}>
+                        <platform-button variant="primary" density="compact" data-action="publish" ?disabled=${saving} @click=${this._save}>
                             <platform-icon name="save" size="14"></platform-icon>
                             ${saving ? this.t('editor_header.saving') : this.t('editor_header.publish')}
                         </platform-button>
@@ -1111,7 +1156,7 @@ export class FlowsEditorHeader extends PlatformElement {
         const hasBundleUpdate = Boolean(flow && flow.has_bundle_update);
         const branchIds = flow && flow.branches ? Object.keys(flow.branches) : [];
         const branchItems = this._branchItems(flow, branchIds);
-        const issues = this._dataflowIssues(state);
+        const issues = this._chromeIssues(state);
         const employeeActive = this._isEmployeeEnabled(state, flow);
 
         // Проблемы могли уйти, пока список открыт: держать пустой флайаут нечем.

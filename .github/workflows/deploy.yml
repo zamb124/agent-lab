@@ -403,12 +403,22 @@ jobs:
           LLM__BOTHUB__API_KEYS: ${{ secrets.LLM__BOTHUB__API_KEYS }}
           LLM__GROQ__API_KEY: ${{ secrets.LLM__GROQ__API_KEY }}
           LLM__GROQ__API_KEYS: ${{ secrets.LLM__GROQ__API_KEYS }}
+          LLM__CEREBRAS__API_KEY: ${{ secrets.LLM__CEREBRAS__API_KEY }}
+          LLM__CEREBRAS__API_KEYS: ${{ secrets.LLM__CEREBRAS__API_KEYS }}
           LLM__GOOGLE__API_KEY: ${{ secrets.LLM__GOOGLE__API_KEY }}
           LLM__GOOGLE__API_KEYS: ${{ secrets.LLM__GOOGLE__API_KEYS }}
           LLM__GITHUB__API_KEY: ${{ secrets.LLM__GITHUB__API_KEY }}
           LLM__GITHUB__API_KEYS: ${{ secrets.LLM__GITHUB__API_KEYS }}
           LLM__HUGGINGFACE__API_KEY: ${{ secrets.LLM__HUGGINGFACE__API_KEY }}
           LLM__HUGGINGFACE__API_KEYS: ${{ secrets.LLM__HUGGINGFACE__API_KEYS }}
+          LLM__NVIDIA__API_KEY: ${{ secrets.LLM__NVIDIA__API_KEY }}
+          LLM__NVIDIA__API_KEYS: ${{ secrets.LLM__NVIDIA__API_KEYS }}
+          LLM__MISTRAL__API_KEY: ${{ secrets.LLM__MISTRAL__API_KEY }}
+          LLM__MISTRAL__API_KEYS: ${{ secrets.LLM__MISTRAL__API_KEYS }}
+          LLM__ZAI__API_KEY: ${{ secrets.LLM__ZAI__API_KEY }}
+          LLM__ZAI__API_KEYS: ${{ secrets.LLM__ZAI__API_KEYS }}
+          LLM__SAMBANOVA__API_KEY: ${{ secrets.LLM__SAMBANOVA__API_KEY }}
+          LLM__SAMBANOVA__API_KEYS: ${{ secrets.LLM__SAMBANOVA__API_KEYS }}
           LLM__DEEPINFRA__API_KEY: ${{ secrets.LLM__DEEPINFRA__API_KEY }}
           LLM__DEEPINFRA__API_KEYS: ${{ secrets.LLM__DEEPINFRA__API_KEYS }}
           LLM__CAILA__API_KEY: ${{ secrets.LLM__CAILA__API_KEY }}

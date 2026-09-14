@@ -16,6 +16,7 @@ from core.ai.adapters import (
     OpenRouterModelCatalogAdapter,
     create_model_catalog_adapter_registry,
 )
+from core.ai.provider_error import AIProviderErrorClass
 from core.ai.providers import (
     EMBEDDING_PROVIDER_ORDER,
     PROVIDER_LITSERVE,
@@ -41,13 +42,12 @@ from tests.core.clients.live_llm_provider_helpers import (
     LIVE_LLM_PROVIDERS,
     SMOKE_MAX_TOKENS,
     catalog_id_candidates_for_runtime_model,
+    classify_http_status_error,
     configured_provider,
     disable_testing_mode,
     discover_live_catalog,
     fetch_live_model_ids,
     fetch_live_model_records,
-    is_provider_rate_limit,
-    is_provider_transient_unavailable,
     live_chat_smoke_prompt,
     live_model_service,
     live_smoke_model,
@@ -156,14 +156,15 @@ async def test_live_provider_chat_completion_smoke(provider: str) -> None:
         try:
             result = await llm.invoke([smoke_message(prompt)], max_tokens=SMOKE_MAX_TOKENS)
         except httpx.HTTPStatusError as exc:
-            if is_provider_rate_limit(provider, exc):
+            error_class = classify_http_status_error(provider, exc)
+            if error_class == AIProviderErrorClass.RATE_LIMITED:
                 last_rate_limit = exc
                 continue
-            if is_provider_transient_unavailable(exc):
+            if error_class == AIProviderErrorClass.TRANSIENT:
                 last_unavailable = exc
                 continue
             skip_provider_content_filter(provider, exc)
-            if exc.response.status_code == 402:
+            if error_class == AIProviderErrorClass.PAYMENT_REQUIRED:
                 pytest.skip(
                     f"{provider}: catalog доступен, но inference требует положительный баланс"
                 )

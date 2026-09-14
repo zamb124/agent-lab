@@ -55,6 +55,13 @@ alwaysApply: true
 - Free pool строится из `AIModelCatalogRepository` и canonical `core.ai.providers.PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER`.
 - `llm.platform_free_pool.providers` в конфиге запрещён.
 - `auto` выбирает по `AIRequestRequirements + computed_scoring + availability`.
+- Провайдер в free-pool настроен, если `collect_provider_api_keys` непустой; для account-free-tier ещё нужен `smoke_model`. Один предикат: `core.config.llm_openai_compat.provider_is_configured_for_free_pool` — refresh, runtime и adapter `is_configured`.
+- Пул аккаунтов для `humanitec_llm` / auto — только `conf.json` / `conf.local.json`: `llm.<provider>.api_key` + `api_keys`. Company BYOK — один `api_key_encrypted`; extra-keys в company metadata нет.
+- Redis-снимок free-pool — scored catalog (per-provider cap каталога). На вызове: filter tools/files/`response_format` текущего запроса, затем `max_candidates_total`. `requirement_bonus` на refresh не вызывается (quality-only: AA/heuristic/editorial).
+- Cooldown кандидата — Redis-ключ по `candidate_key`; значение — JSON `AIProviderErrorRecord` (`error_class`, `http_status`, `error_text`, `set_at`). TTL = `Retry-After` с 429, иначе `candidate_cooldown_seconds`. Классификация — только `core.ai.provider_error` (`AIProviderErrorClass`, `classify_ai_provider_http`, `classify_ai_provider_error`). HTTP-таблица, billing/content-filter маркеры и OpenRouter 401 `Missing Authentication header` не дублируются. In-process dict нет; Redis недоступен — ошибка. Битый payload, в том числе legacy `"1"`, — `raise`.
+- `content_filter` входит в `AIProviderErrorClass` (400 с `content_filter` / `ResponsibleAIPolicyViolation`). Catalog `AIAvailabilityStatus` — отдельная ось discovery (`unknown`/`available`/`unavailable`/`disabled`), не Redis cooldown и не `rate_limited`.
+- Settings GET `/frontend/api/platform/llm-model-scores` (только `system`) читает Redis cooldown и отдаёт `providers[]` + `availability` на item. Live-ping на GET запрещён.
+- Probe провайдеров — отдельная команда `POST .../probe-providers` (smoke chat), не часть GET. Успех не сбрасывает cooldown чужих моделей.
 
 ## Platform model scoring
 
@@ -66,7 +73,7 @@ alwaysApply: true
                 → score = AA.intelligence | catalog_heuristic
                 → + editorial_prior из БД, если строка есть
                 → Redis ranked list
-                → auto берёт этот список
+                → auto: filter текущего запроса → cap max_candidates_total
 ```
 
 - `AIModelRecord` хранит modalities, pricing/`is_free` и typed AA indices. Score и editorial в каталоге нет.

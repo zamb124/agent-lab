@@ -153,16 +153,20 @@ def _retry_http_statuses_for_smart() -> frozenset[int]:
 
 
 def _response_indicates_geo_block(response: httpx.Response) -> bool:
-    """Узкий маркер geo-block (не любой HTTP 400)."""
+    """Узкий маркер geo-block (не любой HTTP 400). Тело уже должно быть прочитано."""
     if response.status_code != 400:
         return False
     body = response.text.lower()
     return any(marker in body for marker in _GEO_BLOCK_BODY_MARKERS)
 
 
-def _should_retry_http_via_proxy(response: httpx.Response) -> bool:
+async def _should_retry_http_via_proxy(response: httpx.Response) -> bool:
     if response.status_code in _retry_http_statuses_for_smart():
         return True
+    if response.status_code != 400:
+        return False
+    # stream=True не буферизует тело: .text без aread() даёт ResponseNotRead.
+    _ = await response.aread()
     return _response_indicates_geo_block(response)
 
 
@@ -584,7 +588,7 @@ class SmartProxyClient:
                         await egress_prefer_proxy_set(origin)
                     return response
                 raise
-            if _should_retry_http_via_proxy(response) and _platform_proxy_active():
+            if await _should_retry_http_via_proxy(response) and _platform_proxy_active():
                 logger.warning(
                     "HTTP %s для %s, повтор через platform proxy",
                     response.status_code,
@@ -753,7 +757,7 @@ class _StreamContextManager:
                 else:
                     raise
             else:
-                if _should_retry_http_via_proxy(response) and _platform_proxy_active():
+                if await _should_retry_http_via_proxy(response) and _platform_proxy_active():
                     logger.warning(
                         "HTTP %s для stream %s, повтор через platform proxy",
                         response.status_code,

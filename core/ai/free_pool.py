@@ -27,11 +27,8 @@ from core.ai.scoring import (
 )
 from core.clients.redis_client import RedisClient
 from core.config.base import BaseSettings
-from core.config.models import (
-    GitHubModelsProviderConfig,
-    GoogleLLMProviderConfig,
-    GroqProviderConfig,
-    HuggingFaceProviderConfig,
+from core.config.llm_openai_compat import (
+    provider_is_configured_for_free_pool as llm_provider_is_configured_for_free_pool,
 )
 from core.logging import get_logger
 from core.types import (
@@ -56,12 +53,6 @@ _FREE_REASON_PRIORITY = {
     "verified_zero_price": 2,
     "account_free_tier": 1,
 }
-_AccountFreeTierProviderConfig = (
-    GroqProviderConfig
-    | GoogleLLMProviderConfig
-    | GitHubModelsProviderConfig
-    | HuggingFaceProviderConfig
-)
 
 
 @dataclass(frozen=True)
@@ -96,22 +87,6 @@ def _json_int(value: JsonValue | None) -> int | None:
     if isinstance(value, int) and not isinstance(value, bool):
         return value
     return None
-
-
-def _account_free_tier_provider_config(
-    settings: BaseSettings,
-    provider_slug: str,
-) -> _AccountFreeTierProviderConfig | None:
-    llm = settings.llm
-    by_provider: dict[str, _AccountFreeTierProviderConfig | None] = {
-        "groq": llm.groq,
-        "google": llm.google,
-        "github": llm.github,
-        "huggingface": llm.huggingface,
-    }
-    if provider_slug not in by_provider:
-        raise ValueError(f"provider {provider_slug!r} is not an account-free-tier LLM provider")
-    return by_provider[provider_slug]
 
 
 def _free_reason_priority(free_reason: str) -> int:
@@ -163,7 +138,7 @@ def catalog_record_map(
 
 
 def provider_is_configured_for_free_pool(settings: BaseSettings, provider: str) -> bool:
-    return _provider_is_configured_for_free_pool(settings, provider)
+    return llm_provider_is_configured_for_free_pool(settings.llm, provider)
 
 
 def compute_platform_free_record_scores(
@@ -230,24 +205,6 @@ def platform_free_model_policy_for_provider(provider: str) -> str:
     return policy
 
 
-def _provider_is_configured_for_free_pool(settings: BaseSettings, provider: str) -> bool:
-    if provider == "openrouter":
-        cfg = settings.llm.openrouter
-        return cfg is not None and bool(cfg.api_key)
-    if provider == "bothub":
-        cfg = settings.llm.bothub
-        return cfg is not None and bool(cfg.api_key)
-    if provider in ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS:
-        cfg = _account_free_tier_provider_config(settings, provider)
-        return (
-            cfg is not None
-            and isinstance(cfg.api_key, str)
-            and bool(cfg.api_key.strip())
-            and bool(cfg.smoke_model.strip())
-        )
-    raise ValueError(f"provider {provider!r} is not a free-pool candidate")
-
-
 def _text_chat_record(record: AIModelRecord) -> bool:
     if AICapability.LLM_CHAT not in record.capabilities:
         return False
@@ -301,7 +258,7 @@ def _free_reason_for_catalog_record(
     if not _text_chat_record(record):
         return None
     if record.provider in ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS:
-        if not _provider_is_configured_for_free_pool(settings, record.provider):
+        if not provider_is_configured_for_free_pool(settings, record.provider):
             return None
         return "account_free_tier"
     if record.is_free is True:
@@ -367,7 +324,7 @@ async def fetch_platform_free_model_records(
     )
     all_records: list[PlatformFreeModelRecord] = []
     for provider_slug in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER:
-        if not _provider_is_configured_for_free_pool(settings, provider_slug):
+        if not provider_is_configured_for_free_pool(settings, provider_slug):
             logger.info("platform_free_models.provider_unconfigured", provider=provider_slug)
             continue
         catalog_records = await model_catalog_repository.list_by_provider_capability(
@@ -403,7 +360,7 @@ async def fetch_platform_free_model_records(
         all_records.extend(provider_records)
     return sort_platform_free_records(
         all_records,
-        max_candidates=pool_config.max_candidates_total,
+        max_candidates=0,
     )
 
 

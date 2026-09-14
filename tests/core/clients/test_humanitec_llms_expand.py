@@ -14,6 +14,7 @@ from core.clients.llm.runtime import create_llm_transport_client
 from core.clients.redis_client import RedisClient
 from core.config import BaseSettings, get_settings, set_settings
 from core.config.models import (
+    CerebrasProviderConfig,
     LLMConfig,
     OpenAIProviderConfig,
     OpenRouterProviderConfig,
@@ -50,8 +51,15 @@ def platform_free_cache_key(unique_id: str, monkeypatch: pytest.MonkeyPatch) -> 
     return key
 
 
-def _expand_settings(*, paid: bool, groq_key: str | None = None) -> BaseSettings:
+def _expand_settings(
+    *,
+    paid: bool,
+    groq_key: str | None = None,
+    groq_api_keys: list[str] | None = None,
+) -> BaseSettings:
     live = get_settings()
+    if live.llm.groq is None:
+        raise ValueError("llm.groq обязателен для expand-тестов")
     paid_fallback = PlatformFreePoolPaidFallbackConfig(
         provider="openrouter",
         model="qwen/qwen-2.5-7b-instruct",
@@ -70,7 +78,10 @@ def _expand_settings(*, paid: bool, groq_key: str | None = None) -> BaseSettings
                         api_key="sk-openai",
                         base_url="https://api.openai.example/v1",
                     ),
-                    "groq": live.llm.groq.model_copy(update={"api_key": groq_key}),
+                    "groq": live.llm.groq.model_copy(
+                        update={"api_key": groq_key, "api_keys": groq_api_keys}
+                    ),
+                    "cerebras": CerebrasProviderConfig(api_key=None),
                     "platform_free_pool": PlatformFreePoolConfig(
                         enabled=True,
                         paid_fallback=paid_fallback,
@@ -420,3 +431,33 @@ def test_constructor_without_pool_uses_authored_fallback() -> None:
     assert client.model == "gpt-4o-mini"
     assert client.llm_provider == "openai"
     assert client._candidate_resolver is not None
+
+
+@pytest.mark.asyncio
+async def test_auto_expands_one_model_per_api_key(
+    platform_free_cache_key: str,
+    unique_id: str,
+) -> None:
+    redis_client = RedisClient(get_settings().database.redis_url)
+    record = _groq_record(unique_id=unique_id)
+    wrote = await redis_client.set(
+        platform_free_cache_key,
+        serialize_platform_free_models([record]),
+        ttl=120,
+    )
+    assert wrote is True
+    settings = _expand_settings(
+        paid=False,
+        groq_key="sk-main",
+        groq_api_keys=["sk-extra-a", "sk-extra-b"],
+    )
+    resolver = _make_humanitec_llms_candidate_chain_resolver(
+        LLMCallConfig(provider=HUMANITEC_LLM_PROVIDER, model=HUMANITEC_LLM_AUTO_MODEL),
+        None,
+        settings=settings,
+        state=None,
+        include_paid_fallback=False,
+    )
+    candidates = await resolver()
+    assert [row.api_key for row in candidates] == ["sk-main", "sk-extra-a", "sk-extra-b"]
+    assert all(row.provider == "groq" and row.model == record.id for row in candidates)

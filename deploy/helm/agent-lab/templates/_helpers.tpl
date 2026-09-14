@@ -354,6 +354,18 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
       name: {{ .Values.platformSecretName }}
       key: llm-groq-api-keys
       optional: true
+- name: LLM__CEREBRAS__API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-cerebras-api-key
+      optional: true
+- name: LLM__CEREBRAS__API_KEYS
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-cerebras-api-keys
+      optional: true
 - name: LLM__GOOGLE__API_KEY
   valueFrom:
     secretKeyRef:
@@ -389,6 +401,54 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
     secretKeyRef:
       name: {{ .Values.platformSecretName }}
       key: llm-huggingface-api-keys
+      optional: true
+- name: LLM__NVIDIA__API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-nvidia-api-key
+      optional: true
+- name: LLM__NVIDIA__API_KEYS
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-nvidia-api-keys
+      optional: true
+- name: LLM__MISTRAL__API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-mistral-api-key
+      optional: true
+- name: LLM__MISTRAL__API_KEYS
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-mistral-api-keys
+      optional: true
+- name: LLM__ZAI__API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-zai-api-key
+      optional: true
+- name: LLM__ZAI__API_KEYS
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-zai-api-keys
+      optional: true
+- name: LLM__SAMBANOVA__API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-sambanova-api-key
+      optional: true
+- name: LLM__SAMBANOVA__API_KEYS
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-sambanova-api-keys
       optional: true
 - name: LLM__DEEPINFRA__API_KEY
   valueFrom:

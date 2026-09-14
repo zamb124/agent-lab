@@ -147,7 +147,7 @@ kubectl delete secret platform-secrets -n platform
 | `ONLYOFFICE_JWT_SECRET` | OnlyOffice DocumentServer JWT |
 | `GRAFANA_ADMIN_PASSWORD` | пароль admin@grafana |
 | `LLM__OPENROUTER__API_KEY` / `LLM__BOTHUB__API_KEY` | (опционально) LLM провайдеры zero-price catalog |
-| `LLM__GROQ__API_KEY` / `LLM__GOOGLE__API_KEY` / `LLM__GITHUB__API_KEY` | (опционально) LLM провайдеры |
+| `LLM__GROQ__API_KEY` / `LLM__CEREBRAS__API_KEY` / `LLM__GOOGLE__API_KEY` / `LLM__GITHUB__API_KEY` / `LLM__NVIDIA__API_KEY` / `LLM__MISTRAL__API_KEY` / `LLM__ZAI__API_KEY` / `LLM__SAMBANOVA__API_KEY` | (опционально) LLM провайдеры |
 | `LLM__HUGGINGFACE__API_KEY` / `LLM__DEEPINFRA__API_KEY` / `LLM__YANDEX__API_KEY` | (опционально) LLM провайдеры |
 | `STT_CLOUD_RU_API_KEY` | (опционально) GitHub → `STT__CLOUD_RU__API_KEY` → Secret `stt-cloud-ru-api-key` → Pod env `VOICE__STT__CLOUD_RU__API_KEY` |
 | `RAG_EMBEDDING_API_KEY` | (опционально) RAG embeddings (если отличается от LLM) |
