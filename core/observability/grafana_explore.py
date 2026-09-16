@@ -15,7 +15,8 @@ from core.types import JsonObject
 # Должен оставаться согласован с _PLATFORM_TRACE_SELECTOR в core.clients.loki_client.
 _PLATFORM_TRACE_SELECTOR = (
     'service=~"(agents|frontend|flows|flows_worker|crm|crm_worker|rag|rag_worker|'
-    'sync|sync_worker|office|voice|scheduler|browser|idle_worker|provider_litserve|.*flows.*)"'
+    'sync|sync_worker|office|voice|scheduler|browser|idle_worker|provider_litserve|'
+    'guest-runtime|.*flows.*)"'
 )
 
 

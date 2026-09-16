@@ -15,14 +15,15 @@ Flows исполняются как durable workflow runtime: `workflow_events` 
 
 Оркестратор графа должен быть детерминированным. LLM/tools/API/code/channel/remote-flow исполняются как durable activities; результат возвращается в граф через events и reducer.
 
-## NodeType (9 типов)
+## NodeType
 
 | Тип | Описание |
 |-----|----------|
 | llm_node | LLM + tools |
-| code | Python код: execute(args, state) |
+| code | Isolated Python / JS / TS / Go / C# через code-runner |
 | flow | Вызов ветки (flow_id + branch_id) |
-| remote_flow | A2A вызов удалённого flow |
+| remote_flow | A2A вызов внешнего агента по URL |
+| code_agent | Агент из дерева исходников (Documents) + контейнер на ферме guest_runtime |
 | external_api | HTTP запрос |
 | mcp | MCP tool |
 | channel | Отправка сообщений (Telegram, Webhook, Email) |

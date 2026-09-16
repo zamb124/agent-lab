@@ -167,5 +167,38 @@ def default_settlement_rules_document() -> SettlementRulesDocument:
                 quantity_from="const:1",
                 match=SettlementRuleMatch(operation_name_equals="search.provider.tavily"),
             ),
+            SettlementRule(
+                rule_id="guest_runtime_start",
+                priority=40,
+                resource_name="guest:start",
+                usage_type=UsageType.AGENT_EXECUTION,
+                quantity_from=f"attr:{trace_attr.ATTR_BILLING_QUANTITY}",
+                match=SettlementRuleMatch(
+                    operation_name_equals="guest_runtime.start",
+                    attribute_keys_present=[trace_attr.ATTR_BILLING_QUANTITY],
+                ),
+            ),
+            SettlementRule(
+                rule_id="guest_runtime_session_seconds",
+                priority=41,
+                resource_name="guest:runtime_second",
+                usage_type=UsageType.AGENT_EXECUTION,
+                quantity_from=f"attr:{trace_attr.ATTR_BILLING_QUANTITY}",
+                match=SettlementRuleMatch(
+                    operation_name_equals="guest_runtime.session_usage",
+                    attribute_keys_present=[trace_attr.ATTR_BILLING_QUANTITY],
+                ),
+            ),
+            SettlementRule(
+                rule_id="guest_runtime_build_seconds",
+                priority=42,
+                resource_name="guest:build_second",
+                usage_type=UsageType.AGENT_EXECUTION,
+                quantity_from=f"attr:{trace_attr.ATTR_BILLING_QUANTITY}",
+                match=SettlementRuleMatch(
+                    operation_name_equals="guest_runtime.build_usage",
+                    attribute_keys_present=[trace_attr.ATTR_BILLING_QUANTITY],
+                ),
+            ),
         ],
     )

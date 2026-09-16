@@ -30,6 +30,9 @@ from httpx import ASGITransport, AsyncClient
 # совпадать с Host, иначе httpx сбрасывает Authorization при cross-host redirect.
 _PLATFORM_ASGI_BASE_URL = "http://humanitec.ru"
 _PLATFORM_ASGI_HOST_HEADERS = {"Host": "humanitec.ru"}
+# Real HTTP e2e: очередь granian под -n10. httpx default 5s → ReadTimeout на enable/enqueue.
+# Длинный граф всё равно SendMessage returnImmediately + GetTask poll (testing.mdc).
+_E2E_HTTP_TIMEOUT_SECONDS = 60.0
 
 # rag_worker импортируется из tests.conftest через pytest
 # Он объявлен там как session-scoped фикстура
@@ -578,7 +581,10 @@ async def flows_client_http(flows_service):
     Использует реальный HTTP сервер на порту 9001.
     Для E2E тестов всей платформы.
     """
-    async with AsyncClient(base_url="http://localhost:9001") as client:
+    async with AsyncClient(
+        base_url="http://localhost:9001",
+        timeout=_E2E_HTTP_TIMEOUT_SECONDS,
+    ) as client:
         yield client
 
 
@@ -589,7 +595,10 @@ async def office_client_http(office_service):
 
     Использует реальный HTTP сервер на порту 9008.
     """
-    async with AsyncClient(base_url="http://localhost:9008") as client:
+    async with AsyncClient(
+        base_url="http://localhost:9008",
+        timeout=_E2E_HTTP_TIMEOUT_SECONDS,
+    ) as client:
         yield client
 
 
@@ -600,5 +609,8 @@ async def worktracker_client_http(worktracker_http_service):
 
     Использует реальный HTTP сервер на порту 9021.
     """
-    async with AsyncClient(base_url="http://localhost:9021") as client:
+    async with AsyncClient(
+        base_url="http://localhost:9021",
+        timeout=_E2E_HTTP_TIMEOUT_SECONDS,
+    ) as client:
         yield client

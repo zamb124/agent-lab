@@ -56,7 +56,7 @@ class DocsPlacementService:
                 raise ValueError("path_segments or anchor required")
             segments = build_path_segments(placement.anchor)
 
-        catalog_id = await self._ensure_catalog_path(
+        catalog_id = await self.ensure_catalog_path(
             company_id=company_id,
             namespace=placement.namespace,
             segments=segments,
@@ -100,7 +100,7 @@ class DocsPlacementService:
             catalog_path=segments,
         )
 
-    async def _ensure_catalog_path(
+    async def ensure_catalog_path(
         self,
         *,
         company_id: str,

@@ -28,6 +28,7 @@ from apps.flows.src.models.enums import NodeToolCallType, NodeType
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.runtime.nodes import (
     ChannelNode,
+    CodeAgentNode,
     CodeNode,
     DatasourceNode,
     ExternalAPINode,
@@ -68,6 +69,8 @@ def _infer_node_type_for_tool(node: BaseNode) -> NodeType:
         return NodeType.FLOW
     if isinstance(node, RemoteFlowNode):
         return NodeType.REMOTE_FLOW
+    if isinstance(node, CodeAgentNode):
+        return NodeType.CODE_AGENT
     if isinstance(node, ExternalAPINode):
         return NodeType.EXTERNAL_API
     if isinstance(node, MCPNode):

@@ -65,8 +65,8 @@ async def test_flow_ui_interface_add_panel_inserts_text_input_and_selects_it(
         block_id = await inserted.get_attribute("data-block-id")
         assert isinstance(block_id, str) and block_id != ""
         await expect(editor.locator(".selection")).to_be_visible(timeout=10_000)
-        # Поле без действия на странице — предупреждение no_action в списке проблем.
-        await expect(editor.locator(".problems .problem")).to_have_count(1, timeout=15_000)
+        await expect(editor.locator(".problems")).to_have_count(0)
+        await expect(page.locator("flows-editor-header .problems-btn")).to_be_visible(timeout=15_000)
         await expect(page.locator("flows-editor-header .status-badge")).to_have_attribute(
             "data-status", "dirty", timeout=10_000
         )

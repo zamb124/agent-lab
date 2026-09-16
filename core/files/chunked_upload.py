@@ -18,6 +18,7 @@ from core.files.s3_client import S3Client, S3ClientFactory
 from core.files.service import DocsBindHook, FilesService, RagIndexHook
 from core.files.storage import original_name_with_extension, to_ascii_s3_metadata
 from core.files.urls import normalize_files_route_segment
+from core.guest_runtime.source_budget import assert_code_agent_source_upload_fits
 from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.types import JsonObject
@@ -118,6 +119,7 @@ class ChunkedUploadService:
             )
         if content_type.strip() == "":
             raise ValueError("content_type is required")
+        await assert_code_agent_source_upload_fits(spec, incoming_bytes=file_size)
 
         context = require_context()
         company_id = require_active_company().company_id

@@ -109,12 +109,24 @@ spec:
             - name: CODE_RUNNER_PYTHON_WORKERS
               value: "2"
             {{- end }}
+            {{- if eq $name "guest-runtime" }}
+            - name: GUEST_RUNTIME__EXECUTOR
+              value: {{ $.Values.guestRuntime.executor | quote }}
+            - name: GUEST_RUNTIME__DATA_DIR
+              value: /var/lib/guest-runtime
+            {{- end }}
             {{- include "agentlab.appEnv" $ | nindent 12 }}
           ports:
             - name: http
               containerPort: {{ $app.port }}
           volumeMounts:
             {{- include "agentlab.confVolumeMount" $ | nindent 12 }}
+            {{- if eq $name "guest-runtime" }}
+            - name: guest-runtime-registry
+              mountPath: /var/lib/guest-runtime
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /health
@@ -170,6 +182,15 @@ spec:
           emptyDir:
             medium: Memory
             sizeLimit: 1Gi
+        {{- end }}
+        {{- if eq $name "guest-runtime" }}
+        - name: guest-runtime-registry
+          persistentVolumeClaim:
+            claimName: guest-runtime-registry
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
         {{- end }}
 {{- end }}
 {{- end }}

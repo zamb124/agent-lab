@@ -294,11 +294,21 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
     _filterItems(items) {
         if (this._query.length === 0) return items;
         return items.filter(
-            (it) => this._matchQuery(it.name)
+            (it) => this._matchQuery(this._paletteName(it))
                 || this._matchQuery(it.description)
                 || this._matchQuery(it.type)
                 || this._matchQuery(it.connector_id),
         );
+    }
+
+    _paletteName(it) {
+        if (it.type === 'code_agent') {
+            return this.t('node_types.code_agent');
+        }
+        if (typeof it.name === 'string' && it.name.length > 0) {
+            return it.name;
+        }
+        return it.type;
     }
 
     _onDragNodeType(e, item) {
@@ -558,20 +568,21 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                             ? getCategoryToken(meta.category)
                             : categoryToken;
                         const style = `background: color-mix(in oklab, ${tokenColor} 14%, transparent); color: ${tokenColor};`;
+                        const paletteName = this._paletteName(it);
                         return html`
                             <div
                                 class="node-item"
                                 data-node-type=${it.type}
                                 data-node-category=${categoryKey}
                                 draggable="true"
-                                title=${it.description || it.name || it.type}
-                                aria-label=${it.name || it.type}
+                                title=${it.description || paletteName}
+                                aria-label=${paletteName}
                                 @dragstart=${(e) => dragHandler.call(this, e, it)}
                             >
                                 <div class="node-icon" style=${style}>
                                     <platform-icon name=${iconName} size="16" ?colored=${brandIcon}></platform-icon>
                                 </div>
-                                <div class="node-name">${it.name || it.type}</div>
+                                <div class="node-name">${paletteName}</div>
                             </div>
                         `;
                     })}

@@ -117,6 +117,7 @@ class ToolRegistry:
             NodeType.LLM_NODE,
             NodeType.FLOW,
             NodeType.REMOTE_FLOW,
+            NodeType.CODE_AGENT,
             NodeType.EXTERNAL_API,
             NodeType.MCP,
             NodeType.DATASOURCE,

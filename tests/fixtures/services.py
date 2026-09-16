@@ -133,6 +133,13 @@ def wiki_service_http(rag_service):
 
 
 @pytest.fixture(scope="session")
+def guest_runtime_service(flows_service):
+    """Ферма code_agent на 9024."""
+    _ = flows_service
+    require_http_service("guest_runtime", 9024)
+
+
+@pytest.fixture(scope="session")
 def voice_service():
     """Voice gateway на 9015 (CRM transcribe и межсервисные вызовы)."""
     require_http_service("voice", 9015)

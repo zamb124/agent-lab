@@ -27,6 +27,7 @@ DocsPlacementSourceKind = Literal[
     "rag_namespace",
     "mail_message",
     "wiki_page",
+    "code_agent_source",
     "office_manual",
     "manual",
 ]
@@ -57,6 +58,8 @@ class DocsPlacementAnchor(StrictBaseModel):
     mailbox_email: str | None = None
     mail_subject: str | None = None
     wiki_page_id: str | None = None
+    node_id: str | None = None
+    relative_dir: str | None = None
 
 
 class DocsPlacement(StrictBaseModel):
@@ -72,4 +75,13 @@ class DocsBindResult(StrictBaseModel):
     file_id: str
     catalog_id: str
     created: bool
+    catalog_path: list[str]
+
+
+class DocsEnsurePathRequest(StrictBaseModel):
+    path_segments: list[str]
+
+
+class DocsEnsurePathResult(StrictBaseModel):
+    catalog_id: str
     catalog_path: list[str]

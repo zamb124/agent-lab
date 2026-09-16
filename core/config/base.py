@@ -19,6 +19,7 @@ from core.config.models import (
     EventsConfig,
     FilesConfig,
     GoogleWorkspaceConfig,
+    GuestRuntimeFarmConfig,
     LegalConfig,
     LLMConfig,
     LoggingConfig,
@@ -101,6 +102,7 @@ class BaseSettings(PydanticBaseSettings):
     s3: S3Config = Field(default_factory=S3Config)
     secrets: SecretsConfig = Field(default_factory=SecretsConfig)
     files: FilesConfig = Field(default_factory=FilesConfig)
+    guest_runtime: GuestRuntimeFarmConfig = Field(default_factory=GuestRuntimeFarmConfig)
     mcp_branding: MCPBrandingConfig = Field(default_factory=MCPBrandingConfig)
     mcp_catalog: MCPCatalogConfig = Field(default_factory=MCPCatalogConfig)
     voice: SpeechProvidersConfig = Field(default_factory=SpeechProvidersConfig)

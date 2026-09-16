@@ -33,7 +33,7 @@ bash deploy/scripts/bootstrap-master.sh
 
 Если NVIDIA driver только что поставлен — скрипт выходит с кодом **10**. `reboot`, затем снова `bootstrap-master.sh`.
 
-Скрипт: hostname=`master`, `harden-ssh.sh`, [`bootstrap-nvidia.sh`](scripts/bootstrap-nvidia.sh) (driver, toolkit, containerd drop-in), MicroK8s канал `MICROK8S_CHANNEL=1.35/stable`, аддоны `dns hostpath-storage ingress cert-manager`, попытка community `portainer` (не блокер, если hang), лейбл `accelerator=nvidia-gpu`. KUBECONFIG_B64 — [`kubeconfig-for-github-actions.sh`](scripts/kubeconfig-for-github-actions.sh).
+Скрипт: hostname=`master`, `harden-ssh.sh`, [`bootstrap-nvidia.sh`](scripts/bootstrap-nvidia.sh) (driver, toolkit, containerd drop-in), MicroK8s канал `MICROK8S_CHANNEL=1.35/stable`, аддоны `dns hostpath-storage ingress cert-manager`, попытка community `portainer` (не блокер, если hang), лейбл `accelerator=nvidia-gpu`, [`bootstrap-host-docker.sh`](scripts/bootstrap-host-docker.sh) (Docker Engine, не snap; сокет для `guest-runtime`). KUBECONFIG_B64 — [`kubeconfig-for-github-actions.sh`](scripts/kubeconfig-for-github-actions.sh).
 
 **Не** запускать `bootstrap-gpu-worker.sh` и **не** `join-cluster.sh` — второй ноды нет.
 
@@ -96,7 +96,7 @@ make k8s-restore FILE=backups/dump-<ts>.sql.gz
 ## 7. Что НЕ нужно делать
 
 - НЕ открывать `ufw allow 5432` или `ufw allow 6379`.
-- НЕ запускать `docker compose` на ноде.
+- НЕ запускать `docker compose` на ноде (Docker Engine нужен только как dockerd для `guest-runtime`, ставит `bootstrap-host-docker.sh`).
 - НЕ копировать `init.sql` на хост — он в ConfigMap чарта.
 - НЕ делать `kubectl apply -f` отдельных манифестов мимо чарта.
 - НЕ держать `static-server` Deployment отдельно.

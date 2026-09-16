@@ -135,4 +135,11 @@ describe('flows chrome height canon', () => {
         const styles = getComputedStyle(toolbar);
         expect(parseFloat(styles.minHeight)).to.be.closeTo(48, 2);
     });
+
+    it('flow editor page registers the interface editor custom element', async () => {
+        const { FlowEditorPage } = await import('../../../../apps/flows/ui/pages/flow-editor-page.js');
+        expect(FlowEditorPage).to.be.a('function');
+        expect(customElements.get('flows-interface-editor')).to.not.equal(undefined);
+        expect(customElements.get('flow-editor-page')).to.not.equal(undefined);
+    });
 });

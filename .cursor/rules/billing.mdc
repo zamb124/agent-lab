@@ -86,7 +86,11 @@ Pre-flight **не заменяет settlement**: джоба пишет usage б�
 | `rag.embed.batch` | `core.ai.runtime` / `core.ai.embedding_client` | `embedding_request` | `embedding:{model}` | token_count |
 | `livekit.room.session_usage` | `core/calls/livekit_usage_spans.py` (завершение SFU-сессии) | `tool_call` | `livekit:room_minute` | поминутно (`platform.billing.quantity`, ceil минут) |
 | `livekit.egress.composite_usage` | то же (стоп записи встречи) | `tool_call` | `livekit:egress_composite_minute` | то же |
-| `livekit.egress.segmented_usage` | то же (speech-to-chat канала) | `tool_call` | `livekit:egress_segmented_minute` | то же |
+| `guest_runtime.start` | `core/guest_runtime/billing.py` (старт lease) | `agent_execution` | `guest:start` | 1 |
+| `guest_runtime.session_usage` | то же (любой `_stop_lease`: idle reaper, drop, смена digest) | `agent_execution` | `guest:runtime_second` | секунды жизни слота |
+| `guest_runtime.build_usage` | то же (реальная сборка образа) | `agent_execution` | `guest:build_second` | секунды сборки |
+
+Skip READY digest / тот же inprocess digest (сборка не запускалась) — span `guest_runtime.build_usage` **не** пишется.
 
 На том же CLIENT span при потоковом вызове из flows возможны `platform.llm.provider` и `platform.llm.provider_reported_cost`/`provider_upstream_inference_cost` (OpenRouter и др.) — это наблюдаемость; базовое списание идёт от внутреннего прайса и `platform.billing.quantity`, если правила не переведены на `quantity_from` по атрибуту провайдера.
 
@@ -98,7 +102,7 @@ Pre-flight **не заменяет settlement**: джоба пишет usage б�
 
 ## Категории базовых цен
 
-`llm`, `embedding`, `livekit`. Wildcard `*` покрывает все ресурсы без явной цены. Инструменты flows в прайс не входят.
+`llm`, `embedding`, `livekit`, `guest`. Wildcard `*` покрывает все ресурсы без явной цены. Инструменты flows в прайс не входят.
 
 ## Как добавить биллинг новой операции
 

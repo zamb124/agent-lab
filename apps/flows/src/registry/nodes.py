@@ -100,6 +100,7 @@ def create_default_node_registry() -> NodeRegistry:
         NodeType.CODE: "Выполнение кода",
         NodeType.FLOW: "Вложенный flow",
         NodeType.REMOTE_FLOW: "Внешний A2A flow",
+        NodeType.CODE_AGENT: "Агент из дерева исходников (Documents) + контейнер guest_runtime",
         NodeType.EXTERNAL_API: "HTTP API вызов",
         NodeType.MCP: "MCP tool",
         NodeType.DATASOURCE: "Живая БД (DatasourceProtocol)",

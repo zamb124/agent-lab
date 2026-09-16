@@ -100,6 +100,17 @@ import {
     flowsDataTableSnapshotOp,
 } from '../events/resources/data-tables.resource.js';
 import {
+    flowsCodeAgentEnsureSourceOp,
+    flowsCodeAgentImportGitOp,
+    flowsCodeAgentImportArchiveOp,
+    flowsCodeAgentCopyTreeOp,
+    flowsCodeAgentRebuildOp,
+    flowsCodeAgentStatusOp,
+    flowsCodeAgentLogsOp,
+    flowsCodeAgentDeleteOp,
+    flowsCatalogItemsOp,
+} from '../events/resources/code-agent.resource.js';
+import {
     integrationsListOp,
     integrationsRemoveOp,
     googleWorkspaceAuthorizeOp,
@@ -323,6 +334,15 @@ export class FlowsApp extends PlatformApp {
         flowsRagNodeTestSlice,
         flowsDataTableCreateOp,
         flowsDataTableSnapshotOp,
+        flowsCodeAgentEnsureSourceOp,
+        flowsCodeAgentImportGitOp,
+        flowsCodeAgentImportArchiveOp,
+        flowsCodeAgentCopyTreeOp,
+        flowsCodeAgentRebuildOp,
+        flowsCodeAgentStatusOp,
+        flowsCodeAgentLogsOp,
+        flowsCodeAgentDeleteOp,
+        flowsCatalogItemsOp,
         promptRenderOp,
         integrationsListOp,
         integrationsRemoveOp,

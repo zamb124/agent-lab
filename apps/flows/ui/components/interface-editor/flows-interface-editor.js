@@ -9,9 +9,8 @@
  * Глобальные Publish/статус — в ``flows-editor-header``, не здесь.
  */
 
-import { css, html, nothing } from 'lit';
+import { html, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
 import { buildFlowAssetFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import { flowUIEditorChromeTokens } from '@platform/lib/flow-ui/editor/editor-chrome.styles.js';
 import { blockElement, blockFrame, blockIdFromEvent } from '@platform/lib/flow-ui/editor/selection.js';
@@ -51,33 +50,13 @@ import {
     withColumns,
     wrapInSection,
 } from './interface-editor-domain.js';
+import { readDrafts, stableStringify, writeDraft } from './interface-editor-drafts.js';
+import { interfaceEditorStyles } from './flows-interface-editor.styles.js';
 import './flows-interface-pages-tabs.js';
 import './flows-interface-add-panel.js';
 import './flows-interface-properties-panel.js';
 
-const DRAFTS_STORAGE_KEY = platformStorageKey('flows', 'interface_drafts');
-
-function stableStringify(value) {
-    if (value === null || typeof value !== 'object') return JSON.stringify(value);
-    if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
-}
-
-function readDrafts() {
-    const raw = globalThis.localStorage.getItem(DRAFTS_STORAGE_KEY);
-    return raw === null ? {} : JSON.parse(raw);
-}
-
-function writeDraft(documentKey, document) {
-    const drafts = readDrafts();
-    if (document === null) delete drafts[documentKey];
-    else drafts[documentKey] = document;
-    globalThis.localStorage.setItem(DRAFTS_STORAGE_KEY, JSON.stringify(drafts));
-}
-
-export function clearStoredInterfaceDraft(documentKey) {
-    writeDraft(documentKey, null);
-}
+const HOST_EDITOR_EVENTS = ['editor-undo', 'editor-redo', 'editor-viewport', 'editor-preview', 'editor-templates', 'editor-assist'];
 
 export class FlowsInterfaceEditor extends PlatformElement {
     static i18nNamespace = 'flows';
@@ -93,30 +72,7 @@ export class FlowsInterfaceEditor extends PlatformElement {
         _menuOpen: { state: true },
     };
 
-    static styles = [PlatformElement.styles, flowUIEditorChromeTokens, css`
-        :host { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0; min-height: 0; height: 100%; background: var(--bg-elevated); outline: none; }
-        .body { display: grid; grid-template-columns: minmax(280px, 320px) minmax(0, 1fr); min-height: 0; }
-        .sidebar { min-height: 0; overflow: auto; border-right: 1px solid var(--border-subtle); background: var(--glass-solid-medium); display: grid; grid-template-rows: auto minmax(0, 1fr); }
-        .sidebar-tabs { display: block; margin: 8px 10px 0; }
-        .canvas { position: relative; min-width: 0; min-height: 0; overflow: auto; padding: 28px 24px 120px; background:
-            radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--text-tertiary) 22%, transparent) 1px, transparent 0) 0 0 / 22px 22px; }
-        .frame { position: relative; margin: 0 auto; min-height: 480px; border-radius: 16px; border: 1px solid var(--border-subtle); background: var(--bg-primary); box-shadow: var(--shadow-lg); transition: width 180ms ease; overflow: visible; }
-        .frame platform-flow-ui { display: block; height: auto; min-height: 480px; border-radius: inherit; overflow: visible; }
-        .selection { position: absolute; pointer-events: none; border: 2px solid var(--flow-ui-editor-select); border-radius: 8px; z-index: 3; }
-        .selection .label { position: absolute; top: -26px; left: -2px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px 6px 6px 0; background: var(--flow-ui-editor-select); color: var(--flow-ui-editor-label-fg); font-size: 11px; font-weight: 650; white-space: nowrap; pointer-events: auto; }
-        .selection .label .handle { cursor: grab; display: inline-grid; place-items: center; }
-        .selection .label .kebab { color: inherit; }
-        .drop-line { position: absolute; height: 3px; margin-top: -1px; border-radius: 3px; background: var(--flow-ui-editor-insert); box-shadow: 0 0 0 3px var(--flow-ui-editor-insert-fill); pointer-events: none; z-index: 4; }
-        .inline-edit { position: absolute; z-index: 5; box-sizing: border-box; padding: 6px 8px; border: 2px solid var(--flow-ui-editor-select); border-radius: 8px; background: var(--bg-primary); color: var(--text-primary); font: inherit; font-size: 14px; line-height: 1.4; resize: none; outline: none; box-shadow: var(--shadow-lg); }
-        .problems { display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 4px 12px; border-top: 1px solid var(--border-subtle); background: var(--glass-solid-medium); font-size: 12px; color: var(--text-secondary); overflow-x: auto; white-space: nowrap; }
-        .problems .problem { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 3px 8px; border-radius: 6px; background: var(--glass-solid-subtle); color: var(--text-primary); font-size: 12px; cursor: pointer; }
-        .problems .problem:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-        .problems .problem[data-severity='error'] { color: var(--error); }
-        .problems .problem[data-severity='warning'] { color: var(--warning); }
-        .problems .ok { color: var(--success); display: inline-flex; align-items: center; gap: 6px; }
-        .loading { display: grid; place-items: center; height: 100%; color: var(--text-tertiary); font-size: 13px; }
-        @media (max-width: 1000px) { .body { grid-template-columns: 240px minmax(0, 1fr); } }
-    `];
+    static styles = [PlatformElement.styles, flowUIEditorChromeTokens, interfaceEditorStyles];
 
     constructor() {
         super();
@@ -145,25 +101,13 @@ export class FlowsInterfaceEditor extends PlatformElement {
         super.connectedCallback();
         this.tabIndex = 0;
         this.addEventListener('keydown', this._onKeyDown);
-        this.addEventListener('editor-undo', this._onHostEditorEvent);
-        this.addEventListener('editor-redo', this._onHostEditorEvent);
-        this.addEventListener('editor-viewport', this._onHostEditorEvent);
-        this.addEventListener('editor-preview', this._onHostEditorEvent);
-        this.addEventListener('editor-templates', this._onHostEditorEvent);
-        this.addEventListener('editor-assist', this._onHostEditorEvent);
-        this.addEventListener('editor-publish', this._onHostEditorEvent);
+        for (const name of HOST_EDITOR_EVENTS) this.addEventListener(name, this._onHostEditorEvent);
         void this._loadSchema();
     }
 
     disconnectedCallback() {
         this.removeEventListener('keydown', this._onKeyDown);
-        this.removeEventListener('editor-undo', this._onHostEditorEvent);
-        this.removeEventListener('editor-redo', this._onHostEditorEvent);
-        this.removeEventListener('editor-viewport', this._onHostEditorEvent);
-        this.removeEventListener('editor-preview', this._onHostEditorEvent);
-        this.removeEventListener('editor-templates', this._onHostEditorEvent);
-        this.removeEventListener('editor-assist', this._onHostEditorEvent);
-        this.removeEventListener('editor-publish', this._onHostEditorEvent);
+        for (const name of HOST_EDITOR_EVENTS) this.removeEventListener(name, this._onHostEditorEvent);
         if (this._resizeObserver) this._resizeObserver.disconnect();
         cancelAnimationFrame(this._frameRaf);
         super.disconnectedCallback();
@@ -245,7 +189,7 @@ export class FlowsInterfaceEditor extends PlatformElement {
 
     _syncProblems() {
         const problems = this._problems;
-        const current = Array.isArray(this._ui.value.problems) ? this._ui.value.problems : [];
+        const current = this._ui.value.problems;
         if (stableStringify(current) === stableStringify(problems)) return;
         this._ui.setProblems({ problems });
     }
@@ -262,7 +206,6 @@ export class FlowsInterfaceEditor extends PlatformElement {
             const scope = event.detail && event.detail.scope;
             void this.assist(instruction, scope);
         }
-        else if (type === 'editor-publish') this.commitDraft();
         else throw new Error(`interface editor: unknown host event ${type}`);
     }
 
@@ -587,19 +530,6 @@ export class FlowsInterfaceEditor extends PlatformElement {
         </div>`;
     }
 
-    _renderProblems(problems) {
-        if (problems.length === 0) return html`<div class="problems"><span class="ok"><platform-icon name="check" size="13"></platform-icon>${this.t('interface_editor.problems_none')}</span></div>`;
-        return html`<div class="problems">
-            ${problems.map((problem) => html`<article role="button" tabindex="0" class="problem" data-severity=${problem.severity}
-                @click=${() => this._focusProblem(problem)}
-                @keydown=${(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this._focusProblem(problem); } }}>
-                <platform-icon name=${problem.severity === 'error' ? 'notification-error' : 'alert-triangle'} size="12"></platform-icon>
-                ${problem.blockId !== null ? html`<code>${problem.blockId}</code>` : nothing}
-                ${this.t(`interface_editor.problem_${problem.code}`, problem.params)}
-            </article>`)}
-        </div>`;
-    }
-
     render() {
         const draft = this._draft;
         if (draft === null || this._schema === null) return html`<div class="loading">${this.t('interface_editor.loading')}</div>`;
@@ -648,7 +578,6 @@ export class FlowsInterfaceEditor extends PlatformElement {
                     </div>
                 </div>
             </div>
-            ${this._renderProblems(problems)}
         `;
     }
 }

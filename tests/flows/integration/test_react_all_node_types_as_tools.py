@@ -995,6 +995,11 @@ class TestNodeAsToolWrapperBasics:
                 config["flow_id"] = "test"
             elif node_type == NodeType.REMOTE_FLOW:
                 config["url"] = "http://test"
+            elif node_type == NodeType.CODE_AGENT:
+                config["catalog_id"] = "cat_test"
+                config["language"] = "python"
+                config["invoke_kind"] = "cli"
+                config["invoke_argv"] = ["python", "main.py"]
             elif node_type == NodeType.EXTERNAL_API:
                 config["url"] = "http://test"
                 config["method"] = "GET"

@@ -17,6 +17,7 @@ const DEFAULT_RETENTION_BY_SOURCE = Object.freeze({
     calendar_event: 'calendar_event_attachment',
     mail_message: 'mail_attachment',
     wiki_page: 'wiki_page',
+    code_agent_source: 'flow_asset',
     platform_auxiliary: 'platform_default',
     generated_ephemeral: 'generated_ephemeral',
 });
@@ -212,6 +213,28 @@ export function buildCrmEntityFileCreateSpecJson({ entityId, entityType, entityT
             entity_type: entityType,
             entity_title: title,
         },
+        postCreate: { is_public: false },
+    });
+}
+
+export function buildCodeAgentSourceFileCreateSpecJson({
+    flowId,
+    nodeId,
+    relativeDir,
+}) {
+    if (typeof flowId !== 'string' || flowId.length === 0) {
+        throw new Error('buildCodeAgentSourceFileCreateSpecJson: flowId required');
+    }
+    if (typeof nodeId !== 'string' || nodeId.length === 0) {
+        throw new Error('buildCodeAgentSourceFileCreateSpecJson: nodeId required');
+    }
+    const sourceRef = { flow_id: flowId, node_id: nodeId };
+    if (typeof relativeDir === 'string' && relativeDir.length > 0) {
+        sourceRef.relative_dir = relativeDir;
+    }
+    return buildFileCreateSpecJson({
+        sourceKind: 'code_agent_source',
+        sourceRef,
         postCreate: { is_public: false },
     });
 }

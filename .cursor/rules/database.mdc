@@ -74,7 +74,7 @@ class BaseRepository(ABC, Generic[T]):
     # _get_key / _get_prefix / _get_table_name — переопределяются при необходимости
 ```
 
-API: `get`, `set`, `delete`, `list_all`, `get_many`. `EvaluationRepository`/`ScheduledTaskRepository` — свои методы (`save`, `list_tasks`, …).
+API: `get`, `set`, `delete`, `list_all`, `get_many`. `CompanyRepository.put_member_roles` / `discard_member` — атомарный roster (SELECT FOR UPDATE), чтобы параллельный `set` всей Company не затирал чужих `members`. `EvaluationRepository`/`ScheduledTaskRepository` — свои методы (`save`, `list_tasks`, …).
 
 ## Реестр репозиториев
 
@@ -94,6 +94,7 @@ API: `get`, `set`, `delete`, `list_all`, `get_many`. `EvaluationRepository`/`Sch
 | `NamespaceRepository` | False | `namespaces` | `company:X:namespace:` |
 | `PushSubscriptionRepository` | False | `push_subscriptions` | `company:X:push:` |
 | `AIModelCatalogRepository` | **True** | `storage` | `ai_model_catalog:{provider}:{model_id}` |
+| `GuestRuntimeRepository` | **True** | `storage` (shared) | `guest_runtime:{flow_id}:{node_id}` |
 
 ### Сервис flows (БД `platform_agents`)
 
@@ -123,6 +124,7 @@ API: `get`, `set`, `delete`, `list_all`, `get_many`. `EvaluationRepository`/`Sch
 
 - `flow_repo`, `node_repo`, `tool_repo`, `durable_workflow_repository`, `resource_repo`, `mcp_repo`, `llm_model_repo` → service БД (`storage` / соответствующие таблицы).
 - `user_repo`, `company_repo`, `usage_repo`, `file_repo`, `push_subscription_repo` → shared БД (`shared_storage`).
+- `GuestRuntimeRepository` (`apps/guest_runtime`, `owner_service=guest_runtime`, `is_global=True`) → **shared** `storage` (`GuestRuntimeContainer` поднимается с `db_url=shared_url`). Ключ `guest_runtime:{flow_id}:{node_id}`. Не service-БД flows.
 - Переменные компании — `SecretsRepository` / `VariablesService` через сервис **secrets** (`DATABASE__SECRETS_URL`), не через shared `variables`.
 
 ## Использование

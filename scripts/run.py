@@ -145,6 +145,11 @@ SERVICES = {
             ("/wiki/ui/static", "apps/wiki/ui"),
         ],
     },
+    "guest_runtime": {
+        "type": "granian",
+        "app": "apps.guest_runtime.main:app",
+        "port": "8024",
+    },
     "browser": {
         "type": "granian",
         "app": "apps.browser.main:app",
@@ -197,6 +202,11 @@ SERVICES = {
         "type": "granian",
         "app": "apps.code_runner_csharp.main:app",
         "port": "8020",
+    },
+    "guest_runtime": {
+        "type": "granian",
+        "app": "apps.guest_runtime.main:app",
+        "port": "8024",
     },
 
     # TaskIQ workers

@@ -37,6 +37,16 @@ _NODE_TYPES: list[JsonObject] = [
     },
     {
         "category": "core",
+        "type": "code_agent",
+        "name": "Code agent",
+        "icon": "code_agent",
+        "description": "Агент из дерева исходников (Documents) + контейнер на ферме",
+        "color": "#7c3aed",
+        "inputs": 1,
+        "outputs": 1,
+    },
+    {
+        "category": "core",
         "type": "reflection",
         "name": "Reflection Gate",
         "icon": "sparkle",

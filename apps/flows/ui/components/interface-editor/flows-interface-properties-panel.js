@@ -69,17 +69,15 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
         .html-open {
             display: flex; align-items: center; gap: 12px; width: 100%; box-sizing: border-box;
             margin: 0 0 12px; padding: 12px 14px 12px 12px; border: 0; border-radius: 16px;
-            background:
-                radial-gradient(120% 160% at 0% 0%, color-mix(in srgb, #fff 26%, transparent), transparent 46%),
-                linear-gradient(135deg, var(--accent, #99A6F9) 0%, color-mix(in srgb, var(--accent, #99A6F9) 48%, #1e1b4b) 100%);
-            color: var(--platform-btn-primary-text, #fff); text-align: left; cursor: pointer; font: inherit;
-            box-shadow: 0 10px 28px color-mix(in srgb, var(--accent, #99A6F9) 34%, transparent);
+            background: var(--accent);
+            color: var(--text-on-accent); text-align: left; cursor: pointer; font: inherit;
+            box-shadow: var(--accent-glow);
         }
         .html-open:hover { filter: brightness(1.06); }
         .html-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         .html-open-mark {
             width: 36px; height: 36px; flex: none; display: grid; place-items: center;
-            border-radius: 11px; background: color-mix(in srgb, #fff 18%, transparent);
+            border-radius: 11px; background: var(--glass-tint-strong);
         }
         .html-open-copy { display: grid; gap: 1px; min-width: 0; flex: 1; }
         .html-open-copy strong { font-size: 13.5px; font-weight: 750; letter-spacing: -.02em; }
@@ -407,15 +405,24 @@ export class FlowsInterfacePropertiesPanel extends PlatformElement {
         </div>`;
     }
 
+    _onHtmlOpenKey(event) {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        this._blockAction('edit_html');
+    }
+
     _htmlOpenHero() {
-        return html`<button type="button" class="html-open" @click=${() => this._blockAction('edit_html')}>
+        return html`<article class="html-open" role="button" tabindex="0"
+            aria-label=${this.t('interface_editor.html_open_editor')}
+            @click=${() => this._blockAction('edit_html')}
+            @keydown=${(event) => this._onHtmlOpenKey(event)}>
             <span class="html-open-mark"><platform-icon name="code" size="18"></platform-icon></span>
             <span class="html-open-copy">
                 <strong>${this.t('interface_editor.html_open_editor')}</strong>
                 <span>${this.t('interface_editor.html_open_editor_hint')}</span>
             </span>
             <platform-icon name="fullscreen" size="16"></platform-icon>
-        </button>`;
+        </article>`;
     }
 
     _htmlSource(value) {

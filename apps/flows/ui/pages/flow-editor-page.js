@@ -44,21 +44,15 @@ import {
     writeEditorLayoutPreference,
 } from '../_helpers/flow-editor-layout.js';
 import '../components/editor/flows-agent-focus-studio.js';
+import '../components/interface-editor/flows-interface-editor.js';
 import '../components/interface-editor/flows-interface-toolbar.js';
-import { clearStoredInterfaceDraft } from '../components/interface-editor/flows-interface-editor.js';
+import { clearStoredInterfaceDraft, stableStringify } from '../components/interface-editor/interface-editor-drafts.js';
 import { hasBlockingProblems } from '../components/interface-editor/interface-editor-domain.js';
 import '../modals/flows-interface-template-modal.js';
 import '../modals/flows-interface-html-editor-modal.js';
 import { saveEditorFlow } from '../_helpers/flow-editor-save.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
-
-function stableStringify(value) {
-    if (value === null || typeof value !== 'object') return JSON.stringify(value);
-    if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-    const keys = Object.keys(value).sort();
-    return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
-}
 
 export class FlowEditorPage extends PlatformPage {
     static properties = {
@@ -573,7 +567,7 @@ export class FlowEditorPage extends PlatformPage {
         const ui = this._interfaceUi.value;
         if (ui.history === null) return true;
         if (!this._interfaceDraftDirty()) return true;
-        const problems = Array.isArray(ui.problems) ? ui.problems : [];
+        const problems = ui.problems;
         if (hasBlockingProblems(problems)) {
             this.toast('interface_editor.publish_blocked', { type: 'error' });
             this._editor.setWorkspace({ workspace: 'interface' });
@@ -590,8 +584,7 @@ export class FlowEditorPage extends PlatformPage {
         return this._commitInterfaceFromSlice();
     }
 
-    _onEditorSave(event) {
-        event.preventDefault();
+    _onEditorSave() {
         void this._publishEditor();
     }
 
@@ -706,7 +699,7 @@ export class FlowEditorPage extends PlatformPage {
                         .flowId=${this.flowId}
                         .branchId=${this.branchId}
                         .interfaceDirty=${this._interfaceDraftDirty()}
-                        .interfaceProblems=${Array.isArray(this._interfaceUi.value.problems) ? this._interfaceUi.value.problems : []}
+                        .interfaceProblems=${this._interfaceUi.value.problems}
                         @editor-save=${this._onEditorSave}
                         @interface-problem-select=${this._onInterfaceProblemSelect}
                     >${state.workspace === 'interface' ? this._renderInterfaceToolbar() : nothing}</flows-editor-header>

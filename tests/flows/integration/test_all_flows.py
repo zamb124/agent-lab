@@ -23,7 +23,7 @@ AGENTS_DIR = Path(__file__).parent.parent.parent.parent / "apps" / "flows" / "bu
 
 # Agents с особой логикой - тестируются отдельно
 SKIP_FLOWS = {"example_external"}
-SIDE_EFFECT_NODE_TYPES = {"channel", "external_api", "flow", "mcp", "datasource", "remote_flow"}
+SIDE_EFFECT_NODE_TYPES = {"channel", "external_api", "flow", "mcp", "datasource", "remote_flow", "code_agent"}
 EXTERNAL_TOOL_PREFIXES = (
     "browser_",
     "crm_",

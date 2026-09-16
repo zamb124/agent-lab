@@ -7,6 +7,7 @@ from .agent_toolkits import router as agent_toolkits_router
 from .browser_preview import router as browser_preview_router
 from .certificate import router as certificate_router
 from .code import router as code_router
+from .code_agent import router as code_agent_router
 from .code_lsp import router as code_lsp_router
 from .company import router as company_router
 from .data_tables import router as data_tables_router
@@ -43,6 +44,7 @@ api_v1_router.include_router(flows_voice_providers_catalog_router)
 api_v1_router.include_router(lara_actions_router)
 api_v1_router.include_router(llm_context_router)
 api_v1_router.include_router(flows_router, prefix="/flows")
+api_v1_router.include_router(code_agent_router, prefix="/flows")
 api_v1_router.include_router(flow_ui_router)
 api_v1_router.include_router(flow_ui_shares_router)
 api_v1_router.include_router(certificate_router, prefix="/certificate")

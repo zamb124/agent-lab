@@ -597,5 +597,4 @@ export class PlatformFlowUI extends LitElement {
         </div>`;
     }
 }
-
 if (!customElements.get('platform-flow-ui')) customElements.define('platform-flow-ui', PlatformFlowUI);

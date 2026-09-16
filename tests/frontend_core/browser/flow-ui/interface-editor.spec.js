@@ -169,15 +169,15 @@ describe('flows-interface-editor', () => {
         const element = await mountEditor();
         paletteItem(element, 'text_input').click();
         await elementUpdated(element);
-        await waitUntil(() => element.renderRoot.querySelector('.problems .problem[data-severity="error"]') !== null, 'publish gate did not report');
-        expect(element.renderRoot.querySelector('.problems').textContent).to.contain(flowsEn.interface_editor.problem_inputs_without_action);
+        await waitUntil(() => editorState().problems.some((problem) => problem.code === 'inputs_without_action'), 'publish gate did not report');
+        expect(element.renderRoot.querySelector('.problems')).to.equal(null);
         expect(element.commitDraft()).to.equal(false);
 
         await showPalette(element);
         expect(editorState().sidebarTab).to.equal('add');
         paletteItem(element, 'button').click();
         await elementUpdated(element);
-        await waitUntil(() => element.renderRoot.querySelector('.problems .ok') !== null, 'problems did not clear');
+        await waitUntil(() => editorState().problems.length === 0, 'problems did not clear');
 
         const published = oneEvent(element, 'interface-change');
         expect(element.commitDraft()).to.equal(true);
@@ -383,6 +383,7 @@ describe('flows-interface-editor', () => {
         const element = await mountEditor();
         expect(element.renderRoot.querySelector('flows-interface-toolbar')).to.equal(null);
         expect(element.renderRoot.querySelector('.status')).to.equal(null);
+        expect(element.renderRoot.querySelector('.problems')).to.equal(null);
 
         const toolbar = await fixture(html`<flows-interface-toolbar></flows-interface-toolbar>`);
         await elementUpdated(toolbar);

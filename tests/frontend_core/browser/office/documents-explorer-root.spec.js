@@ -285,4 +285,65 @@ describe('office documents explorer root', () => {
             return ids.length > 0 || Boolean(catalogId);
         })).to.equal(true);
     });
+
+    it('query catalog_id opens nested catalog after catalogs load', async () => {
+        getPlatformBus().dispatch(
+            CoreEvents.ROUTER_ROUTE_CHANGED,
+            {
+                routeKey: 'documents_list',
+                params: {},
+                pathname: '/documents',
+                search: '?namespace=default&catalog_id=cat-flow-child',
+            },
+            { source: 'system' },
+        );
+        const host = await fixture(html`
+            <div>
+                <office-sidebar></office-sidebar>
+                <office-documents-explorer-page></office-documents-explorer-page>
+            </div>
+        `);
+        const page = host.querySelector('office-documents-explorer-page');
+        await waitUntil(
+            () => page._documents.state.activeCatalogId === 'cat-flow-child',
+            { timeout: 4000 },
+        );
+        await elementUpdated(page);
+        expect(page.shadowRoot.querySelector('platform-file-row[file-name="lara"]')).to.equal(null);
+        expect(page.shadowRoot.querySelector('platform-file-row[file-name="Flows"]')).to.equal(null);
+        const toolbar = page.shadowRoot.querySelector('office-file-toolbar');
+        const crumbs = [...toolbar.shadowRoot.querySelectorAll('button.crumb')];
+        const crumbLabels = crumbs.map((crumb) => crumb.textContent.trim());
+        expect(crumbLabels).to.include('my-flow');
+    });
+
+    it('query catalog_id without namespace opens catalog in default workspace', async () => {
+        getPlatformBus().dispatch(
+            CoreEvents.ROUTER_ROUTE_CHANGED,
+            {
+                routeKey: 'documents_list',
+                params: {},
+                pathname: '/documents',
+                search: '?catalog_id=cat-flow-child',
+            },
+            { source: 'system' },
+        );
+        const host = await fixture(html`
+            <div>
+                <office-sidebar></office-sidebar>
+                <office-documents-explorer-page></office-documents-explorer-page>
+            </div>
+        `);
+        const page = host.querySelector('office-documents-explorer-page');
+        await waitUntil(
+            () => page._documents.state.activeCatalogId === 'cat-flow-child',
+            { timeout: 4000 },
+        );
+        await elementUpdated(page);
+        expect(page.shadowRoot.querySelector('platform-file-row[file-name="lara"]')).to.equal(null);
+        const toolbar = page.shadowRoot.querySelector('office-file-toolbar');
+        const crumbs = [...toolbar.shadowRoot.querySelectorAll('button.crumb')];
+        const crumbLabels = crumbs.map((crumb) => crumb.textContent.trim());
+        expect(crumbLabels).to.include('my-flow');
+    });
 });

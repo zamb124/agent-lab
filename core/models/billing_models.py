@@ -67,6 +67,7 @@ DEFAULT_TARIFF_PRICES: dict[TariffPlan, dict[str, dict[str, float]]] = {
         "embedding": {"*": 1.5},
         "livekit": {"*": 1.5},
         "search": {"*": 1.5},
+        "guest": {"*": 1.5},
         "billing": {"*": 1.0},
     },
     TariffPlan.BASIC: {
@@ -74,6 +75,7 @@ DEFAULT_TARIFF_PRICES: dict[TariffPlan, dict[str, dict[str, float]]] = {
         "embedding": {"*": 1.25},
         "livekit": {"*": 1.25},
         "search": {"*": 1.25},
+        "guest": {"*": 1.25},
         "billing": {"*": 1.0},
     },
     TariffPlan.PREMIUM: {
@@ -81,6 +83,7 @@ DEFAULT_TARIFF_PRICES: dict[TariffPlan, dict[str, dict[str, float]]] = {
         "embedding": {"*": 1.1},
         "livekit": {"*": 1.1},
         "search": {"*": 1.1},
+        "guest": {"*": 1.1},
         "billing": {"*": 1.0},
     },
     TariffPlan.ENTERPRISE: {
@@ -88,6 +91,7 @@ DEFAULT_TARIFF_PRICES: dict[TariffPlan, dict[str, dict[str, float]]] = {
         "embedding": {"*": 1.1},
         "livekit": {"*": 1.1},
         "search": {"*": 1.1},
+        "guest": {"*": 1.1},
         "billing": {"*": 1.0},
     },
 }

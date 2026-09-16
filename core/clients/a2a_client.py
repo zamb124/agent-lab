@@ -188,6 +188,7 @@ class A2AClient:
         headers: dict[str, str] | None = None,
         *,
         timeout: float | None = None,
+        task_id: str | None = None,
     ) -> A2ATaskResult:
         """Convenience SendMessage with a single text Part.
 
@@ -207,6 +208,7 @@ class A2AClient:
             base_url,
             parts=[{"text": content}],
             context_id=context_id,
+            task_id=task_id,
             metadata=final_metadata or None,
             headers=headers,
             timeout=enqueue_timeout,

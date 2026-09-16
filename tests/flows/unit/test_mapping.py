@@ -27,6 +27,13 @@ class TestResolveValue:
 
         assert result == "hello"
 
+    def test_resolve_whole_state_dump(self):
+        state = {"content": "hello", "ticket": "t-1"}
+
+        result = MappingResolver.resolve_value("@state", state)
+
+        assert result == {"content": "hello", "ticket": "t-1"}
+
     def test_resolve_nested_state_path(self):
         """@state:user.name -> state["user"]["name"]"""
         state = {
@@ -924,4 +931,48 @@ class TestResolveVarsInString:
         )
 
         assert result == "START text MIDDLE text END"
+
+
+class TestResolveEnvMapping:
+    def test_state_path_and_literal(self):
+        state = {"ticket": "abc"}
+        resolved = MappingResolver.resolve_env_mapping(
+            {"TICKET": "@state:ticket", "MODEL_NAME": "auto"},
+            state,
+            platform={"OPENAI_API_KEY": "tok"},
+        )
+        assert resolved == {"TICKET": "abc", "MODEL_NAME": "auto"}
+
+    def test_whole_state_json_string(self):
+        state = {"ticket": "abc"}
+        resolved = MappingResolver.resolve_env_mapping(
+            {"SNAPSHOT": "@state"},
+            state,
+            platform={},
+        )
+        assert resolved == {"SNAPSHOT": '{"ticket":"abc"}'}
+
+    def test_platform_key(self):
+        resolved = MappingResolver.resolve_env_mapping(
+            {"API_KEY": "@platform:OPENAI_API_KEY"},
+            {},
+            platform={"OPENAI_API_KEY": "tok-1"},
+        )
+        assert resolved == {"API_KEY": "tok-1"}
+
+    def test_unknown_platform_key_raises(self):
+        with pytest.raises(ValueError, match="unknown @platform:MISSING"):
+            MappingResolver.resolve_env_mapping(
+                {"API_KEY": "@platform:MISSING"},
+                {},
+                platform={"OPENAI_API_KEY": "tok-1"},
+            )
+
+    def test_reserved_key_raises(self):
+        with pytest.raises(ValueError, match="reserved"):
+            MappingResolver.resolve_env_mapping(
+                {"OPENAI_API_KEY": "x"},
+                {},
+                platform={},
+            )
 

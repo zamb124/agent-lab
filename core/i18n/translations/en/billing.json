@@ -85,7 +85,8 @@
             "vision": "image processing",
             "livekit_room": "call room",
             "livekit_egress": "call recording",
-            "search": "web search"
+            "search": "web search",
+            "guest_runtime": "code agent"
         }
     }
 }

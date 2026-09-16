@@ -39,6 +39,7 @@ from apps.flows.src.models import TriggerType
 from apps.flows.src.registry.nodes import NodeRegistry, create_default_node_registry
 from apps.flows.src.runners.remote import RemoteCodeRunner
 from apps.flows.src.services.agent_skill_service import AgentSkillService
+from apps.flows.src.services.code_agent_source_service import CodeAgentSourceService
 from apps.flows.src.services.code_lsp_service import CodeLspService
 from apps.flows.src.services.datasources import DatasourceFlowExecutor, DatasourceMcpExecutor
 from apps.flows.src.services.employee_inbox_service import EmployeeInboxService
@@ -81,6 +82,9 @@ from core.authz.models import AuthzObject, AuthzSubject
 from core.authz.types import AuthzRelation
 from core.capabilities import CAPABILITY_LANGUAGE_SET
 from core.clients.a2a_client import A2AClient
+from core.clients.documents_client import DocumentsClient
+from core.clients.files_client import FilesClient
+from core.clients.guest_runtime_client import GuestRuntimeClient
 from core.clients.loki_client import LokiClient
 from core.clients.redis_client import RedisClient
 from core.clients.tempo_client import TempoClient
@@ -364,6 +368,28 @@ class FlowContainer(BaseContainer):
     @lazy
     def a2a_client(self) -> A2AClient:
         return A2AClient()
+
+    @lazy
+    def documents_client(self) -> DocumentsClient:
+        return DocumentsClient()
+
+    @lazy
+    def files_client(self) -> FilesClient:
+        return FilesClient()
+
+    @lazy
+    def guest_runtime_client(self) -> GuestRuntimeClient:
+        return GuestRuntimeClient()
+
+    @lazy
+    def code_agent_source_service(self) -> CodeAgentSourceService:
+        return CodeAgentSourceService(
+            flow_repository=self.flow_repository,
+            files_service=self.files_service,
+            files_client=self.files_client,
+            documents_client=self.documents_client,
+            guest_runtime_client=self.guest_runtime_client,
+        )
 
     @lazy
     def flow_discovery(self) -> FlowDiscoveryService:

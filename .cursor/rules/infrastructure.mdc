@@ -15,7 +15,8 @@ alwaysApply: false
 
 | Роль | IP | Лейблы | Что бежит |
 |---|---|---|---|
-| Master + GPU | `31.192.111.33` | `kubernetes.io/hostname=master`, `accelerator=nvidia-gpu` | Postgres, Redis, Loki, Tempo, Grafana, все приложения и воркеры, LiveKit, Coturn, OnlyOffice, ingress, `provider_litserve`, NVIDIA device plugin |
+| Master + GPU | `31.192.111.33` | `kubernetes.io/hostname=master`, `accelerator=nvidia-gpu` | Postgres, Redis, Loki, Tempo, Grafana, все приложения и воркеры, LiveKit, Coturn, OnlyOffice, ingress, `provider_litserve`, NVIDIA device plugin. Control plane `guest-runtime` (порт 8024) — здесь. Docker-слоты `code_agent` запускаются через hostPath `/var/run/docker.sock` на этой же ноде. |
+| Guest farm | нет отдельной машины | — | Kubernetes-слоты, taint `dedicated=guest-runtime` и `join-guest-node.sh` не используются. Executor фермы — `docker` (прод) или `inprocess` (тесты). |
 
 Taint `dedicated=gpu` не ставится. `ytai.tech` живёт на `84.38.184.105`, не namespace `platform`, не трогать.
 
@@ -106,6 +107,7 @@ Free-threaded build (cp314t) даёт shared interpreter без fork-копир�
 | code-runner-node | 8018 | 1 | isolated Node runner |
 | code-runner-go | 8019 | 1 | isolated Go runner |
 | code-runner-csharp | 8020 | 1 | isolated C# runner |
+| guest-runtime | 8024 | 1 | ферма `code_agent`: `granian … apps.guest_runtime.main:app`; ClusterIP, не Ingress; host docker.sock |
 | provider-litserve (GPU) | 8014 | 1 | `granian --interface asgi apps.provider_litserve.main:app …` (nodeSelector; ML GIL resurrection) |
 | flows-worker | — | 2 | `taskiq worker apps.flows_worker.worker:worker_app --workers 4` |
 | scheduler | — | 1 | `taskiq scheduler apps.scheduler.scheduler:scheduler` |
@@ -250,7 +252,7 @@ make app             # все Python сервисы локально через 
 ## Что не покрывает чарт (одноразовая настройка)
 
 - SSH: pubkey в `/root/.ssh/authorized_keys`, затем `deploy/scripts/harden-ssh.sh` (из `bootstrap-master.sh`).
-- `bootstrap-master.sh`: NVIDIA, MicroK8s, аддоны `dns hostpath-storage ingress cert-manager`, лейбл `accelerator=nvidia-gpu`. Device plugin — в чарте, не addon `gpu`. Второй ноды нет (`join-cluster.sh` не в happy path).
+- `bootstrap-master.sh`: NVIDIA, MicroK8s, аддоны `dns hostpath-storage ingress cert-manager`, лейбл `accelerator=nvidia-gpu`, **Docker Engine** (`bootstrap-host-docker.sh`) рядом с MicroK8s для `/var/run/docker.sock` (`guest-runtime`). Device plugin — в чарте, не addon `gpu`. Второй ноды нет (`join-cluster.sh` не в happy path). Не snap `docker`.
 - Whitelist Reg.ru API = `31.192.111.33`. DNS и TLS: `setup-brand-dns.sh` / `setup-wildcard-tls.sh` (в CI — с egress master).
 - `KUBECONFIG_B64`: `bash deploy/scripts/kubeconfig-for-github-actions.sh` + `gh secret set`.
 

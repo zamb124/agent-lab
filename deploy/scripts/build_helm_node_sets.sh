@@ -37,7 +37,7 @@ add_set() {
 }
 
 # ---------- apps ----------
-APPS=(flows frontend crm rag sync worktracker wiki scheduler-api office voice browser search secrets capability-gateway code-runner-python code-runner-node code-runner-go code-runner-csharp)
+APPS=(flows frontend crm rag sync worktracker wiki guest-runtime scheduler-api office voice browser search secrets capability-gateway code-runner-python code-runner-node code-runner-go code-runner-csharp)
 for app in "${APPS[@]}"; do
   add_set "applications.${app}" "$APPS_NODE"
 done
@@ -83,6 +83,7 @@ svc_to_helm_path() {
     search)          echo "applications.search" ;;
     secrets)         echo "applications.secrets" ;;
     wiki)            echo "applications.wiki" ;;
+    guest-runtime)   echo "applications.guest-runtime" ;;
     worktracker)     echo "applications.worktracker" ;;
     capability-gateway) echo "applications.capability-gateway" ;;
     code-runner-python) echo "applications.code-runner-python" ;;

@@ -35,6 +35,28 @@ def flow_asset_upload_spec_json(*, flow_id: str, is_public: bool) -> str:
     return spec.model_dump_json()
 
 
+def code_agent_source_upload_spec_json(
+    *,
+    flow_id: str,
+    node_id: str,
+    relative_dir: str | None = None,
+) -> str:
+    if flow_id.strip() == "":
+        raise ValueError("code_agent_source_upload_spec_json: flow_id required")
+    if node_id.strip() == "":
+        raise ValueError("code_agent_source_upload_spec_json: node_id required")
+    spec = FileCreateSpec(
+        source_kind=FileSourceKind.CODE_AGENT_SOURCE,
+        source_ref=FileSourceRef(
+            flow_id=flow_id,
+            node_id=node_id,
+            relative_dir=relative_dir,
+        ),
+        retention=default_retention_for_source(FileSourceKind.CODE_AGENT_SOURCE),
+    )
+    return spec.model_dump_json()
+
+
 async def chunked_upload_file(
     client: AsyncClient,
     headers: Mapping[str, str],
@@ -102,6 +124,7 @@ async def chunked_upload_file(
 __all__ = [
     "DEFAULT_FILES_API_PREFIX",
     "chunked_upload_file",
+    "code_agent_source_upload_spec_json",
     "flow_asset_upload_spec_json",
     "platform_auxiliary_upload_spec_json",
 ]

@@ -55,6 +55,41 @@ UI_REFLECTION_CONTRACTS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("core/i18n/translations/ru/flows.json", ('"reflection_node_editor"',)),
 )
 
+UI_CODE_AGENT_CONTRACTS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("apps/flows/src/api/v1/metadata.py", ('"type": "code_agent"',)),
+    ("apps/flows/ui/constants/node-icons.js", ("code_agent:", "icon: 'code_agent'")),
+    (
+        "apps/flows/ui/components/editor/flows-node-editor-surface.js",
+        ("flows-code-agent-editor.js", "case 'code_agent':"),
+    ),
+    ("apps/flows/ui/pages/flow-editor-page.js", ("flows-property-panel.js",)),
+    ("apps/flows/ui/_helpers/lara-node-helper.js", ("code_agent: 'code_agent_node_helper'",)),
+    ("core/i18n/translations/en/flows.json", ('"code_agent_editor"', '"section_source"', '"invoke_listen_port"')),
+    ("core/i18n/translations/ru/flows.json", ('"code_agent_editor"', '"section_source"', '"invoke_listen_port"')),
+    (
+        "apps/flows/ui/components/nodes/flows-code-agent-editor.js",
+        (
+            'data-testid="code-agent-import-git"',
+            'data-testid="code-agent-file"',
+            'data-testid="code-agent-rebuild"',
+            'data-testid="code-agent-logs"',
+            'data-testid="code-agent-language"',
+            'data-testid="code-agent-argv"',
+            "invoke_listen_port",
+            "openModal('flows.logs'",
+        ),
+    ),
+    (
+        "apps/flows/ui/events/resources/code-agent.resource.js",
+        ("flows/code_agent_logs", "/code-agent/logs"),
+    ),
+    (
+        "apps/flows/ui/modals/flows-logs-modal.js",
+        ("guest_runtime", "flows/code_agent_logs"),
+    ),
+)
+
+
 UI_OBSERVABILITY_CONTRACTS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "apps/flows/ui/events/resources/logs.resource.js",
@@ -397,6 +432,13 @@ def _scan_reflection_ui_contracts() -> list[Violation]:
     )
 
 
+def _scan_code_agent_ui_contracts() -> list[Violation]:
+    return _scan_required_text_contracts(
+        UI_CODE_AGENT_CONTRACTS,
+        message_prefix="CodeAgentNode UI contract",
+    )
+
+
 def _scan_durable_history_ui_contracts() -> list[Violation]:
     violations = _scan_required_text_contracts(
         UI_DURABLE_HISTORY_CONTRACTS,
@@ -424,6 +466,7 @@ def collect_violations() -> list[Violation]:
     violations.extend(_scan_raw_agent_trace_attribute_literals())
     violations.extend(_scan_bundle_edge_contracts())
     violations.extend(_scan_reflection_ui_contracts())
+    violations.extend(_scan_code_agent_ui_contracts())
     violations.extend(_scan_observability_ui_contracts())
     violations.extend(_scan_durable_history_ui_contracts())
     return sorted(violations, key=lambda item: (item.path.as_posix(), item.lineno, item.message))

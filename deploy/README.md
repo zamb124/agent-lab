@@ -101,7 +101,8 @@ kubectl delete secret platform-secrets -n platform
 
 | Скрипт | Где запускать | Назначение |
 |---|---|---|
-| [`bootstrap-master.sh`](scripts/bootstrap-master.sh) | master под root | hostname, harden-ssh, NVIDIA (`bootstrap-nvidia.sh`), MicroK8s, аддоны, лейбл GPU |
+| [`bootstrap-master.sh`](scripts/bootstrap-master.sh) | master под root | hostname, harden-ssh, NVIDIA (`bootstrap-nvidia.sh`), MicroK8s, аддоны, лейбл GPU, Docker Engine (`bootstrap-host-docker.sh`) |
+| [`bootstrap-host-docker.sh`](scripts/bootstrap-host-docker.sh) | master под root | Docker CE рядом с MicroK8s, сокет `/var/run/docker.sock` для `guest-runtime` |
 | [`kubeconfig-for-github-actions.sh`](scripts/kubeconfig-for-github-actions.sh) | локально / master | base64 kubeconfig с `https://31.192.111.33:16443` для `KUBECONFIG_B64` |
 | [`bootstrap-nvidia.sh`](scripts/bootstrap-nvidia.sh) | master под root | NVIDIA driver + toolkit + containerd drop-in (exit 10 = reboot) |
 | [`setup-wildcard-tls.sh`](scripts/setup-wildcard-tls.sh) | локально / master / CI | `cert-manager-webhook-regru` + ClusterIssuer `letsencrypt-prod-dns01` + Certificate `platform-tls` |

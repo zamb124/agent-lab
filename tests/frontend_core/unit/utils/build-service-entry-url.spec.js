@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { buildFrontendPublicPath } from '@platform/lib/utils/build-service-entry-url.js';
+import {
+    buildDocumentsCatalogEntryUrl,
+    buildFrontendPublicPath,
+} from '@platform/lib/utils/build-service-entry-url.js';
 
 describe('buildFrontendPublicPath', () => {
     const withWindow = (loc, fn) => {
@@ -58,6 +61,43 @@ describe('buildFrontendPublicPath', () => {
             { hostname: 'system.lvh.me', port: '9001', protocol: 'http:' },
             () => {
                 expect(buildFrontendPublicPath('/agent')).toBe('http://system.lvh.me:8002/agent');
+            },
+        );
+    });
+});
+
+describe('buildDocumentsCatalogEntryUrl', () => {
+    const withWindow = (loc, fn) => {
+        const prev = globalThis.window;
+        globalThis.window = { location: loc };
+        try {
+            fn();
+        } finally {
+            globalThis.window = prev;
+        }
+    };
+
+    it('throws without catalog_id or namespace', () => {
+        withWindow(
+            { hostname: 'system.lvh.me', port: '8001', protocol: 'http:', origin: 'http://system.lvh.me:8001' },
+            () => {
+                expect(() => buildDocumentsCatalogEntryUrl('', 'default')).toThrow(
+                    'buildDocumentsCatalogEntryUrl: catalog_id required',
+                );
+                expect(() => buildDocumentsCatalogEntryUrl('cat-1', '')).toThrow(
+                    'buildDocumentsCatalogEntryUrl: namespace required',
+                );
+            },
+        );
+    });
+
+    it('adds namespace and catalog_id on documents dev port', () => {
+        withWindow(
+            { hostname: 'system.lvh.me', port: '8001', protocol: 'http:', origin: 'http://system.lvh.me:8001' },
+            () => {
+                expect(buildDocumentsCatalogEntryUrl('cat-1', 'default')).toBe(
+                    'http://system.lvh.me:8008/documents?namespace=default&catalog_id=cat-1',
+                );
             },
         );
     });

@@ -53,7 +53,7 @@ fi
 # При отключении компонента через Helm (*.enabled: false) уберите имя отсюда (см. deploy/README.md
 # «Состав приложений: Helm и cluster-health»).
 EXPECTED_DEPLOYMENTS=(
-  flows frontend crm rag sync worktracker office wiki scheduler-api voice browser search secrets capability-gateway code-runner-python code-runner-node code-runner-go code-runner-csharp
+  flows frontend crm rag sync worktracker office wiki guest-runtime scheduler-api voice browser search secrets capability-gateway code-runner-python code-runner-node code-runner-go code-runner-csharp
   flows-worker scheduler rag-worker sync-worker crm-worker crm-summary-worker idle-worker search-worker
   livekit livekit-egress onlyoffice grafana provider-litserve openfga
 )
@@ -396,6 +396,31 @@ check_taskiq_worker_pod() {
 
 check_taskiq_worker_pod idle-worker 3
 check_taskiq_worker_pod search-worker 3
+
+# Guest runtime: docker executor + host docker.sock на ноде, где крутится guest-runtime.
+log_section "20) Guest runtime docker executor"
+GUEST_POD=$($K get pod -n "$PLATFORM_NS" -l app=guest-runtime \
+  -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+if [ -z "$GUEST_POD" ]; then
+  log_error "guest-runtime: под не найден"
+else
+  GUEST_EXECUTOR=$($K exec -n "$PLATFORM_NS" "$GUEST_POD" -- printenv GUEST_RUNTIME__EXECUTOR)
+  if [ "$GUEST_EXECUTOR" != "docker" ]; then
+    log_error "guest-runtime executor must be docker, got ${GUEST_EXECUTOR:-empty}"
+  else
+    log_ok "guest-runtime executor=docker"
+  fi
+  if $K exec -n "$PLATFORM_NS" "$GUEST_POD" -- test -S /var/run/docker.sock; then
+    log_ok "guest-runtime docker.sock смонтирован"
+  else
+    log_error "guest-runtime: /var/run/docker.sock отсутствует"
+  fi
+  if $K exec -n "$PLATFORM_NS" "$GUEST_POD" -- docker info >/dev/null; then
+    log_ok "guest-runtime docker info"
+  else
+    log_error "guest-runtime: docker info внутри пода не отвечает (нет Docker Engine на host?)"
+  fi
+fi
 
 SEARCH_WORKER_POD=$($K get pod -n "$PLATFORM_NS" -l app=search-worker \
   -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)

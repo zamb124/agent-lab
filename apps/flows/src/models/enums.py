@@ -44,6 +44,7 @@ class NodeType(str, Enum):
     HITL_NODE = "hitl_node"         # Передача диалога оператору очереди (operator_task)
     REFLECTION = "reflection"       # Typed critic/test-time compute gate
     RESOURCE = "resource"           # Нода-ресурс на графе (привязка flow/skill resources; pass-through)
+    CODE_AGENT = "code_agent"       # Агент из дерева исходников + контейнер на ферме guest_runtime
 
 
 class NodeToolCallType(str, Enum):

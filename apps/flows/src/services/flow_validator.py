@@ -703,6 +703,28 @@ class FlowValidator:
                                 node_id=node_id,
                             )
 
+            if node_type == "code_agent":
+                metadata_template = config.get("metadata_template")
+                if metadata_template is not None:
+                    if not isinstance(metadata_template, str):
+                        result.add_error(
+                            code="code_agent_metadata_template_invalid",
+                            message="code_agent.metadata_template must be a JSON object string",
+                            node_id=node_id,
+                        )
+                    elif metadata_template.strip():
+                        try:
+                            _ = parse_json_object(
+                                metadata_template.strip(),
+                                "code_agent.metadata_template",
+                            )
+                        except ValueError as e:
+                            result.add_error(
+                                code="code_agent_metadata_template_invalid",
+                                message=str(e),
+                                node_id=node_id,
+                            )
+
             if node_type == "channel":
                 self._validate_channel_node(node_id, config, result)
 

@@ -139,6 +139,13 @@ MINIMAL_NODE_CONFIGS: dict[str, dict[str, object]] = {
         "url": "https://example.test/a2a",
         "branch_id": "default",
     },
+    NodeType.CODE_AGENT.value: {
+        "type": "code_agent",
+        "language": "python",
+        "invoke_kind": "cli",
+        "catalog_id": "cat_code_agent",
+        "invoke_argv": ["python", "main.py"],
+    },
     NodeType.EXTERNAL_API.value: {
         "type": "external_api",
         "url": "https://example.test",

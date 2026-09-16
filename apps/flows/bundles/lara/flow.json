@@ -431,6 +431,34 @@
         }
       }
     },
+    "code_agent_node_helper": {
+      "name": "Code Agent Node Helper",
+      "description": "Lara entry: Code Agent Node Helper; full platform skills attached",
+      "tags": [
+        "flows",
+        "code_agent",
+        "lara"
+      ],
+      "permission": [],
+      "nodes_mode": "merge",
+      "nodes": {
+        "main": {
+          "name": "Code Agent Node Helper",
+          "prompt": "prompts/node_helper.md",
+          "llm": {
+            "model": "auto",
+            "temperature": 0.15,
+            "provider": "humanitec_llm"
+          },
+          "output_key": "response",
+          "tools": [
+            "ask_user",
+            "device_tools_list",
+            "device_tools_call"
+          ]
+        }
+      }
+    },
     "external_api_node_helper": {
       "name": "External API Node Helper",
       "description": "Lara entry: External API Node Helper; full platform skills attached",

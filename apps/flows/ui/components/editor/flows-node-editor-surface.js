@@ -16,6 +16,7 @@ import '../nodes/flows-hitl-node-editor.js';
 import '../nodes/flows-reflection-node-editor.js';
 import '../nodes/flows-external-api-editor.js';
 import '../nodes/flows-remote-flow-editor.js';
+import '../nodes/flows-code-agent-editor.js';
 import '../nodes/flows-resource-node-editor.js';
 import '../nodes/flows-base-node-editor.js';
 
@@ -204,6 +205,17 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}
             ></flows-remote-flow-editor>`;
+        case 'code_agent':
+            return html`<flows-code-agent-editor
+                .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
+                .nodeConfig=${node} .nodeType=${node.type}
+                .flowVariables=${flowVariables} .graphNodes=${graphNodes}
+                .previewExecutionState=${preview}
+                .dataflowNode=${dataflowNode}
+                ?embedded=${embedded}
+                @change=${onChange}
+                @delete-node=${onDelete} @duplicate-node=${onDuplicate}
+            ></flows-code-agent-editor>`;
         default:
             return html`<flows-base-node-editor
                 .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}

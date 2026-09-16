@@ -25,6 +25,8 @@ procs:
     shell: "uv run python scripts/run.py secrets"
   wiki:
     shell: "uv run python scripts/run.py wiki"
+  guest_runtime:
+    shell: "uv run python scripts/run.py guest_runtime"
   browser:
     shell: "uv run python scripts/run.py browser"
   search:
@@ -43,6 +45,8 @@ procs:
     shell: "uv run python scripts/run.py code_runner_go"
   code_runner_csharp:
     shell: "uv run python scripts/run.py code_runner_csharp"
+  guest_runtime:
+    shell: "uv run python scripts/run.py guest_runtime"
   flows_worker:
     shell: "uv run python scripts/run.py flows_worker"
   rag_worker:

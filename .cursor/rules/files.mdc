@@ -92,7 +92,7 @@ In-process запись байтов (mail inbound, generated artifacts, A2A ext
 | Механика | Где |
 |---|---|
 | Auto placement | `default_docs_placement(source_kind, source_ref)` в `core/files/registry.py` |
-| Path tree | `core/documents/placement_paths.py` (`Mail/…`, `Sync/…`, `Flows/…`, `Networkle/…`, `Worktracker/…`, `Wiki/…`, …) |
+| Path tree | `core/documents/placement_paths.py` (`Mail/…`, `Sync/…`, `Flows/…`, `Flows/…/code_agent/{node_id}/…`, `Networkle/…`, `Worktracker/…`, `Wiki/…`, …) |
 | Bind | `FilesService._bind_after_create` → `DocumentsClient` → Office `DocsPlacementService`. Exempt (`office_document` / `generated_ephemeral` / `platform_auxiliary`) — без bind. Иначе bind обязателен: сбой (office down/`ServiceClientError`/нет hook) → compensation `FilesService.delete` (S3 + `FileRecord`) и `raise`. Orphan durable `FileRecord` без каталога запрещён |
 | Namespace | `resolve_namespace_or_raise()` из Context (`active_namespace`) |
 | Exempt | `office_document` (Office upload уже биндит), `generated_ephemeral`, `platform_auxiliary` |
@@ -102,6 +102,8 @@ Caller заполняет полный `source_ref` (для path), не рука
 CI: `scripts/check_files_canon.py` — каждый `FileSourceKind` ∈ auto-map ∪ exempt.
 
 Mail inbound: `FileSourceKind.MAIL_MESSAGE` (`mailbox_binding_id` + `mail_uid` + `mailbox_email`, optional `mail_subject`); path `Mail/{email}/{subject|uid}`; idempotency `MailAttachmentFileIndex`; materialize на sync persist; UI `openFile` / download по `file_id`.
+
+Code agent source: `FileSourceKind.CODE_AGENT_SOURCE` (`flow_id` или `flow_slug` + **`node_id`**, optional `relative_dir`); path `Flows/{flow}/code_agent/{node_id}/{relative_dir…}`; retention как `FLOW_ASSET` (permanent). Нет `node_id` → `raise`. Канон → **`guest_runtime.mdc`**.
 
 Wiki page media: `FileSourceKind.WIKI_PAGE` (`wiki_page_id` + `namespace_id`); retention permanent (`FileRetentionKind.WIKI_PAGE`); path `Wiki/{namespace_id}/{wiki_page_id}`; JS `buildWikiPageFileCreateSpecJson`. UI выбора — `platform.file_picker` (не `prompt`, не `platform_auxiliary` для cover/image/file страницы).
 

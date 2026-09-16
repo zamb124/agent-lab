@@ -134,6 +134,9 @@ export class FlowsLogsModal extends PlatformModal {
         requestId: { type: String },
         spanId: { type: String },
         userId: { type: String },
+        flowId: { type: String },
+        nodeId: { type: String },
+        contextId: { type: String },
         _mode: { type: String, state: true },
         _pollAttempt: { type: Number, state: true },
         _pollExhausted: { type: Boolean, state: true },
@@ -199,6 +202,9 @@ export class FlowsLogsModal extends PlatformModal {
         this.requestId = '';
         this.spanId = '';
         this.userId = '';
+        this.flowId = '';
+        this.nodeId = '';
+        this.contextId = '';
         this._mode = 'session';
         this._lastLogsLoadKey = '';
         this._pollAttempt = 0;
@@ -211,6 +217,7 @@ export class FlowsLogsModal extends PlatformModal {
         this._byUser = this.useOp('flows/logs_by_user');
         this._byTaskTraces = this.useOp('flows/traces_by_task');
         this._bySessionTraces = this.useOp('flows/traces_by_session');
+        this._guestLogs = this.useOp('flows/code_agent_logs');
     }
 
     _traceIdFromTaskOp() {
@@ -258,7 +265,15 @@ export class FlowsLogsModal extends PlatformModal {
         return '';
     }
 
+    _isGuestRuntimeMode() {
+        return typeof this.flowId === 'string' && this.flowId.length > 0
+            && typeof this.nodeId === 'string' && this.nodeId.length > 0;
+    }
+
     _logsLoadKey() {
+        if (this._isGuestRuntimeMode()) {
+            return `guest|${this.flowId}|${this.nodeId}`;
+        }
         const taskId = typeof this.taskId === 'string' ? this.taskId : '';
         const sessionId = typeof this.sessionId === 'string' ? this.sessionId : '';
         const traceId = typeof this.traceId === 'string' ? this.traceId : '';
@@ -310,7 +325,9 @@ export class FlowsLogsModal extends PlatformModal {
             this._lastLogsLoadKey = '';
         }
 
-        if (
+        if (this._isGuestRuntimeMode()) {
+            this._mode = 'guest_runtime';
+        } else if (
             changed.has('sessionId')
             || changed.has('traceId')
             || changed.has('requestId')
@@ -353,6 +370,28 @@ export class FlowsLogsModal extends PlatformModal {
 
     _load() {
         const runs = [];
+        if (this._mode === 'guest_runtime') {
+            const flowId = typeof this.flowId === 'string' ? this.flowId : '';
+            const nodeId = typeof this.nodeId === 'string' ? this.nodeId : '';
+            if (flowId.length === 0 || nodeId.length === 0) {
+                throw new Error('flows-logs-modal: flowId and nodeId required for guest_runtime');
+            }
+            const payload = { flow_id: flowId, node_id: nodeId };
+            const taskId = typeof this.taskId === 'string' ? this.taskId : '';
+            if (taskId.length > 0) {
+                payload.task_id = taskId;
+            }
+            const sessionId = typeof this.sessionId === 'string' ? this.sessionId : '';
+            if (sessionId.length > 0) {
+                payload.session_id = sessionId;
+            }
+            const contextId = typeof this.contextId === 'string' ? this.contextId : '';
+            if (contextId.length > 0) {
+                payload.context_id = contextId;
+            }
+            runs.push(this._guestLogs.run(payload));
+            return runs;
+        }
         if (this._mode === 'trace') {
             const tid = this._effectiveTraceId();
             if (tid.length > 0) {
@@ -407,6 +446,10 @@ export class FlowsLogsModal extends PlatformModal {
     }
 
     _setMode(mode) {
+        if (this._isGuestRuntimeMode()) {
+            this._mode = 'guest_runtime';
+            return;
+        }
         if (!['trace', 'session', 'request', 'span', 'user'].includes(mode)) {
             throw new Error('flows-logs-modal: invalid mode');
         }
@@ -456,7 +499,40 @@ export class FlowsLogsModal extends PlatformModal {
         ];
     }
 
+    _mapGuestLogEntries(data) {
+        if (data === null || typeof data !== 'object') {
+            throw new Error('flows-logs-modal: guest logs payload required');
+        }
+        const items = data.items;
+        if (!Array.isArray(items)) {
+            throw new Error('flows-logs-modal: guest logs items required');
+        }
+        return items.map((item) => {
+            if (item === null || typeof item !== 'object') {
+                throw new Error('flows-logs-modal: guest log line must be an object');
+            }
+            const event = typeof item.event === 'string' && item.event.length > 0 ? item.event : '';
+            if (event.length === 0) {
+                throw new Error('flows-logs-modal: guest log event required');
+            }
+            const line = typeof item.line === 'string' ? item.line : '';
+            const ts = item.ts;
+            const timestamp = typeof ts === 'string' ? ts : '';
+            const failed = event.includes('fail') || event.includes('error');
+            return {
+                timestamp,
+                level: failed ? 'error' : 'info',
+                message: line.length > 0 ? line : event,
+                service: 'guest_runtime',
+                raw: item,
+            };
+        });
+    }
+
     _activeData() {
+        if (this._mode === 'guest_runtime') {
+            return this._guestLogs.lastResult;
+        }
         if (this._mode === 'trace') {
             return this._byTrace.lastResult;
         }
@@ -473,6 +549,13 @@ export class FlowsLogsModal extends PlatformModal {
     }
 
     _activeEntries() {
+        if (this._mode === 'guest_runtime') {
+            const data = this._guestLogs.lastResult;
+            if (data === null) {
+                return [];
+            }
+            return this._mapGuestLogEntries(data);
+        }
         const data = this._activeData();
         if (data !== null && typeof data === 'object' && Array.isArray(data.entries)) {
             return data.entries;
@@ -481,6 +564,9 @@ export class FlowsLogsModal extends PlatformModal {
     }
 
     _hasLoadTarget() {
+        if (this._mode === 'guest_runtime') {
+            return this._isGuestRuntimeMode();
+        }
         if (this._mode === 'trace') {
             return this._effectiveTraceId().length > 0
                 || (typeof this.taskId === 'string' && this.taskId.length > 0)
@@ -499,7 +585,8 @@ export class FlowsLogsModal extends PlatformModal {
     }
 
     _busy() {
-        return this._byTrace.busy
+        return this._guestLogs.busy
+            || this._byTrace.busy
             || this._bySession.busy
             || this._byRequest.busy
             || this._bySpan.busy
@@ -635,7 +722,8 @@ export class FlowsLogsModal extends PlatformModal {
 
     renderHeaderActions() {
         const busy =
-            this._byTrace.busy
+            this._guestLogs.busy
+            || this._byTrace.busy
             || this._bySession.busy
             || this._byRequest.busy
             || this._bySpan.busy
@@ -662,11 +750,39 @@ export class FlowsLogsModal extends PlatformModal {
         const data = this._activeData();
         const entries = this._activeEntries();
         const count = typeof data?.count === 'number' ? data.count : entries.length;
-        const listBusy = this._byTrace.busy
+        const listBusy = this._guestLogs.busy
+            || this._byTrace.busy
             || this._bySession.busy
             || this._byRequest.busy
             || this._bySpan.busy
             || this._byUser.busy;
+        if (this._mode === 'guest_runtime') {
+            const waiting = this._waitingForLogs(entries, listBusy, false);
+            return html`
+                <div class="logs-modal-stack">
+                    <div class="logs-toolbar">
+                        <span class="count-badge">${this.t('logs_modal.count', { count: entries.length })}</span>
+                    </div>
+                    <div class="logs-main">
+                        ${waiting
+                            ? html`
+                                  <div class="logs-loading">
+                                      <glass-spinner></glass-spinner>
+                                      <div>${this.t('logs_modal.waiting')}</div>
+                                  </div>
+                              `
+                            : html`
+                                  <platform-log-viewer
+                                      .entries=${entries}
+                                      ?loading=${listBusy}
+                                      .emptyLabel=${this.t('logs_modal.empty')}
+                                      @copy-request=${(e) => this._onCopyRequest(e)}
+                                  ></platform-log-viewer>
+                              `}
+                    </div>
+                </div>
+            `;
+        }
         const hasSession = typeof this.sessionId === 'string' && this.sessionId.length > 0;
         const hasRequest = typeof this.requestId === 'string' && this.requestId.length > 0;
         const hasSpan = typeof this.spanId === 'string' && this.spanId.length > 0;

@@ -26,6 +26,11 @@ gpuNodeSelectorValue: nvidia-gpu
 gpuNodeNames:
   - master
 
+guestRuntime:
+  executor: docker
+  registry:
+    size: 20Gi
+
 storageClassName: microk8s-hostpath
 
 postgres:
@@ -347,6 +352,31 @@ applications:
       - /wiki/ui/static
       - --static-path-mount
       - apps/wiki/ui
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+  guest-runtime:
+    nodeName: master
+    enabled: true
+    port: 8024
+    replicas: 1
+    serviceName: guest-runtime
+    command:
+      - granian
+      - --interface
+      - asgi
+      - apps.guest_runtime.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8024"
+      - --http
+      - auto
+      - --ws
     resources:
       requests:
         cpu: 100m

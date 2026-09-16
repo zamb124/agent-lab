@@ -11,7 +11,7 @@
  *   - useResource('flows/flows') — флаг has_bundle_update и список branches.
  *
  * Ops:
- *   - flows/flow_update — публикация;
+ *   - editor-save — публикация (страница → saveEditorFlow / flows/flow_update);
  *   - flows/flow_reload_from_bundle — переинициализация из bundle;
  *   - flows/branch_remove — удаление ветки.
  */
@@ -32,7 +32,6 @@ import {
     buildFlowPublishBody,
     getBranchNodes,
 } from '../../_helpers/flows-resolvers.js';
-import { saveEditorFlow } from '../../_helpers/flow-editor-save.js';
 import { openPlatformLaraAssistant } from '@platform/lib/flow-ui/shell/preferences.js';
 
 const MENU_PORTAL_GAP_PX = 4;
@@ -443,7 +442,6 @@ export class FlowsEditorHeader extends PlatformElement {
             this._problemsOpen = false;
         };
         this._editor = this.useOp('flows/editor');
-        this._update = this.useOp('flows/flow_update');
         this._reload = this.useOp('flows/flow_reload_from_bundle');
         this._flows = this.useResource('flows/flows');
         this._branchRemove = this.useOp('flows/branch_remove');
@@ -630,10 +628,7 @@ export class FlowsEditorHeader extends PlatformElement {
     }
 
     async _save() {
-        const event = new CustomEvent('editor-save', { bubbles: true, composed: true, cancelable: true });
-        this.dispatchEvent(event);
-        if (event.defaultPrevented) return;
-        await saveEditorFlow(this._editor, this._update, this.flowId);
+        this.emit('editor-save');
     }
 
     async _reloadBundle() {
@@ -874,7 +869,7 @@ export class FlowsEditorHeader extends PlatformElement {
 
     _chromeIssues(state) {
         const graph = this._dataflowIssues(state).map((item) => ({ ...item, kind: 'dataflow' }));
-        const uiIssues = (Array.isArray(this.interfaceProblems) ? this.interfaceProblems : []).map((problem) => {
+        const uiIssues = this.interfaceProblems.map((problem) => {
             const nodeName = typeof problem.blockId === 'string' && problem.blockId.length > 0
                 ? problem.blockId
                 : (typeof problem.pageId === 'string' && problem.pageId.length > 0

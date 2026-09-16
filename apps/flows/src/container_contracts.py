@@ -46,6 +46,7 @@ if TYPE_CHECKING:
     from apps.flows.src.models.registry_contracts import RegistryFlowSchema
     from apps.flows.src.runners.remote import RemoteCodeRunner
     from apps.flows.src.services.agent_skill_service import AgentSkillService
+    from apps.flows.src.services.code_agent_source_service import CodeAgentSourceService
     from apps.flows.src.services.flow_access_service import FlowAccessService
     from apps.flows.src.services.flow_discovery import FlowDiscoveryService
     from apps.flows.src.services.flow_ui_share_service import FlowUIShareService
@@ -62,6 +63,7 @@ if TYPE_CHECKING:
     from apps.flows.src.variables import VariablesService
     from core.billing import BillingService
     from core.clients.a2a_client import A2AClient
+    from core.clients.guest_runtime_client import GuestRuntimeClient
     from core.clients.loki_client import LokiClient
     from core.clients.redis_client import RedisClient
     from core.clients.tempo_client import TempoClient
@@ -382,6 +384,12 @@ class FlowRuntimeContainer(Protocol):
 
     @property
     def a2a_client(self) -> A2AClient: ...
+
+    @property
+    def guest_runtime_client(self) -> GuestRuntimeClient: ...
+
+    @property
+    def code_agent_source_service(self) -> CodeAgentSourceService: ...
 
     @property
     def flow_discovery(self) -> FlowDiscoveryService: ...

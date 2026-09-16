@@ -67,6 +67,12 @@ PRODUCTION_LIKE_BASE: dict[str, dict[str, float]] = {
         "tavily": 0.05,
         "*": 0.01,
     },
+    "guest": {
+        "start": 0.05,
+        "runtime_second": 0.001,
+        "build_second": 0.002,
+        "*": 0.0,
+    },
 }
 
 

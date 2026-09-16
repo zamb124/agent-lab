@@ -11,6 +11,7 @@ describe('lara node helper context', () => {
     it('maps node types to dedicated helper branches', () => {
         expect(laraNodeHelperBranchId('code')).toBe('code_helper');
         expect(laraNodeHelperBranchId('llm_node')).toBe('llm_node_helper');
+        expect(laraNodeHelperBranchId('code_agent')).toBe('code_agent_node_helper');
         expect(laraNodeHelperBranchId('external_api')).toBe('external_api_node_helper');
         expect(laraNodeHelperBranchId('unknown')).toBe('node_helper');
     });

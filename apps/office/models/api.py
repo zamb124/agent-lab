@@ -321,6 +321,12 @@ class OfficeCatalogListItem(BaseModel):
 OfficeCatalogListResponse = ListResponse[OfficeCatalogListItem]
 
 
+class OfficeCatalogItemsResponse(BaseModel):
+    catalog_id: str
+    catalogs: list[OfficeCatalogListItem]
+    documents: list[OfficeDocumentItem]
+
+
 class OfficeCatalogDetailResponse(BaseModel):
     catalog_id: str
     parent_catalog_id: str | None = None

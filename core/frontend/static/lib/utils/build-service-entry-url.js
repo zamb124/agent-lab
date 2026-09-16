@@ -61,6 +61,28 @@ export function buildServiceEntryUrl(serviceId) {
 }
 
 /**
+ * @param {string} catalogId
+ * @param {string} namespace
+ * @returns {string}
+ */
+export function buildDocumentsCatalogEntryUrl(catalogId, namespace) {
+    if (typeof catalogId !== 'string' || catalogId.length === 0) {
+        throw new Error('buildDocumentsCatalogEntryUrl: catalog_id required');
+    }
+    if (typeof namespace !== 'string' || namespace.length === 0) {
+        throw new Error('buildDocumentsCatalogEntryUrl: namespace required');
+    }
+    const base = buildServiceEntryUrl('documents');
+    const url = new URL(base, window.location.origin);
+    url.searchParams.set('namespace', namespace);
+    url.searchParams.set('catalog_id', catalogId);
+    if (base.startsWith('/')) {
+        return `${url.pathname}${url.search}`;
+    }
+    return url.toString();
+}
+
+/**
  * @param {string} path — абсолютный path на frontend (например `/agent`)
  * @returns {string}
  */

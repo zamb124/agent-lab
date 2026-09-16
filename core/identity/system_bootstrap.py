@@ -109,13 +109,19 @@ async def ensure_system_admin_membership(
     user_needs_update = ADMIN_ROLE not in user_roles
 
     if company_needs_update:
-        system_company.members[target_user.user_id] = [*company_roles, ADMIN_ROLE]
+        stored = await company_repository.put_member_roles(
+            system_company.company_id,
+            target_user.user_id,
+            [*company_roles, ADMIN_ROLE],
+        )
+        system_company.members = stored.members
+        system_company.updated_at = stored.updated_at
     if user_needs_update:
         target_user.companies[system_company.company_id] = [*user_roles, ADMIN_ROLE]
 
-    if company_needs_update or user_needs_update:
-        _ = await company_repository.set(system_company)
+    if user_needs_update:
         _ = await user_repository.set(target_user)
+    if company_needs_update or user_needs_update:
         await sync_company_member_roles(
             authz,
             company_id=system_company.company_id,

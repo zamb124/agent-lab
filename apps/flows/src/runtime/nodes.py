@@ -9,6 +9,7 @@
 - CodeNode - выполнение кода (Python, JavaScript, Go)
 - FlowNode - вложенный flow
 - RemoteFlowNode - внешний flow по A2A протоколу
+- CodeAgentNode - агент из дерева исходников + контейнер guest_runtime
 - ExternalAPINode - вызов внешнего HTTP API
 - MCPNode - вызов MCP tool
 - DatasourceNode - живая БД (DatasourceProtocol)
@@ -28,6 +29,7 @@ from typing import ClassVar, Literal, TypeAlias, cast, overload, override
 from a2a.types import Artifact, Message, Part
 from a2a.types.a2a_pb2 import ROLE_AGENT, ROLE_USER
 
+from apps.flows.config import get_settings as get_flows_settings
 from apps.flows.src.clients.external_api_client import ExternalAPIClient
 from apps.flows.src.clients.mcp_client import MCPClient
 from apps.flows.src.container_contracts import FlowRuntimeContainer, RuntimeFlowProtocol
@@ -61,6 +63,7 @@ from apps.flows.src.runtime.agent_skill_runtime import AgentSkillRuntimeHost
 from apps.flows.src.runtime.effective_llm_config import resolve_effective_llm_config_for_node
 from apps.flows.src.runtime.exception_policy import node_exception_policy, should_absorb_exception
 from apps.flows.src.runtime.exceptions import BreakpointInterrupt, FlowInterrupt
+from apps.flows.src.runtime.flow_interface_context import current_flow_interface
 from apps.flows.src.runtime.llm_context_memory import resolve_memory_context_source_for_runtime
 from apps.flows.src.runtime.llm_context_rag import resolve_rag_context_source_registry_for_runtime
 from apps.flows.src.runtime.llm_context_resource import resolve_llm_context_policy_for_runtime
@@ -81,14 +84,31 @@ from apps.flows.tools.agent_skill_tools import load_agent_skill, read_agent_skil
 from apps.flows.tools.tables import TABLES_TOOLS
 from core.a2a import artifact_from_json_dict, mapping_from_struct, struct_from_mapping
 from core.ai.runtime import create_llm_client_from_call_config
+from core.capabilities import (
+    CapabilityExecutionContext,
+    CapabilityExecutionTokenClaims,
+    CapabilityManifest,
+    PlatformEffectEnvelope,
+    execution_token_exp,
+    issue_execution_token,
+)
 from core.clients.llm.mock_control import (
     MOCK_MISS,
     MockMiss,
     resolve_entity_node_mock_result,
 )
+from core.clients.service_client import ServiceClient
+from core.config import get_settings
 from core.context import get_context as get_request_context
 from core.datasources.models import DatasourceOperation
 from core.errors import NodeWallClockTimeoutError
+from core.flow_ui.effects import apply_capability_platform_effects
+from core.guest_runtime.env import (
+    guest_env_key_is_reserved,
+    guest_env_key_is_valid,
+    validate_guest_env,
+)
+from core.guest_runtime.models import GuestEnsureLeaseRequest, GuestInvokeKind, GuestLanguage
 from core.integrations.mcp import mcp_tool_reference_id
 from core.llm_context import (
     LLMContextPatch,
@@ -96,7 +116,7 @@ from core.llm_context import (
     LLMContextSource,
     LLMContextSourceRegistry,
 )
-from core.logging import get_logger
+from core.logging import get_log_context, get_logger
 from core.reflection import (
     CriticPolicy,
     ReflectionCritiqueResult,
@@ -118,6 +138,7 @@ from core.state.mutation_policy import (
     forbid_frozen_update_key,
     should_skip_field_on_user_returned_state_copy,
 )
+from core.test_scope import resolve_test_scope
 from core.tracing.attributes import (
     ATTR_NODE_ID,
     ATTR_REFLECTION_GATE,
@@ -149,6 +170,7 @@ DURABLE_CONTEXT_NODE_TYPES: frozenset[NodeType] = frozenset(
         NodeType.CODE,
         NodeType.FLOW,
         NodeType.REMOTE_FLOW,
+        NodeType.CODE_AGENT,
         NodeType.EXTERNAL_API,
         NodeType.MCP,
         NodeType.DATASOURCE,
@@ -216,6 +238,15 @@ def _config_bool(config: JsonObject, field_name: str, default: bool) -> bool:
     value = config[field_name]
     if not isinstance(value, bool):
         raise ValueError(f"{field_name}: ожидается bool")
+    return value
+
+
+def _config_optional_int(config: JsonObject, field_name: str) -> int | None:
+    if field_name not in config or config[field_name] is None:
+        return None
+    value = config[field_name]
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{field_name}: ожидается int")
     return value
 
 
@@ -2209,6 +2240,415 @@ class RemoteFlowNode(BaseNode):
         }
 
 
+def _put_code_agent_env(
+    target: dict[str, str],
+    key: str,
+    value: str,
+    *,
+    source: str,
+) -> None:
+    if not guest_env_key_is_valid(key):
+        raise ValueError(f"{source} key {key!r} is not a valid env name")
+    if guest_env_key_is_reserved(key):
+        raise ValueError(f"{source} key {key!r} is reserved for the platform")
+    if value.strip() == "":
+        raise ValueError(f"{source} {key} resolved to an empty string")
+    if key in target:
+        raise ValueError(f"{source} overlaps guest_env key {key}")
+    target[key] = value
+
+
+def _merge_code_agent_env(*, mapped: dict[str, str], inputs: NodeInputs) -> dict[str, str]:
+    merged = dict(mapped)
+    bag = inputs.get("env")
+    if bag is not None:
+        env_bag = require_json_object(bag, "code_agent.input_mapping.env")
+        for env_key, raw_value in env_bag.items():
+            _put_code_agent_env(
+                merged,
+                env_key,
+                MappingResolver.stringify_mapping_value(raw_value),
+                source="input_mapping.env",
+            )
+    for key, raw_value in inputs.items():
+        if key in {"content", "env"}:
+            continue
+        if not guest_env_key_is_valid(key):
+            continue
+        _put_code_agent_env(
+            merged,
+            key,
+            MappingResolver.stringify_mapping_value(raw_value),
+            source="input_mapping",
+        )
+    return validate_guest_env(merged)
+
+
+def _code_agent_metadata_from_inputs(inputs: NodeInputs) -> JsonObject:
+    extra: JsonObject = {}
+    for key, value in inputs.items():
+        if key in {"content", "env"}:
+            continue
+        if guest_env_key_is_valid(key):
+            continue
+        extra[key] = require_json_value(value, f"code_agent.input_mapping.{key}")
+    return extra
+
+
+def _merge_code_agent_metadata(template: JsonObject, extra: JsonObject) -> JsonObject:
+    overlap = set(template).intersection(extra)
+    if overlap:
+        joined = ", ".join(sorted(overlap))
+        raise ValueError(f"code_agent metadata_template overlaps input_mapping keys: {joined}")
+    merged = dict(template)
+    merged.update(extra)
+    return merged
+
+
+def _code_agent_state_from_artifact(artifact_payload: JsonObject) -> JsonObject:
+    parts = artifact_payload.get("parts")
+    if not isinstance(parts, list) or not parts:
+        raise ValueError("code_agent state artifact parts required")
+    part = require_json_object(parts[0], "code_agent.state.parts[0]")
+    data = part.get("data")
+    return require_json_object(data, "code_agent.state.data")
+
+
+class CodeAgentNode(BaseNode):
+    """Агент из дерева исходников Documents + контейнер на ферме guest_runtime."""
+
+    node_type: ClassVar[NodeType | None] = NodeType.CODE_AGENT
+
+    def __init__(
+        self,
+        node_id: str,
+        config: JsonObject | None = None,
+        *,
+        container: FlowRuntimeContainer,
+    ):
+        super().__init__(node_id, config, container=container)
+        cfg = self.config
+        self.catalog_id: str | None = _config_optional_string(cfg, "catalog_id")
+        language_raw = _config_optional_string(cfg, "language")
+        self.language: str | None = language_raw
+        invoke_kind_raw = _config_optional_string(cfg, "invoke_kind")
+        self.invoke_kind: str | None = invoke_kind_raw
+        self.invoke_argv: list[str] = _config_string_list(cfg, "invoke_argv")
+        self.invoke_listen_port: int | None = _config_optional_int(cfg, "invoke_listen_port")
+        self.egress_hosts: list[str] = _config_string_list(cfg, "egress_hosts")
+        self.idle_ttl_seconds: int | None = _config_optional_int(cfg, "idle_ttl_seconds")
+        self.guest_env: dict[str, str] = _config_string_map_default(cfg, "guest_env")
+        self.metadata_template: str = _config_string(cfg, "metadata_template", "{}")
+
+    def _platform_env(
+        self,
+        *,
+        execution_token: str,
+        llm_url: str,
+        gateway_url: str,
+        state: ExecutionState,
+        company_id: str,
+        context_channel: str,
+        request_id: str,
+        trace_id: str,
+        namespace: str | None,
+    ) -> dict[str, str]:
+        platform: dict[str, str] = {
+            "OPENAI_API_KEY": execution_token,
+            "OPENAI_BASE_URL": llm_url,
+            "CAPABILITY_GATEWAY_URL": gateway_url,
+            "PLATFORM_EXECUTION_TOKEN": execution_token,
+            "PLATFORM_SESSION_ID": state.session_id,
+            "PLATFORM_TASK_ID": state.task_id,
+            "PLATFORM_CONTEXT_ID": state.context_id,
+            "PLATFORM_FLOW_ID": state.session_flow_id,
+            "PLATFORM_NODE_ID": self.node_id,
+            "PLATFORM_COMPANY_ID": company_id,
+            "PLATFORM_BRANCH_ID": state.branch_id,
+            "PLATFORM_CHANNEL": context_channel,
+            "PLATFORM_SOURCE_NODE_ID": self.node_id,
+            "PLATFORM_REQUEST_ID": request_id,
+            "PLATFORM_TRACE_ID": trace_id,
+            "PLATFORM_USER_ID": state.user_id,
+        }
+        if namespace is not None:
+            platform["PLATFORM_NAMESPACE"] = namespace
+        test_scope = resolve_test_scope()
+        if test_scope is not None:
+            platform["PLATFORM_TEST_SCOPE"] = test_scope
+        return platform
+
+    @override
+    async def _run_impl(self, state: ExecutionState, inputs: NodeInputs) -> NodeRunResult:
+        catalog_id = self.catalog_id
+        if catalog_id is None or not catalog_id.strip():
+            raise ValueError(f"CodeAgentNode {self.node_id}: catalog_id is required")
+        if not self.invoke_argv:
+            raise ValueError(f"CodeAgentNode {self.node_id}: invoke_argv is required")
+        language = self.language
+        if language is None:
+            raise ValueError(f"CodeAgentNode {self.node_id}: language is required")
+        invoke_kind = self.invoke_kind
+        if invoke_kind is None:
+            raise ValueError(f"CodeAgentNode {self.node_id}: invoke_kind is required")
+
+        content_value = inputs.get("content")
+        if content_value is None:
+            content_value = state.content
+        if isinstance(content_value, str):
+            content = content_value
+        elif content_value is None:
+            raise ValueError(f"CodeAgentNode {self.node_id}: content is required")
+        else:
+            content = json.dumps(content_value, ensure_ascii=False)
+
+        input_payload = require_json_object(
+            {
+                "node_id": self.node_id,
+                "catalog_id": catalog_id,
+                "language": language,
+                "invoke_kind": invoke_kind,
+                "invoke_argv": list(self.invoke_argv),
+                "content": content,
+                "session_id": state.session_id,
+                "state_hash": self._state_hash_for_activity(state),
+            },
+            "code_agent.activity_input",
+        )
+
+        async def invoke() -> NodeRunResult:
+            context = get_request_context()
+            if context is None or context.active_company is None:
+                raise ValueError("CodeAgentNode requires Context with active_company")
+            log_context = get_log_context()
+            request_id = log_context.get("request_id")
+            if not isinstance(request_id, str) or not request_id.strip():
+                raise ValueError("CodeAgentNode requires request_id")
+            trace_id = context.trace_id
+            if not isinstance(trace_id, str) or not trace_id.strip():
+                raise ValueError("CodeAgentNode requires trace_id")
+            company_id = context.active_company.company_id
+            user_id = context.user.user_id
+            if not user_id.strip():
+                raise ValueError("CodeAgentNode requires user_id")
+            settings = get_settings()
+            flows_settings = get_flows_settings()
+            namespace_raw = context.active_namespace
+            if not namespace_raw.strip() or namespace_raw.strip() == "default":
+                namespace = None
+            else:
+                namespace = namespace_raw.strip()
+            test_scope = resolve_test_scope()
+            claims = CapabilityExecutionTokenClaims(
+                company_id=company_id,
+                user_id=user_id,
+                flow_id=state.session_flow_id,
+                branch_id=state.branch_id,
+                session_id=state.session_id,
+                task_id=state.task_id,
+                context_id=state.context_id,
+                channel=context.channel,
+                request_id=request_id,
+                durable_execution_branch_id=state.durable_execution_branch_id,
+                durable_node_schedule_sequence=state.durable_node_schedule_sequence,
+                durable_superstep_sequence=state.durable_superstep_sequence,
+                source_node_id=self.node_id,
+                namespace=namespace,
+                test_scope=test_scope,
+                exp=execution_token_exp(flows_settings.capability_execution_token_ttl_seconds),
+            )
+            execution_token = issue_execution_token(claims)
+            files = await self.container.code_agent_source_service.list_files(
+                catalog_id=catalog_id
+            )
+            llm_url = (
+                f"{settings.server.get_service_url('flows').rstrip('/')}"
+                "/flows/api/v1/agent/llm/v1"
+            )
+            gateway_url = settings.server.get_service_url("capability_gateway").rstrip("/")
+            platform_env = self._platform_env(
+                execution_token=execution_token,
+                llm_url=llm_url,
+                gateway_url=gateway_url,
+                state=state,
+                company_id=company_id,
+                context_channel=context.channel,
+                request_id=request_id,
+                trace_id=trace_id,
+                namespace=namespace,
+            )
+            guest_env = _merge_code_agent_env(
+                mapped=MappingResolver.resolve_env_mapping(
+                    self.guest_env,
+                    state,
+                    platform=platform_env,
+                ),
+                inputs=inputs,
+            )
+            metadata = _merge_code_agent_metadata(
+                require_json_object(
+                    MappingResolver.parse_and_resolve_body_template(
+                        self.metadata_template,
+                        state,
+                        state.variables,
+                    ),
+                    "code_agent.metadata_template",
+                ),
+                _code_agent_metadata_from_inputs(inputs),
+            )
+            lease = await self.container.guest_runtime_client.ensure_lease(
+                GuestEnsureLeaseRequest(
+                    flow_id=state.session_flow_id,
+                    node_id=self.node_id,
+                    company_id=company_id,
+                    user_id=user_id,
+                    catalog_id=catalog_id,
+                    language=GuestLanguage(language),
+                    invoke_kind=GuestInvokeKind(invoke_kind),
+                    invoke_argv=list(self.invoke_argv),
+                    invoke_listen_port=self.invoke_listen_port,
+                    egress_hosts=list(self.egress_hosts),
+                    files=files,
+                    execution_token=execution_token,
+                    llm_proxy_base_url=llm_url,
+                    capability_gateway_base_url=gateway_url,
+                    session_id=state.session_id,
+                    task_id=state.task_id,
+                    context_id=state.context_id,
+                    branch_id=state.branch_id,
+                    channel=context.channel,
+                    source_node_id=self.node_id,
+                    request_id=request_id,
+                    trace_id=trace_id,
+                    namespace=namespace,
+                    durable_execution_branch_id=state.durable_execution_branch_id,
+                    durable_node_schedule_sequence=state.durable_node_schedule_sequence,
+                    durable_superstep_sequence=state.durable_superstep_sequence,
+                    idle_ttl_seconds=self.idle_ttl_seconds,
+                    guest_env=guest_env,
+                )
+            )
+            result = await self.container.a2a_client.send_task(
+                base_url=lease.a2a_url,
+                content=content,
+                session_id=state.session_id,
+                task_id=state.task_id,
+                metadata=metadata or None,
+            )
+            state.response = result.response
+            state["code_agent_status"] = result.status
+            state["code_agent_artifacts"] = result.artifacts
+
+            emitter = await Emitter.create_ensured(self.container, state)
+            effect_envelopes: list[PlatformEffectEnvelope] = []
+            interrupt_payload: JsonObject | None = None
+            guest_state: JsonObject = {}
+            for artifact_payload in result.artifacts:
+                remote_artifact = artifact_from_json_dict(artifact_payload)
+                remote_artifact_id = remote_artifact.artifact_id.strip()
+                if remote_artifact_id == "":
+                    raise ValueError("code_agent artifact.artifact_id is required")
+                if remote_artifact_id == "platform_effects":
+                    effect_envelopes.extend(_platform_effects_from_artifact(artifact_payload))
+                elif remote_artifact_id == "interrupt":
+                    interrupt_payload = _interrupt_from_artifact(artifact_payload)
+                elif remote_artifact_id == "state":
+                    guest_state = _code_agent_state_from_artifact(artifact_payload)
+                scoped_artifact = Artifact()
+                scoped_artifact.CopyFrom(remote_artifact)
+                scoped_artifact.artifact_id = f"code_agent:{self.node_id}:{remote_artifact_id}"
+                await emitter.emit_exact_artifact(scoped_artifact, last_chunk=True)
+
+            if effect_envelopes:
+                execution_context = CapabilityExecutionContext(
+                    execution_token=execution_token,
+                    company_id=company_id,
+                    user_id=user_id,
+                    flow_id=state.session_flow_id,
+                    branch_id=state.branch_id,
+                    session_id=state.session_id,
+                    task_id=state.task_id,
+                    context_id=state.context_id,
+                    channel=context.channel,
+                    request_id=request_id,
+                    trace_id=trace_id,
+                    durable_execution_branch_id=state.durable_execution_branch_id,
+                    durable_node_schedule_sequence=state.durable_node_schedule_sequence,
+                    durable_superstep_sequence=state.durable_superstep_sequence,
+                    source_node_id=self.node_id,
+                    namespace=namespace,
+                )
+                apply_capability_platform_effects(
+                    state,
+                    effect_envelopes,
+                    context=execution_context,
+                    manifest=await _load_capability_manifest(),
+                    interface=current_flow_interface(),
+                )
+            if interrupt_payload is not None:
+                body = parse_interrupt_body_from_external_dict(interrupt_payload)
+                InterruptManager.apply_interrupt(state, body, tool_call=None)
+                return None
+            node_result: JsonObject = dict(guest_state)
+            if "response" not in node_result:
+                node_result["response"] = result.response
+            return node_result
+
+        return await self._run_durable_activity(
+            state,
+            activity_type="code_agent",
+            input_payload=input_payload,
+            side_effect_policy=SideEffectPolicy.non_idempotent,
+            invoke=invoke,
+        )
+
+
+async def _load_capability_manifest() -> CapabilityManifest:
+    http = ServiceClient()
+    raw_gateway = await http.get(
+        "capability_gateway",
+        "/capability-gateway/api/v1/capabilities/manifest",
+        timeout=30.0,
+    )
+    raw_tools = await http.get(
+        "flows",
+        "/flows/api/v1/tool-runtime/manifest",
+        timeout=30.0,
+    )
+    gateway = CapabilityManifest.model_validate(raw_gateway)
+    tools = CapabilityManifest.model_validate(raw_tools)
+    by_name = {capability.name: capability for capability in gateway.capabilities}
+    by_name.update({capability.name: capability for capability in tools.capabilities})
+    return CapabilityManifest(
+        version=gateway.version,
+        capabilities=[by_name[name] for name in sorted(by_name)],
+    )
+
+
+def _platform_effects_from_artifact(artifact_payload: JsonObject) -> list[PlatformEffectEnvelope]:
+    parts = artifact_payload.get("parts")
+    if not isinstance(parts, list) or not parts:
+        raise ValueError("code_agent platform_effects artifact parts required")
+    envelopes: list[PlatformEffectEnvelope] = []
+    for index, raw_part in enumerate(parts):
+        part = require_json_object(raw_part, f"code_agent.platform_effects.parts[{index}]")
+        data = part.get("data")
+        if not isinstance(data, list):
+            raise ValueError("code_agent platform_effects data must be a list")
+        for item in data:
+            envelopes.append(PlatformEffectEnvelope.model_validate(item))
+    return envelopes
+
+
+def _interrupt_from_artifact(artifact_payload: JsonObject) -> JsonObject:
+    parts = artifact_payload.get("parts")
+    if not isinstance(parts, list) or not parts:
+        raise ValueError("code_agent interrupt artifact parts required")
+    part = require_json_object(parts[0], "code_agent.interrupt.parts[0]")
+    data = part.get("data")
+    return require_json_object(data, "code_agent.interrupt.data")
+
+
 class ExternalAPINode(BaseNode):
     """Вызов внешнего HTTP API."""
 
@@ -3136,6 +3576,7 @@ RUNTIME_NODE_CLASSES: Mapping[NodeType, type[BaseNode]] = {
     NodeType.CODE: CodeNode,
     NodeType.FLOW: FlowNode,
     NodeType.REMOTE_FLOW: RemoteFlowNode,
+    NodeType.CODE_AGENT: CodeAgentNode,
     NodeType.EXTERNAL_API: ExternalAPINode,
     NodeType.MCP: MCPNode,
     NodeType.DATASOURCE: DatasourceNode,

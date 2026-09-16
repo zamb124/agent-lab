@@ -14,6 +14,7 @@ from core.clients.documents_models import (
     DocumentsCopyArgs,
     DocumentsCreateCatalogArgs,
     DocumentsCreateEmptyArgs,
+    DocumentsEnsureCatalogPathArgs,
     DocumentsFileIdArgs,
     DocumentsFindArgs,
     DocumentsFromFileArgs,
@@ -30,7 +31,12 @@ from core.clients.documents_models import (
 from core.clients.files_client import FilesClient
 from core.clients.service_client import NAMESPACE_HEADER, ServiceClient
 from core.context import resolve_namespace_or_raise
-from core.documents.placement import DocsBindResult, DocsPlacement
+from core.documents.placement import (
+    DocsBindResult,
+    DocsEnsurePathRequest,
+    DocsEnsurePathResult,
+    DocsPlacement,
+)
 from core.files.file_ref import FileRef
 from core.files.reader.engine import read_files_to_envelope
 from core.files.reader.models import CompressionMode, ReadFileArgs
@@ -126,6 +132,43 @@ class DocumentsClient:
         )
         payload = require_json_object(response, "DocumentsClient.bind_file")
         return DocsBindResult.model_validate(payload)
+
+    async def ensure_catalog_path(
+        self, path_segments: list[str] | DocumentsEnsureCatalogPathArgs
+    ) -> DocsEnsurePathResult:
+        if isinstance(path_segments, DocumentsEnsureCatalogPathArgs):
+            segments = path_segments.path_segments
+        else:
+            segments = path_segments
+        if not segments:
+            raise ValueError("path_segments required")
+        body = DocsEnsurePathRequest(path_segments=segments)
+        raw = await self._http.post(
+            "office",
+            f"{_API}/catalogs/ensure-path",
+            json=body.model_dump(mode="json"),
+            headers=self._ns_headers(),
+            timeout=30.0,
+        )
+        payload = require_json_object(raw, "documents.ensure_catalog_path")
+        return DocsEnsurePathResult.model_validate(payload)
+
+    async def list_catalog_items(self, catalog_id: str | DocumentsCatalogIdArgs) -> JsonObject:
+        cid = self._catalog_id(catalog_id)
+        raw = await self._http.get(
+            "office",
+            f"{_API}/catalogs/{quote(cid, safe='')}/items",
+            headers=self._ns_headers(),
+        )
+        return require_json_object(raw, "documents.catalog_items")
+
+    async def delete_catalog(self, catalog_id: str | DocumentsCatalogIdArgs) -> None:
+        cid = self._catalog_id(catalog_id)
+        _ = await self._http.delete(
+            "office",
+            f"{_API}/catalogs/{quote(cid, safe='')}",
+            headers=self._ns_headers(),
+        )
 
     async def from_file(
         self,

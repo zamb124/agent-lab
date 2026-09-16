@@ -22,12 +22,13 @@ _DEFAULT_QUERY_LOOKBACK = timedelta(days=7)
 # Селектор сервисов: Loki label service выставляется Alloy из лейбла app=<name> Pod'а:
 # Deployment flows → service=flows; воркеры flows_worker → service=flows-worker. Также сохраняется
 # совместимость со старыми именами (agents, *flows*).
-_FLOWS_SELECTOR = 'service=~"(agents|flows|.*flows.*)"'
+_FLOWS_SELECTOR = 'service=~"(agents|flows|.*flows.*|guest-runtime)"'
 
 # По trace_id — те же процессы; agents обязателен: иначе логи flows-сервиса на проде не попадают в выборку.
 _PLATFORM_TRACE_SELECTOR = (
     'service=~"(agents|frontend|flows|flows_worker|crm|crm_worker|rag|rag_worker|'
-    'sync|sync_worker|office|voice|scheduler|browser|idle_worker|provider_litserve|.*flows.*)"'
+    'sync|sync_worker|office|voice|scheduler|browser|idle_worker|provider_litserve|'
+    'guest-runtime|.*flows.*)"'
 )
 
 

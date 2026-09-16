@@ -17,13 +17,19 @@ import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-segmented-control.js';
 
-function _parseInputSource(raw) {
+function _parseInputSource(raw, allowPlatform) {
     const s = String(raw);
+    if (s === '@state') {
+        return { sourceType: 'const', sourcePath: '@state' };
+    }
     if (s.startsWith('@state:')) {
         return { sourceType: 'state', sourcePath: s.slice(7) };
     }
     if (s.startsWith('@var:')) {
         return { sourceType: 'var', sourcePath: s.slice(5) };
+    }
+    if (allowPlatform === true && s.startsWith('@platform:')) {
+        return { sourceType: 'platform', sourcePath: s.slice(10) };
     }
     return { sourceType: 'const', sourcePath: s };
 }
@@ -35,6 +41,9 @@ function _buildInputSource(sourceType, sourcePath) {
     }
     if (sourceType === 'var') {
         return `@var:${p}`;
+    }
+    if (sourceType === 'platform') {
+        return `@platform:${p}`;
     }
     return p;
 }
@@ -49,9 +58,12 @@ export class FlowsStateMappingEditor extends PlatformElement {
         /** "input" — input_mapping; "output" — output_mapping / state_mapping. */
         kind: { type: String },
         title: { type: String },
+        /** guest_env: четвёртый тип @platform:KEY. */
+        allowPlatform: { type: Boolean, reflect: true, attribute: 'allow-platform' },
         stateSuggestions: { type: Array },
         varSuggestions: { type: Array },
         resultSuggestions: { type: Array },
+        platformSuggestions: { type: Array },
         _rows: { state: true },
     };
 
@@ -109,6 +121,13 @@ export class FlowsStateMappingEditor extends PlatformElement {
             .source-type-segment {
                 width: 114px;
             }
+            :host([allow-platform]) .source-type-segment {
+                width: 152px;
+            }
+            :host([allow-platform]) .map-row.input-grid,
+            :host([allow-platform]) .head-row.input-grid {
+                grid-template-columns: 1fr minmax(0, 10px) 152px minmax(0, 28px) 1fr minmax(0, 36px);
+            }
             .head-row {
                 display: grid;
                 gap: var(--space-2);
@@ -138,9 +157,11 @@ export class FlowsStateMappingEditor extends PlatformElement {
         this.mapping = null;
         this.kind = 'input';
         this.title = '';
+        this.allowPlatform = false;
         this.stateSuggestions = [];
         this.varSuggestions = [];
         this.resultSuggestions = [];
+        this.platformSuggestions = [];
         this._rows = [];
         /** Не тянуть `mapping` с родителя после первого init (иначе пропадут незаполненные новые строки). */
         this._parentMappingSettled = false;
@@ -185,7 +206,7 @@ export class FlowsStateMappingEditor extends PlatformElement {
             }
         } else {
             for (const [param, source] of Object.entries(m)) {
-                const parsed = _parseInputSource(source);
+                const parsed = _parseInputSource(source, this.allowPlatform === true);
                 this._rows.push({
                     param,
                     sourceType: parsed.sourceType,
@@ -264,6 +285,9 @@ export class FlowsStateMappingEditor extends PlatformElement {
         if (sourceType === 'state') {
             return Array.isArray(this.stateSuggestions) ? this.stateSuggestions : [];
         }
+        if (sourceType === 'platform') {
+            return Array.isArray(this.platformSuggestions) ? this.platformSuggestions : [];
+        }
         return [];
     }
 
@@ -289,7 +313,7 @@ export class FlowsStateMappingEditor extends PlatformElement {
     }
 
     _sourceTypeOptions() {
-        return [
+        const options = [
             {
                 value: 'state',
                 icon: 'database',
@@ -309,10 +333,22 @@ export class FlowsStateMappingEditor extends PlatformElement {
                 hint: this.t('state_mapping_editor.type_const_hint'),
             },
         ];
+        if (this.allowPlatform === true) {
+            options.push({
+                value: 'platform',
+                icon: 'server',
+                label: this.t('state_mapping_editor.type_platform_label'),
+                hint: this.t('state_mapping_editor.type_platform_hint'),
+            });
+        }
+        return options;
     }
 
     _renderSourceTypeSwitch(value, onChange) {
-        const current = ['state', 'var', 'const'].includes(value) ? value : 'state';
+        const allowed = this.allowPlatform === true
+            ? ['state', 'var', 'const', 'platform']
+            : ['state', 'var', 'const'];
+        const current = allowed.includes(value) ? value : 'state';
         const items = this._sourceTypeOptions().map((option) => ({
             value: option.value,
             icon: option.icon,
@@ -341,7 +377,9 @@ export class FlowsStateMappingEditor extends PlatformElement {
             <div class="toolbar">
                 <span class="hint">${isOut
                     ? this.t('state_mapping_editor.hint_legend_output')
-                    : this.t('state_mapping_editor.hint_legend_input')}</span>
+                    : this.allowPlatform === true
+                        ? this.t('state_mapping_editor.hint_legend_guest_env')
+                        : this.t('state_mapping_editor.hint_legend_input')}</span>
                 <platform-button variant="ghost" density="compact" @click=${this._addRow}>
                     + ${this.t('state_mapping_editor.add')}
                 </platform-button>
@@ -406,7 +444,9 @@ export class FlowsStateMappingEditor extends PlatformElement {
                                 r.sourcePath,
                                 this._suggestionsForInputSource(r.sourceType),
                                 (value) => this._updateInputRow(i, { sourcePath: value }),
-                                this.t('state_mapping_editor.placeholder_source_path'),
+                                r.sourceType === 'platform'
+                                    ? this.t('state_mapping_editor.placeholder_platform_key')
+                                    : this.t('state_mapping_editor.placeholder_source_path'),
                             )}
                             <span class="sep" aria-hidden="true">|</span>
                             ${this._renderSourceTypeSwitch(

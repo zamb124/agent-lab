@@ -2,9 +2,10 @@
 MappingResolver - единая логика резолвинга @state:path и @var:name.
 
 Используется в:
-- LlmNode / FlowNode / RemoteFlowNode (input_mapping)
+- LlmNode / FlowNode / RemoteFlowNode / CodeAgentNode (input_mapping)
 - ExternalAPIClient / SMS (URL, headers, body_template)
-- RemoteFlowNode (metadata_template → A2A params.metadata)
+- RemoteFlowNode / CodeAgentNode (metadata_template → A2A params.metadata)
+- CodeAgentNode (guest_env → контейнер; @platform:KEY из platform env)
 - HitlNode (handoff_task_title / handoff_user_message)
 
 Свободные строки (headers, URL, HITL): resolve_interpolated_string.
@@ -14,6 +15,7 @@ input_mapping ячейки: resolve_value / build_mapped_state.
 Синтаксис:
 - "@state:field" -> state.field
 - "@state:user.profile.name" -> state.user.profile.name
+- "@state" -> весь state (model_dump JSON)
 - "@var:name" -> state.variables["name"] (или overlay variables=)
 - "@var:nested.path" -> вложенный путь
 - в свободной строке: токены @state: / @var: в тексте
@@ -31,8 +33,11 @@ from typing import TYPE_CHECKING, ClassVar, cast
 
 from pydantic import BaseModel
 
+from core.guest_runtime.env import validate_guest_env
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 from core.variables import VarResolver
+
+PLATFORM_ENV_PREFIX = "@platform:"
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
@@ -83,6 +88,9 @@ class MappingResolver:
         if not isinstance(source, str):
             return source
 
+        if source == "@state":
+            return MappingResolver.dump_state(state)
+
         if source.startswith("@state:"):
             path = source[7:]
             return MappingResolver.get_nested_value(state, path)
@@ -92,6 +100,13 @@ class MappingResolver:
             return VarResolver.resolve_ref(source, variables)
 
         return source
+
+    @staticmethod
+    def dump_state(state: MappingState) -> JsonObject:
+        if isinstance(state, BaseModel):
+            dumped = state.model_dump(mode="json", exclude_none=False)
+            return require_json_object(dumped, "mapping.state")
+        return require_json_object(dict(state), "mapping.state")
 
     @staticmethod
     def get_nested_value(data: MappingState, path: str) -> object | None:
@@ -156,7 +171,7 @@ class MappingResolver:
             resolved = MappingResolver.get_nested_value(state, path)
             if resolved is None:
                 raise ValueError(f"@state:{path} resolved to None")
-            return MappingResolver._coerce_to_header_string(resolved)
+            return MappingResolver.stringify_mapping_value(resolved)
 
         return cls._STATE_TOKEN_PATTERN.sub(replace_state, value)
 
@@ -187,11 +202,11 @@ class MappingResolver:
             resolved = MappingResolver.resolve_value(raw, state)
             if resolved is None:
                 raise ValueError(f"{raw!r} resolved to None")
-            return cls._coerce_to_header_string(resolved).strip()
+            return cls.stringify_mapping_value(resolved).strip()
 
         if _VAR_FULL_VAR.match(raw) is not None:
             resolved = VarResolver.resolve_ref(raw, effective_vars)
-            return cls._coerce_to_header_string(resolved).strip()
+            return cls.stringify_mapping_value(resolved).strip()
 
         text = raw
         if "@state:" in text:
@@ -236,7 +251,7 @@ class MappingResolver:
           для свободного текста используйте resolve_interpolated_string).
         - Иначе подстановка токенов @var: через resolve_interpolated_string.
         """
-        if s.startswith("@state:"):
+        if s == "@state" or s.startswith("@state:"):
             return require_json_value(
                 MappingResolver.resolve_value(s, state),
                 "JSON body template @state value",
@@ -294,7 +309,7 @@ class MappingResolver:
         return MappingResolver.resolve_json_template_tree(parsed, state, variables)
 
     @staticmethod
-    def _coerce_to_header_string(value: object) -> str:
+    def stringify_mapping_value(value: object) -> str:
         """Скаляр или JSON в одну строку для HTTP-заголовка / interpolated string."""
         if value is None:
             raise ValueError("template resolved to None")
@@ -316,3 +331,25 @@ class MappingResolver:
         return MappingResolver.resolve_interpolated_string(
             value, state, variables=variables
         )
+
+    @staticmethod
+    def resolve_env_mapping(
+        mapping: Mapping[str, str],
+        state: MappingState,
+        *,
+        platform: Mapping[str, str],
+    ) -> dict[str, str]:
+        resolved: dict[str, str] = {}
+        for key, source in mapping.items():
+            if source.startswith(PLATFORM_ENV_PREFIX):
+                platform_key = source[len(PLATFORM_ENV_PREFIX) :]
+                if platform_key not in platform:
+                    raise ValueError(f"guest_env {key}: unknown {PLATFORM_ENV_PREFIX}{platform_key}")
+                text = platform[platform_key]
+            else:
+                value = MappingResolver.resolve_value(source, state)
+                text = MappingResolver.stringify_mapping_value(value)
+            if text.strip() == "":
+                raise ValueError(f"guest_env {key} resolved to an empty string")
+            resolved[key] = text
+        return validate_guest_env(resolved)

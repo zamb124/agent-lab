@@ -72,6 +72,7 @@ _SERVICE_PREFIXES: tuple[str, ...] = (
     "code-runner-node",
     "code-runner-go",
     "code-runner-csharp",
+    "guest-runtime",
     "worktracker",
     "secrets",
     "wiki",
@@ -86,6 +87,7 @@ _PREFIX_TO_SERVICE_URL_KEY: dict[str, str] = {
     "code-runner-node": "code_runner_node",
     "code-runner-go": "code_runner_go",
     "code-runner-csharp": "code_runner_csharp",
+    "guest-runtime": "guest_runtime",
 }
 
 _ONLYOFFICE_STATIC_SEGMENTS: frozenset[str] = frozenset(

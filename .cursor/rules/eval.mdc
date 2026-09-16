@@ -26,6 +26,7 @@ flows runtime / code API
 - `code-runner-python` и `code-runner-node` держат persistent worker pool с cached compiled artifact/script (`CODE_RUNNER_PYTHON_WORKERS` / `CODE_RUNNER_NODE_WORKERS`).
 - `code-runner-go` и `code-runner-csharp` кэшируют build artifact по hash(source+entrypoint+manifest) и не компилируют каждый вызов заново. Параллельный `go build` / `dotnet build` ограничен semaphore `CODE_RUNNER_GO_WORKERS` / `CODE_RUNNER_CSHARP_WORKERS` (минимум 2); слот только на compile, не на `tools.call` вложенного same-language runner.
 - `capability-gateway` — единственный trusted API к платформенным возможностям.
+- Целый агент из дерева файлов — нода **`code_agent`** на ферме `guest_runtime` (не code-runner, не `remote_flow`). Канон → **`guest_runtime.mdc`**.
 - Python, JavaScript, TypeScript, Go и C# получают один `CapabilityManifest`.
 
 ## Запреты

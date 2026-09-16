@@ -21,6 +21,12 @@ from apps.flows.src.constants.execution_limits import (
 from core.ai.llm_config import LLMCallConfig, validate_fallback_model_configs
 from core.datasources.models import DatasourceOperation
 from core.files.file_ref import FileRef
+from core.guest_runtime.env import (
+    GUEST_IDLE_TTL_MAX,
+    GUEST_IDLE_TTL_MIN,
+    validate_guest_env,
+)
+from core.guest_runtime.git_url import is_code_agent_commit_sha
 from core.llm_context import LLMContextPatch
 from core.models import StrictBaseModel
 from core.reflection import CriticPolicy
@@ -51,6 +57,12 @@ def _parse_config_int(value: JsonValue, field_name: str) -> int:
     raise ValueError(f"{field_name}: ожидается целое число, получено {type(value).__name__}")
 
 
+def _blank_optional_str(value: object) -> object:
+    if isinstance(value, str) and value.strip() == "":
+        return None
+    return value
+
+
 def _assert_datasource_node_surface(
     *,
     connector_id: str | None,
@@ -79,6 +91,53 @@ def _assert_datasource_node_surface(
         raise ValueError("datasource node: llm is not allowed")
     if llm_context is not None or llm_context_resource_key is not None:
         raise ValueError("datasource node: llm_context is not allowed")
+
+
+def _assert_code_agent_node_surface(
+    *,
+    url: str | None,
+    git_url: str | None,
+    source_sha: str | None,
+    language: str,
+    invoke_kind: str | None,
+) -> None:
+    if url is not None and str(url).strip():
+        raise ValueError("code_agent node: url is not allowed (use remote_flow)")
+    git = git_url.strip() if git_url is not None else ""
+    sha = source_sha.strip() if source_sha is not None else ""
+    if sha and not git:
+        raise ValueError("code_agent node: source_sha requires git_url")
+    if sha and not is_code_agent_commit_sha(sha):
+        raise ValueError("code_agent node: source_sha must be 40 hex chars")
+    if language not in {"python", "node"}:
+        raise ValueError("code_agent node: language must be python or node")
+    if invoke_kind is not None and invoke_kind not in {"cli", "a2a"}:
+        raise ValueError("code_agent node: invoke_kind must be cli or a2a")
+
+
+def _assert_code_agent_runtime_fields(
+    *,
+    idle_ttl_seconds: int | None,
+    guest_env: dict[str, str],
+) -> None:
+    if idle_ttl_seconds is not None and (
+        idle_ttl_seconds < GUEST_IDLE_TTL_MIN or idle_ttl_seconds > GUEST_IDLE_TTL_MAX
+    ):
+        raise ValueError(
+            f"code_agent node: idle_ttl_seconds must be between {GUEST_IDLE_TTL_MIN} and {GUEST_IDLE_TTL_MAX}"
+        )
+    _ = validate_guest_env(guest_env)
+
+
+def _assert_code_agent_fields_absent(
+    *,
+    idle_ttl_seconds: int | None,
+    guest_env: dict[str, str],
+) -> None:
+    if idle_ttl_seconds is not None:
+        raise ValueError("idle_ttl_seconds is only allowed on code_agent")
+    if guest_env:
+        raise ValueError("guest_env is only allowed on code_agent")
 
 
 class ReactLoopMode(str, Enum):
@@ -187,6 +246,7 @@ class NodeConfig(StrictBaseModel):
     - NodeType.HITL_NODE: пауза до оператора очереди
     - NodeType.REFLECTION: typed critic / test-time compute gate
     - NodeType.RESOURCE: нода-ресурс на графе (привязка resources; рантайм pass-through)
+    - NodeType.CODE_AGENT: агент из дерева исходников + ферма guest_runtime
     """
 
     model_config: ClassVar[ConfigDict] = ConfigDict(
@@ -384,6 +444,46 @@ class NodeConfig(StrictBaseModel):
         default=None,
         description="URL remote_flow или external_api",
     )
+    catalog_id: str | None = Field(
+        default=None,
+        description="Корень дерева исходников code_agent в Документах",
+    )
+    git_url: str | None = Field(default=None, description="Git URL ingest для code_agent")
+    source_sha: str | None = Field(default=None, description="Pinned git SHA для code_agent")
+
+    @field_validator("git_url", "source_sha", mode="before")
+    @classmethod
+    def _blank_git_provenance(cls, value: object) -> object:
+        return _blank_optional_str(value)
+    invoke_kind: Literal["cli", "a2a"] | None = Field(
+        default=None,
+        description="Способ запуска code_agent: CLI argv или A2A listen",
+    )
+    invoke_argv: list[str] = Field(
+        default_factory=list,
+        description="Argv PID1 shim для code_agent (не entrypoint code-ноды)",
+    )
+    invoke_listen_port: int | None = Field(
+        default=None,
+        description="Порт A2A-агента внутри guest для invoke_kind=a2a",
+    )
+    egress_hosts: list[str] = Field(
+        default_factory=list,
+        description="Дополнительные egress hosts NetworkPolicy guest",
+    )
+    idle_ttl_seconds: int | None = Field(
+        default=None,
+        ge=GUEST_IDLE_TTL_MIN,
+        le=GUEST_IDLE_TTL_MAX,
+        description="Горячий idle контейнера code_agent, секунды; None = дефолт фермы 60",
+    )
+    guest_env: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Env гостя code_agent: KEY → @state:path / @var:name / @platform:KEY / литерал. "
+            "Нельзя перекрывать PLATFORM_/OPENAI_/CAPABILITY_/GUEST_/PATH"
+        ),
+    )
     method: HTTPMethod | None = Field(default=None, description="HTTP метод external_api")
     headers: dict[str, str] = Field(default_factory=dict, description="HTTP headers")
     request_content_type: str | None = Field(
@@ -399,7 +499,7 @@ class NodeConfig(StrictBaseModel):
         default=None,
         description=(
             "JSON template для A2A SendMessage params.metadata "
-            "(remote_flow; @state: / @var: в строках)"
+            "(remote_flow и code_agent; @state / @state:path / @var: в строках)"
         ),
     )
     state_mapping: dict[str, str] = Field(
@@ -550,8 +650,18 @@ class NodeConfig(StrictBaseModel):
             )
         return iv
 
+    @field_validator("guest_env")
+    @classmethod
+    def validate_node_guest_env(cls, value: dict[str, str]) -> dict[str, str]:
+        return validate_guest_env(value)
+
     @model_validator(mode="after")
     def validate_resource_node_excludes_agent_surface(self) -> "NodeConfig":
+        if self.type != NodeType.CODE_AGENT:
+            _assert_code_agent_fields_absent(
+                idle_ttl_seconds=self.idle_ttl_seconds,
+                guest_env=self.guest_env,
+            )
         if self.call_type == NodeToolCallType.HANDOFF and self.type != NodeType.FLOW:
             raise ValueError("call_type=handoff is only allowed for flow node-as-tool")
         if self.type == NodeType.REFLECTION:
@@ -586,6 +696,20 @@ class NodeConfig(StrictBaseModel):
                 llm=self.llm,
                 llm_context=self.llm_context,
                 llm_context_resource_key=self.llm_context_resource_key,
+            )
+            return self
+
+        if self.type == NodeType.CODE_AGENT:
+            _assert_code_agent_node_surface(
+                url=self.url,
+                git_url=self.git_url,
+                source_sha=self.source_sha,
+                language=self.language,
+                invoke_kind=self.invoke_kind,
+            )
+            _assert_code_agent_runtime_fields(
+                idle_ttl_seconds=self.idle_ttl_seconds,
+                guest_env=self.guest_env,
             )
             return self
 
@@ -671,6 +795,22 @@ class GraphNodeConfig(StrictBaseModel):
     config: JsonObject | None = Field(default=None)
 
     url: str | None = Field(default=None)
+    catalog_id: str | None = Field(default=None)
+    git_url: str | None = Field(default=None)
+    source_sha: str | None = Field(default=None)
+
+    @field_validator("git_url", "source_sha", mode="before")
+    @classmethod
+    def _blank_git_provenance(cls, value: object) -> object:
+        return _blank_optional_str(value)
+    invoke_kind: Literal["cli", "a2a"] | None = Field(default=None)
+    invoke_argv: list[str] = Field(default_factory=list)
+    invoke_listen_port: int | None = Field(default=None)
+    egress_hosts: list[str] = Field(default_factory=list)
+    idle_ttl_seconds: int | None = Field(
+        default=None, ge=GUEST_IDLE_TTL_MIN, le=GUEST_IDLE_TTL_MAX
+    )
+    guest_env: dict[str, str] = Field(default_factory=dict)
     method: HTTPMethod | None = Field(default=None)
     headers: dict[str, str] = Field(default_factory=dict)
     request_content_type: str | None = Field(default=None)
@@ -682,7 +822,7 @@ class GraphNodeConfig(StrictBaseModel):
         default=None,
         description=(
             "JSON template для A2A SendMessage params.metadata "
-            "(remote_flow; @state: / @var: в строках)"
+            "(remote_flow и code_agent; @state / @state:path / @var: в строках)"
         ),
     )
     state_mapping: dict[str, str] = Field(default_factory=dict)
@@ -743,8 +883,18 @@ class GraphNodeConfig(StrictBaseModel):
             normalized.append(item)
         return normalized
 
+    @field_validator("guest_env")
+    @classmethod
+    def validate_graph_guest_env(cls, value: dict[str, str]) -> dict[str, str]:
+        return validate_guest_env(value)
+
     @model_validator(mode="after")
     def validate_graph_node_type_constraints(self) -> "GraphNodeConfig":
+        if self.type != NodeType.CODE_AGENT:
+            _assert_code_agent_fields_absent(
+                idle_ttl_seconds=self.idle_ttl_seconds,
+                guest_env=self.guest_env,
+            )
         if self.call_type is not None and self.type != NodeType.FLOW:
             raise ValueError("call_type is only allowed on flow nodes")
         if self.handoff_mode is not None and self.type != NodeType.HITL_NODE:
@@ -781,6 +931,20 @@ class GraphNodeConfig(StrictBaseModel):
                 llm=self.llm,
                 llm_context=self.llm_context,
                 llm_context_resource_key=self.llm_context_resource_key,
+            )
+            return self
+
+        if self.type == NodeType.CODE_AGENT:
+            _assert_code_agent_node_surface(
+                url=self.url,
+                git_url=self.git_url,
+                source_sha=self.source_sha,
+                language=self.language,
+                invoke_kind=self.invoke_kind,
+            )
+            _assert_code_agent_runtime_fields(
+                idle_ttl_seconds=self.idle_ttl_seconds,
+                guest_env=self.guest_env,
             )
             return self
 

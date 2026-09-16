@@ -108,6 +108,7 @@ export const UI_ICON_MAP = Object.freeze({
     send: 'send', close: 'close', edit: 'edit', trash: 'trash', delete: 'trash',
     apps: 'apps', 'layout-grid': 'apps',
     copy: 'copy', check: 'check', info: 'info', agent: 'agent', llm_node: 'agent',
+    code_agent: 'code_agent',
     plus: 'plus', chat: 'chat', folder: 'folder', code: 'code', terminal: 'terminal',
     api: 'api', rest: 'api', endpoint: 'api', 'integration-instructions': 'api',
     radio: 'radio', stream: 'radio', streaming: 'radio',

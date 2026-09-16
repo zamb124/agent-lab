@@ -1,0 +1,17 @@
+{{- if index .Values.applications "guest-runtime" }}
+{{- $app := index .Values.applications "guest-runtime" }}
+{{- if $app.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: guest-runtime-registry
+  namespace: {{ .Values.namespace }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.storageClassName }}
+  resources:
+    requests:
+      storage: {{ .Values.guestRuntime.registry.size }}
+{{- end }}
+{{- end }}

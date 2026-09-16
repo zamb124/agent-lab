@@ -23,6 +23,7 @@ LOG_COMPANY_ID = "company_id"
 LOG_COMPANY_SUBDOMAIN = "company_subdomain"
 LOG_SESSION_ID = "session_id"  # JWT / WebSocket — авторизационная сессия
 LOG_SESSION_AGENT = "session_agent"  # flow_id:context_id — сессия исполнения агента flows
+LOG_CONTEXT_ID = "context_id"  # context_id исполнения flow (A2A / code_agent)
 LOG_NAMESPACE = "namespace"
 
 # HTTP (OTel: http.request.method, http.route, http.response.status_code)
@@ -124,6 +125,8 @@ LOG_MCP_TOOL_NAME = "platform.mcp.tool_name"
 # Node execution
 LOG_NODE_TYPE = "platform.node_type"
 LOG_NODE_ID = "platform.node_id"
+LOG_GUEST_RUNTIME_ID = "guest_runtime.id"
+LOG_GUEST_LEASE_ID = "guest_lease.id"
 
 # Handoff / HITL
 LOG_HANDOFF_WALL_MS = "platform.handoff.wall_ms"

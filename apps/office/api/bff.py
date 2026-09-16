@@ -32,6 +32,7 @@ from apps.office.events import OFFICE_DOCUMENT_SAVED
 from apps.office.models.api import (
     OfficeCatalogCreateRequest,
     OfficeCatalogDetailResponse,
+    OfficeCatalogItemsResponse,
     OfficeCatalogListItem,
     OfficeCatalogListResponse,
     OfficeCatalogMemberAddRequest,
@@ -120,7 +121,12 @@ from core.clients.service_client import ServiceClientError
 from core.config import get_settings
 from core.context import Context, clear_context, get_context, set_context
 from core.context.job_context import build_job_context
-from core.documents.placement import DocsBindResult, DocsPlacement
+from core.documents.placement import (
+    DocsBindResult,
+    DocsEnsurePathRequest,
+    DocsEnsurePathResult,
+    DocsPlacement,
+)
 from core.events import publish_event_to_user
 from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.registry import default_retention_for_source
@@ -1067,6 +1073,24 @@ async def list_catalogs(container: ContainerDep) -> OfficeCatalogListResponse:
     return OfficeCatalogListResponse(items=out)
 
 
+@router.post("/catalogs/ensure-path", response_model=DocsEnsurePathResult)
+async def ensure_catalog_path(
+    body: DocsEnsurePathRequest,
+    container: ContainerDep,
+) -> DocsEnsurePathResult:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    if not body.path_segments:
+        raise HTTPException(status_code=400, detail="path_segments required")
+    catalog_id = await container.docs_placement_service.ensure_catalog_path(
+        company_id=ctx.active_company.company_id,
+        namespace=namespace,
+        segments=body.path_segments,
+        user_id=ctx.user.user_id,
+    )
+    return DocsEnsurePathResult(catalog_id=catalog_id, catalog_path=list(body.path_segments))
+
+
 @router.post("/catalogs", response_model=OfficeCatalogDetailResponse)
 async def create_catalog(
     body: OfficeCatalogCreateRequest,
@@ -1128,6 +1152,61 @@ async def get_catalog(
         container,
         catalog=cat,
         current_user_id=ctx.user.user_id,
+    )
+
+
+@router.get("/catalogs/{catalog_id}/items", response_model=OfficeCatalogItemsResponse)
+async def list_catalog_items(
+    catalog_id: str,
+    container: ContainerDep,
+) -> OfficeCatalogItemsResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    allowed = await container.authz_service.can_view(
+        AuthzObject.office_catalog(catalog_id),
+        user_id=ctx.user.user_id,
+    )
+    if not allowed:
+        raise HTTPException(status_code=404, detail="Каталог не найден")
+    catalog = await container.catalog_repository.get(
+        catalog_id,
+        ctx.active_company.company_id,
+        namespace,
+    )
+    if catalog is None:
+        raise HTTPException(status_code=404, detail="Каталог не найден")
+    children = await container.catalog_repository.list_children(
+        company_id=ctx.active_company.company_id,
+        namespace=namespace,
+        parent_catalog_id=catalog_id,
+    )
+    catalog_items: list[OfficeCatalogListItem] = []
+    for child in children:
+        child_allowed = await container.authz_service.can_view(
+            AuthzObject.office_catalog(child.catalog_id),
+            user_id=ctx.user.user_id,
+        )
+        if not child_allowed:
+            continue
+        file_count = await container.catalog_repository.count_documents(child.catalog_id)
+        catalog_items.append(
+            await _build_catalog_list_item(
+                container,
+                catalog=child,
+                file_count=file_count,
+                current_user_id=ctx.user.user_id,
+            )
+        )
+    rows = await container.document_binding_repository.list_by_company_namespace_and_catalog(
+        ctx.active_company.company_id,
+        namespace,
+        catalog_id,
+    )
+    documents = await bindings_to_items(container, rows)
+    return OfficeCatalogItemsResponse(
+        catalog_id=catalog_id,
+        catalogs=catalog_items,
+        documents=documents,
     )
 
 

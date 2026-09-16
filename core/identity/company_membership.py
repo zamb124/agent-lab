@@ -24,6 +24,11 @@ def _normalize_roles(roles: Sequence[str]) -> list[str]:
     return normalized
 
 
+def _apply_stored_roster(company: Company, stored: Company) -> None:
+    company.members = stored.members
+    company.updated_at = stored.updated_at
+
+
 async def set_company_member_roles(
     *,
     company_repository: CompanyRepository,
@@ -44,12 +49,14 @@ async def set_company_member_roles(
     had_user_membership = company.company_id in user.companies
     previous_active_company_id = user.active_company_id
 
-    now = datetime.now(timezone.utc)
-    company.members[user.user_id] = list(normalized)
-    company.updated_at = now
     user.companies[company.company_id] = list(normalized)
-    user.updated_at = now
-    _ = await company_repository.set(company)
+    user.updated_at = datetime.now(timezone.utc)
+    stored = await company_repository.put_member_roles(
+        company.company_id,
+        user.user_id,
+        normalized,
+    )
+    _apply_stored_roster(company, stored)
     _ = await user_repository.set(user)
     try:
         await sync_company_member_roles(
@@ -60,17 +67,23 @@ async def set_company_member_roles(
         )
     except AuthzUnavailable:
         if had_company_membership:
-            company.members[user.user_id] = previous_company_roles
+            rolled = await company_repository.put_member_roles(
+                company.company_id,
+                user.user_id,
+                previous_company_roles,
+            )
         else:
-            del company.members[user.user_id]
-        company.updated_at = datetime.now(timezone.utc)
+            rolled = await company_repository.discard_member(
+                company.company_id,
+                user.user_id,
+            )
+        _apply_stored_roster(company, rolled)
         if had_user_membership:
             user.companies[company.company_id] = previous_user_roles
         else:
             del user.companies[company.company_id]
         user.active_company_id = previous_active_company_id
         user.updated_at = datetime.now(timezone.utc)
-        _ = await company_repository.set(company)
         _ = await user_repository.set(user)
         raise
     return normalized
@@ -97,9 +110,8 @@ async def remove_company_membership(
 
     now = datetime.now(timezone.utc)
     if user.user_id in company.members:
-        del company.members[user.user_id]
-        company.updated_at = now
-        _ = await company_repository.set(company)
+        stored = await company_repository.discard_member(company.company_id, user.user_id)
+        _apply_stored_roster(company, stored)
     if company.company_id in user.companies:
         del user.companies[company.company_id]
         if user.active_company_id == company.company_id:
@@ -122,9 +134,12 @@ async def remove_company_membership(
         )
     except AuthzUnavailable:
         if had_company_membership:
-            company.members[user.user_id] = previous_company_roles
-            company.updated_at = datetime.now(timezone.utc)
-            _ = await company_repository.set(company)
+            rolled = await company_repository.put_member_roles(
+                company.company_id,
+                user.user_id,
+                previous_company_roles,
+            )
+            _apply_stored_roster(company, rolled)
         if had_user_membership:
             user.companies[company.company_id] = previous_user_roles
             user.active_company_id = previous_active_company_id

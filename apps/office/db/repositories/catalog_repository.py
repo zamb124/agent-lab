@@ -82,6 +82,25 @@ class CatalogRepository:
             await session.refresh(row)
         return row
 
+    async def list_children(
+        self,
+        *,
+        company_id: str,
+        namespace: str,
+        parent_catalog_id: str,
+    ) -> list[OfficeDocumentCatalog]:
+        async with self._db.session() as session:
+            result = await session.execute(
+                select(OfficeDocumentCatalog)
+                .where(
+                    OfficeDocumentCatalog.company_id == company_id,
+                    OfficeDocumentCatalog.namespace == namespace,
+                    OfficeDocumentCatalog.parent_catalog_id == parent_catalog_id,
+                )
+                .order_by(OfficeDocumentCatalog.title.asc())
+            )
+            return list(result.scalars().all())
+
     async def find_child_by_title(
         self,
         *,

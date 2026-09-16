@@ -39,6 +39,7 @@ class CapabilityExecutionTokenClaims(BaseModel):
     max_calls: int = Field(default=0, ge=0)
     approved_argument_hash: str | None = Field(default=None, min_length=1)
     audience: str = Field(default="capability_gateway", min_length=1)
+    test_scope: str | None = Field(default=None, min_length=1)
     exp: int = Field(..., gt=0)
 
 

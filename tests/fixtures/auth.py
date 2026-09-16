@@ -75,11 +75,7 @@ async def set_test_company_member_roles(
     roles: Sequence[str],
 ) -> None:
     """Roster + OpenFGA dual-write for test membership mutations."""
-    company = await company_repository.get(company_id)
-    if company is None:
-        raise ValueError(f"company not found: {company_id}")
-    company.members[user_id] = list(roles)
-    await company_repository.set(company)
+    _ = await company_repository.put_member_roles(company_id, user_id, roles)
     await _sync_test_company_membership(
         authz,
         company_id=company_id,

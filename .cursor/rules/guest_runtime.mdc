@@ -1,0 +1,128 @@
+---
+description: "Code agent (NodeType.CODE_AGENT) + ферма guest_runtime: дерево исходников в Документах, OCI-образ, GuestLease"
+globs:
+  - "apps/guest_runtime/**"
+  - "core/guest_runtime/**"
+  - "core/clients/guest_runtime_client.py"
+  - "apps/flows/src/api/v1/code_agent.py"
+  - "apps/flows/src/services/code_agent_source_service.py"
+  - "apps/flows/ui/components/nodes/flows-code-agent-editor.js"
+  - "apps/flows/ui/events/resources/code-agent.resource.js"
+---
+# Code agent и ферма guest_runtime
+
+## Три слоя (не путать)
+
+```text
+Документы / S3     → дерево исходников ноды (редактируемое)
+OCI image на farm  → immutable run (build ≠ chat)
+GuestLease         → живой контейнер (idle 60s по умолчанию, нода может задать 1..86400 но не выше farm `max_lifetime_seconds`; cap 2/company)
+```
+
+- Тип ноды: **`code_agent`** (`NodeType.CODE_AGENT`). UI RU «Агент из кода», EN «Code agent», палитра **core**, `platform-icon` name `code_agent` (не `code`).
+- `remote_flow` — **только** внешний A2A `url` + Skill ID. XOR `url`/`guest_runtime_id` запрещён.
+- `guest_runtime` — имя **фермы/слота** (как `code-runner-*` для `code`), не имя ноды.
+- Запись **`GuestRuntime`**: 1:1 с `(flow_id, node_id)` — digest, манифест, лимиты. Не пользовательский каталог агентов отдельно от ноды.
+- Lease: ключ `(flow_id, node_id)`. Две `code_agent` в одном графе = два контейнера.
+
+## Пользователь не приносит Docker
+
+Три способа залить код: git URL+SHA, файлы/папка, zip. Итог — каталог Документов. Платформа сама делает `docker build` своим Dockerfile (`python`/`node`). Свой Dockerfile / image / compose не принимаются. Если в репо лежит `Dockerfile`, это просто файл в `/src`.
+
+## Исходники = дерево Documents
+
+`FileSourceKind.CODE_AGENT_SOURCE` (`code_agent_source`).
+
+`FileSourceRef` / `DocsPlacementAnchor`: обязательны `flow_id` или `flow_slug` + **`node_id`**. Вложенность — `relative_dir` (POSIX без `..` и ведущего `/`). Нет `node_id` → `raise`.
+
+Путь:
+
+```text
+Flows / {flow} / code_agent / {node_id} / {relative_dir…} / filename
+```
+
+S3 **не** файловая система: ключи `files/{file_id}_…`. MinIO prefixes inferred — mkdir пустых папок в бакете не создавать. Дерево пользователя = каталоги Office (`DocsPlacementService.ensure_catalog_path`).
+
+Источник правды после ingest — **каталог**, не zip и не живой git. Zip/git — способ залить. Повторный sync from git — явная команда.
+
+На `NodeConfig` / `GraphNodeConfig` (`type=code_agent`):
+
+- `catalog_id` — корень дерева (после ensure)
+- `git_url` + `source_sha` — provenance. На save `git_url` без SHA допустим (черновик URL). Пустая строка SHA → `None`. Import-git: пустой SHA → `git ls-remote <remote> HEAD`, в граф пишется 40 hex (не имя `main`). Явный SHA или `/commit/<40 hex>` — pin. `source_sha` без `git_url` или SHA не 40 hex → `raise`.
+- `language` ∈ `{python, node}`
+- `invoke_kind` ∈ `{cli, a2a}`, `invoke_argv`, `invoke_listen_port`, `egress_hosts`
+- `entrypoint` code-ноды **не** использовать для argv
+- `url` на `code_agent` → `raise` (это `remote_flow`)
+- На save/drop `invoke_argv`/`catalog_id` не обязательны. Runtime: нет `catalog_id` или пустой `invoke_argv` → `raise`, не угадывать `main.py`
+
+Drop ноды: REST ensure-source → пустой каталог `Flows/{flow}/code_agent/{node_id}` → UI пишет `catalog_id`. **Граф до save не патчится.** Status/import-git/import-archive читают каталог по тому же placement path; ноды в сохранённом `FlowConfig` может не быть (drop только в редакторе). Import-git/archive отвечают **каталогом** (`_source_status`), без hop на ферму. GET status после этого мержит digest/build с фермы. Ферма не запущена → Import проходит, rebuild/GET overlay падают. `_patch_node` без ноды в графе → `LookupError`, не тихий skip. Provenance `git_url`/`source_sha` в граф — только если нода уже сохранена, иначе UI `_emitPatch`. Farm status по `(flow_id, node_id)` без записи в графе.
+
+Rebuild `POST .../code-agent/rebuild` принимает **тело инспектора** (`CodeAgentRebuildRequest`: `language`, `invoke_kind`, `invoke_argv`, listen/egress/git provenance). Каталог файлов — placement path (`_ensure_catalog`), не `FlowConfig`. Пустой `invoke_argv` → `400`, не угадывать `main.py`. Ноды в сохранённом графе для rebuild не требуется.
+
+Ссылка «Открыть в Документах»: `buildDocumentsCatalogEntryUrl(catalog_id, namespace)` → `/documents?namespace=&catalog_id=`. Без `namespace` в URL проводник берёт `default` (как ingest без `X-Platform-Namespace`), а last-used workspace в SPA Документов (`:8008`, отдельный localStorage) не подставляется. Code-agent HTTP на flows несёт `X-Platform-Namespace`, иначе дерево пишется в `default`, а SPA Документов может открыть другой workspace.
+
+Инспектор: `flows-code-agent-editor` (не режим remote_flow). Компактный ingest: одно поле Git URL + suffix Import; SHA из URL с `/commit/<40 hex>` или `/commits/<40 hex>` на любом хосте (`commit_sha_from_git_url` / `commitShaFromGitUrl`), иначе узкое SHA-поле в том же ряду (необязательное). Пустой SHA — `ls-remote HEAD` на сервере, не toast. Import читает live draft (`@change` / значение input). Без git URL — toast. Dropzone файлы/папка/zip + дерево Office catalog items (loading, пока ingest busy). Второй VFS запрещён. Hint argv: `["python3", "main.py"]`; пустой argv в поле — пустая строка, не `[]`. HTTP(S) страница репозитория (`/tree/`, `/blob/`, `/commit/`, GitLab `/-/…`, без `.git`) нормализуется в `{scheme}://{host}/{path}.git` с **хостом из URL** (не github.com) до `git remote add`; `ssh://` / `git@host:path` / `file://` без переписывания. Provenance `git_url` — то, что вставил пользователь. `git` в `Dockerfile.base` (import-git в процессе **flows**: `shutil.which("git")`).
+
+Потолок дерева: 50 MiB uncompressed (git/zip, copy_tree, chunked upload одного файла — сумма каталога до записи). Chunked `file_size <= 0` и Files API «Пустой файл» — 0-byte объект не хранится; git/zip ingest **пропускает** пустые файлы (например пустой `__init__.py`). Deny torch/cuda/nvidia в path и в манифестах зависимостей, **включая lockfile**. Lockfile (`uv.lock`, `package-lock.json`, …) **разрешён** и нужен для `uv sync --frozen` / `npm ci`.
+
+## Ферма
+
+Сервис `apps/guest_runtime`, порт **8024**, публичный префикс `/guest-runtime`. `include_auth_middleware=False` (как code-runner). Executor явный: **`docker` | `inprocess`**. Kubernetes нет. **Без auto-fallback.**
+
+- `inprocess` — тесты (`:9024`): файлы каталога на диск, PID1 shim localhost, digest `inprocess:{sha256}`
+- `docker` — `docker build` / `docker run`; нет daemon → `raise`. Прод Helm: `guestRuntime.executor: docker` + hostPath `/var/run/docker.sock` на ноде, где крутится Deployment `guest-runtime`. **Host Docker Engine** ставит идемпотентный `deploy/scripts/bootstrap-host-docker.sh` (из `bootstrap-master.sh`): свой dockerd, не snap MicroK8s containerd. Без dockerd под `guest-runtime` не стартует (mount Socket). PVC `guest-runtime-registry` **20Gi** = farm `data_dir` (`/var/lib/guest-runtime`); OCI-слои живут в **host docker daemon**, не в этом PVC. Pod guest-runtime не раздувать: `docker build` идёт в dockerd через sock. Ферма **не** в Ingress (ClusterIP, `include_auth_middleware=False`). `cluster-health.sh`: sock + `docker info` внутри пода.
+- Зависимости ставятся **только на `docker build`** (генерируемый Dockerfile, не пользовательский):
+  - Python: `COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/`, `ENV UV_PYTHON_DOWNLOADS=0`, `WORKDIR /src`. `pyproject.toml`+`uv.lock` → `uv sync --frozen --no-dev --no-cache`; только `pyproject.toml` → `uv sync --no-dev --no-cache`; только `requirements.txt` → `pip install --no-cache-dir -r requirements.txt`; иначе stdlib, install нет. После uv: `ENV PATH="/src/.venv/bin:$PATH"` (иначе `python3` останется системным без пакетов).
+  - Node: `package-lock.json`+`package.json` → `npm ci --omit=dev`; только `package.json` → `npm install --omit=dev`.
+  - Inprocess **не** ставит зависимости. Cheetah (LangGraph) на inprocess не invoke.
+- На старте: `RedisClient.connect()` + `ping()`; нет Redis → `raise`. `max_concurrent_builds != 1` → `raise`. Executor docker → `ensure_docker_network()` (`guest-runtime`, **не** `--internal`: у гостя исходящий интернет). `set_billing_service(container.billing_service)` — pre-flight на ensure/rebuild без полного platform lifecycle.
+
+Caps fail-closed: source 50 MiB; image 1.5 GiB; company image budget 3 GiB; registry PVC 20 GiB (`data_dir`); CPU 500m; RAM 512Mi; pids 256; 1 cluster build; **2 leases/company, 8 cluster**; idle **60s** после last completed **и** `in_flight==0` (нода `idle_ttl_seconds` 1..86400, не больше `max_lifetime_seconds`); max lifetime **86400** (24 часа). Третья параллельная `code_agent` → **409**.
+
+`GuestRuntimeClient.ensure_lease` timeout **600s**, как rebuild (uv/pip/npm на docker build).
+
+Build читает байты S3 по `file_id` из дерева каталога. Zip после распаковки не нужен. Git на wake нет. Docker rebuild: `BUILDING` → `docker build` → inspect Size; skip если tag inspect Id == previous.digest и READY. Fail → `FAILED` + `build_error` затем `raise`. Skip READY / тот же inprocess digest — **без** billing span `guest_runtime.build_usage`. Реальная сборка (включая fail после старта) — span `max(1, seconds)`.
+
+GC: refcount `image_digest`; 0 → `docker rmi -f` полного Id. Никогда prune `guest-base`. Нет `docker system prune -a`.
+
+Redis `set` с TTL при недоступности возвращает `False` — на lease path **raise**. TTL ключа lease = remaining **max_lifetime**, не idle: idle истекает только reaper через `_stop_lease` (иначе Redis EXPIRE раньше reaper и session span не пишется). Счётчики company/cluster и image_ref: EXPIRE только если новый TTL больше текущего (`expire_at_least`). Живые lease keys — источник числа; `rebuild_counts` в reaper и перед повторным acquire при cap, иначе Redis TTL ключа без `RELEASE_LUA` оставляет счётчик и даёт ложный 409.
+
+Recreate: Redis lease жив, `_slots` пуст → docker inspect Running / inprocess `os.kill(0)` + health; иначе stop leftover + `_start_slot`, тот же `guest_lease_id`.
+
+Env гостя — whitelist платформы: PATH (inprocess — host PATH; docker — `/src/.venv/bin` + системный PATH), OPENAI_*, CAPABILITY_GATEWAY_URL, PLATFORM_*, PYTHONUNBUFFERED, PYTHONDONTWRITEBYTECODE. Docker `--read-only` + tmpfs `/tmp` 64m: платформенные `HOME=/tmp` и `XDG_CACHE_HOME=/tmp` (OpenAI/httpx не пишут в `/root`). HOME/LANG только inprocess и только если есть. Пользовательский overlay — `guest_env` на ноде (и uppercase-ключи / объект `env` в `input_mapping`). Ключи `PATH` / `HOME` / `XDG_CACHE_HOME` / `OPENAI_*` / `CAPABILITY_*` / `PLATFORM_*` / `GUEST_*` пользователь перекрыть не может. Docker: каждое значение overlay и `OPENAI_BASE_URL` / `CAPABILITY_GATEWAY_URL` прогоняется через `rewrite_loopback_url`. Не мапить `localhost`/`127.0.0.1` в extra_hosts (сломает a2a listen на 127.0.0.1 внутри контейнера). `egress_hosts` — только `--add-host` после DNS resolve, **не** firewall/allowlist. DNS fail → `raise`. `--add-host host.docker.internal:host-gateway`. У гостя исходящий интернет есть; capability-gateway — поддерживаемый путь, не единственный HTTP (Wikipedia/PyPI идут напрямую).
+
+## State, env, A2A metadata
+
+Нет отдельного системного поля `ExecutionState.env`. Env гостя — конфиг ноды `guest_env` + тот же `MappingResolver`, что input mapping.
+
+В контейнер:
+
+| Канал | Назначение |
+|---|---|
+| `guest_env` | `ENV_NAME → @state:path` / `@var:name` / литерал / `@platform:KEY` |
+| `input_mapping.env` | объект KEY→value, мержится в guest env |
+| uppercase-ключи `input_mapping` (`API_KEY`) | тоже env; пересечение с `guest_env` → `raise` |
+| прочие ключи `input_mapping` кроме `content`/`env` | A2A `params.metadata` |
+| `metadata_template` | как у `remote_flow`: JSON с `@state:` / `@var:`; **`@state` без пути = весь dump** |
+
+Весь `ExecutionState` в env по умолчанию не кладётся (лимит ОС). Весь state — `metadata_template: {"state": "@state"}` или явная env-переменная со значением-константой `@state` (одна JSON-строка). `@platform:OPENAI_API_KEY` копирует execution token в пользовательский ключ (`API_KEY`), платформенный `OPENAI_API_KEY` ферма ставит сама.
+
+CLI на invoke: PID1 кладёт JSON metadata в `PLATFORM_A2A_METADATA` (префикс `PLATFORM_` пользователь задать не может). A2A-listen: `POST /invoke` `{text, metadata}` на процесс; metadata на listen-env не пишется (она per-invoke).
+
+Обратно в flow: гость печатает JSON `{text, ...поля}` и/или ключ `state`. Ферма собирает extra-ключи + `state` в A2A artifact `artifactId=state`. `CodeAgentNode` возвращает dict `{**guest_state, response}` — `output_mapping` как у остальных нод (без mapping ключи пишутся в state напрямую). Frozen-поля гость перекрыть не может.
+
+Инспектор: `flows-state-mapping-editor` для `guest_env` (тип `@platform`), `platform-json-editor` для `metadata_template`.
+
+Flows **не** ходит на pod IP. Hop: `CodeAgentNode` → `ensure_lease` → A2A `POST /guest-runtime/api/v1/a2a/{flow_id}/{node_id}`.
+
+PID1 shim всегда PID1: `POST /context` (нет → invoke `raise`); `POST /invoke` `{text, metadata?}`. CLI: argv + text extra arg, cwd процесс, env из context + optional `PLATFORM_A2A_METADATA`. A2A: на `/context` `Popen(argv)` + `GUEST_LISTEN_PORT`, ждать TCP listen 30s; повторный context убивает старый listen; invoke — `POST http://127.0.0.1:{port}/invoke` с тем же body. Invoke fail → JSON `guest.invoke.failed` + HTTP 500.
+
+Логи: stdout shim/`docker logs -f` → logger + Redis `guest:logs:{flow_id}:{node_id}` (LPUSH+LTRIM+EXPIRE). Битый JSON → `guest.shim.raw`. `GET /guest-runtime/api/v1/runtimes/{flow_id}/{node_id}/logs` и REST-зеркало `GET /flows/api/v1/flows/{flow_id}/nodes/{node_id}/code-agent/logs` → `GuestRuntimeLogsResponse.items`. UI: `openModal('flows.logs', { flowId, nodeId })` mode `guest_runtime`, без Loki.
+
+LLM в guest → `/flows/api/v1/agent/llm/v1` с execution token (`OPENAI_BASE_URL` + `OPENAI_API_KEY=<execution_token>`). Модель из каталога proxy (`auto` или `<provider>:<model_id>`), не внутренний `mock-gpt-4`. В TESTING ферма кладёт `PLATFORM_TEST_SCOPE` в env; эталон `cli_llm` шлёт его как `X-Test-Scope` и зовёт `model=auto`. OpenAI SDK гостя заголовок не шлёт: `CodeAgentNode` пишет `test_scope` в claims execution token; `llm_auth` после execution auth делает `bind_log_context(test_scope=…)`. Capabilities только capability-gateway. Effects/interrupt применяет `CodeAgentNode` (`apply_capability_platform_effects`). Docker: DNS + extra_hosts llm_proxy + capability-gateway + `egress_hosts`.
+
+Биллинг spans: `guest_runtime.start` → `guest:start`; `guest_runtime.session_usage` → `guest:runtime_second` на **любом** `_stop_lease` (idle reaper, drop, смена digest); `guest_runtime.build_usage` → `guest:build_second` только на реальной сборке (skip READY без span). Pre-flight `BALANCE_BLOCK_OPERATION_GUEST_RUNTIME`.
+
+Логи JSON: `request_id`, `trace_id`, `session_agent`, `task.id`, `flow.id`, `guest_runtime.id`, `guest_lease.id`. Loki `|guest-runtime`.
+
+Эталоны: `apps/guest_runtime/examples/cli_python`, `cli_node`, `a2a_python`, `fail_cli`, `cli_llm`, `interrupt_cli`, `effects_cli`, `wiki_cli`. Имя **cheetah** — только GitHub-репо (`https://github.com/zub123123123/cheetah-agent`), не локальный эталон. Docker argv: `["python3", "main.py"]` / `["node", "main.js"]`, не `sys.executable` хоста. Cheetah «агент отвечает» — docker + сеть (PyPI/uv на build, Wikipedia на invoke); inprocess — только ingest.

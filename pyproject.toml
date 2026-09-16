@@ -60,6 +60,8 @@ ignore = ["E501"]
 [tool.basedpyright]
 exclude = [
     "apps/agent/desktop/vendor",
+    "apps/guest_runtime/shim",
+    "apps/guest_runtime/examples",
 ]
 
 [dependency-groups]

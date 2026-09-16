@@ -419,6 +419,7 @@
         "catalog_rag_rebuild_started": "RAG reindex started",
         "catalog_rag_rebuild_failed": "Failed to start RAG reindex",
         "catalog_rag_settings_saved": "Search settings saved",
-        "catalog_rag_settings_failed": "Failed to save search settings"
+        "catalog_rag_settings_failed": "Failed to save search settings",
+        "catalog_open_failed": "Catalog not found in this workspace"
     }
 }

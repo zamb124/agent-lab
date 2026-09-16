@@ -45,6 +45,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     antiword \
     xz-utils \
+    docker.io \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Rust toolchain нужен для сборки PyO3-extensions без cp314t wheel:

@@ -10,6 +10,14 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { documentsExplorerStyles } from '../styles/documents-explorer.styles.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
+import {
+    getActivePlatformNamespaceName,
+    setPlatformNamespaceSelection,
+} from '@platform/lib/utils/platform-namespace.js';
+import {
+    documentsExplorerPageQuery,
+    documentsExplorerQueryNamespace,
+} from '../_helpers/documents-explorer-query.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 import { formatFileRetentionRemaining } from '@platform/lib/utils/format-file-retention.js';
@@ -65,7 +73,10 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         this._lastSemanticSearchKey = '';
         this._localeSel = this.select((s) => s.i18n.locale);
         this._routerSearchSel = this.select((s) => s.router.search);
+        this._authSel = this.select((s) => s.auth.user);
         this._accessModalOpened = false;
+        this._deepLinkApplied = '';
+        this._deepLinkMissing = '';
     }
 
     connectedCallback() {
@@ -103,34 +114,85 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
     updated(changed) {
         super.updated && super.updated(changed);
         this._ensureSearchMode();
+        this._applyExplorerQuery();
         this._maybeReloadDocs();
         this._maybeRunSemanticSearch();
         this._ensureActiveCatalog();
         this._maybeOpenAccessFromQuery();
     }
 
+    _companyId() {
+        const user = this._authSel.value;
+        return user && typeof user.company_id === 'string' ? user.company_id.trim() : '';
+    }
+
+    _explorerQuery() {
+        return documentsExplorerPageQuery(
+            this._routerSearchSel.value,
+            window.location.search,
+        );
+    }
+
+    _applyExplorerQuery() {
+        const query = this._explorerQuery();
+        const targetNs = documentsExplorerQueryNamespace(query);
+        const companyId = this._companyId();
+        if (targetNs.length > 0) {
+            if (companyId.length === 0) {
+                return;
+            }
+            if (getActivePlatformNamespaceName(companyId) !== targetNs) {
+                setPlatformNamespaceSelection(companyId, targetNs);
+                return;
+            }
+        }
+        if (query.catalogId.length === 0) {
+            return;
+        }
+        if (this._catalogs.loading || this._catalogs.refreshing) {
+            return;
+        }
+        const catalog = this._catalogById(query.catalogId);
+        if (!catalog) {
+            if (this._deepLinkMissing !== query.catalogId) {
+                this._deepLinkMissing = query.catalogId;
+                this.toast('toast.catalog_open_failed', { type: 'error' });
+            }
+            return;
+        }
+        const appliedKey = `${targetNs}|${query.catalogId}`;
+        if (
+            this._deepLinkApplied === appliedKey
+            && this._documents.state.activeCatalogId === query.catalogId
+        ) {
+            return;
+        }
+        this._deepLinkApplied = appliedKey;
+        this._documents.setExplorerView({ explorerView: 'catalog' });
+        this._documents.setActiveCatalog({ catalogId: query.catalogId });
+        this._documents.setFilterCatalogs({ catalogIds: [query.catalogId] });
+        for (const ancestor of this._catalogAncestorChain(query.catalogId)) {
+            this._documents.setCatalogExpanded({ catalogId: ancestor.catalog_id, expanded: true });
+        }
+        this._documents.clearFileSelection(null);
+        this._lastLoadKey = '';
+    }
+
     _maybeOpenAccessFromQuery() {
         if (this._accessModalOpened) {
             return;
         }
-        const search = this._routerSearchSel.value;
-        const raw = typeof search === 'string' ? search : '';
-        const query = raw.startsWith('?') ? raw.slice(1) : raw;
-        const params = new URLSearchParams(query);
-        if (params.get('access') !== '1') {
+        const query = this._explorerQuery();
+        if (!query.access || query.catalogId.length === 0) {
             return;
         }
-        const catalogId = params.get('catalog_id');
-        if (typeof catalogId !== 'string' || catalogId.length === 0) {
-            return;
-        }
-        const catalog = this._catalogById(catalogId);
+        const catalog = this._catalogById(query.catalogId);
         if (!catalog) {
             return;
         }
         this._accessModalOpened = true;
-        this._documents.setActiveCatalog({ catalogId });
-        this._documents.setFilterCatalogs({ catalogIds: [catalogId] });
+        this._documents.setActiveCatalog({ catalogId: query.catalogId });
+        this._documents.setFilterCatalogs({ catalogIds: [query.catalogId] });
         this._onCatalogAccess(catalog);
     }
 
@@ -240,6 +302,10 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         const cats = this._catalogItems();
         const active = this._documents.state.activeCatalogId;
         if (typeof active !== 'string' || active.length === 0) {
+            return;
+        }
+        const query = this._explorerQuery();
+        if (query.catalogId.length > 0 && query.catalogId === active) {
             return;
         }
         const exists = cats.some((c) => c.catalog_id === active);

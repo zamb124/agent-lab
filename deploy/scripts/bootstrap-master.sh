@@ -132,6 +132,8 @@ log_do "label node $MASTER_HOSTNAME ${GPU_NODE_LABEL_KEY}=${GPU_NODE_LABEL_VALUE
 microk8s kubectl label node "$MASTER_HOSTNAME" \
   "${GPU_NODE_LABEL_KEY}=${GPU_NODE_LABEL_VALUE}" --overwrite
 
+bash "$SCRIPT_DIR/bootstrap-host-docker.sh" || exit 1
+
 print_summary
 
 log_section "Следующий шаг"

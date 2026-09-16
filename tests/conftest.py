@@ -80,6 +80,10 @@ os.environ["SERVER__CODE_RUNNER_GO_SERVICE_URL"] = "http://localhost:9019"
 os.environ["SERVER__CODE_RUNNER_CSHARP_SERVICE_URL"] = "http://localhost:9020"
 os.environ["SERVER__WORKTRACKER_SERVICE_URL"] = "http://localhost:9021"
 os.environ["SERVER__WIKI_SERVICE_URL"] = "http://localhost:9023"
+os.environ["SERVER__GUEST_RUNTIME_SERVICE_URL"] = "http://localhost:9024"
+os.environ.setdefault("GUEST_RUNTIME__EXECUTOR", "inprocess")
+os.environ.setdefault("GUEST_RUNTIME__MAX_LEASES_PER_COMPANY", "32")
+os.environ.setdefault("GUEST_RUNTIME__MAX_LEASES_CLUSTER", "128")
 os.environ.setdefault("VOICE__STT__PROVIDER", "mock")
 os.environ.setdefault("VOICE__STT__MOCK_TRANSCRIPT_TEXT", "Тестовая транскрипция sync worker")
 os.environ.setdefault("S3__DEFAULT_BUCKET", "test-bucket")
@@ -516,9 +520,12 @@ def _skip_autouse_test_context(request: pytest.FixtureRequest) -> bool:
     asgi_client_fixtures = (
         "frontend_client",
         "flows_client",
+        "flows_client_http",
         "crm_client",
         "worktracker_client",
+        "worktracker_client_http",
         "office_client",
+        "office_client_http",
         "sync_client",
         "rag_client",
         "voice_client",

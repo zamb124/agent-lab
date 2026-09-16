@@ -2,7 +2,8 @@
 Multi-auth для OpenAI-compatible LLM proxy:
 
 1. device JWT (LinnexAgent) — validate + set_context из company_id/user_id токена;
-2. OnlyOffice editor JWT — ``platformAi`` claims + set_context.
+2. execution token (guest code_agent) — 2-part HMAC, ``user_id`` обязателен;
+3. OnlyOffice editor JWT — ``platformAi`` claims + set_context.
 
 Route ``/flows/api/v1/agent/llm/*`` — anonymous (middleware не ставит company из JWT).
 Поэтому Context с active_company обязан выставляться здесь. Без фолбека на system.
@@ -17,9 +18,10 @@ from fastapi import HTTPException, Request
 
 from apps.agent.device_auth import require_active_device_bearer
 from apps.flows.src.dependencies import ContainerDep
+from core.capabilities import verify_execution_token
 from core.clients.onlyoffice import OnlyOfficeJwtError, verify_onlyoffice_jwt_hs256
 from core.context import get_context, set_context
-from core.logging import get_logger
+from core.logging import bind_log_context, get_logger
 from core.models.context_models import Context
 from core.models.identity_models import UserStatus
 from core.office.jwt_secret import resolve_onlyoffice_jwt_secret
@@ -27,12 +29,13 @@ from core.office.platform_ai_claims import (
     OfficePlatformAiClaims,
     extract_office_platform_ai_claims,
 )
+from core.test_scope import LOG_TEST_SCOPE
 from core.types import JsonObject
 from core.utils.tokens import TokenData, TokenService
 
 logger = get_logger(__name__)
 
-LlmProxyAuthKind = Literal["device", "office_editor"]
+LlmProxyAuthKind = Literal["device", "office_editor", "execution"]
 
 
 @dataclass(frozen=True)
@@ -146,12 +149,48 @@ async def require_llm_proxy_auth(
     container: ContainerDep,
 ) -> LlmProxyAuthResult:
     """
-    Device JWT или OnlyOffice editor JWT с ``platformAi``.
+    Device JWT, execution token (guest code_agent) или OnlyOffice editor JWT с ``platformAi``.
 
     Device: revoke-check + set_context(company из device JWT).
+    Execution: 2-part HMAC token; ``user_id`` обязателен.
     Office: verify HS256 office secret → set_context из claims.
     """
     token = _extract_bearer_token(request)
+    token_parts = token.split(".")
+    if len(token_parts) == 2:
+        try:
+            claims = verify_execution_token(token)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=401,
+                detail="Недействительный execution token",
+            ) from exc
+        if claims.user_id is None or not claims.user_id.strip():
+            raise HTTPException(
+                status_code=401,
+                detail="execution token user_id обязателен",
+            )
+        execution_namespace = claims.namespace
+        if execution_namespace is None:
+            execution_namespace = "default"
+        await _set_context_for_company_user(
+            container,
+            user_id=claims.user_id.strip(),
+            company_id=claims.company_id,
+            request=request,
+            channel="guest_llm",
+            metadata={"token_purpose": "execution"},
+            active_namespace=execution_namespace,
+        )
+        execution_context = get_context()
+        if execution_context is None or execution_context.active_company is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Context с active_company обязателен после execution token",
+            )
+        if claims.test_scope is not None:
+            bind_log_context(**{LOG_TEST_SCOPE: claims.test_scope})
+        return LlmProxyAuthResult(kind="execution")
 
     platform_token = TokenService().validate_token(token)
     if platform_token is not None:

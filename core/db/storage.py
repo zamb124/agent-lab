@@ -647,6 +647,7 @@ class Storage:
             result = await self._set_with_session(key, value, ttl, table_name, session)
             await session.commit()
             await session.flush()
+            invalidate_key(table_name, key)
             return result
 
     async def delete_with_table(self, key: str, table_name: str) -> bool:
@@ -665,6 +666,7 @@ class Storage:
             result = await self._delete_with_session(key, table_name, session)
             await session.commit()
             await session.flush()
+            invalidate_key(table_name, key)
             return result
 
     async def get_all_by_prefix_and_table_with_json_eq(

@@ -71,7 +71,7 @@ async def test_flow_ui_interface_editor_opens_with_canvas_and_problems(
         await expect(canvas).to_be_visible(timeout=30_000)
         await expect(flows_interface_canvas_block(page, "conversation")).to_have_count(1, timeout=30_000)
         await expect(flows_interface_canvas_block(page, "agent_identity")).to_have_count(1, timeout=30_000)
-        await expect(editor.locator(".problems .ok")).to_be_visible(timeout=30_000)
+        await expect(editor.locator(".problems")).to_have_count(0)
 
         await flows_switch_editor_workspace(page, "logic")
         await expect(page.locator("flows-flow-canvas").first).to_be_visible(timeout=30_000)

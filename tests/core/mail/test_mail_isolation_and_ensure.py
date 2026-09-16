@@ -40,6 +40,16 @@ from core.models.identity_models import User, UserStatus
 from tests.core.mail.fakes import RecordingMailServerPort
 
 
+async def _put_system_member(container, user_id: str) -> None:
+    _ = await container.company_repository.put_member_roles(
+        SYSTEM_COMPANY_ID, user_id, ["member"]
+    )
+
+
+async def _discard_system_member(container, user_id: str) -> None:
+    _ = await container.company_repository.discard_member(SYSTEM_COMPANY_ID, user_id)
+
+
 @pytest.mark.asyncio
 async def test_bindings_isolated_by_company(
     mail_connection_repository: CompanyMailConnectionRepository,
@@ -218,8 +228,7 @@ async def test_ensure_system_user_bindings_creates_flow_employee_mailbox(
             active_company_id=SYSTEM_COMPANY_ID,
         )
     )
-    company.members[employee_user_id] = ["member"]
-    await container.company_repository.set(company)
+    await _put_system_member(container, employee_user_id)
     await sync_company_member_roles(
         container.authz_service,
         company_id=SYSTEM_COMPANY_ID,
@@ -256,8 +265,7 @@ async def test_ensure_system_user_bindings_creates_flow_employee_mailbox(
         restored = await container.company_repository.get(SYSTEM_COMPANY_ID)
         if restored is None:
             raise RuntimeError("system company missing after employee mailbox test")
-        _ = restored.members.pop(employee_user_id, None)
-        await container.company_repository.set(restored)
+        await _discard_system_member(container, employee_user_id)
         await remove_company_member(
             container.authz_service,
             company_id=SYSTEM_COMPANY_ID,
@@ -356,8 +364,7 @@ async def test_ensure_system_user_bindings_local_dev_missing_password_does_not_b
     stored_user = await container.user_repository.get(member_user_id)
     assert stored_user is not None
     email_address = f"{_slug_local_part(stored_user)}@linnex.io"
-    company.members[member_user_id] = ["member"]
-    await container.company_repository.set(company)
+    await _put_system_member(container, member_user_id)
     await sync_company_member_roles(
         container.authz_service,
         company_id=SYSTEM_COMPANY_ID,
@@ -404,8 +411,7 @@ async def test_ensure_system_user_bindings_local_dev_missing_password_does_not_b
         restored = await container.company_repository.get(SYSTEM_COMPANY_ID)
         if restored is None:
             raise RuntimeError("system company missing after local_dev inventory test")
-        _ = restored.members.pop(member_user_id, None)
-        await container.company_repository.set(restored)
+        await _discard_system_member(container, member_user_id)
         await remove_company_member(
             container.authz_service,
             company_id=SYSTEM_COMPANY_ID,
@@ -439,8 +445,7 @@ async def test_ensure_system_user_bindings_local_dev_binds_from_mailbox_password
     assert stored_user is not None
     local_part = _slug_local_part(stored_user)
     email_address = f"{local_part}@linnex.io"
-    company.members[member_user_id] = ["member"]
-    await container.company_repository.set(company)
+    await _put_system_member(container, member_user_id)
     await sync_company_member_roles(
         container.authz_service,
         company_id=SYSTEM_COMPANY_ID,
@@ -490,8 +495,7 @@ async def test_ensure_system_user_bindings_local_dev_binds_from_mailbox_password
         restored = await container.company_repository.get(SYSTEM_COMPANY_ID)
         if restored is None:
             raise RuntimeError("system company missing after local_dev known-password test")
-        _ = restored.members.pop(member_user_id, None)
-        await container.company_repository.set(restored)
+        await _discard_system_member(container, member_user_id)
         await remove_company_member(
             container.authz_service,
             company_id=SYSTEM_COMPANY_ID,

@@ -72,6 +72,7 @@ alwaysApply: true
 | code_runner_csharp | 8020 | Isolated C# user-code runner |
 | worktracker | 8021 | Платформенное ядро задач WorkItem (канбан, очереди, HITL, агентские задачи) |
 | wiki | 8023 | База знаний: дерево страниц внутри namespace, блочный редактор (`apps/wiki`) |
+| guest_runtime | 8024 | Ферма `code_agent`: сборка образа и lease контейнера (`apps/guest_runtime`) |
 | scheduler | 8006 | Scheduler control-plane API + TaskIQ scheduler |
 | flows_worker, crm_worker, crm_summary_worker, rag_worker, sync_worker, idle_worker | — | TaskIQ воркеры |
 
@@ -165,6 +166,8 @@ alwaysApply: true
 | Branch | `branch_id`, `BranchConfig`, `branch` | Вариант графа внутри `flow_id`; не `skill_id`, не `scenario_id`. |
 | Agent Skill | `agent_skill_id`, `AgentSkill` | Progressive procedure pack для `llm_node` (body/tools/files); UI copy — Skill; не `skill_id`, не `BranchConfig`, не `AgentToolkit`. Детали → **`agent_skills.mdc`**. |
 | Node | `node_id`, `NodeConfig`, `node` | `node_type` для типа ноды; не голый `id`, не голый `type` в доменном коде. |
+| Code agent | `code_agent`, `CodeAgentNode`, `catalog_id` | Агент из дерева исходников в Документах (`FileSourceKind.CODE_AGENT_SOURCE`) + контейнер на ферме `guest_runtime`. Path `Flows/{flow}/code_agent/{node_id}/…`. Не `remote_flow`, не `guest_runtime` как тип ноды. Канон → **`guest_runtime.mdc`**. |
+| Guest runtime | `guest_runtime_id`, `GuestRuntime`, `guest_lease_id`, `GuestLease` | Ферма/слот 1:1 с `(flow_id, node_id)`; lease ключ тот же. Не имя ноды. |
 | Tool | `tool_id`, `ToolReference`, `tool` | `parameters_schema` — единственный JSON Schema контракт аргументов. `CallParameter`/`args_schema` запрещены. |
 | Resource | `resource_id`, `ResourceDefinition`, `resource_type` | `resource_type` вместо голого `type`; `resource_id` вместо `id`. |
 | LLM | `provider`, `model`, `llm_*` только где перечислено ниже | См. LLM naming glossary; `model_name` не вводить внутри реализации. |
@@ -172,7 +175,7 @@ alwaysApply: true
 | A2A task lifecycle | `task_state`, `terminal_task_state`, `terminal_task_error` | Внутри платформы итог выполнения — `task_state`; terminal projection fields в `ExecutionState` — `terminal_task_state` + `terminal_task_error`. Внешняя A2A-спека сохраняет `TaskStatus.state` / JSON `status.state` только на транспортной границе. Запрещены `terminal_status`, `terminal_error`, внутренний result `status` для A2A/flow task state. |
 | Landing lead request | `lead_request_id`, `LeadRequestRecord` | `contact_name`, `email`, `phone`, `organization_name`, `job_title`, `headcount_range`, `interested_products`, `comment`; не `id`, не `company` для свободного названия организации. |
 | Request/trace/span | `request_id`, `trace_id`, `span_id`, `parent_span_id` | `request_id` — request/log scope, не доменная заявка. CRM access request — только `access_request_id`. |
-| File | `file_id`, `FileRecord`, `FileResponse`, `FileReadResult`, `FileWriteResult` | `original_name`, `content_type`, `file_size`, `checksum`, `storage_url`, `company_id`; `mime_type` допустим только на границе внешних SDK/STT/MIME registry, не в платформенных file-моделях/API. Не `document_id` для платформенного файла. `FileCategory.VIZ` / `.viz` / MIME `application/vnd.platform.viz+json` — visualization document (JSON `VizDocument`); открытие через Office handler `viz`, канонический id — `file_id` (не `viz_id`). `FileCategory.DATA_TABLE` / `.sqlite` (загрузка `.db` нормализуется в `.sqlite`) / MIME `application/vnd.sqlite3` — табличная SQLite-база как обычный Documents-файл; открытие через Office handler `data_table`; публичный id — `file_id` (запрещены `data_table_id` / `table_id` / `datatable_id`). Scope = `FileSourceKind.flow_asset` \| `flow_session` \| `office_document`. |
+| File | `file_id`, `FileRecord`, `FileResponse`, `FileReadResult`, `FileWriteResult` | `original_name`, `content_type`, `file_size`, `checksum`, `storage_url`, `company_id`; `mime_type` допустим только на границе внешних SDK/STT/MIME registry, не в платформенных file-моделях/API. Не `document_id` для платформенного файла. `FileCategory.VIZ` / `.viz` / MIME `application/vnd.platform.viz+json` — visualization document (JSON `VizDocument`); открытие через Office handler `viz`, канонический id — `file_id` (не `viz_id`). `FileCategory.DATA_TABLE` / `.sqlite` (загрузка `.db` нормализуется в `.sqlite`) / MIME `application/vnd.sqlite3` — табличная SQLite-база как обычный Documents-файл; открытие через Office handler `data_table`; публичный id — `file_id` (запрещены `data_table_id` / `table_id` / `datatable_id`). Scope = `FileSourceKind.flow_asset` \| `flow_session` \| `office_document` \| `code_agent_source`. |
 | FileRef / state file | `FileRef`, `state.files[]` | `file_id`, `original_name`, `url`, `content_type`, `file_size`, `capabilities`; A2A wire — `Part.raw` / `Part.url` (`filename`/`mediaType`); browser `File.name/type/size` мапятся на границе. В runtime state/API/UI запрещены `name`, `path`, `mime_type`, `size`, `type` для файлов. |
 | RAG document | `document_id`, `VectorDocument`, `DocumentProcessingStatus` | `namespace_id`, `document_name`, `chunk_index`, `metadata`; не `file_id`, если запись уже в индексе. |
 | Datasource | `datasource_id`, `connector_id`, `DatasourceConnection`, `DatasourceConnectorSpec`, `NodeType.DATASOURCE` | Живая БД как шаг графа `{connector_id, datasource_id, datasource_operation, sql}`. Пароль — `password_encrypted`. Не `connection_id`, не `database_id`, не `ResourceType.DATASOURCE`. Детали → **`datasources.mdc`**. |
@@ -411,6 +414,7 @@ Cursor — `base64url(json({"ts": "<created_at.isoformat()>", "id": "<entity_id>
 | WebRTC звонки (LiveKit) | `calls.mdc` |
 | Office (OnlyOffice) | `office.mdc` |
 | Wiki (база знаний, страницы, блочный редактор) | `wiki.mdc` |
+| Code agent / ферма guest_runtime | `guest_runtime.mdc` |
 | Voice gateway + Speech providers | `voice.mdc` |
 | Frontend: Lit 3, helpers, i18n, design system | `frontend.mdc` |
 | Единая шина событий платформы (core/events, platform:events, каталог, consumer groups) | `events.mdc` |

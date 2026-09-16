@@ -147,9 +147,13 @@ async def ensure_flow_employee(
     existing_member_roles = company.members.get(user_id, [])
     merged_member_roles = list(dict.fromkeys([*existing_member_roles, *user.companies[clean_company_id]]))
     if merged_member_roles != existing_member_roles:
-        company.members[user_id] = merged_member_roles
-        company.updated_at = now
-        _ = await container.company_repository.set(company)
+        stored = await container.company_repository.put_member_roles(
+            clean_company_id,
+            user_id,
+            merged_member_roles,
+        )
+        company.members = stored.members
+        company.updated_at = stored.updated_at
     await sync_existing_company_member(
         authz=container.authz_service,
         company_id=clean_company_id,

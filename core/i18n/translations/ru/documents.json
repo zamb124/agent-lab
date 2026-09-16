@@ -419,6 +419,7 @@
         "catalog_rag_rebuild_started": "Переиндексация запущена",
         "catalog_rag_rebuild_failed": "Не удалось запустить переиндексацию",
         "catalog_rag_settings_saved": "Параметры поиска сохранены",
-        "catalog_rag_settings_failed": "Не удалось сохранить параметры поиска"
+        "catalog_rag_settings_failed": "Не удалось сохранить параметры поиска",
+        "catalog_open_failed": "Каталог не найден в этом пространстве"
     }
 }

@@ -9,6 +9,7 @@
     "worktracker_service_url": "http://localhost:8021",
     "secrets_service_url": "http://localhost:8022",
     "wiki_service_url": "http://localhost:8023",
+    "guest_runtime_service_url": "http://localhost:8024",
     "office_service_url": "http://localhost:8008",
     "browser_service_url": "http://localhost:8009",
     "search_service_url": "http://localhost:8010",
@@ -130,6 +131,12 @@
         "litserve": 0.0,
         "silero_local": 0.0,
         "mock": 0.0,
+        "*": 0.0
+      },
+      "guest": {
+        "start": 0.05,
+        "runtime_second": 0.001,
+        "build_second": 0.002,
         "*": 0.0
       }
     },
@@ -1127,6 +1134,10 @@
   },
   "mcp_catalog": {
     "auto_provision": "disabled"
+  },
+  "guest_runtime": {
+    "executor": "inprocess",
+    "data_dir": "/tmp/guest-runtime"
   },
   "agent": {
     "releases": {

@@ -87,6 +87,7 @@ import {
 import { getBlankCodeNodeConfig } from '../../_helpers/code-node-defaults.js';
 import { getBlankExternalApiNodeConfig } from '../../_helpers/flows-external-api-defaults.js';
 import { getBlankHitlNodeConfig } from '../../_helpers/flows-hitl-defaults.js';
+import { getBlankCodeAgentNodeConfig } from '../../_helpers/flows-code-agent-defaults.js';
 import {
     getBlankReflectionNodeConfig,
     buildReflectionExitEdge,
@@ -1228,6 +1229,10 @@ export class FlowsFlowCanvas extends PlatformElement {
         this._stickyUpsert = this.useOp('flows/sticky_note_upsert');
         this._dataTableCreate = this.useOp('flows/data_table_create');
         this._dataTableCreateInFlight = new Set();
+        this._codeAgentEnsure = this.useOp('flows/code_agent_ensure_source');
+        this._codeAgentCopyTree = this.useOp('flows/code_agent_copy_tree');
+        this._codeAgentDelete = this.useOp('flows/code_agent_delete');
+        this._codeAgentEnsureInFlight = new Set();
         this._onDocKeyDown = this._onDocKeyDown.bind(this);
         this._onDocKeyUp = this._onDocKeyUp.bind(this);
         this._stickyResize = null;
@@ -1457,7 +1462,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             const hasSelection = Boolean(this._state().selectedNodeId) || asArray(this._state().multiSelection).length > 0;
             if (!hasSelection) return;
             e.preventDefault();
-            this._deleteSelection();
+            void this._deleteSelection();
             return;
         }
         if (cmd && e.key.toLowerCase() === 'a') {
@@ -1467,7 +1472,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         }
         if (cmd && e.key.toLowerCase() === 'd') {
             e.preventDefault();
-            this._duplicateSelection();
+            void this._duplicateSelection();
             return;
         }
         if (cmd && e.key.toLowerCase() === 'z' && !e.shiftKey) {
@@ -1516,7 +1521,7 @@ export class FlowsFlowCanvas extends PlatformElement {
     }
 
     /* ===== Hotkey actions ===== */
-    _deleteSelection() {
+    async _deleteSelection() {
         const ids = asArray(this._state().multiSelection);
         const single = this._state().selectedNodeId;
         const targetIds = ids.length > 0 ? ids : (single ? [single] : []);
@@ -1531,7 +1536,20 @@ export class FlowsFlowCanvas extends PlatformElement {
         if (deletableIds.length < targetIds.length) {
             this.toast('flows:toast.cant_delete_inherited', { type: 'warning' });
         }
-        void this._bulkDelete.run({ flow_id: this.flowId, node_ids: deletableIds });
+        const nodesSnapshot = asObject(this._branchData().nodes);
+        for (const id of deletableIds) {
+            const node = nodesSnapshot[id];
+            if (isPlainObject(node) && node.type === 'code_agent') {
+                const catalogId = typeof node.catalog_id === 'string' ? node.catalog_id : '';
+                await this._codeAgentDelete.run({
+                    flow_id: this.flowId,
+                    node_id: id,
+                    branch_id: this.branchId,
+                    catalog_id: catalogId,
+                });
+            }
+        }
+        await this._bulkDelete.run({ flow_id: this.flowId, node_ids: deletableIds });
         const data = this._branchData();
         const newNodes = { ...asObject(data.nodes) };
         for (const id of deletableIds) delete newNodes[id];
@@ -1552,7 +1570,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         this._editor.setMultiSelection({ nodeIds: ids });
     }
 
-    _duplicateSelection() {
+    async _duplicateSelection() {
         const ids = asArray(this._state().multiSelection);
         const single = this._state().selectedNodeId;
         const targetIds = ids.length > 0 ? ids : (single ? [single] : []);
@@ -1564,11 +1582,28 @@ export class FlowsFlowCanvas extends PlatformElement {
             const orig = nodes[id];
             if (!orig) continue;
             const copyId = genId('n');
-            nodes[copyId] = {
+            const copy = {
                 ...orig,
                 pos_x: asNumber(orig.pos_x) + 30,
                 pos_y: asNumber(orig.pos_y) + 30,
             };
+            if (orig.type === 'code_agent') {
+                delete copy.catalog_id;
+                const fromCatalogId = typeof orig.catalog_id === 'string' ? orig.catalog_id : '';
+                if (fromCatalogId.length > 0 && this.flowId) {
+                    const ensured = await this._codeAgentCopyTree.run({
+                        flow_id: this.flowId,
+                        node_id: copyId,
+                        branch_id: this.branchId,
+                        from_catalog_id: fromCatalogId,
+                    });
+                    if (!ensured || typeof ensured.catalog_id !== 'string' || ensured.catalog_id.length === 0) {
+                        throw new Error('flows-flow-canvas: copy-tree must return catalog_id');
+                    }
+                    copy.catalog_id = ensured.catalog_id;
+                }
+            }
+            nodes[copyId] = copy;
             newIds.push(copyId);
         }
         const next = { ...data, nodes };
@@ -1988,8 +2023,8 @@ export class FlowsFlowCanvas extends PlatformElement {
                 return;
             }
             if (kind === 'toggle_breakpoint') { this._editor.toggleBreakpoint({ nodeId: targetId }); return; }
-            if (kind === 'duplicate') { this._editor.setMultiSelection({ nodeIds: [targetId] }); this._duplicateSelection(); return; }
-            if (kind === 'delete') { this._editor.setMultiSelection({ nodeIds: [targetId] }); this._deleteSelection(); return; }
+            if (kind === 'duplicate') { this._editor.setMultiSelection({ nodeIds: [targetId] }); void this._duplicateSelection(); return; }
+            if (kind === 'delete') { this._editor.setMultiSelection({ nodeIds: [targetId] }); void this._deleteSelection(); return; }
             if (kind === 'advanced_incoming_policy') { this.openModal('flows.incoming_policy', { nodeId: targetId }); return; }
         }
         if (target === 'edge') {
@@ -2248,6 +2283,10 @@ export class FlowsFlowCanvas extends PlatformElement {
             }
             if (nodeType === 'reflection') {
                 this._placeReflectionNode({ nodeId: genId('n'), local });
+                return;
+            }
+            if (nodeType === 'code_agent') {
+                this._placeCodeAgentNode({ nodeId: genId('n'), local });
                 return;
             }
             if (nodeType === 'datasource') {
@@ -2576,6 +2615,63 @@ export class FlowsFlowCanvas extends PlatformElement {
         this._editor.pushHistory({ snapshot: next });
         this._editor.setDirty({ dirty: true });
         this._editor.selectNode({ nodeId });
+    }
+
+    _placeCodeAgentNode(p) {
+        const { nodeId, local } = p;
+        const data = this._branchData();
+        const newNode = {
+            type: 'code_agent',
+            name: 'code_agent',
+            pos_x: local.x - NODE_W / 2,
+            pos_y: local.y - NODE_H / 2,
+            ...getBlankCodeAgentNodeConfig(),
+        };
+        const nodes = { ...asObject(data.nodes), [nodeId]: newNode };
+        const next = { ...data, nodes };
+        this._editor.updateBranchData({ data: next });
+        this._editor.pushHistory({ snapshot: next });
+        this._editor.setDirty({ dirty: true });
+        this._editor.selectNode({ nodeId });
+        void this._ensureCodeAgentSource(nodeId);
+    }
+
+    async _ensureCodeAgentSource(nodeId) {
+        if (typeof nodeId !== 'string' || nodeId.length === 0) {
+            throw new Error('flows-flow-canvas: nodeId required for code_agent ensure');
+        }
+        if (this._codeAgentEnsureInFlight.has(nodeId)) {
+            return;
+        }
+        const flowId = typeof this.flowId === 'string' ? this.flowId.trim() : '';
+        if (flowId.length === 0) {
+            throw new Error('flows-flow-canvas: flowId required for code_agent ensure');
+        }
+        this._codeAgentEnsureInFlight.add(nodeId);
+        try {
+            const ensured = await this._codeAgentEnsure.run({
+                flow_id: flowId,
+                node_id: nodeId,
+                branch_id: this.branchId,
+            });
+            if (!ensured || typeof ensured.catalog_id !== 'string' || ensured.catalog_id.length === 0) {
+                throw new Error('flows-flow-canvas: code_agent ensure did not return catalog_id');
+            }
+            const latest = this._branchData();
+            const nodes = { ...asObject(latest.nodes) };
+            const current = nodes[nodeId];
+            if (!isPlainObject(current)) {
+                throw new Error(`flows-flow-canvas: code_agent node missing after ensure: ${nodeId}`);
+            }
+            if (typeof current.catalog_id === 'string' && current.catalog_id.length > 0) {
+                return;
+            }
+            nodes[nodeId] = { ...current, catalog_id: ensured.catalog_id };
+            this._editor.updateBranchData({ data: { ...latest, nodes } });
+            this._editor.setDirty({ dirty: true });
+        } finally {
+            this._codeAgentEnsureInFlight.delete(nodeId);
+        }
     }
 
     /* ===== Drag/edit/delete для sticky notes ===== */

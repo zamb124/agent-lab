@@ -340,7 +340,18 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
         port=9023,
         readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
     ),
-    )
+    GranianService(
+        name="guest_runtime",
+        app_path="apps.guest_runtime.main:app",
+        port=9024,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
+        env={
+            "GUEST_RUNTIME__EXECUTOR": "inprocess",
+            "GUEST_RUNTIME__MAX_LEASES_PER_COMPANY": "32",
+            "GUEST_RUNTIME__MAX_LEASES_CLUSTER": "128",
+        },
+    ),
+)
 
 
 def build_taskiq_worker_services(pytest_workers: int | None = None) -> tuple[TaskiqWorkerService, ...]:

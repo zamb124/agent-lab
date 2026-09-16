@@ -39,6 +39,11 @@ class TestQueryBuilders:
         assert 'session_agent="flow1:ctx1"' in q
         assert "agents" in q
         assert "flows" in q
+        assert "guest-runtime" in q
+
+    def test_trace_query_includes_guest_runtime(self):
+        q = _build_trace_query("traceguest")
+        assert "guest-runtime" in q
 
     def test_trace_query_sanitizes_quotes(self):
         # Кавычки внутри trace_id должны быть удалены для безопасности

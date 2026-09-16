@@ -213,6 +213,12 @@ class DocumentsAccessMemberItem(BaseModel):
     )
 
 
+class DocumentsEnsureCatalogPathArgs(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    path_segments: list[str] = Field(..., min_length=1)
+
+
 class DocumentsCreateCatalogArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 

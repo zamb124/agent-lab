@@ -7,6 +7,7 @@ from enum import StrEnum
 from pydantic import model_validator
 
 from core.documents.placement import DocsPlacement
+from core.documents.placement_paths import validate_relative_dir
 from core.files.retention import FileRetentionSpec
 from core.models.base import StrictBaseModel
 from core.types import JsonObject
@@ -27,6 +28,7 @@ class FileSourceKind(StrEnum):
     CALENDAR_EVENT = "calendar_event"
     MAIL_MESSAGE = "mail_message"
     WIKI_PAGE = "wiki_page"
+    CODE_AGENT_SOURCE = "code_agent_source"
     PLATFORM_AUXILIARY = "platform_auxiliary"
     GENERATED_EPHEMERAL = "generated_ephemeral"
 
@@ -54,6 +56,8 @@ class FileSourceRef(StrictBaseModel):
     browser_session_id: str | None = None
     import_id: str | None = None
     wiki_page_id: str | None = None
+    node_id: str | None = None
+    relative_dir: str | None = None
 
 
 class FilePostCreate(StrictBaseModel):
@@ -122,4 +126,11 @@ class FileCreateSpec(StrictBaseModel):
                 raise ValueError("source_ref.wiki_page_id required for wiki_page")
             if not ref.namespace_id or not ref.namespace_id.strip():
                 raise ValueError("source_ref.namespace_id required for wiki_page")
+        if kind == FileSourceKind.CODE_AGENT_SOURCE:
+            if not ref.flow_id and not ref.flow_slug:
+                raise ValueError("source_ref.flow_id or flow_slug required for code_agent_source")
+            if not ref.node_id or not ref.node_id.strip():
+                raise ValueError("source_ref.node_id required for code_agent_source")
+            if ref.relative_dir is not None and ref.relative_dir.strip():
+                _ = validate_relative_dir(ref.relative_dir)
         return self

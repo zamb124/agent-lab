@@ -11,6 +11,7 @@ from typing import Any, cast
 import pytest
 
 from core.viz.models import VIZ_CONTENT_TYPE, parse_viz_document_bytes
+from tests.flows._a2a_v1 import SEND_MESSAGE, a2a_rpc, a2a_wait_task_completed
 from tests.office.access_helpers import parse_viz_stream_url
 
 pytestmark = [
@@ -53,28 +54,30 @@ async def _send_text(
     context_id: str,
     text: str,
 ) -> dict[str, Any]:
+    """Enqueue SendMessage without holding a flows granian worker for the graph."""
     response = await flows_client_http.post(
         f"/flows/api/v1/{flow_id}",
         headers=headers,
-        json={
-            "jsonrpc": "2.0",
-            "id": f"test-{uuid.uuid4().hex}",
-            "method": "SendMessage",
-            "params": {
+        json=a2a_rpc(
+            SEND_MESSAGE,
+            {
                 "message": {
                     "messageId": str(uuid.uuid4()),
                     "role": "ROLE_USER",
                     "contextId": context_id,
                     "parts": [{"text": text}],
-                }
+                },
+                "configuration": {"returnImmediately": True},
             },
-        },
+        ),
     )
     assert response.status_code == 200, response.text
-    data = response.json()
-    task = data.get("result", {})
-    assert task.get("status", {}).get("state") == "TASK_STATE_COMPLETED", data
-    return data
+    return await a2a_wait_task_completed(
+        flows_client_http,
+        headers,
+        flow_id=flow_id,
+        data=response.json(),
+    )
 
 
 def _file_item_dict(item: object) -> dict[str, Any] | None:

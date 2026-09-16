@@ -59,6 +59,8 @@ export class FlowsPropertyPanel extends PlatformElement {
         this.focusSection = 'prompt';
         this._editor = this.useOp('flows/editor');
         this._bulkDelete = this.useOp('flows/editor_bulk_delete');
+        this._codeAgentCopyTree = this.useOp('flows/code_agent_copy_tree');
+        this._codeAgentDelete = this.useOp('flows/code_agent_delete');
     }
 
     _onChange(e) {
@@ -97,6 +99,18 @@ export class FlowsPropertyPanel extends PlatformElement {
         const { nodeId } = isPlainObject(e.detail) ? e.detail : {};
         if (typeof nodeId !== 'string' || !nodeId) return;
         if (!this.flowId) return;
+        const state = this._editor.state;
+        const skillsData = state?.branchData;
+        const node = skillsData?.nodes?.[nodeId];
+        if (isPlainObject(node) && node.type === 'code_agent') {
+            const catalogId = typeof node.catalog_id === 'string' ? node.catalog_id : '';
+            await this._codeAgentDelete.run({
+                flow_id: this.flowId,
+                node_id: nodeId,
+                branch_id: this.branchId,
+                catalog_id: catalogId,
+            });
+        }
         await this._bulkDelete.run({ flow_id: this.flowId, node_ids: [nodeId] });
         this._editor.removeNode({ nodeId });
     }
@@ -124,6 +138,32 @@ export class FlowsPropertyPanel extends PlatformElement {
                 x: asNumber(copy.position.x) + 40,
                 y: asNumber(copy.position.y) + 40,
             };
+        }
+        if (copy.type === 'code_agent') {
+            const fromCatalogId = typeof copy.catalog_id === 'string' ? copy.catalog_id : '';
+            delete copy.catalog_id;
+            if (fromCatalogId.length > 0 && this.flowId) {
+                void this._codeAgentCopyTree.run({
+                    flow_id: this.flowId,
+                    node_id: newId,
+                    branch_id: this.branchId,
+                    from_catalog_id: fromCatalogId,
+                }).then((ensured) => {
+                    if (!ensured || typeof ensured.catalog_id !== 'string' || ensured.catalog_id.length === 0) {
+                        throw new Error('flows-property-panel: copy-tree must return catalog_id');
+                    }
+                    const latestState = this._editor.state;
+                    const latestData = latestState?.branchData;
+                    const latestNodes = latestData?.nodes;
+                    if (!latestNodes || !latestNodes[newId]) {
+                        throw new Error(`flows-property-panel: code_agent copy missing after copy-tree: ${newId}`);
+                    }
+                    const nextNodes = { ...latestNodes, [newId]: { ...latestNodes[newId], catalog_id: ensured.catalog_id } };
+                    const nextLatest = { ...latestData, nodes: nextNodes };
+                    this._editor.updateBranchData({ data: nextLatest });
+                    this._editor.setDirty({ dirty: true });
+                });
+            }
         }
         const nextNodes = { ...nodes, [newId]: copy };
         const nextData = { ...skillsData, nodes: nextNodes };

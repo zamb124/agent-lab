@@ -6,6 +6,21 @@ from core.documents.placement import DocsPlacementAnchor
 from core.utils.subdomain import slugify
 
 
+def validate_relative_dir(relative_dir: str) -> list[str]:
+    stripped = relative_dir.strip()
+    if stripped == "":
+        raise ValueError("relative_dir must be a non-empty POSIX path")
+    if stripped.startswith("/") or stripped.endswith("/"):
+        raise ValueError("relative_dir must not have a leading or trailing slash")
+    segments = stripped.split("/")
+    for segment in segments:
+        if segment in {"", ".", ".."}:
+            raise ValueError("relative_dir segments must not be empty, '.' or '..'")
+        if "\\" in segment:
+            raise ValueError("relative_dir must be POSIX")
+    return segments
+
+
 def _flow_label(anchor: DocsPlacementAnchor) -> str:
     flow_label = anchor.flow_slug if anchor.flow_slug else anchor.flow_id
     if not flow_label:
@@ -86,6 +101,13 @@ def build_path_segments(anchor: DocsPlacementAnchor) -> list[str]:
         if not anchor.namespace_id or not anchor.namespace_id.strip():
             raise ValueError("namespace_id required for wiki_page placement")
         return ["Wiki", anchor.namespace_id.strip(), anchor.wiki_page_id.strip()]
+    if kind == "code_agent_source":
+        if not anchor.node_id or not anchor.node_id.strip():
+            raise ValueError("node_id required for code_agent_source placement")
+        path = ["Flows", _flow_label(anchor), "code_agent", anchor.node_id.strip()]
+        if anchor.relative_dir is not None and anchor.relative_dir.strip():
+            path.extend(validate_relative_dir(anchor.relative_dir))
+        return path
     if kind == "crm_knowledge_import":
         if not anchor.import_id:
             raise ValueError("import_id required for crm_knowledge_import placement")

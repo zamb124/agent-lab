@@ -54,6 +54,9 @@ FILE_SOURCE_DEFAULTS: dict[FileSourceKind, FileSourceDefaults] = {
         retention_kind=FileRetentionKind.MAIL_ATTACHMENT
     ),
     FileSourceKind.WIKI_PAGE: FileSourceDefaults(retention_kind=FileRetentionKind.WIKI_PAGE),
+    FileSourceKind.CODE_AGENT_SOURCE: FileSourceDefaults(
+        retention_kind=FileRetentionKind.FLOW_ASSET
+    ),
     FileSourceKind.PLATFORM_AUXILIARY: FileSourceDefaults(
         retention_kind=FileRetentionKind.PLATFORM_DEFAULT
     ),
@@ -88,6 +91,7 @@ SOURCE_KIND_TO_DOCS_PLACEMENT: dict[FileSourceKind, DocsPlacementSourceKind] = {
     FileSourceKind.CALENDAR_EVENT: "calendar_event",
     FileSourceKind.MAIL_MESSAGE: "mail_message",
     FileSourceKind.WIKI_PAGE: "wiki_page",
+    FileSourceKind.CODE_AGENT_SOURCE: "code_agent_source",
 }
 
 
@@ -126,6 +130,8 @@ def source_ref_to_placement_anchor(
         mailbox_email=source_ref.mailbox_email,
         mail_subject=source_ref.mail_subject,
         wiki_page_id=source_ref.wiki_page_id,
+        node_id=source_ref.node_id,
+        relative_dir=source_ref.relative_dir,
     )
 
 

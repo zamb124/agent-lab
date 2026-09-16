@@ -1474,6 +1474,12 @@ async def flows_drop_node(
                         language: 'python',
                         code: ctx.code || '',
                     };
+                } else if (ctx.nodeType === 'code_agent') {
+                    node = {
+                        ...base,
+                        language: 'python',
+                        invoke_kind: 'cli',
+                    };
                 }
                 const nodes = { ...(data.nodes || {}), [nodeId]: node };
                 const next = { ...data, nodes };
@@ -1521,6 +1527,18 @@ async def flows_drop_node(
                         candidate,
                     )
                     if still is True:
+                        if node_type == "code_agent":
+                            await canvas.evaluate(
+                                """
+                                (el, selectedNodeId) => {
+                                    if (typeof el._ensureCodeAgentSource !== 'function') {
+                                        throw new Error('flows-flow-canvas: _ensureCodeAgentSource required');
+                                    }
+                                    return el._ensureCodeAgentSource(selectedNodeId);
+                                }
+                                """,
+                                candidate,
+                            )
                         return candidate
                     break
                 await asyncio.sleep(0.1)
@@ -1870,6 +1888,7 @@ async def flows_open_node_editor(page: Page, node_id: str) -> Locator:
         "flows-llm-node-editor, "
         "flows-reflection-node-editor, "
         "flows-code-node-editor, "
+        "flows-code-agent-editor, "
         "flows-remote-flow-editor, "
         "flows-channel-node-editor, "
         "flows-external-api-editor, "

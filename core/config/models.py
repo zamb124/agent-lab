@@ -309,6 +309,7 @@ class ServerConfig(BaseModel):
     browser_service_url: str | None = None
     search_service_url: str | None = None
     wiki_service_url: str | None = None
+    guest_runtime_service_url: str | None = None
     provider_litserve_service_url: str | None = None
     voice_service_url: str | None = None
     capability_gateway_service_url: str | None = None
@@ -353,6 +354,7 @@ class ServerConfig(BaseModel):
         "worktracker": 8021,
         "secrets": 8022,
         "wiki": 8023,
+        "guest_runtime": 8024,
     }
 
     def get_service_url(self, service: str | None = None) -> str:
@@ -400,6 +402,8 @@ class ServerConfig(BaseModel):
                 return self.search_service_url
             case "wiki":
                 return self.wiki_service_url
+            case "guest_runtime":
+                return self.guest_runtime_service_url
             case "provider_litserve":
                 return self.provider_litserve_service_url
             case "voice":
@@ -2105,6 +2109,34 @@ class FilesConfig(BaseModel):
     )
 
 
+class GuestRuntimeFarmConfig(BaseModel):
+    """Ферма code_agent: executor без auto-fallback."""
+
+    executor: Literal["docker", "inprocess"] = Field(default="inprocess")
+    idle_ttl_seconds: int = Field(default=60, ge=1, le=86400)
+    max_lifetime_seconds: int = Field(default=86400, ge=1, le=86400)
+    max_source_bytes: int = Field(default=50 * 1024 * 1024, ge=1)
+    max_image_bytes: int = Field(default=int(1.5 * 1024 * 1024 * 1024), ge=1)
+    company_image_budget_bytes: int = Field(default=3 * 1024 * 1024 * 1024, ge=1)
+    max_leases_per_company: int = Field(default=2, ge=1)
+    max_leases_cluster: int = Field(default=8, ge=1)
+    max_concurrent_builds: int = Field(default=1, ge=1)
+    guest_cpu: str = Field(default="500m")
+    guest_memory: str = Field(default="512Mi")
+    pids_limit: int = Field(default=256, ge=1)
+    data_dir: str = Field(default="/tmp/guest-runtime")
+    reaper_interval_seconds: int = Field(default=5, ge=1)
+    log_lines_max: int = Field(default=2000, ge=1)
+
+    @model_validator(mode="after")
+    def idle_within_lifetime(self) -> Self:
+        if self.idle_ttl_seconds > self.max_lifetime_seconds:
+            raise ValueError(
+                "guest_runtime.idle_ttl_seconds must be <= max_lifetime_seconds"
+            )
+        return self
+
+
 class MCPBrandingConfig(BaseModel):
     """Seed глобальных иконок MCP из git-бандла."""
 
@@ -2425,6 +2457,12 @@ def default_billing_resource_base_prices() -> dict[str, dict[str, float]]:
             "room_minute": 0.01,
             "egress_composite_minute": 0.05,
             "egress_segmented_minute": 0.02,
+            "*": 0.0,
+        },
+        "guest": {
+            "start": 0.05,
+            "runtime_second": 0.001,
+            "build_second": 0.002,
             "*": 0.0,
         },
     }

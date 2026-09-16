@@ -65,6 +65,7 @@ _INLINE_SELF_CONTAINED_TOOL_TYPES = frozenset(
         "datasource",
         "external_api",
         "remote_flow",
+        "code_agent",
         "code",
         "resource",
     }

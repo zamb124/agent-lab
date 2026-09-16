@@ -131,6 +131,11 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
 - name: SERVER__WIKI_SERVICE_URL
   value: http://{{ $wiki.serviceName }}:{{ $wiki.port }}
 {{- end }}
+{{- $guestRuntime := index .Values.applications "guest-runtime" }}
+{{- if and $guestRuntime $guestRuntime.enabled }}
+- name: SERVER__GUEST_RUNTIME_SERVICE_URL
+  value: http://{{ $guestRuntime.serviceName }}:{{ $guestRuntime.port }}
+{{- end }}
 - name: SERVER__OFFICE_SERVICE_URL
   value: http://{{ .Values.applications.office.serviceName }}:{{ .Values.applications.office.port }}
 - name: SERVER__SCHEDULER_SERVICE_URL

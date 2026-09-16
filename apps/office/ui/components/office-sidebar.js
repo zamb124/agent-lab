@@ -30,6 +30,10 @@ import {
     getPlatformNamespaceSidebarSelection,
     setPlatformNamespaceSelection,
 } from '@platform/lib/utils/platform-namespace.js';
+import {
+    documentsExplorerPageQuery,
+    documentsExplorerQueryNamespace,
+} from '../_helpers/documents-explorer-query.js';
 import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/layout/platform-service-sidebar.js';
@@ -152,6 +156,7 @@ export class OfficeSidebar extends PlatformElement {
         this._documents = this.useOp(DOCUMENTS_OP);
         this._move = this.useOp('office/document_move');
         this._routeSel = this.select((s) => s.router.routeKey);
+        this._routerSearchSel = this.select((s) => s.router.search);
         this._authSel = this.select((s) => s.auth.user);
     }
 
@@ -256,6 +261,18 @@ export class OfficeSidebar extends PlatformElement {
 
     _ensureExplicitNamespace(items, sidebarSel, companyId) {
         if (!companyId) return;
+        const queryNs = documentsExplorerQueryNamespace(
+            documentsExplorerPageQuery(
+                this._routerSearchSel.value,
+                window.location.search,
+            ),
+        );
+        if (queryNs.length > 0) {
+            if (sidebarSel !== queryNs) {
+                setPlatformNamespaceSelection(companyId, queryNs);
+            }
+            return;
+        }
         if (sidebarSel !== 'all') return;
         if (!Array.isArray(items) || items.length === 0) return;
         const first = items[0];

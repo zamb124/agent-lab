@@ -116,6 +116,23 @@ def test_all_file_source_kinds_have_placement_policy() -> None:
             ),
             ["Wiki", "knowledge", "page-1"],
         ),
+        (
+            DocsPlacementAnchor(
+                source_kind="code_agent_source",
+                flow_id="my_flow",
+                node_id="n1",
+            ),
+            ["Flows", "my-flow", "code_agent", "n1"],
+        ),
+        (
+            DocsPlacementAnchor(
+                source_kind="code_agent_source",
+                flow_id="my_flow",
+                node_id="n1",
+                relative_dir="src/lib",
+            ),
+            ["Flows", "my-flow", "code_agent", "n1", "src", "lib"],
+        ),
     ],
 )
 def test_build_path_segments(anchor: DocsPlacementAnchor, expected: list[str]) -> None:
