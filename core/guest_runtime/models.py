@@ -193,6 +193,10 @@ class GuestBuildBusyError(Exception):
     """Cluster already has a guest image build in progress."""
 
 
+class GuestRuntimeUnavailableError(Exception):
+    """Farm HTTP is unreachable (guest_runtime process down)."""
+
+
 class CodeAgentEnsureSourceResponse(StrictBaseModel):
     catalog_id: str
     flow_id: str
@@ -256,4 +260,5 @@ __all__ = [
     "GuestRuntime",
     "GuestRuntimeLogsResponse",
     "GuestRuntimeStatusResponse",
+    "GuestRuntimeUnavailableError",
 ]

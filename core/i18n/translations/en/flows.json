@@ -1145,6 +1145,8 @@
     "toast_git_url_required": "Paste a Git URL first",
     "toast_catalog_required": "Wait until the source catalog is ready",
     "toast_invoke_argv_required": "CLI argv is required before rebuild",
+    "toast_invoke_argv_invalid": "CLI argv must be a JSON array, for example [\"python3\", \"main.py\"]",
+    "toast_egress_hosts_invalid": "Egress hosts must be a JSON array of hostnames, for example [\"api.example.com\"]",
     "open_documents": "Open in Documents",
     "waiting_catalog": "Source catalog is being created.",
     "tree_empty": "No files yet.",

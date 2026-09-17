@@ -13,6 +13,7 @@ import { buildDocumentsCatalogEntryUrl } from '@platform/lib/utils/build-service
 import { getActivePlatformNamespaceName } from '@platform/lib/utils/platform-namespace.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { commitShaFromGitUrl } from '../../_helpers/code-agent-git.js';
+import { parseJsonStringList } from '../../_helpers/code-agent-json-list.js';
 import { asObject, isPlainObject } from '../../_helpers/flows-resolvers.js';
 import './flows-base-node-editor.js';
 import '../editors/flows-state-mapping-editor.js';
@@ -39,6 +40,8 @@ export class FlowsCodeAgentEditor extends PlatformElement {
         _status: { state: true },
         _draftGitUrl: { state: true },
         _draftSourceSha: { state: true },
+        _draftArgvText: { state: true },
+        _draftEgressText: { state: true },
         _treeLoading: { state: true },
     };
 
@@ -191,6 +194,8 @@ export class FlowsCodeAgentEditor extends PlatformElement {
         this._status = null;
         this._draftGitUrl = null;
         this._draftSourceSha = null;
+        this._draftArgvText = null;
+        this._draftEgressText = null;
         this._treeLoading = false;
         this._importGitOp = this.useOp('flows/code_agent_import_git');
         this._importArchiveOp = this.useOp('flows/code_agent_import_archive');
@@ -229,6 +234,25 @@ export class FlowsCodeAgentEditor extends PlatformElement {
         return typeof cfg.source_sha === 'string' ? cfg.source_sha : '';
     }
 
+    _liveArgvText() {
+        if (this._draftArgvText !== null) {
+            return this._draftArgvText;
+        }
+        const cfg = asObject(this.nodeConfig);
+        if (Array.isArray(cfg.invoke_argv) && cfg.invoke_argv.length > 0) {
+            return JSON.stringify(cfg.invoke_argv);
+        }
+        return '';
+    }
+
+    _liveEgressText() {
+        if (this._draftEgressText !== null) {
+            return this._draftEgressText;
+        }
+        const cfg = asObject(this.nodeConfig);
+        return Array.isArray(cfg.egress_hosts) ? JSON.stringify(cfg.egress_hosts) : '';
+    }
+
     _ingestBusy() {
         return Boolean(
             this._importGitOp.busy
@@ -252,6 +276,8 @@ export class FlowsCodeAgentEditor extends PlatformElement {
         if (changed.has('flowId') || changed.has('nodeId')) {
             this._draftGitUrl = null;
             this._draftSourceSha = null;
+            this._draftArgvText = null;
+            this._draftEgressText = null;
             this._tree = null;
             this._status = null;
         }
@@ -376,14 +402,12 @@ export class FlowsCodeAgentEditor extends PlatformElement {
         if (d === null || typeof d !== 'object' || !('value' in d) || typeof d.value !== 'string') {
             throw new Error('flows-code-agent-editor: invoke_argv string required');
         }
-        if (d.value.trim().length === 0) {
+        this._draftArgvText = d.value;
+        const parsed = parseJsonStringList(d.value);
+        if (parsed.status !== 'ok') {
             return;
         }
-        const parsed = JSON.parse(d.value);
-        if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== 'string' || item.length === 0)) {
-            throw new Error('flows-code-agent-editor: invoke_argv must be a JSON array of non-empty strings');
-        }
-        this._emitPatch({ invoke_argv: parsed });
+        this._emitPatch({ invoke_argv: parsed.items });
     }
 
     _onListenPort(e) {
@@ -407,11 +431,16 @@ export class FlowsCodeAgentEditor extends PlatformElement {
         if (d === null || typeof d !== 'object' || !('value' in d) || typeof d.value !== 'string') {
             throw new Error('flows-code-agent-editor: egress_hosts string required');
         }
-        const parsed = JSON.parse(d.value);
-        if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== 'string' || item.length === 0)) {
-            throw new Error('flows-code-agent-editor: egress_hosts must be a JSON array of non-empty strings');
+        this._draftEgressText = d.value;
+        const parsed = parseJsonStringList(d.value);
+        if (parsed.status === 'empty') {
+            this._emitPatch({ egress_hosts: [] });
+            return;
         }
-        this._emitPatch({ egress_hosts: parsed });
+        if (parsed.status !== 'ok') {
+            return;
+        }
+        this._emitPatch({ egress_hosts: parsed.items });
     }
 
     _onIdleTtl(e) {
@@ -579,14 +608,16 @@ export class FlowsCodeAgentEditor extends PlatformElement {
         if (typeof invokeKind !== 'string' || invokeKind.length === 0) {
             throw new Error('flows-code-agent-editor: invoke_kind required for rebuild');
         }
-        const invokeArgv = cfg.invoke_argv;
-        if (!Array.isArray(invokeArgv) || invokeArgv.length === 0) {
+        const argvParsed = parseJsonStringList(this._liveArgvText());
+        if (argvParsed.status === 'empty') {
             this.toast('code_agent_editor.toast_invoke_argv_required', { type: 'error' });
             return;
         }
-        if (invokeArgv.some((item) => typeof item !== 'string' || item.length === 0)) {
-            throw new Error('flows-code-agent-editor: invoke_argv must be a JSON array of non-empty strings');
+        if (argvParsed.status !== 'ok') {
+            this.toast('code_agent_editor.toast_invoke_argv_invalid', { type: 'error' });
+            return;
         }
+        const invokeArgv = argvParsed.items;
         const listenPort = cfg.invoke_listen_port;
         if (
             listenPort !== undefined
@@ -595,13 +626,15 @@ export class FlowsCodeAgentEditor extends PlatformElement {
         ) {
             throw new Error('flows-code-agent-editor: invoke_listen_port must be int or null');
         }
-        const egressHosts = cfg.egress_hosts;
-        if (egressHosts !== undefined && egressHosts !== null && !Array.isArray(egressHosts)) {
-            throw new Error('flows-code-agent-editor: egress_hosts must be a JSON array of non-empty strings');
-        }
-        const resolvedEgress = Array.isArray(egressHosts) ? egressHosts : [];
-        if (resolvedEgress.some((item) => typeof item !== 'string' || item.length === 0)) {
-            throw new Error('flows-code-agent-editor: egress_hosts must be non-empty strings');
+        const egressParsed = parseJsonStringList(this._liveEgressText());
+        let resolvedEgress;
+        if (egressParsed.status === 'empty') {
+            resolvedEgress = [];
+        } else if (egressParsed.status !== 'ok') {
+            this.toast('code_agent_editor.toast_egress_hosts_invalid', { type: 'error' });
+            return;
+        } else {
+            resolvedEgress = egressParsed.items;
         }
         const rebuilt = await this._rebuildOp.run({
             flow_id: this.flowId,
@@ -746,12 +779,10 @@ export class FlowsCodeAgentEditor extends PlatformElement {
         const needsSha = shaFromUrl.length === 0;
         const language = typeof cfg.language === 'string' ? cfg.language : '';
         const invokeKind = typeof cfg.invoke_kind === 'string' ? cfg.invoke_kind : '';
-        const argvText = Array.isArray(cfg.invoke_argv) && cfg.invoke_argv.length > 0
-            ? JSON.stringify(cfg.invoke_argv)
-            : '';
+        const argvText = this._liveArgvText();
         const listenPort = typeof cfg.invoke_listen_port === 'number' ? cfg.invoke_listen_port : null;
         const idleTtl = typeof cfg.idle_ttl_seconds === 'number' ? cfg.idle_ttl_seconds : null;
-        const egressText = Array.isArray(cfg.egress_hosts) ? JSON.stringify(cfg.egress_hosts) : '';
+        const egressText = this._liveEgressText();
         const guestEnv =
             cfg.guest_env !== null && typeof cfg.guest_env === 'object' && !Array.isArray(cfg.guest_env)
                 ? cfg.guest_env
@@ -926,6 +957,7 @@ export class FlowsCodeAgentEditor extends PlatformElement {
                             ></platform-field>
                         </div>
                         <platform-field
+                            data-testid="code-agent-egress"
                             pill-density="compact"
                             mode="edit"
                             type="string"

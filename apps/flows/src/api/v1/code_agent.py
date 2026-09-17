@@ -20,6 +20,7 @@ from core.guest_runtime.models import (
     GuestLeaseCapError,
     GuestRebuildResponse,
     GuestRuntimeLogsResponse,
+    GuestRuntimeUnavailableError,
 )
 
 router = APIRouter(tags=["code-agent"])
@@ -49,6 +50,10 @@ def _http_from_source_error(exc: LookupError | ValueError) -> HTTPException:
 
 def _http_from_farm_error(exc: GuestLeaseCapError | GuestBuildBusyError) -> HTTPException:
     return HTTPException(status_code=409, detail=str(exc))
+
+
+def _http_from_farm_unavailable(exc: GuestRuntimeUnavailableError) -> HTTPException:
+    return HTTPException(status_code=503, detail=str(exc))
 
 
 @router.post(
@@ -156,6 +161,8 @@ async def rebuild_code_agent(
         return await container.code_agent_source_service.rebuild(
             flow_id=flow_id, node_id=node_id, branch_id=branch_id, request=body
         )
+    except GuestRuntimeUnavailableError as exc:
+        raise _http_from_farm_unavailable(exc) from exc
     except (GuestLeaseCapError, GuestBuildBusyError) as exc:
         raise _http_from_farm_error(exc) from exc
     except (LookupError, ValueError) as exc:
@@ -177,6 +184,8 @@ async def code_agent_status(
         return await container.code_agent_source_service.status(
             flow_id=flow_id, node_id=node_id, branch_id=branch_id
         )
+    except GuestRuntimeUnavailableError as exc:
+        raise _http_from_farm_unavailable(exc) from exc
     except (LookupError, ValueError) as exc:
         raise _http_from_source_error(exc) from exc
 
@@ -204,6 +213,8 @@ async def code_agent_logs(
             session_id=session_id,
             context_id=context_id,
         )
+    except GuestRuntimeUnavailableError as exc:
+        raise _http_from_farm_unavailable(exc) from exc
     except (LookupError, ValueError) as exc:
         raise _http_from_source_error(exc) from exc
 
@@ -224,5 +235,7 @@ async def delete_code_agent_source(
             branch_id=branch_id,
             catalog_id=catalog_id,
         )
+    except GuestRuntimeUnavailableError as exc:
+        raise _http_from_farm_unavailable(exc) from exc
     except (LookupError, ValueError) as exc:
         raise _http_from_source_error(exc) from exc

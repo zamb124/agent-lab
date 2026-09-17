@@ -15,13 +15,18 @@ from core.guest_runtime.models import (
     GuestRebuildResponse,
     GuestRuntimeLogsResponse,
     GuestRuntimeStatusResponse,
+    GuestRuntimeUnavailableError,
 )
 from core.types import require_json_object
 
 _API = "/guest-runtime/api/v1"
 
 
-def _reraise_farm_error(exc: ServiceClientError) -> NoReturn:
+def reraise_farm_error(exc: ServiceClientError) -> NoReturn:
+    if exc.status_code is None:
+        raise GuestRuntimeUnavailableError(
+            f"guest_runtime is unreachable: {exc}"
+        ) from exc
     text = exc.response_text if exc.response_text is not None else str(exc)
     if exc.status_code == 409:
         if "cap" in text:
@@ -53,7 +58,7 @@ class GuestRuntimeClient:
                 timeout=600.0,
             )
         except ServiceClientError as exc:
-            _reraise_farm_error(exc)
+            reraise_farm_error(exc)
         return GuestRebuildResponse.model_validate(require_json_object(raw, "guest.rebuild"))
 
     async def ensure_lease(self, body: GuestEnsureLeaseRequest) -> GuestEnsureLeaseResponse:
@@ -65,17 +70,20 @@ class GuestRuntimeClient:
                 timeout=600.0,
             )
         except ServiceClientError as exc:
-            _reraise_farm_error(exc)
+            reraise_farm_error(exc)
         return GuestEnsureLeaseResponse.model_validate(
             require_json_object(raw, "guest.ensure_lease")
         )
 
     async def status(self, flow_id: str, node_id: str) -> GuestRuntimeStatusResponse:
-        raw = await self._http.get(
-            "guest_runtime",
-            f"{_API}/runtimes/{flow_id}/{node_id}",
-            timeout=30.0,
-        )
+        try:
+            raw = await self._http.get(
+                "guest_runtime",
+                f"{_API}/runtimes/{flow_id}/{node_id}",
+                timeout=30.0,
+            )
+        except ServiceClientError as exc:
+            reraise_farm_error(exc)
         return GuestRuntimeStatusResponse.model_validate(
             require_json_object(raw, "guest.status")
         )
@@ -102,19 +110,25 @@ class GuestRuntimeClient:
             if context_id.strip() == "":
                 raise ValueError("context_id must be non-empty when provided")
             params["context_id"] = context_id
-        raw = await self._http.get(
-            "guest_runtime",
-            f"{_API}/runtimes/{flow_id}/{node_id}/logs",
-            timeout=30.0,
-            params=params if params else None,
-        )
+        try:
+            raw = await self._http.get(
+                "guest_runtime",
+                f"{_API}/runtimes/{flow_id}/{node_id}/logs",
+                timeout=30.0,
+                params=params if params else None,
+            )
+        except ServiceClientError as exc:
+            reraise_farm_error(exc)
         return GuestRuntimeLogsResponse.model_validate(
             require_json_object(raw, "guest.logs")
         )
 
     async def drop(self, flow_id: str, node_id: str) -> None:
-        _ = await self._http.delete(
-            "guest_runtime",
-            f"{_API}/runtimes/{flow_id}/{node_id}",
-            timeout=60.0,
-        )
+        try:
+            _ = await self._http.delete(
+                "guest_runtime",
+                f"{_API}/runtimes/{flow_id}/{node_id}",
+                timeout=60.0,
+            )
+        except ServiceClientError as exc:
+            reraise_farm_error(exc)

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from uuid import uuid4
+
 import pytest
 
 from apps.sync.container import SyncContainer
@@ -13,18 +16,23 @@ from apps.sync.models.messages import (
     MessageEdit,
     TextPlainContent,
 )
+from apps.sync.models.threads import ThreadCreate
 from apps.sync.realtime.operations import (
     MessagesDeletePayload,
     MessagesEditPayload,
     MessagesForwardPayload,
     MessagesListPayload,
+    MessagesListThreadPayload,
     MessagesSendPayload,
+    ThreadsCreatePayload,
     op_channels_create,
     op_messages_delete,
     op_messages_edit,
     op_messages_forward,
     op_messages_list,
+    op_messages_list_thread,
     op_messages_send,
+    op_threads_create,
 )
 from core.models.identity_models import User
 from core.websocket import WsCommandError
@@ -78,6 +86,34 @@ async def _send_text(
         container=op_container,
     )
     return msg.message_id
+
+
+async def _insert_guest_text(
+    op_container: SyncContainer,
+    *,
+    company_id: str,
+    channel_id: str,
+    text: str,
+    guest_sender_id: str,
+    thread_id: str | None = None,
+) -> None:
+    _ = await op_container.message_repository.create_message(
+        message_id=uuid4().hex,
+        company_id=company_id,
+        channel_id=channel_id,
+        thread_id=thread_id,
+        parent_message_id=None,
+        sender_user_id=guest_sender_id,
+        status="sent",
+        sent_at=datetime.now(tz=UTC),
+        contents=[
+            MessageContentModel(
+                type=MessageContentType.TEXT_PLAIN,
+                data=TextPlainContent(body=text, mentions=None),
+                order=0,
+            )
+        ],
+    )
 
 
 @pytest.mark.asyncio
@@ -167,6 +203,71 @@ async def test_op_messages_list_returns_chronological(
     )
     bodies = [m.contents[0].data.body for m in result.items]
     assert bodies == ["m1", "m2"]
+
+
+@pytest.mark.asyncio
+async def test_op_messages_list_guest_sender_uses_name_from_id(
+    op_user: User,
+    op_container: SyncContainer,
+    op_context: None,
+    unique_id: str,
+) -> None:
+    company_id = op_user.active_company_id
+    ch_id, _ = await _setup_two_channels(op_user, op_container, unique_id)
+    guest_sender_id = f"guest:aabbccdd:{unique_id}"
+    await _insert_guest_text(
+        op_container,
+        company_id=company_id,
+        channel_id=ch_id,
+        text="from guest",
+        guest_sender_id=guest_sender_id,
+    )
+    result = await op_messages_list(
+        MessagesListPayload(channel_id=ch_id, limit=10),
+        user=op_user,
+        container=op_container,
+    )
+    guest_items = [m for m in result.items if m.sender.user_id == guest_sender_id]
+    assert len(guest_items) == 1
+    assert guest_items[0].sender.display_name == unique_id
+    assert guest_items[0].sender.display_name != guest_sender_id
+
+
+@pytest.mark.asyncio
+async def test_op_messages_list_thread_guest_sender_uses_name_from_id(
+    op_user: User,
+    op_container: SyncContainer,
+    op_context: None,
+    unique_id: str,
+) -> None:
+    company_id = op_user.active_company_id
+    ch_id, _ = await _setup_two_channels(op_user, op_container, unique_id)
+    root_id = await _send_text(op_user, op_container, ch_id, "root")
+    thread = await op_threads_create(
+        ThreadsCreatePayload(body=ThreadCreate(root_message_id=root_id)),
+        user=op_user,
+        container=op_container,
+    )
+    guest_sender_id = f"guest:deadbeef:{unique_id}"
+    await _insert_guest_text(
+        op_container,
+        company_id=company_id,
+        channel_id=ch_id,
+        text="thread guest",
+        guest_sender_id=guest_sender_id,
+        thread_id=thread.thread_id,
+    )
+    result = await op_messages_list_thread(
+        MessagesListThreadPayload(
+            channel_id=ch_id, thread_id=thread.thread_id, limit=20, offset=0
+        ),
+        user=op_user,
+        container=op_container,
+    )
+    guest_items = [m for m in result.items if m.sender.user_id == guest_sender_id]
+    assert len(guest_items) == 1
+    assert guest_items[0].sender.display_name == unique_id
+    assert guest_items[0].sender.display_name != guest_sender_id
 
 
 @pytest.mark.asyncio

@@ -169,6 +169,23 @@
             "python": "${workspaceFolder}/.venv/bin/python"
         },
         {
+            "name": "Run: guest_runtime",
+            "consoleTitle": "run.py: guest_runtime",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/run.py",
+            "args": [
+                "guest_runtime"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
             "name": "Run: office",
             "consoleTitle": "run.py: office 📄",
             "type": "debugpy",
@@ -537,6 +554,37 @@
             "justMyCode": false
         },
         {
+            "name": "Debug: guest_runtime :8024",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "granian",
+            "args": [
+                "--interface",
+                "asgi",
+                "apps.guest_runtime.main:app",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "8024",
+                "--http",
+                "auto",
+                "--ws",
+                "--reload",
+                "--reload-paths",
+                "apps/guest_runtime",
+                "--reload-paths",
+                "core",
+                "--no-access-log"
+            ],
+            "cwd": "${workspaceFolder}",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "env": {
+                "PYTHONUNBUFFERED": "1",
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "justMyCode": false
+        },
+        {
             "name": "Debug: flows :8001",
             "type": "debugpy",
             "request": "launch",
@@ -622,6 +670,7 @@
                 "Run: worktracker",
                 "Run: secrets",
                 "Run: wiki",
+                "Run: guest_runtime",
                 "Run: office",
                 "Run: scheduler-api",
                 "Run: browser",

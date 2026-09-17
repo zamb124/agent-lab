@@ -41,6 +41,7 @@ import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-spinner.js';
 import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
+import { guestDisplayNameFromSenderId, isGuestSenderId } from '../_helpers/sync-guest-sender.js';
 import { formatDurationSeconds } from '@platform/lib/utils/format-duration.js';
 import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
 import {
@@ -1981,9 +1982,10 @@ export class SyncCallOverlayModal extends PlatformModal {
         if (typeof participantIdentity !== 'string' || participantIdentity === '') return '?';
         const names = this._livekitDisplayNames();
         if (names && typeof names[participantIdentity] === 'string') return names[participantIdentity];
-        if (participantIdentity.startsWith('guest:')) {
-            const parts = participantIdentity.split(':');
-            return parts.slice(2).join(':') || this.t('call_overlay.guest');
+        if (isGuestSenderId(participantIdentity)) {
+            const guestName = guestDisplayNameFromSenderId(participantIdentity);
+            if (guestName !== null) return guestName;
+            return this.t('call_overlay.guest');
         }
         return participantIdentity;
     }

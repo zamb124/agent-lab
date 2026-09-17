@@ -33,6 +33,7 @@ import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import { buildPlatformFileDownloadUrl } from '@platform/lib/utils/platform-files-url.js';
 import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
 import { isSpeechOriginText, messageHasSpeechOriginText } from '../_helpers/sync-speech-origin.js';
+import { guestDisplayNameFromSenderId, isGuestSenderId } from '../_helpers/sync-guest-sender.js';
 
 const LONG_PRESS_MS = 450;
 
@@ -141,6 +142,15 @@ export class SyncMessageBubble extends PlatformElement {
             background: hsl(var(--sync-avatar-h), var(--sync-pastel-avatar-s-bg), var(--sync-pastel-avatar-l-bg));
             color: hsl(var(--sync-avatar-h), var(--sync-pastel-avatar-s-fg), var(--sync-pastel-avatar-l-fg));
         }
+        .avatar.guest {
+            background: var(--accent-subtle);
+            color: var(--accent);
+            cursor: default;
+        }
+        .avatar.guest platform-icon {
+            flex-shrink: 0;
+            line-height: 0;
+        }
         .avatar img {
             width: 100%;
             height: 100%;
@@ -166,13 +176,13 @@ export class SyncMessageBubble extends PlatformElement {
             background: var(--glass-solid-soft, var(--glass-solid));
             border: 1px solid var(--glass-border-subtle, var(--glass-border));
             border-radius: var(--radius-2xl, 18px);
-            padding: 8px 12px 6px;
+            padding: 6px var(--space-3) 4px;
             display: flex;
             flex-direction: column;
             align-items: flex-start;
             box-sizing: border-box;
             flex: 0 1 auto;
-            width: max-content;
+            width: fit-content;
             max-width: min(70%, 36rem);
             min-width: 0;
             height: auto;
@@ -215,6 +225,10 @@ export class SyncMessageBubble extends PlatformElement {
             cursor: pointer;
             max-width: 100%;
             overflow-wrap: anywhere;
+            white-space: normal;
+        }
+        .sender.guest {
+            cursor: default;
         }
         :host([data-own]) .sender { display: none; }
         .reply-quote {
@@ -256,12 +270,17 @@ export class SyncMessageBubble extends PlatformElement {
         }
         :host([data-own]) .forwarded { color: rgba(255,255,255,0.85); }
         .body {
-            white-space: pre-wrap;
+            white-space: normal;
             word-break: break-word;
             overflow-wrap: anywhere;
             max-width: 100%;
             font-size: var(--text-base, 16px);
             line-height: 1.45;
+        }
+        .body-text {
+            white-space: pre-wrap;
+            word-break: break-word;
+            overflow-wrap: anywhere;
         }
         .body--speech {
             display: flex;
@@ -270,11 +289,19 @@ export class SyncMessageBubble extends PlatformElement {
         }
         .speech-origin {
             display: inline-flex;
+            flex-direction: row;
             align-items: center;
             gap: 4px;
             font-size: var(--text-xs, 12px);
-            line-height: 1.2;
+            line-height: 1;
+            white-space: nowrap;
             opacity: 0.72;
+        }
+        .speech-origin platform-icon {
+            flex: none;
+            width: 12px;
+            height: 12px;
+            line-height: 0;
         }
         .tail-row {
             display: flex;
@@ -325,6 +352,7 @@ export class SyncMessageBubble extends PlatformElement {
             color: var(--text-tertiary);
             margin-top: 2px;
             opacity: 0.88;
+            white-space: normal;
         }
         :host([data-own]) .meta {
             color: rgba(255, 255, 255, 0.82);
@@ -782,6 +810,7 @@ export class SyncMessageBubble extends PlatformElement {
     _onSenderClick() {
         const senderId = this.message && this.message.sender && this.message.sender.user_id;
         if (typeof senderId !== 'string' || senderId === '') return;
+        if (isGuestSenderId(senderId)) return;
         this.openModal('platform.user_info', { userId: senderId });
     }
 
@@ -854,17 +883,13 @@ export class SyncMessageBubble extends PlatformElement {
         const segments = parseMentionsToSegments(text, this.members);
         const speechOrigin = isSpeechOriginText(content);
         const bodyClass = speechOrigin ? 'body body--speech' : 'body';
-        return html`<div class=${bodyClass}>
-            ${speechOrigin
-                ? html`<span class="speech-origin">
-                    <platform-icon name="mic" size="12"></platform-icon>
-                    ${this.t('bubble.speech_origin')}
-                </span>`
-                : ''}
-            ${segments.map((s) => s.kind === 'mention'
+        const textNodes = segments.map((s) => s.kind === 'mention'
             ? html`<span class="mention" @click=${(e) => { e.stopPropagation(); this._onMentionClick(s.userId); }}>${s.value}</span>`
-            : s.value)}
-        </div>`;
+            : s.value);
+        if (speechOrigin) {
+            return html`<div class=${bodyClass}><span class="speech-origin"><platform-icon name="mic" size="12"></platform-icon><span>${this.t('bubble.speech_origin')}</span></span><span class="body-text">${textNodes}</span></div>`;
+        }
+        return html`<div class=${bodyClass}><span class="body-text">${textNodes}</span></div>`;
     }
 
     _renderCodeBlock(content) {
@@ -1144,11 +1169,7 @@ export class SyncMessageBubble extends PlatformElement {
         }
         let senderName = '';
         if (parent.sender && typeof parent.sender === 'object') {
-            if (typeof parent.sender.display_name === 'string' && parent.sender.display_name !== '') {
-                senderName = parent.sender.display_name;
-            } else if (typeof parent.sender.user_id === 'string') {
-                senderName = parent.sender.user_id;
-            }
+            senderName = this._senderDisplayName(parent.sender);
         }
         const previewContent = Array.isArray(parent.contents) ? parent.contents.find((c) => c.type === 'text/plain') : null;
         const previewData = previewContent && previewContent.data;
@@ -1294,12 +1315,37 @@ export class SyncMessageBubble extends PlatformElement {
         return rel.length > 0 && rel.every((c) => this._stringContentType(c) === 'call/boundary');
     }
 
+    _isGuestSender(sender) {
+        return Boolean(sender && typeof sender.user_id === 'string' && isGuestSenderId(sender.user_id));
+    }
+
+    _senderDisplayName(sender) {
+        if (!sender || typeof sender !== 'object') {
+            throw new Error('sender обязателен');
+        }
+        if (typeof sender.user_id !== 'string' || sender.user_id === '') {
+            throw new Error('sender.user_id обязателен');
+        }
+        if (isGuestSenderId(sender.user_id)) {
+            const guestName = guestDisplayNameFromSenderId(sender.user_id);
+            if (guestName !== null) return guestName;
+            return this.t('bubble.guest');
+        }
+        if (typeof sender.display_name === 'string' && sender.display_name !== '') {
+            return sender.display_name;
+        }
+        return sender.user_id;
+    }
+
     _renderAvatar() {
         const sender = this.message && this.message.sender;
         if (!sender || typeof sender.user_id !== 'string') return html`<span class="avatar"></span>`;
-        const name = (typeof sender.display_name === 'string' && sender.display_name !== '')
-            ? sender.display_name
-            : sender.user_id;
+        if (isGuestSenderId(sender.user_id)) {
+            return html`<span class="avatar guest" title=${this._senderDisplayName(sender)}>
+                <platform-icon name="user" size="18"></platform-icon>
+            </span>`;
+        }
+        const name = this._senderDisplayName(sender);
         const hueVar = syncAvatarHueVar(sender.user_id);
         if (this._senderAvatarFailed) {
             return html`<span class="avatar pastel-initials" style=${hueVar} @click=${this._onSenderClick}>${initialsFromName(name)}</span>`;
@@ -1336,9 +1382,8 @@ export class SyncMessageBubble extends PlatformElement {
             && this.message.message_id
             && slice.selectedMessageIds.includes(this.message.message_id);
         const showSenderName = !isOwn && (this.position === 'first' || this.position === 'single');
-        const senderName = sender && (typeof sender.display_name === 'string' && sender.display_name !== ''
-            ? sender.display_name
-            : sender.user_id);
+        const senderName = sender ? this._senderDisplayName(sender) : '';
+        const senderIsGuest = this._isGuestSender(sender);
         const bodyMain = html`${contents.map((c) => this._renderContent(c))}`;
         return html`
             <div class="row"
@@ -1351,7 +1396,7 @@ export class SyncMessageBubble extends PlatformElement {
                 ${selectionMode ? html`<span class="check"><input type="checkbox" .checked=${!!selected} /></span>` : ''}
                 ${!isOwn ? html`<div class="avatar-slot">${this._renderAvatar()}</div>` : ''}
                 <div class="bubble">
-                    ${showSenderName && senderName ? html`<div class="sender" @click=${this._onSenderClick}>${senderName}</div>` : ''}
+                    ${showSenderName && senderName ? html`<div class="sender${senderIsGuest ? ' guest' : ''}" @click=${this._onSenderClick}>${senderName}</div>` : ''}
                     ${this._renderForwarded()}
                     ${this._renderReplyQuote()}
                     ${bodyMain}

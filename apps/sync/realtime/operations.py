@@ -142,6 +142,7 @@ from apps.sync.realtime.task_names import (
     SYNC_TRANSCRIBE_AUDIO_MESSAGE,
     SYNC_TRANSCRIBE_VIDEO_MESSAGE,
 )
+from apps.sync.sender_display import sender_brief_for_message
 from apps.sync.ws_presence import batch_peer_presence
 from core.authz.models import AuthzCheckItem, AuthzObject, AuthzSubject
 from core.authz.types import AuthzRelation
@@ -824,6 +825,18 @@ class MessagesListResult(BaseModel):
     prev_cursor: str | None
 
 
+async def _listed_message_sender_brief(
+    users_by_id: dict[str, User],
+    sender_user_id: str,
+) -> UserBrief:
+    u = users_by_id.get(sender_user_id)
+    if u is None:
+        return await sender_brief_for_message(None, sender_user_id)
+    return UserBrief(
+        user_id=sender_user_id, display_name=u.name, avatar_url=u.avatar_url
+    )
+
+
 class MessagesSendPayload(BaseModel):
     channel_id: str = Field(min_length=1)
     body: MessageCreate
@@ -924,17 +937,7 @@ async def op_messages_list(
     items: list[MessageRead] = []
     for m in chronological:
         contents = await container.message_repository.list_contents(m.message_id)
-        u = users_by_id.get(m.sender_user_id)
-        if u is None:
-            sender = UserBrief(
-                user_id=m.sender_user_id,
-                display_name=m.sender_user_id,
-                avatar_url=None,
-            )
-        else:
-            sender = UserBrief(
-                user_id=m.sender_user_id, display_name=u.name, avatar_url=u.avatar_url
-            )
+        sender = await _listed_message_sender_brief(users_by_id, m.sender_user_id)
         items.append(message_read_from_entity(m=m, contents=contents, sender=sender))
 
     oldest = chronological[0]
@@ -1003,17 +1006,7 @@ async def op_messages_list_thread(
     items: list[MessageRead] = []
     for m in rows:
         contents = await container.message_repository.list_contents(m.message_id)
-        u = users_by_id.get(m.sender_user_id)
-        if u is None:
-            sender = UserBrief(
-                user_id=m.sender_user_id,
-                display_name=m.sender_user_id,
-                avatar_url=None,
-            )
-        else:
-            sender = UserBrief(
-                user_id=m.sender_user_id, display_name=u.name, avatar_url=u.avatar_url
-            )
+        sender = await _listed_message_sender_brief(users_by_id, m.sender_user_id)
         items.append(message_read_from_entity(m=m, contents=contents, sender=sender))
     return MessagesListThreadResult(
         items=items,

@@ -23,6 +23,7 @@ from core.guest_runtime.models import (
     GuestRuntime,
     GuestRuntimeLogsResponse,
     GuestRuntimeStatusResponse,
+    GuestRuntimeUnavailableError,
 )
 
 __all__ = [
@@ -48,4 +49,5 @@ __all__ = [
     "GuestRuntime",
     "GuestRuntimeLogsResponse",
     "GuestRuntimeStatusResponse",
+    "GuestRuntimeUnavailableError",
 ]

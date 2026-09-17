@@ -1144,6 +1144,8 @@
     "toast_git_url_required": "Сначала вставьте Git URL",
     "toast_catalog_required": "Дождитесь создания каталога исходников",
     "toast_invoke_argv_required": "Перед сборкой нужен CLI argv",
+    "toast_invoke_argv_invalid": "CLI argv — JSON-массив, например [\"python3\", \"main.py\"]",
+    "toast_egress_hosts_invalid": "Egress-хосты — JSON-массив имён, например [\"api.example.com\"]",
     "open_documents": "Открыть в Документах",
     "waiting_catalog": "Каталог исходников создаётся.",
     "tree_empty": "Файлов пока нет.",
