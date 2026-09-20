@@ -10,6 +10,7 @@
     "secrets_service_url": "http://localhost:8022",
     "wiki_service_url": "http://localhost:8023",
     "guest_runtime_service_url": "http://localhost:8024",
+    "realtime_service_url": "http://localhost:8025",
     "office_service_url": "http://localhost:8008",
     "browser_service_url": "http://localhost:8009",
     "search_service_url": "http://localhost:8010",
@@ -35,6 +36,7 @@
     "search_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_search",
     "secrets_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_secrets",
     "wiki_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_wiki",
+    "realtime_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_realtime",
     "redis_url": "redis://localhost:63791/0"
   },
   "openfga": {
@@ -48,6 +50,12 @@
   },
   "tasks": {
     "broker_url": "redis://localhost:63791/0"
+  },
+  "realtime": {
+    "centrifugo_api_url": "http://127.0.0.1:8000/api",
+    "centrifugo_api_key": "YOUR_CENTRIFUGO_API_KEY",
+    "command_deadline_seconds": 30,
+    "sweeper_interval_seconds": 5.0
   },
   "logging": {
     "format": "json",
@@ -373,11 +381,11 @@
     }
   },
   "secrets": {
-    "encryption_key": "dev-secrets-encryption-key-change-in-production"
+    "encryption_key": "YOUR_SECRETS_ENCRYPTION_KEY"
   },
   "auth": {
     "enabled": true,
-    "jwt_secret_key": "dev-secret-key-change-in-production",
+    "jwt_secret_key": "YOUR_JWT_SECRET_KEY",
     "session_timeout": 7200,
     "providers": {
       "yandex": {
@@ -386,7 +394,7 @@
         "userinfo_url": "https://login.yandex.ru/info",
         "scope": "login:email login:avatar",
         "client_id": "test-yandex-client-id",
-        "client_secret": "test-yandex-client-secret",
+        "client_secret": "YOUR_YANDEX_CLIENT_SECRET",
         "enabled": true
       },
       "google": {
@@ -395,7 +403,7 @@
         "userinfo_url": "https://openidconnect.googleapis.com/v1/userinfo",
         "scope": "openid email profile",
         "client_id": "test-google-client-id",
-        "client_secret": "test-google-client-secret",
+        "client_secret": "YOUR_GOOGLE_CLIENT_SECRET",
         "enabled": true
       },
       "github": {
@@ -404,7 +412,7 @@
         "userinfo_url": "https://api.github.com/user",
         "scope": "read:user user:email",
         "client_id": "test-github-client-id",
-        "client_secret": "test-github-client-secret",
+        "client_secret": "YOUR_GITHUB_CLIENT_SECRET",
         "enabled": true
       },
       "amocrm": {
@@ -425,7 +433,7 @@
     "demo": {
       "login_enabled": true,
       "email": "demo@demo.ru",
-      "password": "Zz123456",
+      "password": "YOUR_DEMO_PASSWORD",
       "company_id": "demo",
       "subdomain": "demo",
       "company_name": "Demo"
@@ -555,8 +563,8 @@
       "test-bucket": {
         "provider": "minio",
         "bucket_name": "test-bucket",
-        "access_key_id": "minioadmin",
-        "secret_access_key": "minioadmin",
+        "access_key_id": "YOUR_MINIO_ACCESS_KEY",
+        "secret_access_key": "YOUR_MINIO_SECRET_KEY",
         "region_name": "us-east-1",
         "endpoint_url": "http://127.0.0.1:19001",
         "enabled": false
@@ -849,8 +857,8 @@
       "rag": {
         "providers": {
           "agentset": {
-            "api_key": "agentset_MrUnHaYpdrNDCMeK",
-            "embedding_api_key": "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"
+            "api_key": "YOUR_AGENTSET_API_KEY",
+            "embedding_api_key": "YOUR_OPENROUTER_API_KEY"
           }
         }
       }
@@ -873,7 +881,7 @@
       },
       "office": {
         "document_server_public_url": "http://localhost:8002",
-        "jwt_secret": "dev-onlyoffice-jwt-secret",
+        "jwt_secret": "YOUR_ONLYOFFICE_JWT_SECRET",
         "callback_public_base_url": "http://host.docker.internal:8008",
         "download_token_ttl_seconds": 900,
         "editor_customization": {
@@ -1077,8 +1085,8 @@
   "calls": {
     "livekit_url": "ws://localhost:7880",
     "livekit_public_url": "ws://localhost:7880",
-    "livekit_api_key": "devkey",
-    "livekit_api_secret": "secret",
+    "livekit_api_key": "YOUR_LIVEKIT_API_KEY",
+    "livekit_api_secret": "YOUR_LIVEKIT_API_SECRET",
     "turn_host": "localhost",
     "turn_port": 3478,
     "turn_secret": "turnsecret",

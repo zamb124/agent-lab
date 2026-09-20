@@ -59,6 +59,7 @@ docs/video/*.mov
 /reports/postgres-test-logs/
 /reports/coverage/
 /reports/openfga-test.env
+/reports/openfga-test.env.bak
 /reports/openfga-dev.env
 /data/
 /apps/provider_litserve/data/
@@ -87,3 +88,12 @@ tests/core/files/file_writer_output/
 .gemini/
 /.coverage
 /coverage/
+
+# Гигиена корня: дампы, бинарники, черновики
+/*.pdf
+/1.md
+/demo_sales.json
+/latest_silero_models.yml
+/drafts/
+/backups/
+/test-results/

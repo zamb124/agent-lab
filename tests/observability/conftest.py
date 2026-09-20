@@ -6,12 +6,16 @@ import sys
 from collections.abc import Generator
 
 import pytest
+import pytest_asyncio
 
+from core.context import set_context
 from core.logging import get_logger
+from core.models.context_models import Context
 from core.tracing import setup_tracing
 from core.tracing.config import TracingConfig
 from core.tracing.provider import set_tracing_enabled
 from core.tracing.tracer import set_span_repository, set_tracing_service_name
+from core.utils.tokens import get_token_service
 
 OBSERVABILITY_LOGGERS: tuple[str, ...] = (
     "core.tracing.operation_log_mirror",
@@ -23,7 +27,7 @@ OBSERVABILITY_LOGGERS: tuple[str, ...] = (
     "core.clients.llm.context_layer",
     "core.clients.llm.logging",
     "core.clients.voice_logging",
-    "core.websocket.router",
+    "core.realtime.command_http",
     "core.tasks.logging_middleware",
     "platform.task",
     "apps.idle_worker.tasks.span_billing_settlement_tasks",
@@ -69,6 +73,29 @@ def observability_caplog(caplog: pytest.LogCaptureFixture) -> pytest.LogCaptureF
     for logger_name in OBSERVABILITY_LOGGERS:
         caplog.set_level("INFO", logger=logger_name)
     return caplog
+
+
+@pytest_asyncio.fixture
+async def system_member_context(container, auth_token_system: str, mock_context: Context) -> Context:
+    """Context с пользователем, который реально состоит в компании system."""
+    token = get_token_service().validate_token(auth_token_system)
+    if token is None:
+        raise RuntimeError("auth_token_system невалиден")
+    user = await container.user_repository.get(token.user_id)
+    if user is None:
+        raise RuntimeError(f"пользователь {token.user_id} не найден")
+    company = await container.company_repository.get("system")
+    if company is None:
+        raise RuntimeError("компания system не найдена")
+    ctx = mock_context.model_copy(
+        update={
+            "user": user,
+            "active_company": company,
+            "auth_token": auth_token_system,
+        }
+    )
+    set_context(ctx)
+    return ctx
 
 
 @pytest.fixture(autouse=True)

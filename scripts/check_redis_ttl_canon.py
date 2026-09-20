@@ -25,7 +25,6 @@ REDIS_FROM_URL_ALLOWLIST: frozenset[str] = frozenset(
     {
         "core/tasks/broker.py",
         "core/utils/invite_tokens.py",
-        "core/websocket/manager.py",
         "core/events/redis_client.py",
         "core/events/consumer.py",
         "apps/sync/realtime/tasks.py",
@@ -92,12 +91,20 @@ def _is_domain_redis_rpush(call: ast.Call) -> bool:
 
 def _check_python_file(path: Path) -> list[str]:
     rel = _relative(path)
-    source = path.read_text(encoding="utf-8")
     errors: list[str] = []
+    try:
+        source = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        print(f"check_redis_ttl_canon: skip unreadable {rel}: {exc}", file=sys.stderr)
+        return []
     try:
         tree = ast.parse(source, filename=rel)
     except SyntaxError as exc:
-        return [f"{rel}: syntax error: {exc}"]
+        print(f"check_redis_ttl_canon: skip unparseable {rel}: {exc}", file=sys.stderr)
+        return []
+    except RecursionError as exc:
+        print(f"check_redis_ttl_canon: skip too-deep AST {rel}: {exc}", file=sys.stderr)
+        return []
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):

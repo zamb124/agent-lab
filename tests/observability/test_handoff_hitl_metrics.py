@@ -70,9 +70,11 @@ async def test_handoff_wall_time_emitted_after_initiated(
 async def test_hitl_operator_responded_emitted_on_resume(
     app,
     container,
+    system_member_context,
     observability_caplog: pytest.LogCaptureFixture,
     unique_id: str,
 ) -> None:
+    _ = app, system_member_context
     slug = f"hitl-metrics-{unique_id}"
     await container.work_item_service.create_queue(
         company_id="system",

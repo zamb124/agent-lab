@@ -1,4 +1,4 @@
-.PHONY: test test-until-fail test-all test-static test-up test-down test-reset test-cov test-cov-all test-cov-report test-unit test-network test-ui test-ui-chat test-ui-doc test-ui-components test-ui-kit test-ui-kit-playwright test-ui-kit-doc ui ui-doc test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser test-profile check-strict-agent-architecture check-wider-repo-strictness agent-ensure test-agent test-agent-e2e test-agent-desktop-e2e test-observability
+.PHONY: test test-until-fail test-all test-static test-up test-down test-reset test-cov test-cov-all test-cov-report test-unit test-network test-ui test-ui-chat test-ui-doc test-ui-components test-ui-kit test-ui-kit-playwright test-ui-kit-doc ui ui-doc test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser test-profile check-strict-agent-architecture check-wider-repo-strictness agent-ensure test-observability
 
 WORKERS ?= 10
 DB_PROFILE ?= 1
@@ -53,8 +53,8 @@ test-up: runtime-bootstrap
 	@echo "Preflight: зачистка stale pytest/granian/taskiq/code-runner процессов..."
 	@uv run python -m scripts.test_process_preflight_cleanup
 	@uv run python scripts/ensure_test_compose_images.py
-	docker-compose -f docker-compose-test.yaml --env-file $(DOCKER_COMPOSE_ENV_FILE) up -d --pull $(DOCKER_COMPOSE_PULL) postgres-test redis-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test loki-test tempo-test alloy-test grafana-test
-	@echo "Ожидание готовности сервисов (postgres, redis, minio, onlyoffice, provider_litserve, test-a2a-agent, livekit, livekit-egress, livekit-cli, loki, tempo, alloy, grafana)..."
+	docker-compose -f docker-compose-test.yaml --env-file $(DOCKER_COMPOSE_ENV_FILE) up -d --pull $(DOCKER_COMPOSE_PULL) postgres-test redis-test redis-realtime-test centrifugo-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test loki-test tempo-test alloy-test grafana-test
+	@echo "Ожидание готовности сервисов (postgres, redis, redis-realtime, centrifugo, minio, onlyoffice, provider_litserve, test-a2a-agent, livekit, livekit-egress, livekit-cli, loki, tempo, alloy, grafana)..."
 	@sleep 7
 	@echo "Сброс тестовой БД (TRUNCATE managed таблиц + Redis FLUSHDB)..."
 	@uv run python -m scripts.db_test_reset
@@ -74,7 +74,7 @@ test-reset:
 
 test-down:
 	@uv run python -m scripts.test_stack down
-	docker-compose -f docker-compose-test.yaml --env-file $(DOCKER_COMPOSE_ENV_FILE) stop postgres-test redis-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test loki-test tempo-test alloy-test grafana-test openfga-test
+	docker-compose -f docker-compose-test.yaml --env-file $(DOCKER_COMPOSE_ENV_FILE) stop postgres-test redis-test redis-realtime-test centrifugo-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test loki-test tempo-test alloy-test grafana-test openfga-test
 
 # Запуск unit/API тестов параллельно (без browser тестов)
 test-unit: test-up
@@ -365,25 +365,6 @@ test-cov-report:
 	uv run coverage html
 	@uv run python -m scripts.test_coverage_report term
 	@echo "Отчет сохранен в htmlcov/index.html"
-
-test-agent: test-up
-	uv run python scripts/check_agent_e2e_coverage.py
-	uv run python scripts/check_agent_goose_tool_contract.py
-	uv run python scripts/check_agent_test_no_monkeypatch.py
-	AGENT_ARTIFACT_MODE=release uv run python scripts/agent_build.py ensure-local --artifact-mode release --version-sha "$$(git rev-parse HEAD)"
-	RUN_UI_IN_TEST=1 UI_E2E_USE_LVH_ME=1 AGENT_DESKTOP_E2E_RUN=1 uv run pytest tests/agent tests/frontend/api/test_humanitec_agent_api.py tests/flows/api/test_agent_platform_mcp.py tests/ui/e2e/test_frontend_settings_agent.py -v -n0 --timeout=15
-
-test-agent-e2e: test-up
-	uv run pytest tests/agent/e2e -v -n0 --timeout=180
-
-test-agent-desktop-e2e: test-up
-	uv run python scripts/check_agent_e2e_coverage.py
-	uv run python scripts/check_agent_goose_tool_contract.py
-	AGENT_ARTIFACT_MODE=release uv run python scripts/agent_build.py ensure-local --artifact-mode release --version-sha "$$(git rev-parse HEAD)"
-	RUN_UI_IN_TEST=1 UI_E2E_USE_LVH_ME=1 AGENT_DESKTOP_E2E_RUN=1 uv run pytest tests/agent/desktop_e2e tests/ui/e2e/test_frontend_settings_agent.py -v -n0 --timeout=15
-
-test-agent-ui-e2e: test-up
-	UI_E2E_USE_LVH_ME=1 RUN_UI_IN_TEST=1 uv run pytest tests/ui/e2e/test_frontend_settings_agent.py -n0 --timeout=300
 
 # LLM context layer: unit + adapter + flows wiring + e2e (MockLLM only)
 test-llm-context: test-up

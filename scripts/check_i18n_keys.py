@@ -14,6 +14,7 @@ Cross-check ключей переводов: код ↔ JSON-бандлы.
         --mode all     : и то, и другое (по умолчанию).
   4. Динамические ключи (`t(\\`prefix.${var}\\`)`, `t('a' + suffix)`) пропускаются
      и попадают в счётчик skipped — ручной ревью.
+     Конкатенация после закрытой кавычки (`t('kind.' + item.kind)`) тоже динамика.
 
 Резолв namespace для каждого использования (как в `translate()` runtime):
    1. Если 3-й аргумент задан как `I18nNs.X` или строковый литерал — берём его.
@@ -265,6 +266,8 @@ def file_default_namespace(path: Path, available: set[str]) -> str | None:
         svc = parts[1]
         return svc if svc in available else None
     if len(parts) >= 2 and parts[0] == "core":
+        if "flow-ui" in parts and "flows" in available:
+            return "flows"
         return "platform" if "platform" in available else None
     return None
 
@@ -330,7 +333,7 @@ def scan_file(path: Path, available: set[str], stats: Stats) -> list[Usage]:
         quote = m.group("quote")
         body = m.group("body")
         rest = m.group("rest") or ""
-        if is_dynamic_key(quote, body):
+        if is_dynamic_key(quote, body) or re.match(r"\s*\+", rest):
             stats.calls_dynamic += 1
             continue
         if "." not in body and not body.strip():

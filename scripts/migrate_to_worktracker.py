@@ -51,7 +51,6 @@ from core.worktracker.models import (
     WorkItemPriority,
     WorkItemState,
     WorkQueue,
-    WorkQueueMember,
 )
 from core.worktracker.repository import WorktrackerRepository
 

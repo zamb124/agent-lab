@@ -15,7 +15,7 @@ from apps.flows.src.observability.flow_timing import (
 from apps.flows.src.tasks.flow_tasks import process_flow_task
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from core.clients.llm import setup_mock_responses
-from core.context import Context, set_context
+from core.context import set_context
 from core.logging.attributes import LOG_TASK_NAME, LOG_TASK_QUEUE_WAIT_MS
 from core.tasks.logging_middleware import LoggingMiddleware
 from core.tasks.message_contract import set_task_message_string_label
@@ -93,7 +93,7 @@ async def test_flow_terminal_via_process_flow_task_in_worker_context(
     container,
     observability_caplog: pytest.LogCaptureFixture,
     unique_id: str,
-    mock_context,
+    system_member_context,
 ) -> None:
     flow_id = f"flow-worker-terminal-{unique_id}"
     await container.flow_repository.set(
@@ -119,8 +119,7 @@ async def test_flow_terminal_via_process_flow_task_in_worker_context(
     await record_flow_task_enqueued(container.redis_client, task_id=task_id, flow_id=flow_id)
 
     setup_mock_responses(response_queue=["hello from worker"])
-    ctx = Context.from_dict(mock_context.to_dict())
-    ctx.session_id = state.session_id
+    ctx = system_member_context.model_copy(update={"session_id": state.session_id})
     set_context(ctx)
 
     _ = await process_flow_task(
@@ -130,7 +129,7 @@ async def test_flow_terminal_via_process_flow_task_in_worker_context(
         content=state.content,
         task_id=task_id,
         context_id=state.context_id,
-        context_data=mock_context.to_dict(),
+        context_data=ctx.to_dict(),
     )
     await maybe_record_flow_terminal(
         container.redis_client,
