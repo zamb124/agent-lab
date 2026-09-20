@@ -482,7 +482,11 @@ class WikiClient:
             headers=self._ns_headers(),
             params={"limit": str(args.limit)},
         )
-        items = self._as_objects(raw, "wiki.revisions") if isinstance(raw, list) else []
+        body = require_json_object(raw, "wiki.revisions")
+        raw_items = body.get("items")
+        if not isinstance(raw_items, list):
+            raise ValueError("wiki.revisions.items must be a list")
+        items = self._as_objects(raw_items, "wiki.revisions.items")
         briefs: list[JsonObject] = [
             {
                 "wiki_revision_id": item.get("wiki_revision_id"),

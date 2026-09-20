@@ -626,9 +626,9 @@ export class WikiPageView extends PlatformPage {
             acceptMimePrefix,
             uploadOpName: 'platform/file_create',
             uploadSpec: this._wikiFileCreateSpec(metadata),
-            catalogsOpName: 'wiki/catalogs',
-            documentsOpName: 'wiki/documents',
-            searchOpName: 'wiki/documents_search',
+            catalogsOpName: 'office/catalogs_list',
+            documentsOpName: 'office/documents_list',
+            searchOpName: 'office/documents_search',
             onSelect,
         });
     }
@@ -708,7 +708,13 @@ export class WikiPageView extends PlatformPage {
             return pages;
         }
         const found = await this._search.run({ query: trimmed, mode: 'lexical', limit: 6 });
-        const hits = Array.isArray(found.items) ? found.items : [];
+        if (found === null) {
+            return pages;
+        }
+        if (typeof found !== 'object' || !Array.isArray(found.items)) {
+            throw new Error('wiki mention search: result.items required');
+        }
+        const hits = found.items;
         const extra = hits
             .filter((hit) => !pages.some((page) => page.id === hit.wiki_page_id))
             .map((hit) => ({ id: hit.wiki_page_id, kind: 'wiki_page', label: hit.title }));

@@ -276,7 +276,7 @@ export class WikiPagePanel extends PlatformElement {
             return;
         }
         if (this.tab === 'backlinks') {
-            void this._backlinks.run({ target_id: this.pageId });
+            void this._backlinks.run({ target_kind: 'wiki_page', target_id: this.pageId });
             return;
         }
         if (this.tab === 'comments') {
@@ -378,7 +378,13 @@ export class WikiPagePanel extends PlatformElement {
 
     _renderBacklinks() {
         const result = this._backlinks.lastResult;
-        const links = result && Array.isArray(result.items) ? result.items : [];
+        if (result === null) {
+            return html`<div class="muted">${this.t('page.backlinks_empty')}</div>`;
+        }
+        if (typeof result !== 'object' || !Array.isArray(result.items)) {
+            throw new Error('wiki backlinks: lastResult.items required');
+        }
+        const links = result.items;
         if (links.length === 0) {
             return html`<div class="muted">${this.t('page.backlinks_empty')}</div>`;
         }
@@ -397,7 +403,13 @@ export class WikiPagePanel extends PlatformElement {
 
     _commentItems() {
         const result = this._commentsOp.lastResult;
-        return result && Array.isArray(result.items) ? result.items : [];
+        if (result === null) {
+            return [];
+        }
+        if (typeof result !== 'object' || !Array.isArray(result.items)) {
+            throw new Error('wiki comments: lastResult.items required');
+        }
+        return result.items;
     }
 
     async _sendComment() {
@@ -459,7 +471,13 @@ export class WikiPagePanel extends PlatformElement {
 
     _revisionItems() {
         const result = this._revisions.lastResult;
-        return Array.isArray(result) ? result : [];
+        if (result === null) {
+            return [];
+        }
+        if (typeof result !== 'object' || !Array.isArray(result.items)) {
+            throw new Error('wiki revisions: lastResult.items required');
+        }
+        return result.items;
     }
 
     async _selectRevision(revisionId) {

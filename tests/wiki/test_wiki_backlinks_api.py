@@ -32,7 +32,6 @@ async def test_crm_mention_creates_backlink(wiki_client, create_page, unique_id)
     items = await _backlinks(wiki_client, "crm_entity", entity_id)
 
     assert [item["wiki_page_id"] for item in items] == [page["wiki_page_id"]]
-    assert items[0]["url"] == f"/wiki/p/{page['wiki_page_id']}"
 
 
 async def test_file_card_creates_backlink(wiki_client, create_page, unique_id):

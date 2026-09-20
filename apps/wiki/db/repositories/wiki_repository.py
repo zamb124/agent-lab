@@ -34,6 +34,7 @@ from apps.wiki.models.domain import (
     WikiRevisionSummary,
     WikiSearchHit,
 )
+from core.db.utils import get_rowcount
 from core.types import JsonObject, require_json_object
 
 
@@ -905,15 +906,16 @@ class WikiRepository:
 
     async def delete_comment(
         self, company_id: str, namespace: str, wiki_comment_id: str
-    ) -> None:
+    ) -> int:
         async with self._db.session() as session:
             stmt = delete(WikiCommentRow).where(
                 WikiCommentRow.company_id == company_id,
                 WikiCommentRow.namespace == namespace,
                 WikiCommentRow.wiki_comment_id == wiki_comment_id,
             )
-            _ = await session.execute(stmt)
+            result = await session.execute(stmt)
             await session.commit()
+            return get_rowcount(result)
 
 
 __all__ = ["WikiRepository"]

@@ -13,6 +13,7 @@ export const wikiNamespacesResource = createResourceCollection({
     baseUrl: '/wiki/api/v1/namespaces',
     idField: 'name',
     operations: ['list'],
-    transport: 'http',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
     listQuery: () => ({ limit: 200, offset: 0 }),
 });

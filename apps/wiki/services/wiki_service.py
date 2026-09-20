@@ -172,8 +172,8 @@ class WikiService:
         """Корзина пространства: удаление зачищает FGA-tuples страницы,
 
         поэтому доступ к корзине определяется одной проверкой членства в
-        namespace (`require_scope`), не FGA per-page `can_view` — его после
-        удаления не осталось ни у кого, включая владельца.
+        namespace (`require_namespace` + `platform_namespace` viewer), не FGA
+        per-page `can_view` — его после удаления не осталось ни у кого, включая владельца.
         """
         return await self._repo.list_deleted(company_id, namespace)
 
@@ -1029,6 +1029,7 @@ class WikiService:
                     snippet=result.content[:280],
                     heading_path=raw_heading if isinstance(raw_heading, str) else "",
                     score=result.score,
+                    channel="semantic",
                     updated_at=summary.updated_at,
                 )
             )
@@ -1090,7 +1091,11 @@ class WikiService:
         self, company_id: str, namespace: str, user_id: str, wiki_comment_id: str
     ) -> None:
         _ = user_id
-        await self._repo.delete_comment(company_id, namespace, wiki_comment_id)
+        deleted_count = await self._repo.delete_comment(
+            company_id, namespace, wiki_comment_id
+        )
+        if deleted_count == 0:
+            raise WikiPageNotFoundError(f"Комментарий {wiki_comment_id} не найден")
 
     # --- вспомогательное ---
 

@@ -1,23 +1,14 @@
 /**
  * Страницы wiki: дерево пространства, содержимое, перемещение, корзина.
  *
- * Дерево приходит без содержимого страниц — контент грузится отдельной
- * операцией по мере открытия, иначе переключение пространства тянуло бы
- * весь текст базы знаний.
+ * Mutating/read команды идут одним `op_*` через WS RPC и REST-зеркало.
+ * Namespace едет в `PlatformEvent.meta.namespace`.
  *
- * Все запросы адресованы рабочему пространству: заголовок
- * `X-Platform-Namespace` обязателен, без него backend отвечает ошибкой.
- *
- * Mutating/read endpoints возвращают `WikiPageResponse { page, can_edit, ... }`.
- * Фабрики отдают наружу только `page`: UI и push-редьюсеры работают с
- * канонической моделью `WikiPage`, а не с обёрткой ответа.
+ * Ответ страницы — `WikiPageResponse { page, can_edit, can_admin }`.
+ * extraReducer оставляет в lastResult каноническую `WikiPage`.
  */
 
 import { createAsyncOp, createResourceCollection } from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
-import { platformNamespaceHeader } from '@platform/lib/utils/platform-namespace-header.js';
-
-const BASE_URL = '/wiki/api/v1/pages';
 
 export const WIKI_PAGE_EVENTS = [
     'wiki/page/created',
@@ -38,23 +29,23 @@ function mergeSummary(state, summary) {
     return { ...state, items, byId: { ...state.byId, [id]: summary } };
 }
 
-/** @param {unknown} response */
-function unwrapWikiPage(response) {
+function unwrapWikiPageResult(state, event, events) {
+    if (event.type !== events.SUCCEEDED) {
+        return state;
+    }
+    if (!event.payload || !('result' in event.payload)) {
+        throw new Error('wiki pages: SUCCEEDED payload.result required');
+    }
+    const result = event.payload.result;
     if (
-        !response
-        || typeof response !== 'object'
-        || !('page' in response)
-        || response.page === null
-        || typeof response.page !== 'object'
+        !result
+        || typeof result !== 'object'
+        || result.page === null
+        || typeof result.page !== 'object'
     ) {
         throw new Error('wiki pages: ожидался WikiPageResponse с полем page');
     }
-    return response.page;
-}
-
-/** @param {Parameters<typeof httpRequest>[0]} options */
-async function requestWikiPage(options) {
-    return unwrapWikiPage(await httpRequest(options));
+    return { ...state, lastResult: result.page };
 }
 
 export const wikiPagesResource = createResourceCollection({
@@ -62,203 +53,161 @@ export const wikiPagesResource = createResourceCollection({
     baseUrl: '/wiki/api/v1/pages',
     idField: 'wiki_page_id',
     operations: ['list'],
-    transport: 'http',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
     itemsPath: 'items',
-    requestHeaders: ({ ctx }) => platformNamespaceHeader(ctx),
-    extraReducers: {
-        'wiki/page/created': (state, payload) => mergeSummary(state, payload.page),
-        'wiki/page/updated': (state, payload) => mergeSummary(state, payload.page),
-        'wiki/page/published': (state, payload) => mergeSummary(state, payload.page),
-        'wiki/page/restored': (state, payload) => mergeSummary(state, payload.page),
-        'wiki/page/moved': (state, payload) => mergeSummary(state, payload.page),
-        'wiki/page/deleted': (state, payload) => {
-            const removed = new Set(payload.affected_page_ids);
+    listQuery: () => ({}),
+    extraReducer: (state, event) => {
+        if (
+            WIKI_PAGE_EVENTS.includes(event.type)
+            && event.type !== 'wiki/page/deleted'
+            && event.type !== 'wiki/page/access_changed'
+        ) {
+            if (!event.payload || typeof event.payload.page !== 'object' || event.payload.page === null) {
+                throw new Error(`${event.type}: payload.page required`);
+            }
+            return mergeSummary(state, event.payload.page);
+        }
+        if (event.type === 'wiki/page/deleted') {
+            if (!event.payload || !Array.isArray(event.payload.affected_page_ids)) {
+                throw new Error('wiki/page/deleted: payload.affected_page_ids required');
+            }
+            const removed = new Set(event.payload.affected_page_ids);
             const items = state.items.filter((item) => item && !removed.has(item.wiki_page_id));
             const byId = { ...state.byId };
             for (const id of removed) delete byId[id];
             return { ...state, items, byId };
-        },
+        }
+        return state;
     },
 });
 
 export const wikiPageReadOp = createAsyncOp({
     name: 'wiki/page_read',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'wiki/pages/item_requested',
     restMirror: { method: 'GET', path: '/wiki/api/v1/pages/:wiki_page_id' },
-    request: ({ payload, ctx }) => requestWikiPage({
-        method: 'GET',
-        url: `${BASE_URL}/${payload.wiki_page_id}`,
-        headers: platformNamespaceHeader(ctx),
-    }),
+    extraReducer: unwrapWikiPageResult,
 });
 
 export const wikiPageCreateOp = createAsyncOp({
     name: 'wiki/page_create',
     successToastKey: 'wiki:toast.page.created',
     errorToastKey: 'wiki:toast.page.create_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'wiki/pages/create_requested',
     restMirror: { method: 'POST', path: '/wiki/api/v1/pages' },
-    request: ({ payload, ctx }) => requestWikiPage({
-        method: 'POST',
-        url: BASE_URL,
-        headers: platformNamespaceHeader(ctx),
-        body: payload,
-    }),
+    extraReducer: unwrapWikiPageResult,
 });
 
 export const wikiPageSaveOp = createAsyncOp({
     name: 'wiki/page_save',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'wiki/pages/content_update_requested',
     restMirror: { method: 'PUT', path: '/wiki/api/v1/pages/:wiki_page_id/content' },
-    request: ({ payload, ctx }) => requestWikiPage({
-        method: 'PUT',
-        url: `${BASE_URL}/${payload.wiki_page_id}/content`,
-        headers: platformNamespaceHeader(ctx),
-        body: {
-            content: payload.content,
-            title: payload.title,
-            create_revision: payload.create_revision,
-        },
-    }),
+    extraReducer: unwrapWikiPageResult,
 });
 
 export const wikiPagePropertiesOp = createAsyncOp({
     name: 'wiki/page_properties',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'wiki/pages/properties_update_requested',
     restMirror: { method: 'PATCH', path: '/wiki/api/v1/pages/:wiki_page_id' },
-    request: ({ payload, ctx }) => {
-        const { wiki_page_id: pageId, ...body } = payload;
-        return requestWikiPage({
-            method: 'PATCH',
-            url: `${BASE_URL}/${pageId}`,
-            headers: platformNamespaceHeader(ctx),
-            body,
-        });
-    },
+    extraReducer: unwrapWikiPageResult,
 });
 
 export const wikiPageMoveOp = createAsyncOp({
     name: 'wiki/page_move',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'wiki/pages/move_requested',
     restMirror: { method: 'POST', path: '/wiki/api/v1/pages/:wiki_page_id/move' },
-    request: ({ payload, ctx }) => requestWikiPage({
-        method: 'POST',
-        url: `${BASE_URL}/${payload.wiki_page_id}/move`,
-        headers: platformNamespaceHeader(ctx),
-        body: { parent_page_id: payload.parent_page_id, position: payload.position },
-    }),
+    extraReducer: unwrapWikiPageResult,
 });
 
 export const wikiPageMoveNamespaceOp = createAsyncOp({
     name: 'wiki/page_move_namespace',
     successToastKey: 'wiki:toast.page.namespace_changed',
     errorToastKey: 'wiki:toast.page.namespace_change_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'wiki/pages/move_namespace_requested',
     restMirror: { method: 'POST', path: '/wiki/api/v1/pages/:wiki_page_id/move-namespace' },
-    request: ({ payload, ctx }) => requestWikiPage({
-        method: 'POST',
-        url: `${BASE_URL}/${payload.wiki_page_id}/move-namespace`,
-        headers: platformNamespaceHeader(ctx),
-        body: {
-            target_namespace: payload.target_namespace,
-            parent_page_id: payload.parent_page_id,
-        },
-    }),
+    extraReducer: unwrapWikiPageResult,
 });
 
 export const wikiPageDeleteOp = createAsyncOp({
     name: 'wiki/page_delete',
     successToastKey: 'wiki:toast.page.deleted',
     errorToastKey: 'wiki:toast.page.delete_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'wiki/pages/remove_requested',
     restMirror: { method: 'DELETE', path: '/wiki/api/v1/pages/:wiki_page_id' },
-    request: ({ payload, ctx }) => httpRequest({
-        method: 'DELETE',
-        url: `${BASE_URL}/${payload.wiki_page_id}`,
-        headers: platformNamespaceHeader(ctx),
-    }),
 });
 
 export const wikiPageRestoreOp = createAsyncOp({
     name: 'wiki/page_restore',
     successToastKey: 'wiki:toast.page.restored',
     errorToastKey: 'wiki:toast.page.restore_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'wiki/pages/restore_requested',
     restMirror: { method: 'POST', path: '/wiki/api/v1/pages/:wiki_page_id/restore' },
-    request: ({ payload, ctx }) => requestWikiPage({
-        method: 'POST',
-        url: `${BASE_URL}/${payload.wiki_page_id}/restore`,
-        headers: platformNamespaceHeader(ctx),
-    }),
+    extraReducer: unwrapWikiPageResult,
 });
 
 export const wikiDeletedPagesOp = createAsyncOp({
     name: 'wiki/pages_deleted',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'wiki/pages/deleted_list_requested',
     restMirror: { method: 'GET', path: '/wiki/api/v1/pages/deleted' },
-    request: ({ ctx }) => httpRequest({
-        method: 'GET',
-        url: `${BASE_URL}/deleted`,
-        headers: platformNamespaceHeader(ctx),
-    }),
 });
 
 export const wikiPageMarkdownOp = createAsyncOp({
     name: 'wiki/page_markdown',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'wiki/pages/markdown_requested',
     restMirror: { method: 'GET', path: '/wiki/api/v1/pages/:wiki_page_id/markdown' },
-    request: ({ payload, ctx }) => httpRequest({
-        method: 'GET',
-        url: `${BASE_URL}/${payload.wiki_page_id}/markdown`,
-        headers: platformNamespaceHeader(ctx),
-    }),
 });
 
-/**
- * Импорт файла в существующую страницу.
- *
- * Ответ отдаётся целиком, а не только `page`: заметки о том, что не перенеслось,
- * нужны UI, чтобы показать их пользователю.
- */
 export const wikiPageMarkdownImportOp = createAsyncOp({
     name: 'wiki/page_markdown_import',
     successToastKey: 'wiki:toast.markdown.imported',
     errorToastKey: 'wiki:toast.markdown.import_failed',
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'wiki/pages/markdown_import_requested',
     restMirror: { method: 'POST', path: '/wiki/api/v1/pages/:wiki_page_id/import/markdown' },
-    request: ({ payload, ctx }) => httpRequest({
-        method: 'POST',
-        url: `${BASE_URL}/${payload.wiki_page_id}/import/markdown`,
-        headers: platformNamespaceHeader(ctx),
-        body: {
-            markdown: payload.markdown,
-            apply_front_matter: payload.apply_front_matter,
-        },
-    }),
 });
 
-/** Разбор markdown без записи: вставка в редактор и предпросмотр. */
 export const wikiMarkdownParseOp = createAsyncOp({
     name: 'wiki/markdown_parse',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'wiki/pages/markdown_parse_requested',
     restMirror: { method: 'POST', path: '/wiki/api/v1/pages/markdown/parse' },
-    request: ({ payload, ctx }) => httpRequest({
-        method: 'POST',
-        url: `${BASE_URL}/markdown/parse`,
-        headers: platformNamespaceHeader(ctx),
-        body: { markdown: payload.markdown },
-    }),
 });
 
-/** Импорт файла новой страницей. */
 export const wikiPageMarkdownCreateOp = createAsyncOp({
     name: 'wiki/page_markdown_create',
     successToastKey: 'wiki:toast.markdown.imported',
     errorToastKey: 'wiki:toast.markdown.import_failed',
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'wiki/pages/markdown_create_requested',
     restMirror: { method: 'POST', path: '/wiki/api/v1/pages/import/markdown' },
-    request: ({ payload, ctx }) => httpRequest({
-        method: 'POST',
-        url: `${BASE_URL}/import/markdown`,
-        headers: platformNamespaceHeader(ctx),
-        body: {
-            markdown: payload.markdown,
-            parent_page_id: payload.parent_page_id,
-            apply_front_matter: payload.apply_front_matter,
-        },
-    }),
 });

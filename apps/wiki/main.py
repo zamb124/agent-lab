@@ -16,6 +16,7 @@ from apps.wiki.api import get_api_router
 from apps.wiki.config import WikiSettings
 from apps.wiki.container import WikiContainer, get_wiki_container
 from apps.wiki.dependencies import ContainerDep
+from apps.wiki.realtime.command_router import register_wiki_ws_commands
 from core.app import create_service_app
 from core.config import get_settings
 from core.logging import get_logger
@@ -28,7 +29,8 @@ logger = get_logger(__name__)
 
 async def on_startup(app: FastAPI, container: WikiContainer, settings: WikiSettings) -> None:
     _ = app, container, settings
-    logger.info("Wiki Service: запущен")
+    register_wiki_ws_commands()
+    logger.info("Wiki Service: command-router op_* зарегистрирован")
 
 
 app = create_service_app(

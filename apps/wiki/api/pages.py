@@ -1,27 +1,12 @@
-"""
-Страницы wiki: дерево, чтение, запись, перемещение, корзина.
-
-Каждый обработчик начинается с `require_scope`: без проверенного пространства
-операции не существует.
-"""
+"""Страницы wiki: тонкая REST-обвязка тех же `op_*`."""
 
 from __future__ import annotations
 
 from typing import Annotated
-from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from fastapi.responses import PlainTextResponse
 
-from apps.wiki.api._scope import load_viewable_page, require_scope, wiki_page_response
-from apps.wiki.content.markdown_file import markdown_file_name, split_markdown_file
-from apps.wiki.content.markdown_parser import (
-    WikiMarkdownError,
-    markdown_to_document,
-    parse_markdown,
-)
-from apps.wiki.content.prosemirror import ProseMirrorNode
-from apps.wiki.content.schema import WikiSchemaError
 from apps.wiki.dependencies import ContainerDep
 from apps.wiki.models.api import (
     WikiMarkdownImportRequest,
@@ -38,119 +23,91 @@ from apps.wiki.models.api import (
     WikiTreeResponse,
 )
 from apps.wiki.models.domain import WikiPageSummary
-from apps.wiki.services.wiki_service import WikiAccessDeniedError, WikiPageNotFoundError
-from core.logging import get_logger
-
-logger = get_logger(__name__)
+from apps.wiki.realtime.operations import (
+    WikiChildrenPayload,
+    WikiEmptyPayload,
+    WikiMarkdownImportPagePayload,
+    WikiPageContentUpdatePayload,
+    WikiPageIdPayload,
+    WikiPageMoveNamespacePayload,
+    WikiPageMovePayload,
+    WikiPagePropertiesUpdatePayload,
+    markdown_file_disposition,
+    op_pages_children_list,
+    op_pages_content_update,
+    op_pages_create,
+    op_pages_deleted_list,
+    op_pages_get,
+    op_pages_list,
+    op_pages_markdown,
+    op_pages_markdown_create,
+    op_pages_markdown_file,
+    op_pages_markdown_import,
+    op_pages_markdown_parse,
+    op_pages_move,
+    op_pages_move_namespace,
+    op_pages_properties_update,
+    op_pages_remove,
+    op_pages_restore,
+)
+from core.context import require_context
+from core.pagination import ListResponse
 
 router = APIRouter(prefix="/pages", tags=["wiki-pages"])
 
 
-def _resolve_content(
-    content: ProseMirrorNode | None, markdown: str | None
-) -> ProseMirrorNode | None:
-    """Свести два способа задать содержимое к одному документу.
-
-    Оба поля сразу — ошибка вызывающего: молча выбрать одно из них значит
-    потерять то, что человек или агент реально прислал.
-    """
-    if content is not None and markdown is not None:
-        raise HTTPException(
-            status_code=400, detail="Укажите либо content, либо markdown, но не оба поля"
-        )
-    if markdown is None:
-        return content
-    try:
-        return markdown_to_document(markdown)
-    except WikiMarkdownError as exc:
-        raise HTTPException(status_code=400, detail=f"Markdown не разобран: {exc}") from exc
-
-
 @router.get("", response_model=WikiTreeResponse)
 async def list_tree(container: ContainerDep) -> WikiTreeResponse:
-    """Дерево страниц текущего пространства."""
-    scope = await require_scope(container)
-    items = await container.wiki_service.list_tree(
-        scope.company_id, scope.namespace, scope.user_id
+    return await op_pages_list(
+        WikiEmptyPayload(), user=require_context().user, container=container
     )
-    return WikiTreeResponse(namespace=scope.namespace, items=items)
 
 
 @router.get("/deleted", response_model=WikiTreeResponse)
 async def list_deleted(container: ContainerDep) -> WikiTreeResponse:
-    scope = await require_scope(container)
-    items = await container.wiki_service.list_deleted(scope.company_id, scope.namespace)
-    return WikiTreeResponse(namespace=scope.namespace, items=items)
+    return await op_pages_deleted_list(
+        WikiEmptyPayload(), user=require_context().user, container=container
+    )
 
 
 @router.post("", response_model=WikiPageResponse, status_code=201)
 async def create_page(
     container: ContainerDep, request: WikiPageCreateRequest
 ) -> WikiPageResponse:
-    scope = await require_scope(container)
-    content = _resolve_content(request.content, request.markdown)
-    try:
-        page = await container.wiki_service.create_page(
-            company_id=scope.company_id,
-            namespace=scope.namespace,
-            user_id=scope.user_id,
-            title=request.title,
-            parent_page_id=request.parent_page_id,
-            content=content,
-            icon=request.icon,
-        )
-    except WikiSchemaError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except WikiPageNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Родительская страница не найдена") from exc
-    except WikiAccessDeniedError as exc:
-        raise HTTPException(status_code=403, detail="Нет прав на создание страницы") from exc
-    return await wiki_page_response(container, page, user_id=scope.user_id)
+    return await op_pages_create(request, user=require_context().user, container=container)
 
 
 @router.get("/{wiki_page_id}", response_model=WikiPageResponse)
 async def get_page(container: ContainerDep, wiki_page_id: str) -> WikiPageResponse:
-    scope = await require_scope(container)
-    page = await load_viewable_page(container, scope, wiki_page_id)
-    return await wiki_page_response(container, page, user_id=scope.user_id)
+    return await op_pages_get(
+        WikiPageIdPayload(wiki_page_id=wiki_page_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.get("/{wiki_page_id}/markdown", response_model=WikiMarkdownResponse)
 async def get_page_markdown(
     container: ContainerDep, wiki_page_id: str
 ) -> WikiMarkdownResponse:
-    """Markdown страницы — для чтения агентами.
-
-    Отдаёт только содержимое, без YAML-шапки: свойства страницы агент читает из
-    обычного ответа `GET /pages/{id}`, а шапка засоряла бы текст.
-    """
-    scope = await require_scope(container)
-    page = await load_viewable_page(container, scope, wiki_page_id)
-    return WikiMarkdownResponse(
-        wiki_page_id=page.wiki_page_id,
-        title=page.title,
-        markdown=page.text_markdown,
+    return await op_pages_markdown(
+        WikiPageIdPayload(wiki_page_id=wiki_page_id),
+        user=require_context().user,
+        container=container,
     )
 
 
 @router.get("/{wiki_page_id}/markdown/file", response_class=PlainTextResponse)
 async def download_page_markdown(container: ContainerDep, wiki_page_id: str) -> PlainTextResponse:
-    """Выгрузка страницы файлом: YAML-шапка со свойствами плюс содержимое.
-
-    Отдельный роут вместо флага у JSON-варианта: браузеру нужен заголовок
-    вложения и `text/markdown`, а агенту — чистое тело в JSON.
-    """
-    scope = await require_scope(container)
-    page = await load_viewable_page(container, scope, wiki_page_id)
-    file_name = markdown_file_name(page.title, page.wiki_page_id)
+    result = await op_pages_markdown_file(
+        WikiPageIdPayload(wiki_page_id=wiki_page_id),
+        user=require_context().user,
+        container=container,
+    )
     return PlainTextResponse(
-        content=container.wiki_service.export_markdown_file(page),
+        content=result.body,
         media_type="text/markdown; charset=utf-8",
-        headers={
-            "Content-Disposition": (
-                f"attachment; filename*=UTF-8''{quote(file_name)}"
-            )
-        },
+        headers={"Content-Disposition": markdown_file_disposition(result.file_name)},
     )
 
 
@@ -158,20 +115,8 @@ async def download_page_markdown(container: ContainerDep, wiki_page_id: str) -> 
 async def parse_markdown_fragment(
     container: ContainerDep, request: WikiMarkdownParseRequest
 ) -> WikiMarkdownParseResponse:
-    """Разобрать markdown в документ, ничего не записывая.
-
-    Нужен вставке в редактор: диалект и его расширения знает только сервер, и
-    второй реализации разбора в браузере быть не должно.
-    """
-    scope = await require_scope(container)
-    _ = scope
-    parts = split_markdown_file(request.markdown)
-    try:
-        parsed = parse_markdown(parts.body)
-    except WikiMarkdownError as exc:
-        raise HTTPException(status_code=400, detail=f"Markdown не разобран: {exc}") from exc
-    return WikiMarkdownParseResponse(
-        document=parsed.document, notices=[*parts.notices, *parsed.notices]
+    return await op_pages_markdown_parse(
+        request, user=require_context().user, container=container
     )
 
 
@@ -179,87 +124,50 @@ async def parse_markdown_fragment(
 async def import_markdown_as_page(
     container: ContainerDep, request: WikiMarkdownImportRequest
 ) -> WikiMarkdownImportResponse:
-    """Создать страницу из markdown-файла."""
-    scope = await require_scope(container)
-    try:
-        page, notices = await container.wiki_service.import_markdown(
-            company_id=scope.company_id,
-            namespace=scope.namespace,
-            user_id=scope.user_id,
-            markdown=request.markdown,
-            parent_page_id=request.parent_page_id,
-            apply_front_matter=request.apply_front_matter,
-        )
-    except WikiMarkdownError as exc:
-        raise HTTPException(status_code=400, detail=f"Markdown не разобран: {exc}") from exc
-    except WikiPageNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Родительская страница не найдена") from exc
-    except WikiAccessDeniedError as exc:
-        raise HTTPException(status_code=403, detail="Нет прав на создание страницы") from exc
-    return WikiMarkdownImportResponse(page=page, notices=notices)
+    return await op_pages_markdown_create(
+        request, user=require_context().user, container=container
+    )
 
 
 @router.post("/{wiki_page_id}/import/markdown", response_model=WikiMarkdownImportResponse)
 async def import_markdown_into_page(
     container: ContainerDep, wiki_page_id: str, request: WikiMarkdownImportRequest
 ) -> WikiMarkdownImportResponse:
-    """Заменить содержимое страницы markdown-файлом."""
-    scope = await require_scope(container)
-    try:
-        page, notices = await container.wiki_service.import_markdown(
-            company_id=scope.company_id,
-            namespace=scope.namespace,
-            user_id=scope.user_id,
-            markdown=request.markdown,
+    return await op_pages_markdown_import(
+        WikiMarkdownImportPagePayload(
             wiki_page_id=wiki_page_id,
+            markdown=request.markdown,
+            parent_page_id=request.parent_page_id,
             apply_front_matter=request.apply_front_matter,
-        )
-    except WikiMarkdownError as exc:
-        raise HTTPException(status_code=400, detail=f"Markdown не разобран: {exc}") from exc
-    except WikiPageNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Страница не найдена") from exc
-    except WikiAccessDeniedError as exc:
-        raise HTTPException(status_code=403, detail="Нет прав на изменение страницы") from exc
-    return WikiMarkdownImportResponse(page=page, notices=notices)
+        ),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.put("/{wiki_page_id}/content", response_model=WikiPageResponse)
 async def update_content(
     container: ContainerDep, wiki_page_id: str, request: WikiPageContentUpdateRequest
 ) -> WikiPageResponse:
-    scope = await require_scope(container)
-    content = _resolve_content(request.content, request.markdown)
-    if content is None:
-        raise HTTPException(status_code=400, detail="Не передано содержимое страницы")
-    try:
-        page = await container.wiki_service.update_page_content(
-            company_id=scope.company_id,
-            namespace=scope.namespace,
-            user_id=scope.user_id,
+    return await op_pages_content_update(
+        WikiPageContentUpdatePayload(
             wiki_page_id=wiki_page_id,
-            content=content,
+            content=request.content,
+            markdown=request.markdown,
             title=request.title,
             create_revision=request.create_revision,
-        )
-    except WikiSchemaError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except WikiPageNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Страница не найдена") from exc
-    except WikiAccessDeniedError as exc:
-        raise HTTPException(status_code=403, detail="Нет прав на изменение страницы") from exc
-    return await wiki_page_response(container, page, user_id=scope.user_id)
+        ),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.patch("/{wiki_page_id}", response_model=WikiPageResponse)
 async def update_properties(
     container: ContainerDep, wiki_page_id: str, request: WikiPagePropertiesUpdateRequest
 ) -> WikiPageResponse:
-    scope = await require_scope(container)
-    try:
-        page = await container.wiki_service.update_page_properties(
-            company_id=scope.company_id,
-            namespace=scope.namespace,
-            user_id=scope.user_id,
+    return await op_pages_properties_update(
+        WikiPagePropertiesUpdatePayload(
             wiki_page_id=wiki_page_id,
             title=request.title,
             icon=request.icon,
@@ -267,106 +175,68 @@ async def update_properties(
             is_published=request.is_published,
             is_template=request.is_template,
             is_full_width=request.is_full_width,
-        )
-    except WikiPageNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Страница не найдена") from exc
-    except WikiAccessDeniedError as exc:
-        raise HTTPException(status_code=403, detail="Нет прав на изменение страницы") from exc
-    return await wiki_page_response(container, page, user_id=scope.user_id)
+        ),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post("/{wiki_page_id}/move", response_model=WikiPageResponse)
 async def move_page(
     container: ContainerDep, wiki_page_id: str, request: WikiPageMoveRequest
 ) -> WikiPageResponse:
-    scope = await require_scope(container)
-    try:
-        page = await container.wiki_service.move_page(
-            company_id=scope.company_id,
-            namespace=scope.namespace,
-            user_id=scope.user_id,
+    return await op_pages_move(
+        WikiPageMovePayload(
             wiki_page_id=wiki_page_id,
-            new_parent_page_id=request.parent_page_id,
+            parent_page_id=request.parent_page_id,
             position=request.position,
-        )
-    except WikiPageNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Страница не найдена") from exc
-    except WikiAccessDeniedError as exc:
-        raise HTTPException(status_code=403, detail="Нет прав на перемещение") from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return await wiki_page_response(container, page, user_id=scope.user_id)
+        ),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post("/{wiki_page_id}/move-namespace", response_model=WikiPageResponse)
 async def move_page_to_namespace(
     container: ContainerDep, wiki_page_id: str, request: WikiPageMoveNamespaceRequest
 ) -> WikiPageResponse:
-    """Перенести страницу с поддеревом в другое пространство."""
-    scope = await require_scope(container)
-    target = await container.namespace_service.get(request.target_namespace)
-    if target is None or target.company_id != scope.company_id:
-        raise HTTPException(status_code=400, detail="Целевое пространство недоступно")
-
-    try:
-        page = await container.wiki_service.move_page_to_namespace(
-            company_id=scope.company_id,
-            namespace=scope.namespace,
-            target_namespace=target.name,
-            user_id=scope.user_id,
+    return await op_pages_move_namespace(
+        WikiPageMoveNamespacePayload(
             wiki_page_id=wiki_page_id,
-            new_parent_page_id=request.parent_page_id,
-        )
-    except WikiPageNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Страница не найдена") from exc
-    except WikiAccessDeniedError as exc:
-        raise HTTPException(status_code=403, detail="Нет прав на перенос страницы") from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return await wiki_page_response(container, page, user_id=scope.user_id)
+            target_namespace=request.target_namespace,
+            parent_page_id=request.parent_page_id,
+        ),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.delete("/{wiki_page_id}", status_code=204)
 async def delete_page(container: ContainerDep, wiki_page_id: str) -> None:
-    scope = await require_scope(container)
-    try:
-        affected = await container.wiki_service.delete_page(
-            scope.company_id, scope.namespace, scope.user_id, wiki_page_id
-        )
-    except WikiPageNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Страница не найдена") from exc
-    except WikiAccessDeniedError as exc:
-        raise HTTPException(status_code=403, detail="Нет прав на удаление") from exc
-    logger.info(
-        "wiki.page.deleted",
-        extra={"wiki_page_id": wiki_page_id, "pages": len(affected)},
+    await op_pages_remove(
+        WikiPageIdPayload(wiki_page_id=wiki_page_id),
+        user=require_context().user,
+        container=container,
     )
 
 
 @router.post("/{wiki_page_id}/restore", response_model=WikiPageResponse)
 async def restore_page(container: ContainerDep, wiki_page_id: str) -> WikiPageResponse:
-    scope = await require_scope(container)
-    try:
-        page = await container.wiki_service.restore_page(
-            scope.company_id, scope.namespace, scope.user_id, wiki_page_id
-        )
-    except WikiPageNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Страница не найдена") from exc
-    return await wiki_page_response(container, page, user_id=scope.user_id)
+    return await op_pages_restore(
+        WikiPageIdPayload(wiki_page_id=wiki_page_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
-@router.get("/{wiki_page_id}/children", response_model=list[WikiPageSummary])
+@router.get("/{wiki_page_id}/children", response_model=ListResponse[WikiPageSummary])
 async def list_children(
     container: ContainerDep,
     wiki_page_id: str,
     include_self: Annotated[bool, Query()] = False,
-) -> list[WikiPageSummary]:
-    scope = await require_scope(container)
-    _ = await load_viewable_page(container, scope, wiki_page_id)
-    tree = await container.wiki_service.list_tree(
-        scope.company_id, scope.namespace, scope.user_id
+) -> ListResponse[WikiPageSummary]:
+    return await op_pages_children_list(
+        WikiChildrenPayload(wiki_page_id=wiki_page_id, include_self=include_self),
+        user=require_context().user,
+        container=container,
     )
-    children = [item for item in tree if item.parent_page_id == wiki_page_id]
-    if include_self:
-        children = [item for item in tree if item.wiki_page_id == wiki_page_id] + children
-    return children

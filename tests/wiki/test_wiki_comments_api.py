@@ -112,6 +112,12 @@ async def test_delete_comment_removes_it_from_thread(wiki_client, wiki_page):
     assert (await wiki_client.get(f"{PAGES_URL}/{page_id}/comments")).json()["items"] == []
 
 
+async def test_delete_missing_comment_is_not_found(wiki_client, unique_id):
+    response = await wiki_client.delete(f"{API_PREFIX}/comments/missing-{unique_id}")
+
+    assert response.status_code == 404
+
+
 async def test_colleague_can_comment_open_page(wiki_client_member, wiki_page):
     response = await wiki_client_member.post(
         f"{PAGES_URL}/{wiki_page['wiki_page_id']}/comments",

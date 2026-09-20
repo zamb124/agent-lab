@@ -186,7 +186,13 @@ export class WikiHistoryPage extends PlatformPage {
 
     _revisionItems() {
         const state = this._revisions.lastResult;
-        return Array.isArray(state) ? state : [];
+        if (state === null) {
+            return [];
+        }
+        if (typeof state !== 'object' || !Array.isArray(state.items)) {
+            throw new Error('wiki revisions: lastResult.items required');
+        }
+        return state.items;
     }
 
     async _selectRevision(revisionId) {

@@ -249,6 +249,7 @@ export class WikiPageAccessModal extends PlatformModal {
             wiki_page_id: this.pageId,
             enabled: Boolean(event.detail.value),
             permission: this._linkPermission(),
+            origin: location.origin,
         });
         this._issuedLinkUrl = result && typeof result.url === 'string' ? result.url : '';
         await this._reload();
@@ -259,6 +260,7 @@ export class WikiPageAccessModal extends PlatformModal {
             wiki_page_id: this.pageId,
             enabled: true,
             permission: event.detail.value,
+            origin: location.origin,
         });
         this._issuedLinkUrl = result && typeof result.url === 'string' ? result.url : '';
         await this._reload();
@@ -275,6 +277,7 @@ export class WikiPageAccessModal extends PlatformModal {
             wiki_page_id: this.pageId,
             enabled: true,
             permission: this._linkPermission(),
+            origin: location.origin,
         });
         this._issuedLinkUrl = result && typeof result.url === 'string' ? result.url : '';
         await this._reload();

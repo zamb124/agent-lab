@@ -202,6 +202,7 @@ class WikiSearchHit(WikiBaseModel):
     snippet: str = ""
     heading_path: str = ""
     score: float = 0.0
+    channel: str = "lexical"
     updated_at: datetime
 
 

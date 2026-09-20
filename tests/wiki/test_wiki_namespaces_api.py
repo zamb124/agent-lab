@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 
+from core.models.identity_models import Namespace
 from tests.wiki.conftest import API_PREFIX
 
 pytestmark = pytest.mark.no_test_doubles
@@ -23,8 +24,13 @@ async def test_list_returns_offset_page_shape(wiki_client):
     assert response.status_code == 200, response.text
     body = response.json()
     assert isinstance(body["items"], list)
-    assert body["total"] == len(body["items"])
     assert body["offset"] == 0
+    assert body["limit"] == 200
+    assert body["total"] >= len(body["items"])
+    if body["total"] > body["limit"]:
+        assert len(body["items"]) == body["limit"]
+    else:
+        assert body["total"] == len(body["items"])
 
 
 async def test_list_contains_current_namespace(wiki_client, wiki_namespace):
@@ -34,13 +40,12 @@ async def test_list_contains_current_namespace(wiki_client, wiki_namespace):
     assert wiki_namespace in names
 
 
-async def test_items_expose_only_name_and_default_flag(wiki_client):
+async def test_items_are_platform_namespaces(wiki_client):
     response = await wiki_client.get(NAMESPACES_URL)
 
     items = response.json()["items"]
     assert items, "ожидается хотя бы одно пространство компании"
     for item in items:
-        assert set(item.keys()) == {"name", "is_default"}
-        assert item["name"].strip() == item["name"]
-        assert item["name"] != ""
-        assert isinstance(item["is_default"], bool)
+        namespace = Namespace.model_validate(item)
+        assert namespace.name.strip() == namespace.name
+        assert namespace.name != ""

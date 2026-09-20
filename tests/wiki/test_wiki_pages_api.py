@@ -149,7 +149,7 @@ async def test_update_content_creates_revision_and_rewrites_markdown(
 
     revisions = await wiki_client.get(f"{PAGES_URL}/{page_id}/revisions")
     assert revisions.status_code == 200
-    assert len(revisions.json()) == 1
+    assert len(revisions.json()["items"]) == 1
 
 
 async def test_update_content_without_body_is_rejected(wiki_client, wiki_page):
@@ -284,7 +284,7 @@ async def test_children_endpoint_returns_direct_descendants(wiki_client, create_
     response = await wiki_client.get(f"{PAGES_URL}/{parent['wiki_page_id']}/children")
 
     assert response.status_code == 200, response.text
-    returned = {item["wiki_page_id"] for item in response.json()}
+    returned = {item["wiki_page_id"] for item in response.json()["items"]}
     assert returned == {child["wiki_page_id"]}
     assert grandchild["wiki_page_id"] not in returned
 

@@ -169,7 +169,14 @@ export class WikiSearchPage extends PlatformPage {
         if (seq !== this._seq) {
             return;
         }
-        this._items = Array.isArray(result.items) ? result.items : [];
+        if (result === null) {
+            this._items = [];
+            return;
+        }
+        if (typeof result !== 'object' || !Array.isArray(result.items)) {
+            throw new Error('wiki search: result.items required');
+        }
+        this._items = result.items;
     }
 
     _modeOptions() {

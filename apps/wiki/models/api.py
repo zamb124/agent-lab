@@ -17,10 +17,8 @@ from apps.wiki.content.markdown_notices import WikiMarkdownNotice
 from apps.wiki.content.prosemirror import ProseMirrorNode
 from apps.wiki.models.domain import (
     WikiAccessMemberRelation,
-    WikiComment,
     WikiLinkPermission,
     WikiPage,
-    WikiPageMember,
     WikiPageSummary,
 )
 
@@ -106,15 +104,6 @@ class WikiPublicLinkResponse(WikiBaseModel):
     url: str | None = None
 
 
-class WikiAccessResponse(WikiBaseModel):
-    wiki_page_id: str
-    company_visible: bool
-    inherited_from_page_id: str | None = None
-    members: list[WikiPageMember] = Field(default_factory=list)
-    link_enabled: bool = False
-    link_permission: WikiLinkPermission = WikiLinkPermission.VIEWER
-
-
 class WikiSearchRequest(WikiBaseModel):
     query: str = Field(..., min_length=1, max_length=500)
     mode: str = Field(
@@ -128,22 +117,6 @@ class WikiSearchRequest(WikiBaseModel):
     limit: int = Field(20, ge=1, le=50)
 
 
-class WikiSearchResultItem(WikiBaseModel):
-    wiki_page_id: str
-    namespace: str
-    title: str = ""
-    icon: str = ""
-    snippet: str = ""
-    heading_path: str = ""
-    score: float = 0.0
-    channel: str = "lexical"
-    updated_at: datetime
-
-
-class WikiSearchResponse(WikiBaseModel):
-    items: list[WikiSearchResultItem] = Field(default_factory=list)
-
-
 class WikiCommentCreateRequest(WikiBaseModel):
     body_markdown: str = Field(..., min_length=1)
     anchor_text: str = ""
@@ -152,23 +125,6 @@ class WikiCommentCreateRequest(WikiBaseModel):
 
 class WikiCommentResolveRequest(WikiBaseModel):
     resolved: bool = True
-
-
-class WikiCommentListResponse(WikiBaseModel):
-    items: list[WikiComment] = Field(default_factory=list)
-
-
-class WikiBacklinkItem(WikiBaseModel):
-    wiki_page_id: str
-    namespace: str
-    title: str = ""
-    icon: str = ""
-    url: str
-    updated_at: datetime
-
-
-class WikiBacklinksResponse(WikiBaseModel):
-    items: list[WikiBacklinkItem] = Field(default_factory=list)
 
 
 class WikiPublicPageResponse(WikiBaseModel):

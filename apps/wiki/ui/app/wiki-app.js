@@ -48,10 +48,10 @@ import {
 import { wikiNamespacesResource } from '../events/resources/namespaces.resource.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
 import {
-    wikiCatalogsOp,
-    wikiDocumentsOp,
-    wikiDocumentsSearchOp,
-} from '../events/resources/documents-browse.resource.js';
+    catalogsListOp,
+    documentsListOp,
+    documentsSearchOp,
+} from '@platform/lib/events/resources/office-documents-browse.resource.js';
 
 import '@platform/lib/components/layout/platform-island.js';
 import '@platform/lib/components/platform-command-palette.js';
@@ -103,9 +103,9 @@ export class WikiApp extends PlatformApp {
 
     static factories = [
         wikiNamespacesResource,
-        wikiCatalogsOp,
-        wikiDocumentsOp,
-        wikiDocumentsSearchOp,
+        catalogsListOp,
+        documentsListOp,
+        documentsSearchOp,
         wikiPagesResource,
         wikiPageReadOp,
         wikiPageCreateOp,
@@ -244,7 +244,10 @@ export class WikiApp extends PlatformApp {
             }));
         }
         const result = await this._search.run({ query: trimmed, mode: 'auto', limit: 12 });
-        const items = Array.isArray(result.items) ? result.items : [];
+        if (!result || typeof result !== 'object' || !Array.isArray(result.items)) {
+            throw new Error('wiki search: result.items required');
+        }
+        const items = result.items;
         return items.map((item) => ({
             id: item.wiki_page_id,
             label: item.title,
