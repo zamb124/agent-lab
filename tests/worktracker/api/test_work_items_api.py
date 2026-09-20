@@ -5,7 +5,11 @@ from __future__ import annotations
 import pytest
 
 from tests.worktracker.conftest import API_PREFIX
-from tests.worktracker.helpers.assertions import assert_offset_page, assert_work_item_json
+from tests.worktracker.helpers.assertions import (
+    assert_items_object,
+    assert_offset_page,
+    assert_work_item_json,
+)
 from tests.worktracker.helpers.builders import (
     build_manual_work_item_payload,
     build_queue_assignment,
@@ -319,7 +323,7 @@ async def test_comments_create_and_list(worktracker_client, unique_id: str) -> N
 
     list_resp = await worktracker_client.get(f"{WORK_ITEMS}/{work_item_id}/comments")
     assert list_resp.status_code == 200
-    comments = list_resp.json()
+    comments = assert_items_object(list_resp.json())
     assert len(comments) >= 1
     assert comments[0]["text"] == f"Note {unique_id}"
 

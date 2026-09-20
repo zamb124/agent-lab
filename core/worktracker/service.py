@@ -29,9 +29,9 @@ from core.worktracker.events import (
     WORK_ITEM_MOVED,
     WORK_ITEM_UPDATED,
     WorkItemEventType,
-    WorkItemRealtimeEvent,
     publish_work_item_assigned,
     publish_work_item_events,
+    work_item_platform_event,
 )
 from core.worktracker.hook_dispatcher import hook_dispatch_internal_user_id
 from core.worktracker.models import (
@@ -527,7 +527,7 @@ class WorkItemService:
         saved = await self._repo.append_comment(comment)
         await publish_work_item_events(
             [
-                WorkItemRealtimeEvent(
+                work_item_platform_event(
                     type=WORK_ITEM_COMMENT_CREATED,
                     payload={
                         "work_item_id": work_item_id,
@@ -876,7 +876,7 @@ class WorkItemService:
         )
         await publish_work_item_events(
             [
-                WorkItemRealtimeEvent(
+                work_item_platform_event(
                     type=event_type,
                     payload={"work_item": item.model_dump(mode="json")},
                     company_id=item.company_id,
@@ -906,12 +906,18 @@ class WorkItemService:
                 continue
             if skip_user_ids is not None and user_id in skip_user_ids:
                 continue
+            if message is not None and message != "":
+                notify_message = message
+            elif item.description != "":
+                notify_message = item.description
+            else:
+                notify_message = item.title
             await notify_user(
                 user_id,
                 Notification(
                     type=notification_type,
                     title=item.title,
-                    message=message if message is not None else item.description,
+                    message=notify_message,
                     service="worktracker",
                     action_url=f"/worktracker/tasks/{item.work_item_id}",
                     data={"work_item_id": item.work_item_id},

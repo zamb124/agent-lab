@@ -13,7 +13,7 @@ import {
 import {
     WORK_ITEM_EVENTS,
     WORK_ITEM_MUTATION_SUCCEEDED,
-} from '../events/resources/work-items.resource.js';
+} from '@platform/lib/events/resources/work-items.resource.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';

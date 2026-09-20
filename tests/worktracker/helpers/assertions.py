@@ -5,12 +5,18 @@ from __future__ import annotations
 from typing import Any
 
 
+def assert_items_object(payload: dict[str, Any]) -> list[Any]:
+    assert isinstance(payload, dict)
+    items = payload["items"]
+    assert isinstance(items, list)
+    return items
+
+
 def assert_offset_page(payload: dict[str, Any]) -> None:
-    assert "items" in payload
+    assert_items_object(payload)
     assert "total" in payload
     assert "limit" in payload
     assert "offset" in payload
-    assert isinstance(payload["items"], list)
     assert isinstance(payload["total"], int)
     assert isinstance(payload["limit"], int)
     assert isinstance(payload["offset"], int)

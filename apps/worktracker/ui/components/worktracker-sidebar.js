@@ -64,7 +64,7 @@ export class WorktrackerSidebar extends PlatformElement {
         this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
         this._routeKeySel = this.select((s) => s.router.routeKey);
-        this._countsOp = this.useOp('platform/work_item_counts');
+        this._countsOp = this.useOp('worktracker/work_item_counts');
     }
 
     _shell() {

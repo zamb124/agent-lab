@@ -10,14 +10,14 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from core.events import (
     publish_domain_event,
-    publish_event_to_company,
-    publish_event_to_users,
+    publish_event,
     register_platform_event,
 )
+from core.events.contract import EventDelivery, PlatformEvent
 from core.types import JsonObject
 from core.worktracker.models import WorkItem, WorkItemComment
 
@@ -103,30 +103,25 @@ async def publish_work_item_assigned(item: WorkItem, *, assigned_by_user_id: str
     )
 
 
-class WorkItemRealtimeEvent(BaseModel):
-    """Доменное событие WorkItem для рассылки через шину `platform:events`."""
-
-    type: WorkItemEventType
-    payload: JsonObject = Field(description="Сериализованный WorkItem или дельта.")
-    company_id: str = Field(description="Компания-получатель (изоляция между тенантами).")
-    recipient_user_ids: list[str] | None = Field(
-        default=None,
-        description="None — broadcast компании; иначе адресная отправка перечисленным user_id.",
+def work_item_platform_event(
+    *,
+    type: WorkItemEventType,
+    company_id: str,
+    payload: JsonObject,
+    recipient_user_ids: list[str] | None,
+) -> PlatformEvent:
+    if recipient_user_ids is None:
+        delivery = EventDelivery(company_id=company_id)
+    else:
+        delivery = EventDelivery(user_ids=list(recipient_user_ids))
+    return PlatformEvent(
+        type=type,
+        company_id=company_id,
+        payload=payload,
+        delivery=delivery,
     )
 
 
-async def publish_work_item_events(events: list[WorkItemRealtimeEvent]) -> None:
+async def publish_work_item_events(events: list[PlatformEvent]) -> None:
     for event in events:
-        if event.recipient_user_ids is None:
-            await publish_event_to_company(
-                company_id=event.company_id,
-                type=event.type,
-                payload=event.payload,
-            )
-        else:
-            await publish_event_to_users(
-                event.recipient_user_ids,
-                event.type,
-                event.payload,
-                company_id=event.company_id,
-            )
+        await publish_event(event)

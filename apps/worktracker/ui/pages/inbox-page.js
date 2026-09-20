@@ -52,7 +52,7 @@ export class WorktrackerInboxPage extends PlatformPage {
         this._queuesLoaded = false;
         this._reloadGeneration = 0;
         this._workItems = this.useResource('worktracker/work_items');
-        this._countsOp = this.useOp('platform/work_item_counts');
+        this._countsOp = this.useOp('worktracker/work_item_counts');
         this._userSel = this.select((s) => s.auth.user);
         this.useEvent(CoreEvents.AUTH_USER_LOADED, () => {
             this._reload();

@@ -1,49 +1,49 @@
-"""REST API задач WorkItem (зеркало WS-команд worktracker/work_item/*)."""
+"""REST API задач WorkItem — тонкая обвязка тех же `op_*`."""
 
 from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 
-from apps.worktracker.api._common import (
-    current_company_id,
-    current_user_actor,
-    current_user_id,
-)
 from apps.worktracker.dependencies import ContainerDep
 from apps.worktracker.models.api import (
     WorkItemAssignRequest,
     WorkItemCommentRequest,
+    WorkItemCommentsList,
     WorkItemCompleteRequest,
     WorkItemCreateRequest,
-    WorkItemMineSummaryResponse,
     WorkItemMoveRequest,
-    WorkItemPublic,
     WorkItemUpdateRequest,
 )
-from core.pagination import OffsetPage
-from core.worktracker.models import (
-    WorkItem,
-    WorkItemComment,
-    WorkItemCommentRole,
-    WorkItemKind,
-    WorkItemResolution,
-    WorkItemState,
-    build_interaction_policy,
+from apps.worktracker.realtime.operations import (
+    WorkItemAssignPayload,
+    WorkItemCommentPayload,
+    WorkItemCompletePayload,
+    WorkItemIdPayload,
+    WorkItemMovePayload,
+    WorkItemsListPayload,
+    WorkItemsMineSummaryPayload,
+    WorkItemUpdatePayload,
+    op_work_items_assign,
+    op_work_items_cancel,
+    op_work_items_claim,
+    op_work_items_comment,
+    op_work_items_comments_list,
+    op_work_items_complete,
+    op_work_items_create,
+    op_work_items_get,
+    op_work_items_list,
+    op_work_items_mine_summary,
+    op_work_items_move,
+    op_work_items_update,
 )
+from core.context import require_context
+from core.pagination import OffsetPage
+from core.worktracker.models import WorkItem, WorkItemComment, WorkItemKind, WorkItemState
+from core.worktracker.service import WorkItemMineSummary
 
 router = APIRouter(prefix="/work-items", tags=["work-items"])
-
-
-async def _to_public(container: ContainerDep, item: WorkItem) -> WorkItemPublic:
-    authorized = await container.work_item_service.operator_authorized(
-        item, current_user_id()
-    )
-    policy = build_interaction_policy(item, operator_authorized=authorized)
-    return WorkItemPublic.model_validate(
-        {**item.model_dump(mode="json"), "interaction_policy": policy.model_dump(mode="json")}
-    )
 
 
 @router.get("", response_model=OffsetPage[WorkItem])
@@ -62,100 +62,48 @@ async def list_work_items(
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[WorkItem]:
-    company_id = current_company_id()
-    service = container.work_item_service
-    items = await service.list(
-        company_id,
-        board_id=board_id,
-        namespace=namespace,
-        kind=kind,
-        state=state,
-        work_queue_id=work_queue_id,
-        assignee_user_id=assignee_user_id,
-        assignee_flow_id=assignee_flow_id,
-        exclude_terminal=exclude_terminal,
-        queue_unclaimed_only=queue_unclaimed_only,
-        work_queue_ids=work_queue_ids,
-        limit=limit,
-        offset=offset,
-    )
-    total = await service.count(
-        company_id,
-        board_id=board_id,
-        namespace=namespace,
-        kind=kind,
-        state=state,
-        work_queue_id=work_queue_id,
-        assignee_user_id=assignee_user_id,
-        assignee_flow_id=assignee_flow_id,
-        exclude_terminal=exclude_terminal,
-        queue_unclaimed_only=queue_unclaimed_only,
-        work_queue_ids=work_queue_ids,
-    )
-    return OffsetPage[WorkItem](items=items, total=total, limit=limit, offset=offset)
-
-
-@router.get("/mine/summary", response_model=WorkItemMineSummaryResponse)
-async def mine_work_items_summary(container: ContainerDep) -> WorkItemMineSummaryResponse:
-    summary = await container.work_item_service.mine_summary(
-        current_company_id(),
-        current_user_id(),
-    )
-    return WorkItemMineSummaryResponse(
-        assigned_open_count=summary.assigned_open_count,
-        queue_inbox_count=summary.queue_inbox_count,
-        work_queue_ids=summary.work_queue_ids,
+    return await op_work_items_list(
+        WorkItemsListPayload(
+            board_id=board_id,
+            namespace=namespace,
+            kind=kind,
+            state=state,
+            work_queue_id=work_queue_id,
+            assignee_user_id=assignee_user_id,
+            assignee_flow_id=assignee_flow_id,
+            exclude_terminal=exclude_terminal,
+            queue_unclaimed_only=queue_unclaimed_only,
+            work_queue_ids=work_queue_ids,
+            limit=limit,
+            offset=offset,
+        ),
+        user=require_context().user,
+        container=container,
     )
 
 
-@router.get("/{work_item_id}", response_model=WorkItemPublic)
-async def get_work_item(container: ContainerDep, work_item_id: str) -> WorkItemPublic:
-    service = container.work_item_service
-    try:
-        item = await service.get(current_company_id(), work_item_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return await _to_public(container, item)
+@router.get("/mine/summary", response_model=WorkItemMineSummary)
+async def mine_work_items_summary(container: ContainerDep) -> WorkItemMineSummary:
+    return await op_work_items_mine_summary(
+        WorkItemsMineSummaryPayload(),
+        user=require_context().user,
+        container=container,
+    )
+
+
+@router.get("/{work_item_id}", response_model=WorkItem)
+async def get_work_item(container: ContainerDep, work_item_id: str) -> WorkItem:
+    return await op_work_items_get(
+        WorkItemIdPayload(work_item_id=work_item_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post("", response_model=WorkItem, status_code=201)
 async def create_work_item(container: ContainerDep, body: WorkItemCreateRequest) -> WorkItem:
-    actor = current_user_actor()
-    if body.assignment is not None:
-        return await container.work_item_service.create(
-            company_id=current_company_id(),
-            title=body.title,
-            created_by=actor,
-            description=body.description,
-            kind=body.kind,
-            namespace=body.namespace,
-            board_id=body.board_id,
-            board_column_id=body.board_column_id,
-            priority=body.priority,
-            due_date=body.due_date,
-            labels=body.labels,
-            assignment=body.assignment,
-            blocking=body.blocking,
-            links=body.links,
-            variables=body.variables,
-            attachments=body.attachments,
-        )
-    return await container.work_item_service.create_manual_task(
-        company_id=current_company_id(),
-        title=body.title,
-        created_by=actor,
-        description=body.description,
-        kind=body.kind,
-        namespace=body.namespace,
-        board_id=body.board_id,
-        board_column_id=body.board_column_id,
-        priority=body.priority,
-        due_date=body.due_date,
-        labels=body.labels,
-        blocking=body.blocking,
-        links=body.links,
-        variables=body.variables,
-        attachments=body.attachments,
+    return await op_work_items_create(
+        body, user=require_context().user, container=container
     )
 
 
@@ -163,9 +111,8 @@ async def create_work_item(container: ContainerDep, body: WorkItemCreateRequest)
 async def update_work_item(
     container: ContainerDep, work_item_id: str, body: WorkItemUpdateRequest
 ) -> WorkItem:
-    try:
-        return await container.work_item_service.update(
-            company_id=current_company_id(),
+    return await op_work_items_update(
+        WorkItemUpdatePayload(
             work_item_id=work_item_id,
             title=body.title,
             description=body.description,
@@ -175,107 +122,91 @@ async def update_work_item(
             links=body.links,
             variables=body.variables,
             attachments=body.attachments,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        ),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post("/{work_item_id}/assign", response_model=WorkItem)
 async def assign_work_item(
     container: ContainerDep, work_item_id: str, body: WorkItemAssignRequest
 ) -> WorkItem:
-    """Переназначить задачу (человек/очередь/агент) — для любого вида задач."""
-    try:
-        return await container.work_item_service.reassign(
-            company_id=current_company_id(),
-            work_item_id=work_item_id,
-            assignment=body.assignment,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return await op_work_items_assign(
+        WorkItemAssignPayload(work_item_id=work_item_id, assignment=body.assignment),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post("/{work_item_id}/move", response_model=WorkItem)
 async def move_work_item(
     container: ContainerDep, work_item_id: str, body: WorkItemMoveRequest
 ) -> WorkItem:
-    try:
-        return await container.work_item_service.move(
-            company_id=current_company_id(),
+    return await op_work_items_move(
+        WorkItemMovePayload(
             work_item_id=work_item_id,
             board_column_id=body.board_column_id,
             state=body.state,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        ),
+        user=require_context().user,
+        container=container,
+    )
 
 
-@router.post("/{work_item_id}/claim", response_model=WorkItemPublic)
-async def claim_work_item(container: ContainerDep, work_item_id: str) -> WorkItemPublic:
-    try:
-        item = await container.work_item_service.claim(
-            company_id=current_company_id(),
-            work_item_id=work_item_id,
-            user_id=current_user_id(),
-        )
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return await _to_public(container, item)
+@router.post("/{work_item_id}/claim", response_model=WorkItem)
+async def claim_work_item(container: ContainerDep, work_item_id: str) -> WorkItem:
+    return await op_work_items_claim(
+        WorkItemIdPayload(work_item_id=work_item_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post("/{work_item_id}/comments", response_model=WorkItemComment, status_code=201)
 async def add_comment(
     container: ContainerDep, work_item_id: str, body: WorkItemCommentRequest
 ) -> WorkItemComment:
-    try:
-        return await container.work_item_service.add_comment(
-            company_id=current_company_id(),
+    return await op_work_items_comment(
+        WorkItemCommentPayload(
             work_item_id=work_item_id,
-            author=current_user_actor(),
-            role=WorkItemCommentRole.OPERATOR,
             text=body.text,
             files=body.files,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        ),
+        user=require_context().user,
+        container=container,
+    )
 
 
-@router.get("/{work_item_id}/comments", response_model=list[WorkItemComment])
-async def list_comments(container: ContainerDep, work_item_id: str) -> list[WorkItemComment]:
-    return await container.work_item_service.list_comments(current_company_id(), work_item_id)
+@router.get("/{work_item_id}/comments", response_model=WorkItemCommentsList)
+async def list_comments(container: ContainerDep, work_item_id: str) -> WorkItemCommentsList:
+    return await op_work_items_comments_list(
+        WorkItemIdPayload(work_item_id=work_item_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
-@router.post("/{work_item_id}/complete", response_model=WorkItemPublic)
+@router.post("/{work_item_id}/complete", response_model=WorkItem)
 async def complete_work_item(
     container: ContainerDep, work_item_id: str, body: WorkItemCompleteRequest
-) -> WorkItemPublic:
-    company_id = current_company_id()
-    resolution = WorkItemResolution(
-        text=body.resolution_text,
-        files=body.resolution_files,
-        resolved_by=current_user_actor(),
-    )
-    try:
-        completion = await container.work_item_service.complete(
-            company_id=company_id,
+) -> WorkItem:
+    return await op_work_items_complete(
+        WorkItemCompletePayload(
             work_item_id=work_item_id,
-            resolution=resolution,
+            resolution_text=body.resolution_text,
+            resolution_files=body.resolution_files,
             terminal_state=body.terminal_state,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return await _to_public(container, completion.work_item)
+        ),
+        user=require_context().user,
+        container=container,
+    )
 
 
-@router.post("/{work_item_id}/cancel", response_model=WorkItemPublic)
-async def cancel_work_item(container: ContainerDep, work_item_id: str) -> WorkItemPublic:
-    try:
-        completion = await container.work_item_service.cancel(
-            company_id=current_company_id(),
-            work_item_id=work_item_id,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return await _to_public(container, completion.work_item)
+@router.post("/{work_item_id}/cancel", response_model=WorkItem)
+async def cancel_work_item(container: ContainerDep, work_item_id: str) -> WorkItem:
+    return await op_work_items_cancel(
+        WorkItemIdPayload(work_item_id=work_item_id),
+        user=require_context().user,
+        container=container,
+    )

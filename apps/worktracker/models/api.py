@@ -13,22 +13,14 @@ from core.variables.models import VariableMap
 from core.worktracker.models import (
     BoardColumn,
     WorkActor,
-    WorkItem,
     WorkItemAssignment,
-    WorkItemInteractionPolicy,
+    WorkItemComment,
     WorkItemKind,
     WorkItemLink,
     WorkItemPriority,
     WorkItemState,
+    WorkQueueMember,
 )
-
-
-class WorkItemPublic(WorkItem):
-    """Проекция задачи для UI: доменные поля + вычисленная политика композера."""
-
-    interaction_policy: WorkItemInteractionPolicy = Field(
-        default_factory=WorkItemInteractionPolicy
-    )
 
 
 class WorkItemCreateRequest(StrictBaseModel):
@@ -111,7 +103,9 @@ class BoardUpdateRequest(StrictBaseModel):
     columns: list[BoardColumn] | None = None
 
 
-class WorkItemMineSummaryResponse(StrictBaseModel):
-    assigned_open_count: int = Field(..., ge=0)
-    queue_inbox_count: int = Field(..., ge=0)
-    work_queue_ids: list[str] = Field(default_factory=list)
+class WorkItemCommentsList(StrictBaseModel):
+    items: list[WorkItemComment]
+
+
+class WorkQueueMembersList(StrictBaseModel):
+    items: list[WorkQueueMember]

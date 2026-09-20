@@ -371,6 +371,7 @@ class WorkItem(WorktrackerModel):
     assignment: WorkItemAssignment = Field(default_factory=UnassignedAssignment)
     blocking: bool = False
     interaction: WorkItemInteractionSpec | None = None
+    interaction_policy: WorkItemInteractionPolicy | None = None
     hooks: list[WorkItemHook] = Field(default_factory=list)
     resolution: WorkItemResolution | None = None
     links: list[WorkItemLink] = Field(default_factory=list)

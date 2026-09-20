@@ -7,17 +7,6 @@ import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
 
-import {
-    workItemsResource,
-    workItemMoveOp,
-    workItemClaimOp,
-    workItemCompleteOp,
-    workItemCancelOp,
-    workItemAssignOp,
-    workItemCommentOp,
-    workItemCommentsListOp,
-    workItemCreateForm,
-} from '../events/resources/work-items.resource.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
 import { boardsResource, boardCreateForm } from '../events/resources/boards.resource.js';
 import {
@@ -74,15 +63,6 @@ export class WorktrackerApp extends PlatformApp {
     };
 
     static factories = [
-        workItemsResource,
-        workItemMoveOp,
-        workItemClaimOp,
-        workItemCompleteOp,
-        workItemCancelOp,
-        workItemAssignOp,
-        workItemCommentOp,
-        workItemCommentsListOp,
-        workItemCreateForm,
         platformFileCreateOp,
         boardCreateForm,
         boardsResource,
@@ -156,7 +136,7 @@ export class WorktrackerApp extends PlatformApp {
     constructor() {
         super();
         this._detailWorkItemId = '';
-        this._countsOp = this.useOp('platform/work_item_counts');
+        this._countsOp = this.useOp('worktracker/work_item_counts');
         this._routeSel = this.select((state) => state.router.routeKey);
         this.useEvent(WorktrackerUiEvents.DETAIL_OPEN, (event) => {
             this._openWorkItemDetailPanel(event.payload);

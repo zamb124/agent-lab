@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from tests.worktracker.conftest import API_PREFIX
-from tests.worktracker.helpers.assertions import assert_offset_page
+from tests.worktracker.helpers.assertions import assert_items_object, assert_offset_page
 from tests.worktracker.helpers.builders import build_queue_payload
 
 pytestmark = pytest.mark.asyncio
@@ -73,7 +73,7 @@ async def test_queue_members_add_list_remove(
 
     list_resp = await worktracker_client.get(f"{QUEUES}/{queue_id}/members")
     assert list_resp.status_code == 200
-    members = list_resp.json()
+    members = assert_items_object(list_resp.json())
     assert any(m["member"]["user_id"] == member_user_id for m in members)
 
     remove_resp = await worktracker_client.post(
@@ -83,7 +83,25 @@ async def test_queue_members_add_list_remove(
     assert remove_resp.status_code == 204
 
     list_after = await worktracker_client.get(f"{QUEUES}/{queue_id}/members")
-    assert not any(m["member"]["user_id"] == member_user_id for m in list_after.json())
+    assert not any(
+        m["member"]["user_id"] == member_user_id for m in assert_items_object(list_after.json())
+    )
+
+
+async def test_delete_queue_removes_access(worktracker_client, unique_id: str) -> None:
+    create_resp = await worktracker_client.post(QUEUES, json=build_queue_payload(unique_id))
+    assert create_resp.status_code == 201
+    queue_id = create_resp.json()["work_queue_id"]
+
+    deleted = await worktracker_client.delete(f"{QUEUES}/{queue_id}")
+    assert deleted.status_code == 204
+
+    members = await worktracker_client.get(f"{QUEUES}/{queue_id}/members")
+    assert members.status_code == 403
+
+    listed = await worktracker_client.get(QUEUES)
+    slugs = {item["work_queue_slug"] for item in listed.json()["items"]}
+    assert f"q-{unique_id}" not in slugs
 
 
 async def test_remove_unknown_member_returns_404(worktracker_client, worktracker_queue) -> None:

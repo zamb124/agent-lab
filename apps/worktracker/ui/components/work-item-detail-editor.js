@@ -9,7 +9,7 @@ import { TEAM_EVENTS } from '@platform/lib/events/index.js';
 import {
     WORK_ITEM_EVENTS,
     WORK_ITEM_MUTATION_SUCCEEDED,
-} from '../events/resources/work-items.resource.js';
+} from '@platform/lib/events/resources/work-items.resource.js';
 import {
     TERMINAL_STATES,
     WORK_ITEM_STATES,

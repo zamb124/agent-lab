@@ -14,7 +14,6 @@ from core.worktracker.events import (
     WORK_ITEM_CREATED,
     WORK_ITEM_MOVED,
     WORK_ITEM_UPDATED,
-    WorkItemRealtimeEvent,
 )
 from core.worktracker.models import (
     TERMINAL_WORK_ITEM_STATES,
@@ -80,7 +79,6 @@ __all__ = [
     "WorkItemLink",
     "WorkItemLinkRelation",
     "WorkItemPriority",
-    "WorkItemRealtimeEvent",
     "WorkItemResolution",
     "WorkItemState",
     "WorkItemToWorkItemLink",

@@ -16,6 +16,7 @@ from apps.worktracker.api import get_api_router
 from apps.worktracker.config import WorktrackerSettings
 from apps.worktracker.container import WorktrackerContainer, get_worktracker_container
 from apps.worktracker.dependencies import ContainerDep
+from apps.worktracker.realtime.command_router import register_worktracker_ws_commands
 from core.app import create_service_app
 from core.config import get_settings
 from core.logging import get_logger
@@ -30,7 +31,8 @@ async def on_startup(
     app: FastAPI, container: WorktrackerContainer, settings: WorktrackerSettings
 ) -> None:
     _ = app, container, settings
-    logger.info("Worktracker Service: запущен")
+    register_worktracker_ws_commands()
+    logger.info("Worktracker Service: command-router op_* зарегистрирован")
 
 
 app = create_service_app(

@@ -1,11 +1,5 @@
 /**
  * Boards — доски задач (колонки канбана).
- *
- * Backend (`/worktracker/api/v1/boards`):
- *   GET   /                 → OffsetPage<Board>
- *   GET   /{board_id}       → Board
- *   POST  /                 → Board (create)
- *   PATCH /{board_id}       → Board (update)
  */
 
 import {
@@ -18,7 +12,8 @@ export const boardsResource = createResourceCollection({
     baseUrl: '/worktracker/api/v1/boards',
     idField: 'board_id',
     operations: ['list', 'get', 'create', 'update'],
-    transport: 'http',
+    transport: 'ws',
+    wsTimeoutMs: 5_000,
     listQuery: (payload) => {
         const query = {};
         if (payload && typeof payload === 'object' && typeof payload.namespace === 'string' && payload.namespace.length > 0) {
