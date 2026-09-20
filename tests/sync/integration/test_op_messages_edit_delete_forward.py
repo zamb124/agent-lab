@@ -159,7 +159,8 @@ async def test_op_messages_delete_by_owner(
         user=op_user,
         container=op_container,
     )
-    assert result == {"message_id": msg_id}
+    assert result.message_id == msg_id
+    assert result.channel_id == ch_id
 
 
 @pytest.mark.asyncio

@@ -6,30 +6,21 @@
 """
 
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
 
 from apps.sync.dependencies import ContainerDep
-from apps.sync.realtime.context import require_current_user
 from apps.sync.realtime.operations import (
     FilesUploadCompletedPayload,
     FilesUploadCompletedResult,
     op_files_upload_completed,
 )
+from core.context import require_context
 
 router = APIRouter()
 
 
-class _UploadCompletedBody(BaseModel):
-    file_id: str = Field(min_length=1)
-
-
 @router.post("/upload-completed", response_model=FilesUploadCompletedResult)
 async def upload_completed(
-    container: ContainerDep, body: _UploadCompletedBody
+    container: ContainerDep, body: FilesUploadCompletedPayload
 ) -> FilesUploadCompletedResult:
-    user = require_current_user()
-    return await op_files_upload_completed(
-        FilesUploadCompletedPayload(file_id=body.file_id),
-        user=user,
-        container=container,
-    )
+    user = require_context().user
+    return await op_files_upload_completed(body, user=user, container=container)

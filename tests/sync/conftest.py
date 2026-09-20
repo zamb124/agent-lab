@@ -5,14 +5,13 @@
 
 from __future__ import annotations
 
-from tests.fixtures.auth import set_test_company_member_roles
-
 import asyncio
 import os
 import subprocess
 import uuid
 from pathlib import Path
 
+from tests.fixtures.auth import set_test_company_member_roles
 from tests.fixtures.test_database_env import TEST_DATABASE_ENV, TEST_LIVEKIT_API_SECRET
 
 for _k, _v in TEST_DATABASE_ENV.items():
@@ -230,11 +229,6 @@ async def sync_auth_headers(sync_auth_token: str) -> dict[str, str]:
 @pytest_asyncio.fixture()
 async def sync_auth_headers_user2(sync_auth_token_user2: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {sync_auth_token_user2}"}
-
-
-@pytest_asyncio.fixture()
-async def sync_ws_cookie(sync_auth_token: str, sync_user_id: str) -> dict[str, str]:
-    return {"Cookie": f"auth_token={sync_auth_token}; session_id={sync_user_id}"}
 
 
 @pytest.fixture()

@@ -10,9 +10,8 @@ from apps.sync.realtime.task_names import (
     DELIVER_CHANNEL_MESSAGE_NOTIFICATION,
     DELIVER_SYNC_MENTION_NOTIFICATION,
 )
-from apps.sync.ws_presence import is_user_sync_ws_online
-from core.config import get_settings
 from core.logging import get_logger
+from core.realtime.presence import is_user_connected
 from core.tasks import platform_task
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
@@ -29,12 +28,9 @@ async def deliver_channel_message_notification(
     notification_title: str,
     body_preview: str,
 ) -> None:
-    settings = get_settings()
-    if not settings.database.redis_url:
-        raise ValueError("database.redis_url не задан")
-    if await is_user_sync_ws_online(settings.database.redis_url, recipient_user_id):
+    if await is_user_connected(recipient_user_id, company_id=company_id):
         logger.debug(
-            "sync notify skipped: user has sync ws: user=%s channel=%s",
+            "sync notify skipped: user connected: user=%s channel=%s",
             recipient_user_id,
             channel_id,
         )
@@ -86,11 +82,7 @@ async def deliver_sync_mention_notification(
     notification_title: str,
     body_preview: str,
 ) -> None:
-    """Упоминание: доставляется даже при открытом /sync/ws (без проверки sync presence)."""
-    settings = get_settings()
-    if not settings.database.redis_url:
-        raise ValueError("database.redis_url не задан")
-
+    """Упоминание: без проверки Centrifugo presence, только mute канала."""
     container = get_sync_container()
     muted = await container.channel_repository.get_member_notifications_muted(
         channel_id,

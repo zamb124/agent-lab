@@ -16,6 +16,7 @@ from apps.sync.models.messages import MessageRead, MessageStatus, ReactionEntry
 from apps.sync.models.threads import ThreadRead
 from core.calls.models import SignalType
 from core.events import register_platform_event
+from core.events.contract import EventDelivery, PlatformEvent
 from core.types import JsonArray, JsonObject, parse_json_object
 
 EventType = Literal[
@@ -42,26 +43,29 @@ EventType = Literal[
     "sync/call/recording_started",
     "sync/call/recording_stopped",
     "sync/call/recording_failed",
-    "sync/presence/changed",
 ]
 
 
-class RealtimeEvent(BaseModel):
-    """Доменное событие Sync для рассылки через шину `platform:events`.
-
-    `channel_id` в payload остаётся (где нужно) — для фильтрации на клиенте.
-    `company_id` / `recipient_user_ids` — адресация для `publish_realtime_events`,
-    в проводной фрейм не уходят (определяют выбор `publish_event_to_users`
-    vs `publish_event_to_company`).
-    """
-
-    type: EventType
-    channel_id: str | None = Field(default=None, description="Канал события, если применимо.")
-    payload: JsonObject = Field(description="Сериализованный payload события.")
-    company_id: str = Field(description="Компания-получатель (изоляция между тенантами).")
-    recipient_user_ids: list[str] | None = Field(
-        default=None,
-        description="None — broadcast компании; иначе адресная отправка перечисленным user_id.",
+def sync_platform_event(
+    *,
+    type: EventType,
+    company_id: str,
+    payload: JsonObject,
+    recipient_user_ids: list[str] | None,
+    channel_id: str | None = None,
+) -> PlatformEvent:
+    body = dict(payload)
+    if channel_id is not None and "channel_id" not in body:
+        body["channel_id"] = channel_id
+    if recipient_user_ids is None:
+        delivery = EventDelivery(company_id=company_id)
+    else:
+        delivery = EventDelivery(user_ids=list(recipient_user_ids))
+    return PlatformEvent(
+        type=type,
+        company_id=company_id,
+        payload=body,
+        delivery=delivery,
     )
 
 
@@ -79,6 +83,7 @@ class MessageCreatedEventPayload(MessageRead):
 
     channel_type: str
     recipient_user_ids: list[str]
+    local_id: str | None = None
 
 
 class MessageDeletedEventPayload(BaseModel):
@@ -93,8 +98,8 @@ def event_channel_created(
     *,
     company_id: str,
     recipient_user_ids: list[str],
-) -> RealtimeEvent:
-    return RealtimeEvent(
+) -> PlatformEvent:
+    return sync_platform_event(
         type="sync/channel/created",
         channel_id=channel.channel_id,
         payload=parse_json_object(channel.model_dump_json(), "ChannelRead"),
@@ -109,8 +114,8 @@ def event_channel_member_added(
     *,
     company_id: str,
     recipient_user_ids: list[str],
-) -> RealtimeEvent:
-    return RealtimeEvent(
+) -> PlatformEvent:
+    return sync_platform_event(
         type="sync/channel/member_added",
         channel_id=channel_id,
         payload={"channel_id": channel_id, "added_user_id": added_user_id},
@@ -126,8 +131,8 @@ def event_channel_read_updated(
     *,
     company_id: str,
     recipient_user_ids: list[str],
-) -> RealtimeEvent:
-    return RealtimeEvent(
+) -> PlatformEvent:
+    return sync_platform_event(
         type="sync/channel/read_updated",
         channel_id=channel_id,
         payload={
@@ -148,8 +153,8 @@ def event_channel_typing(
     user: UserBrief,
     company_id: str,
     recipient_user_ids: list[str],
-) -> RealtimeEvent:
-    return RealtimeEvent(
+) -> PlatformEvent:
+    return sync_platform_event(
         type="sync/channel/typing",
         channel_id=channel_id,
         payload={
@@ -168,8 +173,8 @@ def event_thread_created(
     *,
     company_id: str,
     recipient_user_ids: list[str],
-) -> RealtimeEvent:
-    return RealtimeEvent(
+) -> PlatformEvent:
+    return sync_platform_event(
         type="sync/thread/created",
         channel_id=thread.channel_id,
         payload=parse_json_object(thread.model_dump_json(), "ThreadRead"),
@@ -184,15 +189,17 @@ def event_message_created(
     company_id: str,
     recipient_user_ids: list[str],
     channel_type: str,
-) -> RealtimeEvent:
+    local_id: str | None = None,
+) -> PlatformEvent:
     enriched = MessageCreatedEventPayload.model_validate(
         {
             **message.model_dump(),
             "channel_type": channel_type,
             "recipient_user_ids": recipient_user_ids,
+            "local_id": local_id,
         }
     )
-    return RealtimeEvent(
+    return sync_platform_event(
         type="sync/message/created",
         channel_id=message.channel_id,
         payload=parse_json_object(enriched.model_dump_json(), "MessageCreatedEventPayload"),
@@ -207,8 +214,8 @@ def event_message_status_changed(
     *,
     company_id: str,
     recipient_user_ids: list[str],
-) -> RealtimeEvent:
-    return RealtimeEvent(
+) -> PlatformEvent:
+    return sync_platform_event(
         type="sync/message/status_changed",
         channel_id=channel_id,
         payload=parse_json_object(payload.model_dump_json(), "MessageStatusChangedPayload"),
@@ -217,8 +224,8 @@ def event_message_status_changed(
     )
 
 
-def event_git_resource_upserted(ref: GitResourceRefRead, *, company_id: str) -> RealtimeEvent:
-    return RealtimeEvent(
+def event_git_resource_upserted(ref: GitResourceRefRead, *, company_id: str) -> PlatformEvent:
+    return sync_platform_event(
         type="sync/git_resource/upserted",
         channel_id=None,
         payload=parse_json_object(ref.model_dump_json(), "GitResourceRefRead"),
@@ -232,8 +239,8 @@ def event_message_updated(
     *,
     company_id: str,
     recipient_user_ids: list[str],
-) -> RealtimeEvent:
-    return RealtimeEvent(
+) -> PlatformEvent:
+    return sync_platform_event(
         type="sync/message/updated",
         channel_id=message.channel_id,
         payload=parse_json_object(message.model_dump_json(), "MessageRead"),
@@ -248,8 +255,8 @@ def event_message_deleted(
     *,
     company_id: str,
     recipient_user_ids: list[str],
-) -> RealtimeEvent:
-    return RealtimeEvent(
+) -> PlatformEvent:
+    return sync_platform_event(
         type="sync/message/deleted",
         channel_id=channel_id,
         payload={"message_id": message_id, "channel_id": channel_id},
@@ -265,12 +272,12 @@ def event_message_reaction_changed(
     *,
     company_id: str,
     recipient_user_ids: list[str],
-) -> RealtimeEvent:
+) -> PlatformEvent:
     reaction_payload: JsonArray = [
         parse_json_object(reaction.model_dump_json(), "ReactionEntry")
         for reaction in reactions
     ]
-    return RealtimeEvent(
+    return sync_platform_event(
         type="sync/message/reaction_changed",
         channel_id=channel_id,
         payload={
@@ -288,8 +295,8 @@ def event_channel_pins_changed(
     *,
     company_id: str,
     recipient_user_ids: list[str],
-) -> RealtimeEvent:
-    return RealtimeEvent(
+) -> PlatformEvent:
+    return sync_platform_event(
         type="sync/channel/pins_changed",
         channel_id=channel.channel_id,
         payload=parse_json_object(channel.model_dump_json(), "ChannelRead"),
@@ -298,16 +305,36 @@ def event_channel_pins_changed(
     )
 
 
+class CallIncomingEventPayload(CallRead):
+    initiator_user_id: str
+    caller_display_name: str
+    incoming_channel_kind: str
+    channel_display_name: str | None = None
+
+
 def event_call_incoming(
     call: CallRead,
     *,
     company_id: str,
     recipient_user_ids: list[str],
-) -> RealtimeEvent:
-    return RealtimeEvent(
+    initiator_user_id: str,
+    caller_display_name: str,
+    incoming_channel_kind: str,
+    channel_display_name: str | None = None,
+) -> PlatformEvent:
+    payload = CallIncomingEventPayload.model_validate(
+        {
+            **call.model_dump(),
+            "initiator_user_id": initiator_user_id,
+            "caller_display_name": caller_display_name,
+            "incoming_channel_kind": incoming_channel_kind,
+            "channel_display_name": channel_display_name,
+        }
+    )
+    return sync_platform_event(
         type="sync/call/incoming",
         channel_id=call.channel_id,
-        payload=parse_json_object(call.model_dump_json(), "CallRead"),
+        payload=parse_json_object(payload.model_dump_json(), "CallIncomingEventPayload"),
         company_id=company_id,
         recipient_user_ids=recipient_user_ids,
     )
@@ -320,11 +347,19 @@ def event_call_signal(
     *,
     company_id: str,
     recipient_user_ids: list[str],
-) -> RealtimeEvent:
-    return RealtimeEvent(
+    target_user_id: str,
+    sender_user_id: str,
+) -> PlatformEvent:
+    return sync_platform_event(
         type="sync/call/signaled",
         channel_id=None,
-        payload={"call_id": call_id, "signal_type": signal_type, "data": data},
+        payload={
+            "call_id": call_id,
+            "signal_type": signal_type,
+            "data": data,
+            "target_user_id": target_user_id,
+            "sender_user_id": sender_user_id,
+        },
         company_id=company_id,
         recipient_user_ids=recipient_user_ids,
     )
@@ -336,8 +371,8 @@ def event_call_accepted(
     *,
     company_id: str,
     recipient_user_ids: list[str],
-) -> RealtimeEvent:
-    return RealtimeEvent(
+) -> PlatformEvent:
+    return sync_platform_event(
         type="sync/call/accepted",
         channel_id=None,
         payload={"call_id": call_id, "user_id": user_id},
@@ -352,8 +387,8 @@ def event_call_declined(
     *,
     company_id: str,
     recipient_user_ids: list[str],
-) -> RealtimeEvent:
-    return RealtimeEvent(
+) -> PlatformEvent:
+    return sync_platform_event(
         type="sync/call/declined",
         channel_id=None,
         payload={"call_id": call_id, "user_id": user_id},
@@ -367,8 +402,8 @@ def event_call_ended(
     *,
     company_id: str,
     recipient_user_ids: list[str],
-) -> RealtimeEvent:
-    return RealtimeEvent(
+) -> PlatformEvent:
+    return sync_platform_event(
         type="sync/call/ended",
         channel_id=call.channel_id,
         payload=parse_json_object(call.model_dump_json(), "CallRead"),
@@ -383,8 +418,8 @@ def event_call_participant_joined(
     *,
     company_id: str,
     recipient_user_ids: list[str],
-) -> RealtimeEvent:
-    return RealtimeEvent(
+) -> PlatformEvent:
+    return sync_platform_event(
         type="sync/call/participant_joined",
         channel_id=None,
         payload={"call_id": call_id, "user_id": user_id},
@@ -399,8 +434,8 @@ def event_call_participant_left(
     *,
     company_id: str,
     recipient_user_ids: list[str],
-) -> RealtimeEvent:
-    return RealtimeEvent(
+) -> PlatformEvent:
+    return sync_platform_event(
         type="sync/call/participant_left",
         channel_id=None,
         payload={"call_id": call_id, "user_id": user_id},
@@ -414,8 +449,8 @@ def event_call_admin_changed(
     *,
     company_id: str,
     recipient_user_ids: list[str],
-) -> RealtimeEvent:
-    return RealtimeEvent(
+) -> PlatformEvent:
+    return sync_platform_event(
         type="sync/call/admin_changed",
         channel_id=call.channel_id,
         payload=parse_json_object(call.model_dump_json(), "CallRead"),
@@ -429,8 +464,8 @@ def event_call_recording_started(
     *,
     company_id: str,
     recipient_user_ids: list[str],
-) -> RealtimeEvent:
-    return RealtimeEvent(
+) -> PlatformEvent:
+    return sync_platform_event(
         type="sync/call/recording_started",
         channel_id=recording.channel_id,
         payload=parse_json_object(recording.model_dump_json(), "CallRecordingRead"),
@@ -444,8 +479,8 @@ def event_call_recording_stopped(
     *,
     company_id: str,
     recipient_user_ids: list[str],
-) -> RealtimeEvent:
-    return RealtimeEvent(
+) -> PlatformEvent:
+    return sync_platform_event(
         type="sync/call/recording_stopped",
         channel_id=recording.channel_id,
         payload=parse_json_object(recording.model_dump_json(), "CallRecordingRead"),
@@ -459,8 +494,8 @@ def event_call_recording_failed(
     *,
     company_id: str,
     recipient_user_ids: list[str],
-) -> RealtimeEvent:
-    return RealtimeEvent(
+) -> PlatformEvent:
+    return sync_platform_event(
         type="sync/call/recording_failed",
         channel_id=recording.channel_id,
         payload=parse_json_object(recording.model_dump_json(), "CallRecordingRead"),
@@ -493,17 +528,12 @@ class SyncMessageReactionChangedPayload(BaseModel):
     reactions: list[ReactionEntry] = Field(default_factory=list)
 
 
-class SyncPresenceChangedPayload(BaseModel):
-    company_id: str
-    user_id: str
-    online: bool
-    last_seen_at: str | None = None
-
-
 class SyncCallSignaledPayload(BaseModel):
     call_id: str
     signal_type: SignalType
     data: JsonObject = Field(default_factory=dict)
+    target_user_id: str
+    sender_user_id: str
 
 
 class SyncCallUserPayload(BaseModel):
@@ -573,7 +603,7 @@ register_platform_event(
 )
 register_platform_event(
     "sync/call/incoming",
-    CallRead,
+    CallIncomingEventPayload,
     description="Входящий звонок Sync.",
 )
 register_platform_event(
@@ -626,29 +656,3 @@ register_platform_event(
     CallRecordingRead,
     description="Ошибка записи звонка Sync.",
 )
-register_platform_event(
-    "sync/presence/changed",
-    SyncPresenceChangedPayload,
-    description="Изменился online/offline статус пользователя Sync.",
-)
-
-
-def event_user_presence(
-    *,
-    company_id: str,
-    user_id: str,
-    online: bool,
-    last_seen_at: str | None,
-) -> RealtimeEvent:
-    return RealtimeEvent(
-        type="sync/presence/changed",
-        channel_id=None,
-        payload={
-            "company_id": company_id,
-            "user_id": user_id,
-            "online": online,
-            "last_seen_at": last_seen_at,
-        },
-        company_id=company_id,
-        recipient_user_ids=None,
-    )

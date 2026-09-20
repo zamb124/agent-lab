@@ -1,76 +1,79 @@
 """Хелперы realtime для E2E-тестов sync (без моков).
 
-Все вспомогательные функции работают против реального HTTP-сервера sync на
-`127.0.0.1:9005` (фикстура `sync_service`) и реального Redis Pub/Sub. Никаких
-`unittest.mock` / `AsyncMock` / `monkeypatch`.
+HTTP — `127.0.0.1:9005`. User WS — Centrifugo JSON protocol
+(`CENTRIFUGO_WS_URL`), кадр = PlatformEvent.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Awaitable, Callable
+from typing import Any, AsyncIterator
 
 from httpx import AsyncClient
 
 from apps.sync.container import get_sync_container
-from apps.sync.ws_presence import is_user_sync_ws_online
 from core.authz.company_sync import sync_company_member_roles
-from core.config import get_settings
 from core.models.identity_models import Company, User
+from core.realtime.presence import is_user_connected
+from core.types import JsonObject, require_json_object
 from core.utils.tokens import get_token_service
+from tests.realtime.centrifugo_ws import (
+    CentrifugoWsClient,
+    connect_centrifugo,
+    rpc_platform_event,
+)
 
 SYNC_BASE_URL = "http://127.0.0.1:9005"
 FRONTEND_BASE_URL = "http://127.0.0.1:9004"
-SYNC_WS_URI = "ws://127.0.0.1:9005/sync/api/ws/notifications"
 
 
 @asynccontextmanager
-async def connect_ws(token: str) -> AsyncIterator[Any]:
-    """Открывает WebSocket к /sync/api/ws/notifications с cookie-авторизацией.
-
-    Импорт `websockets` локальный, чтобы тесты, не требующие WS, не тащили
-    зависимость в коллекцию.
-    """
-    import websockets
-
-    async with websockets.connect(
-        SYNC_WS_URI,
-        additional_headers=[("Cookie", f"auth_token={token}")],
-    ) as ws:
-        yield ws
+async def connect_ws(token: str) -> AsyncIterator[CentrifugoWsClient]:
+    async with connect_centrifugo(token) as client:
+        yield client
 
 
-async def wait_sync_ws_online(user_id: str, *, timeout: float = 10.0) -> None:
-    """Ждёт, пока connect-hook sync выставит `sync:ws:presence:<user_id>` в Redis."""
-    settings = get_settings()
-    redis_url = settings.database.redis_url
-    if not redis_url:
-        raise RuntimeError("database.redis_url не задан для wait_sync_ws_online.")
-
+async def wait_sync_ws_online(
+    user_id: str,
+    *,
+    company_id: str,
+    timeout: float = 10.0,
+) -> None:
     deadline = asyncio.get_event_loop().time() + timeout
     while asyncio.get_event_loop().time() < deadline:
-        if await is_user_sync_ws_online(redis_url, user_id):
+        if await is_user_connected(user_id, company_id=company_id):
             return
         await asyncio.sleep(0.05)
     raise AssertionError(
-        f"wait_sync_ws_online: user {user_id!r} не появился в sync WS presence за {timeout}s"
+        f"wait_sync_ws_online: user {user_id!r} не появился в Centrifugo presence за {timeout}s"
+    )
+
+
+async def wait_sync_ws_offline(
+    user_id: str,
+    *,
+    company_id: str,
+    timeout: float = 10.0,
+) -> None:
+    deadline = asyncio.get_event_loop().time() + timeout
+    while asyncio.get_event_loop().time() < deadline:
+        if not await is_user_connected(user_id, company_id=company_id):
+            return
+        await asyncio.sleep(0.05)
+    raise AssertionError(
+        f"wait_sync_ws_offline: user {user_id!r} всё ещё в Centrifugo presence за {timeout}s"
     )
 
 
 async def wait_frame(
-    ws: Any,
+    ws: CentrifugoWsClient,
     *,
     type_: str,
     where: Callable[[dict[str, Any]], bool] | None = None,
     timeout: float = 10.0,
 ) -> dict[str, Any]:
-    """Ждёт фрейм с `type == type_` (и опциональным предикатом по payload).
-
-    Каждый `recv` ограничен 2 секундами; общий deadline — `timeout`.
-    Бросает `AssertionError` если за `timeout` ничего подходящего не пришло.
-    """
     deadline = asyncio.get_event_loop().time() + timeout
     last_seen: list[str] = []
     while asyncio.get_event_loop().time() < deadline:
@@ -78,10 +81,9 @@ async def wait_frame(
         if remaining <= 0:
             break
         try:
-            raw = await asyncio.wait_for(ws.recv(), timeout=min(remaining, 2.0))
+            parsed = await ws.recv_platform_event(timeout=min(remaining, 2.0))
         except asyncio.TimeoutError:
             continue
-        parsed = json.loads(raw)
         frame_type = parsed.get("type")
         if not isinstance(frame_type, str):
             continue
@@ -94,7 +96,7 @@ async def wait_frame(
                 continue
             if not where(payload):
                 continue
-        return parsed
+        return dict(parsed)
     raise AssertionError(
         f"wait_frame: за {timeout}s не получен фрейм type={type_!r}; "
         f"были типы: {last_seen}"
@@ -102,23 +104,21 @@ async def wait_frame(
 
 
 async def assert_no_frame(
-    ws: Any,
+    ws: CentrifugoWsClient,
     *,
     type_: str,
     where: Callable[[dict[str, Any]], bool] | None = None,
     duration: float = 2.0,
 ) -> None:
-    """Проверяет, что фрейм с `type == type_` НЕ пришёл за `duration` секунд."""
     deadline = asyncio.get_event_loop().time() + duration
     while asyncio.get_event_loop().time() < deadline:
         remaining = deadline - asyncio.get_event_loop().time()
         if remaining <= 0:
             return
         try:
-            raw = await asyncio.wait_for(ws.recv(), timeout=min(remaining, 0.5))
+            parsed = await ws.recv_platform_event(timeout=min(remaining, 0.5))
         except asyncio.TimeoutError:
             continue
-        parsed = json.loads(raw)
         if parsed.get("type") != type_:
             continue
         payload = parsed.get("payload")
@@ -128,6 +128,26 @@ async def assert_no_frame(
         raise AssertionError(
             f"assert_no_frame: пришёл нежелательный фрейм type={type_!r}, payload={payload!r}"
         )
+
+
+async def send_ws_command(
+    ws: CentrifugoWsClient,
+    *,
+    token: str,
+    event_type: str,
+    payload: JsonObject,
+    event_id: str,
+) -> JsonObject:
+    token_data = get_token_service().validate_token(token)
+    if token_data is None:
+        raise AssertionError("SESSION JWT is required for Centrifugo RPC")
+    return await rpc_platform_event(
+        ws,
+        event_type=event_type,
+        payload=payload,
+        company_id=token_data.company_id,
+        event_id=event_id,
+    )
 
 
 async def add_third_user(
@@ -242,3 +262,7 @@ async def http_frontend(token: str) -> AsyncIterator[AsyncClient]:
     async with AsyncClient(base_url=FRONTEND_BASE_URL, timeout=60.0) as client:
         client.headers.update({"Authorization": f"Bearer {token}"})
         yield client
+
+
+def require_payload_object(event: dict[str, Any]) -> dict[str, Any]:
+    return dict(require_json_object(event.get("payload"), "platform_event.payload"))

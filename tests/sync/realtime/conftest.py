@@ -1,9 +1,8 @@
-"""Контекст компании для op_* (membership и `resolve_company_id` через `get_context`)."""
+"""Контекст компании для op_* (membership и `require_company` через `get_context`)."""
 
 
 from __future__ import annotations
 
-from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 from collections.abc import Generator
 
 import pytest
@@ -15,6 +14,7 @@ from core.context import clear_context, set_context
 from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
 @pytest_asyncio.fixture(autouse=True)

@@ -93,7 +93,7 @@ async def test_call_invite_publishes_incoming_to_other_member(
     )
 
     async with connect_ws(sync_auth_token_user2) as ws_user2:
-        await wait_sync_ws_online(user2_id)
+        await wait_sync_ws_online(user2_id, company_id=company_id)
         call = await _invite_call(sync_auth_token, channel_id)
         assert call["status"] == "ringing"
         assert isinstance(call["livekit_room_name"], str) and call["livekit_room_name"] != ""
@@ -130,7 +130,7 @@ async def test_call_invite_writes_call_boundary_started_to_feed(
     )
 
     async with connect_ws(sync_auth_token_user2) as ws_user2:
-        await wait_sync_ws_online(user2_id)
+        await wait_sync_ws_online(user2_id, company_id=company_id)
         call = await _invite_call(sync_auth_token, channel_id)
 
         frame = await wait_frame(
@@ -179,7 +179,7 @@ async def test_call_accept_changes_status_active_and_publishes_accepted(
 
     owner_id = _user_id_from_token(sync_auth_token)
     async with connect_ws(sync_auth_token) as ws_owner:
-        await wait_sync_ws_online(owner_id)
+        await wait_sync_ws_online(owner_id, company_id=company_id)
         async with http_owner(sync_auth_token_user2) as http2:
             r = await http2.post(f"/sync/api/v1/calls/{call['call_id']}/accept")
             assert r.status_code == 200, r.text
@@ -218,10 +218,11 @@ async def test_call_decline_publishes_declined_to_initiator(
 
     owner_id = _user_id_from_token(sync_auth_token)
     async with connect_ws(sync_auth_token) as ws_owner:
-        await wait_sync_ws_online(owner_id)
+        await wait_sync_ws_online(owner_id, company_id=company_id)
         async with http_owner(sync_auth_token_user2) as http2:
             r = await http2.post(f"/sync/api/v1/calls/{call['call_id']}/decline")
-            assert r.status_code == 204, r.text
+            assert r.status_code == 200, r.text
+            assert r.json()["call_id"] == call["call_id"]
 
         frame = await wait_frame(
             ws_owner,
@@ -257,7 +258,7 @@ async def test_call_hangup_by_last_participant_writes_call_boundary_ended(
         assert r.status_code == 200
 
     async with connect_ws(sync_auth_token_user2) as ws_user2:
-        await wait_sync_ws_online(user2_id)
+        await wait_sync_ws_online(user2_id, company_id=company_id)
         async with http_owner(sync_auth_token) as http:
             r = await http.post(f"/sync/api/v1/calls/{call['call_id']}/hangup")
             assert r.status_code == 200, r.text
@@ -317,12 +318,13 @@ async def test_call_signal_forwards_to_target_user_only(
 
     async with connect_ws(sync_auth_token_user2) as ws_user2, \
             connect_ws(sync_auth_token_user3) as ws_user3:
-        await wait_sync_ws_online(user2_id)
-        await wait_sync_ws_online(user3_id)
+        await wait_sync_ws_online(user2_id, company_id=company_id)
+        await wait_sync_ws_online(user3_id, company_id=company_id)
         async with http_owner(sync_auth_token) as http:
             r = await http.post(
                 f"/sync/api/v1/calls/{call['call_id']}/signal",
                 json={
+                    "call_id": call["call_id"],
                     "target_user_id": user2_id,
                     "signal_type": "offer",
                     "data": {"sdp": "v=0", "tag": unique_id},
@@ -369,16 +371,19 @@ async def test_call_admin_transfer_only_admin_can_change(
     async with http_owner(sync_auth_token_user2) as http2:
         r = await http2.post(
             f"/sync/api/v1/calls/{call['call_id']}/admin/transfer",
-            json={"target_user_id": _user_id_from_token(sync_auth_token)},
+            json={
+                "call_id": call["call_id"],
+                "target_user_id": _user_id_from_token(sync_auth_token),
+            },
         )
         assert r.status_code == 403
 
     async with connect_ws(sync_auth_token_user2) as ws_user2:
-        await wait_sync_ws_online(user2_id)
+        await wait_sync_ws_online(user2_id, company_id=company_id)
         async with http_owner(sync_auth_token) as http:
             r = await http.post(
                 f"/sync/api/v1/calls/{call['call_id']}/admin/transfer",
-                json={"target_user_id": user2_id},
+                json={"call_id": call["call_id"], "target_user_id": user2_id},
             )
             assert r.status_code == 200, r.text
             updated = r.json()

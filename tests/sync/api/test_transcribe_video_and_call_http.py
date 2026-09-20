@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import io
 import shutil
 import subprocess
 import tempfile
@@ -12,12 +11,13 @@ import uuid
 from pathlib import Path
 
 import pytest
-
-from tests.files.chunked_upload_helpers import chunked_upload_file, platform_auxiliary_upload_spec_json
 from httpx import AsyncClient
 
+from tests.files.chunked_upload_helpers import (
+    chunked_upload_file,
+    platform_auxiliary_upload_spec_json,
+)
 from tests.fixtures.audio_bytes import minimal_wav_silence
-from tests.sync.api._helpers import platform_auxiliary_file_spec_json
 
 
 def _minimal_mp4_bytes() -> bytes:

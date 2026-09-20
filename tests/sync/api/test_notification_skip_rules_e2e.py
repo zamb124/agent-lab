@@ -20,9 +20,7 @@ import asyncio
 import uuid
 
 import pytest
-import redis.asyncio as redis_async
 
-from core.config import get_settings
 from core.utils.tokens import get_token_service
 from tests.sync.api._helpers import create_topic_channel_via_http
 from tests.sync.api._realtime_helpers import (
@@ -31,6 +29,7 @@ from tests.sync.api._realtime_helpers import (
     connect_ws,
     http_owner,
     send_text_message,
+    wait_sync_ws_offline,
 )
 
 
@@ -41,16 +40,8 @@ def _user_id_from_token(token: str) -> str:
     return data.user_id
 
 
-async def _ensure_no_presence(user_id: str) -> None:
-    """Снимает Redis presence-ключ user'a (на случай хвоста от прошлого теста)."""
-    settings = get_settings()
-    if not settings.database.redis_url:
-        return
-    client = redis_async.from_url(settings.database.redis_url)
-    try:
-        await client.delete(f"sync:ws:presence:{user_id}")
-    finally:
-        await client.aclose()
+async def _ensure_offline(user_id: str, *, company_id: str) -> None:
+    await wait_sync_ws_offline(user_id, company_id=company_id)
 
 
 @pytest.mark.asyncio
@@ -115,7 +106,7 @@ async def test_notify_user_delivered_when_recipient_offline(
 ) -> None:
     """User2 офлайн (нет WS) → ждём `notify/sync/sync_new_message_received` через TaskIQ."""
     user2_id = _user_id_from_token(sync_auth_token_user2)
-    await _ensure_no_presence(user2_id)
+    await _ensure_offline(user2_id, company_id=company_id)
 
     async with http_owner(sync_auth_token) as http:
         channel_id = await create_topic_channel_via_http(
@@ -163,7 +154,7 @@ async def test_notify_user_skipped_when_channel_muted(
 ) -> None:
     """Mute канала у user2 → notify-push не приходит даже при offline-presence."""
     user2_id = _user_id_from_token(sync_auth_token_user2)
-    await _ensure_no_presence(user2_id)
+    await _ensure_offline(user2_id, company_id=company_id)
 
     async with http_owner(sync_auth_token) as http:
         channel_id = await create_topic_channel_via_http(

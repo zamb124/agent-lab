@@ -2491,7 +2491,7 @@
           "is_online": {
             "type": "boolean",
             "title": "Is Online",
-            "description": "Активное подключение /sync/ws в Redis."
+            "description": "Подключение к Centrifugo (presence_stats user channel)."
           },
           "last_seen_at": {
             "anyOf": [
@@ -2503,7 +2503,7 @@
               }
             ],
             "title": "Last Seen At",
-            "description": "ISO-время последнего отключения WS (если офлайн и ключ есть в Redis)."
+            "description": "ISO-время последнего наблюдения online при GET /company/members (Redis, если офлайн)."
           }
         },
         "type": "object",

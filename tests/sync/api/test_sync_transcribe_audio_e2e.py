@@ -11,16 +11,15 @@
 from __future__ import annotations
 
 import asyncio
-import io
-import json
 import uuid
 from typing import Any
 
 import pytest
 
-from tests.files.chunked_upload_helpers import chunked_upload_file, platform_auxiliary_upload_spec_json
-
 from core.utils.tokens import get_token_service
+from tests.files.chunked_upload_helpers import (
+    chunked_upload_file,
+)
 from tests.fixtures.audio_bytes import minimal_wav_silence
 from tests.sync.api._helpers import create_topic_channel_via_http, platform_auxiliary_file_spec_json
 from tests.sync.api._realtime_helpers import (
@@ -28,6 +27,7 @@ from tests.sync.api._realtime_helpers import (
     connect_ws,
     http_frontend,
     http_owner,
+    send_ws_command,
     wait_frame,
 )
 
@@ -176,12 +176,14 @@ async def test_transcribe_audio_via_ws_command_succeeds(
 
     async with connect_ws(sync_auth_token) as ws_owner:
         await asyncio.sleep(0.3)
-        request_id = uuid.uuid4().hex
-        await ws_owner.send(json.dumps({
-            "request_id": request_id,
-            "type": "sync/messages/transcribe_audio_requested",
-            "payload": {"channel_id": channel_id, "message_id": message_id},
-        }))
+        event_id = uuid.uuid4().hex
+        await send_ws_command(
+            ws_owner,
+            token=sync_auth_token,
+            event_type="sync/messages/transcribe_audio_requested",
+            payload={"channel_id": channel_id, "message_id": message_id},
+            event_id=event_id,
+        )
 
         reply = await wait_frame(
             ws_owner,
@@ -189,7 +191,10 @@ async def test_transcribe_audio_via_ws_command_succeeds(
             where=lambda p: True,
             timeout=15.0,
         )
-        assert reply.get("request_id") == request_id
+        meta = reply.get("meta")
+        if not isinstance(meta, dict):
+            raise AssertionError("terminal meta must be object")
+        assert meta.get("causation_id") == event_id
 
         done = await wait_frame(
             ws_owner,

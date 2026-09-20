@@ -255,7 +255,11 @@ class SyncClient:
                 f"{_API}/channels/{quote(args.channel_id, safe='')}"
                 f"/messages/{quote(args.message_id, safe='')}/react"
             ),
-            json={"emoji": args.emoji},
+            json={
+                "channel_id": args.channel_id,
+                "message_id": args.message_id,
+                "emoji": args.emoji,
+            },
         )
         result = require_json_object(response, "sync.react_message")
         return self.message_brief(result)

@@ -8,7 +8,6 @@
 
 from __future__ import annotations
 
-from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -23,6 +22,7 @@ from core.context import clear_context, set_context
 from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 from tests.fixtures.platform_events import platform_events_listener
 
 
@@ -58,7 +58,7 @@ async def op_context(
     company_id: str,
     op_user: User,
 ) -> AsyncIterator[None]:
-    """Установить get_context() для in-process вызовов op_* (resolve_company_id)."""
+    """Установить get_context() для in-process вызовов op_* (`require_company`)."""
     _ = sync_auth_token
     company = Company(
         company_id=company_id,

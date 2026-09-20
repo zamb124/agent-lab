@@ -1,12 +1,14 @@
-"""WebSocket: broadcast message.created нескольким клиентам."""
+"""WebSocket: broadcast message.created нескольким клиентам через Centrifugo."""
 
 from __future__ import annotations
 
 import asyncio
-import json
 import uuid
 
 import pytest
+from httpx import AsyncClient
+
+from tests.realtime.centrifugo_ws import connect_centrifugo, wait_platform_event
 
 
 @pytest.mark.asyncio
@@ -21,9 +23,6 @@ async def test_two_ws_clients_receive_message_created(
     company_id: str,
     unique_id: str,
 ) -> None:
-    import websockets
-    from httpx import AsyncClient
-
     from core.utils.tokens import get_token_service
     from tests.sync.api._helpers import seed_namespace_via_repo
 
@@ -56,29 +55,24 @@ async def test_two_ws_clients_receive_message_created(
         )
         assert mr.status_code in (200, 201)
 
-    uri = "ws://127.0.0.1:9005/sync/api/ws/notifications"
-
-    async def _wait_message_created(ws, expect_channel_id: str) -> dict[str, object]:
-        for _ in range(80):
-            raw = await asyncio.wait_for(ws.recv(), timeout=2.0)
-            parsed = json.loads(raw)
-            if parsed.get("type") != "sync/message/created":
-                continue
-            payload = parsed.get("payload")
-            if isinstance(payload, dict) and payload.get("channel_id") == expect_channel_id:
-                return parsed
-        raise AssertionError("Не получен sync/message/created для канала")
-
-    async with websockets.connect(
-        uri,
-        additional_headers=[("Cookie", f"auth_token={sync_auth_token}")],
-    ) as ws1:
-        async with websockets.connect(
-            uri,
-            additional_headers=[("Cookie", f"auth_token={sync_auth_token_user2}")],
-        ) as ws2:
-            t1 = asyncio.create_task(_wait_message_created(ws1, channel_id))
-            t2 = asyncio.create_task(_wait_message_created(ws2, channel_id))
+    async with connect_centrifugo(sync_auth_token) as ws1:
+        async with connect_centrifugo(sync_auth_token_user2) as ws2:
+            t1 = asyncio.create_task(
+                wait_platform_event(
+                    ws1,
+                    type_="sync/message/created",
+                    where={"channel_id": channel_id},
+                    timeout=45.0,
+                )
+            )
+            t2 = asyncio.create_task(
+                wait_platform_event(
+                    ws2,
+                    type_="sync/message/created",
+                    where={"channel_id": channel_id},
+                    timeout=45.0,
+                )
+            )
             await asyncio.sleep(0.25)
 
             async with AsyncClient(base_url="http://127.0.0.1:9005", timeout=60.0) as http_post:

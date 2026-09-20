@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Query
 
 from apps.sync.dependencies import ContainerDep
 from apps.sync.models.channels import ChannelRead
 from apps.sync.models.common import PaginationResponse
 from apps.sync.models.messages import MessageCreate, MessageEdit, MessageRead
-from apps.sync.realtime.context import require_current_user
 from apps.sync.realtime.operations import (
     MessagesDeletePayload,
     MessagesEditPayload,
@@ -24,6 +22,7 @@ from apps.sync.realtime.operations import (
     MessagesSendPayload,
     MessagesTranscribeAudioPayload,
     MessagesTranscribeCallPayload,
+    MessagesTranscribeCallResult,
     MessagesTranscribeVideoPayload,
     op_messages_delete,
     op_messages_edit,
@@ -38,57 +37,31 @@ from apps.sync.realtime.operations import (
     op_messages_transcribe_call,
     op_messages_transcribe_video,
 )
+from core.context import require_context
 from core.pagination import OffsetPage
+from core.websocket import WsCommandError
 
 router = APIRouter()
-MESSAGES_DEFAULT_LIMIT = 20
-
-
-class _MessagePaginationRequest(BaseModel):
-    limit: int = Field(default=50, ge=1, le=200)
-    before: str | None = Field(default=None)
-    after: str | None = Field(default=None)
-
-
-class MessageForwardBody(BaseModel):
-    to_channel_id: str = Field(min_length=1)
-    thread_id: str | None = Field(default=None)
-
-
-class MessageReactBody(BaseModel):
-    emoji: str | None = Field(default=None)
-
-
-class MessagePinBody(BaseModel):
-    message_id: str = Field(min_length=1)
-    action: Literal["add", "remove"]
 
 
 @router.get("/{channel_id}/messages", response_model=PaginationResponse[MessageRead])
 async def list_messages(
     channel_id: str,
-    request: Request,
     container: ContainerDep,
-    pagination: Annotated[_MessagePaginationRequest, Depends()],
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    before: str | None = None,
+    after: str | None = None,
 ) -> PaginationResponse[MessageRead]:
-    user = require_current_user()
-    limit = pagination.limit
-    if "limit" not in request.query_params:
-        limit = MESSAGES_DEFAULT_LIMIT
-    result = await op_messages_list(
+    user = require_context().user
+    return await op_messages_list(
         MessagesListPayload(
             channel_id=channel_id,
             limit=limit,
-            before=pagination.before,
-            after=pagination.after,
+            before=before,
+            after=after,
         ),
         user=user,
         container=container,
-    )
-    return PaginationResponse[MessageRead](
-        items=result.items,
-        next_cursor=result.next_cursor,
-        prev_cursor=result.prev_cursor,
     )
 
 
@@ -104,8 +77,8 @@ async def list_thread_messages(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[MessageRead]:
     """REST-зеркало `sync/messages/list_thread_requested`."""
-    user = require_current_user()
-    result = await op_messages_list_thread(
+    user = require_context().user
+    return await op_messages_list_thread(
         MessagesListThreadPayload(
             channel_id=channel_id,
             thread_id=thread_id,
@@ -115,19 +88,13 @@ async def list_thread_messages(
         user=user,
         container=container,
     )
-    return OffsetPage[MessageRead](
-        items=result.items,
-        total=result.total,
-        limit=result.limit,
-        offset=result.offset,
-    )
 
 
 @router.post("/{channel_id}/messages", status_code=201, response_model=MessageRead)
 async def send_message(
     container: ContainerDep, channel_id: str, body: MessageCreate
 ) -> MessageRead:
-    user = require_current_user()
+    user = require_context().user
     return await op_messages_send(
         MessagesSendPayload(channel_id=channel_id, body=body),
         user=user,
@@ -142,7 +109,7 @@ async def edit_message(
     message_id: str,
     body: MessageEdit,
 ) -> MessageRead:
-    user = require_current_user()
+    user = require_context().user
     return await op_messages_edit(
         MessagesEditPayload(channel_id=channel_id, message_id=message_id, body=body),
         user=user,
@@ -150,11 +117,11 @@ async def edit_message(
     )
 
 
-@router.delete("/{channel_id}/messages/{message_id}")
+@router.delete("/{channel_id}/messages/{message_id}", response_model=MessagesDeletePayload)
 async def delete_message(
     container: ContainerDep, channel_id: str, message_id: str
-) -> dict[str, str]:
-    user = require_current_user()
+) -> MessagesDeletePayload:
+    user = require_context().user
     return await op_messages_delete(
         MessagesDeletePayload(channel_id=channel_id, message_id=message_id),
         user=user,
@@ -167,19 +134,12 @@ async def forward_message(
     container: ContainerDep,
     channel_id: str,
     message_id: str,
-    body: MessageForwardBody,
+    body: MessagesForwardPayload,
 ) -> MessageRead:
-    user = require_current_user()
-    return await op_messages_forward(
-        MessagesForwardPayload(
-            from_channel_id=channel_id,
-            message_id=message_id,
-            to_channel_id=body.to_channel_id,
-            thread_id=body.thread_id,
-        ),
-        user=user,
-        container=container,
-    )
+    if body.from_channel_id != channel_id or body.message_id != message_id:
+        raise WsCommandError("ws_invalid_payload", "channel_id or message_id mismatch")
+    user = require_context().user
+    return await op_messages_forward(body, user=user, container=container)
 
 
 @router.post("/{channel_id}/messages/{message_id}/react", response_model=MessageRead)
@@ -187,22 +147,18 @@ async def react_message(
     container: ContainerDep,
     channel_id: str,
     message_id: str,
-    body: MessageReactBody,
+    body: MessagesReactPayload,
 ) -> MessageRead:
-    user = require_current_user()
-    return await op_messages_react(
-        MessagesReactPayload(
-            channel_id=channel_id, message_id=message_id, emoji=body.emoji
-        ),
-        user=user,
-        container=container,
-    )
+    if body.channel_id != channel_id or body.message_id != message_id:
+        raise WsCommandError("ws_invalid_payload", "channel_id or message_id mismatch")
+    user = require_context().user
+    return await op_messages_react(body, user=user, container=container)
 
 
-@router.post("/{channel_id}/messages/{message_id}/read")
+@router.post("/{channel_id}/messages/{message_id}/read", status_code=204)
 async def mark_message_read(
     container: ContainerDep, channel_id: str, message_id: str
-) -> dict[str, str]:
+) -> None:
     """REST-зеркало команды `sync/messages/mark_read_requested`.
 
     Помечает конкретное сообщение как прочитанное и публикует
@@ -210,27 +166,22 @@ async def mark_message_read(
     `sync_channel_members.last_read_at` — для обнуления unread-счётчика
     используется `POST /channels/{channel_id}/read` (op_channels_mark_read).
     """
-    user = require_current_user()
+    user = require_context().user
     await op_messages_mark_read(
         MessagesMarkReadPayload(channel_id=channel_id, message_id=message_id),
         user=user,
         container=container,
     )
-    return {"message_id": message_id}
 
 
 @router.post("/{channel_id}/pins", response_model=ChannelRead)
 async def pin_message(
-    container: ContainerDep, channel_id: str, body: MessagePinBody
+    container: ContainerDep, channel_id: str, body: MessagesPinPayload
 ) -> ChannelRead:
-    user = require_current_user()
-    return await op_messages_pin(
-        MessagesPinPayload(
-            channel_id=channel_id, message_id=body.message_id, action=body.action
-        ),
-        user=user,
-        container=container,
-    )
+    if body.channel_id != channel_id:
+        raise WsCommandError("ws_invalid_payload", "channel_id mismatch")
+    user = require_context().user
+    return await op_messages_pin(body, user=user, container=container)
 
 
 @router.post("/{channel_id}/messages/{message_id}/transcribe", response_model=MessageRead)
@@ -239,7 +190,7 @@ async def transcribe_audio_message(
     channel_id: str,
     message_id: str,
 ) -> MessageRead:
-    user = require_current_user()
+    user = require_context().user
     return await op_messages_transcribe_audio(
         MessagesTranscribeAudioPayload(channel_id=channel_id, message_id=message_id),
         user=user,
@@ -253,7 +204,7 @@ async def transcribe_video_message(
     channel_id: str,
     message_id: str,
 ) -> MessageRead:
-    user = require_current_user()
+    user = require_context().user
     return await op_messages_transcribe_video(
         MessagesTranscribeVideoPayload(channel_id=channel_id, message_id=message_id),
         user=user,
@@ -261,16 +212,19 @@ async def transcribe_video_message(
     )
 
 
-@router.post("/{channel_id}/calls/{call_id}/transcribe", status_code=202)
+@router.post(
+    "/{channel_id}/calls/{call_id}/transcribe",
+    status_code=202,
+    response_model=MessagesTranscribeCallResult,
+)
 async def transcribe_call_session(
     container: ContainerDep,
     channel_id: str,
     call_id: str,
-) -> dict[str, str]:
-    user = require_current_user()
-    result = await op_messages_transcribe_call(
+) -> MessagesTranscribeCallResult:
+    user = require_context().user
+    return await op_messages_transcribe_call(
         MessagesTranscribeCallPayload(channel_id=channel_id, call_id=call_id),
         user=user,
         container=container,
     )
-    return {"status": result.status}

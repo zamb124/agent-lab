@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import io
-
 import pytest
-
-from tests.files.chunked_upload_helpers import chunked_upload_file, platform_auxiliary_upload_spec_json
 from httpx import ASGITransport, AsyncClient
 
+from tests.files.chunked_upload_helpers import (
+    chunked_upload_file,
+)
 from tests.sync.api._helpers import platform_auxiliary_file_spec_json
 from tests.sync.integration.conftest import _temporary_settings
 

@@ -7,7 +7,7 @@
   - `bare except: ...`
 
 Фолбеки `or default` отдельно ловит `pytest tests/sync/integration/test_ops_zero_fallback.py`
-(through behaviour: ws_invalid_payload / ws_no_company / not_found).
+(through behaviour: ws_invalid_payload / forbidden / not_found).
 """
 
 from __future__ import annotations

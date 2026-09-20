@@ -1,20 +1,15 @@
-"""WebSocket Sync: единый платформенный сокет /sync/api/ws/notifications.
-
-Контракт фрейма (см. `architecture.mdc`, раздел «REST-зеркало команд»):
-
-  client -> server:  { request_id, type: 'sync/<entity>/<verb>_requested', payload }
-  server -> client:  { request_id, type: 'sync/<entity>/<verb>_succeeded'|'..._failed', payload }
-                     либо push без request_id: { type, payload, meta? } из platform:events.
-"""
+"""User WS Sync через Centrifugo: кадр PlatformEvent, RPC platform.event."""
 
 from __future__ import annotations
 
-import json
 import uuid
 
 import pytest
+import websockets
 
+from tests.realtime.centrifugo_ws import CENTRIFUGO_WS_URL, connect_centrifugo, wait_platform_event
 from tests.sync.api._helpers import seed_namespace_via_repo
+from tests.sync.api._realtime_helpers import send_ws_command
 
 
 @pytest.mark.asyncio
@@ -26,39 +21,31 @@ async def test_ws_channels_create_via_command_router(
     company_id: str,
     unique_id: str,
 ) -> None:
-    import websockets
-
     namespace = f"ns_{unique_id}_ws"
     await seed_namespace_via_repo(company_id, namespace)
 
-    uri = "ws://127.0.0.1:9005/sync/api/ws/notifications"
-    request_id = uuid.uuid4().hex
-    frame = {
-        "request_id": request_id,
-        "type": "sync/channels/create_requested",
-        "payload": {
-            "type": "topic",
-            "name": "WsTopic",
-            "namespace": namespace,
-            "is_private": False,
-        },
-    }
-    async with websockets.connect(
-        uri,
-        additional_headers=[("Cookie", f"auth_token={sync_auth_token}")],
-    ) as ws:
-        await ws.send(json.dumps(frame))
-        reply = None
-        for _ in range(20):
-            raw = await ws.recv()
-            parsed = json.loads(raw)
-            if parsed.get("request_id") == request_id:
-                reply = parsed
-                break
-        assert reply is not None, "ожидался reply-фрейм с тем же request_id"
-        assert reply["type"] == "sync/channels/create_succeeded"
-        assert reply["payload"]["name"] == "WsTopic"
-        assert reply["payload"]["namespace"] == namespace
+    event_id = uuid.uuid4().hex
+    async with connect_centrifugo(sync_auth_token) as ws:
+        await send_ws_command(
+            ws,
+            token=sync_auth_token,
+            event_type="sync/channels/create_requested",
+            payload={
+                "type": "topic",
+                "name": "WsTopic",
+                "namespace": namespace,
+                "is_private": False,
+            },
+            event_id=event_id,
+        )
+        reply = await wait_platform_event(ws, type_="sync/channels/create_succeeded")
+        payload = reply.get("payload")
+        assert isinstance(payload, dict)
+        assert payload["name"] == "WsTopic"
+        assert payload["namespace"] == namespace
+        meta = reply.get("meta")
+        assert isinstance(meta, dict)
+        assert meta.get("causation_id") == event_id
 
 
 @pytest.mark.asyncio
@@ -67,12 +54,14 @@ async def test_ws_rejects_without_auth_cookie(
     sync_worker,
     sync_db_clean: None,
 ) -> None:
-    import websockets
-
-    uri = "ws://127.0.0.1:9005/sync/api/ws/notifications"
-    with pytest.raises((websockets.exceptions.InvalidStatus, websockets.exceptions.ConnectionClosed)):
-        async with websockets.connect(uri) as ws:
-            await ws.recv()
+    with pytest.raises(websockets.exceptions.ConnectionClosedError) as closed:
+        async with websockets.connect(CENTRIFUGO_WS_URL) as connection:
+            await connection.send('{"id":1,"connect":{}}')
+            _ = await connection.recv()
+    received = closed.value.rcvd
+    if received is None:
+        raise AssertionError("Centrifugo close frame is required")
+    assert received.code == 3501
 
 
 @pytest.mark.asyncio
@@ -82,30 +71,19 @@ async def test_ws_command_failed_when_target_missing(
     sync_auth_token,
     sync_db_clean: None,
 ) -> None:
-    import websockets
-
-    uri = "ws://127.0.0.1:9005/sync/api/ws/notifications"
-    request_id = uuid.uuid4().hex
-    frame = {
-        "request_id": request_id,
-        "type": "sync/channels/update_requested",
-        "payload": {"channel_id": "missing_channel_ws", "body": {"name": "X"}},
-    }
-    async with websockets.connect(
-        uri,
-        additional_headers=[("Cookie", f"auth_token={sync_auth_token}")],
-    ) as ws:
-        await ws.send(json.dumps(frame))
-        reply = None
-        for _ in range(20):
-            raw = await ws.recv()
-            parsed = json.loads(raw)
-            if parsed.get("request_id") == request_id:
-                reply = parsed
-                break
-        assert reply is not None
-        assert reply["type"] == "sync/channels/update_failed"
-        assert "error_code" in reply["payload"]
+    event_id = uuid.uuid4().hex
+    async with connect_centrifugo(sync_auth_token) as ws:
+        await send_ws_command(
+            ws,
+            token=sync_auth_token,
+            event_type="sync/channels/update_requested",
+            payload={"channel_id": "missing_channel_ws", "body": {"name": "X"}},
+            event_id=event_id,
+        )
+        reply = await wait_platform_event(ws, type_="sync/channels/update_failed")
+        payload = reply.get("payload")
+        assert isinstance(payload, dict)
+        assert "error_code" in payload
 
 
 @pytest.mark.asyncio
@@ -117,56 +95,48 @@ async def test_ws_two_commands_sequential(
     company_id: str,
     unique_id: str,
 ) -> None:
-    import websockets
-
     namespace = f"ns_{unique_id}_seq"
     await seed_namespace_via_repo(company_id, namespace)
 
-    uri = "ws://127.0.0.1:9005/sync/api/ws/notifications"
     id1 = uuid.uuid4().hex
     id2 = uuid.uuid4().hex
-    f1 = {
-        "request_id": id1,
-        "type": "sync/channels/create_requested",
-        "payload": {
-            "type": "topic",
-            "name": "WsA",
-            "namespace": namespace,
-            "is_private": False,
-        },
-    }
-    f2 = {
-        "request_id": id2,
-        "type": "sync/channels/create_requested",
-        "payload": {
-            "type": "topic",
-            "name": "WsB",
-            "namespace": namespace,
-            "is_private": False,
-        },
-    }
-    async with websockets.connect(
-        uri,
-        additional_headers=[("Cookie", f"auth_token={sync_auth_token}")],
-    ) as ws:
-        await ws.send(json.dumps(f1))
-        await ws.send(json.dumps(f2))
+    async with connect_centrifugo(sync_auth_token) as ws:
+        await send_ws_command(
+            ws,
+            token=sync_auth_token,
+            event_type="sync/channels/create_requested",
+            payload={
+                "type": "topic",
+                "name": "WsA",
+                "namespace": namespace,
+                "is_private": False,
+            },
+            event_id=id1,
+        )
+        await send_ws_command(
+            ws,
+            token=sync_auth_token,
+            event_type="sync/channels/create_requested",
+            payload={
+                "type": "topic",
+                "name": "WsB",
+                "namespace": namespace,
+                "is_private": False,
+            },
+            event_id=id2,
+        )
         got: dict[str, dict[str, object]] = {}
-        for _ in range(40):
-            raw = await ws.recv()
-            parsed = json.loads(raw)
-            rid = parsed.get("request_id")
-            if rid in (id1, id2):
-                got[rid] = parsed
-            if len(got) == 2:
-                break
-        reply1 = got[id1]
-        payload1 = reply1.get("payload")
+        while len(got) < 2:
+            event = await wait_platform_event(ws, type_="sync/channels/create_succeeded")
+            meta = event.get("meta")
+            if not isinstance(meta, dict):
+                continue
+            causation = meta.get("causation_id")
+            if causation in (id1, id2):
+                got[str(causation)] = event
+        payload1 = got[id1].get("payload")
         assert isinstance(payload1, dict)
-        assert reply1.get("type") == "sync/channels/create_succeeded"
         assert payload1.get("name") == "WsA"
-        reply2 = got[id2]
-        payload2 = reply2.get("payload")
+        payload2 = got[id2].get("payload")
         assert isinstance(payload2, dict)
-        assert reply2.get("type") == "sync/channels/create_succeeded"
         assert payload2.get("name") == "WsB"

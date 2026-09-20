@@ -11,7 +11,7 @@
 Для каждой операции:
   - REST-route в `apps/sync/api/**` валидирует входное тело через Pydantic
     (FastAPI), вызывает `op_*` напрямую и сериализует результат.
-  - WS command-handler (`apps/sync/realtime/command_router.py::_make_ws_handler`)
+  - WS command-handler (`core.websocket.register_service_operations`)
     валидирует payload через тот же Pydantic-класс и вызывает ту же `op_*`.
 
 Zero-fallback canon (см. `main.mdc`):
@@ -21,8 +21,8 @@ Zero-fallback canon (см. `main.mdc`):
     идут наверх как 500.
   - Бизнес-инварианты: явный `raise WsCommandError(code, detail)`.
     Не «вернуть пустой результат».
-  - `resolve_company_id` бросает, если контекста нет, — никаких неявных
-    дефолтов на `system` или `user.active_company_id or "default"`.
+  - `require_company` бросает, если контекста нет, — никаких неявных
+    дефолтов на `system` или `user.active_company_id`.
 
 Mutating-операции исполняются in-process. TaskIQ — только для явно
 помеченных heavy-операций (`messages.transcribe_audio/video/call`),
@@ -35,18 +35,17 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-from collections.abc import Awaitable
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Generic, Literal, Protocol, TypeVar
+from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 
 from apps.sync.channel_read_helpers import channel_read_from_entity
 from apps.sync.constants import CHANNEL_TYPE_CALENDAR_MEETING
 from apps.sync.container import SyncContainer
 from apps.sync.db.models import SyncCall, SyncCallLink, SyncCallRecording, SyncChannel
+from apps.sync.db.repositories.meeting_repository import call_recording_read
 from apps.sync.message_read_helpers import message_read_from_entity
 from apps.sync.models.calls import (
     CallLinkCreate,
@@ -70,7 +69,7 @@ from apps.sync.models.channels import (
     ChannelRead,
     ChannelUpdate,
 )
-from apps.sync.models.common import UserBrief
+from apps.sync.models.common import PaginationResponse, UserBrief
 from apps.sync.models.company_members import CompanyMemberRead
 from apps.sync.models.git import (
     GitProvider,
@@ -78,7 +77,7 @@ from apps.sync.models.git import (
     GitResourceRefCreate,
     GitResourceRefRead,
 )
-from apps.sync.models.meetings import CallRecordingRead, RecordingStatus
+from apps.sync.models.meetings import CallRecordingRead
 from apps.sync.models.messages import (
     CallBoundaryContent,
     MessageContentModel,
@@ -97,10 +96,8 @@ from apps.sync.realtime.call_handlers import (
     handle_call_hangup,
     handle_call_invite,
 )
-from apps.sync.realtime.context import resolve_company_id
 from apps.sync.realtime.events import (
     MessageStatusChangedPayload,
-    RealtimeEvent,
     event_call_admin_changed,
     event_call_recording_started,
     event_call_recording_stopped,
@@ -150,143 +147,18 @@ from core.calls.livekit_client import LiveKitClient
 from core.calls.models import TurnCredentials
 from core.calls.turn import generate_turn_credentials
 from core.config import BaseSettings, get_settings
+from core.events.contract import PlatformEvent
 from core.files.models import AudioTranscriptionStatus, FileRecord
 from core.logging import get_logger
 from core.models.identity_models import User
+from core.pagination import ListResponse, OffsetPage
 from core.platform_brand.resolver import resolve_context_host, resolve_livekit_public_url
+from core.request_scope import require_company
 from core.tasks import enqueue
-from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
+from core.types import JsonObject, parse_json_object
 from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
-
-PayloadT = TypeVar("PayloadT", bound=BaseModel)
-OperationPayloadT = TypeVar("OperationPayloadT", bound=BaseModel, contravariant=True)
-
-
-class OperationFn(Protocol[OperationPayloadT]):
-    def __call__(
-        self,
-        payload: OperationPayloadT,
-        /,
-        *,
-        user: User,
-        container: SyncContainer,
-    ) -> Awaitable[BaseModel | JsonValue | None]: ...
-
-
-class RegisteredOperation(Protocol):
-    @property
-    def canonical_type(self) -> str: ...
-
-    @property
-    def payload_model(self) -> type[BaseModel]: ...
-
-    async def run(
-        self,
-        payload: JsonObject,
-        *,
-        user: User,
-        container: SyncContainer,
-    ) -> JsonObject | None: ...
-
-
-@dataclass(frozen=True)
-class Operation(Generic[PayloadT]):
-    """Описание операции: payload-модель + бизнес-функция.
-
-    `fn` обязана иметь сигнатуру:
-        async def fn(payload: PayloadT, *, user: User, container: SyncContainer)
-            -> BaseModel | JsonValue | None
-    """
-
-    canonical_type: str
-    payload_model: type[PayloadT]
-    fn: OperationFn[PayloadT]
-    result_model: type[BaseModel] | None = None
-
-    def __post_init__(self) -> None:
-        if not self.canonical_type:
-            raise ValueError("Operation.canonical_type must be non-empty string")
-        if not self.canonical_type.endswith("_requested"):
-            raise ValueError(
-                f"Operation.canonical_type {self.canonical_type!r} must end with '_requested'"
-            )
-
-    async def run(
-        self,
-        payload: JsonObject,
-        *,
-        user: User,
-        container: SyncContainer,
-    ) -> JsonObject | None:
-        validated = parse_payload(self.payload_model, payload)
-        operation_result = await self.fn(validated, user=user, container=container)
-        return dump_result(operation_result)
-
-
-def parse_payload(model: type[PayloadT], raw: JsonObject) -> PayloadT:
-    """Валидация входа через Pydantic. ValidationError → WsCommandError."""
-    try:
-        return model.model_validate(raw)
-    except ValidationError as exc:
-        raise WsCommandError("ws_invalid_payload", str(exc)) from exc
-
-
-def dump_result(result: BaseModel | JsonValue | None) -> JsonObject | None:
-    """Привести результат операции к JSON-словарю или None."""
-    if result is None:
-        return None
-    if isinstance(result, BaseModel):
-        return parse_json_object(result.model_dump_json(), type(result).__name__)
-    return require_json_object(result, "Sync operation result")
-
-
-def _recording_status(value: str) -> RecordingStatus:
-    if value == "requested":
-        return "requested"
-    if value == "recording":
-        return "recording"
-    if value == "uploaded":
-        return "uploaded"
-    if value == "failed":
-        return "failed"
-    raise WsCommandError("internal", f"Invalid call recording status: {value!r}")
-
-
-def _call_recording_read_from_entity(recording: SyncCallRecording) -> CallRecordingRead:
-    return CallRecordingRead(
-        recording_id=recording.recording_id,
-        call_id=recording.call_id,
-        channel_id=recording.channel_id,
-        namespace=recording.namespace,
-        started_by_user_id=recording.started_by_user_id,
-        status=_recording_status(recording.status),
-        provider_job_id=recording.provider_job_id,
-        raw_file_id=recording.raw_file_id,
-        started_at=recording.started_at,
-        ended_at=recording.ended_at,
-        created_at=recording.created_at,
-        error=recording.error,
-    )
-
-
-# Маппинг кодов `WsCommandError` в HTTP-статусы для REST-зеркал.
-_HTTP_STATUS_BY_CODE: dict[str, int] = {
-    "ws_invalid_payload": 400,
-    "ws_invalid_cursor": 400,
-    "ws_invalid_result": 500,
-    "ws_no_company": 400,
-    "not_found": 404,
-    "forbidden": 403,
-    "conflict": 409,
-    "internal": 500,
-}
-
-
-def ws_command_error_status(error: WsCommandError) -> int:
-    """HTTP-статус для `WsCommandError`. Неизвестный код = 500."""
-    return _HTTP_STATUS_BY_CODE.get(error.code, 500)
 
 
 # ---------------------------------------------------------------------------
@@ -331,13 +203,6 @@ class ChannelsListPayload(BaseModel):
     offset: int = Field(default=0, ge=0)
 
 
-class ChannelsListResult(BaseModel):
-    items: list[ChannelRead]
-    total: int
-    limit: int
-    offset: int
-
-
 class ChannelsUpdatePayload(BaseModel):
     channel_id: str = Field(min_length=1)
     body: ChannelUpdate
@@ -366,10 +231,6 @@ class ChannelsAddMemberPayload(BaseModel):
 
 class ChannelsListMembersPayload(BaseModel):
     channel_id: str = Field(min_length=1)
-
-
-class ChannelsListMembersResult(BaseModel):
-    items: list[ChannelMemberRead]
 
 
 async def _build_channel_read(
@@ -447,8 +308,8 @@ async def op_channels_list(
     *,
     user: User,
     container: SyncContainer,
-) -> ChannelsListResult:
-    company_id = resolve_company_id(user)
+) -> OffsetPage[ChannelRead]:
+    company_id = require_company().company_id
     candidates = await container.channel_repository.list_for_user(
         user.user_id,
         namespace=payload.namespace,
@@ -478,7 +339,7 @@ async def op_channels_list(
                 lane_summary=summaries[c.channel_id],
             )
         )
-    return ChannelsListResult(
+    return OffsetPage[ChannelRead](
         items=items, total=len(items), limit=payload.limit, offset=payload.offset
     )
 
@@ -489,7 +350,7 @@ async def op_channels_create(
     user: User,
     container: SyncContainer,
 ) -> ChannelRead:
-    company_id = resolve_company_id(user)
+    company_id = require_company().company_id
     channel, created_new = await create_channel(
         payload,
         actor_user_id=user.user_id,
@@ -519,7 +380,7 @@ async def op_channels_update(
     user: User,
     container: SyncContainer,
 ) -> ChannelRead:
-    company_id = resolve_company_id(user)
+    company_id = require_company().company_id
     return await update_channel(
         payload.channel_id,
         payload.body,
@@ -536,7 +397,7 @@ async def op_channels_mark_read(
     user: User,
     container: SyncContainer,
 ) -> None:
-    company_id = resolve_company_id(user)
+    company_id = require_company().company_id
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
@@ -573,7 +434,7 @@ async def op_channels_typing(
     user: User,
     container: SyncContainer,
 ) -> None:
-    company_id = resolve_company_id(user)
+    company_id = require_company().company_id
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
@@ -618,7 +479,7 @@ async def op_channels_notification_settings_update(
     user: User,
     container: SyncContainer,
 ) -> ChannelRead:
-    company_id = resolve_company_id(user)
+    company_id = require_company().company_id
     ch = await container.channel_repository.get(payload.channel_id)
     if ch is None or ch.company_id != company_id:
         raise WsCommandError("not_found", "Канал не найден.")
@@ -643,7 +504,7 @@ async def op_channels_add_member(
     user: User,
     container: SyncContainer,
 ) -> ChannelMemberRead:
-    company_id = resolve_company_id(user)
+    company_id = require_company().company_id
     ch = await container.channel_repository.get(payload.channel_id)
     if ch is None or ch.company_id != company_id:
         raise WsCommandError("not_found", "Канал не найден.")
@@ -690,8 +551,8 @@ async def op_channels_list_members(
     *,
     user: User,
     container: SyncContainer,
-) -> ChannelsListMembersResult:
-    company_id = resolve_company_id(user)
+) -> ListResponse[ChannelMemberRead]:
+    company_id = require_company().company_id
     ch = await container.channel_repository.get(payload.channel_id)
     if ch is None or ch.company_id != company_id:
         raise WsCommandError("not_found", "Канал не найден.")
@@ -700,7 +561,7 @@ async def op_channels_list_members(
     ):
         raise WsCommandError("forbidden", "Нет доступа к каналу.")
     rows = await container.channel_access_service.list_member_rows(payload.channel_id)
-    return ChannelsListMembersResult(
+    return ListResponse[ChannelMemberRead](
         items=[ChannelMemberRead(user_id=uid, role=role) for uid, role in rows]
     )
 
@@ -716,13 +577,6 @@ class ThreadsListPayload(BaseModel):
     offset: int = Field(default=0, ge=0)
 
 
-class ThreadsListResult(BaseModel):
-    items: list[ThreadRow]
-    total: int
-    limit: int
-    offset: int
-
-
 class ThreadsItemPayload(BaseModel):
     thread_id: str = Field(min_length=1)
 
@@ -736,8 +590,9 @@ async def op_threads_list(
     *,
     user: User,
     container: SyncContainer,
-) -> ThreadsListResult:
-    company_id = resolve_company_id(user)
+) -> OffsetPage[ThreadRow]:
+    _ = user
+    company_id = require_company().company_id
     threads = await container.thread_repository.list_by_channel(
         payload.channel_id,
         limit=payload.limit,
@@ -754,7 +609,7 @@ async def op_threads_list(
         )
         for t in threads
     ]
-    return ThreadsListResult(
+    return OffsetPage[ThreadRow](
         items=items, total=len(items), limit=payload.limit, offset=payload.offset
     )
 
@@ -765,7 +620,8 @@ async def op_threads_item(
     user: User,
     container: SyncContainer,
 ) -> ThreadRow:
-    _ = resolve_company_id(user)
+    _ = user
+    _ = require_company()
     thread = await container.thread_repository.get(payload.thread_id)
     if thread is None:
         raise WsCommandError("not_found", f"Thread {payload.thread_id!r} not found.")
@@ -785,7 +641,7 @@ async def op_threads_create(
     user: User,
     container: SyncContainer,
 ) -> ThreadRead:
-    company_id = resolve_company_id(user)
+    company_id = require_company().company_id
     thread = await create_thread(
         payload.body,
         actor_user_id=user.user_id,
@@ -817,12 +673,6 @@ class MessagesListPayload(BaseModel):
     limit: int = Field(default=50, ge=1, le=200)
     before: str | None = Field(default=None)
     after: str | None = Field(default=None)
-
-
-class MessagesListResult(BaseModel):
-    items: list[MessageRead]
-    next_cursor: str | None
-    prev_cursor: str | None
 
 
 async def _listed_message_sender_brief(
@@ -901,8 +751,9 @@ async def op_messages_list(
     *,
     user: User,
     container: SyncContainer,
-) -> MessagesListResult:
-    company_id = resolve_company_id(user)
+) -> PaginationResponse[MessageRead]:
+    _ = user
+    company_id = require_company().company_id
     if payload.before is not None and payload.after is not None:
         raise WsCommandError(
             "ws_invalid_payload", "before and after are mutually exclusive"
@@ -928,7 +779,7 @@ async def op_messages_list(
     )
     rows = window.rows
     if not rows:
-        return MessagesListResult(items=[], next_cursor=None, prev_cursor=None)
+        return PaginationResponse[MessageRead](items=[], next_cursor=None, prev_cursor=None)
 
     user_ids = list({m.sender_user_id for m in rows})
     users_by_id = await container.user_repository.get_many(user_ids)
@@ -952,7 +803,9 @@ async def op_messages_list(
         if window.has_more_newer
         else None
     )
-    return MessagesListResult(items=items, next_cursor=next_cursor, prev_cursor=prev_cursor)
+    return PaginationResponse[MessageRead](
+        items=items, next_cursor=next_cursor, prev_cursor=prev_cursor
+    )
 
 
 class MessagesListThreadPayload(BaseModel):
@@ -962,20 +815,13 @@ class MessagesListThreadPayload(BaseModel):
     offset: int = Field(default=0, ge=0)
 
 
-class MessagesListThreadResult(BaseModel):
-    items: list[MessageRead]
-    total: int
-    limit: int
-    offset: int
-
-
 async def op_messages_list_thread(
     payload: MessagesListThreadPayload,
     *,
     user: User,
     container: SyncContainer,
-) -> MessagesListThreadResult:
-    company_id = resolve_company_id(user)
+) -> OffsetPage[MessageRead]:
+    company_id = require_company().company_id
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
@@ -995,7 +841,7 @@ async def op_messages_list_thread(
         company_id=company_id,
     )
     if not rows:
-        return MessagesListThreadResult(
+        return OffsetPage[MessageRead](
             items=[],
             total=0,
             limit=payload.limit,
@@ -1008,7 +854,7 @@ async def op_messages_list_thread(
         contents = await container.message_repository.list_contents(m.message_id)
         sender = await _listed_message_sender_brief(users_by_id, m.sender_user_id)
         items.append(message_read_from_entity(m=m, contents=contents, sender=sender))
-    return MessagesListThreadResult(
+    return OffsetPage[MessageRead](
         items=items,
         total=len(items),
         limit=payload.limit,
@@ -1036,7 +882,8 @@ async def op_messages_mark_read(
     user: User,
     container: SyncContainer,
 ) -> None:
-    company_id = resolve_company_id(user)
+    _ = user
+    company_id = require_company().company_id
     recipients = await channel_recipient_user_ids(
         container.channel_access_service, payload.channel_id
     )
@@ -1061,7 +908,7 @@ async def op_messages_edit(
     user: User,
     container: SyncContainer,
 ) -> MessageRead:
-    company_id = resolve_company_id(user)
+    company_id = require_company().company_id
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
@@ -1103,8 +950,8 @@ async def op_messages_delete(
     *,
     user: User,
     container: SyncContainer,
-) -> dict[str, str]:
-    company_id = resolve_company_id(user)
+) -> MessagesDeletePayload:
+    company_id = require_company().company_id
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
@@ -1126,7 +973,7 @@ async def op_messages_delete(
     recipients = await channel_recipient_user_ids(
         container.channel_access_service, payload.channel_id
     )
-    events: list[RealtimeEvent] = [
+    events: list[PlatformEvent] = [
         event_message_deleted(
             payload.channel_id,
             payload.message_id,
@@ -1151,7 +998,7 @@ async def op_messages_delete(
                     ),
                 )
     await publish_realtime_events(events)
-    return {"message_id": payload.message_id}
+    return payload
 
 
 async def op_messages_forward(
@@ -1160,7 +1007,7 @@ async def op_messages_forward(
     user: User,
     container: SyncContainer,
 ) -> MessageRead:
-    company_id = resolve_company_id(user)
+    company_id = require_company().company_id
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(payload.from_channel_id), user_id=user.user_id
     ):
@@ -1243,7 +1090,7 @@ async def op_messages_react(
     user: User,
     container: SyncContainer,
 ) -> MessageRead:
-    company_id = resolve_company_id(user)
+    company_id = require_company().company_id
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
@@ -1290,7 +1137,7 @@ async def op_messages_pin(
     user: User,
     container: SyncContainer,
 ) -> ChannelRead:
-    company_id = resolve_company_id(user)
+    company_id = require_company().company_id
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
@@ -1343,7 +1190,7 @@ async def op_messages_transcribe_audio(
     user: User,
     container: SyncContainer,
 ) -> MessageRead:
-    company_id = resolve_company_id(user)
+    company_id = require_company().company_id
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
@@ -1358,12 +1205,15 @@ async def op_messages_transcribe_audio(
     if source.deleted_at is not None:
         raise WsCommandError("forbidden", "Сообщение удалено.")
     source_contents = await container.message_repository.list_contents(payload.message_id)
-    processing_contents = set_audio_transcription_state(
-        source_contents,
-        status=AudioTranscriptionStatus.PROCESSING,
-        transcription_text=None,
-        transcription_error=None,
-    )
+    try:
+        processing_contents = set_audio_transcription_state(
+            source_contents,
+            status=AudioTranscriptionStatus.PROCESSING,
+            transcription_text=None,
+            transcription_error=None,
+        )
+    except ValueError as exc:
+        raise WsCommandError("ws_invalid_payload", str(exc)) from exc
     edited_at = datetime.now(tz=UTC)
     await container.message_repository.replace_message_contents(
         payload.message_id, processing_contents, edited_at
@@ -1403,7 +1253,7 @@ async def op_messages_transcribe_video(
     user: User,
     container: SyncContainer,
 ) -> MessageRead:
-    company_id = resolve_company_id(user)
+    company_id = require_company().company_id
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
@@ -1418,12 +1268,15 @@ async def op_messages_transcribe_video(
     if source.deleted_at is not None:
         raise WsCommandError("forbidden", "Сообщение удалено.")
     source_contents = await container.message_repository.list_contents(payload.message_id)
-    processing_contents = set_video_transcription_state(
-        source_contents,
-        status=AudioTranscriptionStatus.PROCESSING,
-        transcription_text=None,
-        transcription_error=None,
-    )
+    try:
+        processing_contents = set_video_transcription_state(
+            source_contents,
+            status=AudioTranscriptionStatus.PROCESSING,
+            transcription_text=None,
+            transcription_error=None,
+        )
+    except ValueError as exc:
+        raise WsCommandError("ws_invalid_payload", str(exc)) from exc
     edited_at = datetime.now(tz=UTC)
     await container.message_repository.replace_message_contents(
         payload.message_id, processing_contents, edited_at
@@ -1463,7 +1316,7 @@ async def op_messages_transcribe_call(
     user: User,
     container: SyncContainer,
 ) -> MessagesTranscribeCallResult:
-    company_id = resolve_company_id(user)
+    company_id = require_company().company_id
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
@@ -1501,7 +1354,8 @@ async def op_git_resources_upsert(
     user: User,
     container: SyncContainer,
 ) -> GitResourceRefRead:
-    company_id = resolve_company_id(user)
+    _ = user
+    company_id = require_company().company_id
     ref = await upsert_git_resource(
         payload.body, company_id=company_id, git_refs=container.git_resource_ref_repository
     )
@@ -1515,7 +1369,8 @@ async def op_git_resources_get(
     user: User,
     container: SyncContainer,
 ) -> GitResourceRefRead:
-    _ = resolve_company_id(user)
+    _ = user
+    _ = require_company()
     ref = await container.git_resource_ref_repository.get(payload.git_ref_id)
     if ref is None:
         raise WsCommandError("not_found", "Git resource not found")
@@ -1597,17 +1452,20 @@ async def op_calls_invite(
     user: User,
     container: SyncContainer,
 ) -> CallRead:
-    company_id = resolve_company_id(user)
-    out, evs = await handle_call_invite(
-        payload,
-        actor_user_id=user.user_id,
-        company_id=company_id,
-        calls=container.call_repository,
-        channels=container.channel_repository,
-        channel_access=container.channel_access_service,
-        authz=container.authz_service,
-        user_repository=container.user_repository,
-    )
+    company_id = require_company().company_id
+    try:
+        out, evs = await handle_call_invite(
+            payload,
+            actor_user_id=user.user_id,
+            company_id=company_id,
+            calls=container.call_repository,
+            channels=container.channel_repository,
+            channel_access=container.channel_access_service,
+            authz=container.authz_service,
+            user_repository=container.user_repository,
+        )
+    except PermissionError as exc:
+        raise WsCommandError("forbidden", str(exc)) from exc
     member_rows = await container.channel_access_service.list_member_rows(out.channel_id)
     member_ids = [uid for uid, _role in member_rows]
     started_read = await _post_call_boundary_message_op(
@@ -1650,14 +1508,17 @@ async def op_calls_accept(
     user: User,
     container: SyncContainer,
 ) -> CallRead:
-    company_id = resolve_company_id(user)
-    out, evs, became_active = await handle_call_accept(
-        payload,
-        actor_user_id=user.user_id,
-        company_id=company_id,
-        calls=container.call_repository,
-        channel_access=container.channel_access_service,
-    )
+    company_id = require_company().company_id
+    try:
+        out, evs, became_active = await handle_call_accept(
+            payload,
+            actor_user_id=user.user_id,
+            company_id=company_id,
+            calls=container.call_repository,
+            channel_access=container.channel_access_service,
+        )
+    except ValueError as exc:
+        raise WsCommandError("conflict", str(exc)) from exc
     if became_active:
         await maybe_start_speech_to_chat_poll(
             call_id=out.call_id,
@@ -1676,14 +1537,17 @@ async def op_calls_decline(
     user: User,
     container: SyncContainer,
 ) -> CallRead:
-    company_id = resolve_company_id(user)
-    out, evs = await handle_call_decline(
-        payload,
-        actor_user_id=user.user_id,
-        company_id=company_id,
-        calls=container.call_repository,
-        channel_access=container.channel_access_service,
-    )
+    company_id = require_company().company_id
+    try:
+        out, evs = await handle_call_decline(
+            payload,
+            actor_user_id=user.user_id,
+            company_id=company_id,
+            calls=container.call_repository,
+            channel_access=container.channel_access_service,
+        )
+    except ValueError as exc:
+        raise WsCommandError("conflict", str(exc)) from exc
     await publish_realtime_events(evs)
     return out
 
@@ -1694,9 +1558,9 @@ async def op_calls_hangup(
     user: User,
     container: SyncContainer,
 ) -> CallRead:
-    company_id = resolve_company_id(user)
+    company_id = require_company().company_id
 
-    auto_stopped_recording_event: RealtimeEvent | None = None
+    auto_stopped_recording_event: PlatformEvent | None = None
     call = await container.call_repository.get_call(payload.call_id, company_id)
     active_recording = await container.call_recording_repository.get_active_for_call(
         payload.call_id, company_id
@@ -1716,13 +1580,16 @@ async def op_calls_hangup(
             stopped_recording, company_id=company_id, recipient_user_ids=rec_stop_recipients
         )
 
-    out, evs, fully_ended = await handle_call_hangup(
-        payload,
-        actor_user_id=user.user_id,
-        company_id=company_id,
-        calls=container.call_repository,
-        channel_access=container.channel_access_service,
-    )
+    try:
+        out, evs, fully_ended = await handle_call_hangup(
+            payload,
+            actor_user_id=user.user_id,
+            company_id=company_id,
+            calls=container.call_repository,
+            channel_access=container.channel_access_service,
+        )
+    except ValueError as exc:
+        raise WsCommandError("conflict", str(exc)) from exc
     if auto_stopped_recording_event is not None:
         evs.append(auto_stopped_recording_event)
     if fully_ended:
@@ -1758,7 +1625,7 @@ async def op_calls_recording_start(
     user: User,
     container: SyncContainer,
 ) -> CallRecordingRead:
-    company_id = resolve_company_id(user)
+    company_id = require_company().company_id
     call = await container.call_repository.get_call(payload.call_id, company_id)
     if call.status == "ended":
         raise WsCommandError("forbidden", "Нельзя включить запись завершённого звонка.")
@@ -1851,7 +1718,7 @@ async def op_calls_recording_start(
         started_at=datetime.now(UTC),
     )
     _ = await container.call_recording_repository.create(recording)
-    out = _call_recording_read_from_entity(recording)
+    out = call_recording_read(recording)
     recipients = await channel_recipient_user_ids(
         container.channel_access_service, call.channel_id
     )
@@ -1871,7 +1738,7 @@ async def op_calls_recording_stop(
     user: User,
     container: SyncContainer,
 ) -> CallRecordingRead:
-    company_id = resolve_company_id(user)
+    company_id = require_company().company_id
     call = await container.call_repository.get_call(payload.call_id, company_id)
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(call.channel_id), user_id=user.user_id
@@ -1915,7 +1782,7 @@ async def op_calls_admin_transfer(
     user: User,
     container: SyncContainer,
 ) -> CallRead:
-    company_id = resolve_company_id(user)
+    company_id = require_company().company_id
     call = await container.call_repository.get_call(payload.call_id, company_id)
     if call.created_by_user_id != user.user_id:
         raise WsCommandError(
@@ -1966,16 +1833,16 @@ async def op_calls_signal(
 ) -> None:
     """Быстрый путь сигналинга: без TaskIQ, прямая публикация события."""
     _ = container
-    company_id = resolve_company_id(user)
+    company_id = require_company().company_id
     event = event_call_signal(
         payload.call_id,
         payload.signal_type,
         payload.data,
         company_id=company_id,
         recipient_user_ids=[payload.target_user_id],
+        target_user_id=payload.target_user_id,
+        sender_user_id=user.user_id,
     )
-    event.payload["target_user_id"] = payload.target_user_id
-    event.payload["sender_user_id"] = user.user_id
     await publish_realtime_events([event])
     return None
 
@@ -1991,10 +1858,6 @@ class CallsGetPayload(BaseModel):
 
 class CallsRecordingsListPayload(BaseModel):
     call_id: str = Field(min_length=1)
-
-
-class CallsRecordingsListResult(BaseModel):
-    items: list[CallRecordingRead]
 
 
 class CallsTokenPayload(BaseModel):
@@ -2016,13 +1879,6 @@ class CallsLinksListPayload(BaseModel):
     channel_id: str | None = Field(default=None)
     limit: int = Field(default=200, ge=1, le=1000)
     offset: int = Field(default=0, ge=0)
-
-
-class CallsLinksListResult(BaseModel):
-    items: list[CallScheduledLinkRead]
-    total: int
-    limit: int
-    offset: int
 
 
 class CallsLinksUpdatePayload(BaseModel):
@@ -2132,7 +1988,8 @@ async def op_calls_get(
     user: User,
     container: SyncContainer,
 ) -> CallRead:
-    company_id = resolve_company_id(user)
+    _ = user
+    company_id = require_company().company_id
     try:
         call = await container.call_repository.get_call(payload.call_id, company_id)
     except ValueError as exc:
@@ -2146,16 +2003,15 @@ async def op_calls_recordings_list(
     *,
     user: User,
     container: SyncContainer,
-) -> CallsRecordingsListResult:
-    company_id = resolve_company_id(user)
+) -> ListResponse[CallRecordingRead]:
+    company_id = require_company().company_id
     call = await container.call_repository.get_call(payload.call_id, company_id)
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(call.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "Нет доступа к звонку.")
     rows = await container.call_recording_repository.list_for_call(payload.call_id, company_id)
-    items = [_call_recording_read_from_entity(r) for r in rows]
-    return CallsRecordingsListResult(items=items)
+    return ListResponse[CallRecordingRead](items=[call_recording_read(r) for r in rows])
 
 
 async def op_calls_token(
@@ -2164,7 +2020,7 @@ async def op_calls_token(
     user: User,
     container: SyncContainer,
 ) -> CallsTokenResult:
-    company_id = resolve_company_id(user)
+    company_id = require_company().company_id
     settings = get_settings()
     try:
         call = await container.call_repository.get_call(payload.call_id, company_id)
@@ -2213,8 +2069,8 @@ async def op_calls_links_list(
     *,
     user: User,
     container: SyncContainer,
-) -> CallsLinksListResult:
-    company_id = resolve_company_id(user)
+) -> OffsetPage[CallScheduledLinkRead]:
+    company_id = require_company().company_id
     rows = await container.call_repository.list_scheduled_calendar_links_for_user(
         company_id,
         user.user_id,
@@ -2244,7 +2100,7 @@ async def op_calls_links_list(
             )
         )
     page = out[payload.offset : payload.offset + payload.limit]
-    return CallsLinksListResult(
+    return OffsetPage[CallScheduledLinkRead](
         items=page, total=len(out), limit=payload.limit, offset=payload.offset
     )
 
@@ -2255,7 +2111,7 @@ async def op_calls_links_create(
     user: User,
     container: SyncContainer,
 ) -> CallLinkRead:
-    company_id = resolve_company_id(user)
+    company_id = require_company().company_id
     actor_id = user.user_id
 
     channel_id: str
@@ -2442,7 +2298,7 @@ async def op_calls_links_update(
     user: User,
     container: SyncContainer,
 ) -> CallLinkRead:
-    company_id = resolve_company_id(user)
+    company_id = require_company().company_id
     body = payload.body
     link = await container.call_repository.get_link_for_company(
         payload.link_token, company_id
@@ -2515,7 +2371,7 @@ async def op_calls_links_remove(
     user: User,
     container: SyncContainer,
 ) -> None:
-    company_id = resolve_company_id(user)
+    company_id = require_company().company_id
     link = await container.call_repository.get_link_for_company(payload.link_token, company_id)
     if link.calendar_event_id is None:
         raise WsCommandError(
@@ -2679,24 +2535,10 @@ class CompanyMembersListPayload(BaseModel):
     offset: int = Field(default=0, ge=0)
 
 
-class CompanyMembersListResult(BaseModel):
-    items: list[CompanyMemberRead]
-    total: int
-    limit: int
-    offset: int
-
-
 class CompanySharedChannelsListPayload(BaseModel):
     peer_user_id: str = Field(min_length=1)
     limit: int = Field(default=50, ge=1, le=200)
     offset: int = Field(default=0, ge=0)
-
-
-class CompanySharedChannelsListResult(BaseModel):
-    items: list[ChannelRead]
-    total: int
-    limit: int
-    offset: int
 
 
 async def op_company_members_list(
@@ -2704,8 +2546,8 @@ async def op_company_members_list(
     *,
     user: User,
     container: SyncContainer,
-) -> CompanyMembersListResult:
-    company_id = resolve_company_id(user)
+) -> OffsetPage[CompanyMemberRead]:
+    company_id = require_company().company_id
     company = await container.company_repository.get(company_id)
     if company is None:
         raise WsCommandError("not_found", "Компания не найдена.")
@@ -2746,7 +2588,7 @@ async def op_company_members_list(
             )
         )
     items.sort(key=lambda m: m.name.casefold())
-    return CompanyMembersListResult(
+    return OffsetPage[CompanyMemberRead](
         items=items, total=total, limit=payload.limit, offset=payload.offset
     )
 
@@ -2756,8 +2598,8 @@ async def op_company_shared_channels_list(
     *,
     user: User,
     container: SyncContainer,
-) -> CompanySharedChannelsListResult:
-    company_id = resolve_company_id(user)
+) -> OffsetPage[ChannelRead]:
+    company_id = require_company().company_id
     company = await container.company_repository.get(company_id)
     if company is None:
         raise WsCommandError("not_found", "Компания не найдена.")
@@ -2809,7 +2651,7 @@ async def op_company_shared_channels_list(
                 lane_summary=summaries[c.channel_id],
             )
         )
-    return CompanySharedChannelsListResult(
+    return OffsetPage[ChannelRead](
         items=items, total=len(items), limit=payload.limit, offset=payload.offset
     )
 

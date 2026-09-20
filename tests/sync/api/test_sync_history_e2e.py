@@ -220,7 +220,11 @@ async def test_history_reflects_edits_and_reactions(
     async with http_owner(sync_auth_token_user2) as http2:
         rr = await http2.post(
             f"/sync/api/v1/channels/{channel_id}/messages/{message_id}/react",
-            json={"emoji": "🔥"},
+            json={
+                "channel_id": channel_id,
+                "message_id": message_id,
+                "emoji": "🔥",
+            },
         )
         assert rr.status_code == 200, rr.text
 

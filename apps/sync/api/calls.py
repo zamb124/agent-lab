@@ -6,7 +6,6 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Query
-from pydantic import BaseModel
 
 from apps.sync.dependencies import ContainerDep
 from apps.sync.models.calls import (
@@ -25,7 +24,6 @@ from apps.sync.models.calls import (
     JoinResponse,
 )
 from apps.sync.models.meetings import CallRecordingRead
-from apps.sync.realtime.context import require_current_user
 from apps.sync.realtime.operations import (
     CallsAdminTransferPayload,
     CallsGetPayload,
@@ -38,6 +36,7 @@ from apps.sync.realtime.operations import (
     CallsRecordingStartPayload,
     CallsRecordingStopPayload,
     CallsTokenPayload,
+    CallsTokenResult,
     CallsTurnCredentialsPayload,
     op_calls_accept,
     op_calls_admin_transfer,
@@ -58,26 +57,17 @@ from apps.sync.realtime.operations import (
     op_calls_token,
     op_calls_turn_credentials,
 )
-from core.calls.models import SignalType, TurnCredentials
-from core.pagination import OffsetPage
-from core.types import JsonObject
+from core.calls.models import TurnCredentials
+from core.context import require_context
+from core.pagination import ListResponse, OffsetPage
+from core.websocket import WsCommandError
 
 router = APIRouter()
 
 
-class _CallTransferAdminBody(BaseModel):
-    target_user_id: str
-
-
-class _CallSignalBody(BaseModel):
-    target_user_id: str
-    signal_type: SignalType
-    data: JsonObject
-
-
 @router.get("/turn-credentials", response_model=TurnCredentials)
 async def get_turn_credentials(container: ContainerDep) -> TurnCredentials:
-    user = require_current_user()
+    user = require_context().user
     return await op_calls_turn_credentials(
         CallsTurnCredentialsPayload(), user=user, container=container
     )
@@ -85,7 +75,7 @@ async def get_turn_credentials(container: ContainerDep) -> TurnCredentials:
 
 @router.post("/links", status_code=201, response_model=CallLinkRead)
 async def create_call_link(body: CallLinkCreate, container: ContainerDep) -> CallLinkRead:
-    user = require_current_user()
+    user = require_context().user
     return await op_calls_links_create(body, user=user, container=container)
 
 
@@ -98,8 +88,8 @@ async def list_scheduled_call_links(
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[CallScheduledLinkRead]:
-    user = require_current_user()
-    result = await op_calls_links_list(
+    user = require_context().user
+    return await op_calls_links_list(
         CallsLinksListPayload(
             start_at=start_at,
             end_at=end_at,
@@ -110,9 +100,6 @@ async def list_scheduled_call_links(
         user=user,
         container=container,
     )
-    return OffsetPage[CallScheduledLinkRead](
-        items=result.items, total=result.total, limit=result.limit, offset=result.offset
-    )
 
 
 @router.patch("/links/{link_token}", response_model=CallLinkRead)
@@ -121,7 +108,7 @@ async def patch_call_link(
     body: CallLinkPatch,
     container: ContainerDep,
 ) -> CallLinkRead:
-    user = require_current_user()
+    user = require_context().user
     return await op_calls_links_update(
         CallsLinksUpdatePayload(link_token=link_token, body=body),
         user=user,
@@ -131,7 +118,7 @@ async def patch_call_link(
 
 @router.delete("/links/{link_token}", status_code=204)
 async def delete_call_link(link_token: str, container: ContainerDep) -> None:
-    user = require_current_user()
+    user = require_context().user
     await op_calls_links_remove(
         CallsLinksRemovePayload(link_token=link_token),
         user=user,
@@ -141,37 +128,35 @@ async def delete_call_link(link_token: str, container: ContainerDep) -> None:
 
 @router.get("/{call_id}", response_model=CallRead)
 async def get_call(call_id: str, container: ContainerDep) -> CallRead:
-    user = require_current_user()
+    user = require_context().user
     return await op_calls_get(
         CallsGetPayload(call_id=call_id), user=user, container=container
     )
 
 
-@router.get("/{call_id}/recordings", response_model=list[CallRecordingRead])
+@router.get("/{call_id}/recordings", response_model=ListResponse[CallRecordingRead])
 async def list_call_recordings(
     call_id: str, container: ContainerDep
-) -> list[CallRecordingRead]:
-    user = require_current_user()
-    result = await op_calls_recordings_list(
+) -> ListResponse[CallRecordingRead]:
+    user = require_context().user
+    return await op_calls_recordings_list(
         CallsRecordingsListPayload(call_id=call_id),
         user=user,
         container=container,
     )
-    return result.items
 
 
-@router.get("/{call_id}/token")
-async def get_livekit_token(call_id: str, container: ContainerDep) -> dict[str, str]:
-    user = require_current_user()
-    result = await op_calls_token(
+@router.get("/{call_id}/token", response_model=CallsTokenResult)
+async def get_livekit_token(call_id: str, container: ContainerDep) -> CallsTokenResult:
+    user = require_context().user
+    return await op_calls_token(
         CallsTokenPayload(call_id=call_id), user=user, container=container
     )
-    return {"token": result.token, "livekit_url": result.livekit_url}
 
 
 @router.get("/join/{link_token}", response_model=CallLinkInfo)
 async def get_link_info(link_token: str, container: ContainerDep) -> CallLinkInfo:
-    user = require_current_user()
+    user = require_context().user
     return await op_calls_join_info(
         CallsJoinInfoPayload(link_token=link_token),
         user=user,
@@ -185,7 +170,7 @@ async def join_via_link(
     container: ContainerDep,
     body: GuestJoinRequest | None = None,
 ) -> JoinResponse:
-    user = require_current_user()
+    user = require_context().user
     return await op_calls_join_accept(
         CallsJoinAcceptPayload(link_token=link_token, body=body),
         user=user,
@@ -196,29 +181,29 @@ async def join_via_link(
 @router.post("/{call_id}/invite", response_model=CallRead)
 async def invite_call(container: ContainerDep, call_id: str, body: CallsInvitePayload) -> CallRead:
     _ = call_id
-    user = require_current_user()
+    user = require_context().user
     return await op_calls_invite(body, user=user, container=container)
 
 
 @router.post("/{call_id}/accept", response_model=CallRead)
 async def accept_call(container: ContainerDep, call_id: str) -> CallRead:
-    user = require_current_user()
+    user = require_context().user
     return await op_calls_accept(
         CallsAcceptPayload(call_id=call_id), user=user, container=container
     )
 
 
-@router.post("/{call_id}/decline", status_code=204)
-async def decline_call(container: ContainerDep, call_id: str) -> None:
-    user = require_current_user()
-    _ = await op_calls_decline(
+@router.post("/{call_id}/decline", response_model=CallRead)
+async def decline_call(container: ContainerDep, call_id: str) -> CallRead:
+    user = require_context().user
+    return await op_calls_decline(
         CallsDeclinePayload(call_id=call_id), user=user, container=container
     )
 
 
 @router.post("/{call_id}/hangup", response_model=CallRead)
 async def hangup_call(container: ContainerDep, call_id: str) -> CallRead:
-    user = require_current_user()
+    user = require_context().user
     return await op_calls_hangup(
         CallsHangupPayload(call_id=call_id), user=user, container=container
     )
@@ -228,7 +213,7 @@ async def hangup_call(container: ContainerDep, call_id: str) -> CallRead:
 async def start_call_recording(
     container: ContainerDep, call_id: str
 ) -> CallRecordingRead:
-    user = require_current_user()
+    user = require_context().user
     return await op_calls_recording_start(
         CallsRecordingStartPayload(call_id=call_id),
         user=user,
@@ -240,7 +225,7 @@ async def start_call_recording(
 async def stop_call_recording(
     container: ContainerDep, call_id: str
 ) -> CallRecordingRead:
-    user = require_current_user()
+    user = require_context().user
     return await op_calls_recording_stop(
         CallsRecordingStopPayload(call_id=call_id),
         user=user,
@@ -250,30 +235,19 @@ async def stop_call_recording(
 
 @router.post("/{call_id}/admin/transfer", response_model=CallRead)
 async def transfer_call_admin(
-    container: ContainerDep, call_id: str, body: _CallTransferAdminBody
+    container: ContainerDep, call_id: str, body: CallsAdminTransferPayload
 ) -> CallRead:
-    user = require_current_user()
-    return await op_calls_admin_transfer(
-        CallsAdminTransferPayload(
-            call_id=call_id, target_user_id=body.target_user_id
-        ),
-        user=user,
-        container=container,
-    )
+    if body.call_id != call_id:
+        raise WsCommandError("ws_invalid_payload", "call_id mismatch")
+    user = require_context().user
+    return await op_calls_admin_transfer(body, user=user, container=container)
 
 
 @router.post("/{call_id}/signal", status_code=204)
 async def signal_call(
-    container: ContainerDep, call_id: str, body: _CallSignalBody
+    container: ContainerDep, call_id: str, body: CallsSignalPayload
 ) -> None:
-    user = require_current_user()
-    await op_calls_signal(
-        CallsSignalPayload(
-            call_id=call_id,
-            target_user_id=body.target_user_id,
-            signal_type=body.signal_type,
-            data=body.data,
-        ),
-        user=user,
-        container=container,
-    )
+    if body.call_id != call_id:
+        raise WsCommandError("ws_invalid_payload", "call_id mismatch")
+    user = require_context().user
+    await op_calls_signal(body, user=user, container=container)

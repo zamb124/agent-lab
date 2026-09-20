@@ -28,14 +28,17 @@ from apps.sync.db.models import (
 from apps.sync.db.repositories.call_repository import CallRepository
 from apps.sync.db.repositories.channel_repository import ChannelRepository
 from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRefRepository
-from apps.sync.db.repositories.meeting_repository import CallRecordingRepository
+from apps.sync.db.repositories.meeting_repository import (
+    CallRecordingRepository,
+    call_recording_read,
+)
 from apps.sync.db.repositories.message_repository import MessageRepository
 from apps.sync.db.repositories.thread_repository import ThreadRepository
 from apps.sync.message_read_helpers import message_read_from_entity
 from apps.sync.models.channels import ChannelCreate, ChannelRead, ChannelType, ChannelUpdate
 from apps.sync.models.common import UserBrief
 from apps.sync.models.git import GitResourceRefCreate, GitResourceRefRead
-from apps.sync.models.meetings import CallRecordingRead, RecordingStatus
+from apps.sync.models.meetings import CallRecordingRead
 from apps.sync.models.messages import (
     MessageContentModel,
     MessageContentType,
@@ -45,9 +48,7 @@ from apps.sync.models.messages import (
     TextPlainContent,
 )
 from apps.sync.models.threads import ThreadCreate, ThreadRead
-from apps.sync.realtime.context import resolve_company_id
 from apps.sync.realtime.events import (
-    RealtimeEvent,
     event_message_created,
     event_message_updated,
 )
@@ -67,6 +68,7 @@ from core.calls.livekit_client import LiveKitClient
 from core.calls.livekit_usage_spans import trace_livekit_egress_composite_usage
 from core.config import get_settings
 from core.db.repositories.user_repository import UserRepository
+from core.events.contract import PlatformEvent
 from core.files.models import (
     AudioAttachmentContent,
     AudioTranscriptionStatus,
@@ -75,22 +77,11 @@ from core.files.models import (
 from core.identity.flow_employee import is_flow_employee
 from core.logging import get_logger
 from core.namespace import NamespaceService
+from core.request_scope import require_company
 from core.tasks import enqueue
 from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
-
-
-def _recording_status(value: str) -> RecordingStatus:
-    if value == "requested":
-        return "requested"
-    if value == "recording":
-        return "recording"
-    if value == "uploaded":
-        return "uploaded"
-    if value == "failed":
-        return "failed"
-    raise ValueError(f"Unknown recording status: {value!r}")
 
 
 if TYPE_CHECKING:
@@ -157,23 +148,6 @@ def build_livekit_recording_client() -> LiveKitClient:
         url=settings.calls.livekit_url,
         api_key=settings.calls.livekit_api_key,
         api_secret=settings.calls.livekit_api_secret,
-    )
-
-
-def _recording_read_from_entity(recording: SyncCallRecording) -> CallRecordingRead:
-    return CallRecordingRead(
-        recording_id=recording.recording_id,
-        call_id=recording.call_id,
-        channel_id=recording.channel_id,
-        namespace=recording.namespace,
-        started_by_user_id=recording.started_by_user_id,
-        status=_recording_status(recording.status),
-        provider_job_id=recording.provider_job_id,
-        raw_file_id=recording.raw_file_id,
-        started_at=recording.started_at,
-        ended_at=recording.ended_at,
-        created_at=recording.created_at,
-        error=recording.error,
     )
 
 
@@ -255,7 +229,7 @@ async def stop_and_finalize_recording(
         actor_user_id=actor_user_id,
         background_kind="sync_call",
     )
-    return _recording_read_from_entity(updated_recording)
+    return call_recording_read(updated_recording)
 
 
 def _notification_preview_from_message(message: MessageRead) -> str:
@@ -644,20 +618,23 @@ async def update_channel(
 ) -> ChannelRead:
     data = body.model_dump(exclude_unset=True)
     if not data:
-        raise ValueError("Нет полей для обновления канала.")
+        raise WsCommandError("ws_invalid_payload", "Нет полей для обновления канала.")
     if not await authz.can_view(
         AuthzObject.sync_channel(channel_id), user_id=actor_user_id
     ):
-        raise PermissionError(f"Пользователь не состоит в канале {channel_id}.")
+        raise WsCommandError("forbidden", f"Пользователь не состоит в канале {channel_id}.")
     if not await authz.can_admin(
         AuthzObject.sync_channel(channel_id), user_id=actor_user_id
     ):
-        raise PermissionError("Изменение настроек канала доступно только ролям owner и admin.")
+        raise WsCommandError(
+            "forbidden",
+            "Изменение настроек канала доступно только ролям owner и admin.",
+        )
     entity = await channels.get(channel_id)
     if entity is None:
-        raise ValueError(f"Канал {channel_id} не найден.")
+        raise WsCommandError("not_found", f"Канал {channel_id} не найден.")
     if entity.company_id != company_id:
-        raise PermissionError("Канал принадлежит другой компании.")
+        raise WsCommandError("forbidden", "Канал принадлежит другой компании.")
     if "name" in data:
         entity.name = data["name"]
     if "is_private" in data:
@@ -846,7 +823,7 @@ async def send_message_with_side_effects(
     user: "User",
     container: "SyncContainer",
 ) -> MessageRead:
-    company_id = resolve_company_id(user)
+    company_id = require_company().company_id
     await _ensure_actor_may_send_to_channel(
         channel_id=channel_id,
         company_id=company_id,
@@ -891,10 +868,9 @@ async def send_message_with_side_effects(
         company_id=company_id,
         recipient_user_ids=recipients,
         channel_type=channel_entity.type,
+        local_id=body.local_id if body.local_id else None,
     )
-    if body.local_id is not None and body.local_id != "":
-        created_event.payload["local_id"] = body.local_id
-    events: list[RealtimeEvent] = [created_event]
+    events: list[PlatformEvent] = [created_event]
     audio_idx = _find_first_audio_content_index(normalized_body.contents)
     if audio_idx is not None:
         block = normalized_body.contents[audio_idx]

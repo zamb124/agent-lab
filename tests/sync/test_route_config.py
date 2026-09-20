@@ -21,14 +21,6 @@ def test_sync_ui_shell_is_public() -> None:
         assert rule.auth_required is False, f"{path}: expected auth_required=False"
 
 
-def test_sync_ws_is_public_middleware_auth_in_handler() -> None:
-    matcher = RouteMatcher()
-    rule = matcher.match("/sync/ws")
-    assert rule is not None
-    assert rule.context_type == "anonymous"
-    assert rule.auth_required is False
-
-
 def test_prefixed_auth_providers_is_public_anonymous() -> None:
     """Login-модалка на landing грузит провайдеров без сессии."""
     matcher = RouteMatcher()

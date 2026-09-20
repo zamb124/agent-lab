@@ -21,9 +21,9 @@ from redis.asyncio.client import Redis
 
 import core.tracing.attributes as trace_attributes
 from apps.sync.container import SyncContainer, get_sync_container
-from apps.sync.db.models import SyncCallRecording, SyncFile
+from apps.sync.db.models import SyncFile
+from apps.sync.db.repositories.meeting_repository import call_recording_read
 from apps.sync.message_read_helpers import message_read_from_entity
-from apps.sync.models.meetings import CallRecordingRead, RecordingStatus
 from apps.sync.models.messages import (
     CallTranscriptContent,
     CallTranscriptEntry,
@@ -81,18 +81,6 @@ class _TranscribeAudioRedis(Protocol):
     def eval(self, script: str, numkeys: int, *keys_and_args: str) -> Awaitable[str | int | None]: ...
 
     def aclose(self) -> Awaitable[None]: ...
-
-
-def _recording_status(value: str) -> RecordingStatus:
-    if value == "requested":
-        return "requested"
-    if value == "recording":
-        return "recording"
-    if value == "uploaded":
-        return "uploaded"
-    if value == "failed":
-        return "failed"
-    raise ValueError(f"Unknown recording status: {value!r}")
 
 
 _TRANSCRIBE_AUDIO_LOCK_RELEASE_LUA = """
@@ -270,25 +258,6 @@ async def _resolve_livekit_egress_result(
         "LiveKit egress не вернул готовый файл записи. "
         + f"room_name={room_name}, observed={last_observed}. "
         + "Проверьте egress service и output конфигурацию."
-    )
-
-
-def _recording_read_from_entity(recording: SyncCallRecording) -> CallRecordingRead:
-    return CallRecordingRead(
-        recording_id=recording.recording_id,
-        call_id=recording.call_id,
-        channel_id=recording.channel_id,
-        namespace=recording.namespace,
-        started_by_user_id=recording.started_by_user_id,
-        status=_recording_status(recording.status),
-        provider_job_id=recording.provider_job_id,
-        raw_file_id=recording.raw_file_id,
-        raw_file_storage_url=None,
-        raw_file_download_url=None,
-        started_at=recording.started_at,
-        ended_at=recording.ended_at,
-        created_at=recording.created_at,
-        error=recording.error,
     )
 
 
@@ -643,7 +612,7 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
             )
             failed_row = await container.call_recording_repository.get(recording_id)
             if failed_row is not None:
-                failed_read = _recording_read_from_entity(failed_row)
+                failed_read = call_recording_read(failed_row)
                 fail_recipients = await container.channel_access_service.list_member_user_ids(
                     failed_read.channel_id
                 )

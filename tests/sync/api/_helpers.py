@@ -12,7 +12,6 @@
 
 from __future__ import annotations
 
-from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 from contextlib import contextmanager
 from typing import Iterator
 
@@ -25,6 +24,7 @@ from core.namespace.authz.tuples import (
     platform_namespace_company_link,
     platform_namespace_company_viewer_tuple,
 )
+from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
 @contextmanager

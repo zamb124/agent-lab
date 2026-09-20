@@ -33,14 +33,13 @@ uv run pytest tests/sync/ -v
 
 ## Архитектура операций (источник правды)
 
-Реестр операций — `apps/sync/realtime/command_router.py::SYNC_OPERATIONS`
-(49 записей). Один handler — оба транспорта:
+Реестр операций — `apps/sync/realtime/command_router.py::SYNC_OPERATIONS`.
+Один handler — оба транспорта:
 
 - **WS** — фрейм `{request_id, type: 'sync/<entity>/<verb>_requested', payload}` →
   `_make_ws_handler(op)` валидирует payload через Pydantic и зовёт `op.fn(...)`.
 - **REST** — route в `apps/sync/api/**` собирает Pydantic payload и зовёт ту же
-  `op.fn(...)`. `WsCommandError` маппится в `HTTPException` через
-  `@app.exception_handler` в `apps/sync/main.py`.
+  `op.fn(...)`. `WsCommandError` → HTTP через `WS_COMMAND_ERROR_HTTP_STATUS`.
 
 TaskIQ остаётся ТОЛЬКО для heavy-операций (`sync_transcribe_*_message_task`,
 `sync_finalize_recording_task`).
@@ -55,8 +54,8 @@ TaskIQ остаётся ТОЛЬКО для heavy-операций (`sync_transc
 | WS command-router | `realtime/test_command_router.py` | `register_sync_ws_commands()`: каждая запись `SYNC_OPERATIONS` зарегистрирована, `canonical_type` совпадает с ключом, `_requested` суффикс |
 | Presence hooks | `realtime/test_presence_hooks.py` | Connect/disconnect: online/offline в Redis presence |
 | Finalize recording | `realtime/test_finalize_recording_platform_file.py` | Регистрация platform `FileRecord` после записи звонка |
-| **WS=REST identity** | `integration/test_ops_ws_rest_identical.py` | Каждая op из `SYNC_OPERATIONS` даёт одинаковый result через WS и REST |
-| **Zero-fallback red-tests** | `integration/test_ops_zero_fallback.py` | Missing field → `ws_invalid_payload`, no company → `ws_no_company`, not_found → 404/`not_found` |
+| **WS=REST identity** | `tests/realtime/test_sync_commands.py` | Каждая op из `SYNC_OPERATIONS` — live Centrifugo hop и REST, одинаковый result |
+| **Zero-fallback red-tests** | `integration/test_ops_zero_fallback.py` | Missing field → `ws_invalid_payload`, no company → `forbidden`, not_found → 404/`not_found` |
 | **AST-сканер** | `integration/test_no_silent_except_in_ops.py` | Запрет `except Exception: pass`, `or default` фолбеков в `operations.py` |
 | **Push-events** | `integration/test_op_publish_realtime_events.py` | После op в `platform:events` опубликован нужный фрейм с правильным `recipient_user_ids` |
 | **op_messages_*** | `integration/test_op_messages_send.py`, `_edit_delete_forward.py`, `_react_pin.py` | Send + auto-transcribe; edit/delete/forward; react/pin |

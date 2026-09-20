@@ -12,8 +12,8 @@ class CompanyMemberRead(BaseModel):
     name: str = Field(description="Отображаемое имя.")
     roles: list[str] = Field(description="Роли в компании.")
     avatar_url: str | None = Field(default=None, description="URL аватара.")
-    is_online: bool = Field(description="Активное подключение /sync/ws в Redis.")
+    is_online: bool = Field(description="Подключение к Centrifugo (presence_stats user channel).")
     last_seen_at: str | None = Field(
         default=None,
-        description="ISO-время последнего отключения WS (если офлайн и ключ есть в Redis).",
+        description="ISO-время последнего наблюдения online при GET /company/members (Redis, если офлайн).",
     )

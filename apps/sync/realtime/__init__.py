@@ -1,4 +1,6 @@
-"""Realtime слой Sync: Command-Event через WS request-reply + platform:events.
+"""Realtime слой Sync: каталог `op_*` (REST + Centrifugo RPC) и TaskIQ STT.
 
-Heavy STT — TaskIQ (`enqueue(SYNC_TRANSCRIBE_*)`).
+Команды: `SYNC_OPERATIONS` → тот же `op_*` с REST-зеркала и с bus
+`POST /sync/api/internal/realtime/command`. Push — `PlatformEvent` через bus
+и Centrifugo `/realtime`. Heavy STT — TaskIQ (`enqueue(SYNC_TRANSCRIBE_*)`).
 """

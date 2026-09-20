@@ -129,7 +129,11 @@ async def test_message_reaction_changed_broadcast(
         async with http_owner(sync_auth_token_user2) as http2:
             r = await http2.post(
                 f"/sync/api/v1/channels/{channel_id}/messages/{message_id}/react",
-                json={"emoji": "👍"},
+                json={
+                    "channel_id": channel_id,
+                    "message_id": message_id,
+                    "emoji": "👍",
+                },
             )
             assert r.status_code == 200, r.text
 
@@ -362,7 +366,11 @@ async def test_forward_publishes_message_created_in_target_channel(
         async with http_owner(sync_auth_token) as http:
             r = await http.post(
                 f"/sync/api/v1/channels/{channel_a}/messages/{message_id}/forward",
-                json={"to_channel_id": channel_b},
+                json={
+                    "from_channel_id": channel_a,
+                    "message_id": message_id,
+                    "to_channel_id": channel_b,
+                },
             )
             assert r.status_code == 201, r.text
             forwarded_id = r.json()["message_id"]

@@ -8,8 +8,8 @@ Sync Service - FastAPI приложение для инженерного чат
 import importlib
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from apps.sync.api import get_api_router
@@ -17,12 +17,9 @@ from apps.sync.config import SyncSettings
 from apps.sync.container import SyncContainer, get_sync_container
 from apps.sync.dependencies import ContainerDep
 from apps.sync.realtime.command_router import register_sync_ws_commands
-from apps.sync.realtime.operations import ws_command_error_status
-from apps.sync.realtime.presence_hooks import register_presence_hooks
 from core.app import create_service_app
 from core.config import get_settings
 from core.logging import get_logger
-from core.websocket import WsCommandError
 
 # side-effect: register platform event catalog types
 _ = importlib.import_module("apps.sync.realtime.events")
@@ -31,16 +28,14 @@ logger = get_logger(__name__)
 
 
 async def on_startup(app: FastAPI, container: SyncContainer, settings: SyncSettings) -> None:
-    """Регистрация WS command-handler'ов и presence hook'ов в core.websocket.
+    """Регистрация WS command-handler'ов (`op_*`) для bus `realtime`.
 
-    Сам WS-сокет /sync/api/ws/notifications поднимает `core.websocket.router`
-    через `create_service_app`. Push-события идут через `platform:events`
-    (см. `architecture.mdc`, раздел «REST-зеркало команд»).
+    User WS — Centrifugo `/realtime`. Вход команд — `PlatformEvent` через bus
+    → `POST /sync/api/internal/realtime/command`. REST-зеркало без изменений.
     """
     _ = app, container, settings
     register_sync_ws_commands()
-    register_presence_hooks()
-    logger.info("Sync Service: WS command-router и presence hooks готовы")
+    logger.info("Sync Service: command-router op_* зарегистрирован")
 
 
 app = create_service_app(
@@ -57,19 +52,6 @@ app = create_service_app(
     api_version="v1",
     include_crud_routers=False,
 )
-
-@app.exception_handler(WsCommandError)
-async def ws_command_error_handler(request: Request, exc: WsCommandError) -> JSONResponse:
-    """REST-зеркало команд: WsCommandError превращается в HTTPException-style ответ.
-
-    Та же ошибка по WS уходит в `*_failed` фрейм; по REST — в JSON с тем же
-    `error_code`/`error_detail`.
-    """
-    _ = request
-    return JSONResponse(
-        status_code=ws_command_error_status(exc),
-        content={"error_code": exc.code, "error_detail": exc.detail, "detail": exc.detail},
-    )
 
 core_frontend_path = Path(__file__).parent.parent.parent / "core" / "frontend" / "static"
 if core_frontend_path.exists():

@@ -10,7 +10,36 @@ from sqlalchemy.orm.attributes import InstrumentedAttribute
 
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
 from apps.sync.db.models import SyncCallRecording
+from apps.sync.models.meetings import CallRecordingRead, RecordingStatus
 from core.types import SqlParameterValue
+
+
+def call_recording_read(recording: SyncCallRecording) -> CallRecordingRead:
+    status: RecordingStatus
+    if recording.status == "requested":
+        status = "requested"
+    elif recording.status == "recording":
+        status = "recording"
+    elif recording.status == "uploaded":
+        status = "uploaded"
+    elif recording.status == "failed":
+        status = "failed"
+    else:
+        raise ValueError(f"Unknown recording status: {recording.status!r}")
+    return CallRecordingRead(
+        recording_id=recording.recording_id,
+        call_id=recording.call_id,
+        channel_id=recording.channel_id,
+        namespace=recording.namespace,
+        started_by_user_id=recording.started_by_user_id,
+        status=status,
+        provider_job_id=recording.provider_job_id,
+        raw_file_id=recording.raw_file_id,
+        started_at=recording.started_at,
+        ended_at=recording.ended_at,
+        created_at=recording.created_at,
+        error=recording.error,
+    )
 
 
 class CallRecordingRepository(BaseSyncRepository[SyncCallRecording]):

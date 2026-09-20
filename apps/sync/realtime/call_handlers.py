@@ -1,7 +1,7 @@
 """Обработчики realtime-команд для WebRTC звонков.
 
-События публикуются в Redis и доходят до /sync/ws только участникам канала (и call.signal — адресно).
-notification_manager здесь не используется — call-события не платформенные уведомления.
+События — PlatformEvent на шине; UI читает их с Centrifugo `/realtime`.
+call.signal адресован одному получателю (`delivery.user_ids`).
 """
 
 from __future__ import annotations
@@ -28,7 +28,6 @@ from apps.sync.models.calls import (
 )
 from apps.sync.models.channels import ChannelType
 from apps.sync.realtime.events import (
-    RealtimeEvent,
     event_call_accepted,
     event_call_declined,
     event_call_ended,
@@ -44,6 +43,7 @@ from core.calls.livekit_client import LiveKitClient
 from core.calls.livekit_usage_spans import trace_livekit_room_session_usage
 from core.config import get_settings
 from core.db.repositories.user_repository import UserRepository
+from core.events.contract import PlatformEvent
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -127,7 +127,7 @@ async def handle_call_invite(
     channel_access: SyncChannelAccessService,
     authz: AuthzService,
     user_repository: UserRepository | None = None,
-) -> tuple[CallRead, list[RealtimeEvent]]:
+) -> tuple[CallRead, list[PlatformEvent]]:
     """Создаёт звонок и событие call.incoming только для участников канала."""
     if not await authz.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=actor_user_id
@@ -193,13 +193,6 @@ async def handle_call_invite(
     participants = await calls.list_participants(call.call_id)
     call_read = call_read_from_entities(call, participants)
 
-    incoming = event_call_incoming(
-        call_read,
-        company_id=company_id,
-        recipient_user_ids=member_ids,
-    )
-    incoming.payload["initiator_user_id"] = actor_user_id
-
     ch_entity = await channels.get(payload.channel_id)
     if ch_entity is None:
         raise ValueError(f"Канал {payload.channel_id} не найден.")
@@ -209,12 +202,21 @@ async def handle_call_invite(
         creator = await user_repository.get(actor_user_id)
         if creator is not None:
             caller_display_name = creator.name
-    incoming.payload["caller_display_name"] = caller_display_name
-    incoming.payload["incoming_channel_kind"] = ch_entity.type
+    channel_display_name: str | None = None
     if ch_entity.type != ChannelType.DIRECT.value:
         raw_name = ch_entity.name
         if isinstance(raw_name, str) and raw_name.strip() != "":
-            incoming.payload["channel_display_name"] = raw_name
+            channel_display_name = raw_name
+
+    incoming = event_call_incoming(
+        call_read,
+        company_id=company_id,
+        recipient_user_ids=member_ids,
+        initiator_user_id=actor_user_id,
+        caller_display_name=caller_display_name,
+        incoming_channel_kind=ch_entity.type,
+        channel_display_name=channel_display_name,
+    )
 
     return call_read, [incoming]
 
@@ -226,7 +228,7 @@ async def handle_call_accept(
     company_id: str,
     calls: CallRepository,
     channel_access: SyncChannelAccessService,
-) -> tuple[CallRead, list[RealtimeEvent], bool]:
+) -> tuple[CallRead, list[PlatformEvent], bool]:
     """Третий элемент: звонок только что перешёл ringing → active (для маркера в чате)."""
     call = await calls.get_call(payload.call_id, company_id)
 
@@ -276,7 +278,7 @@ async def handle_call_decline(
     company_id: str,
     calls: CallRepository,
     channel_access: SyncChannelAccessService,
-) -> tuple[CallRead, list[RealtimeEvent]]:
+) -> tuple[CallRead, list[PlatformEvent]]:
     call = await calls.get_call(payload.call_id, company_id)
 
     if call.status == "ended":
@@ -306,7 +308,7 @@ async def handle_call_hangup(
     company_id: str,
     calls: CallRepository,
     channel_access: SyncChannelAccessService,
-) -> tuple[CallRead, list[RealtimeEvent], bool]:
+) -> tuple[CallRead, list[PlatformEvent], bool]:
     """Третий элемент: звонок полностью завершён (последний участник вышел)."""
     call = await calls.get_call(payload.call_id, company_id)
 
@@ -324,7 +326,7 @@ async def handle_call_hangup(
     recipients = await _call_event_recipients(
         channel_access, channel_id=call.channel_id
     )
-    events: list[RealtimeEvent] = [
+    events: list[PlatformEvent] = [
         event_call_participant_left(
             payload.call_id,
             actor_user_id,

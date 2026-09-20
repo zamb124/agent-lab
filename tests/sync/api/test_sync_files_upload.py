@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from tests.files.chunked_upload_helpers import chunked_upload_file, platform_auxiliary_upload_spec_json
+from tests.files.chunked_upload_helpers import (
+    chunked_upload_file,
+    platform_auxiliary_upload_spec_json,
+)
 
 
 @pytest.mark.asyncio

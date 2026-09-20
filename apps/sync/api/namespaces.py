@@ -9,14 +9,15 @@ CRM (`apps/crm/api/namespaces.py`); Sync только читает список 
 import asyncio
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
 from apps.sync.dependencies import ContainerDep
-from apps.sync.realtime.context import require_current_user
+from core.context import require_context
 from core.logging import get_logger
 from core.models.identity_models import NamespaceKind, NamespaceSyncSettings
 from core.pagination import OffsetPage
+from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
 
@@ -90,11 +91,11 @@ async def update_namespace_sync_settings(
     Создание namespace выполняется CRM. 404, если namespace не существует
     в shared `NamespaceRepository` для текущей компании.
     """
-    _ = require_current_user()
+    _ = require_context().user
     namespace_service = container.namespace_service
     existing = await namespace_service.get(namespace_name)
     if existing is None:
-        raise HTTPException(status_code=404, detail=f"Namespace '{namespace_name}' не найден")
+        raise WsCommandError("not_found", f"Namespace '{namespace_name}' не найден")
     existing.sync_settings = body.sync_settings
     _ = await namespace_service.save(existing)
     return SyncNamespaceResponse(
