@@ -113,7 +113,7 @@ fi
 #    добавляются. Снижайте F_LIMIT по мере вычистки кодовой базы.
 if rg -nq "logger\.[a-z_]+\(\s*f['\"]" "${PY_GLOBS[@]}"; then
     F_COUNT=$(rg -c "logger\.[a-z_]+\(\s*f['\"]" "${PY_GLOBS[@]}" 2>/dev/null | awk -F: '{s+=$2} END {print s+0}')
-    F_LIMIT=650
+    F_LIMIT=330
     if [ "$F_COUNT" -gt "$F_LIMIT" ]; then
         fail "logger.* с f-строкой превышает лимит ($F_COUNT > $F_LIMIT) — переводите на kwargs: logger.info('event.id', key=value, ...)"
     else

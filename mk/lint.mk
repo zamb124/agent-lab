@@ -50,6 +50,12 @@ _lint-py:
 	uv run python scripts/check_rest_handlers_call_ops.py
 	@echo "=== lint: billing span canon ==="
 	uv run python scripts/check_billing_span_canon.py
+	@echo "=== lint: conf.json secrets ==="
+	uv run python scripts/check_conf_secrets.py
+	@echo "=== lint: repo hygiene ==="
+	uv run python scripts/check_repo_hygiene.py
+	@echo "=== lint: ratchet counts ==="
+	uv run python scripts/check_ratchet_counts.py
 
 	@echo "=== lint: mcp branding bundle ==="
 	uv run python scripts/check_mcp_branding_bundle.py

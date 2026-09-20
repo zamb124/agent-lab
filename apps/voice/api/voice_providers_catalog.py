@@ -2,9 +2,9 @@
 Публичный каталог доступных моделей речи для Console (без секретов и без чтения ключей из conf).
 Любой авторизованный пользователь платформы.
 
-``GET /voice/api/v1/voice-providers/catalog``: роутер в ``pages_routers``. Путь должен быть
-в ``core/middleware/auth/route_config.py::ROUTE_RULES`` и при необходимости в ``NO_SUBDOMAIN_ALLOWED_PATHS``,
-иначе AuthMiddleware вернёт 404 до FastAPI (префикс ``/frontend/`` исключён из SPA-fallback).
+``GET /voice/api/v1/voice-providers/catalog``: роутер в ``pages_routers``. Путь покрыт правилом
+``/voice/api/v1/*`` в ``core/middleware/auth/route_config.py::ROUTE_RULES`` и входит в
+``NO_SUBDOMAIN_ALLOWED_PATHS`` (консоль без субдомена компании).
 """
 
 from __future__ import annotations

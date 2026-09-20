@@ -1,4 +1,4 @@
-"""Lit SPA сервиса: статика core UI Kit, статика сервиса и SPA-fallback на `index.html`.
+"""Lit SPA сервиса: статика core UI Kit, статика сервиса и catch-all на `index.html`.
 
 Одна функция на все сервисы: `apps/<svc>/main.py` не держит своих `app.mount` и
 `serve_<svc>_ui`. Вызывается после регистрации собственных маршрутов сервиса —
@@ -31,10 +31,10 @@ def mount_service_spa(
     excluded_prefixes: Sequence[str] = _DEFAULT_EXCLUDED_PREFIXES,
     extra_static_mounts: Sequence[tuple[str, Path, str]] = (),
 ) -> None:
-    """Монтирует `/static/core`, `/{segment}/ui/static` и SPA-fallback `/{segment}/{path}`.
+    """Монтирует `/static/core`, `/{segment}/ui/static` и catch-all `/{segment}/{path}` → index.html.
 
     `excluded_prefixes` — под-пути, которые SPA не обслуживает (API, статика, WS):
-    для них fallback отвечает 404, а не index.html.
+    для них catch-all отвечает 404, а не index.html.
     """
     index_file = ui_dir / "index.html"
     if not index_file.is_file():
