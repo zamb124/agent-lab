@@ -85,7 +85,6 @@
         "providers_loading": "Загрузка провайдеров...",
         "providers_default_badge": "по умолчанию",
         "providers_active_badge": "активен",
-        "providers_switch_button": "Использовать",
         "about_title": "О RAG Service",
         "about_text": "Retrieval Augmented Generation: документы разбиваются на чанки, векторизуются и сохраняются для семантического поиска по корпоративным данным."
     },
@@ -111,10 +110,6 @@
         "document_delete_failed": "Не удалось удалить документ",
         "document_processed": "Документ «{{name}}» проиндексирован",
         "document_process_failed": "Индексация «{{name}}» завершилась с ошибкой",
-        "text_ingested": "Текст проиндексирован",
-        "text_ingest_failed": "Не удалось проиндексировать текст",
-        "search_failed": "Поиск не выполнен",
-        "provider_switched": "Провайдер переключён",
-        "provider_switch_failed": "Не удалось переключить провайдер"
+        "search_failed": "Поиск не выполнен"
     }
 }

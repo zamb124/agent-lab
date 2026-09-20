@@ -1,6 +1,7 @@
 import { fixture, fixtureCleanup, html, expect, aTimeout } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { collectFactories, registerFactory } from '@platform/lib/events/index.js';
+import { platformWs } from '@platform/lib/events/effects/ws.effect.js';
 import { toolsAllOp, toolsResource } from '../../../../apps/flows/ui/events/resources/tools.resource.js';
 import { toolTagGroupsOp } from '../../../../apps/flows/ui/events/resources/tool-tag-groups.resource.js';
 import {
@@ -34,35 +35,32 @@ function bootstrap() {
     bootstrapTestBus({ slices: collected.slices, effects: collected.effects });
 }
 
-function jsonResponse(body) {
-    return new Response(JSON.stringify(body), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-    });
-}
-
 describe('flows library picker code templates', () => {
     let originalFetch;
+    let originalWsRequest;
 
     beforeEach(() => {
         originalFetch = window.fetch;
+        originalWsRequest = platformWs.request;
         resetPlatformState();
         bootstrap();
     });
 
     afterEach(() => {
         window.fetch = originalFetch;
+        platformWs.request = originalWsRequest;
         fixtureCleanup();
     });
 
     it('commits catalog code template with inferred parameters_schema', async () => {
-        window.fetch = async (url, options) => {
-            const href = String(url);
-            if (href.endsWith('/flows/api/v1/code/parse-signature')) {
-                const body = JSON.parse(String(options.body));
-                expect(body.func_name).to.equal(undefined);
-                expect(body.code).to.include('async def run');
-                return jsonResponse({
+        window.fetch = async (url) => {
+            throw new Error(`unexpected fetch: ${String(url)}`);
+        };
+        platformWs.request = async (opts) => {
+            if (opts.type === 'flows/code/parse_signature_requested') {
+                expect(opts.payload.func_name).to.equal(undefined);
+                expect(opts.payload.code).to.include('async def run');
+                return {
                     success: true,
                     func_name: 'run',
                     parameters: {},
@@ -81,9 +79,9 @@ describe('flows library picker code templates', () => {
                         },
                         required: ['url'],
                     },
-                });
+                };
             }
-            throw new Error(`unexpected fetch: ${href}`);
+            throw new Error(`unexpected WS command ${opts.type}`);
         };
 
         const modal = await fixture(html`<flows-library-picker-modal></flows-library-picker-modal>`);

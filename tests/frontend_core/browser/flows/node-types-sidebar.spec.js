@@ -4,15 +4,51 @@
 
 import { fixture, fixtureCleanup, html, expect, waitUntil } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
-import { installFetchMock } from '../helpers/fake-fetch.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
+import { platformWs } from '@platform/lib/events/effects/ws.effect.js';
 import flowsEn from '../../../../core/i18n/translations/en/flows.json' with { type: 'json' };
 import { nodeTypesOp, resourceTypesOp } from '../../../../apps/flows/ui/events/resources/metadata.resource.js';
 import { triggerRemoveOp, triggersListOp } from '../../../../apps/flows/ui/events/resources/triggers.resource.js';
 import '../../../../apps/flows/ui/components/editor/flows-node-types-sidebar.js';
 
+const NODE_TYPE_ITEMS = [
+    {
+        category: 'sources',
+        type: 'datasource',
+        connector_id: 'postgres',
+        name: 'PostgreSQL',
+        icon: 'postgres',
+        description: 'SQL query/schema',
+        color: '#14b8a6',
+        inputs: 1,
+        outputs: 1,
+    },
+    {
+        category: 'sources',
+        type: 'datasource',
+        connector_id: 'mysql',
+        name: 'MySQL',
+        icon: 'mysql',
+        description: 'SQL query/schema',
+        color: '#14b8a6',
+        inputs: 1,
+        outputs: 1,
+    },
+    {
+        category: 'sources',
+        type: 'datasource',
+        connector_id: 'clickhouse',
+        name: 'ClickHouse',
+        icon: 'clickhouse',
+        description: 'SQL query/schema',
+        color: '#14b8a6',
+        inputs: 1,
+        outputs: 1,
+    },
+];
+
 describe('flows-node-types-sidebar datasource brand icons', () => {
-    let fetchMock;
+    let originalWsRequest;
 
     beforeEach(() => {
         resetPlatformState();
@@ -26,47 +62,23 @@ describe('flows-node-types-sidebar datasource brand icons', () => {
             { locale, bundle: { ...previous, flows: flowsEn } },
             { source: 'system' },
         );
-        fetchMock = installFetchMock();
-        fetchMock.respondJson('GET', (url) => url.includes('/flows/api/v1/metadata/node-types'), [
-            {
-                category: 'sources',
-                type: 'datasource',
-                connector_id: 'postgres',
-                name: 'PostgreSQL',
-                icon: 'postgres',
-                description: 'SQL query/schema',
-                color: '#14b8a6',
-                inputs: 1,
-                outputs: 1,
-            },
-            {
-                category: 'sources',
-                type: 'datasource',
-                connector_id: 'mysql',
-                name: 'MySQL',
-                icon: 'mysql',
-                description: 'SQL query/schema',
-                color: '#14b8a6',
-                inputs: 1,
-                outputs: 1,
-            },
-            {
-                category: 'sources',
-                type: 'datasource',
-                connector_id: 'clickhouse',
-                name: 'ClickHouse',
-                icon: 'clickhouse',
-                description: 'SQL query/schema',
-                color: '#14b8a6',
-                inputs: 1,
-                outputs: 1,
-            },
-        ]);
-        fetchMock.respondJson('GET', (url) => url.includes('/flows/api/v1/metadata/resource-types'), []);
+        originalWsRequest = platformWs.request;
+        platformWs.request = async (opts) => {
+            if (opts.type === 'flows/metadata/node_types_requested') {
+                return { items: NODE_TYPE_ITEMS };
+            }
+            if (opts.type === 'flows/metadata/resource_types_requested') {
+                return { items: [] };
+            }
+            if (opts.type === 'flows/triggers/list_requested') {
+                return { items: [] };
+            }
+            throw new Error(`unexpected WS command ${opts.type}`);
+        };
     });
 
     afterEach(() => {
-        fetchMock.uninstall();
+        platformWs.request = originalWsRequest;
         fixtureCleanup();
     });
 

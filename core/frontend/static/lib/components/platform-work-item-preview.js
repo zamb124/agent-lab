@@ -179,7 +179,7 @@ export class PlatformWorkItemPreview extends PlatformElement {
         this.workItemId = '';
         this.item = null;
         this.anchorRect = null;
-        this._getOp = this.useOp('platform/work_item_get');
+        this._getOp = this.useOp('worktracker/work_item_get');
         this._locale = this.select((s) => (
             typeof s.i18n.locale === 'string' && s.i18n.locale.length > 0 ? s.i18n.locale : 'en'
         ));

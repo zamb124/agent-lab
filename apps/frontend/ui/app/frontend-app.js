@@ -55,7 +55,7 @@ import {
     publicSearchSerpMoreOp,
     publicSearchSourceDescribeOp,
 } from '../events/resources/public-search.resource.js';
-import { flowsCatalogOp } from '../events/resources/flows-catalog.resource.js';
+import { flowsListOp } from '@platform/lib/events/resources/flows-flows-list.resource.js';
 import {
     schedulerTasksResource,
     schedulerPauseOp,
@@ -94,8 +94,8 @@ import {
     agentReleasesStatusOp,
     agentDevicePolicyPatchOp,
     agentAuditLoadOp,
-    agentToolkitsLoadOp,
 } from '../events/resources/agent.resource.js';
+import { agentToolkitsListOp } from '@platform/lib/events/resources/flows-agent-toolkits.resource.js';
 import { leadSubmitOp, leadRequestsList } from '../events/resources/leads.resource.js';
 import { tracingSpansList, tracingFacets, tracingTraceLoadOp } from '../events/resources/tracing.resource.js';
 import {
@@ -336,7 +336,7 @@ export class FrontendApp extends PlatformApp {
         publicSearchSerpClickOp,
         publicSearchSerpMoreOp,
         publicSearchSourceDescribeOp,
-        flowsCatalogOp,
+        flowsListOp,
         schedulerTasksResource,
         schedulerPauseOp,
         schedulerResumeOp,
@@ -368,7 +368,7 @@ export class FrontendApp extends PlatformApp {
         agentReleasesStatusOp,
         agentDevicePolicyPatchOp,
         agentAuditLoadOp,
-        agentToolkitsLoadOp,
+        agentToolkitsListOp,
         leadSubmitOp,
         leadRequestsList,
         tracingSpansList,

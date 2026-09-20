@@ -10,10 +10,11 @@ import { fixture, fixtureCleanup, html, expect, elementUpdated, aTimeout, waitUn
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { installFetchMock } from '../helpers/fake-fetch.js';
 import { registerFactory, collectFactories, getPlatformBus, CoreEvents } from '@platform/lib/events/index.js';
+import { platformWs, WsTransportError } from '@platform/lib/events/effects/ws.effect.js';
 import flowsEn from '../../../../core/i18n/translations/en/flows.json' with { type: 'json' };
 
 import { editorResource, editorBulkDeleteOp } from '../../../../apps/flows/ui/events/resources/editor.resource.js';
-import { resourcesBundleResource, resourceUpdateOp } from '../../../../apps/flows/ui/events/resources/resources-bundle.resource.js';
+import { resourcesBundleResource } from '../../../../apps/flows/ui/events/resources/resources-bundle.resource.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
 import { flowValidateOp, flowsResource } from '../../../../apps/flows/ui/events/resources/flows.resource.js';
 import { modelsListOp } from '../../../../apps/flows/ui/events/resources/models.resource.js';
@@ -23,7 +24,7 @@ import {
     codeEditorStateOp, codeSourceOp, codeFlowFunctionsOp,
     codeToolSourceOp, codeParseSignatureOp, codeValidateOp, codeExecuteOp,
 } from '../../../../apps/flows/ui/events/resources/code.resource.js';
-import { mcpServersResource, mcpServerSyncOp, mcpServerUpdateOp, mcpServerTestOp } from '../../../../apps/flows/ui/events/resources/mcp.resource.js';
+import { mcpServersResource, mcpServerSyncOp, mcpServerTestOp } from '../../../../apps/flows/ui/events/resources/mcp.resource.js';
 import { promptRenderOp } from '../../../../apps/flows/ui/events/resources/prompts.resource.js';
 import { secretsVariablesResource } from '@platform/lib/events/resources/secrets-variables.resource.js';
 import { toolsResource } from '../../../../apps/flows/ui/events/resources/tools.resource.js';
@@ -32,7 +33,7 @@ import {
 } from '../../../../apps/flows/ui/events/resources/agent-skills.resource.js';
 import { llmContextResolveParentOp } from '../../../../apps/flows/ui/events/resources/llm-context.resource.js';
 import { exceptionAbsorbAllowNamesOp, executionLimitsOp } from '../../../../apps/flows/ui/events/resources/metadata.resource.js';
-import { workQueuesResource } from '../../../../apps/flows/ui/events/resources/work-queues.resource.js';
+import { workQueuesResource } from '@platform/lib/events/resources/work-queues.resource.js';
 import {
     datasourcesResource,
     datasourceTestOp,
@@ -54,7 +55,7 @@ import '../../../../apps/flows/ui/components/nodes/flows-remote-flow-editor.js';
 
 const FACTORIES = [
     editorResource, editorBulkDeleteOp,
-    resourcesBundleResource, resourceUpdateOp,
+    resourcesBundleResource,
     platformFileCreateOp,
     flowValidateOp, flowsResource,
     modelsListOp,
@@ -62,7 +63,7 @@ const FACTORIES = [
     codeLspSessionOp, codeDocumentationOp, codeTemplatesOp, codeEditorStateOp,
     codeSourceOp, codeFlowFunctionsOp, codeToolSourceOp, codeParseSignatureOp,
     codeValidateOp, codeExecuteOp,
-    mcpServersResource, mcpServerSyncOp, mcpServerUpdateOp, mcpServerTestOp,
+    mcpServersResource, mcpServerSyncOp, mcpServerTestOp,
     promptRenderOp,
     secretsVariablesResource,
     toolsResource,
@@ -84,7 +85,7 @@ function bootstrap() {
     const effects = collected.effects.filter((effect) => (
         effect.__factoryName === 'flows/code_validate'
         || effect.__factoryName === 'flows/code_editor_state'
-        || effect.__factoryName === 'flows/work_queues'
+        || effect.__factoryName === 'worktracker/work_queues'
         || effect.__factoryName === 'flows/datasources'
         || effect.__factoryName === 'flows/datasource_test'
         || effect.__factoryName === 'flows/datasource_introspect'
@@ -138,53 +139,167 @@ function clickPlatformButton(buttonEl) {
 
 describe('node editors — top-level NodeConfig contract', () => {
     let fetchMock;
+    let originalWsRequest;
+    const wsCalls = [];
+    const datasourceListPage = {
+        items: [
+            {
+                datasource_id: 'ds_orders',
+                connector_id: 'postgres',
+                name: 'Orders',
+                host: 'localhost',
+                port: 5432,
+                database_name: 'orders',
+                username: 'app',
+                ssl_mode: 'disable',
+                allowed_operations: ['select'],
+                statement_timeout_ms: 15000,
+                max_rows: 1000,
+            },
+        ],
+        total: 1,
+        limit: 200,
+        offset: 0,
+    };
+    const datasourceWs = {
+        testResult: {
+            ok: true,
+            latency_ms: 12,
+            server_version: 'PostgreSQL 16',
+        },
+        testError: null,
+        introspectResult: {
+            tables: [
+                {
+                    table_name: 'public.items',
+                    columns: [
+                        { name: 'id', data_type: 'integer' },
+                        { name: 'name', data_type: 'text' },
+                    ],
+                },
+            ],
+        },
+        createResult: {
+            datasource_id: 'ds_created',
+            connector_id: 'postgres',
+            name: 'Warehouse',
+            host: 'db.example',
+            port: 5432,
+            database_name: 'orders',
+            username: 'app',
+            ssl_mode: 'disable',
+            allowed_operations: ['select'],
+            statement_timeout_ms: 15000,
+            max_rows: 1000,
+        },
+        updateResult: {
+            datasource_id: 'ds_orders',
+            connector_id: 'postgres',
+            name: 'Orders',
+            host: 'db.internal',
+            port: 5432,
+            database_name: 'orders',
+            username: 'app',
+            ssl_mode: 'disable',
+            allowed_operations: ['select'],
+            statement_timeout_ms: 20000,
+            max_rows: 50,
+        },
+    };
     beforeEach(() => {
         resetPlatformState();
         bootstrap();
         fetchMock = installFetchMock();
-        fetchMock.respondJson('POST', (url) => url.endsWith('/flows/api/v1/code/validate'), { valid: true, warnings: [] });
-        fetchMock.respondJson('GET', (url) => url.includes('/flows/api/v1/code/editor-state'), { variables: {} });
-        fetchMock.respondJson('GET', (url) => /\/flows\/api\/v1\/agent-skills(\?|$)/.test(url), {
-            items: [],
-            total: 0,
-            limit: 200,
-            offset: 0,
-        });
-        fetchMock.respondJson('GET', (url) => /\/flows\/api\/v1\/work-queues(\?|$)/.test(url), {
-            items: [
-                {
-                    work_queue_id: 'wq_support',
-                    work_queue_slug: 'support',
-                    name: 'Support',
-                    description: null,
-                },
-            ],
-            total: 1,
-            limit: 200,
-            offset: 0,
-        });
-        fetchMock.respondJson('GET', (url) => /\/flows\/api\/v1\/datasources(\?|$)/.test(url), {
-            items: [
-                {
-                    datasource_id: 'ds_orders',
-                    connector_id: 'postgres',
-                    name: 'Orders',
-                    host: 'localhost',
-                    port: 5432,
-                    database_name: 'orders',
-                    username: 'app',
-                    ssl_mode: 'disable',
-                    allowed_operations: ['select'],
-                    statement_timeout_ms: 15000,
-                    max_rows: 1000,
-                },
-            ],
-            total: 1,
-            limit: 200,
-            offset: 0,
-        });
+        wsCalls.length = 0;
+        datasourceWs.testError = null;
+        originalWsRequest = platformWs.request;
+        platformWs.request = async (opts) => {
+            if (opts.type === 'flows/code/validate_requested') {
+                wsCalls.push(opts);
+                return { valid: true, warnings: [] };
+            }
+            if (opts.type === 'flows/code/editor_state_requested') {
+                wsCalls.push(opts);
+                return { variables: {} };
+            }
+            if (opts.type === 'flows/datasources/list_requested') {
+                wsCalls.push(opts);
+                return datasourceListPage;
+            }
+            if (opts.type === 'flows/datasources/test_requested') {
+                wsCalls.push(opts);
+                if (datasourceWs.testError !== null) {
+                    throw new WsTransportError(datasourceWs.testError, 'ws_command_failed');
+                }
+                return datasourceWs.testResult;
+            }
+            if (opts.type === 'flows/datasources/introspect_requested') {
+                wsCalls.push(opts);
+                return datasourceWs.introspectResult;
+            }
+            if (opts.type === 'flows/datasources/create_requested') {
+                wsCalls.push(opts);
+                return datasourceWs.createResult;
+            }
+            if (opts.type === 'flows/datasources/update_requested') {
+                wsCalls.push(opts);
+                return datasourceWs.updateResult;
+            }
+            if (opts.type === 'flows/resources/list_requested') {
+                wsCalls.push(opts);
+                return { items: [], total: 0, limit: 200, offset: 0 };
+            }
+            if (opts.type === 'flows/agent_skills/list_requested') {
+                wsCalls.push(opts);
+                return { items: [], total: 0, limit: 200, offset: 0 };
+            }
+            if (opts.type === 'flows/resources/update_requested') {
+                wsCalls.push(opts);
+                return opts.payload;
+            }
+            if (opts.type === 'flows/registry/providers_list_requested') {
+                wsCalls.push(opts);
+                return { items: ['openrouter'] };
+            }
+            if (opts.type === 'flows/registry/models_list_requested') {
+                wsCalls.push(opts);
+                return { items: ['test-model'] };
+            }
+            if (opts.type === 'flows/llm_context/resolve_parent_requested') {
+                wsCalls.push(opts);
+                return {
+                    resolved: {
+                        profile: 'standard',
+                        mode: 'smart',
+                        memory: 'session',
+                        retrieval: { mode: 'hybrid' },
+                        budget: 'medium',
+                    },
+                    profiles: ['standard'],
+                    budgets: ['medium'],
+                };
+            }
+            if (opts.type === 'worktracker/work_queues/list_requested') {
+                wsCalls.push(opts);
+                return {
+                    items: [
+                        {
+                            work_queue_id: 'wq_support',
+                            work_queue_slug: 'support',
+                            name: 'Support',
+                            description: null,
+                        },
+                    ],
+                    total: 1,
+                    limit: 200,
+                    offset: 0,
+                };
+            }
+            return originalWsRequest(opts);
+        };
     });
     afterEach(() => {
+        platformWs.request = originalWsRequest;
         fetchMock.uninstall();
         fixtureCleanup();
     });
@@ -585,11 +700,11 @@ describe('node editors — top-level NodeConfig contract', () => {
         await elementUpdated(workbench);
         await aTimeout(720);
         await waitUntil(
-            () => fetchMock.calls.some((call) => call.method === 'POST' && call.url.endsWith('/flows/api/v1/code/validate')),
+            () => wsCalls.some((call) => call.type === 'flows/code/validate_requested'),
             'code validation request',
         );
-        const call = fetchMock.calls.find((item) => item.method === 'POST' && item.url.endsWith('/flows/api/v1/code/validate'));
-        const body = JSON.parse(call.init.body);
+        const call = wsCalls.find((item) => item.type === 'flows/code/validate_requested');
+        const body = call.payload;
         expect(body).to.deep.include({
             language: 'typescript',
             kind: 'tool',
@@ -950,22 +1065,6 @@ describe('node editors — top-level NodeConfig contract', () => {
     });
 
     it('flows-datasource-node-editor — Test и Schema заполняют панель', async () => {
-        fetchMock.respondJson('POST', (url) => url.includes('/flows/api/v1/datasources/ds_orders/test'), {
-            ok: true,
-            latency_ms: 12,
-            server_version: 'PostgreSQL 16',
-        });
-        fetchMock.respondJson('POST', (url) => url.includes('/flows/api/v1/datasources/ds_orders/introspect'), {
-            tables: [
-                {
-                    table_name: 'public.items',
-                    columns: [
-                        { name: 'id', data_type: 'integer' },
-                        { name: 'name', data_type: 'text' },
-                    ],
-                },
-            ],
-        });
         const node = {
             node_id: 'a',
             type: 'datasource',
@@ -1013,26 +1112,15 @@ describe('node editors — top-level NodeConfig contract', () => {
         expect(schemaItem.textContent).to.include('public.items');
         expect(schemaItem.textContent).to.include('id:integer');
         expect(schemaItem.textContent).to.include('name:text');
-        const testCall = fetchMock.calls.find((call) => call.method === 'POST' && call.url.includes('/datasources/ds_orders/test'));
-        const schemaCall = fetchMock.calls.find((call) => call.method === 'POST' && call.url.includes('/datasources/ds_orders/introspect'));
-        expect(testCall, 'POST test').to.exist;
-        expect(schemaCall, 'POST introspect').to.exist;
+        const testCall = wsCalls.find((call) => call.type === 'flows/datasources/test_requested');
+        const schemaCall = wsCalls.find((call) => call.type === 'flows/datasources/introspect_requested');
+        expect(testCall, 'WS test').to.exist;
+        expect(schemaCall, 'WS introspect').to.exist;
+        expect(testCall.payload.datasource_id).to.equal('ds_orders');
+        expect(schemaCall.payload.datasource_id).to.equal('ds_orders');
     });
 
     it('flows-datasource-node-editor — submit create патчит datasource_id', async () => {
-        fetchMock.respondJson('POST', (url) => /\/flows\/api\/v1\/datasources\/?(\?|$)/.test(url), {
-            datasource_id: 'ds_created',
-            connector_id: 'postgres',
-            name: 'Warehouse',
-            host: 'db.example',
-            port: 5432,
-            database_name: 'orders',
-            username: 'app',
-            ssl_mode: 'disable',
-            allowed_operations: ['select'],
-            statement_timeout_ms: 15000,
-            max_rows: 1000,
-        });
         const node = {
             node_id: 'a',
             type: 'datasource',
@@ -1069,11 +1157,9 @@ describe('node editors — top-level NodeConfig contract', () => {
         await waitUntil(() => last !== null && last.patch && last.patch.datasource_id === 'ds_created', 'create patch');
         expect(last.patch).to.deep.equal({ datasource_id: 'ds_created' });
         expect(el._showCreate).to.equal(false);
-        const createCall = fetchMock.calls.find((call) => (
-            call.method === 'POST' && /\/flows\/api\/v1\/datasources\/?(\?|$)/.test(call.url)
-        ));
-        expect(createCall, 'POST create').to.exist;
-        const body = JSON.parse(createCall.init.body);
+        const createCall = wsCalls.find((call) => call.type === 'flows/datasources/create_requested');
+        expect(createCall, 'WS create').to.exist;
+        const body = createCall.payload;
         expect(body.connector_id).to.equal('postgres');
         expect(body.name).to.equal('Warehouse');
         expect(body.host).to.equal('db.example');
@@ -1106,19 +1192,6 @@ describe('node editors — top-level NodeConfig contract', () => {
     });
 
     it('flows-datasource-node-editor — edit PATCH полей', async () => {
-        fetchMock.respondJson('PATCH', (url) => url.includes('/flows/api/v1/datasources/ds_orders'), {
-            datasource_id: 'ds_orders',
-            connector_id: 'postgres',
-            name: 'Orders',
-            host: 'db.internal',
-            port: 5432,
-            database_name: 'orders',
-            username: 'app',
-            ssl_mode: 'disable',
-            allowed_operations: ['select'],
-            statement_timeout_ms: 20000,
-            max_rows: 50,
-        });
         const node = {
             node_id: 'a',
             type: 'datasource',
@@ -1145,10 +1218,11 @@ describe('node editors — top-level NodeConfig contract', () => {
         const editButtons = [...base.querySelectorAll('[data-connection-edit] .create-actions platform-button')];
         expect(editButtons.length, 'delete and save').to.equal(2);
         clickPlatformButton(editButtons[1]);
-        await waitUntil(() => fetchMock.calls.some((call) => call.method === 'PATCH'), 'PATCH save');
-        const patchCall = fetchMock.calls.find((call) => call.method === 'PATCH');
-        expect(patchCall, 'PATCH connection').to.exist;
-        const body = JSON.parse(patchCall.init.body);
+        await waitUntil(() => wsCalls.some((call) => call.type === 'flows/datasources/update_requested'), 'WS update');
+        const patchCall = wsCalls.find((call) => call.type === 'flows/datasources/update_requested');
+        expect(patchCall, 'WS update').to.exist;
+        const body = patchCall.payload;
+        expect(body.datasource_id).to.equal('ds_orders');
         expect(body.host).to.equal('db.internal');
         expect(body.statement_timeout_ms).to.equal(20000);
         expect(body.max_rows).to.equal(50);
@@ -1156,9 +1230,7 @@ describe('node editors — top-level NodeConfig contract', () => {
     });
 
     it('flows-datasource-node-editor — Test fail рисует error line', async () => {
-        fetchMock.respondJson('POST', (url) => url.includes('/flows/api/v1/datasources/ds_orders/test'), {
-            detail: 'connection refused',
-        }, 400);
+        datasourceWs.testError = 'connection refused';
         const node = {
             node_id: 'a',
             type: 'datasource',
@@ -1185,17 +1257,6 @@ describe('node editors — top-level NodeConfig contract', () => {
     });
 
     it('flows-datasource-node-editor — клик таблицы подставляет sql', async () => {
-        fetchMock.respondJson('POST', (url) => url.includes('/flows/api/v1/datasources/ds_orders/introspect'), {
-            tables: [
-                {
-                    table_name: 'public.items',
-                    columns: [
-                        { name: 'id', data_type: 'integer' },
-                        { name: 'name', data_type: 'text' },
-                    ],
-                },
-            ],
-        });
         const node = {
             node_id: 'a',
             type: 'datasource',

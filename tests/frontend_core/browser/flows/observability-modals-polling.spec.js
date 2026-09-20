@@ -5,6 +5,7 @@
 import { fixture, fixtureCleanup, html, expect, waitUntil, elementUpdated } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { collectFactories, registerFactory, getPlatformBus, CoreEvents } from '@platform/lib/events/index.js';
+import { platformWs } from '@platform/lib/events/effects/ws.effect.js';
 import '@platform/lib/components/platform-modal-stack.js';
 import {
     tracesBySessionOp,
@@ -18,6 +19,7 @@ import {
     logsBySpanOp,
     logsByUserOp,
 } from '../../../../apps/flows/ui/events/resources/logs.resource.js';
+import { flowsCodeAgentLogsOp } from '../../../../apps/flows/ui/events/resources/code-agent.resource.js';
 import {
     FlowsTracingModal,
 } from '../../../../apps/flows/ui/modals/flows-tracing-modal.js';
@@ -34,16 +36,10 @@ const FACTORIES = [
     logsByRequestOp,
     logsBySpanOp,
     logsByUserOp,
+    flowsCodeAgentLogsOp,
 ];
 
 const SVG_RESPONSE = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"></svg>';
-
-function jsonResponse(body) {
-    return new Response(JSON.stringify(body), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-    });
-}
 
 function svgResponse() {
     return new Response(SVG_RESPONSE, {
@@ -85,6 +81,7 @@ function cleanupPortaledModals() {
 
 describe('flows observability modals polling', () => {
     let originalFetch;
+    let originalWsRequest;
     let originalTraceInterval;
     let originalTraceMax;
     let originalLogsInterval;
@@ -92,12 +89,14 @@ describe('flows observability modals polling', () => {
 
     beforeEach(() => {
         originalFetch = window.fetch;
+        originalWsRequest = platformWs.request;
         originalTraceInterval = FlowsTracingModal.pollIntervalMs;
         originalTraceMax = FlowsTracingModal.pollMaxAttempts;
         originalLogsInterval = FlowsLogsModal.pollIntervalMs;
         originalLogsMax = FlowsLogsModal.pollMaxAttempts;
         resetPlatformState();
         bootstrap();
+        window.fetch = async () => svgResponse();
         FlowsTracingModal.pollIntervalMs = 10;
         FlowsTracingModal.pollMaxAttempts = 4;
         FlowsLogsModal.pollIntervalMs = 10;
@@ -106,6 +105,7 @@ describe('flows observability modals polling', () => {
 
     afterEach(() => {
         window.fetch = originalFetch;
+        platformWs.request = originalWsRequest;
         FlowsTracingModal.pollIntervalMs = originalTraceInterval;
         FlowsTracingModal.pollMaxAttempts = originalTraceMax;
         FlowsLogsModal.pollIntervalMs = originalLogsInterval;
@@ -116,13 +116,15 @@ describe('flows observability modals polling', () => {
 
     it('tracing modal keeps loading and retries until spans appear', async () => {
         let sessionCalls = 0;
-        window.fetch = async (url) => {
-            const href = String(url);
-            if (href.includes('/flows/api/v1/traces/session/session_1')) {
-                sessionCalls += 1;
-                return jsonResponse(sessionCalls < 2 ? { spans: [] } : { spans: [traceRoot()] });
+        platformWs.request = async (opts) => {
+            if (!opts || typeof opts.type !== 'string') {
+                throw new Error('observability ws stub: opts.type required');
             }
-            return svgResponse();
+            if (opts.type === 'flows/traces/by_session_requested') {
+                sessionCalls += 1;
+                return sessionCalls < 2 ? { spans: [] } : { spans: [traceRoot()] };
+            }
+            throw new Error(`unexpected ws: ${opts.type}`);
         };
 
         const stack = await fixture(html`<platform-modal-stack></platform-modal-stack>`);
@@ -145,27 +147,29 @@ describe('flows observability modals polling', () => {
 
     it('logs modal keeps loading and retries until session log entries appear', async () => {
         let logsCalls = 0;
-        window.fetch = async (url) => {
-            const href = String(url);
-            if (href.includes('/flows/api/v1/observability/logs/by-session/session_1')) {
+        platformWs.request = async (opts) => {
+            if (!opts || typeof opts.type !== 'string') {
+                throw new Error('observability ws stub: opts.type required');
+            }
+            if (opts.type === 'flows/logs/by_session_requested') {
                 logsCalls += 1;
-                return jsonResponse(logsCalls < 2
+                return logsCalls < 2
                     ? { entries: [], count: 0 }
                     : {
-                          entries: [{
-                              timestamp: '2026-05-15T10:00:00.000Z',
-                              level: 'info',
-                              service: 'flows',
-                              message: 'indexed log line',
-                              raw: { message: 'indexed log line' },
-                          }],
-                          count: 1,
-                      });
+                        entries: [{
+                            timestamp: '2026-05-15T10:00:00.000Z',
+                            level: 'info',
+                            service: 'flows',
+                            message: 'indexed log line',
+                            raw: { message: 'indexed log line' },
+                        }],
+                        count: 1,
+                    };
             }
-            if (href.includes('/flows/api/v1/traces/session/session_1')) {
-                return jsonResponse({ spans: [] });
+            if (opts.type === 'flows/traces/by_session_requested') {
+                return { spans: [] };
             }
-            return svgResponse();
+            throw new Error(`unexpected ws: ${opts.type}`);
         };
 
         const stack = await fixture(html`<platform-modal-stack></platform-modal-stack>`);

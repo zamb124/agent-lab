@@ -113,7 +113,7 @@ export function bootstrapPlatformBus(options) {
     if (routes.length > 0) {
         bus.registerEffect(createRouterEffect({ baseUrl, routes }));
     }
-    bus.registerEffect(createPlatformWsEffect({ baseUrl }));
+    bus.registerEffect(createPlatformWsEffect());
 
     for (const eff of extraEffects) {
         bus.registerEffect(eff);

@@ -6,8 +6,8 @@
 
 import { elementUpdated, expect, fixture, fixtureCleanup, html, waitUntil } from '../helpers/render.js';
 import { bootstrapTestBus, resetPlatformState } from '../helpers/reset.js';
-import { installFetchMock } from '../helpers/fake-fetch.js';
 import { CoreEvents, getPlatformBus } from '@platform/lib/events/index.js';
+import { platformWs } from '@platform/lib/events/effects/ws.effect.js';
 import { blockElement, pageRenderRoot } from '@platform/lib/flow-ui/editor/selection.js';
 import { iterBlocks } from '@platform/lib/flow-ui/runtime/flow-ui-store.js';
 import flowsEn from '../../../../core/i18n/translations/en/flows.json' with { type: 'json' };
@@ -18,7 +18,19 @@ import '../../../../apps/flows/ui/modals/flows-interface-template-modal.js';
 
 const TAG = 'flows-interface-template-modal';
 
-function seedTranslations(bus) {
+async function seedTranslations(bus) {
+    await waitUntil(
+        () => {
+            const i18n = bus.getState().i18n;
+            if (i18n.loading) {
+                return false;
+            }
+            const bundle = i18n.translations[i18n.locale];
+            return Boolean(bundle && typeof bundle === 'object' && bundle.platform);
+        },
+        'i18n bootstrap settled',
+        { timeout: 15_000 },
+    );
     const locale = bus.getState().i18n.locale;
     const previous = bus.getState().i18n.translations[locale] || {};
     bus.dispatch(CoreEvents.I18N_LOCALE_LOADED, { locale, bundle: { ...previous, flows: flowsEn } }, { source: 'system' });
@@ -50,18 +62,23 @@ function button(modal, label) {
 describe('flows-interface-template-modal', function () {
     this.timeout(30_000);
 
-    let fetchMock;
+    let originalWsRequest;
 
-    beforeEach(() => {
+    beforeEach(async () => {
         resetPlatformState();
         bootstrapTestBus({ factories: [flowUiTemplatesOp] });
-        seedTranslations(getPlatformBus());
-        fetchMock = installFetchMock();
-        fetchMock.respondJson('GET', (url) => url.includes('/flows/api/v1/flow-ui/templates'), templatesPage);
+        await seedTranslations(getPlatformBus());
+        originalWsRequest = platformWs.request;
+        platformWs.request = async (opts) => {
+            if (opts.type === 'flows/flow_ui/templates_requested') {
+                return templatesPage;
+            }
+            return originalWsRequest(opts);
+        };
     });
 
     afterEach(() => {
-        fetchMock.uninstall();
+        platformWs.request = originalWsRequest;
         fixtureCleanup();
         for (const leftover of document.querySelectorAll(TAG)) leftover.remove();
     });

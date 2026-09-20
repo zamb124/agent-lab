@@ -8,7 +8,7 @@
  * (apps/frontend/api/embed_configs.py): идентичность, безопасность и look&feel.
  * Поведение ленты и композера задаёт блок conversation интерфейса flow (редактор интерфейса).
  *
- * Branch (branch_id): список из flow.branches в ответе GET /flows/api/v1/flows/.
+ * Branch (branch_id): список из flow.branches в ответе `flows/flows_list` (`op_flows_list`).
  * Заблокирован для external и для LOCAL без веток (бэк подставит default).
  */
 import { html, css, nothing } from 'lit';
@@ -113,7 +113,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         this._sessionShareEnabled = false;
         this.size = 'lg';
         this._configs = this.useResource('frontend/embed_configs');
-        this._catalog = this.useOp('frontend/flows_catalog');
+        this._catalog = this.useOp('flows/flows_list');
         this._activeCompanySel = this.select((s) => s.companies.active);
         this._loaded = false;
         this._populated = false;
@@ -155,7 +155,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             : this.t('embed_create_modal.header');
         if (changed.has('open') && this.open && !this._loaded) {
             this._loaded = true;
-            this._catalog.run(null);
+            this._catalog.run({});
         }
         if (changed.has('open') && this.open && !this.embedConfig) {
             this._populated = false;
@@ -207,9 +207,14 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
     }
 
     _flows() {
-        const r = this._catalog.lastResult;
-        if (!r || !Array.isArray(r.flows)) return [];
-        return r.flows;
+        const listed = this._catalog.lastResult;
+        if (listed == null) {
+            return [];
+        }
+        if (!Array.isArray(listed.items)) {
+            throw new Error('create-embed-modal: flows/flows_list items[] required');
+        }
+        return listed.items;
     }
 
     _selectedFlow() {

@@ -958,7 +958,8 @@
         "action_open": "Открыть",
         "action_settings": "Настройки",
         "empty_message": "Пока нет пространств. Создайте первое.",
-        "empty_description": "Описание не задано"
+        "empty_description": "Описание не задано",
+        "default": "по умолчанию"
     },
     "namespace_note_defaults": {
         "section_title": "Заметки: голос заметки",

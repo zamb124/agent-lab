@@ -85,7 +85,6 @@
         "providers_loading": "Loading providers...",
         "providers_default_badge": "default",
         "providers_active_badge": "active",
-        "providers_switch_button": "Use",
         "about_title": "About RAG Service",
         "about_text": "Retrieval Augmented Generation: documents are chunked, vectorized, and stored for semantic search across enterprise data."
     },
@@ -111,10 +110,6 @@
         "document_delete_failed": "Failed to delete document",
         "document_processed": "Document \"{{name}}\" indexed",
         "document_process_failed": "Indexing of \"{{name}}\" failed",
-        "text_ingested": "Text indexed",
-        "text_ingest_failed": "Failed to index text",
-        "search_failed": "Search failed",
-        "provider_switched": "Provider switched",
-        "provider_switch_failed": "Failed to switch provider"
+        "search_failed": "Search failed"
     }
 }

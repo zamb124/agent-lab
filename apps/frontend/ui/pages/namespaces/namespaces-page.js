@@ -144,7 +144,7 @@ export class FrontendNamespacesPage extends PlatformPage {
     }
 
     render() {
-        const t = (key, fallback) => this.t(key, fallback);
+        const t = (key) => this.t(key);
         const loading = Boolean(this._namespaces?.loading);
         const items = this._items();
         const draft = this._form?.draft ?? { name: '', description: '' };
@@ -152,8 +152,8 @@ export class FrontendNamespacesPage extends PlatformPage {
         return html`
             <platform-breadcrumbs></platform-breadcrumbs>
             <page-header
-                title=${t('namespaces_page.title', 'Namespaces')}
-                subtitle=${t('namespaces_page.subtitle', 'Company workspaces and personal catalogs')}
+                title=${t('namespaces_page.title')}
+                subtitle=${t('namespaces_page.subtitle')}
             >
                 <button
                     slot="actions"
@@ -162,7 +162,7 @@ export class FrontendNamespacesPage extends PlatformPage {
                     @click=${() => { this._showCreate = !this._showCreate; }}
                 >
                     <platform-icon name="plus" size="16"></platform-icon>
-                    ${t('namespaces_page.create', 'Create workspace')}
+                    ${t('namespaces_page.create')}
                 </button>
             </page-header>
 
@@ -173,7 +173,7 @@ export class FrontendNamespacesPage extends PlatformPage {
                         class="filter-tag"
                         aria-pressed=${this._kindFilter === kind ? 'true' : 'false'}
                         @click=${() => this._setFilter(kind)}
-                    >${t(`namespaces_page.filter_${kind}`, kind)}</button>
+                    >${t(`namespaces_page.filter_${kind}`)}</button>
                 `)}
             </div>
 
@@ -183,7 +183,7 @@ export class FrontendNamespacesPage extends PlatformPage {
                         type="string"
                         mode="edit"
                         name="name"
-                        label=${t('namespaces_page.field_name', 'Name')}
+                        label=${t('namespaces_page.field_name')}
                         .value=${draft.name}
                         @change=${(e) => this._form.setField('name', e.detail.value)}
                     ></platform-field>
@@ -191,16 +191,16 @@ export class FrontendNamespacesPage extends PlatformPage {
                         type="text"
                         mode="edit"
                         name="description"
-                        label=${t('namespaces_page.field_description', 'Description')}
+                        label=${t('namespaces_page.field_description')}
                         .value=${draft.description}
                         @change=${(e) => this._form.setField('description', e.detail.value)}
                     ></platform-field>
                     <div class="actions">
                         <button class="btn btn-primary" type="submit" ?disabled=${this._form?.submitting}>
-                            ${t('namespaces_page.save', 'Create')}
+                            ${t('namespaces_page.save')}
                         </button>
                         <button class="btn" type="button" @click=${() => { this._showCreate = false; }}>
-                            ${t('namespaces_page.cancel', 'Cancel')}
+                            ${t('namespaces_page.cancel')}
                         </button>
                     </div>
                 </form>
@@ -218,12 +218,12 @@ export class FrontendNamespacesPage extends PlatformPage {
                             ${item.owner_user_id ? html`
                                 <platform-user-chip .userId=${item.owner_user_id}></platform-user-chip>
                             ` : nothing}
-                            ${item.is_default ? html`<span>${t('namespaces_page.default', 'default')}</span>` : nothing}
+                            ${item.is_default ? html`<span>${t('namespaces_page.default')}</span>` : nothing}
                             ${item.kind === 'company_workspace' ? html`
                                 <a
                                     class="crm-link"
                                     href=${`/crm/namespaces/${encodeURIComponent(item.name)}`}
-                                >${t('namespaces_page.open_crm', 'CRM settings & grants')}</a>
+                                >${t('namespaces_page.open_crm')}</a>
                             ` : nothing}
                         </div>
                     </div>

@@ -1,8 +1,10 @@
 /**
- * Presence Sync — typing-индикатор и user.presence (online/last_seen).
+ * Presence Sync — typing-индикатор.
  *
- * Чистый `createSlice` без HTTP/WS: состояние derived из push-событий
- * `sync/channel/typing` и `sync/presence/changed` (через `extraReducer`).
+ * Чистый `createSlice` без HTTP/WS: состояние derived из push
+ * `sync/channel/typing` (через `extraReducer`).
+ *
+ * Online/last_seen — поля `CompanyMemberRead` фабрики `sync/company_members`.
  *
  * Локальный action `pruneTyping` используется TTL-таймером, чтобы убрать
  * устаревшие typing-записи (>= TYPING_TTL_MS).
@@ -21,7 +23,6 @@ export const presenceResource = createSlice({
     name: 'sync/presence',
     extraInitial: {
         typingByChannel: Object.freeze({}),
-        presenceByUserId: Object.freeze({}),
     },
     extraEvents: {
         TYPING_PRUNE: 'typing_prune',
@@ -49,21 +50,6 @@ export const presenceResource = createSlice({
                 typingByChannel: Object.freeze({
                     ...state.typingByChannel,
                     [p.channel_id]: Object.freeze(next),
-                }),
-            };
-        }
-        if (event.type === 'sync/presence/changed') {
-            const p = event.payload;
-            if (!p || typeof p.user_id !== 'string') return state;
-            const lastSeenAt = (typeof p.last_seen_at === 'string' && p.last_seen_at !== '') ? p.last_seen_at : null;
-            return {
-                ...state,
-                presenceByUserId: Object.freeze({
-                    ...state.presenceByUserId,
-                    [p.user_id]: {
-                        online: Boolean(p.online),
-                        last_seen_at: lastSeenAt,
-                    },
                 }),
             };
         }

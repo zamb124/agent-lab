@@ -98,15 +98,3 @@ export const agentAuditLoadOp = createAsyncOp({
         url: `${AGENT_BASE}/audit`,
     }),
 });
-
-const FLOWS_AGENT_TOOLKITS_BASE = '/flows/api/v1/agent/toolkits/manage';
-
-export const agentToolkitsLoadOp = createAsyncOp({
-    name: 'frontend/agent_toolkits_load',
-    silent: true,
-    restMirror: { method: 'GET', path: '/flows/api/v1/agent/toolkits/manage', service: 'flows' },
-    request: async () => await httpRequest({
-        method: 'GET',
-        url: FLOWS_AGENT_TOOLKITS_BASE,
-    }),
-});

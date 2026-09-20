@@ -2,8 +2,8 @@
  * Bootstrap UI Sync: импорт <sync-app> + страниц + компонентов + модалок.
  *
  * Доменная логика — в `events/resources/*.resource.js` (factories с
- * `transport: 'ws'` + restMirror). Транспорт — единый platform WS
- * `/sync/api/ws/notifications` (см. `architecture.mdc`).
+ * `transport: 'ws'` + restMirror). Транспорт — Centrifugo `/realtime`
+ * (см. `architecture.mdc`).
  */
 
 import '@platform/lib/components/app-loader.js';

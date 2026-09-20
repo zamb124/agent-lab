@@ -1,7 +1,7 @@
 /**
  * platform-work-item-badge — cross-service chip/row/card для WorkItem.
  *
- * Источник данных: prop `.item` (zero HTTP) или lazy GET через `platform/work_item_get`.
+ * Источник данных: prop `.item` (zero HTTP) или lazy GET через `worktracker/work_item_get`.
  * Hover preview — `<platform-work-item-preview>` (если `show-preview`).
  */
 
@@ -274,7 +274,7 @@ export class PlatformWorkItemBadge extends PlatformElement {
         this._previewAnchorRect = null;
         this._previewPinned = false;
         this._previewCloseTimer = null;
-        this._getOp = this.useOp('platform/work_item_get');
+        this._getOp = this.useOp('worktracker/work_item_get');
         this._locale = this.select((s) => (
             typeof s.i18n.locale === 'string' && s.i18n.locale.length > 0 ? s.i18n.locale : 'en'
         ));

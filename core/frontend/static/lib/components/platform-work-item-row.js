@@ -138,7 +138,7 @@ export class PlatformWorkItemRow extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
-        this._getOp = this.useOp('platform/work_item_get');
+        this._getOp = this.useOp('worktracker/work_item_get');
     }
 
     updated(changed) {

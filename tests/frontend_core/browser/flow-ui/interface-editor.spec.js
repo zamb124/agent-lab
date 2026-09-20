@@ -7,6 +7,7 @@ import { elementUpdated, expect, fixture, fixtureCleanup, html, oneEvent, waitUn
 import { bootstrapTestBus, resetPlatformState } from '../helpers/reset.js';
 import { installFetchMock } from '../helpers/fake-fetch.js';
 import { CoreEvents, getPlatformBus, platformFileCreateOp } from '@platform/lib/events/index.js';
+import { platformWs } from '@platform/lib/events/effects/ws.effect.js';
 import { blockElement } from '@platform/lib/flow-ui/editor/selection.js';
 import flowsEn from '../../../../core/i18n/translations/en/flows.json' with { type: 'json' };
 import schema from '../../../fixtures/flow_ui/schema.json' with { type: 'json' };
@@ -96,14 +97,21 @@ function paletteColumnsItem(element, count) {
 
 describe('flows-interface-editor', () => {
     let fetchMock;
+    let originalWsRequest;
 
     beforeEach(() => {
         resetPlatformState();
         globalThis.localStorage.clear();
         const bus = bootstrapTestBus({ factories: [interfaceEditorSlice, editorResource, flowUiSchemaOp, flowUiAssistOp, secretsVariablesResource, platformFileCreateOp] });
         seedTranslations(bus);
+        originalWsRequest = platformWs.request;
+        platformWs.request = async (opts) => {
+            if (opts.type === 'flows/flow_ui/schema_requested') {
+                return schema;
+            }
+            return originalWsRequest(opts);
+        };
         fetchMock = installFetchMock();
-        fetchMock.respondJson('GET', (url) => url.includes('/flows/api/v1/flow-ui/schema'), schema);
         fetchMock.respondJson('GET', (url) => url.includes('/secrets/api/v1/variables'), { items: [], total: 0, limit: 200, offset: 0 });
         fetchMock.respondJson('POST', (url) => url.endsWith('/api/v1/files/uploads'), {
             upload_id: 'up_identity',
@@ -125,6 +133,7 @@ describe('flows-interface-editor', () => {
     });
 
     afterEach(() => {
+        platformWs.request = originalWsRequest;
         fetchMock.uninstall();
         fixtureCleanup();
     });

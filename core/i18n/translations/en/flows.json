@@ -342,6 +342,7 @@
     "tab_config": "Configuration",
     "tab_mapping": "Mapping",
     "tab_output": "Output",
+    "tabs_aria": "Trigger editor sections",
     "field_id": "Trigger ID",
     "field_id_placeholder": "snake_case, starts with a letter",
     "field_name": "Name",
@@ -599,6 +600,7 @@
     "save_header_title": "Save edge condition",
     "mode_simple": "Simple mode",
     "mode_python": "Code",
+    "mode_aria": "Edge condition mode",
     "preview_label": "Result:",
     "preview_empty": "No condition yet",
     "skip_no_condition": "Skip (no condition)",
@@ -1230,8 +1232,6 @@
     "create_cancel": "Cancel",
     "create_submit": "Create",
     "namespace_name_invalid": "Name: latin letters, digits, _ and -; starts with a letter; up to 64 characters.",
-    "toast_namespace_created": "Namespace created",
-    "toast_namespace_create_failed": "Failed to create namespace",
     "section_search": "Search",
     "field_default_top_k": "Fragments to return",
     "hint_default_top_k": "How many text chunks from the base go into context / search results. Typical range: 3–8.",
@@ -1268,13 +1268,7 @@
     "test_query_required": "Enter a query to test search",
     "test_hits": "{count} hits",
     "test_results_empty": "No results for this query",
-    "test_page_label": "Page {label}",
-    "toast_document_uploaded": "Document accepted for processing",
-    "toast_document_upload_failed": "Failed to upload document",
-    "toast_document_deleted": "Document deleted",
-    "toast_document_delete_failed": "Failed to delete document",
-    "toast_document_processed": "Document “{name}” indexed",
-    "toast_document_process_failed": "Indexing “{name}” failed"
+    "test_page_label": "Page {label}"
   },
   "data_table_resource_editor": {
     "field_file_id": "Link file",
@@ -2317,6 +2311,7 @@
   },
   "api_console": {
     "title": "API and A2A",
+    "nav_aria": "API console navigation",
     "hero_title": "Call this flow through the API",
     "hero_subtitle": "This flow is called through A2A JSON-RPC. Switch the mode below: the UI will update method, Accept header, metadata, and examples for the current flow.",
     "endpoint": "Endpoint",
@@ -3214,8 +3209,6 @@
     }
   },
   "toast": {
-    "work_queue_created": "Queue created",
-    "work_queue_create_error": "Failed to create queue",
     "datasource_created": "Connection created",
     "datasource_create_error": "Could not create connection",
     "datasource_updated": "Connection updated",

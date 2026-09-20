@@ -342,6 +342,7 @@
     "tab_config": "Конфигурация",
     "tab_mapping": "Сопоставление",
     "tab_output": "Вывод",
+    "tabs_aria": "Разделы редактора триггера",
     "field_id": "ID триггера",
     "field_id_placeholder": "латиница, цифры и _, с буквы",
     "field_name": "Название",
@@ -599,6 +600,7 @@
     "save_header_title": "Сохранить условие перехода",
     "mode_simple": "Простой режим",
     "mode_python": "Код",
+    "mode_aria": "Режим условия ребра",
     "preview_label": "Результат:",
     "preview_empty": "Условие ещё не задано",
     "skip_no_condition": "Пропустить (без условия)",
@@ -1229,8 +1231,6 @@
     "create_cancel": "Отмена",
     "create_submit": "Создать",
     "namespace_name_invalid": "Имя: латиница, цифры, _ и -; начинается с буквы; до 64 символов.",
-    "toast_namespace_created": "Namespace создан",
-    "toast_namespace_create_failed": "Не удалось создать namespace",
     "section_search": "Поиск",
     "field_default_top_k": "Сколько фрагментов вернуть",
     "hint_default_top_k": "Сколько кусков текста из базы подставлять в контекст / отдавать в поиск. Обычно 3–8.",
@@ -1267,13 +1267,7 @@
     "test_query_required": "Введите запрос для проверки поиска",
     "test_hits": "{count} фрагментов",
     "test_results_empty": "По запросу ничего не найдено",
-    "test_page_label": "Страница {label}",
-    "toast_document_uploaded": "Документ принят в обработку",
-    "toast_document_upload_failed": "Не удалось загрузить документ",
-    "toast_document_deleted": "Документ удалён",
-    "toast_document_delete_failed": "Не удалось удалить документ",
-    "toast_document_processed": "Документ «{name}» проиндексирован",
-    "toast_document_process_failed": "Индексация «{name}» завершилась с ошибкой"
+    "test_page_label": "Страница {label}"
   },
   "data_table_resource_editor": {
     "field_file_id": "Привязать файл",
@@ -2316,6 +2310,7 @@
   },
   "api_console": {
     "title": "API и A2A",
+    "nav_aria": "Навигация консоли API",
     "hero_title": "Как вызвать этот flow по API",
     "hero_subtitle": "Текущий flow вызывается через A2A JSON-RPC. Переключите режим ниже: UI сразу перестроит method, Accept header, metadata и примеры под текущий flow.",
     "endpoint": "Endpoint",
@@ -3213,8 +3208,6 @@
     }
   },
   "toast": {
-    "work_queue_created": "Очередь создана",
-    "work_queue_create_error": "Не удалось создать очередь",
     "datasource_created": "Подключение создано",
     "datasource_create_error": "Не удалось создать подключение",
     "datasource_updated": "Подключение обновлено",

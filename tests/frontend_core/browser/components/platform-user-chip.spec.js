@@ -10,9 +10,9 @@ import '@platform/lib/components/platform-user-chip.js';
 import { getPlatformBus, CoreEvents } from '@platform/lib/events/index.js';
 import { TEAM_EVENTS } from '@platform/lib/events/reducers/team.js';
 import {
-    platformWorkItemCountsOp,
-    platformWorkItemFactories,
-} from '@platform/lib/events/resources/platform-work-item.resource.js';
+    workItemCountsOp,
+    worktrackerWorkItemFactories,
+} from '@platform/lib/events/resources/work-items.resource.js';
 
 describe('platform-user-chip', () => {
     beforeEach(() => { resetPlatformState(); bootstrapTestBus(); });
@@ -82,16 +82,16 @@ describe('platform-user-chip', () => {
 
     it('show-work-count для текущего пользователя показывает badge', async () => {
         resetPlatformState();
-        for (const factory of platformWorkItemFactories) {
+        for (const factory of worktrackerWorkItemFactories) {
             registerFactory(factory);
         }
         bootstrapTestBus({
             slices: {
-                [platformWorkItemCountsOp.sliceKey]: platformWorkItemCountsOp.slice,
+                [workItemCountsOp.sliceKey]: workItemCountsOp.slice,
             },
         });
         getPlatformBus().dispatch(CoreEvents.AUTH_USER_LOADED, { user: { user_id: 'self', name: 'me', raw: { user_id: 'self' } } });
-        getPlatformBus().dispatch(platformWorkItemCountsOp.events.SUCCEEDED, {
+        getPlatformBus().dispatch(workItemCountsOp.events.SUCCEEDED, {
             result: { assigned_open_count: 2, queue_inbox_count: 1 },
         });
         const el = await fixture(html`<platform-user-chip user-id="self" show-work-count></platform-user-chip>`);

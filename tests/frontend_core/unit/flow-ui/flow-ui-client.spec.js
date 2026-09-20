@@ -504,7 +504,7 @@ describe('FlowUIClient tail, cancel, context and share', () => {
 
     it('creates and revokes shares through the flow share collection', async () => {
         const server = fakeServer();
-        server.handlers.share = (url, init) => (init.method === 'POST' ? jsonResponse({ grant_id: 'g1', url: 'https://p/s/g1' }) : jsonResponse({}, 204));
+        server.handlers.share = (url, init) => (init.method === 'POST' ? jsonResponse({ grant_id: 'g1', url: 'https://p/s/g1' }) : jsonResponse({ status: 'deleted', grant_id: 'g1' }));
         const client = createClient({ getHeaders: () => ({ Authorization: 'Bearer t' }) });
         await expect(client.createShare()).rejects.toThrow(/share requires an open context/);
         await client.open();

@@ -6,19 +6,42 @@ import { fixture, fixtureCleanup, html, expect, elementUpdated } from '../helper
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { collectFactories } from '@platform/lib/events/factories/register.js';
 import { registerFactory } from '@platform/lib/events/factory-registry.js';
+import { platformWs } from '@platform/lib/events/effects/ws.effect.js';
 import { llmContextResolveParentOp } from '../../../../apps/flows/ui/events/resources/llm-context.resource.js';
 import { renderResourceDefinitionEditor } from '../../../../apps/flows/ui/components/editor/flows-resource-definition-editor-surface.js';
 import '../../../../core/frontend/static/lib/components/llm/llm-context-editor.js';
 
 describe('platform-llm-context-editor', () => {
+    let originalWsRequest;
+
     beforeEach(() => {
         resetPlatformState();
         registerFactory(llmContextResolveParentOp);
         const collected = collectFactories([llmContextResolveParentOp]);
         bootstrapTestBus({ slices: collected.slices, effects: [] });
+        originalWsRequest = platformWs.request;
+        platformWs.request = async (opts) => {
+            if (opts.type === 'flows/llm_context/resolve_parent_requested') {
+                return {
+                    resolved: {
+                        profile: 'standard',
+                        mode: 'smart',
+                        memory: 'session',
+                        retrieval: { mode: 'hybrid' },
+                        budget: 'medium',
+                    },
+                    profiles: ['standard'],
+                    budgets: ['medium'],
+                };
+            }
+            return originalWsRequest(opts);
+        };
     });
 
-    afterEach(() => fixtureCleanup());
+    afterEach(() => {
+        platformWs.request = originalWsRequest;
+        fixtureCleanup();
+    });
 
     it('рендерит четыре базовых настройки', async () => {
         const el = await fixture(html`

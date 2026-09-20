@@ -1,16 +1,23 @@
 /**
- * Хелперы presence Sync — отображение online/last_seen.
+ * Хелперы presence Sync — отображение online/last_seen из CompanyMemberRead.
  *
  * Чистые функции. `t` (translator) передаётся аргументом, чтобы helpers
  * оставались UI-нейтральными и тестируемыми.
  */
 
-export function isOnline(presenceByUserId, userId) {
-    if (typeof userId !== 'string' || userId === '') return false;
-    if (!presenceByUserId || typeof presenceByUserId !== 'object') return false;
-    const entry = presenceByUserId[userId];
-    if (!entry || typeof entry !== 'object') return false;
-    return entry.online === true;
+export function findCompanyMember(members, userId) {
+    if (typeof userId !== 'string' || userId === '') return null;
+    if (!Array.isArray(members)) return null;
+    for (const member of members) {
+        if (member && typeof member === 'object' && member.user_id === userId) {
+            return member;
+        }
+    }
+    return null;
+}
+
+export function isOnline(member) {
+    return Boolean(member && member.is_online === true);
 }
 
 function _formatTime(date) {
@@ -46,14 +53,11 @@ export function formatLastSeen(iso, t) {
 /**
  * Подзаголовок для DM-собеседника: "онлайн" или человеко-читаемый last_seen.
  */
-export function getPeerPresenceSubtitle(presenceByUserId, userId, t) {
-    if (typeof userId !== 'string' || userId === '') return '';
-    if (!presenceByUserId || typeof presenceByUserId !== 'object') return '';
-    const entry = presenceByUserId[userId];
-    if (!entry || typeof entry !== 'object') return '';
-    if (entry.online === true) return t('presence.online');
-    if (typeof entry.last_seen_at === 'string' && entry.last_seen_at !== '') {
-        return formatLastSeen(entry.last_seen_at, t);
+export function getPeerPresenceSubtitle(member, t) {
+    if (!member || typeof member !== 'object') return '';
+    if (member.is_online === true) return t('presence.online');
+    if (typeof member.last_seen_at === 'string' && member.last_seen_at !== '') {
+        return formatLastSeen(member.last_seen_at, t);
     }
     return t('presence.offline');
 }

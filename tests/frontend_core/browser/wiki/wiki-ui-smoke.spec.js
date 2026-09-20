@@ -88,12 +88,12 @@ describe('wiki ui', () => {
         ]);
     });
 
-    it('browse Documents для picker зарегистрирован как wiki/*', () => {
+    it('browse Documents для picker — owner office/*', () => {
         const names = WikiApp.factories.map((factory) => factory.name);
         expect(names).to.include.members([
-            'wiki/catalogs',
-            'wiki/documents',
-            'wiki/documents_search',
+            'office/catalogs_list',
+            'office/documents_list',
+            'office/documents_search',
         ]);
     });
 

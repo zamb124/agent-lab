@@ -21,10 +21,8 @@ import {
 } from '../../../../apps/crm/ui/events/resources/namespaces.resource.js';
 import { templatesResource } from '../../../../apps/crm/ui/events/resources/templates.resource.js';
 import {
-    entityGrantsListOp,
-    entityGrantCreateOp,
-    namespaceGrantsListOp,
-    namespaceGrantCreateOp,
+    grantsListOp,
+    grantCreateOp,
     grantRevokeOp,
 } from '../../../../apps/crm/ui/events/resources/grants.resource.js';
 import { teamSearchFacets } from '../../../../apps/crm/ui/events/resources/team-search.resource.js';
@@ -38,10 +36,8 @@ const FACTORIES = [
     namespaceCreateForm,
     namespaceEditForm,
     templatesResource,
-    entityGrantsListOp,
-    entityGrantCreateOp,
-    namespaceGrantsListOp,
-    namespaceGrantCreateOp,
+    grantsListOp,
+    grantCreateOp,
     grantRevokeOp,
     teamSearchFacets,
 ];

@@ -52,7 +52,7 @@ import {
     attachmentUploadOp,
     attachmentDeleteOp,
 } from '../../../../apps/crm/ui/events/resources/attachments.resource.js';
-import { entityGrantsListOp } from '../../../../apps/crm/ui/events/resources/grants.resource.js';
+import { grantsListOp } from '../../../../apps/crm/ui/events/resources/grants.resource.js';
 import { relatedEntitiesOp } from '../../../../apps/crm/ui/events/resources/graph.resource.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
 import { namespacesResource } from '../../../../apps/crm/ui/events/resources/namespaces.resource.js';
@@ -370,7 +370,7 @@ function crmFactories() {
         attachmentsListOp,
         attachmentUploadOp,
         attachmentDeleteOp,
-        entityGrantsListOp,
+        grantsListOp,
         relatedEntitiesOp,
         platformFileCreateOp,
         namespacesResource,

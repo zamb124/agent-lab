@@ -20,7 +20,7 @@ import {
     nextTestRunClientId,
     setTestRunRequestClientId,
 } from '../../../../apps/flows/ui/_helpers/flows-test-run-gate.js';
-import { flowsRagNodeTestSlice } from '../../../../apps/flows/ui/events/resources/rag-search.resource.js';
+import { flowsRagNodeTestSlice } from '../../../../apps/flows/ui/events/resources/rag-node-test.resource.js';
 
 function ragBindCtx(overrides) {
     return {
@@ -68,7 +68,7 @@ describe('node test-run registry', () => {
     it('resolves rag_search for resource + rag', () => {
         const handler = resolveNodeTestRunHandler({ nodeType: 'resource', resourceType: 'rag' });
         expect(handler.id).toBe('rag_search');
-        expect(handler.opName).toBe('flows/rag_search');
+        expect(handler.opName).toBe('rag/search');
     });
 
     it('throws when resource type has no handler', () => {
@@ -106,8 +106,7 @@ describe('node test-run registry', () => {
             catalogItems: [],
         });
         expect(payload).toEqual({
-            nodeId: 'n1',
-            namespaceId: 'kb-support',
+            namespace_id: 'kb-support',
             query: 'return policy',
             limit: 7,
             rerank: true,
@@ -183,8 +182,7 @@ describe('node test-run registry', () => {
     it('omits filters when bind has none', () => {
         const payload = buildRagSearchPayload(ragBindCtx({}));
         expect(payload).toEqual({
-            nodeId: 'n1',
-            namespaceId: 'kb-support',
+            namespace_id: 'kb-support',
             query: 'return policy',
             limit: 5,
         });
@@ -194,7 +192,7 @@ describe('node test-run registry', () => {
     it('throws when two handlers match the same node', () => {
         registerNodeTestRunHandler({
             id: 'rag_search_dup',
-            opName: 'flows/rag_search',
+            opName: 'rag/search',
             match: ({ nodeType, resourceType }) => nodeType === 'resource' && resourceType === 'rag',
             run: async () => {},
             formatViewModel: () => null,
@@ -221,11 +219,9 @@ describe('ragSearchTestRunHandler view model and run', () => {
         const view = ragSearchTestRunHandler.formatViewModel({
             nodeId: 'n1',
             t: (key, vars) => `${key}:${vars.count}`,
-            op: {
-                state: {
-                    errorByNodeId: {},
-                    resultByNodeId: { n1: { results: [{}, {}] } },
-                },
+            nodeTest: {
+                errorByNodeId: {},
+                resultByNodeId: { n1: { results: [{}, {}] } },
             },
         });
         expect(view).toEqual({
@@ -243,11 +239,9 @@ describe('ragSearchTestRunHandler view model and run', () => {
             t: () => {
                 throw new Error('t must not run on error');
             },
-            op: {
-                state: {
-                    errorByNodeId: { n1: 'namespace missing' },
-                    resultByNodeId: {},
-                },
+            nodeTest: {
+                errorByNodeId: { n1: 'namespace missing' },
+                resultByNodeId: {},
             },
         });
         expect(view).toEqual({
@@ -263,11 +257,9 @@ describe('ragSearchTestRunHandler view model and run', () => {
         const view = ragSearchTestRunHandler.formatViewModel({
             nodeId: 'n1',
             t: () => 'unused',
-            op: {
-                state: {
-                    errorByNodeId: {},
-                    resultByNodeId: {},
-                },
+            nodeTest: {
+                errorByNodeId: {},
+                resultByNodeId: {},
             },
         });
         expect(view).toBeNull();
@@ -277,11 +269,9 @@ describe('ragSearchTestRunHandler view model and run', () => {
         expect(() => ragSearchTestRunHandler.formatViewModel({
             nodeId: 'n1',
             t: () => 'unused',
-            op: {
-                state: {
-                    errorByNodeId: {},
-                    resultByNodeId: { n1: { hits: [] } },
-                },
+            nodeTest: {
+                errorByNodeId: {},
+                resultByNodeId: { n1: { hits: [] } },
             },
         })).toThrow(/lastResult.results array required/);
     });
@@ -301,7 +291,7 @@ describe('ragSearchTestRunHandler view model and run', () => {
             matchCtx: {},
             op: {
                 run() {
-                    throw new Error('flows/rag_search must not run on empty query');
+                    throw new Error('rag/search must not run on empty query');
                 },
             },
         });
@@ -312,13 +302,19 @@ describe('ragSearchTestRunHandler view model and run', () => {
 
     it('builds bind payload and runs the search op', async () => {
         const runs = [];
+        const binds = [];
         const host = {
             nodeId: 'n1',
             nodeConfig: { resources: { r1: { resource_id: 'r1' } } },
             toast() {
                 throw new Error('toast must not run when query is present');
             },
-            _ragNodeTest: { value: { queryByNodeId: { n1: '  returns  ' } } },
+            _ragNodeTest: {
+                value: { queryByNodeId: { n1: '  returns  ' } },
+                bindSearch(payload) {
+                    binds.push(payload);
+                },
+            },
         };
         await ragSearchTestRunHandler.run({
             host,
@@ -345,10 +341,10 @@ describe('ragSearchTestRunHandler view model and run', () => {
             },
         });
         expect(getTestRunRequestClientId()).toBe('tr_9');
+        expect(binds).toEqual([{ nodeId: 'n1' }]);
         expect(runs).toEqual([
             {
-                nodeId: 'n1',
-                namespaceId: 'kb-support',
+                namespace_id: 'kb-support',
                 query: 'returns',
                 limit: 8,
             },

@@ -6,7 +6,8 @@
  *   - `header-mode="list"`: тот же ряд (меню, иконка, title/subtitle), без действий канала — список каналов, встречи, настройки
  *   - баннер активного звонка (свёрнутого) — открывает overlay.
  *
- * Источники: useResource('sync/channels'), select syncPresence, syncCallUi.
+ * Источники: useResource('sync/channels'), useResource('sync/company_members'),
+ *            select syncPresence (typing), syncCallUi.
  * Действия: openModal('platform.user_info', ...), openModal('sync.channel_edit'),
  *           useOp('sync/calls_invite'), dispatch overlay_expanded.
  */
@@ -18,7 +19,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/glass-spinner.js';
 import { buildChatSubtitle, channelDisplayTitle } from './_helpers/sync-channel-display.js';
-import { isOnline } from '../_helpers/sync-presence.js';
+import { isOnline, findCompanyMember } from '../_helpers/sync-presence.js';
 import { resolveAvatarImageSrc } from '@platform/lib/utils/placeholder-avatar.js';
 import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
 import { resolveDisplayName } from '../_helpers/sync-id-resolvers.js';
@@ -446,9 +447,8 @@ export class SyncChatHeader extends PlatformElement {
     _renderAvatar(channel) {
         const isDm = channel.type === 'direct' && channel.peer && typeof channel.peer.user_id === 'string';
         if (isDm) {
-            const presence = this._presenceSel.value;
-            const presenceByUserId = presence && presence.presenceByUserId ? presence.presenceByUserId : null;
-            const online = isOnline(presenceByUserId, channel.peer.user_id);
+            const member = findCompanyMember(this._members.items, channel.peer.user_id);
+            const online = isOnline(member);
             const name = resolveDisplayName(channel.peer);
             const hueVar = syncAvatarHueVar(channel.peer.user_id);
             if (this._headerAvatarFailed) {
@@ -518,7 +518,6 @@ export class SyncChatHeader extends PlatformElement {
         }
         const presence = this._presenceSel.value;
         const typingByChannel = presence && presence.typingByChannel ? presence.typingByChannel : null;
-        const presenceByUserId = presence && presence.presenceByUserId ? presence.presenceByUserId : null;
         const me = this._authSel.value;
         const myUserId = me && typeof me.user_id === 'string' ? me.user_id : '';
         const callUi = this._callUiSel.value;
@@ -526,14 +525,13 @@ export class SyncChatHeader extends PlatformElement {
         const subtitle = buildChatSubtitle({
             channel,
             typingByChannel,
-            presenceByUserId,
             t: (k, vars) => this.t(k, vars),
             myUserId,
             members: this._members.items,
         });
         const isPeerOnline = channel.type === 'direct'
             && channel.peer && typeof channel.peer.user_id === 'string'
-            && isOnline(presenceByUserId, channel.peer.user_id);
+            && isOnline(findCompanyMember(this._members.items, channel.peer.user_id));
         const ac = callUi && callUi.activeCall ? callUi.activeCall : null;
         const chId = typeof this.channelId === 'string' ? this.channelId : '';
         const byChannelId = ac && typeof ac.channel_id === 'string' && ac.channel_id === chId;

@@ -5,6 +5,7 @@
 import { fixture, fixtureCleanup, html, expect, elementUpdated, waitUntil } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { getPlatformBus, CoreEvents } from '@platform/lib/events/index.js';
+import { platformWs } from '@platform/lib/events/effects/ws.effect.js';
 import { setDefaultI18nNamespace } from '@platform/lib/utils/i18n-namespace.js';
 import { integrationStatusOp } from '../../../../apps/office/ui/events/resources/integration.resource.js';
 import { namespacesResource } from '../../../../apps/office/ui/events/resources/namespaces.resource.js';
@@ -91,60 +92,74 @@ function asUrl(raw) {
     return new URL(String(raw), 'http://local.test');
 }
 
-function isDocumentsList(raw) {
-    const pathname = asUrl(raw).pathname;
-    return pathname === '/documents/api/v1/documents' || pathname === '/documents/api/v1/documents/';
-}
-
-function jsonResponse(body) {
-    return new Response(JSON.stringify(body), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-    });
-}
-
 function installOfficeFetch() {
-    const calls = [];
     const prevFetch = window.fetch;
     window.fetch = async (url, init = {}) => {
         const method = (init.method || 'GET').toUpperCase();
         const raw = String(url);
-        calls.push({ url: raw, method, init });
         const pathname = asUrl(raw).pathname;
+        if (
+            pathname.startsWith('/api/i18n/')
+            || pathname.startsWith('/api/platform/')
+            || pathname === '/health'
+        ) {
+            return prevFetch(url, init);
+        }
         if (raw.includes('/static/core/assets/') || raw.includes('jsdelivr.net') || raw.startsWith('blob:')) {
             return new Response('<svg xmlns="http://www.w3.org/2000/svg"></svg>', {
                 status: 200,
                 headers: { 'content-type': 'image/svg+xml' },
             });
         }
-        if (method === 'GET' && (pathname === '/documents/api/v1/catalogs' || pathname === '/documents/api/v1/catalogs/')) {
-            return jsonResponse({ items: CATALOGS });
+        throw new Error(`fake fetch: no handler for ${method} ${raw}`);
+    };
+    return {
+        uninstall() {
+            window.fetch = prevFetch;
+        },
+    };
+}
+
+function installOfficeWs() {
+    const calls = [];
+    const original = platformWs.request;
+    platformWs.request = async (opts) => {
+        if (!opts || typeof opts.type !== 'string') {
+            throw new Error('office ws stub: opts.type required');
         }
-        if (method === 'GET' && pathname.includes('/documents/api/v1/namespaces')) {
-            return jsonResponse({
+        calls.push({ type: opts.type, payload: opts.payload });
+        if (opts.type === 'office/catalogs/list_requested') {
+            return { items: CATALOGS };
+        }
+        if (opts.type === 'office/namespaces/list_requested') {
+            return {
                 items: [{ name: 'default', is_default: true }],
                 total: 1,
                 limit: 200,
                 offset: 0,
-            });
+            };
         }
-        if (method === 'GET' && pathname.includes('/integration/status')) {
-            return jsonResponse({ configured: true });
+        if (opts.type === 'office/integration/status_requested') {
+            return { configured: true };
         }
-        if (method === 'GET' && isDocumentsList(raw)) {
-            const ids = asUrl(raw).searchParams.getAll('catalog_ids');
-            if (ids.length === 0 && !asUrl(raw).searchParams.get('catalog_id')) {
-                throw new Error(`documents list without catalog_ids: ${raw}`);
+        if (opts.type === 'office/documents/list_requested') {
+            const payload = opts.payload;
+            if (!payload || typeof payload !== 'object') {
+                throw new Error('documents list without payload');
+            }
+            const ids = Array.isArray(payload.catalog_ids) ? payload.catalog_ids : [];
+            if (ids.length === 0) {
+                throw new Error('documents list without catalog_ids');
             }
             const items = ids.includes('cat-flows') ? [FLOWS_DOC] : [];
-            return jsonResponse({ items });
+            return { items };
         }
-        throw new Error(`fake fetch: no handler for ${method} ${raw}`);
+        throw new Error(`unexpected ws: ${opts.type}`);
     };
     return {
         calls,
         uninstall() {
-            window.fetch = prevFetch;
+            platformWs.request = original;
         },
     };
 }
@@ -186,12 +201,13 @@ function seedAuth() {
     );
 }
 
-function documentsListCalls(fetchMock) {
-    return fetchMock.calls.filter((call) => call.method === 'GET' && isDocumentsList(call.url));
+function documentsListCalls(wsMock) {
+    return wsMock.calls.filter((call) => call.type === 'office/documents/list_requested');
 }
 
 describe('office documents explorer root', () => {
     let fetchMock;
+    let wsMock;
 
     beforeEach(() => {
         window.localStorage.clear();
@@ -199,12 +215,14 @@ describe('office documents explorer root', () => {
         setDefaultI18nNamespace('documents');
         fetchMock = installOfficeFetch();
         bootstrapTestBus({ factories: FACTORIES });
+        wsMock = installOfficeWs();
         seedAuth();
         seedTranslations();
     });
 
     afterEach(() => {
         fetchMock.uninstall();
+        wsMock.uninstall();
         document.querySelectorAll('office-documents-explorer-page, office-sidebar').forEach((node) => node.remove());
         fixtureCleanup();
     });
@@ -220,6 +238,7 @@ describe('office documents explorer root', () => {
         const sidebar = host.querySelector('office-sidebar');
         await waitUntil(
             () => page.shadowRoot.querySelectorAll('platform-file-row[item-kind="catalog"]').length >= 2,
+            'root catalog rows',
             { timeout: 4000 },
         );
         await elementUpdated(page);
@@ -231,7 +250,7 @@ describe('office documents explorer root', () => {
         expect(rootNames).to.include('lara');
         expect(rootNames).to.not.include('my-flow');
         expect(page.shadowRoot.querySelector('platform-file-row[file-name="Data table.sqlite"]')).to.equal(null);
-        expect(documentsListCalls(fetchMock)).to.have.length(0);
+        expect(documentsListCalls(wsMock)).to.have.length(0);
 
         const toolbar = page.shadowRoot.querySelector('office-file-toolbar');
         expect(toolbar.actionsDisabled).to.equal(true);
@@ -242,14 +261,15 @@ describe('office documents explorer root', () => {
         flowsRow.shadowRoot.querySelector('.row').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
         await waitUntil(
             () => page.shadowRoot.querySelector('platform-file-row[file-name="Data table.sqlite"]'),
+            'flows catalog file row',
             { timeout: 4000 },
         );
         await elementUpdated(page);
 
         expect(page._documents.state.activeCatalogId).to.equal('cat-flows');
-        const listCalls = documentsListCalls(fetchMock);
+        const listCalls = documentsListCalls(wsMock);
         expect(listCalls.length).to.be.greaterThan(0);
-        expect(listCalls.every((call) => asUrl(call.url).searchParams.getAll('catalog_ids').includes('cat-flows'))).to.equal(true);
+        expect(listCalls.every((call) => Array.isArray(call.payload.catalog_ids) && call.payload.catalog_ids.includes('cat-flows'))).to.equal(true);
         expect(page.shadowRoot.querySelector('platform-file-row[file-name="Data table.sqlite"]')).to.exist;
         expect(page.shadowRoot.querySelector('platform-file-row[file-name="lara"]')).to.equal(null);
 
@@ -259,6 +279,7 @@ describe('office documents explorer root', () => {
         await waitUntil(
             () => page._documents.state.activeCatalogId === null
                 && page.shadowRoot.querySelector('platform-file-row[file-name="lara"]'),
+            'breadcrumb back to root',
             { timeout: 4000 },
         );
         expect(page.shadowRoot.querySelector('platform-file-row[file-name="Data table.sqlite"]')).to.equal(null);
@@ -267,6 +288,7 @@ describe('office documents explorer root', () => {
         flowsAgain.shadowRoot.querySelector('.row').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
         await waitUntil(
             () => page._documents.state.activeCatalogId === 'cat-flows',
+            'reopen flows catalog',
             { timeout: 4000 },
         );
 
@@ -277,12 +299,12 @@ describe('office documents explorer root', () => {
         await waitUntil(
             () => page._documents.state.activeCatalogId === null
                 && page.shadowRoot.querySelector('platform-file-row[file-name="lara"]'),
+            'nav rail all documents',
             { timeout: 4000 },
         );
-        expect(documentsListCalls(fetchMock).every((call) => {
-            const ids = asUrl(call.url).searchParams.getAll('catalog_ids');
-            const catalogId = asUrl(call.url).searchParams.get('catalog_id');
-            return ids.length > 0 || Boolean(catalogId);
+        expect(documentsListCalls(wsMock).every((call) => {
+            const ids = call.payload && Array.isArray(call.payload.catalog_ids) ? call.payload.catalog_ids : [];
+            return ids.length > 0;
         })).to.equal(true);
     });
 
@@ -306,6 +328,7 @@ describe('office documents explorer root', () => {
         const page = host.querySelector('office-documents-explorer-page');
         await waitUntil(
             () => page._documents.state.activeCatalogId === 'cat-flow-child',
+            'deep link nested catalog',
             { timeout: 4000 },
         );
         await elementUpdated(page);
@@ -337,6 +360,7 @@ describe('office documents explorer root', () => {
         const page = host.querySelector('office-documents-explorer-page');
         await waitUntil(
             () => page._documents.state.activeCatalogId === 'cat-flow-child',
+            'deep link catalog without namespace',
             { timeout: 4000 },
         );
         await elementUpdated(page);

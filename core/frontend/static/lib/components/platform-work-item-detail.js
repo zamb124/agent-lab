@@ -1,7 +1,7 @@
 /**
  * platform-work-item-detail — cross-service panel/page редактор WorkItem.
  * Визуальный канон совпадает с worktracker `work-item-detail-panel` + content/inspector
- * (без HITL activity). Мутации — platform/work_item_* фабрики.
+ * Мутации — worktracker/work_item_* фабрики.
  */
 
 import { html, css, nothing } from '../lit-shim.js';
@@ -282,10 +282,10 @@ export class PlatformWorkItemDetail extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
-        this._getOp = this.useOp('platform/work_item_get');
-        this._items = this.useResource('platform/work_items', { autoload: false });
-        this._moveOp = this.useOp('platform/work_item_move');
-        this._assignOp = this.useOp('platform/work_item_assign');
+        this._getOp = this.useOp('worktracker/work_item_get');
+        this._items = this.useResource('worktracker/work_items', { autoload: false });
+        this._moveOp = this.useOp('worktracker/work_item_move');
+        this._assignOp = this.useOp('worktracker/work_item_assign');
         this.setAttribute('layout', this.layout);
         this._ensureTeamMembers();
     }

@@ -1,50 +1,30 @@
 /**
- * WebSocket-effect платформы. Один сокет на страницу
- * `/<svc>/api/ws/notifications` (канон). Если `baseUrl` уже содержит
- * сегмент `/api` (напр. `/sync/api`), вторично добавлять не нужно;
- * иначе (`/crm`, `/frontend`, `/rag`, `/office`) `/api` добавляется.
+ * User WS платформы — один Centrifugo на `/realtime/connection/websocket`.
  *
- * Транспортирует два потока через одно соединение:
+ * Кадр = `PlatformEvent` (`event_id`, `type`, `company_id`, `meta`, `payload`).
+ * Push: `client.on('publication')` по server-side каналам из SESSION JWT.
+ * Команда: `centrifuge.rpc('platform.event', PlatformEvent)`. RPC accepted
+ * не является исходом бизнеса. Исход — publication `*_succeeded`/`*_failed`
+ * с `meta.causation_id = event_id`. Timeout сокета ≠ `*_failed`.
  *
- *   - **Push** (server -> client): входящий кадр без поля `request_id`.
- *     Если у фрейма есть валидный `type` — диспатчится в bus как обычное
- *     событие (`source: 'ws'`).
- *
- *   - **RPC request-reply** (client -> server -> client): фабрика вызывает
- *     `platformWs.request({ type, payload, timeoutMs })`. Effect генерирует
- *     `request_id`, отправляет фрейм `{ request_id, type, payload }`,
- *     регистрирует pending Promise. Серверный reply-фрейм
- *     `{ request_id, type, payload }` (с тем же `request_id` и type
- *     `*_succeeded` / `*_failed`) резолвит/реджектит Promise — в bus reply
- *     **не диспатчится** (фабрика сама диспатчит локальные `*_succeeded`
- *     / `*_failed` в bus после resolve через `_runEffect`). Это исключает
- *     дублирование событий. Кадры с неизвестным `request_id` (нет в
- *     `_pending`) обрабатываются как push-события (с предупреждением в
- *     консоли при невалидном `type`).
- *
- * Без fallback: если истёк timeout — request падает с `WsTransportError`
- * (`ws_timeout`). На HTTP не переключается.
- *
- * Pre-connect queue: если `request()` вызван до `WS_CONNECTED` (типичный
- * случай — autoload фабрики до завершения `AUTH_USER_LOADED → _open`),
- * фрейм откладывается в `_preConnectQueue` и отправляется сразу после
- * `onopen`. Если соединение не установилось за `PRE_CONNECT_MAX_WAIT_MS`
- * (5 секунд) — request падает с `ws_timeout`. После явного `_close()`
- * (logout) очередь сбрасывается с `ws_disconnected`.
+ * `getToken` читает cookie `auth_token` (SESSION JWT = connection JWT).
+ * На localhost SDK ходит на `:8000/connection/websocket` (Centrifugo),
+ * не через Granian.
  */
 
 import { CoreEvents, assertEventType } from '../contract.js';
+import { getActivePlatformNamespaceName } from '../../utils/platform-namespace.js';
+import { Centrifuge, UnauthorizedError } from '../../../assets/js/centrifuge/centrifuge.esm.min.js';
 
 const BASE_DELAY_MS = 600;
 const MAX_DELAY_MS = 60_000;
-const BACKOFF_FACTOR = 1.7;
 
-let _socket = null;
-let _attempt = 0;
-let _pingTimer = null;
-let _reconnectTimer = null;
+let _CentrifugeCtor = Centrifuge;
+let _UnauthorizedError = UnauthorizedError;
+
+let _client = null;
+let _connected = false;
 let _intentionalClose = false;
-let _baseUrl = null;
 let _ctxRef = null;
 let _requestSeq = 0;
 const _pending = new Map();
@@ -59,81 +39,174 @@ export class WsTransportError extends Error {
     }
 }
 
-function _wsUrl() {
-    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // Канон бэка: `/<svc>/api/ws/notifications` (см. core/app/factory.py
-    // и architecture.mdc, раздел про единый WS). `_baseUrl` приходит из
-    // PlatformApp.getBaseUrl() и по контракту всегда вида `/<svc>` (один
-    // сегмент); префикс `/api` добавляем здесь, чтобы UI не дублировал его
-    // в getBaseUrl. Пустой baseUrl допустим для landing-shell без сервиса.
-    const base = _baseUrl || '';
-    const wsPrefix = base === '' ? '' : `${base}/api`;
-    return `${proto}//${location.host}${wsPrefix}/ws/notifications`;
+function _hostname() {
+    if (typeof location.hostname === 'string' && location.hostname.length > 0) {
+        return location.hostname;
+    }
+    const host = location.host;
+    if (typeof host !== 'string' || host.length === 0) {
+        throw new Error('location.host is required for Centrifugo URL');
+    }
+    return host.split(':')[0];
 }
 
-function _clearReconnect() {
-    if (_reconnectTimer) {
-        clearTimeout(_reconnectTimer);
-        _reconnectTimer = null;
+function _centrifugeUrl() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const hostname = _hostname();
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        return `${proto}//${hostname}:8000/connection/websocket`;
+    }
+    return `${proto}//${location.host}/realtime/connection/websocket`;
+}
+
+function _cookieValue(name) {
+    if (typeof document === 'undefined' || typeof document.cookie !== 'string') {
+        throw new Error(`cookie ${name} is required`);
+    }
+    const prefix = `${name}=`;
+    const parts = document.cookie.split(';');
+    for (const part of parts) {
+        const trimmed = part.trim();
+        if (trimmed.startsWith(prefix)) {
+            return decodeURIComponent(trimmed.slice(prefix.length));
+        }
+    }
+    throw new Error(`cookie ${name} is required`);
+}
+
+function _decodeJwtPayload(token) {
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+        throw new Error('auth_token is not a JWT');
+    }
+    const normalized = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const pad = normalized.length % 4;
+    const padded = pad === 0 ? normalized : normalized + '='.repeat(4 - pad);
+    const json = atob(padded);
+    const payload = JSON.parse(json);
+    if (!payload || typeof payload !== 'object') {
+        throw new Error('JWT payload is required');
+    }
+    return payload;
+}
+
+function _sessionCompanyId(token) {
+    const payload = _decodeJwtPayload(token);
+    const companyId = payload.company_id;
+    if (typeof companyId !== 'string' || companyId.length === 0) {
+        throw new Error('SESSION JWT company_id is required');
+    }
+    return companyId;
+}
+
+async function _getToken() {
+    if (typeof document === 'undefined' || typeof document.cookie !== 'string') {
+        throw new _UnauthorizedError();
+    }
+    if (!document.cookie.split(';').some((part) => part.trim().startsWith('auth_token='))) {
+        throw new _UnauthorizedError();
+    }
+    return _cookieValue('auth_token');
+}
+
+function _newEventId() {
+    _requestSeq = (_requestSeq + 1) & 0xffffffff;
+    const ts = Date.now().toString(36);
+    const seq = _requestSeq.toString(36);
+    const rnd = Math.floor(Math.random() * 0xffffff).toString(36);
+    return `e_${ts}_${seq}_${rnd}`;
+}
+
+function _dispatchPlatformEvent(frame) {
+    if (!frame || typeof frame.type !== 'string') {
+        return;
+    }
+    try {
+        assertEventType(frame.type);
+        _ctxRef.dispatch(frame.type, frame.payload === undefined ? null : frame.payload, {
+            source: 'ws',
+            correlation_id: frame.meta && frame.meta.correlation_id,
+            causation_id: frame.meta && frame.meta.causation_id,
+            trace_id: frame.meta && frame.meta.trace_id,
+        });
+    } catch (err) {
+        console.warn('[ws.effect] dropped frame: invalid event type', frame.type, err);
     }
 }
 
-function _scheduleReconnect() {
-    _clearReconnect();
-    const delayBase = Math.min(MAX_DELAY_MS, BASE_DELAY_MS * Math.pow(BACKOFF_FACTOR, _attempt));
-    const jitter = Math.random() * delayBase * 0.3;
-    const delay = Math.floor(delayBase + jitter);
-    _reconnectTimer = setTimeout(() => _open(), delay);
+function _matchPending(frame) {
+    const causationId = frame && frame.meta && typeof frame.meta.causation_id === 'string'
+        ? frame.meta.causation_id
+        : null;
+    if (causationId === null || !_pending.has(causationId)) {
+        return false;
+    }
+    const entry = _pending.get(causationId);
+    if (entry.expectedSucceeded === frame.type) {
+        _pending.delete(causationId);
+        clearTimeout(entry.timeoutHandle);
+        entry.resolve(frame.payload === undefined ? null : frame.payload);
+        return true;
+    }
+    if (entry.expectedFailed === frame.type) {
+        _pending.delete(causationId);
+        clearTimeout(entry.timeoutHandle);
+        const failurePayload = frame.payload && typeof frame.payload === 'object' ? frame.payload : {};
+        const message = typeof failurePayload.error_detail === 'string'
+            ? failurePayload.error_detail
+            : (typeof failurePayload.message === 'string' ? failurePayload.message : 'WS command failed');
+        const code = typeof failurePayload.error_code === 'string' ? failurePayload.error_code : 'ws_command_failed';
+        entry.reject(new WsTransportError(message, code));
+        return true;
+    }
+    return false;
+}
+
+function _onPublication(ctx) {
+    const frame = ctx && ctx.data;
+    _ctxRef.dispatch(CoreEvents.WS_FRAME_RECEIVED, { frame }, { source: 'ws' });
+    if (_matchPending(frame)) {
+        return;
+    }
+    _dispatchPlatformEvent(frame);
 }
 
 function _open() {
-    if (_socket && (_socket.readyState === WebSocket.OPEN || _socket.readyState === WebSocket.CONNECTING)) {
+    if (_client && (_connected || _client.state === 'connecting')) {
         return;
     }
     _intentionalClose = false;
-    _attempt += 1;
-    _ctxRef.dispatch(CoreEvents.WS_CONNECT_REQUESTED, { url: _wsUrl() }, { source: 'system' });
-    _socket = new WebSocket(_wsUrl());
-    const onOpen = () => {
-        _attempt = 0;
-        _ctxRef.dispatch(CoreEvents.WS_CONNECTED, { url: _wsUrl() }, { source: 'ws' });
-        if (_pingTimer) clearInterval(_pingTimer);
-        _pingTimer = setInterval(() => {
-            if (_socket && _socket.readyState === WebSocket.OPEN) {
-                try { _socket.send('ping'); } catch { /* ignored */ }
-            }
-        }, 25_000);
+    const url = _centrifugeUrl();
+    _ctxRef.dispatch(CoreEvents.WS_CONNECT_REQUESTED, { url }, { source: 'system' });
+    _client = new _CentrifugeCtor(url, {
+        getToken: _getToken,
+        minReconnectDelay: BASE_DELAY_MS,
+        maxReconnectDelay: MAX_DELAY_MS,
+    });
+    _client.on('connected', () => {
+        _connected = true;
+        _ctxRef.dispatch(CoreEvents.WS_CONNECTED, { url }, { source: 'ws' });
         _flushPreConnectQueue();
-    };
-    _socket.onopen = onOpen;
-    _socket.onmessage = (msg) => _onFrame(msg);
-    _socket.onerror = (err) => {
-        console.warn('[ws.effect] error', err);
-    };
-    _socket.onclose = (ev) => {
-        if (_pingTimer) { clearInterval(_pingTimer); _pingTimer = null; }
-        _ctxRef.dispatch(CoreEvents.WS_DISCONNECTED, { reason: ev.reason || `code_${ev.code}` }, { source: 'ws' });
-        _rejectAllPending(new WsTransportError('WebSocket disconnected', 'ws_disconnected'));
+    });
+    _client.on('disconnected', (ctx) => {
+        _connected = false;
+        const reason = ctx && ctx.reason ? ctx.reason : 'disconnected';
+        _ctxRef.dispatch(CoreEvents.WS_DISCONNECTED, { reason }, { source: 'ws' });
         if (!_intentionalClose) {
-            _scheduleReconnect();
+            _rejectAllPending(new WsTransportError('WebSocket disconnected', 'ws_disconnected'));
         }
-    };
-    if (_socket.readyState === WebSocket.OPEN) {
-        // MockWebSocket в тестах открывается синхронно в конструкторе и не
-        // вызывает onopen после присваивания handler. Дёргаем вручную.
-        onOpen();
-    }
+    });
+    _client.on('publication', _onPublication);
+    _client.connect();
 }
 
 function _close() {
     _intentionalClose = true;
-    _clearReconnect();
-    if (_pingTimer) { clearInterval(_pingTimer); _pingTimer = null; }
-    if (_socket && _socket.readyState !== WebSocket.CLOSED) {
-        try { _socket.close(1000, 'client_close'); } catch { /* ignored */ }
+    _connected = false;
+    if (_client) {
+        _client.disconnect();
+        _client = null;
     }
-    _socket = null;
-    _attempt = 0;
     _rejectAllPending(new WsTransportError('WebSocket closed', 'ws_disconnected'));
     _rejectAllPreConnect(new WsTransportError('WebSocket closed', 'ws_disconnected'));
 }
@@ -150,7 +223,7 @@ function _flushPreConnectQueue() {
     while (_preConnectQueue.length > 0) {
         const queued = _preConnectQueue.shift();
         clearTimeout(queued.preTimeoutHandle);
-        _sendFrameNow(queued);
+        _sendRpcNow(queued);
     }
 }
 
@@ -162,115 +235,106 @@ function _rejectAllPreConnect(error) {
     }
 }
 
-function _sendFrameNow(queued) {
-    if (!_socket || _socket.readyState !== WebSocket.OPEN) {
+function _buildCommandEvent(queued) {
+    const token = _cookieValue('auth_token');
+    const companyId = _sessionCompanyId(token);
+    const eventId = queued.causationEventId || _newEventId();
+    return {
+        event_id: eventId,
+        type: queued.type,
+        company_id: companyId,
+        payload: queued.payload,
+        meta: {
+            ts: Date.now(),
+            source: 'ws',
+            causation_id: eventId,
+            namespace: getActivePlatformNamespaceName(companyId),
+        },
+    };
+}
+
+function _sendRpcNow(queued) {
+    if (!_client || !_connected) {
         queued.reject(new WsTransportError('WebSocket is not connected', 'ws_disconnected'));
         return;
     }
-    const requestId = _generateRequestId();
-    const frame = {
-        request_id: requestId,
-        type: queued.type,
-        payload: queued.payload,
-    };
+    const event = _buildCommandEvent(queued);
+    const eventId = event.event_id;
     const timeoutHandle = setTimeout(() => {
-        if (_pending.has(requestId)) {
-            _pending.delete(requestId);
-            queued.reject(new WsTransportError(`WS command "${queued.type}" timed out after ${queued.timeoutMs}ms`, 'ws_timeout'));
-        }
+        void _onCommandTimeout(eventId, queued);
     }, queued.timeoutMs);
-    _pending.set(requestId, {
+    _pending.set(eventId, {
         resolve: queued.resolve,
         reject: queued.reject,
         timeoutHandle,
         expectedSucceeded: queued.expectedSucceeded,
         expectedFailed: queued.expectedFailed,
-        causationEventId: queued.causationEventId,
     });
-    try {
-        _socket.send(JSON.stringify(frame));
-    } catch (err) {
-        _pending.delete(requestId);
-        clearTimeout(timeoutHandle);
-        queued.reject(new WsTransportError(`WS send failed: ${err && err.message ? err.message : String(err)}`, 'ws_send_failed'));
-    }
-}
-
-function _onFrame(msg) {
-    const data = msg.data;
-    if (typeof data !== 'string') return;
-    if (data === 'pong') return;
-    let parsed;
-    try {
-        parsed = JSON.parse(data);
-    } catch {
-        _ctxRef.dispatch(CoreEvents.WS_FRAME_RECEIVED, { raw: data }, { source: 'ws' });
-        return;
-    }
-    _ctxRef.dispatch(CoreEvents.WS_FRAME_RECEIVED, { frame: parsed }, { source: 'ws' });
-
-    if (!parsed || typeof parsed.type !== 'string') {
-        return;
-    }
-
-    const requestId = typeof parsed.request_id === 'string' ? parsed.request_id : null;
-    if (requestId !== null && _pending.has(requestId)) {
-        const entry = _pending.get(requestId);
-        _pending.delete(requestId);
-        clearTimeout(entry.timeoutHandle);
-        if (entry.expectedSucceeded === parsed.type) {
-            entry.resolve(parsed.payload === undefined ? null : parsed.payload);
-        } else if (entry.expectedFailed === parsed.type) {
-            const failurePayload = parsed.payload && typeof parsed.payload === 'object' ? parsed.payload : {};
-            const message = typeof failurePayload.error_detail === 'string'
-                ? failurePayload.error_detail
-                : (typeof failurePayload.message === 'string' ? failurePayload.message : 'WS command failed');
-            const code = typeof failurePayload.error_code === 'string' ? failurePayload.error_code : 'ws_command_failed';
-            entry.reject(new WsTransportError(message, code));
-        } else {
-            entry.reject(new WsTransportError(
-                `reply type "${parsed.type}" does not match expected ${entry.expectedSucceeded} | ${entry.expectedFailed}`,
-                'ws_unexpected_reply',
-            ));
+    queued.eventId = eventId;
+    _client.rpc('platform.event', event).then(() => undefined, (err) => {
+        if (!_pending.has(eventId)) {
+            return;
         }
+        const entry = _pending.get(eventId);
+        _pending.delete(eventId);
+        clearTimeout(entry.timeoutHandle);
+        const message = err && typeof err.message === 'string' && err.message.length > 0
+            ? err.message
+            : 'Centrifugo rpc platform.event failed';
+        entry.reject(new WsTransportError(message, 'ws_disconnected'));
+    });
+}
+
+async function _onCommandTimeout(eventId, queued) {
+    if (!_pending.has(eventId)) {
         return;
     }
-
     try {
-        assertEventType(parsed.type);
-        _ctxRef.dispatch(parsed.type, parsed.payload === undefined ? null : parsed.payload, {
-            source: 'ws',
-            correlation_id: parsed.meta && parsed.meta.correlation_id,
-            causation_id: parsed.meta && parsed.meta.causation_id,
-            trace_id: parsed.meta && parsed.meta.trace_id,
-        });
+        const response = await fetch(
+            `/realtime/api/v1/events/${encodeURIComponent(eventId)}/terminal`,
+            { credentials: 'include' },
+        );
+        if (response.ok) {
+            const frame = await response.json();
+            if (_matchPending(frame)) {
+                return;
+            }
+        } else if (response.status !== 404) {
+            throw new Error(`terminal lookup HTTP ${response.status}`);
+        }
     } catch (err) {
-        console.warn('[ws.effect] dropped frame: invalid event type', parsed.type, err);
+        const failed = _pending.get(eventId);
+        if (!failed) {
+            return;
+        }
+        _pending.delete(eventId);
+        clearTimeout(failed.timeoutHandle);
+        const message = err instanceof Error && err.message
+            ? err.message
+            : 'terminal lookup failed';
+        failed.reject(new WsTransportError(message, 'ws_disconnected'));
+        return;
     }
+    const entry = _pending.get(eventId);
+    if (!entry) {
+        return;
+    }
+    _pending.delete(eventId);
+    clearTimeout(entry.timeoutHandle);
+    entry.reject(new WsTransportError(
+        `WS command "${queued.type}" timed out after ${queued.timeoutMs}ms`,
+        'ws_timeout',
+    ));
 }
 
-function _generateRequestId() {
-    _requestSeq = (_requestSeq + 1) & 0xffffffff;
-    const ts = Date.now().toString(36);
-    const seq = _requestSeq.toString(36);
-    const rnd = Math.floor(Math.random() * 0xffffff).toString(36);
-    return `r_${ts}_${seq}_${rnd}`;
-}
-
-/**
- * Singleton-контроллер платформенного WS. Используется фабриками с
- * `transport: 'ws'`. Никогда не вызывается из pages/components/modals
- * напрямую — только из effect-ов фабрик.
- */
 export const platformWs = {
     isOpen() {
-        return Boolean(_socket && _socket.readyState === WebSocket.OPEN);
+        return Boolean(_client && _connected);
     },
 
     /**
-     * Отправить command-фрейм по WS, дождаться reply с тем же request_id.
-     * Фабрика передаёт собственные `expectedSucceeded`/`expectedFailed` —
-     * имена событий, которыми сервер обязан ответить.
+     * Отправить PlatformEvent `_requested` через Centrifugo RPC, дождаться
+     * publication `expectedSucceeded` / `expectedFailed` с causation_id.
      *
      * @param {{
      *   type: string,
@@ -316,7 +380,7 @@ export const platformWs = {
             };
 
             if (this.isOpen()) {
-                _sendFrameNow(queued);
+                _sendRpcNow(queued);
                 return;
             }
 
@@ -325,9 +389,6 @@ export const platformWs = {
                 return;
             }
 
-            // Соединения ещё нет (initial autoload до AUTH_USER_LOADED или
-            // мгновенный reconnect). Откладываем фрейм до onopen, но не
-            // дольше PRE_CONNECT_MAX_WAIT_MS — иначе ws_timeout.
             queued.preTimeoutHandle = setTimeout(() => {
                 const idx = _preConnectQueue.indexOf(queued);
                 if (idx >= 0) {
@@ -343,9 +404,7 @@ export const platformWs = {
     },
 };
 
-export function createPlatformWsEffect({ baseUrl }) {
-    _baseUrl = baseUrl || '';
-
+export function createPlatformWsEffect() {
     return async function wsEffect(event, ctx) {
         if (_ctxRef === null) {
             _ctxRef = ctx;
@@ -365,19 +424,20 @@ export function createPlatformWsEffect({ baseUrl }) {
     };
 }
 
-/**
- * Тестовый сброс модульного состояния (между тестами Web Test Runner).
- */
+export function _setCentrifugeForTests(ctor, unauthorizedError) {
+    _CentrifugeCtor = ctor;
+    _UnauthorizedError = unauthorizedError;
+}
+
 export function _resetPlatformWsForTests() {
     _close();
-    _socket = null;
-    _attempt = 0;
-    _pingTimer = null;
-    _reconnectTimer = null;
+    _client = null;
+    _connected = false;
     _intentionalClose = false;
-    _baseUrl = null;
     _ctxRef = null;
     _requestSeq = 0;
     _pending.clear();
     _preConnectQueue.length = 0;
+    _CentrifugeCtor = Centrifuge;
+    _UnauthorizedError = UnauthorizedError;
 }

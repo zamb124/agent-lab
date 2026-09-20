@@ -385,7 +385,7 @@ export class PlatformFilePickerModal extends PlatformModal {
         this._catalogId = catalogId;
         this._searchResults = null;
         this._error = '';
-        const result = await this._documentsOp.run({ catalog_id: catalogId });
+        const result = await this._documentsOp.run({ catalog_ids: [catalogId] });
         if (!result || typeof result !== 'object' || !Array.isArray(result.items)) {
             throw new Error('platform-file-picker: documents.items required');
         }

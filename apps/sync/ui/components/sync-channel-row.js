@@ -3,7 +3,8 @@
  *
  * Источники:
  *   useResource('sync/channels')      — выбранный канал, для подсветки.
- *   select syncPresence                — typing preview, online dot для DM.
+ *   select syncPresence                — typing preview.
+ *   useResource('sync/company_members') — online-dot DM.
  *   select syncCallUi.activeCallChannels — pill «Войти» (как баннер свёрнутого звонка).
  *
  * Действия: navigate('channel', { channelId }), при открытой моб. панели — closeMobile;
@@ -18,7 +19,7 @@ import { channelDisplayTitle } from './_helpers/sync-channel-display.js';
 import { resolveAvatarImageSrc } from '@platform/lib/utils/placeholder-avatar.js';
 import { syncChannelPlaceholderCollection } from '../_helpers/sync-channel-placeholder-collection.js';
 import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
-import { isOnline } from '../_helpers/sync-presence.js';
+import { findCompanyMember, isOnline } from '../_helpers/sync-presence.js';
 import { getTypingIndicatorLine } from '../_helpers/sync-typing.js';
 
 export class SyncChannelRow extends PlatformElement {
@@ -387,8 +388,8 @@ export class SyncChannelRow extends PlatformElement {
         const channel = this.channel;
         const isDm = channel.type === 'direct' && channel.peer && typeof channel.peer.user_id === 'string';
         if (isDm) {
-            const presenceByUserId = this._presenceSel.value && this._presenceSel.value.presenceByUserId;
-            const online = isOnline(presenceByUserId, channel.peer.user_id);
+            const member = findCompanyMember(this._members.items, channel.peer.user_id);
+            const online = isOnline(member);
             const name = typeof channel.peer.display_name === 'string' && channel.peer.display_name !== ''
                 ? channel.peer.display_name
                 : channel.peer.user_id;

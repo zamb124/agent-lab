@@ -7,19 +7,19 @@ import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { registerFactory } from '@platform/lib/events/factory-registry.js';
 import '@platform/lib/components/platform-work-item-badge.js';
 import {
-    platformWorkItemGetOp,
-    platformWorkItemFactories,
-} from '@platform/lib/events/resources/platform-work-item.resource.js';
+    workItemGetOp,
+    worktrackerWorkItemFactories,
+} from '@platform/lib/events/resources/work-items.resource.js';
 
 describe('platform-work-item-badge', () => {
     beforeEach(() => {
         resetPlatformState();
-        for (const factory of platformWorkItemFactories) {
+        for (const factory of worktrackerWorkItemFactories) {
             registerFactory(factory);
         }
         bootstrapTestBus({
             slices: {
-                [platformWorkItemGetOp.sliceKey]: platformWorkItemGetOp.slice,
+                [workItemGetOp.sliceKey]: workItemGetOp.slice,
             },
         });
     });

@@ -297,7 +297,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         this._teamSel = this.select((s) => s.team);
         this._authSel = this.select((s) => s.auth);
         this._localeSel = this.select((s) => s.i18n.locale);
-        this._workCountsSel = this.select((s) => s.platformWorkItemCounts);
+        this._workCountsSel = this.select((s) => s.worktrackerWorkItemCounts);
         this._loadDispatched = false;
         // Редактирование ролей живёт в фабрике сервиса frontend
         // (`frontend/team_members`). В сервисах без админ-панели команд

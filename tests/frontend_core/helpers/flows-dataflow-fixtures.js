@@ -10,6 +10,11 @@ import {
     stickyNoteUpsertOp,
 } from '../../../apps/flows/ui/events/resources/editor.resource.js';
 import { flowsDataTableCreateOp } from '../../../apps/flows/ui/events/resources/data-tables.resource.js';
+import {
+    flowsCodeAgentCopyTreeOp,
+    flowsCodeAgentDeleteOp,
+    flowsCodeAgentEnsureSourceOp,
+} from '../../../apps/flows/ui/events/resources/code-agent.resource.js';
 
 /**
  * Фабрики constructor `useOp` у `<flows-flow-canvas>`.
@@ -20,6 +25,9 @@ export const FLOW_CANVAS_FACTORIES = [
     editorBulkDeleteOp,
     stickyNoteUpsertOp,
     flowsDataTableCreateOp,
+    flowsCodeAgentEnsureSourceOp,
+    flowsCodeAgentCopyTreeOp,
+    flowsCodeAgentDeleteOp,
 ];
 
 export const SAMPLE_DATAFLOW_NODES = {

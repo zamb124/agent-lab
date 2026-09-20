@@ -8,6 +8,7 @@
 
 import { resolveChannelTitle, resolveDisplayName } from '../../_helpers/sync-id-resolvers.js';
 import { getTypingIndicatorLine } from '../../_helpers/sync-typing.js';
+import { findCompanyMember } from '../../_helpers/sync-presence.js';
 
 /**
  * Заголовок канала. Тонкая обёртка над `resolveChannelTitle` для
@@ -48,7 +49,6 @@ export function normalizeSyncChannelId(channelId) {
 export function buildChatSubtitle({
     channel,
     typingByChannel,
-    presenceByUserId,
     t,
     myUserId,
     members,
@@ -64,12 +64,10 @@ export function buildChatSubtitle({
     });
     if (typingLine !== '') return typingLine;
     if (channel.type === 'direct' && channel.peer && typeof channel.peer === 'object') {
-        const presence = presenceByUserId && presenceByUserId[channel.peer.user_id];
-        if (presence) {
-            if (presence.online === true) return t('chat_header.subtitle_online');
-            if (typeof presence.last_seen_at === 'string' && presence.last_seen_at !== '') {
-                return t('chat_header.subtitle_last_seen', { at: presence.last_seen_at });
-            }
+        const member = findCompanyMember(members, channel.peer.user_id);
+        if (member && member.is_online === true) return t('chat_header.subtitle_online');
+        if (member && typeof member.last_seen_at === 'string' && member.last_seen_at !== '') {
+            return t('chat_header.subtitle_last_seen', { at: member.last_seen_at });
         }
         return t('chat_header.subtitle_direct');
     }

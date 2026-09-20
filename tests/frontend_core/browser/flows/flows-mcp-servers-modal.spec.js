@@ -1,10 +1,10 @@
 import { fixture, fixtureCleanup, html, expect, aTimeout, waitUntil } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { collectFactories, registerFactory, getPlatformBus, CoreEvents } from '@platform/lib/events/index.js';
+import { platformWs } from '@platform/lib/events/effects/ws.effect.js';
 import {
     mcpServersResource,
     mcpServersListOp,
-    mcpServerUpdateOp,
     mcpServerSyncOp,
     mcpServerTestOp,
     mcpServerResetCatalogDefaultsOp,
@@ -21,7 +21,6 @@ import '../../../../apps/flows/ui/modals/flows-mcp-servers-modal.js';
 const FACTORIES = [
     mcpServersResource,
     mcpServersListOp,
-    mcpServerUpdateOp,
     mcpServerSyncOp,
     mcpServerTestOp,
     mcpServerResetCatalogDefaultsOp,
@@ -42,34 +41,30 @@ function bootstrap() {
     bootstrapTestBus({ slices: collected.slices, effects: collected.effects });
 }
 
-function createMcpModalFetchStub(routes) {
+function createMcpWsStub(handlers) {
     const calls = [];
-    const prevFetch = window.fetch;
-    window.fetch = async (url, init = {}) => {
-        const href = String(url);
-        const method = (init.method || 'GET').toUpperCase();
-        calls.push({ url: href, method, init });
-        for (const route of routes) {
-            if (route.method !== method) {
-                continue;
-            }
-            if (!route.match(href)) {
-                continue;
-            }
-            const body = typeof route.body === 'function' ? route.body(href, init) : route.body;
-            return new Response(JSON.stringify(body), {
-                status: route.status || 200,
-                headers: { 'content-type': 'application/json' },
-            });
+    const original = platformWs.request;
+    platformWs.request = async (opts) => {
+        if (!opts || typeof opts.type !== 'string') {
+            throw new Error('mcp ws stub: opts.type required');
         }
-        throw new Error(`unexpected fetch: ${method} ${href}`);
+        calls.push({ type: opts.type, payload: opts.payload });
+        const handler = handlers[opts.type];
+        if (handler === undefined) {
+            throw new Error(`unexpected ws: ${opts.type}`);
+        }
+        return typeof handler === 'function' ? handler(opts.payload) : handler;
     };
     return {
         calls,
         uninstall() {
-            window.fetch = prevFetch;
+            platformWs.request = original;
         },
     };
+}
+
+function offsetPage(items, total, limit, offset) {
+    return { items, total, limit, offset };
 }
 
 function modalRoot(modal) {
@@ -165,8 +160,8 @@ function catalogItemStub(catalogId, overrides = {}) {
 }
 
 describe('flows mcp servers modal', () => {
-    /** @type {ReturnType<typeof createMcpModalFetchStub> | null} */
-    let fetchStub;
+    /** @type {ReturnType<typeof createMcpWsStub> | null} */
+    let wsStub;
 
     beforeEach(() => {
         resetPlatformState();
@@ -174,34 +169,26 @@ describe('flows mcp servers modal', () => {
     });
 
     afterEach(() => {
-        fetchStub?.uninstall();
-        fetchStub = null;
+        wsStub?.uninstall();
+        wsStub = null;
         fixtureCleanup();
     });
 
     it('switches to catalog via segmented control and loads catalog', async () => {
-        fetchStub = createMcpModalFetchStub([
-            {
-                method: 'GET',
-                match: (href) => href.includes('/flows/api/v1/mcp/servers'),
-                body: {
-                    items: [installedServerStub('browser', { source: 'platform' })],
-                    total: 1,
-                    limit: 50,
-                    offset: 0,
-                },
-            },
-            {
-                method: 'GET',
-                match: (href) => href.includes('/flows/api/v1/mcp/catalog'),
-                body: {
-                    items: [catalogItemStub('store_demo')],
-                    total: 1,
-                    limit: 50,
-                    offset: 0,
-                },
-            },
-        ]);
+        wsStub = createMcpWsStub({
+            'flows/mcp_servers/list_requested': offsetPage(
+                [installedServerStub('browser', { source: 'platform' })],
+                1,
+                50,
+                0,
+            ),
+            'flows/mcp_catalog/list_requested': offsetPage(
+                [catalogItemStub('store_demo')],
+                1,
+                50,
+                0,
+            ),
+        });
 
         const modal = await fixture(html`
             <flows-mcp-servers-modal ?open=${true}></flows-mcp-servers-modal>
@@ -217,54 +204,45 @@ describe('flows mcp servers modal', () => {
 
     it('installs catalog entry via Install button and refreshes servers list', async () => {
         const state = { installCalls: 0 };
-        fetchStub = createMcpModalFetchStub([
-            {
-                method: 'GET',
-                match: (href) => href.includes('/flows/api/v1/mcp/servers'),
-                body: () => ({
-                    items: state.installCalls > 0
-                        ? [installedServerStub('mcp_store_demo', {
-                            source: 'catalog',
-                            catalog_id: 'store_demo',
-                            cached_tools: ['mcp:mcp_store_demo:echo'],
-                        })]
-                        : [],
-                    total: state.installCalls > 0 ? 1 : 0,
-                    limit: 50,
-                    offset: 0,
-                }),
-            },
-            {
-                method: 'GET',
-                match: (href) => href.includes('/flows/api/v1/mcp/catalog'),
-                body: () => ({
-                    items: [catalogItemStub('store_demo', { installed: state.installCalls > 0 })],
-                    total: 1,
-                    limit: 50,
-                    offset: 0,
-                }),
-            },
-            {
-                method: 'POST',
-                match: (href) => href.includes('/flows/api/v1/mcp/catalog/store_demo/install'),
-                body: () => {
-                    state.installCalls += 1;
-                    return {
-                        server_id: 'mcp_store_demo',
-                        name: 'Store Demo',
-                        url: 'https://example.test/mcp',
-                        transport_type: 'http',
+        wsStub = createMcpWsStub({
+            'flows/mcp_servers/list_requested': () => offsetPage(
+                state.installCalls > 0
+                    ? [installedServerStub('mcp_store_demo', {
                         source: 'catalog',
                         catalog_id: 'store_demo',
-                        catalog_auto_provisioned: false,
-                        is_active: true,
-                        cached_tools: [],
-                        headers: {},
-                        override_locked: false,
-                    };
-                },
+                        cached_tools: ['mcp:mcp_store_demo:echo'],
+                    })]
+                    : [],
+                state.installCalls > 0 ? 1 : 0,
+                50,
+                0,
+            ),
+            'flows/mcp_catalog/list_requested': () => offsetPage(
+                [catalogItemStub('store_demo', { installed: state.installCalls > 0 })],
+                1,
+                50,
+                0,
+            ),
+            'flows/mcp_catalog/install_requested': (payload) => {
+                if (!payload || payload.catalog_id !== 'store_demo') {
+                    throw new Error('mcp ws stub: catalog_id store_demo required');
+                }
+                state.installCalls += 1;
+                return {
+                    server_id: 'mcp_store_demo',
+                    name: 'Store Demo',
+                    url: 'https://example.test/mcp',
+                    transport_type: 'http',
+                    source: 'catalog',
+                    catalog_id: 'store_demo',
+                    catalog_auto_provisioned: false,
+                    is_active: true,
+                    cached_tools: [],
+                    headers: {},
+                    override_locked: false,
+                };
             },
-        ]);
+        });
 
         const modal = await fixture(html`
             <flows-mcp-servers-modal ?open=${true}></flows-mcp-servers-modal>
@@ -282,39 +260,27 @@ describe('flows mcp servers modal', () => {
     });
 
     it('loads branding with backend search query from header search field', async () => {
-        fetchStub = createMcpModalFetchStub([
-            {
-                method: 'GET',
-                match: (href) => href.includes('/flows/api/v1/mcp/servers'),
-                body: { items: [], total: 0, limit: 50, offset: 0 },
+        wsStub = createMcpWsStub({
+            'flows/mcp_servers/list_requested': offsetPage([], 0, 50, 0),
+            'flows/mcp_branding/slug_suggest_requested': { slugs: ['context7_catalog'] },
+            'flows/mcp_branding/list_requested': (payload) => {
+                if (payload && payload.search === 'context7') {
+                    return offsetPage(
+                        [{
+                            server_id: 'context7_catalog',
+                            icon_file_id: 'file_context7',
+                            icon_url: '/frontend/api/v1/files/download/file_context7',
+                            updated_at: '2026-01-01T00:00:00Z',
+                            updated_by_user_id: 'user_test',
+                        }],
+                        1,
+                        40,
+                        0,
+                    );
+                }
+                return offsetPage([], 0, 40, 0);
             },
-            {
-                method: 'GET',
-                match: (href) => href.includes('/flows/api/v1/mcp/branding/slug-suggest'),
-                body: { slugs: ['context7_catalog'] },
-            },
-            {
-                method: 'GET',
-                match: (href) => href.includes('/flows/api/v1/mcp/branding') && href.includes('search=context7'),
-                body: {
-                    items: [{
-                        server_id: 'context7_catalog',
-                        icon_file_id: 'file_context7',
-                        icon_url: '/frontend/api/v1/files/download/file_context7',
-                        updated_at: '2026-01-01T00:00:00Z',
-                        updated_by_user_id: 'user_test',
-                    }],
-                    total: 1,
-                    limit: 40,
-                    offset: 0,
-                },
-            },
-            {
-                method: 'GET',
-                match: (href) => href.includes('/flows/api/v1/mcp/branding'),
-                body: { items: [], total: 0, limit: 40, offset: 0 },
-            },
-        ]);
+        });
 
         switchToSystemCompany();
         const modal = await fixture(html`
@@ -325,29 +291,25 @@ describe('flows mcp servers modal', () => {
         await dispatchSearch(modal, 'context7');
 
         expect(
-            fetchStub.calls.some((call) => call.url.includes('/mcp/branding?') && call.url.includes('search=context7')),
+            wsStub.calls.some((call) => (
+                call.type === 'flows/mcp_branding/list_requested'
+                && call.payload
+                && call.payload.search === 'context7'
+            )),
         ).to.equal(true);
         expect(modalRoot(modal).querySelectorAll('.mcp-branding-card')).to.have.length(1);
     });
 
     it('catalog search debounces and sends search query param', async () => {
-        fetchStub = createMcpModalFetchStub([
-            {
-                method: 'GET',
-                match: (href) => href.includes('/flows/api/v1/mcp/servers'),
-                body: { items: [], total: 0, limit: 50, offset: 0 },
-            },
-            {
-                method: 'GET',
-                match: (href) => href.includes('/flows/api/v1/mcp/catalog'),
-                body: {
-                    items: [catalogItemStub('store_demo')],
-                    total: 1,
-                    limit: 50,
-                    offset: 0,
-                },
-            },
-        ]);
+        wsStub = createMcpWsStub({
+            'flows/mcp_servers/list_requested': offsetPage([], 0, 50, 0),
+            'flows/mcp_catalog/list_requested': offsetPage(
+                [catalogItemStub('store_demo')],
+                1,
+                50,
+                0,
+            ),
+        });
 
         const modal = await fixture(html`
             <flows-mcp-servers-modal ?open=${true}></flows-mcp-servers-modal>
@@ -357,7 +319,11 @@ describe('flows mcp servers modal', () => {
         await dispatchSearch(modal, 'store_demo');
 
         expect(
-            fetchStub.calls.some((call) => call.url.includes('/mcp/catalog') && call.url.includes('search=store_demo')),
+            wsStub.calls.some((call) => (
+                call.type === 'flows/mcp_catalog/list_requested'
+                && call.payload
+                && call.payload.search === 'store_demo'
+            )),
         ).to.equal(true);
     });
 
@@ -368,18 +334,15 @@ describe('flows mcp servers modal', () => {
             ...Array.from({ length: 48 }, (_, index) => installedServerStub(`srv_${index}`)),
         ];
         const secondPage = [installedServerStub('srv_48')];
-        fetchStub = createMcpModalFetchStub([
-            {
-                method: 'GET',
-                match: (href) => href.includes('/flows/api/v1/mcp/servers') && href.includes('offset=50'),
-                body: { items: secondPage, total: 51, limit: 50, offset: 50 },
+        wsStub = createMcpWsStub({
+            'flows/mcp_servers/list_requested': (payload) => {
+                const offset = payload && typeof payload.offset === 'number' ? payload.offset : 0;
+                if (offset === 50) {
+                    return offsetPage(secondPage, 51, 50, 50);
+                }
+                return offsetPage(firstPage, 51, 50, 0);
             },
-            {
-                method: 'GET',
-                match: (href) => href.includes('/flows/api/v1/mcp/servers'),
-                body: { items: firstPage, total: 51, limit: 50, offset: 0 },
-            },
-        ]);
+        });
 
         const modal = await fixture(html`
             <flows-mcp-servers-modal ?open=${true}></flows-mcp-servers-modal>
@@ -391,28 +354,24 @@ describe('flows mcp servers modal', () => {
         await waitUntil(() => modal._installedItems.length === 51, 'second page');
 
         expect(
-            fetchStub.calls.some((call) => call.url.includes('/mcp/servers') && call.url.includes('offset=50')),
+            wsStub.calls.some((call) => (
+                call.type === 'flows/mcp_servers/list_requested'
+                && call.payload
+                && call.payload.offset === 50
+            )),
         ).to.equal(true);
     });
 
     it('renders platform_curated chip on catalog card', async () => {
-        fetchStub = createMcpModalFetchStub([
-            {
-                method: 'GET',
-                match: (href) => href.includes('/flows/api/v1/mcp/servers'),
-                body: { items: [], total: 0, limit: 50, offset: 0 },
-            },
-            {
-                method: 'GET',
-                match: (href) => href.includes('/flows/api/v1/mcp/catalog'),
-                body: {
-                    items: [catalogItemStub('context7_catalog', { platform_curated: true, title: 'Context7' })],
-                    total: 1,
-                    limit: 50,
-                    offset: 0,
-                },
-            },
-        ]);
+        wsStub = createMcpWsStub({
+            'flows/mcp_servers/list_requested': offsetPage([], 0, 50, 0),
+            'flows/mcp_catalog/list_requested': offsetPage(
+                [catalogItemStub('context7_catalog', { platform_curated: true, title: 'Context7' })],
+                1,
+                50,
+                0,
+            ),
+        });
 
         const modal = await fixture(html`
             <flows-mcp-servers-modal ?open=${true}></flows-mcp-servers-modal>
@@ -426,23 +385,11 @@ describe('flows mcp servers modal', () => {
     });
 
     it('slug typeahead requests suggest endpoint', async () => {
-        fetchStub = createMcpModalFetchStub([
-            {
-                method: 'GET',
-                match: (href) => href.includes('/flows/api/v1/mcp/servers'),
-                body: { items: [], total: 0, limit: 50, offset: 0 },
-            },
-            {
-                method: 'GET',
-                match: (href) => href.includes('/flows/api/v1/mcp/branding/slug-suggest'),
-                body: { slugs: ['context7_catalog'] },
-            },
-            {
-                method: 'GET',
-                match: (href) => href.includes('/flows/api/v1/mcp/branding'),
-                body: { items: [], total: 0, limit: 40, offset: 0 },
-            },
-        ]);
+        wsStub = createMcpWsStub({
+            'flows/mcp_servers/list_requested': offsetPage([], 0, 50, 0),
+            'flows/mcp_branding/slug_suggest_requested': { slugs: ['context7_catalog'] },
+            'flows/mcp_branding/list_requested': offsetPage([], 0, 40, 0),
+        });
 
         switchToSystemCompany();
         const modal = await fixture(html`
@@ -465,40 +412,32 @@ describe('flows mcp servers modal', () => {
         await modal.updateComplete;
 
         expect(
-            fetchStub.calls.some((call) => call.url.includes('/mcp/branding/slug-suggest') && call.url.includes('search=context7')),
+            wsStub.calls.some((call) => (
+                call.type === 'flows/mcp_branding/slug_suggest_requested'
+                && call.payload
+                && call.payload.search === 'context7'
+            )),
         ).to.equal(true);
         expect(modalRoot(modal).querySelector('.mcp-branding-slugs platform-button')).to.exist;
     });
 
     it('branding gallery card selects on click', async () => {
-        fetchStub = createMcpModalFetchStub([
-            {
-                method: 'GET',
-                match: (href) => href.includes('/flows/api/v1/mcp/servers'),
-                body: { items: [], total: 0, limit: 50, offset: 0 },
-            },
-            {
-                method: 'GET',
-                match: (href) => href.includes('/flows/api/v1/mcp/branding/slug-suggest'),
-                body: { slugs: [] },
-            },
-            {
-                method: 'GET',
-                match: (href) => href.includes('/flows/api/v1/mcp/branding'),
-                body: {
-                    items: [{
-                        server_id: 'browser',
-                        icon_file_id: 'file_browser',
-                        icon_url: '/frontend/api/v1/files/download/file_browser',
-                        updated_at: '2026-01-01T00:00:00Z',
-                        updated_by_user_id: 'user_test',
-                    }],
-                    total: 1,
-                    limit: 40,
-                    offset: 0,
-                },
-            },
-        ]);
+        wsStub = createMcpWsStub({
+            'flows/mcp_servers/list_requested': offsetPage([], 0, 50, 0),
+            'flows/mcp_branding/slug_suggest_requested': { slugs: [] },
+            'flows/mcp_branding/list_requested': offsetPage(
+                [{
+                    server_id: 'browser',
+                    icon_file_id: 'file_browser',
+                    icon_url: '/frontend/api/v1/files/download/file_browser',
+                    updated_at: '2026-01-01T00:00:00Z',
+                    updated_by_user_id: 'user_test',
+                }],
+                1,
+                40,
+                0,
+            ),
+        });
 
         switchToSystemCompany();
         const modal = await fixture(html`
@@ -517,24 +456,20 @@ describe('flows mcp servers modal', () => {
     });
 
     it('shows installed cards without both platform defaults', async () => {
-        fetchStub = createMcpModalFetchStub([
-            {
-                method: 'GET',
-                match: (href) => href.includes('/flows/api/v1/mcp/servers'),
-                body: {
-                    items: [
-                        installedServerStub('browser', { source: 'platform' }),
-                        installedServerStub('mcp_store_demo', {
-                            source: 'catalog',
-                            catalog_id: 'store_demo',
-                        }),
-                    ],
-                    total: 2,
-                    limit: 50,
-                    offset: 0,
-                },
-            },
-        ]);
+        wsStub = createMcpWsStub({
+            'flows/mcp_servers/list_requested': offsetPage(
+                [
+                    installedServerStub('browser', { source: 'platform' }),
+                    installedServerStub('mcp_store_demo', {
+                        source: 'catalog',
+                        catalog_id: 'store_demo',
+                    }),
+                ],
+                2,
+                50,
+                0,
+            ),
+        });
 
         const modal = await fixture(html`
             <flows-mcp-servers-modal ?open=${true}></flows-mcp-servers-modal>
@@ -548,34 +483,26 @@ describe('flows mcp servers modal', () => {
 
     it('catalog then installed roundtrip reloads and shows cards', async () => {
         let installedCalls = 0;
-        fetchStub = createMcpModalFetchStub([
-            {
-                method: 'GET',
-                match: (href) => href.includes('/flows/api/v1/mcp/servers'),
-                body: () => {
-                    installedCalls += 1;
-                    return {
-                        items: [
-                            installedServerStub('browser', { source: 'platform' }),
-                            installedServerStub('search', { source: 'platform' }),
-                        ],
-                        total: 2,
-                        limit: 50,
-                        offset: 0,
-                    };
-                },
+        wsStub = createMcpWsStub({
+            'flows/mcp_servers/list_requested': () => {
+                installedCalls += 1;
+                return offsetPage(
+                    [
+                        installedServerStub('browser', { source: 'platform' }),
+                        installedServerStub('search', { source: 'platform' }),
+                    ],
+                    2,
+                    50,
+                    0,
+                );
             },
-            {
-                method: 'GET',
-                match: (href) => href.includes('/flows/api/v1/mcp/catalog'),
-                body: {
-                    items: [catalogItemStub('store_demo')],
-                    total: 1,
-                    limit: 50,
-                    offset: 0,
-                },
-            },
-        ]);
+            'flows/mcp_catalog/list_requested': offsetPage(
+                [catalogItemStub('store_demo')],
+                1,
+                50,
+                0,
+            ),
+        });
 
         const modal = await fixture(html`
             <flows-mcp-servers-modal ?open=${true}></flows-mcp-servers-modal>

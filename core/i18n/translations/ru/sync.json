@@ -506,20 +506,6 @@
         "err_messages_items": "Некорректный ответ messages: items должен быть массивом.",
         "err_command_id": "commandId обязателен."
     },
-    "sync_app": {
-        "ws_json_expected": "[sync-ws] ожидался JSON-объект.",
-        "ws_unknown_frame": "[sync-ws] неизвестный кадр WebSocket: {{detail}}",
-        "ws_user_presence_company_id": "user.presence: auth.user.company_id обязателен.",
-        "ws_payload_required": "{{type}}: payload обязателен.",
-        "ws_channel_read_user_id": "channel.read_updated: auth.user.id обязателен.",
-        "ws_message_created_user_id": "message.created: auth.user.id обязателен.",
-        "ws_no_user_id_channel_list": "Нет user id для синхронизации списка каналов.",
-        "ws_reaction_no_message_id": "message.reaction_changed: нет message_id.",
-        "ws_status_no_message_id": "message.status_changed: нет message_id.",
-        "ws_unknown_realtime": "[sync-ws] неизвестное realtime-событие: {{type}}",
-        "err_sync_ws_not_initialized": "syncWs не инициализирован при accept.",
-        "err_recording_action": "action должен быть start или stop."
-    },
     "channels": {
         "toast_created": "Канал создан",
         "err_create": "Не удалось создать канал",

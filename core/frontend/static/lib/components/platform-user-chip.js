@@ -166,7 +166,7 @@ export class PlatformUserChip extends PlatformElement {
         this._chipAvatarSig = '';
         this._teamSel = this.select((s) => s.team);
         this._authSel = this.select((s) => s.auth);
-        this._workCountsSel = this.select((s) => s.platformWorkItemCounts);
+        this._workCountsSel = this.select((s) => s.worktrackerWorkItemCounts);
         this._loadDispatched = false;
     }
 

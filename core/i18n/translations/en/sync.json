@@ -506,20 +506,6 @@
         "err_messages_items": "Invalid messages response: items must be an array.",
         "err_command_id": "commandId is required."
     },
-    "sync_app": {
-        "ws_json_expected": "[sync-ws] expected a JSON object.",
-        "ws_unknown_frame": "[sync-ws] unknown WebSocket frame: {{detail}}",
-        "ws_user_presence_company_id": "user.presence: auth.user.company_id is required.",
-        "ws_payload_required": "{{type}}: payload is required.",
-        "ws_channel_read_user_id": "channel.read_updated: auth.user.id is required.",
-        "ws_message_created_user_id": "message.created: auth.user.id is required.",
-        "ws_no_user_id_channel_list": "No user id for channel list sync.",
-        "ws_reaction_no_message_id": "message.reaction_changed: message_id is missing.",
-        "ws_status_no_message_id": "message.status_changed: message_id is missing.",
-        "ws_unknown_realtime": "[sync-ws] unknown realtime event: {{type}}",
-        "err_sync_ws_not_initialized": "syncWs is not initialized on accept.",
-        "err_recording_action": "action must be start or stop."
-    },
     "channels": {
         "toast_created": "Channel created",
         "err_create": "Failed to create channel",

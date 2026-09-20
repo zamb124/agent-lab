@@ -47,9 +47,9 @@ import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 import { registerFactory } from '../events/factory-registry.js';
 import { collectFactories } from '../events/factories/register.js';
 import {
-    platformWorkItemFactories,
-    createPlatformWorkItemCountsAuthEffect,
-} from '../events/resources/platform-work-item.resource.js';
+    worktrackerWorkItemFactories,
+    createWorktrackerWorkItemCountsAuthEffect,
+} from '../events/resources/work-items.resource.js';
 import {
     platformAgentDeviceFactories,
     createPlatformAgentDevicesAuthEffect,
@@ -131,13 +131,13 @@ export class PlatformApp extends PlatformElement {
             setDefaultI18nNamespace(ctor.defaultI18nNamespace);
         }
         const factories = [
-            ...platformWorkItemFactories,
+            ...worktrackerWorkItemFactories,
             ...platformAgentDeviceFactories,
             ...(Array.isArray(ctor.factories) ? ctor.factories : []),
         ];
         const factorySlices = {};
         const factoryEffects = [
-            createPlatformWorkItemCountsAuthEffect(),
+            createWorktrackerWorkItemCountsAuthEffect(),
             createPlatformAgentDevicesAuthEffect(),
         ];
         if (factories.length > 0) {

@@ -26,7 +26,7 @@ import {
     attachmentUploadOp,
     attachmentDeleteOp,
 } from '../../../../apps/crm/ui/events/resources/attachments.resource.js';
-import { entityGrantsListOp } from '../../../../apps/crm/ui/events/resources/grants.resource.js';
+import { grantsListOp } from '../../../../apps/crm/ui/events/resources/grants.resource.js';
 import { relatedEntitiesOp } from '../../../../apps/crm/ui/events/resources/graph.resource.js';
 import crmRu from '../../../../core/i18n/translations/ru/crm.json' with { type: 'json' };
 import '../../../../apps/crm/ui/components/entity-card.js';
@@ -44,7 +44,7 @@ const FACTORIES = [
     attachmentsListOp,
     attachmentUploadOp,
     attachmentDeleteOp,
-    entityGrantsListOp,
+    grantsListOp,
     relatedEntitiesOp,
 ];
 

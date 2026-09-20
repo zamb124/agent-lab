@@ -1,6 +1,6 @@
 /**
  * platform-work-item-board — канбан по WorkItem.state (open / in_progress / blocked / done).
- * DnD между колонками → platform/work_item_move { work_item_id, state }.
+ * DnD между колонками → worktracker/work_item_move { work_item_id, state }.
  */
 
 import { html, css } from '../lit-shim.js';
@@ -113,7 +113,7 @@ export class PlatformWorkItemBoard extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
-        this._moveOp = this.useOp('platform/work_item_move');
+        this._moveOp = this.useOp('worktracker/work_item_move');
     }
 
     updated(changed) {

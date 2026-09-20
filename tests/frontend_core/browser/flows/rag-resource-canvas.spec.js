@@ -11,29 +11,20 @@ import { registerFactory } from '@platform/lib/events/factory-registry.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
 import { codeExecuteOp } from '../../../../apps/flows/ui/events/resources/code.resource.js';
 import { editorResource } from '../../../../apps/flows/ui/events/resources/editor.resource.js';
-import {
-    resourcesBundleResource,
-    resourceUpdateOp,
-} from '../../../../apps/flows/ui/events/resources/resources-bundle.resource.js';
+import { resourcesBundleResource } from '../../../../apps/flows/ui/events/resources/resources-bundle.resource.js';
 import {
     exceptionAbsorbAllowNamesOp,
     executionLimitsOp,
 } from '../../../../apps/flows/ui/events/resources/metadata.resource.js';
+import { namespacesResource } from '../../../../core/frontend/static/lib/events/resources/rag-namespaces.resource.js';
 import {
-    flowsRagNamespacesListOp,
-    flowsRagNamespacesCreateOp,
-    flowsRagSearchDefaultsOp,
-} from '../../../../apps/flows/ui/events/resources/rag-namespaces.resource.js';
-import {
-    flowsRagDocumentsOp,
-    flowsRagDocumentUploadOp,
-    flowsRagDocumentStatusOp,
-    flowsRagDocumentRemoveOp,
-} from '../../../../apps/flows/ui/events/resources/rag-documents.resource.js';
-import {
-    flowsRagSearchOp,
-    flowsRagNodeTestSlice,
-} from '../../../../apps/flows/ui/events/resources/rag-search.resource.js';
+    documentsResource,
+    documentUploadOp,
+    documentRemoveOp,
+} from '../../../../core/frontend/static/lib/events/resources/rag-documents.resource.js';
+import { documentStatusResource } from '../../../../core/frontend/static/lib/events/resources/rag-document-status.resource.js';
+import { searchOp, searchDefaultsOp } from '../../../../core/frontend/static/lib/events/resources/rag-search.resource.js';
+import { flowsRagNodeTestSlice } from '../../../../apps/flows/ui/events/resources/rag-node-test.resource.js';
 import {
     clearNodeTestRunHandlersForTests,
     registerNodeTestRunHandler,
@@ -46,14 +37,13 @@ import '../../../../apps/flows/ui/components/resources/flows-rag-resource-editor
 import '../../../../apps/flows/ui/components/nodes/flows-resource-node-editor.js';
 
 const RAG_FACTORIES = [
-    flowsRagNamespacesListOp,
-    flowsRagNamespacesCreateOp,
-    flowsRagSearchDefaultsOp,
-    flowsRagDocumentsOp,
-    flowsRagDocumentUploadOp,
-    flowsRagDocumentStatusOp,
-    flowsRagDocumentRemoveOp,
-    flowsRagSearchOp,
+    namespacesResource,
+    searchDefaultsOp,
+    documentsResource,
+    documentUploadOp,
+    documentStatusResource,
+    documentRemoveOp,
+    searchOp,
     flowsRagNodeTestSlice,
 ];
 
@@ -61,7 +51,6 @@ const NODE_FACTORIES = [
     ...RAG_FACTORIES,
     editorResource,
     resourcesBundleResource,
-    resourceUpdateOp,
     platformFileCreateOp,
     codeExecuteOp,
     exceptionAbsorbAllowNamesOp,
@@ -110,7 +99,7 @@ function ragResource(config) {
 
 async function settleDocuments(el, items) {
     const bus = getPlatformBus();
-    bus.dispatch(flowsRagDocumentsOp.events.SUCCEEDED, {
+    bus.dispatch(documentsResource.events.SUCCEEDED, {
         result: { items, total: items.length, limit: 100, offset: 0 },
     });
     await elementUpdated(el);
@@ -262,13 +251,8 @@ describe('flows-rag-resource-editor on canvas', () => {
         expect(getPlatformBus().getState().flowsRagNodeTest.queryByNodeId.rag_node).to.equal('return window');
 
         const bus = getPlatformBus();
-        bus.dispatch(flowsRagSearchOp.events.REQUESTED, {
-            nodeId: 'rag_node',
-            namespaceId: 'kb-support',
-            query: 'return window',
-            limit: 5,
-        });
-        bus.dispatch(flowsRagSearchOp.events.SUCCEEDED, {
+        bus.dispatch('flows/rag_node_test/search_bind', { nodeId: 'rag_node' });
+        bus.dispatch(searchOp.events.SUCCEEDED, {
             result: {
                 results: [
                     {
@@ -300,13 +284,8 @@ describe('flows-rag-resource-editor on canvas', () => {
         `);
         await elementUpdated(el);
         const bus = getPlatformBus();
-        bus.dispatch(flowsRagSearchOp.events.REQUESTED, {
-            nodeId: 'rag_node',
-            namespaceId: 'kb-support',
-            query: 'zzz',
-            limit: 5,
-        });
-        bus.dispatch(flowsRagSearchOp.events.SUCCEEDED, { result: { results: [] } });
+        bus.dispatch('flows/rag_node_test/search_bind', { nodeId: 'rag_node' });
+        bus.dispatch(searchOp.events.SUCCEEDED, { result: { results: [] } });
         await elementUpdated(el);
         expect(el.shadowRoot.textContent).to.include(flowsEn.rag_resource_editor.test_results_empty);
     });
@@ -473,7 +452,7 @@ describe('flows-resource-node-editor RAG on canvas', () => {
                 duration: null,
             },
         ]);
-        expect(getPlatformBus().getState().flowsRagSearch.lastNodeId).to.equal(null);
-        expect(getPlatformBus().getState().flowsRagSearch.busy).to.equal(false);
+        expect(getPlatformBus().getState().flowsRagNodeTest.lastNodeId).to.equal(null);
+        expect(getPlatformBus().getState().ragSearch.busy).to.equal(false);
     });
 });

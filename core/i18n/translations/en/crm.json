@@ -958,7 +958,8 @@
         "action_open": "Open",
         "action_settings": "Settings",
         "empty_message": "No namespaces yet. Create the first one.",
-        "empty_description": "No description"
+        "empty_description": "No description",
+        "default": "default"
     },
     "namespace_note_defaults": {
         "section_title": "Notes: note voice",

@@ -2,10 +2,9 @@
  * SyncApp — PlatformApp для сервиса Sync.
  *
  * Все доменные операции описаны фабриками в `apps/sync/ui/events/resources/*.resource.js`.
- * Транспорт операций — `transport: 'ws'` (single-socket request-reply через
- * `/sync/api/ws/notifications`), REST — байт-в-байт зеркало для CLI / SDK /
- * гостевых сценариев. Push-события приходят через `platform:events` и
- * автоматически диспатчатся в bus core ws-effect'ом.
+ * Транспорт операций — `transport: 'ws'` (Centrifugo `/realtime`,
+ * кадр PlatformEvent), REST — байт-в-байт зеркало для CLI / SDK /
+ * гостевых сценариев. Push — тот же PlatformEvent через Centrifugo.
  *
  * Маршруты задаются через `createRouterEffect`; рендер страниц — switch по
  * `routeKey` в `renderRoute`.

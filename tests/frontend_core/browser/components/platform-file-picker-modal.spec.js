@@ -33,8 +33,14 @@ const documentsOp = createAsyncOp({
     silent: true,
     restMirror: { method: 'GET', path: '/documents/api/v1/documents', service: 'office' },
     request: async ({ payload }) => {
-        if (!payload || typeof payload.catalog_id !== 'string') {
-            throw new Error('test/picker_documents: catalog_id required');
+        if (
+            !payload
+            || !Array.isArray(payload.catalog_ids)
+            || payload.catalog_ids.length === 0
+            || typeof payload.catalog_ids[0] !== 'string'
+            || payload.catalog_ids[0].length === 0
+        ) {
+            throw new Error('test/picker_documents: catalog_ids required');
         }
         return {
             items: [

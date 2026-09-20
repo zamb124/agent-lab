@@ -14,7 +14,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { resolveDisplayName } from '../_helpers/sync-id-resolvers.js';
 import { resolveAvatarImageSrc } from '@platform/lib/utils/placeholder-avatar.js';
 import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
-import { getPeerPresenceSubtitle } from '../_helpers/sync-presence.js';
+import { getPeerPresenceSubtitle, isOnline } from '../_helpers/sync-presence.js';
 import '@platform/lib/components/platform-icon.js';
 import { SYNC_CHANNELS_CREATED } from '../events/types.js';
 
@@ -119,7 +119,6 @@ export class SyncDirectMemberRow extends PlatformElement {
         this._avatarMemberSig = '';
         this._pendingOpenDmPeerId = null;
         this._channels = this.useResource('sync/channels');
-        this._presenceSel = this.select((s) => s.syncPresence);
         this.useEvent(SYNC_CHANNELS_CREATED, (e) => this._onChannelsCreated(e));
         this.useEvent('sync/channels/create_failed', () => {
             this._pendingOpenDmPeerId = null;
@@ -198,15 +197,12 @@ export class SyncDirectMemberRow extends PlatformElement {
 
     render() {
         if (!this.member) return html``;
-        const presence = this._presenceSel.value;
-        const presenceByUserId = presence && presence.presenceByUserId ? presence.presenceByUserId : null;
-        const userPresence = presenceByUserId ? presenceByUserId[this.member.user_id] : null;
-        const subtitle = getPeerPresenceSubtitle(presenceByUserId, this.member.user_id, (k, v) => this.t(k, v));
+        const subtitle = getPeerPresenceSubtitle(this.member, (k, v) => this.t(k, v));
         return html`
             <div class="row-inner" @click=${this._onClick}>
                 <span style="position: relative;">
                     ${this._renderAvatar()}
-                    ${userPresence && userPresence.online
+                    ${isOnline(this.member)
                         ? html`<span class="presence-dot" title=${this.t('sidebar.row_online')}></span>`
                         : ''}
                 </span>

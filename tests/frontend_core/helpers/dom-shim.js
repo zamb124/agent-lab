@@ -58,6 +58,7 @@ export function installDomShim(opts = {}) {
         documentElement,
         head,
         body,
+        cookie: '',
         querySelector(sel) {
             if (sel === 'meta[name="theme-color"]') return themeColorMeta;
             if (sel === 'meta[name="viewport"]') {
@@ -80,7 +81,7 @@ export function installDomShim(opts = {}) {
     const eventListeners = new Map();
     const window = {
         document,
-        location: { protocol: 'http:', host: 'localhost', search: '', pathname: '/', href: 'http://localhost/' },
+        location: { protocol: 'http:', host: 'localhost', hostname: 'localhost', search: '', pathname: '/', href: 'http://localhost/' },
         navigator: { onLine: true, userAgent: 'node-test', standalone: false, serviceWorker: null },
         matchMedia,
         addEventListener(name, fn) {
