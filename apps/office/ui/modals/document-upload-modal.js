@@ -215,7 +215,7 @@ export class OfficeDocumentUploadModal extends PlatformFormModal {
                 && !openedEditor;
             const result = await this._upload.run({
                 file: entry.file,
-                catalogId: this.catalogId,
+                catalog_id: this.catalogId,
                 openAfterUpload,
                 localId: entry.localId,
                 suppressSuccessToast: pending.length > 1,

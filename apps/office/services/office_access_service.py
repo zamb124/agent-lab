@@ -6,8 +6,6 @@ import hashlib
 from dataclasses import dataclass
 from typing import Literal
 
-from fastapi import Request
-
 from apps.office.authz.tuples import (
     office_catalog_company_link,
     office_catalog_company_viewer_tuple,
@@ -71,8 +69,10 @@ class OfficeAccessService:
         return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
     @staticmethod
-    def build_public_page_url(request: Request, raw_token: str) -> str:
-        base = str(request.base_url).rstrip("/")
+    def build_public_page_url(origin: str, raw_token: str) -> str:
+        base = origin.rstrip("/")
+        if not base:
+            raise ValueError("origin обязателен для публичной ссылки")
         return f"{base}/documents/p/{raw_token}"
 
     def _catalog_obj(self, catalog_id: str) -> AuthzObject:
@@ -312,7 +312,6 @@ class OfficeAccessService:
         catalog_id: str,
         company_id: str,
         namespace: str,
-        _request: Request,
     ) -> OfficeResourceAccessResponse:
         catalog = await self._catalog_repository.get(catalog_id, company_id, namespace)
         if catalog is None:
@@ -331,7 +330,6 @@ class OfficeAccessService:
     async def get_binding_access(
         self,
         binding: OfficeDocumentBinding,
-        _request: Request,
     ) -> OfficeResourceAccessResponse:
         members = await self._list_member_items(self._document_obj(binding.file_id))
         company_visible = await self.catalog_is_company_visible(
@@ -379,7 +377,7 @@ class OfficeAccessService:
         company_id: str,
         namespace: str,
         body: OfficeResourceAccessPatchRequest,
-        request: Request,
+        origin: str,
     ) -> tuple[OfficeResourceAccessResponse, str | None]:
         catalog = await self._catalog_repository.get(catalog_id, company_id, namespace)
         if catalog is None:
@@ -429,10 +427,10 @@ class OfficeAccessService:
                     ],
                     owner_user_id=owner_user_id,
                 )
-        response = await self.get_catalog_access(catalog_id, company_id, namespace, request)
+        response = await self.get_catalog_access(catalog_id, company_id, namespace)
         if raw_token is not None:
             response = response.model_copy(
-                update={"public_url": self.build_public_page_url(request, raw_token)},
+                update={"public_url": self.build_public_page_url(origin, raw_token)},
             )
         return response, raw_token
 
@@ -440,7 +438,7 @@ class OfficeAccessService:
         self,
         binding: OfficeDocumentBinding,
         body: OfficeResourceAccessPatchRequest,
-        request: Request,
+        origin: str,
     ) -> tuple[OfficeResourceAccessResponse, str | None]:
         raw_token: str | None = None
         link_enabled = binding.link_enabled
@@ -471,10 +469,10 @@ class OfficeAccessService:
                 members=[(row.user_id, _member_to_relation(row.relation)) for row in body.members],
                 owner_user_id=binding.created_by_user_id,
             )
-        response = await self.get_binding_access(updated_binding, request)
+        response = await self.get_binding_access(updated_binding)
         if raw_token is not None:
             response = response.model_copy(
-                update={"public_url": self.build_public_page_url(request, raw_token)},
+                update={"public_url": self.build_public_page_url(origin, raw_token)},
             )
         return response, raw_token
 
@@ -517,7 +515,7 @@ class OfficeAccessService:
         catalog_id: str,
         company_id: str,
         namespace: str,
-        request: Request,
+        origin: str,
     ) -> OfficeResourceAccessRotateLinkResponse:
         catalog = await self._catalog_repository.get(catalog_id, company_id, namespace)
         if catalog is None:
@@ -536,13 +534,13 @@ class OfficeAccessService:
         if updated is None:
             raise ValueError("Каталог не найден")
         return OfficeResourceAccessRotateLinkResponse(
-            public_url=self.build_public_page_url(request, raw_token),
+            public_url=self.build_public_page_url(origin, raw_token),
         )
 
     async def rotate_binding_link(
         self,
         binding: OfficeDocumentBinding,
-        request: Request,
+        origin: str,
     ) -> OfficeResourceAccessRotateLinkResponse:
         if not binding.link_enabled:
             raise ValueError("Публичная ссылка не включена")
@@ -556,7 +554,7 @@ class OfficeAccessService:
         if updated is None:
             raise ValueError("Привязка не найдена")
         return OfficeResourceAccessRotateLinkResponse(
-            public_url=self.build_public_page_url(request, raw_token),
+            public_url=self.build_public_page_url(origin, raw_token),
         )
 
     async def build_public_resolve(self, target: PublicLinkTarget) -> OfficePublicResolveResponse:

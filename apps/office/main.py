@@ -5,14 +5,15 @@
 import importlib
 from pathlib import Path
 
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from apps.office.api.bff import router as bff_router
 from apps.office.config import OfficeSettings, get_office_settings
-from apps.office.container import get_office_container
+from apps.office.container import OfficeContainer, get_office_container
 from apps.office.dependencies import ContainerDep
+from apps.office.realtime.command_router import register_office_ws_commands
 from core.app import create_service_app
 from core.app.health_payload import build_health_payload
 from core.logging import get_logger
@@ -21,6 +22,12 @@ from core.logging import get_logger
 _ = importlib.import_module("apps.office.events")
 
 logger = get_logger(__name__)
+
+
+async def on_startup(app: FastAPI, container: OfficeContainer, settings: OfficeSettings) -> None:
+    _ = app, container, settings
+    register_office_ws_commands()
+    logger.info("Documents: command-router op_* зарегистрирован")
 
 
 def _api_routers():
@@ -32,6 +39,7 @@ app = create_service_app(
     get_container=get_office_container,
     services_spa_index=Path(__file__).parent / "ui" / "index.html",
     routers=_api_routers(),
+    on_startup=on_startup,
     title="Documents",
     description="Документы Office через OnlyOffice Document Server",
     api_version="v1",

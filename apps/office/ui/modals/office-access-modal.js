@@ -196,8 +196,8 @@ export class OfficeAccessModal extends PlatformFormModal {
     async _loadAccess() {
         this._loading = true;
         const payload = this.resourceKind === 'binding'
-            ? { fileId: this.resourceId }
-            : { catalogId: this.resourceId };
+            ? { file_id: this.resourceId }
+            : { catalog_id: this.resourceId };
         const data = await this._accessGet.run(payload);
         if (data) {
             this._companyVisible = data.company_visible === true;
@@ -268,10 +268,19 @@ export class OfficeAccessModal extends PlatformFormModal {
         }));
     }
 
+    _companyMemberItems() {
+        const result = this._companyMembers.lastResult;
+        if (result == null) {
+            return [];
+        }
+        if (typeof result !== 'object' || !Array.isArray(result.items)) {
+            throw new Error('office.access: company_members.lastResult.items required');
+        }
+        return result.items;
+    }
+
     _filteredCandidates() {
-        const company = Array.isArray(this._companyMembers.lastResult)
-            ? this._companyMembers.lastResult
-            : [];
+        const company = this._companyMemberItems();
         const q = this._query.trim().toLowerCase();
         return company.filter((item) => {
             if (typeof item.user_id !== 'string') return false;
@@ -299,8 +308,8 @@ export class OfficeAccessModal extends PlatformFormModal {
 
     async _rotateLink() {
         const payload = this.resourceKind === 'binding'
-            ? { fileId: this.resourceId }
-            : { catalogId: this.resourceId };
+            ? { file_id: this.resourceId, origin: window.location.origin }
+            : { catalog_id: this.resourceId, origin: window.location.origin };
         const result = await this._accessRotate.run(payload);
         if (!result || typeof result.public_url !== 'string' || result.public_url.length === 0) {
             return;
@@ -313,16 +322,18 @@ export class OfficeAccessModal extends PlatformFormModal {
     async _submit() {
         const patchPayload = this.resourceKind === 'binding'
             ? {
-                fileId: this.resourceId,
-                linkEnabled: this._linkEnabled,
-                linkPermission: this._linkPermission,
+                file_id: this.resourceId,
+                origin: window.location.origin,
+                link_enabled: this._linkEnabled,
+                link_permission: this._linkPermission,
                 members: this._buildMembersPayload(),
             }
             : {
-                catalogId: this.resourceId,
-                companyVisible: this._companyVisible,
-                linkEnabled: this._linkEnabled,
-                linkPermission: this._linkPermission,
+                catalog_id: this.resourceId,
+                origin: window.location.origin,
+                company_visible: this._companyVisible,
+                link_enabled: this._linkEnabled,
+                link_permission: this._linkPermission,
                 members: this._companyVisible ? null : this._buildMembersPayload(),
             };
         const result = await this._accessPatch.run(patchPayload);

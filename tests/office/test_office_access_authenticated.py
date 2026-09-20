@@ -53,7 +53,7 @@ async def test_catalog_access_non_owner_get_forbidden(
     )
     assert response.status_code == 403
     body = response.json()
-    assert body.get("code") == "authz_denied"
+    assert body["error_code"] == "forbidden"
 
 
 @pytest.mark.asyncio
@@ -69,7 +69,7 @@ async def test_catalog_access_missing_catalog_returns_forbidden_for_non_owner(
         headers=auth_headers_system,
     )
     assert response.status_code == 403
-    assert response.json().get("code") == "authz_denied"
+    assert response.json()["error_code"] == "forbidden"
 
 
 @pytest.mark.asyncio
@@ -845,7 +845,7 @@ async def test_catalog_editor_member_can_view_but_not_share_or_admin(
         headers=auth_headers_system_user2,
     )
     assert share.status_code == 403
-    assert share.json().get("code") == "authz_denied"
+    assert share.json()["error_code"] == "forbidden"
 
     rag = await office_client.post(
         f"/documents/api/v1/catalogs/{catalog_id}/rag-index/enable",

@@ -1,27 +1,16 @@
 /**
- * OnlyOffice Integration Status — readonly статус наличия конфигурации DS,
- * JWT secret, callback URL.
+ * OnlyOffice Integration Status — readonly статус конфигурации DS.
  *
- * Бэкенд: `GET /documents/api/v1/integration/status` →
- * `OfficeIntegrationStatusResponse { configured, document_server_public_url,
- * jwt_secret_present, callback_public_base_url, ... }`.
- *
- * Используется баннером `<office-integration-banner>` для показа подсказки
- * «integration not configured» и в режиме editor для предупреждения, что
- * сервер документов не настроен.
+ * GET /documents/api/v1/integration/status → OfficeIntegrationStatusResponse.
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
-import { nsHeader } from './_namespace-header.js';
 
 export const integrationStatusOp = createAsyncOp({
     name: 'office/integration_status',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'office/integration/status_requested',
     restMirror: { method: 'GET', path: '/documents/api/v1/integration/status' },
-    request: ({ ctx }) => httpRequest({
-        method: 'GET',
-        url: '/documents/api/v1/integration/status',
-        headers: nsHeader(ctx),
-    }),
 });

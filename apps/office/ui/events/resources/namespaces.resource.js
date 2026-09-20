@@ -9,8 +9,7 @@
  *   GET /documents/api/v1/namespaces/templates → OffsetPage[OfficeNamespaceTemplateItem]
  *
  * idField — `name` (Namespace.name уникален в пределах company_id).
- * Заголовок `X-Platform-Namespace` подмешивается через `nsHeader(ctx)` —
- * см. `_namespace-header.js`.
+ * Namespace списка каталогов — `PlatformEvent.meta.namespace`.
  *
  * `namespaceCreateForm` — отдельная фабрика формы для модалки
  * `office.namespace_create`.
@@ -21,8 +20,6 @@ import {
     createAsyncOp,
     createForm,
 } from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
-import { nsHeader } from './_namespace-header.js';
 
 const NAMESPACE_NAME_PATTERN = /^[a-z][a-z0-9_]{0,62}[a-z0-9]$|^[a-z]$/;
 
@@ -31,8 +28,9 @@ export const namespacesResource = createResourceCollection({
     baseUrl: '/documents/api/v1/namespaces',
     idField: 'name',
     operations: ['list', 'create'],
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
     listQuery: () => ({ limit: 200, offset: 0 }),
-    requestHeaders: ({ ctx }) => nsHeader(ctx),
     restMirror: {
         list:   { method: 'GET',  path: '/documents/api/v1/namespaces' },
         create: { method: 'POST', path: '/documents/api/v1/namespaces' },
@@ -46,13 +44,10 @@ export const namespacesResource = createResourceCollection({
 export const namespaceTemplatesOp = createAsyncOp({
     name: 'office/namespace_templates',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'office/namespaces/templates_requested',
     restMirror: { method: 'GET', path: '/documents/api/v1/namespaces/templates' },
-    request: ({ ctx }) => httpRequest({
-        method: 'GET',
-        url: '/documents/api/v1/namespaces/templates',
-        query: { limit: 200, offset: 0 },
-        headers: nsHeader(ctx),
-    }),
 });
 
 export const namespaceCreateForm = createForm({

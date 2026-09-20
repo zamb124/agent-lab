@@ -157,10 +157,6 @@ class OfficeDocumentShareItem(BaseModel):
     created_at: datetime
 
 
-class OfficeDocumentShareListResponse(BaseModel):
-    items: list[OfficeDocumentShareItem]
-
-
 class OfficeDocumentShareResolveResponse(BaseModel):
     file_id: str
     title: str
@@ -183,23 +179,11 @@ class OfficeDocumentRevisionItem(BaseModel):
     created_at: datetime
 
 
-class OfficeDocumentRevisionListResponse(BaseModel):
-    items: list[OfficeDocumentRevisionItem]
-
-
 class OfficeDocumentEventItem(BaseModel):
     event_id: str
     event_type: str
     user_id: str
     created_at: datetime
-
-
-class OfficeDocumentEventListResponse(BaseModel):
-    items: list[OfficeDocumentEventItem]
-
-
-class OfficeDocumentSearchResponse(BaseModel):
-    items: list[OfficeDocumentItem]
 
 
 class OfficeDocumentAiSummaryResponse(BaseModel):

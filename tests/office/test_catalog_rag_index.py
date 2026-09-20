@@ -432,7 +432,7 @@ async def test_non_owner_cannot_manage_rag_index(
     )
     assert enable_response.status_code == 403
     body = enable_response.json()
-    assert body.get("code") == "authz_denied" or "can_admin" in str(body.get("detail", "")).lower()
+    assert body["error_code"] == "forbidden"
 
 
 @pytest.mark.asyncio

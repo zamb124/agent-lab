@@ -330,7 +330,7 @@ export class OfficeSidebar extends PlatformElement {
         if (typeof fileId !== 'string' || typeof catalogId !== 'string') {
             return;
         }
-        this._move.run({ fileId, catalogId });
+        this._move.run({ file_id: fileId, catalog_id: catalogId });
     }
 
     async _onCatalogAction(e) {

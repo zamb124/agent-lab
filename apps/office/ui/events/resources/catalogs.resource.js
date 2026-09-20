@@ -8,7 +8,7 @@
  *   PATCH  /{catalog_id}           → OfficeCatalogDetailResponse (title? / company_visible?)
  *   DELETE /{catalog_id}           → 204
  *
- * idField — `catalog_id`. Все запросы несут заголовок `X-Platform-Namespace`.
+ * idField — `catalog_id`. Namespace — `PlatformEvent.meta.namespace`.
  *
  * `catalogCreateForm` / `catalogEditForm` — формы для модалок
  * `office.catalog_create` и `office.catalog_edit`.
@@ -18,15 +18,15 @@ import {
     createResourceCollection,
     createForm,
 } from '@platform/lib/events/index.js';
-import { nsHeader } from './_namespace-header.js';
 
 export const catalogsResource = createResourceCollection({
     name: 'office/catalogs',
     baseUrl: '/documents/api/v1/catalogs',
     idField: 'catalog_id',
     operations: ['list', 'get', 'create', 'update', 'remove'],
-    transport: 'http',
-    requestHeaders: ({ ctx }) => nsHeader(ctx),
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    listQuery: () => ({}),
     restMirror: {
         list:   { method: 'GET',    path: '/documents/api/v1/catalogs' },
         get:    { method: 'GET',    path: '/documents/api/v1/catalogs/:catalog_id' },

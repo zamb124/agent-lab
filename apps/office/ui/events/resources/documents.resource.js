@@ -8,7 +8,7 @@
  *   PATCH  /documents/{file_id}              → OfficeDocumentRenameResponse (JSON: title)
  *   DELETE /documents/{file_id}              → 204
  *
- * `documentsOp` — list по `catalogIds` (sub-resource), slice хранит
+ * `documentsOp` — list по `catalog_ids` (sub-resource), slice хранит
  * `items` + `loadedCatalogIds` + `activeCatalogId` + `filterCatalogIds`.
  * `activeCatalogId === null` в режиме `catalog` — корень namespace (корневые
  * каталоги в главной панели, без GET /documents). Файл без каталога запрещён.
@@ -58,7 +58,7 @@ function _writeStoredIds(storageKey, ids) {
 
 function _normalizeCatalogIds(raw) {
     if (!Array.isArray(raw)) {
-        throw new Error('documents: payload.catalogIds (array) required');
+        throw new Error('documents: payload.catalog_ids (array) required');
     }
     const ids = [];
     const seen = new Set();
@@ -70,25 +70,28 @@ function _normalizeCatalogIds(raw) {
         ids.push(v);
     }
     if (ids.length === 0) {
-        throw new Error('documents: payload.catalogIds must contain at least one non-empty id');
+        throw new Error('documents: payload.catalog_ids must contain at least one non-empty id');
     }
     return ids;
 }
 
-function _buildDocumentsQuery(ids, payload) {
-    const parts = ids.map((id) => `catalog_ids=${encodeURIComponent(id)}`);
-    if (payload && typeof payload.q === 'string' && payload.q.trim().length > 0) {
-        parts.push(`q=${encodeURIComponent(payload.q.trim())}`);
+function _reloadVisibleDocuments(ctx, event) {
+    const docState = ctx.getState().officeDocuments;
+    const filterIds = Array.isArray(docState.filterCatalogIds)
+        ? docState.filterCatalogIds.filter((id) => typeof id === 'string' && id.length > 0)
+        : [];
+    const activeId = typeof docState.activeCatalogId === 'string' && docState.activeCatalogId.length > 0
+        ? docState.activeCatalogId
+        : '';
+    const ids = filterIds.length > 0 ? filterIds : (activeId.length > 0 ? [activeId] : []);
+    if (ids.length === 0) {
+        return;
     }
-    const sortKey = payload && typeof payload.sortKey === 'string' ? payload.sortKey : '';
-    const sortDir = payload && typeof payload.sortDir === 'string' ? payload.sortDir : '';
-    if (sortKey.length > 0) {
-        parts.push(`sort=${encodeURIComponent(sortKey)}`);
-    }
-    if (sortDir === 'asc' || sortDir === 'desc') {
-        parts.push(`order=${encodeURIComponent(sortDir)}`);
-    }
-    return parts.join('&');
+    ctx.dispatch(
+        documentsOp.events.REQUESTED,
+        buildDocumentsListPayload(docState, ids),
+        { causation_id: event.id, source: 'local' },
+    );
 }
 
 const _DOCUMENT_ITEM_COMPARE_KEYS = [
@@ -146,30 +149,22 @@ function _mergeDocumentItems(prevItems, nextItems) {
 
 export function buildDocumentsListPayload(docState, catalogIds) {
     const ids = _normalizeCatalogIds(catalogIds);
+    const query = typeof docState.searchQuery === 'string' ? docState.searchQuery.trim() : '';
     return {
-        catalogIds: ids,
-        q: docState.searchQuery,
-        sortKey: docState.sortKey,
-        sortDir: docState.sortDir,
+        catalog_ids: ids,
+        q: query.length > 0 ? query : null,
+        sort: docState.sortKey,
+        order: docState.sortDir,
     };
 }
 
 export const documentsOp = createAsyncOp({
     name: 'office/documents',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'office/documents/list_requested',
     restMirror: { method: 'GET', path: '/documents/api/v1/documents' },
-    request: ({ payload, ctx }) => {
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('office/documents: payload required');
-        }
-        const ids = _normalizeCatalogIds(payload.catalogIds);
-        const qs = _buildDocumentsQuery(ids, payload);
-        return httpRequest({
-            method: 'GET',
-            url: `/documents/api/v1/documents?${qs}`,
-            headers: nsHeader(ctx),
-        });
-    },
     extraInitial: {
         items: [],
         loadedCatalogIds: [],
@@ -232,7 +227,10 @@ export const documentsOp = createAsyncOp({
     },
     extraReducer: (state, event, events) => {
         if (event.type === events.REQUESTED) {
-            const ids = _normalizeCatalogIds(event.payload.catalogIds);
+            if (!event.payload || typeof event.payload !== 'object') {
+                throw new Error('office/documents: REQUESTED.payload required');
+            }
+            const ids = _normalizeCatalogIds(event.payload.catalog_ids);
             // Soft-refresh того же scope: не обнуляем items (иначе мигает вся таблица).
             if (_sameCatalogIds(ids, state.loadedCatalogIds) && state.items.length > 0) {
                 return { ...state, loadedCatalogIds: ids };
@@ -541,51 +539,12 @@ export const documentCreateEmptyOp = createAsyncOp({
     name: 'office/document_create_empty',
     successToastKey: 'documents:toast.document_created',
     errorToastKey: 'documents:toast.document_create_failed',
+    transport: 'ws',
+    wsTimeoutMs: 12_000,
+    commandType: 'office/documents/empty_requested',
     restMirror: { method: 'POST', path: '/documents/api/v1/documents/empty' },
-    request: ({ payload, ctx }) => {
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('office/document_create_empty: payload required');
-        }
-        if (typeof payload.title !== 'string' || payload.title.length === 0) {
-            throw new Error('office/document_create_empty: payload.title required');
-        }
-        if (typeof payload.documentType !== 'string') {
-            throw new Error('office/document_create_empty: payload.documentType required');
-        }
-        if (typeof payload.catalogId !== 'string' || payload.catalogId.length === 0) {
-            throw new Error('office/document_create_empty: payload.catalogId required');
-        }
-        const body = {
-            title: payload.title,
-            document_type: payload.documentType,
-            catalog_id: payload.catalogId,
-        };
-        if (payload.documentType === 'cell' && typeof payload.spreadsheetFormat === 'string') {
-            body.spreadsheet_format = payload.spreadsheetFormat;
-        }
-        return httpRequest({
-            method: 'POST',
-            url: '/documents/api/v1/documents/empty',
-            body,
-            headers: nsHeader(ctx),
-        });
-    },
-    onSuccess: (ctx, result, event) => {
-        if (result && typeof result.file_id === 'string') {
-            if (event.payload.openAfterCreate === true) {
-                ctx.dispatch(
-                    CoreEvents.ROUTER_NAVIGATE_REQUESTED,
-                    { routeKey: 'document_editor', params: { fileId: result.file_id } },
-                    { causation_id: event.id, source: 'local' },
-                );
-            }
-        }
-        const docState = ctx.getState().officeDocuments;
-        ctx.dispatch(
-            documentsOp.events.REQUESTED,
-            buildDocumentsListPayload(docState, [event.payload.catalogId]),
-            { causation_id: event.id, source: 'local' },
-        );
+    onSuccess: (ctx, _result, event) => {
+        _reloadVisibleDocuments(ctx, event);
     },
 });
 
@@ -601,8 +560,8 @@ export const documentUploadOp = createAsyncOp({
         if (!(payload.file instanceof File) && !(payload.file instanceof Blob)) {
             throw new Error('office/document_upload: payload.file (File|Blob) required');
         }
-        if (typeof payload.catalogId !== 'string' || payload.catalogId.length === 0) {
-            throw new Error('office/document_upload: payload.catalogId required');
+        if (typeof payload.catalog_id !== 'string' || payload.catalog_id.length === 0) {
+            throw new Error('office/document_upload: payload.catalog_id required');
         }
         const nsHeaders = nsHeader(ctx);
         const namespaceId = nsHeaders['X-Platform-Namespace'];
@@ -624,7 +583,7 @@ export const documentUploadOp = createAsyncOp({
         }
         const body = {
             file_id: uploaded.file_id,
-            catalog_id: payload.catalogId,
+            catalog_id: payload.catalog_id,
         };
         if (typeof payload.title === 'string' && payload.title.length > 0) {
             body.title = payload.title;
@@ -664,7 +623,7 @@ export const documentUploadOp = createAsyncOp({
         const docState = ctx.getState().officeDocuments;
         ctx.dispatch(
             documentsOp.events.REQUESTED,
-            buildDocumentsListPayload(docState, [event.payload.catalogId]),
+            buildDocumentsListPayload(docState, [event.payload.catalog_id]),
             { causation_id: event.id, source: 'local' },
         );
     },
@@ -684,62 +643,32 @@ export const documentRenameOp = createAsyncOp({
     name: 'office/document_rename',
     successToastKey: 'documents:toast.document_renamed',
     errorToastKey: 'documents:toast.document_rename_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'office/documents/rename_requested',
     restMirror: { method: 'PATCH', path: '/documents/api/v1/documents/:file_id' },
-    request: ({ payload, ctx }) => {
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('office/document_rename: payload required');
-        }
-        if (typeof payload.fileId !== 'string' || payload.fileId.length === 0) {
-            throw new Error('office/document_rename: payload.fileId required');
-        }
-        if (typeof payload.title !== 'string' || payload.title.length === 0) {
-            throw new Error('office/document_rename: payload.title required');
-        }
-        return httpRequest({
-            method: 'PATCH',
-            url: `/documents/api/v1/documents/${encodeURIComponent(payload.fileId)}`,
-            body: { title: payload.title },
-            headers: nsHeader(ctx),
-        });
-    },
     onSuccess: (ctx, _result, event) => {
-        const docState = ctx.getState().officeDocuments;
-        if (Array.isArray(event.payload.catalogIds) && event.payload.catalogIds.length > 0) {
-            ctx.dispatch(
-                documentsOp.events.REQUESTED,
-                buildDocumentsListPayload(docState, event.payload.catalogIds),
-                { causation_id: event.id, source: 'local' },
-            );
-        }
+        _reloadVisibleDocuments(ctx, event);
     },
 });
 
 export const deletedDocumentsOp = createAsyncOp({
     name: 'office/documents_deleted',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'office/documents/deleted_list_requested',
     restMirror: { method: 'GET', path: '/documents/api/v1/documents/deleted' },
-    request: ({ ctx }) => httpRequest({
-        method: 'GET',
-        url: '/documents/api/v1/documents/deleted',
-        headers: nsHeader(ctx),
-    }),
 });
 
 export const documentRestoreOp = createAsyncOp({
     name: 'office/document_restore',
     successToastKey: 'documents:toast.document_restored',
     errorToastKey: 'documents:toast.document_restore_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'office/documents/restore_requested',
     restMirror: { method: 'POST', path: '/documents/api/v1/documents/:file_id/restore' },
-    request: ({ payload, ctx }) => {
-        if (!payload || typeof payload.fileId !== 'string' || payload.fileId.length === 0) {
-            throw new Error('office/document_restore: payload.fileId required');
-        }
-        return httpRequest({
-            method: 'POST',
-            url: `/documents/api/v1/documents/${encodeURIComponent(payload.fileId)}/restore`,
-            headers: nsHeader(ctx),
-        });
-    },
     onSuccess: (ctx, _result, event) => {
         ctx.dispatch(deletedDocumentsOp.events.REQUESTED, null, { causation_id: event.id, source: 'local' });
     },
@@ -749,17 +678,10 @@ export const documentPermanentDeleteOp = createAsyncOp({
     name: 'office/document_permanent_delete',
     successToastKey: 'documents:toast.document_permanent_deleted',
     errorToastKey: 'documents:toast.document_permanent_delete_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'office/documents/permanent_remove_requested',
     restMirror: { method: 'DELETE', path: '/documents/api/v1/documents/:file_id/permanent' },
-    request: ({ payload, ctx }) => {
-        if (!payload || typeof payload.fileId !== 'string' || payload.fileId.length === 0) {
-            throw new Error('office/document_permanent_delete: payload.fileId required');
-        }
-        return httpRequest({
-            method: 'DELETE',
-            url: `/documents/api/v1/documents/${encodeURIComponent(payload.fileId)}/permanent`,
-            headers: nsHeader(ctx),
-        });
-    },
     onSuccess: (ctx, _result, event) => {
         ctx.dispatch(deletedDocumentsOp.events.REQUESTED, null, { causation_id: event.id, source: 'local' });
     },
@@ -769,32 +691,12 @@ export const documentMoveOp = createAsyncOp({
     name: 'office/document_move',
     successToastKey: 'documents:toast.document_moved',
     errorToastKey: 'documents:toast.document_move_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'office/documents/move_requested',
     restMirror: { method: 'POST', path: '/documents/api/v1/documents/:file_id/move' },
-    request: ({ payload, ctx }) => {
-        if (!payload || typeof payload.fileId !== 'string' || payload.fileId.length === 0) {
-            throw new Error('office/document_move: payload.fileId required');
-        }
-        if (typeof payload.catalogId !== 'string' || payload.catalogId.length === 0) {
-            throw new Error('office/document_move: payload.catalogId required');
-        }
-        return httpRequest({
-            method: 'POST',
-            url: `/documents/api/v1/documents/${encodeURIComponent(payload.fileId)}/move`,
-            body: { catalog_id: payload.catalogId },
-            headers: nsHeader(ctx),
-        });
-    },
     onSuccess: (ctx, _result, event) => {
-        const docState = ctx.getState().officeDocuments;
-        const targetCatalogId = event.payload.catalogId;
-        const reloadCatalogId = typeof docState.activeCatalogId === 'string' && docState.activeCatalogId.length > 0
-            ? docState.activeCatalogId
-            : targetCatalogId;
-        ctx.dispatch(
-            documentsOp.events.REQUESTED,
-            buildDocumentsListPayload(docState, [reloadCatalogId]),
-            { causation_id: event.id, source: 'local' },
-        );
+        _reloadVisibleDocuments(ctx, event);
     },
 });
 
@@ -802,52 +704,22 @@ export const documentShareCreateOp = createAsyncOp({
     name: 'office/document_share_create',
     successToastKey: 'documents:toast.share_created',
     errorToastKey: 'documents:toast.share_create_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'office/documents/share_create_requested',
     restMirror: { method: 'POST', path: '/documents/api/v1/documents/:file_id/shares' },
-    request: ({ payload, ctx }) => {
-        if (!payload || typeof payload.fileId !== 'string' || payload.fileId.length === 0) {
-            throw new Error('office/document_share_create: payload.fileId required');
-        }
-        if (payload.permission !== 'viewer' && payload.permission !== 'editor') {
-            throw new Error('office/document_share_create: payload.permission must be viewer|editor');
-        }
-        const permission = payload.permission;
-        const expiresInHours = typeof payload.expiresInHours === 'number' ? payload.expiresInHours : null;
-        return httpRequest({
-            method: 'POST',
-            url: `/documents/api/v1/documents/${encodeURIComponent(payload.fileId)}/shares`,
-            body: { permission, expires_in_hours: expiresInHours },
-            headers: nsHeader(ctx),
-        });
-    },
 });
 
 export const documentRemoveOp = createAsyncOp({
     name: 'office/document_remove',
     successToastKey: 'documents:toast.document_deleted',
     errorToastKey: 'documents:toast.document_delete_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'office/documents/remove_requested',
     restMirror: { method: 'DELETE', path: '/documents/api/v1/documents/:file_id' },
-    request: ({ payload, ctx }) => {
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('office/document_remove: payload required');
-        }
-        if (typeof payload.fileId !== 'string' || payload.fileId.length === 0) {
-            throw new Error('office/document_remove: payload.fileId required');
-        }
-        return httpRequest({
-            method: 'DELETE',
-            url: `/documents/api/v1/documents/${encodeURIComponent(payload.fileId)}`,
-            headers: nsHeader(ctx),
-        });
-    },
     onSuccess: (ctx, _result, event) => {
-        const docState = ctx.getState().officeDocuments;
-        if (Array.isArray(event.payload.catalogIds) && event.payload.catalogIds.length > 0) {
-            ctx.dispatch(
-                documentsOp.events.REQUESTED,
-                buildDocumentsListPayload(docState, event.payload.catalogIds),
-                { causation_id: event.id, source: 'local' },
-            );
-        }
+        _reloadVisibleDocuments(ctx, event);
     },
 });
 
@@ -861,13 +733,11 @@ export const documentRenameForm = createForm({
             maxLength: 500,
             errorKey: 'form.document_title_required',
         },
-        catalog_ids: {},
     },
-    initial: { file_id: '', title: '', catalog_ids: [] },
+    initial: { file_id: '', title: '' },
     submitEvent: documentRenameOp.events.REQUESTED,
     buildPayload: (draft) => ({
-        fileId: draft.file_id,
+        file_id: draft.file_id,
         title: typeof draft.title === 'string' ? draft.title.trim() : '',
-        catalogIds: Array.isArray(draft.catalog_ids) ? draft.catalog_ids : [],
     }),
 });

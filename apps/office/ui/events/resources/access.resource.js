@@ -1,120 +1,69 @@
 /**
  * Office unified access — company, members, public link для catalog и binding.
+ *
+ * Session-команды идут одним `op_*` через WS RPC и REST-зеркало.
+ * Анонимный public browse остаётся HTTP (гостевой pre-WS контур).
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
-import { nsHeader } from './_namespace-header.js';
 
 export const catalogAccessGetOp = createAsyncOp({
     name: 'office/catalog_access_get',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'office/catalogs/access_requested',
     restMirror: { method: 'GET', path: '/documents/api/v1/catalogs/:catalog_id/access' },
-    request: ({ payload, ctx }) => {
-        if (!payload || typeof payload.catalogId !== 'string' || payload.catalogId.length === 0) {
-            throw new Error('office/catalog_access_get: payload.catalogId required');
-        }
-        return httpRequest({
-            method: 'GET',
-            url: `/documents/api/v1/catalogs/${encodeURIComponent(payload.catalogId)}/access`,
-            headers: nsHeader(ctx),
-        });
-    },
 });
 
 export const catalogAccessPatchOp = createAsyncOp({
     name: 'office/catalog_access_update',
     successToastKey: 'documents:toast.access_updated',
     errorToastKey: 'documents:toast.access_update_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'office/catalogs/access_update_requested',
     restMirror: { method: 'PATCH', path: '/documents/api/v1/catalogs/:catalog_id/access' },
-    request: ({ payload, ctx }) => {
-        if (!payload || typeof payload.catalogId !== 'string' || payload.catalogId.length === 0) {
-            throw new Error('office/catalog_access_update: payload.catalogId required');
-        }
-        return httpRequest({
-            method: 'PATCH',
-            url: `/documents/api/v1/catalogs/${encodeURIComponent(payload.catalogId)}/access`,
-            headers: nsHeader(ctx),
-            body: {
-                company_visible: payload.companyVisible,
-                link_enabled: payload.linkEnabled,
-                link_permission: payload.linkPermission,
-                members: payload.members,
-            },
-        });
-    },
 });
 
 export const catalogAccessRotateLinkOp = createAsyncOp({
     name: 'office/catalog_access_rotate_link',
     successToastKey: 'documents:toast.access_link_rotated',
     errorToastKey: 'documents:toast.access_link_rotate_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'office/catalogs/access_rotate_link_requested',
     restMirror: { method: 'POST', path: '/documents/api/v1/catalogs/:catalog_id/access/link/rotate' },
-    request: ({ payload, ctx }) => {
-        if (!payload || typeof payload.catalogId !== 'string' || payload.catalogId.length === 0) {
-            throw new Error('office/catalog_access_rotate_link: payload.catalogId required');
-        }
-        return httpRequest({
-            method: 'POST',
-            url: `/documents/api/v1/catalogs/${encodeURIComponent(payload.catalogId)}/access/link/rotate`,
-            headers: nsHeader(ctx),
-        });
-    },
 });
 
 export const documentAccessGetOp = createAsyncOp({
     name: 'office/document_access_get',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'office/documents/access_requested',
     restMirror: { method: 'GET', path: '/documents/api/v1/documents/:file_id/access' },
-    request: ({ payload, ctx }) => {
-        if (!payload || typeof payload.fileId !== 'string' || payload.fileId.length === 0) {
-            throw new Error('office/document_access_get: payload.fileId required');
-        }
-        return httpRequest({
-            method: 'GET',
-            url: `/documents/api/v1/documents/${encodeURIComponent(payload.fileId)}/access`,
-            headers: nsHeader(ctx),
-        });
-    },
 });
 
 export const documentAccessPatchOp = createAsyncOp({
     name: 'office/document_access_update',
     successToastKey: 'documents:toast.access_updated',
     errorToastKey: 'documents:toast.access_update_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'office/documents/access_update_requested',
     restMirror: { method: 'PATCH', path: '/documents/api/v1/documents/:file_id/access' },
-    request: ({ payload, ctx }) => {
-        if (!payload || typeof payload.fileId !== 'string' || payload.fileId.length === 0) {
-            throw new Error('office/document_access_update: payload.fileId required');
-        }
-        return httpRequest({
-            method: 'PATCH',
-            url: `/documents/api/v1/documents/${encodeURIComponent(payload.fileId)}/access`,
-            headers: nsHeader(ctx),
-            body: {
-                link_enabled: payload.linkEnabled,
-                link_permission: payload.linkPermission,
-                members: payload.members,
-            },
-        });
-    },
 });
 
 export const documentAccessRotateLinkOp = createAsyncOp({
     name: 'office/document_access_rotate_link',
     successToastKey: 'documents:toast.access_link_rotated',
     errorToastKey: 'documents:toast.access_link_rotate_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'office/documents/access_rotate_link_requested',
     restMirror: { method: 'POST', path: '/documents/api/v1/documents/:file_id/access/link/rotate' },
-    request: ({ payload, ctx }) => {
-        if (!payload || typeof payload.fileId !== 'string' || payload.fileId.length === 0) {
-            throw new Error('office/document_access_rotate_link: payload.fileId required');
-        }
-        return httpRequest({
-            method: 'POST',
-            url: `/documents/api/v1/documents/${encodeURIComponent(payload.fileId)}/access/link/rotate`,
-            headers: nsHeader(ctx),
-        });
-    },
 });
 
 export const publicResolveOp = createAsyncOp({

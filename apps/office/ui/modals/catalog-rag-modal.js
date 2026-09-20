@@ -9,6 +9,8 @@ import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date
 import {
     buildAdvancedRetrievalPayloadFromPanel,
     defaultRetrievalPanelValue,
+    packAdvancedRetrievalPayload,
+    packSearchRequestOptions,
     panelValueFromSearchOptions,
 } from '@platform/lib/rag/pack_search_request_options.js';
 import '@platform/lib/components/platform-switch.js';
@@ -121,7 +123,7 @@ export class OfficeCatalogRagModal extends PlatformFormModal {
     connectedCallback() {
         super.connectedCallback();
         if (typeof this.catalogId === 'string' && this.catalogId.length > 0) {
-            this._status.run({ catalogId: this.catalogId });
+            this._status.run({ catalog_id: this.catalogId });
         }
     }
 
@@ -185,9 +187,9 @@ export class OfficeCatalogRagModal extends PlatformFormModal {
             return;
         }
         if (enabled) {
-            await this._enable.run({ catalogId: this.catalogId });
+            await this._enable.run({ catalog_id: this.catalogId });
         } else {
-            await this._disable.run({ catalogId: this.catalogId });
+            await this._disable.run({ catalog_id: this.catalogId });
         }
         this._catalogs.load(null);
     }
@@ -196,7 +198,7 @@ export class OfficeCatalogRagModal extends PlatformFormModal {
         if (typeof this.catalogId !== 'string' || this.catalogId.length === 0) {
             return;
         }
-        await this._rebuild.run({ catalogId: this.catalogId });
+        await this._rebuild.run({ catalog_id: this.catalogId });
         this._catalogs.load(null);
     }
 
@@ -206,8 +208,8 @@ export class OfficeCatalogRagModal extends PlatformFormModal {
             return;
         }
         await this._settings.run({
-            catalogId: this.catalogId,
-            includeSubcatalogs,
+            catalog_id: this.catalogId,
+            include_subcatalogs: includeSubcatalogs,
         });
         this._catalogs.load(null);
     }
@@ -221,13 +223,18 @@ export class OfficeCatalogRagModal extends PlatformFormModal {
             throw new Error('OfficeCatalogRagModal: invalid retrieval panel state');
         }
         /** @type {Record<string, unknown>} */
-        const payload = { catalogId: this.catalogId };
+        const packed = { catalog_id: this.catalogId };
         if (panel.usePlatformDefaults === true) {
-            payload.clearSearchOptions = true;
+            packed.clear_search_options = true;
         } else {
-            Object.assign(payload, buildAdvancedRetrievalPayloadFromPanel(panel));
+            const panelPayload = buildAdvancedRetrievalPayloadFromPanel(panel);
+            Object.assign(
+                packed,
+                packSearchRequestOptions(panelPayload),
+                packAdvancedRetrievalPayload(panelPayload),
+            );
         }
-        await this._settings.run(payload);
+        await this._settings.run(packed);
         this._catalogs.load(null);
     }
 

@@ -3,7 +3,7 @@
  * (word/cell/slide; csv через cell + spreadsheet_format='csv').
  *
  * props: { catalogId, openAfterCreate: true }.
- * useOp('office/document_create_empty').run({ title, documentType, catalogId,
+ * useOp('office/document_create_empty').run({ title, document_type, catalog_id,
  * openAfterCreate, spreadsheetFormat? }) → бэкенд создаёт пустой OOXML по
  * шаблону. На SUCCEEDED фабрика навигирует в editor (если openAfterCreate)
  * и перезагружает documentsOp.
@@ -110,12 +110,14 @@ export class OfficeDocumentCreateEmptyModal extends PlatformFormModal {
         }
         const payload = {
             title,
-            documentType: opt.documentType,
-            catalogId: this.catalogId,
-            openAfterCreate: Boolean(this.openAfterCreate),
+            document_type: opt.documentType,
+            catalog_id: this.catalogId,
         };
-        if (opt.spreadsheetFormat) payload.spreadsheetFormat = opt.spreadsheetFormat;
-        this._create.run(payload);
+        if (opt.spreadsheetFormat) payload.spreadsheet_format = opt.spreadsheetFormat;
+        const created = await this._create.run(payload);
+        if (this.openAfterCreate === true && created && typeof created.file_id === 'string') {
+            this.navigate('document_editor', { fileId: created.file_id });
+        }
     }
 
     _saveHeaderTitle() {

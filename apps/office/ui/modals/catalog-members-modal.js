@@ -123,7 +123,7 @@ export class OfficeCatalogMembersModal extends PlatformFormModal {
     willUpdate(changed) {
         super.willUpdate(changed);
         if (!this._loaded && typeof this.catalogId === 'string' && this.catalogId.length > 0) {
-            this._members.run({ catalogId: this.catalogId });
+            this._members.run({ catalog_id: this.catalogId });
             this._loaded = true;
         }
         this.isDirty = false;
@@ -136,12 +136,12 @@ export class OfficeCatalogMembersModal extends PlatformFormModal {
 
     _onAdd(userId) {
         if (typeof userId !== 'string' || userId.length === 0) return;
-        this._add.run({ catalogId: this.catalogId, userId });
+        this._add.run({ catalog_id: this.catalogId, user_id: userId });
     }
 
     _onRemove(userId) {
         if (typeof userId !== 'string' || userId.length === 0) return;
-        this._remove.run({ catalogId: this.catalogId, userId });
+        this._remove.run({ catalog_id: this.catalogId, member_user_id: userId });
     }
 
     _activeMembers() {
@@ -150,7 +150,11 @@ export class OfficeCatalogMembersModal extends PlatformFormModal {
     }
 
     _candidates() {
-        const company = Array.isArray(this._company.lastResult) ? this._company.lastResult : [];
+        const result = this._company.lastResult;
+        if (result != null && (typeof result !== 'object' || !Array.isArray(result.items))) {
+            throw new Error('office.catalog_members: company_members.lastResult.items required');
+        }
+        const company = result == null ? [] : result.items;
         const memberIds = new Set(this._activeMembers().map((m) => m.user_id));
         const q = this._query.trim().toLowerCase();
         return company.filter((u) => {

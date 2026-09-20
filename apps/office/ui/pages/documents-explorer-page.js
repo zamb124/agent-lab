@@ -237,7 +237,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         if (key === this._lastSemanticSearchKey) return;
         this._lastSemanticSearchKey = key;
         this._catalogRagSearch.run({
-            catalogId,
+            catalog_id: catalogId,
             query,
             limit: 20,
             ...catalogOptions,
@@ -316,11 +316,12 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
 
     _listPayloadFor(catalogIds) {
         const state = this._documents.state;
+        const query = typeof state.searchQuery === 'string' ? state.searchQuery.trim() : '';
         return {
-            catalogIds,
-            q: state.searchQuery,
-            sortKey: state.sortKey,
-            sortDir: state.sortDir,
+            catalog_ids: catalogIds,
+            q: query.length > 0 ? query : null,
+            sort: state.sortKey,
+            order: state.sortDir,
         };
     }
 
@@ -690,7 +691,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
             this._documents.op.events.UPLOAD_JOB_ADD,
             { job: { localId, fileName: file.name, status: 'uploading', progress: 0 } },
         );
-        this._upload.run({ file, catalogId, openAfterUpload, localId });
+        this._upload.run({ file, catalog_id: catalogId, openAfterUpload, localId });
     }
 
     _onFileDragStart(e, doc) {
@@ -743,7 +744,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         if (typeof fileId !== 'string' || fileId.length === 0) {
             return;
         }
-        this._move.run({ fileId, catalogId: catalog.catalog_id });
+        this._move.run({ file_id: fileId, catalog_id: catalog.catalog_id });
     }
 
     _docByFileId(fileId) {
@@ -818,7 +819,6 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         this.openModal('office.document_rename', {
             fileId: doc.file_id,
             currentTitle: doc.title,
-            catalogIds: [doc.catalog_id],
         });
     }
 
@@ -839,12 +839,9 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         );
         if (ok !== true) return;
         if (isDeletedView) {
-            this._permanentDelete.run({ fileId: doc.file_id });
+            this._permanentDelete.run({ file_id: doc.file_id });
         } else {
-            this._remove.run({
-                fileId: doc.file_id,
-                catalogIds: [doc.catalog_id],
-            });
+            this._remove.run({ file_id: doc.file_id });
         }
         if (this._documents.state.selectedFileId === doc.file_id) {
             this._documents.clearFileSelection(null);
@@ -853,7 +850,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
 
     async _onRestoreDocument(doc) {
         if (!doc) return;
-        this._restore.run({ fileId: doc.file_id });
+        this._restore.run({ file_id: doc.file_id });
     }
 
     async _onShareDocument(doc) {
