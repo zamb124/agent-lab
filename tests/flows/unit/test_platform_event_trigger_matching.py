@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel, Field
 
-from apps.crm.services import crm_entity_events as _crm_entity_events
+from apps.crm import events as _crm_events
 from apps.flows.src.models import EventFilter, PlatformEventTriggerConfig
 from apps.flows.src.triggers.handlers.platform_event import (
     platform_event_matches_filters,
@@ -17,7 +17,7 @@ from apps.flows.src.triggers.handlers.platform_event import (
 from core.events import register_platform_event
 from core.worktracker import events as _worktracker_events
 
-_ = (_crm_entity_events, _worktracker_events)
+_ = (_crm_events, _worktracker_events)
 
 
 

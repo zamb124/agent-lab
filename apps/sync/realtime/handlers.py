@@ -34,6 +34,10 @@ from apps.sync.db.repositories.meeting_repository import (
 )
 from apps.sync.db.repositories.message_repository import MessageRepository
 from apps.sync.db.repositories.thread_repository import ThreadRepository
+from apps.sync.events import (
+    event_message_created,
+    event_message_updated,
+)
 from apps.sync.message_read_helpers import message_read_from_entity
 from apps.sync.models.channels import ChannelCreate, ChannelRead, ChannelType, ChannelUpdate
 from apps.sync.models.common import UserBrief
@@ -48,10 +52,6 @@ from apps.sync.models.messages import (
     TextPlainContent,
 )
 from apps.sync.models.threads import ThreadCreate, ThreadRead
-from apps.sync.realtime.events import (
-    event_message_created,
-    event_message_updated,
-)
 from apps.sync.realtime.publish_events import publish_realtime_events
 from apps.sync.realtime.task_names import (
     DELIVER_CHANNEL_MESSAGE_NOTIFICATION,

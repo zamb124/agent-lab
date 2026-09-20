@@ -35,6 +35,7 @@ from core.capabilities.models import CapabilityExecutionContext
 from core.clients.files_client import FilesClient
 from core.config import get_settings
 from core.config.models import GuestRuntimeFarmConfig
+from core.errors.boundary import PlatformNotFoundError
 from core.guest_runtime.billing import (
     trace_guest_build_usage,
     trace_guest_session_usage,
@@ -807,7 +808,7 @@ class GuestFarmService:
     ) -> JsonObject:
         lease = await self._leases.get(flow_id, node_id)
         if lease is None:
-            raise LookupError("guest lease not found")
+            raise PlatformNotFoundError("guest lease not found")
         slot = self._slots.get(lease.guest_lease_id)
         if slot is None:
             raise RuntimeError("guest slot is not running")
@@ -932,7 +933,7 @@ class GuestFarmService:
             raise ValueError("GetTask id is required")
         raw = await self._leases.get_task(task_id.strip())
         if raw is None:
-            raise LookupError("task not found")
+            raise PlatformNotFoundError("task not found")
         task = parse_json_object(raw, "guest.task")
         return {"jsonrpc": "2.0", "id": rpc.get("id"), "result": task}
 

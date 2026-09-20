@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import get_args
 
-import apps.sync.realtime.events as sync_events
-from apps.sync.realtime.events import EventType
+import apps.sync.events as sync_events
+from apps.sync.events import EventType
 from core.events import is_registered_platform_event
 
 _ = sync_events

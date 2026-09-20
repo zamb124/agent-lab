@@ -22,7 +22,7 @@ def test_ui_factory_resource_path() -> None:
         "core/frontend/static/lib/events/resources/foo.resource.js"
     )
     assert not gate._is_ui_factory_resource_path("apps/crm/ui/pages/note-page.js")
-    assert not gate._is_ui_factory_resource_path("apps/sync/realtime/events.py")
+    assert not gate._is_ui_factory_resource_path("apps/sync/events.py")
 
 
 def test_handler_reaches_http_via_method_graph() -> None:

@@ -46,6 +46,25 @@ from apps.sync.constants import CHANNEL_TYPE_CALENDAR_MEETING
 from apps.sync.container import SyncContainer
 from apps.sync.db.models import SyncCall, SyncCallLink, SyncCallRecording, SyncChannel
 from apps.sync.db.repositories.meeting_repository import call_recording_read
+from apps.sync.events import (
+    MessageStatusChangedPayload,
+    event_call_admin_changed,
+    event_call_recording_started,
+    event_call_recording_stopped,
+    event_call_signal,
+    event_channel_created,
+    event_channel_member_added,
+    event_channel_pins_changed,
+    event_channel_read_updated,
+    event_channel_typing,
+    event_git_resource_upserted,
+    event_message_created,
+    event_message_deleted,
+    event_message_reaction_changed,
+    event_message_status_changed,
+    event_message_updated,
+    event_thread_created,
+)
 from apps.sync.message_read_helpers import message_read_from_entity
 from apps.sync.models.calls import (
     CallLinkCreate,
@@ -95,25 +114,6 @@ from apps.sync.realtime.call_handlers import (
     handle_call_decline,
     handle_call_hangup,
     handle_call_invite,
-)
-from apps.sync.realtime.events import (
-    MessageStatusChangedPayload,
-    event_call_admin_changed,
-    event_call_recording_started,
-    event_call_recording_stopped,
-    event_call_signal,
-    event_channel_created,
-    event_channel_member_added,
-    event_channel_pins_changed,
-    event_channel_read_updated,
-    event_channel_typing,
-    event_git_resource_upserted,
-    event_message_created,
-    event_message_deleted,
-    event_message_reaction_changed,
-    event_message_status_changed,
-    event_message_updated,
-    event_thread_created,
 )
 from apps.sync.realtime.handlers import (
     build_livekit_recording_client,

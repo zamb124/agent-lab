@@ -52,6 +52,11 @@ from core.config import set_settings
 from core.config.loader import get_project_root, load_merged_config
 from core.config.testing import is_testing
 from core.container.base import BaseContainer
+from core.errors.boundary import (
+    PlatformAccessDeniedError,
+    PlatformConflictError,
+    PlatformNotFoundError,
+)
 from core.events import store_registered_platform_events
 from core.events.publisher import close_publisher_client
 from core.files.api import build_files_router
@@ -83,7 +88,8 @@ from core.tracing import setup_tracing
 from core.tracing.tracer import set_span_repository, set_tracing_service_name
 from core.types import JsonObject, JsonValue
 from core.utils.background import run_with_log_context
-from core.websocket import WsCommandError, ws_command_error_status
+from core.websocket import WsCommandError
+from core.websocket.operation import WS_COMMAND_ERROR_HTTP_STATUS
 
 logger = get_logger(__name__)
 
@@ -363,20 +369,43 @@ def create_service_app(
         )
     _ = _authz_config_error_handler
 
+    def _boundary_error_response(code: str, detail: str) -> JSONResponse:
+        return JSONResponse(
+            status_code=WS_COMMAND_ERROR_HTTP_STATUS[code],
+            content={"error_code": code, "error_detail": detail, "detail": detail},
+        )
+
     @app.exception_handler(WsCommandError)
     async def _ws_command_error_handler(
         _request: Request, exc: WsCommandError
     ) -> JSONResponse:
-        return JSONResponse(
-            status_code=ws_command_error_status(exc),
-            content={
-                "error_code": exc.code,
-                "error_detail": exc.detail,
-                "detail": exc.detail,
-            },
-        )
+        return _boundary_error_response(exc.code, exc.detail)
 
     _ = _ws_command_error_handler
+
+    @app.exception_handler(PlatformNotFoundError)
+    async def _platform_not_found_handler(
+        _request: Request, exc: PlatformNotFoundError
+    ) -> JSONResponse:
+        return _boundary_error_response("not_found", str(exc))
+
+    _ = _platform_not_found_handler
+
+    @app.exception_handler(PlatformConflictError)
+    async def _platform_conflict_handler(
+        _request: Request, exc: PlatformConflictError
+    ) -> JSONResponse:
+        return _boundary_error_response("conflict", str(exc))
+
+    _ = _platform_conflict_handler
+
+    @app.exception_handler(PlatformAccessDeniedError)
+    async def _platform_access_denied_handler(
+        _request: Request, exc: PlatformAccessDeniedError
+    ) -> JSONResponse:
+        return _boundary_error_response("forbidden", str(exc))
+
+    _ = _platform_access_denied_handler
 
     @app.exception_handler(Exception)
     async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:

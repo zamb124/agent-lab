@@ -474,6 +474,7 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/flows/*", context_type="a2a", auth_required=True),
 
     # CRM (если используется)
+    RouteRule("/crm/api/v1/internal/*", context_type="anonymous", auth_required=False),
     RouteRule("/crm/api/v1/*", context_type="api", auth_required=True),
     RouteRule("/crm/*", context_type="frontend", auth_required=True),
     RouteRule("/crm", context_type="frontend", auth_required=True),

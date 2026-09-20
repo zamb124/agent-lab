@@ -31,6 +31,12 @@ class AuthProvider(str, Enum):
 
 
 ANONYMOUS_USER_ID = "anonymous"
+GUEST_USER_ID_PREFIX = "guest:"
+
+
+def is_platform_user_id(user_id: str) -> bool:
+    """Идентичность из реестра пользователей: не аноним и не гость звонка по ссылке."""
+    return user_id not in ("", ANONYMOUS_USER_ID) and not user_id.startswith(GUEST_USER_ID_PREFIX)
 
 
 class User(BaseModel):

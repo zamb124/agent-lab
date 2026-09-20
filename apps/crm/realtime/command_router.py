@@ -33,6 +33,7 @@ from apps.crm.realtime.operations import (
     CrmActivityTasksListPayload,
     CrmAttachmentsAttachPayload,
     CrmAttachmentsRemovePayload,
+    CrmCompanyInitPayload,
     CrmEmptyPayload,
     CrmEntitiesAggregatePayload,
     CrmEntitiesInfluenceGraphPayload,
@@ -79,6 +80,7 @@ from apps.crm.realtime.operations import (
     op_attachments_attach,
     op_attachments_list,
     op_attachments_remove,
+    op_crm_company_init,
     op_entities_aggregate,
     op_entities_bulk_create,
     op_entities_bulk_delete,
@@ -162,6 +164,9 @@ from core.websocket import Operation, RegisteredOperation, register_service_oper
 logger = get_logger(__name__)
 
 CRM_OPERATIONS: dict[str, RegisteredOperation[CRMContainer]] = {
+    "crm/company/init_requested": Operation(
+        payload_model=CrmCompanyInitPayload, fn=op_crm_company_init
+    ),
     "crm/namespaces/list_requested": Operation(
         payload_model=CrmOffsetPagePayload, fn=op_namespaces_list
     ),

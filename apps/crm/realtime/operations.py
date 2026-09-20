@@ -187,6 +187,14 @@ class CrmEmptyPayload(StrictBaseModel):
     pass
 
 
+class CrmCompanyInitPayload(StrictBaseModel):
+    company_id: str = Field(min_length=1)
+
+
+class CrmCompanyInitResponse(StrictBaseModel):
+    result: dict[str, int | bool]
+
+
 class CrmOffsetPagePayload(StrictBaseModel):
     limit: int = Field(default=200, ge=1, le=1000)
     offset: int = Field(default=0, ge=0)
@@ -308,6 +316,29 @@ def _raise_service_error(exc: Exception) -> Never:
     if "not found" in lowered:
         raise_not_found(PlatformNotFoundError(detail))
     raise_invalid(exc)
+
+
+async def op_crm_company_init(
+    payload: CrmCompanyInitPayload,
+    *,
+    user: User,
+    container: CRMContainer,
+) -> CrmCompanyInitResponse:
+    """Insert-only инициализация типов, шаблонов и personal namespace новой компании.
+
+    Зовётся idle-воркером `company_init_new_company` с internal context компании;
+    `system` переинициализирует lifespan CRM (`reseed=True`).
+    """
+    _ = user
+    scope = _company_scope()
+    if payload.company_id != scope.company_id:
+        raise_forbidden(
+            ValueError(
+                f"company_id {payload.company_id!r} does not match active company {scope.company_id!r}"
+            )
+        )
+    result = await container.company_init_service.initialize_company(payload.company_id)
+    return CrmCompanyInitResponse(result=result)
 
 
 async def op_namespaces_list(

@@ -23,6 +23,7 @@ import core.tracing.attributes as trace_attributes
 from apps.sync.container import SyncContainer, get_sync_container
 from apps.sync.db.models import SyncFile
 from apps.sync.db.repositories.meeting_repository import call_recording_read
+from apps.sync.events import event_call_recording_failed, event_message_updated
 from apps.sync.message_read_helpers import message_read_from_entity
 from apps.sync.models.messages import (
     CallTranscriptContent,
@@ -33,7 +34,6 @@ from apps.sync.models.messages import (
     MessageRead,
     TextPlainContent,
 )
-from apps.sync.realtime.events import event_call_recording_failed, event_message_updated
 from apps.sync.realtime.operations import MessagesSendPayload, op_messages_send
 from apps.sync.realtime.publish_events import publish_realtime_events
 from apps.sync.realtime.speech_to_chat_workflow import run_speech_to_chat_poll_cycle
@@ -48,6 +48,8 @@ from apps.sync.sender_display import guest_display_name_from_sender_id, sender_b
 from core.calls.livekit_client import LiveKitClient
 from core.clients.files_client import FilesClient
 from core.config import get_settings
+from core.context import clear_context, get_context, set_context
+from core.context.job_context import build_job_context
 from core.files.media.audio_extract import extract_audio_from_video
 from core.files.media.chunked_stt import transcribe_audio_with_chunking
 from core.files.models import (
@@ -60,7 +62,6 @@ from core.files.models import (
 )
 from core.files.s3_client import S3ClientFactory
 from core.logging import get_logger
-from core.models.identity_models import User
 from core.tasks import enqueue, platform_task
 from core.tracing.operation_span import traced_operation
 from core.types import parse_json_object
@@ -393,14 +394,43 @@ def _extract_video_info(contents: list[MessageContentModel]) -> VideoAttachmentC
         return block.data
     raise ValueError("Сообщение не содержит file/video.")
 
-def _make_actor_user(actor_user_id: str, company_id: str) -> User:
-    """Создать минимальный User-объект для in-process вызова `op_messages_send`
-    из TaskIQ-таска (где нет HTTP/WS-контекста).
+async def _send_message_as_actor(
+    container: SyncContainer,
+    *,
+    company_id: str,
+    actor_user_id: str,
+    payload: MessagesSendPayload,
+    channel: str,
+) -> MessageRead:
+    """`op_messages_send` из TaskIQ-таска: тот же `op_*`, что у HTTP/WS, в job-контексте актора.
 
-    `op_messages_send` использует только `user.user_id` и
-    `user.active_company_id`, остальные поля не читаются.
+    Компания и пользователь берутся из реестра (Zero-Guess: нет записи — ошибка),
+    членство проверяет `build_job_context`.
     """
-    return User(user_id=actor_user_id, name=actor_user_id, active_company_id=company_id)
+    company = await container.company_repository.get(company_id)
+    if company is None:
+        raise ValueError(f"company not found: {company_id}")
+    user = await container.user_repository.get(actor_user_id)
+    if user is None:
+        raise ValueError(f"actor user not found: {actor_user_id}")
+    previous = get_context()
+    _ = set_context(
+        build_job_context(
+            company=company,
+            user=user,
+            host="sync-worker.local",
+            trace_id=f"{channel}:{payload.channel_id}",
+            session_id=f"{channel}:{payload.channel_id}",
+            channel=channel,
+        )
+    )
+    try:
+        return await op_messages_send(payload, user=user, container=container)
+    finally:
+        if previous is not None:
+            _ = set_context(previous)
+        else:
+            clear_context()
 
 
 def _call_recording_s3_object_key(*, company_id: str, call_id: str, recording_id: str) -> str:
@@ -588,10 +618,12 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
                 call_id=recording.call_id,
             )
             send_payload = MessagesSendPayload(channel_id=recording.channel_id, body=video_body)
-            _ = await op_messages_send(
-                send_payload,
-                user=_make_actor_user(recording.started_by_user_id, company_id),
-                container=container,
+            _ = await _send_message_as_actor(
+                container,
+                company_id=company_id,
+                actor_user_id=recording.started_by_user_id,
+                payload=send_payload,
+                channel="sync_finalize_recording",
             )
             logger.info(
                 "sync_finalize_recording_task posted video message: recording_id=%s channel_id=%s",
@@ -1060,10 +1092,12 @@ async def sync_aggregate_call_transcript_task(
             call_id=call_id,
         )
         send_payload = MessagesSendPayload(channel_id=channel_id, body=agg_body)
-        _ = await op_messages_send(
-            send_payload,
-            user=_make_actor_user(actor_user_id, company_id),
-            container=container,
+        _ = await _send_message_as_actor(
+            container,
+            company_id=company_id,
+            actor_user_id=actor_user_id,
+            payload=send_payload,
+            channel="sync_aggregate_call_transcript",
         )
 
 

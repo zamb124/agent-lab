@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from apps.crm.services.crm_realtime_events import (
+from apps.crm.events import (
     CRM_DAILY_SUMMARY_UPDATED,
     CRM_PERIOD_SUMMARY_UPDATED,
 )

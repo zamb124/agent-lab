@@ -8,16 +8,14 @@ Wiki Service — база знаний платформы.
 import importlib
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI
 
 from apps.wiki.api import get_api_router
 from apps.wiki.config import WikiSettings
 from apps.wiki.container import WikiContainer, get_wiki_container
-from apps.wiki.dependencies import ContainerDep
 from apps.wiki.realtime.command_router import register_wiki_ws_commands
 from core.app import create_service_app
+from core.app.spa import mount_service_spa
 from core.config import get_settings
 from core.logging import get_logger
 
@@ -48,33 +46,7 @@ app = create_service_app(
     include_crud_routers=False,
 )
 
-core_frontend_path = Path(__file__).parent.parent.parent / "core" / "frontend" / "static"
-if core_frontend_path.exists():
-    app.mount("/static/core", StaticFiles(directory=core_frontend_path), name="core_frontend")
-    logger.info(f"Core frontend библиотека смонтирована: {core_frontend_path}")
-
-wiki_ui_path = Path(__file__).parent / "ui"
-if wiki_ui_path.exists():
-    app.mount(
-        "/wiki/ui/static",
-        StaticFiles(directory=wiki_ui_path, html=True),
-        name="wiki_ui",
-    )
-    logger.info(f"Wiki UI смонтирован: {wiki_ui_path}")
-
-
-@app.get("/wiki")
-@app.get("/wiki/")
-@app.get("/wiki/{path:path}")
-async def serve_wiki_ui(container: ContainerDep, path: str = "") -> FileResponse:
-    """Отдаёт SPA Wiki для не-API маршрутов."""
-    _ = container
-    if path.startswith(("api/", "ui/static/", "ws", "assets/")):
-        raise HTTPException(status_code=404, detail="Not found")
-    ui_file = Path(__file__).parent / "ui" / "index.html"
-    if not ui_file.exists():
-        raise HTTPException(status_code=404, detail="Wiki UI not found")
-    return FileResponse(ui_file)
+mount_service_spa(app, public_segment="wiki", ui_dir=Path(__file__).parent / "ui")
 
 
 if __name__ == "__main__":

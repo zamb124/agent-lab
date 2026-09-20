@@ -240,7 +240,7 @@ async def test_http_messages_default_limit_and_cursor_pagination(
         channel_name="paginated-channel",
     )
 
-    for idx in range(25):
+    for idx in range(55):
         sr = await sync_client.post(
             f"/sync/api/v1/channels/{channel_id}/messages",
             headers=sync_auth_headers,
@@ -261,12 +261,12 @@ async def test_http_messages_default_limit_and_cursor_pagination(
     assert first_page.status_code == 200
     payload = first_page.json()
     assert isinstance(payload["items"], list)
-    assert len(payload["items"]) == 20
+    assert len(payload["items"]) == 50
     assert isinstance(payload["next_cursor"], str)
     first_body = payload["items"][0]["contents"][0]["data"]["body"]
     last_body = payload["items"][-1]["contents"][0]["data"]["body"]
     assert first_body == "m05"
-    assert last_body == "m24"
+    assert last_body == "m54"
 
     second_page = await sync_client.get(
         f"/sync/api/v1/channels/{channel_id}/messages?before={payload['next_cursor']}&limit=20",

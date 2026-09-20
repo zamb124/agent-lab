@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from apps.crm.db.models import CRMTask
 from apps.crm.db.repositories.task_repository import TaskRepository
+from apps.crm.events import CRM_TASK_UPDATED
 from apps.crm.models.api import TaskResponse
-from apps.crm.services.crm_realtime_events import CRM_TASK_UPDATED
 from core.events import publish_event_to_user
 
 

@@ -8,15 +8,14 @@ NetWorkle Service - FastAPI приложение для управления Net
 import importlib
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI
 
 from apps.crm.api.router import router as api_router
 from apps.crm.config import CRMSettings
 from apps.crm.container import CRMContainer, get_crm_container
 from apps.crm.realtime.command_router import register_crm_ws_commands
 from core.app import create_service_app
+from core.app.spa import mount_service_spa
 from core.config import get_settings
 from core.context import clear_context, get_context, set_context
 from core.integrations.models import IntegrationCredential
@@ -26,8 +25,7 @@ from core.models.context_models import Context
 from core.models.identity_models import Company, User
 
 # side-effect: register platform event catalog types
-_ = importlib.import_module("apps.crm.services.crm_entity_events")
-_ = importlib.import_module("apps.crm.services.crm_realtime_events")
+_ = importlib.import_module("apps.crm.events")
 
 logger = get_logger(__name__)
 
@@ -102,49 +100,21 @@ def create_app() -> FastAPI:
 
 app = create_app()
 
-core_frontend_path = Path(__file__).parent.parent.parent / "core" / "frontend" / "static"
-if core_frontend_path.exists():
-    app.mount("/static/core", StaticFiles(directory=core_frontend_path), name="core_frontend")
-    logger.info(f"Core frontend библиотека смонтирована: {core_frontend_path}")
-
-crm_ui_path = Path(__file__).parent / "ui"
-if crm_ui_path.exists():
-    app.mount("/crm/ui/static", StaticFiles(directory=crm_ui_path, html=True), name="crm_ui")
-    logger.info(f"NetWorkle UI смонтирован: {crm_ui_path}")
-
-vendor_3d_force_graph_path = (
-    Path(__file__).parent.parent.parent / "node_modules" / "3d-force-graph" / "dist"
+_NODE_MODULES = Path(__file__).parent.parent.parent / "node_modules"
+mount_service_spa(
+    app,
+    public_segment="crm",
+    ui_dir=Path(__file__).parent / "ui",
+    excluded_prefixes=("api/", "ui/static/", "ui/vendor/"),
+    extra_static_mounts=(
+        (
+            "/crm/ui/vendor/3d-force-graph",
+            _NODE_MODULES / "3d-force-graph" / "dist",
+            "crm_ui_vendor_3d_force_graph",
+        ),
+        ("/crm/ui/vendor/three", _NODE_MODULES / "three" / "build", "crm_ui_vendor_three"),
+    ),
 )
-if vendor_3d_force_graph_path.exists():
-    app.mount(
-        "/crm/ui/vendor/3d-force-graph",
-        StaticFiles(directory=vendor_3d_force_graph_path),
-        name="crm_ui_vendor_3d_force_graph",
-    )
-    logger.info(f"3d-force-graph vendor смонтирован: {vendor_3d_force_graph_path}")
-
-vendor_three_path = Path(__file__).parent.parent.parent / "node_modules" / "three" / "build"
-if vendor_three_path.exists():
-    app.mount(
-        "/crm/ui/vendor/three",
-        StaticFiles(directory=vendor_three_path),
-        name="crm_ui_vendor_three",
-    )
-    logger.info(f"three vendor смонтирован: {vendor_three_path}")
-
-
-@app.get("/crm")
-@app.get("/crm/")
-@app.get("/crm/{path:path}")
-async def serve_crm_ui(path: str = ""):
-    """Отдает главную страницу NetWorkle UI для всех /crm/* путей (SPA-резерв)"""
-    if path.startswith("api/") or path.startswith("ui/static/") or path.startswith("ui/vendor/"):
-        raise HTTPException(status_code=404, detail="Not found")
-
-    ui_file = Path(__file__).parent / "ui" / "index.html"
-    if not ui_file.exists():
-        raise HTTPException(status_code=404, detail="NetWorkle UI not found")
-    return FileResponse(ui_file)
 
 
 if __name__ == "__main__":

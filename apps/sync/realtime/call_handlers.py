@@ -15,6 +15,14 @@ from livekit.api.twirp_client import TwirpError, TwirpErrorCode
 from apps.sync.db.models import SyncCall, SyncCallParticipant
 from apps.sync.db.repositories.call_repository import CallRepository
 from apps.sync.db.repositories.channel_repository import ChannelRepository
+from apps.sync.events import (
+    event_call_accepted,
+    event_call_declined,
+    event_call_ended,
+    event_call_incoming,
+    event_call_participant_joined,
+    event_call_participant_left,
+)
 from apps.sync.models.calls import (
     CallMode,
     CallParticipantRead,
@@ -27,14 +35,6 @@ from apps.sync.models.calls import (
     ParticipantStatus,
 )
 from apps.sync.models.channels import ChannelType
-from apps.sync.realtime.events import (
-    event_call_accepted,
-    event_call_declined,
-    event_call_ended,
-    event_call_incoming,
-    event_call_participant_joined,
-    event_call_participant_left,
-)
 from apps.sync.realtime.speech_to_chat_workflow import stop_speech_egresses_for_call_room
 from apps.sync.services.sync_channel_access_service import SyncChannelAccessService
 from core.authz.models import AuthzObject

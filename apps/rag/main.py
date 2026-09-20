@@ -5,11 +5,10 @@
 import importlib
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI
 
 from core.app import create_service_app
+from core.app.spa import mount_service_spa
 from core.files.reader.service import FileReader
 from core.logging import get_logger
 
@@ -73,30 +72,7 @@ app = create_service_app(
     version="1.0.0",
 )
 
-# Монтирование UI
-ui_path = Path(__file__).parent / "ui"
-if ui_path.exists():
-    app.mount("/rag/ui/static", StaticFiles(directory=ui_path), name="rag_ui")
-    logger.info(f"RAG UI смонтирован: {ui_path}")
-
-# Монтирование core/frontend (общая библиотека)
-core_frontend_path = Path(__file__).parent.parent.parent / "core" / "frontend" / "static"
-if core_frontend_path.exists():
-    app.mount("/static/core", StaticFiles(directory=core_frontend_path), name="core_frontend")
-    logger.info(f"Core frontend библиотека смонтирована: {core_frontend_path}")
-
-
-@app.get("/rag")
-@app.get("/rag/")
-@app.get("/rag/ui")
-@app.get("/rag/ui/{path:path}")
-async def serve_ui(path: str = "") -> FileResponse:
-    """Отдает SPA для RAG UI"""
-    _ = path
-    index_path = ui_path / "index.html"
-    if index_path.exists():
-        return FileResponse(index_path)
-    raise HTTPException(status_code=404, detail="RAG UI not built yet")
+mount_service_spa(app, public_segment="rag", ui_dir=Path(__file__).parent / "ui")
 
 
 if __name__ == "__main__":

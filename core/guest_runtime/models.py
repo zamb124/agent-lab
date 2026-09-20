@@ -8,6 +8,7 @@ from enum import StrEnum
 from pydantic import Field, field_validator
 
 from core.documents.placement_paths import validate_relative_dir
+from core.errors.boundary import PlatformConflictError
 from core.guest_runtime.env import (
     GUEST_IDLE_TTL_MAX,
     GUEST_IDLE_TTL_MIN,
@@ -183,11 +184,11 @@ class GuestRuntimeLogsResponse(StrictBaseModel):
     items: list[GuestLogLine] = Field(default_factory=list)
 
 
-class GuestLeaseCapError(Exception):
+class GuestLeaseCapError(PlatformConflictError):
     """Company or cluster lease cap exceeded."""
 
 
-class GuestBuildBusyError(Exception):
+class GuestBuildBusyError(PlatformConflictError):
     """Cluster already has a guest image build in progress."""
 
 

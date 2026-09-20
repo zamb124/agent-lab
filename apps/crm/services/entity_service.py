@@ -37,6 +37,12 @@ from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
 from apps.crm.db.repositories.relationship_repository import RelationshipRepository
 from apps.crm.db.repositories.relationship_type_repository import RelationshipTypeRepository
 from apps.crm.db.repositories.task_repository import TaskRepository
+from apps.crm.events import (
+    CRM_ENTITY_CREATED,
+    CRM_ENTITY_DELETED,
+    CRM_ENTITY_UPDATED,
+    publish_crm_entity_event,
+)
 from apps.crm.models.api import (
     AIAnalysisDraftApplyResult,
     AIAnalysisDraftPatchRequest,
@@ -52,12 +58,6 @@ from apps.crm.models.api import (
     EntityMergeRequest,
 )
 from apps.crm.services.attachment_service import AttachmentService
-from apps.crm.services.crm_entity_events import (
-    CRM_ENTITY_CREATED,
-    CRM_ENTITY_DELETED,
-    CRM_ENTITY_UPDATED,
-    publish_crm_entity_event,
-)
 from apps.crm.services.crm_note_broadcast import broadcast_crm_note_event
 from apps.crm.services.crm_summary_broadcast import (
     broadcast_crm_daily_summary_updated,

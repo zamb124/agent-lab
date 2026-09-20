@@ -8,7 +8,7 @@ from core.clients.service_client import ServiceClient
 from core.context import get_context
 from core.events.contract import PlatformEvent
 from core.internal_context_headers import build_internal_context_headers
-from core.models.identity_models import ANONYMOUS_USER_ID
+from core.models.identity_models import is_platform_user_id
 from core.types import require_json_object
 
 LocalEventIngest = Callable[[PlatformEvent], Awaitable[PlatformEvent]]
@@ -25,7 +25,7 @@ def _submit_headers(event: PlatformEvent) -> dict[str, str] | None:
     if (
         context is not None
         and context.active_company is not None
-        and context.user.user_id not in ("", ANONYMOUS_USER_ID)
+        and is_platform_user_id(context.user.user_id)
     ):
         return None
     if not event.company_id:

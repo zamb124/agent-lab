@@ -22,6 +22,7 @@ from core.http import get_httpx_client
 from core.http.client import HttpRequestKwargs
 from core.internal_context_headers import build_internal_context_headers
 from core.logging import get_log_context, get_logger
+from core.models.identity_models import is_platform_user_id
 from core.test_scope import TEST_SCOPE_HEADER, resolve_test_scope
 from core.types import JsonValue, parse_json_value, require_json_value
 
@@ -108,7 +109,10 @@ class ServiceClient:
                 trace_id = context.trace_id
             if context.auth_token:
                 headers["Authorization"] = f"Bearer {context.auth_token}"
-            if context.active_company is not None:
+            # Аноним и гость звонка по ссылке не являются идентичностью реестра:
+            # peer не может её восстановить, а guest id несёт не-ASCII имя.
+            propagate_user = is_platform_user_id(context.user.user_id)
+            if context.active_company is not None and propagate_user:
                 headers.update(
                     build_internal_context_headers(
                         company_id=context.active_company.company_id,
@@ -117,7 +121,7 @@ class ServiceClient:
                 )
             if context.active_company:
                 headers[COMPANY_ID_HEADER] = context.active_company.company_id
-            if context.user:
+            if propagate_user:
                 headers[USER_ID_HEADER] = context.user.user_id
             if context.active_namespace and context.active_namespace != "default":
                 headers[NAMESPACE_HEADER] = context.active_namespace

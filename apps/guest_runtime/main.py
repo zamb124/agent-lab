@@ -17,7 +17,6 @@ from apps.guest_runtime.services.slots import ensure_docker_network
 from core.app import create_service_app
 from core.billing import set_billing_service
 from core.config import get_settings
-from core.guest_runtime.models import GuestBuildBusyError, GuestLeaseCapError
 from core.logging import get_logger
 from core.utils.background import run_with_log_context
 
@@ -88,27 +87,12 @@ app = create_service_app(
 )
 
 
-@app.exception_handler(GuestLeaseCapError)
-async def _guest_lease_cap(_request: Request, exc: GuestLeaseCapError) -> JSONResponse:
-    return JSONResponse(status_code=409, content={"detail": str(exc)})
-
-
-@app.exception_handler(GuestBuildBusyError)
-async def _guest_build_busy(_request: Request, exc: GuestBuildBusyError) -> JSONResponse:
-    return JSONResponse(status_code=409, content={"detail": str(exc)})
-
-
-@app.exception_handler(LookupError)
-async def _guest_lookup(_request: Request, exc: LookupError) -> JSONResponse:
-    return JSONResponse(status_code=404, content={"detail": str(exc)})
-
-
 @app.exception_handler(ValueError)
 async def _guest_value(_request: Request, exc: ValueError) -> JSONResponse:
     return JSONResponse(status_code=400, content={"detail": str(exc)})
 
 
-_ = _guest_lease_cap, _guest_build_busy, _guest_lookup, _guest_value
+_ = _guest_value
 
 
 if __name__ == "__main__":

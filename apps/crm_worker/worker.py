@@ -31,8 +31,8 @@ from core.tasks.worker_bootstrap import build_worker, init_worker_tracing
 logger = get_logger(__name__)
 
 # side-effect: register CRM platform event catalog types for this process
-_ = importlib.import_module("apps.crm.services.crm_entity_events")
-_ = importlib.import_module("apps.crm.services.crm_realtime_events")
+_ = importlib.import_module("apps.crm.events")
+_ = importlib.import_module("apps.crm.events")
 
 broker = wire_worker("crm")
 

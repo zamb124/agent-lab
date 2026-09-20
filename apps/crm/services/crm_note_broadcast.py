@@ -18,8 +18,8 @@ from __future__ import annotations
 from typing import Literal, TypedDict
 
 from apps.crm.db.models import CRMEntity
+from apps.crm.events import CRM_NOTE_UPDATED
 from apps.crm.models.api import EntityResponse
-from apps.crm.services.crm_realtime_events import CRM_NOTE_UPDATED
 from apps.crm.services.namespace_notification_recipients import (
     normalize_namespace_for_broadcast,
 )

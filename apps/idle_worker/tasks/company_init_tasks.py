@@ -84,7 +84,8 @@ async def initialize_new_company_task(
 
     Шаги:
     1. flows: `/flows/api/v1/internal/company/init` — заводит дефолтных агентов / тулы.
-    2. sync: `/sync/api/v1/channels/` — создаёт дефолтный topic-канал.
+    2. crm: `/crm/api/v1/internal/company/init` — системные типы, шаблоны, personal namespace.
+    3. sync: `/sync/api/v1/channels/` — создаёт дефолтный topic-канал.
 
     Каждая ошибка peer-сервиса пробрасывается → TaskIQ retry. После исчерпания
     retry — задача падает, `Company.metadata.initialization_status` = "failed".
@@ -115,6 +116,24 @@ async def initialize_new_company_task(
             "company_init.flows_init_done",
             company_id=company_id,
             flows_task_id=flows_init_payload.get("task_id"),
+        )
+
+        crm_response = await service_client.post(
+            "crm",
+            "/crm/api/v1/internal/company/init",
+            json={"company_id": company_id},
+            headers=build_internal_context_headers(
+                company_id=company_id,
+                user_id=owner_user_id,
+            ),
+        )
+        crm_init_payload = require_json_object(
+            crm_response, "crm /crm/api/v1/internal/company/init response"
+        )
+        logger.info(
+            "company_init.crm_init_done",
+            company_id=company_id,
+            result=crm_init_payload.get("result"),
         )
 
         channel_response = await service_client.post(

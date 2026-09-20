@@ -38,6 +38,7 @@ from apps.sync.realtime.livekit_sdk_boundary import (
 from core.calls.livekit_client import LiveKitClient
 from core.calls.livekit_usage_spans import trace_livekit_egress_segmented_usage
 from core.config import get_settings
+from core.context import clear_context, get_context, set_context
 from core.files.audio_probe import probe_audio_duration_ms_from_bytes
 from core.files.audio_silence import (
     trim_leading_trailing_silence_from_bytes,
@@ -52,6 +53,7 @@ from core.files.s3_client import S3ClientFactory
 from core.files.storage import retention_fields_from_spec
 from core.http import get_httpx_client
 from core.logging import get_logger
+from core.models.context_models import Context
 from core.models.identity_models import User
 
 logger = get_logger(__name__)
@@ -444,17 +446,41 @@ async def _post_segment_file_as_message(
         mentioned_user_ids=None,
         call_id=call_id,
     )
-    user = User(
-        user_id=row.participant_identity,
-        name=row.participant_identity,
-        active_company_id=row.company_id,
+    container = get_sync_container()
+    company = await container.company_repository.get(row.company_id)
+    if company is None:
+        raise ValueError(f"company not found: {row.company_id}")
+    # Гость звонка по ссылке не хранится в реестре пользователей — сообщение идёт от его identity.
+    participant = await container.user_repository.get(row.participant_identity)
+    if participant is None:
+        participant = User(
+            user_id=row.participant_identity,
+            name=row.participant_identity,
+            active_company_id=row.company_id,
+        )
+    previous = get_context()
+    _ = set_context(
+        Context(
+            user=participant,
+            host="sync-worker.local",
+            session_id=f"speech_to_chat:{call_id}",
+            channel="sync_speech_to_chat",
+            active_company=company,
+            trace_id=f"speech_to_chat:{call_id}",
+        )
     )
-    _ = await send_message_with_side_effects(
-        channel_id=row.channel_id,
-        body=body,
-        user=user,
-        container=get_sync_container(),
-    )
+    try:
+        _ = await send_message_with_side_effects(
+            channel_id=row.channel_id,
+            body=body,
+            user=participant,
+            container=container,
+        )
+    finally:
+        if previous is not None:
+            _ = set_context(previous)
+        else:
+            clear_context()
 
 
 async def process_new_files_for_egress_row(

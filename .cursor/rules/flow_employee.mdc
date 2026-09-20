@@ -96,7 +96,7 @@ alwaysApply: false
 | UI modal | `apps/flows/ui/modals/flows-employee-settings-modal.js` |
 | UI header chip | `apps/flows/ui/components/editor/flows-editor-header.js` |
 | UI sidebar badge | `apps/flows/ui/components/flow-card.js` |
-| Sync событие (обогащение payload) | `apps/sync/realtime/events.py`, `handlers.py` |
+| Sync событие (обогащение payload) | `apps/sync/events.py`, `realtime/handlers.py` |
 | Sync tools | `apps/flows/tools/sync_tools.py`, `sync_channel_tools.py`, `sync_thread_tools.py` |
 | WorkItem событие assigned | `core/worktracker/events.py`, `service.py` |
 | Config model | `apps/flows/src/models/flow_config.py` (`FlowEmployeeConfig`) |

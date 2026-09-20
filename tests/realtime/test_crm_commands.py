@@ -546,6 +546,11 @@ async def _setup_empty(ctx: LiveCtx) -> JsonObject:
     return {}
 
 
+async def _setup_company_init(ctx: LiveCtx) -> JsonObject:
+    _ = ctx
+    return {"company_id": "system"}
+
+
 async def _setup_timeline(ctx: LiveCtx) -> JsonObject:
     _ = ctx
     return {"namespace": _NAMESPACE}
@@ -875,6 +880,9 @@ def _op(
 
 
 _CASES: dict[str, OpCase] = {
+    "crm/company/init_requested": _op(
+        "POST", f"{_API}/internal/company/init", "body_minus_path", _setup_company_init, same=True,
+    ),
     "crm/namespaces/list_requested": _op(
         "GET", f"{_API}/namespaces", "query", _setup_namespaces_list,
         same=True, compare="marker_row", marker_field="name",
