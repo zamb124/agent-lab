@@ -228,7 +228,7 @@ Exit 1 на нарушении:
 5. Эмодзи в любом `logger.*` запрещены.
 6. `setup_logging(...)` запрещён в `apps/*_worker/broker.py` и `apps/sync/realtime/broker.py` — только `register_worker_events(...)`.
 7. `asyncio.create_task(...)` запрещён вне whitelisted инфраструктуры.
-8. Мягкий счётчик `logger.<level>(f"...")` — лимит снижается с миграцией на kwargs.
+8. Счётчик `logger.<level>(f"...")` — ratchet: `F_LIMIT` в `scripts/check_logging_canon.sh` равен текущему минимуму (330) и снижается с каждой миграцией на kwargs; рост — FAIL. Тот же счётчик дублируется метрикой `logger_fstring` в `scripts/ratchet_baseline.json`.
 9. `enter_request_scope(...)` — только в платформенных точках входа.
 10. `clear_log_context()` запрещён вне `core/logging/**`.
 11. Прямые `.kiq(` / `find_task(` / `AsyncKicker(` / `create_broker(` вне whitelist — **FAIL**. Канон постановки в очередь — `core.tasks.enqueue`. Полный реестр/wiring — `scripts/check_taskiq_canon.py` / `make check-taskiq-canon`.

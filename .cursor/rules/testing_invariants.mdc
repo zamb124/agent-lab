@@ -52,7 +52,7 @@ Editor parity — контракт: canvas редактора и production rout
 
 ## Зависимости
 
-По **`testing.mdc`**: репозитории и т.п. не мокать; LLM — MockLLM. Предпочтение: **конструктор + тестовые реализации/фабрики** из `tests/`. Внешний API — фейк с тем же интерфейсом через DI. `patch`/`monkeypatch` — только где нет точки расширения и это согласовано с `testing.mdc`; в новом коде — инъекция.
+По **`testing.mdc`**: репозитории и т.п. не мокать; LLM — MockLLM. Предпочтение: **конструктор + тестовые реализации/фабрики** из `tests/`. Внешний API — фейк с тем же интерфейсом через DI. `patch`/`monkeypatch` — только где нет точки расширения и это согласовано с `testing.mdc`; в новом коде — инъекция. Ratchet (`scripts/check_ratchet_counts.py`): `monkeypatch.setattr("core.|apps.")`, `AsyncMock(`, `pytest.skip`/`mark.skip` в `tests/` не растут относительно `scripts/ratchet_baseline.json`.
 
 ## Параллельный запуск
 
