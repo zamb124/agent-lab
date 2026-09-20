@@ -44,6 +44,10 @@ _lint-py:
 	uv run python scripts/check_office_file_id_canon.py
 	@echo "=== lint: cross-service imports ==="
 	uv run python scripts/check_cross_service_imports.py
+	@echo "=== lint: command owners have catalogs ==="
+	uv run python scripts/check_command_owner_catalogs.py
+	@echo "=== lint: REST handlers call op_* ==="
+	uv run python scripts/check_rest_handlers_call_ops.py
 
 	@echo "=== lint: mcp branding bundle ==="
 	uv run python scripts/check_mcp_branding_bundle.py

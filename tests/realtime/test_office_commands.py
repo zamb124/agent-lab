@@ -33,6 +33,7 @@ _VOLATILE_KEYS = frozenset(
         "catalog_id",
         "parent_catalog_id",
         "file_id",
+        "s3_key",
         "share_id",
         "event_id",
         "revision_id",
@@ -100,6 +101,14 @@ def _str_field(payload: JsonObject, key: str) -> str:
     if not isinstance(value, str) or not value:
         raise AssertionError(f"{key} is required, got {value!r}")
     return value
+
+
+def _path_field(payload: JsonObject, key: str) -> str:
+    """Path-параметр REST: строковый id или целочисленный (`row_id`)."""
+    value = payload.get(key)
+    if isinstance(value, bool) or not isinstance(value, int | str) or value == "":
+        raise AssertionError(f"{key} is required, got {value!r}")
+    return str(value)
 
 
 def _token(ctx: LiveCtx) -> str:
@@ -513,6 +522,128 @@ async def _setup_share_create(ctx: LiveCtx) -> JsonObject:
     }
 
 
+async def _create_data_table(ctx: LiveCtx, *, with_rows: bool = False) -> str:
+    created = await ctx.client.post(
+        f"{_API}/data-tables",
+        headers=ctx.headers,
+        json={
+            "original_name": f"live-table{_token(ctx)}.sqlite",
+            "scope": "office_document",
+            "namespace": "default",
+            "tables": [
+                {
+                    "name": "leads",
+                    "columns": [
+                        {"name": "title", "column_type": "text"},
+                        {"name": "score", "column_type": "integer"},
+                    ],
+                }
+            ],
+        },
+    )
+    payload = await _expect_json(created, ok=(200,), label="create_data_table")
+    file_id = _str_field(payload, "file_id")
+    if with_rows:
+        inserted = await ctx.client.post(
+            f"{_API}/data-tables/{file_id}/tables/leads/rows",
+            headers=ctx.headers,
+            json={"rows": [{"title": "a", "score": 1}, {"title": "b", "score": 2}]},
+        )
+        _ = await _expect_json(inserted, ok=(200,), label="insert_rows")
+    return file_id
+
+
+async def _setup_data_table_create(ctx: LiveCtx) -> JsonObject:
+    return {
+        "original_name": f"live-create{_token(ctx)}.sqlite",
+        "scope": "office_document",
+        "namespace": "default",
+        "tables": [{"name": "items", "columns": [{"name": "title", "column_type": "text"}]}],
+    }
+
+
+async def _setup_data_table_get(ctx: LiveCtx) -> JsonObject:
+    return {"file_id": await _create_data_table(ctx, with_rows=True)}
+
+
+async def _setup_data_table_table_create(ctx: LiveCtx) -> JsonObject:
+    return {
+        "file_id": await _create_data_table(ctx),
+        "name": "extra",
+        "columns": [{"name": "note", "column_type": "text"}],
+    }
+
+
+async def _setup_data_table_column_add(ctx: LiveCtx) -> JsonObject:
+    return {
+        "file_id": await _create_data_table(ctx),
+        "table_name": "leads",
+        "name": "flag",
+        "column_type": "boolean",
+        "not_null": False,
+    }
+
+
+async def _setup_data_table_rows_list(ctx: LiveCtx) -> JsonObject:
+    return {
+        "file_id": await _create_data_table(ctx, with_rows=True),
+        "table_name": "leads",
+        "limit": 10,
+        "sort_column": "score",
+        "sort_dir": "asc",
+    }
+
+
+async def _setup_data_table_rows_insert(ctx: LiveCtx) -> JsonObject:
+    return {
+        "file_id": await _create_data_table(ctx),
+        "table_name": "leads",
+        "rows": [{"title": "c", "score": 3}],
+    }
+
+
+async def _setup_data_table_row_update(ctx: LiveCtx) -> JsonObject:
+    return {
+        "file_id": await _create_data_table(ctx, with_rows=True),
+        "table_name": "leads",
+        "row_id": 1,
+        "values": {"score": 10},
+    }
+
+
+async def _setup_data_table_rows_delete(ctx: LiveCtx) -> JsonObject:
+    return {
+        "file_id": await _create_data_table(ctx, with_rows=True),
+        "table_name": "leads",
+        "row_ids": [1],
+    }
+
+
+async def _setup_data_table_query(ctx: LiveCtx) -> JsonObject:
+    return {
+        "file_id": await _create_data_table(ctx, with_rows=True),
+        "sql": "SELECT title, score FROM leads ORDER BY score",
+    }
+
+
+async def _setup_data_table_promote(ctx: LiveCtx) -> JsonObject:
+    flow_id = f"live-dt-flow{_token(ctx)}"
+    created = await ctx.client.post(
+        f"{_API}/data-tables",
+        headers=ctx.headers,
+        json={
+            "original_name": f"live-session{_token(ctx)}.sqlite",
+            "scope": "flow_session",
+            "flow_id": flow_id,
+            "session_id": f"{flow_id}:ctx{_token(ctx)}",
+            "namespace": "default",
+            "tables": [{"name": "leads", "columns": [{"name": "title", "column_type": "text"}]}],
+        },
+    )
+    payload = await _expect_json(created, ok=(200,), label="create_session_data_table")
+    return {"file_id": _str_field(payload, "file_id"), "flow_id": flow_id}
+
+
 def _op(
     method: str,
     url: str,
@@ -745,6 +876,68 @@ _CASES: dict[str, OpCase] = {
     "office/documents/ai_summary_requested": _op(
         "GET", f"{_API}/documents/{{file_id}}/ai-summary", "none", _setup_file_id, same=True,
     ),
+    "office/data_tables/create_requested": _op(
+        "POST", f"{_API}/data-tables", "body", _setup_data_table_create, same=False,
+    ),
+    "office/data_tables/get_requested": _op(
+        "GET", f"{_API}/data-tables/{{file_id}}", "none", _setup_data_table_get, same=True,
+    ),
+    "office/data_tables/promote_requested": _op(
+        "POST",
+        f"{_API}/data-tables/{{file_id}}/promote",
+        "body_minus_path",
+        _setup_data_table_promote,
+        same=False,
+    ),
+    "office/data_tables/table_create_requested": _op(
+        "POST",
+        f"{_API}/data-tables/{{file_id}}/tables",
+        "body_minus_path",
+        _setup_data_table_table_create,
+        same=False,
+    ),
+    "office/data_tables/column_add_requested": _op(
+        "POST",
+        f"{_API}/data-tables/{{file_id}}/tables/{{table_name}}/columns",
+        "body_minus_path",
+        _setup_data_table_column_add,
+        same=False,
+    ),
+    "office/data_tables/rows_list_requested": _op(
+        "GET",
+        f"{_API}/data-tables/{{file_id}}/tables/{{table_name}}/rows",
+        "query",
+        _setup_data_table_rows_list,
+        same=True,
+    ),
+    "office/data_tables/rows_insert_requested": _op(
+        "POST",
+        f"{_API}/data-tables/{{file_id}}/tables/{{table_name}}/rows",
+        "body_minus_path",
+        _setup_data_table_rows_insert,
+        same=False,
+    ),
+    "office/data_tables/row_update_requested": _op(
+        "PATCH",
+        f"{_API}/data-tables/{{file_id}}/tables/{{table_name}}/rows/{{row_id}}",
+        "body_minus_path",
+        _setup_data_table_row_update,
+        same=False,
+    ),
+    "office/data_tables/rows_delete_requested": _op(
+        "POST",
+        f"{_API}/data-tables/{{file_id}}/tables/{{table_name}}/rows/delete",
+        "body_minus_path",
+        _setup_data_table_rows_delete,
+        same=False,
+    ),
+    "office/data_tables/query_requested": _op(
+        "POST",
+        f"{_API}/data-tables/{{file_id}}/query",
+        "body_minus_path",
+        _setup_data_table_query,
+        same=True,
+    ),
 }
 
 
@@ -818,7 +1011,7 @@ async def _rest_command(
 ) -> JsonObject:
     path_params: dict[str, str] = {}
     for key in _PATH_PLACEHOLDER.findall(rest.url):
-        path_params[key] = _str_field(payload, key)
+        path_params[key] = _path_field(payload, key)
     url = rest.url.format(**path_params)
     json_body: JsonObject | None = None
     query: dict[str, JsonValue] | None = None

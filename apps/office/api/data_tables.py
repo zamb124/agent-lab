@@ -1,15 +1,36 @@
-"""HTTP API DataTable: SQLite FileRecord, paging и мутации через DataTableService."""
+"""HTTP API DataTable: тонкое REST-зеркало `op_data_tables_*`; байты (export/import) остаются REST."""
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, assert_never
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 
 from apps.office.dependencies import ContainerDep
+from apps.office.realtime.data_table_operations import (
+    OfficeDataTableAddColumnPayload,
+    OfficeDataTableCreateTablePayload,
+    OfficeDataTableDeleteRowsPayload,
+    OfficeDataTableFileIdPayload,
+    OfficeDataTableInsertRowsPayload,
+    OfficeDataTablePromotePayload,
+    OfficeDataTableQueryPayload,
+    OfficeDataTableRowsListPayload,
+    OfficeDataTableUpdateRowPayload,
+    op_data_tables_column_add,
+    op_data_tables_create,
+    op_data_tables_get,
+    op_data_tables_promote,
+    op_data_tables_query,
+    op_data_tables_row_update,
+    op_data_tables_rows_delete,
+    op_data_tables_rows_insert,
+    op_data_tables_rows_list,
+    op_data_tables_table_create,
+)
 from core.authz.models import AuthzObject
-from core.context import get_context
+from core.context import require_active_company, require_context
 from core.data_tables.lock import DataTableLockedError
 from core.data_tables.models import (
     MAX_PAGE_LIMIT,
@@ -27,27 +48,15 @@ from core.data_tables.models import (
     DataTableQueryResult,
     DataTableRow,
     DataTableSchemaSnapshot,
-    DataTableScope,
     DataTableUpdateRowRequest,
     DataTableUpdateRowResponse,
 )
 from core.data_tables.service import DataTableNotFoundError
-from core.documents.placement import DocsPlacement, DocsPlacementAnchor
 from core.files.models import FileRecord
 from core.files.types import ext_to_mime
-from core.models.identity_models import Company, User
 from core.pagination import CursorPage
 
 router = APIRouter(tags=["data-tables"])
-
-
-def _require_user() -> tuple[Company, User, str | None]:
-    ctx = get_context()
-    if ctx is None:
-        raise HTTPException(status_code=403, detail="Контекст запроса не установлен")
-    if ctx.active_company is None:
-        raise HTTPException(status_code=403, detail="Компания не выбрана")
-    return ctx.active_company, ctx.user, ctx.active_namespace
 
 
 def _http_from_data_table_error(exc: Exception) -> HTTPException:
@@ -61,59 +70,13 @@ def _http_from_data_table_error(exc: Exception) -> HTTPException:
 
 
 async def _require_view(container: ContainerDep, file_id: str) -> None:
-    _ = _require_user()
+    _ = require_active_company()
     await container.authz_service.require_can_view(AuthzObject.office_document(file_id))
 
 
 async def _require_edit(container: ContainerDep, file_id: str) -> None:
-    _ = _require_user()
+    _ = require_active_company()
     await container.authz_service.require_can_edit(AuthzObject.office_document(file_id))
-
-
-def _resolved_namespace(explicit: str | None, active: str | None) -> str:
-    if explicit is not None and explicit.strip() != "":
-        return explicit.strip()
-    if active is not None and active.strip() != "":
-        return active.strip()
-    raise HTTPException(status_code=400, detail="namespace is required")
-
-
-def _placement_anchor(
-    scope: DataTableScope,
-    *,
-    flow_id: str | None,
-    session_id: str | None,
-) -> DocsPlacementAnchor:
-    if scope == "office_document":
-        return DocsPlacementAnchor(source_kind="office_manual")
-    if scope == "flow_asset":
-        return DocsPlacementAnchor(source_kind="flow_asset", flow_id=flow_id, session_id=session_id)
-    if scope == "flow_session":
-        return DocsPlacementAnchor(
-            source_kind="flow_session",
-            flow_id=flow_id,
-            session_id=session_id,
-        )
-    assert_never(scope)
-
-
-def _data_table_placement(
-    *,
-    file_id: str,
-    title: str,
-    scope: DataTableScope,
-    namespace: str,
-    flow_id: str | None,
-    session_id: str | None,
-) -> DocsPlacement:
-    path_segments: list[str] | None = ["Tables"] if scope == "office_document" else None
-    return DocsPlacement(
-        namespace=namespace,
-        file_id=file_id,
-        title=title,
-        path_segments=path_segments,
-        anchor=_placement_anchor(scope, flow_id=flow_id, session_id=session_id),
-    )
 
 
 @router.post("/data-tables", response_model=FileRecord)
@@ -121,38 +84,7 @@ async def create_data_table(
     body: DataTableCreateRequest,
     container: ContainerDep,
 ) -> FileRecord:
-    company, user, active_namespace = _require_user()
-    scope = body.scope
-    namespace = _resolved_namespace(body.namespace, active_namespace)
-    try:
-        record = await container.data_table_service.create(
-            original_name=body.original_name,
-            scope=scope,
-            flow_id=body.flow_id,
-            session_id=body.session_id,
-            tables=body.tables,
-            namespace=namespace,
-        )
-    except (DataTableNotFoundError, DataTableLockedError, ValueError) as exc:
-        raise _http_from_data_table_error(exc) from exc
-    placement = _data_table_placement(
-        file_id=record.file_id,
-        title=record.original_name,
-        scope=scope,
-        namespace=namespace,
-        flow_id=body.flow_id,
-        session_id=body.session_id,
-    )
-    try:
-        _ = await container.docs_placement_service.bind(
-            placement,
-            company_id=company.company_id,
-            user_id=user.user_id,
-        )
-    except Exception:
-        _ = await container.files_service.delete(record.file_id)
-        raise
-    return record
+    return await op_data_tables_create(body, user=require_context().user, container=container)
 
 
 @router.get("/data-tables/{file_id}", response_model=DataTableFileSnapshot)
@@ -160,11 +92,11 @@ async def get_data_table(
     file_id: str,
     container: ContainerDep,
 ) -> DataTableFileSnapshot:
-    await _require_view(container, file_id)
-    try:
-        return await container.data_table_service.snapshot(file_id)
-    except (DataTableNotFoundError, DataTableLockedError, ValueError) as exc:
-        raise _http_from_data_table_error(exc) from exc
+    return await op_data_tables_get(
+        OfficeDataTableFileIdPayload(file_id=file_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post("/data-tables/{file_id}/promote", response_model=FileRecord)
@@ -173,35 +105,13 @@ async def promote_data_table(
     body: DataTablePromoteRequest,
     container: ContainerDep,
 ) -> FileRecord:
-    company, user, active_namespace = _require_user()
-    await container.authz_service.require_can_edit(AuthzObject.office_document(file_id))
-    namespace = _resolved_namespace(None, active_namespace)
-    try:
-        record = await container.data_table_service.promote_session_to_asset(
-            file_id,
-            flow_id=body.flow_id,
-            original_name=body.original_name,
-        )
-    except (DataTableNotFoundError, DataTableLockedError, ValueError) as exc:
-        raise _http_from_data_table_error(exc) from exc
-    placement = _data_table_placement(
-        file_id=record.file_id,
-        title=record.original_name,
-        scope="flow_asset",
-        namespace=namespace,
-        flow_id=body.flow_id,
-        session_id=None,
+    return await op_data_tables_promote(
+        OfficeDataTablePromotePayload(
+            file_id=file_id, flow_id=body.flow_id, original_name=body.original_name
+        ),
+        user=require_context().user,
+        container=container,
     )
-    try:
-        _ = await container.docs_placement_service.bind(
-            placement,
-            company_id=company.company_id,
-            user_id=user.user_id,
-        )
-    except Exception:
-        _ = await container.files_service.delete(record.file_id)
-        raise
-    return record
 
 
 @router.post("/data-tables/{file_id}/tables", response_model=DataTableSchemaSnapshot)
@@ -210,11 +120,11 @@ async def create_data_table_table(
     body: DataTableCreateTableRequest,
     container: ContainerDep,
 ) -> DataTableSchemaSnapshot:
-    await _require_edit(container, file_id)
-    try:
-        return await container.data_table_service.create_table(file_id, body)
-    except (DataTableNotFoundError, DataTableLockedError, ValueError) as exc:
-        raise _http_from_data_table_error(exc) from exc
+    return await op_data_tables_table_create(
+        OfficeDataTableCreateTablePayload(file_id=file_id, name=body.name, columns=body.columns),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post(
@@ -227,11 +137,17 @@ async def add_data_table_column(
     body: DataTableAddColumnRequest,
     container: ContainerDep,
 ) -> DataTableSchemaSnapshot:
-    await _require_edit(container, file_id)
-    try:
-        return await container.data_table_service.add_column(file_id, table_name, body)
-    except (DataTableNotFoundError, DataTableLockedError, ValueError) as exc:
-        raise _http_from_data_table_error(exc) from exc
+    return await op_data_tables_column_add(
+        OfficeDataTableAddColumnPayload(
+            file_id=file_id,
+            table_name=table_name,
+            name=body.name,
+            column_type=body.column_type,
+            not_null=body.not_null,
+        ),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.get(
@@ -251,11 +167,10 @@ async def list_data_table_rows(
     q: Annotated[str | None, Query(min_length=1, max_length=MAX_SEARCH_Q_LENGTH)] = None,
     column_q: Annotated[list[str] | None, Query()] = None,
 ) -> CursorPage[DataTableRow]:
-    await _require_view(container, file_id)
-    try:
-        return await container.data_table_service.page_rows(
-            file_id,
-            table_name,
+    return await op_data_tables_rows_list(
+        OfficeDataTableRowsListPayload(
+            file_id=file_id,
+            table_name=table_name,
             limit=limit,
             cursor=cursor,
             sort_column=sort_column,
@@ -264,9 +179,10 @@ async def list_data_table_rows(
             filter_value=filter_value,
             q=q,
             column_q=column_q,
-        )
-    except (DataTableNotFoundError, DataTableLockedError, ValueError) as exc:
-        raise _http_from_data_table_error(exc) from exc
+        ),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.get("/data-tables/{file_id}/tables/{table_name}/export")
@@ -303,14 +219,11 @@ async def insert_data_table_rows(
     body: DataTableInsertRowsRequest,
     container: ContainerDep,
 ) -> DataTableInsertRowsResponse:
-    await _require_edit(container, file_id)
-    try:
-        row_ids = await container.data_table_service.insert_rows(
-            file_id, table_name, body.rows
-        )
-    except (DataTableNotFoundError, DataTableLockedError, ValueError) as exc:
-        raise _http_from_data_table_error(exc) from exc
-    return DataTableInsertRowsResponse(row_ids=row_ids)
+    return await op_data_tables_rows_insert(
+        OfficeDataTableInsertRowsPayload(file_id=file_id, table_name=table_name, rows=body.rows),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.patch(
@@ -324,14 +237,13 @@ async def update_data_table_row(
     body: DataTableUpdateRowRequest,
     container: ContainerDep,
 ) -> DataTableUpdateRowResponse:
-    await _require_edit(container, file_id)
-    try:
-        await container.data_table_service.update_row(
-            file_id, table_name, row_id, body.values
-        )
-    except (DataTableNotFoundError, DataTableLockedError, ValueError) as exc:
-        raise _http_from_data_table_error(exc) from exc
-    return DataTableUpdateRowResponse()
+    return await op_data_tables_row_update(
+        OfficeDataTableUpdateRowPayload(
+            file_id=file_id, table_name=table_name, row_id=row_id, values=body.values
+        ),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post(
@@ -344,14 +256,13 @@ async def delete_data_table_rows(
     body: DataTableDeleteRowsRequest,
     container: ContainerDep,
 ) -> DataTableDeleteRowsResponse:
-    await _require_edit(container, file_id)
-    try:
-        deleted = await container.data_table_service.delete_rows(
-            file_id, table_name, body.row_ids
-        )
-    except (DataTableNotFoundError, DataTableLockedError, ValueError) as exc:
-        raise _http_from_data_table_error(exc) from exc
-    return DataTableDeleteRowsResponse(deleted=deleted)
+    return await op_data_tables_rows_delete(
+        OfficeDataTableDeleteRowsPayload(
+            file_id=file_id, table_name=table_name, row_ids=body.row_ids
+        ),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post("/data-tables/{file_id}/query", response_model=DataTableQueryResult)
@@ -360,16 +271,11 @@ async def query_data_table(
     body: DataTableQueryRequest,
     container: ContainerDep,
 ) -> DataTableQueryResult:
-    stripped = body.sql.strip().lower()
-    is_write = stripped.startswith(("insert", "update", "delete"))
-    if is_write:
-        await _require_edit(container, file_id)
-    else:
-        await _require_view(container, file_id)
-    try:
-        return await container.data_table_service.query(file_id, body.sql)
-    except (DataTableNotFoundError, DataTableLockedError, ValueError) as exc:
-        raise _http_from_data_table_error(exc) from exc
+    return await op_data_tables_query(
+        OfficeDataTableQueryPayload(file_id=file_id, sql=body.sql),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post(

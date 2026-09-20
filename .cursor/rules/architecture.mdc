@@ -38,7 +38,7 @@ alwaysApply: true
 - `createCursorList`: `{method:'GET', path}` auto из `baseUrl`. Только `GET`.
 - `createFacets`: auto per facet key из `baseUrl`+`facets[key]`.
 
-CI `scripts/check_command_rest_mirror.py` (`make check-events-canon`):
+CI `scripts/check_command_rest_mirror.py` (`make check-events-canon`), `scripts/check_command_owner_catalogs.py` (owner в `_OWNER_BY_SCOPE` ⇔ непустой `<SVC>_OPERATIONS`, ключи `<svc>/<entity>/<verb>_requested`) и `scripts/check_rest_handlers_call_ops.py` (REST-хендлер сервиса из `COMMAND_WS_SERVICES` зовёт `op_*`; протокольные исключения и долг — ratchet `scripts/rest_handlers_without_op_baseline.json`):
 1. Каждая factory operation имеет `restMirror` (явный или auto).
 2. FastAPI route существует.
 3. Имя push-события ≠ имени команды.

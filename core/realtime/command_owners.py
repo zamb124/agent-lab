@@ -1,4 +1,11 @@
-"""Владелец `op_*` по первому сегменту PlatformEvent.type."""
+"""Владелец `op_*` по первому сегменту PlatformEvent.type.
+
+Владелец есть только у сервиса с каталогом `<SVC>_OPERATIONS`
+(`apps/<svc>/realtime/command_router.py`) — гейт `scripts/check_command_owner_catalogs.py`.
+`frontend`, `secrets`, `scheduler`, `search` и протокольные сервисы (`voice`, `browser`,
+`guest_runtime`, `capability_gateway`, `code_runner_*`, `realtime`) команд по шине не принимают:
+их API — только REST (`transport: 'http'` фабрики).
+"""
 
 from __future__ import annotations
 
@@ -9,10 +16,7 @@ _OWNER_BY_SCOPE: dict[str, str] = {
     "office": "office",
     "flows": "flows",
     "worktracker": "worktracker",
-    "frontend": "frontend",
     "rag": "rag",
-    "search": "search",
-    "secrets": "secrets",
 }
 
 

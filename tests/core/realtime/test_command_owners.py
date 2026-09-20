@@ -23,7 +23,8 @@ def test_owner_service_for_known_scopes() -> None:
     assert owner_service_for_event_type("worktracker/work_items/create_requested") == "worktracker"
     assert owner_service_for_event_type("office/document/rename_requested") == "office"
     assert owner_service_for_event_type("flows/flow/create_requested") == "flows"
-    assert owner_service_for_event_type("frontend/company/switch_requested") == "frontend"
+    with pytest.raises(ValueError):
+        _ = owner_service_for_event_type("frontend/company/switch_requested")
 
 
 def test_owner_service_unknown_scope_raises() -> None:

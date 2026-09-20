@@ -10,6 +10,27 @@ from apps.office.models.api import (
     OfficeEmptyCreateRequest,
     OfficeNamespaceCreateRequest,
 )
+from apps.office.realtime.data_table_operations import (
+    OfficeDataTableAddColumnPayload,
+    OfficeDataTableCreateTablePayload,
+    OfficeDataTableDeleteRowsPayload,
+    OfficeDataTableFileIdPayload,
+    OfficeDataTableInsertRowsPayload,
+    OfficeDataTablePromotePayload,
+    OfficeDataTableQueryPayload,
+    OfficeDataTableRowsListPayload,
+    OfficeDataTableUpdateRowPayload,
+    op_data_tables_column_add,
+    op_data_tables_create,
+    op_data_tables_get,
+    op_data_tables_promote,
+    op_data_tables_query,
+    op_data_tables_row_update,
+    op_data_tables_rows_delete,
+    op_data_tables_rows_insert,
+    op_data_tables_rows_list,
+    op_data_tables_table_create,
+)
 from apps.office.realtime.operations import (
     OfficeCatalogAccessRotatePayload,
     OfficeCatalogAccessUpdatePayload,
@@ -84,6 +105,7 @@ from apps.office.realtime.operations import (
     op_namespaces_create,
     op_namespaces_templates,
 )
+from core.data_tables.models import DataTableCreateRequest
 from core.documents.placement import DocsEnsurePathRequest, DocsPlacement
 from core.logging import get_logger
 from core.namespace.operations import NamespacesListPayload, op_namespaces_list
@@ -247,6 +269,36 @@ OFFICE_OPERATIONS: dict[str, RegisteredOperation[OfficeContainer]] = {
     ),
     "office/documents/ai_summary_requested": Operation(
         payload_model=OfficeFileIdPayload, fn=op_documents_ai_summary
+    ),
+    "office/data_tables/create_requested": Operation(
+        payload_model=DataTableCreateRequest, fn=op_data_tables_create
+    ),
+    "office/data_tables/get_requested": Operation(
+        payload_model=OfficeDataTableFileIdPayload, fn=op_data_tables_get
+    ),
+    "office/data_tables/promote_requested": Operation(
+        payload_model=OfficeDataTablePromotePayload, fn=op_data_tables_promote
+    ),
+    "office/data_tables/table_create_requested": Operation(
+        payload_model=OfficeDataTableCreateTablePayload, fn=op_data_tables_table_create
+    ),
+    "office/data_tables/column_add_requested": Operation(
+        payload_model=OfficeDataTableAddColumnPayload, fn=op_data_tables_column_add
+    ),
+    "office/data_tables/rows_list_requested": Operation(
+        payload_model=OfficeDataTableRowsListPayload, fn=op_data_tables_rows_list
+    ),
+    "office/data_tables/rows_insert_requested": Operation(
+        payload_model=OfficeDataTableInsertRowsPayload, fn=op_data_tables_rows_insert
+    ),
+    "office/data_tables/row_update_requested": Operation(
+        payload_model=OfficeDataTableUpdateRowPayload, fn=op_data_tables_row_update
+    ),
+    "office/data_tables/rows_delete_requested": Operation(
+        payload_model=OfficeDataTableDeleteRowsPayload, fn=op_data_tables_rows_delete
+    ),
+    "office/data_tables/query_requested": Operation(
+        payload_model=OfficeDataTableQueryPayload, fn=op_data_tables_query
     ),
 }
 
