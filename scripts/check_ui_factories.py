@@ -41,6 +41,18 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 APPS = ROOT / "apps"
 I18N = ROOT / "core" / "i18n" / "translations"
+CORE_FACTORY_RESOURCES = ROOT / "core" / "frontend" / "static" / "lib" / "events" / "resources"
+CORE_FACTORY_FILE_SERVICE = {
+    "rag-namespaces.resource.js": "rag",
+    "rag-documents.resource.js": "rag",
+    "rag-document-status.resource.js": "rag",
+    "rag-search.resource.js": "rag",
+    "rag-providers.resource.js": "rag",
+    "office-catalog-items.resource.js": "office",
+    "office-documents-browse.resource.js": "office",
+    "flows-agent-toolkits.resource.js": "flows",
+    "flows-flows-list.resource.js": "flows",
+}
 
 FACTORY_KINDS = (
     "createAsyncOp",
@@ -314,6 +326,13 @@ def main() -> int:
             if any(kind + "(" in text for kind in FACTORY_KINDS):
                 targets.append(path)
 
+    for factory_name, mapped_svc in CORE_FACTORY_FILE_SERVICE.items():
+        if args.app and args.app != mapped_svc:
+            continue
+        core_path = CORE_FACTORY_RESOURCES / factory_name
+        if core_path.exists():
+            targets.append(core_path)
+
     i18n_index = _load_i18n_index()
     by_locale_ns: dict[str, dict[str, set[str]]] = {}
     for (locale, ns), keys in i18n_index.items():
@@ -327,7 +346,14 @@ def main() -> int:
 
     for path in targets:
         rel = path.relative_to(ROOT)
-        svc_name = path.relative_to(APPS).parts[0]
+        if path.is_relative_to(CORE_FACTORY_RESOURCES):
+            mapped_svc = CORE_FACTORY_FILE_SERVICE.get(path.name)
+            if mapped_svc is None:
+                errors.append(f"{rel}: core factory without service mapping")
+                continue
+            svc_name = mapped_svc
+        else:
+            svc_name = path.relative_to(APPS).parts[0]
         for rec in _parse_factories(path):
             factories_total += 1
             rec["path"] = rel

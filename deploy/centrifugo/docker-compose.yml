@@ -1,0 +1,41 @@
+services:
+  redis-realtime:
+    image: redis:7-alpine
+    container_name: platform_redis_realtime
+    ports:
+      - "8098:6379"
+    command:
+      - redis-server
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - noeviction
+      - --save
+      - ""
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+
+  centrifugo:
+    image: centrifugo/centrifugo:v6.9.3
+    container_name: platform_centrifugo
+    depends_on:
+      redis-realtime:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY: ${CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY}
+      CENTRIFUGO_HTTP_API_KEY: ${CENTRIFUGO_HTTP_API_KEY:-local-centrifugo-http-api-key}
+    volumes:
+      - ./config.json:/centrifugo/config.json:ro
+    command: ["centrifugo", "-c", "/centrifugo/config.json"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8000/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 10

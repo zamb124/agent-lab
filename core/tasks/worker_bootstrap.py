@@ -3,7 +3,7 @@
 ``build_worker`` инкапсулирует то, что раньше копипастилось в каждом
 ``apps/<svc>_worker/worker.py``: регистрацию startup/shutdown событий и recovery
 зависших задач. Доменная инициализация (billing, redis, file processors,
-notification_manager, tracing) — явными типизированными вызовами хелперов внутри
+tracing) — явными типизированными вызовами хелперов внутри
 ``on_startup`` конкретного воркера.
 """
 

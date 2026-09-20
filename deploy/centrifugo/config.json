@@ -1,0 +1,57 @@
+{
+  "log_level": "info",
+  "health": {
+    "enabled": true
+  },
+  "engine": {
+    "type": "redis",
+    "redis": {
+      "address": "redis-realtime:6379",
+      "prefix": "centrifugo"
+    }
+  },
+  "client": {
+    "allowed_origins": ["*"],
+    "token": {
+      "hmac_secret_key": "local-dev-override-via-env",
+      "user_id_claim": "user_id",
+      "issuer": "platform.session"
+    }
+  },
+  "http_api": {
+    "key": "local-centrifugo-http-api-key"
+  },
+  "channel": {
+    "without_namespace": {
+      "allow_subscribe_for_client": false,
+      "allow_publish_for_client": false
+    },
+    "namespaces": [
+      {
+        "name": "user",
+        "presence": true,
+        "join_leave": true,
+        "allow_user_limited_channels": true,
+        "allow_subscribe_for_client": false,
+        "allow_publish_for_client": false
+      },
+      {
+        "name": "company",
+        "presence": true,
+        "join_leave": true,
+        "allow_subscribe_for_client": false,
+        "allow_publish_for_client": false
+      }
+    ]
+  },
+  "rpc": {
+    "proxy": {
+      "endpoint": "http://host.docker.internal:8025/realtime/api/v1/internal/centrifugo/inbound",
+      "timeout": "15s",
+      "include_connection_meta": true
+    },
+    "without_namespace": {
+      "proxy_enabled": true
+    }
+  }
+}

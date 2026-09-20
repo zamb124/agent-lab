@@ -1,0 +1,85 @@
+{{- if .Values.centrifugo.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: centrifugo
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: centrifugo
+spec:
+  type: ClusterIP
+  selector:
+    app: centrifugo
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: centrifugo
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: centrifugo
+spec:
+  replicas: {{ .Values.centrifugo.replicas }}
+  selector:
+    matchLabels:
+      app: centrifugo
+  template:
+    metadata:
+      labels:
+        app: centrifugo
+    spec:
+{{- include "agentlab.nodeSchedule" (list . .Values.centrifugo.nodeName) | nindent 6 }}
+      enableServiceLinks: false
+      containers:
+        - name: centrifugo
+          image: {{ .Values.centrifugo.image }}
+          imagePullPolicy: {{ .Values.centrifugo.imagePullPolicy }}
+          args:
+            - centrifugo
+            - -c
+            - /centrifugo/config.json
+          env:
+            - name: CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.platformSecretName }}
+                  key: auth-jwt-secret
+            - name: CENTRIFUGO_HTTP_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.platformSecretName }}
+                  key: centrifugo-api-key
+          ports:
+            - name: http
+              containerPort: 8000
+          volumeMounts:
+            - name: config
+              mountPath: /centrifugo/config.json
+              subPath: config.json
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.centrifugo.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: centrifugo-config
+{{- end }}

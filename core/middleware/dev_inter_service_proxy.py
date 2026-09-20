@@ -76,6 +76,7 @@ _SERVICE_PREFIXES: tuple[str, ...] = (
     "worktracker",
     "secrets",
     "wiki",
+    "realtime",
 )
 
 # Где публичный первый сегмент пути не совпадает с ключом get_service_url / SERVER__*_SERVICE_URL.
@@ -493,6 +494,11 @@ class DevInterServiceWsProxyMiddleware:
                 return await self.app(scope, receive, send)
             if target not in _SERVICE_PREFIXES:
                 return await self.app(scope, receive, send)
+            if target == "realtime":
+                raise RuntimeError(
+                    "user WebSocket /realtime must not be proxied through Granian; "
+                    + "connect Centrifugo on port 8000 (dev) or 19000 (tests)"
+                )
             if _is_local_target_for_process(target, self._service_name):
                 return await self.app(scope, receive, send)
             url_key = _PREFIX_TO_SERVICE_URL_KEY.get(target, target)

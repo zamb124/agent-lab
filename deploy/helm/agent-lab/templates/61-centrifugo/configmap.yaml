@@ -1,0 +1,65 @@
+{{- if .Values.centrifugo.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: centrifugo-config
+  namespace: {{ .Values.namespace }}
+data:
+  config.json: |
+    {
+      "log_level": "info",
+      "health": {
+        "enabled": true
+      },
+      "engine": {
+        "type": "redis",
+        "redis": {
+          "address": "redis-realtime:6379",
+          "prefix": "centrifugo"
+        }
+      },
+      "http_api": {
+        "key": "set-via-env"
+      },
+      "client": {
+        "allowed_origins": ["*"],
+        "token": {
+          "user_id_claim": "user_id",
+          "issuer": "platform.session"
+        }
+      },
+      "channel": {
+        "without_namespace": {
+          "allow_subscribe_for_client": false,
+          "allow_publish_for_client": false
+        },
+        "namespaces": [
+          {
+            "name": "user",
+            "presence": true,
+            "join_leave": true,
+            "allow_user_limited_channels": true,
+            "allow_subscribe_for_client": false,
+            "allow_publish_for_client": false
+          },
+          {
+            "name": "company",
+            "presence": true,
+            "join_leave": true,
+            "allow_subscribe_for_client": false,
+            "allow_publish_for_client": false
+          }
+        ]
+      },
+      "rpc": {
+        "proxy": {
+          "endpoint": "http://{{ .Values.applications.realtime.serviceName }}:{{ .Values.applications.realtime.port }}/realtime/api/v1/internal/centrifugo/inbound",
+          "timeout": "15s",
+          "include_connection_meta": true
+        },
+        "without_namespace": {
+          "proxy_enabled": true
+        }
+      }
+    }
+{{- end }}

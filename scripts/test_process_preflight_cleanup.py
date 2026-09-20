@@ -40,6 +40,10 @@ TEST_HTTP_PORTS = {
     9020,
     9021,
     9022,
+    9023,
+    9024,
+    9025,
+    19000,
 }
 
 TEST_GRANIAN_APPS = (
@@ -59,6 +63,9 @@ TEST_GRANIAN_APPS = (
     "apps.code_runner_csharp.main:app",
     "apps.worktracker.main:app",
     "apps.secrets.main:app",
+    "apps.wiki.main:app",
+    "apps.guest_runtime.main:app",
+    "apps.realtime.main:app",
 )
 
 TEST_TASKIQ_APPS = (

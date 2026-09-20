@@ -44,6 +44,10 @@ class PlatformEventCatalogEntry(BaseModel):
         return self.model_copy(update={"filter_fields": healed})
 
 
+class PlatformEventCatalogResponse(BaseModel):
+    items: list[PlatformEventCatalogEntry] = Field(default_factory=list)
+
+
 def _model_ref(payload_model: type[BaseModel]) -> str:
     return f"{payload_model.__module__}.{payload_model.__qualname__}"
 

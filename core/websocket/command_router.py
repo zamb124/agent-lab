@@ -1,27 +1,15 @@
 """
-Платформенный command-router поверх WS-сокета `/<svc>/api/ws/notifications`.
+Каталог `op_*` владельца: bus `realtime` зовёт
+`POST /{svc}/api/internal/realtime/command` с телом `PlatformEvent`.
 
-Каждый сервис регистрирует свои command-handlers через `register_ws_command_handler`.
-Контракт фрейма от клиента:
+Каждый сервис регистрирует handlers через `register_ws_command_handler`.
+Вход — `PlatformEvent.type` (`…/_requested`) и `payload`. Исход —
+`publish_event` с `*_succeeded` / `*_failed` и `meta.causation_id = event_id`.
 
-    { "request_id": "<id>", "type": "<scope>/<entity>/<verb>_requested", "payload": <object> }
+Тип reply выводится механически: суффикс `_requested` → `_succeeded` / `_failed`.
+Команды без `_requested` запрещены — `register_ws_command_handler` бросает `ValueError`.
 
-WS-роутер ищет handler по `type`, передаёт ему `(payload, user)` и формирует
-обратный фрейм:
-
-    { "request_id": "<id>", "type": "<scope>/<entity>/<verb>_succeeded", "payload": <result> }
-
-либо при `WsCommandError`:
-
-    { "request_id": "<id>", "type": "<scope>/<entity>/<verb>_failed",
-      "payload": { "error_code": "<code>", "error_detail": "<detail>" } }
-
-Тип reply'я выводится из имени команды механически: суффикс `_requested`
-заменяется на `_succeeded` / `_failed`. Команды без суффикса `_requested`
-запрещены — `register_ws_command_handler` бросает `ValueError`.
-
-Никаких фолбеков: если handler выбросил исключение не `WsCommandError` —
-оно пробрасывается, фрейм reply не отправляется (клиент дождётся timeout).
+Доменная ошибка — `WsCommandError`. Любая другая ошибка handler'а пробрасывается.
 """
 
 from __future__ import annotations
@@ -32,8 +20,10 @@ from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
 
+from core.events import register_platform_event
 from core.logging import get_logger
 from core.models.identity_models import User
+from core.realtime.models import PlatformCommandEventPayload
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
 logger = get_logger(__name__)
@@ -93,7 +83,28 @@ def register_ws_command_handler(command_type: str, handler: CommandHandler) -> N
     _validate_command_type(command_type)
     if command_type in _handlers:
         raise ValueError(f"WS command handler for {command_type!r} already registered")
+    _register_command_platform_events(command_type)
     _handlers[command_type] = handler
+
+
+def _register_command_platform_events(command_type: str) -> None:
+    succeeded = derive_succeeded_type(command_type)
+    failed = derive_failed_type(command_type)
+    register_platform_event(
+        command_type,
+        PlatformCommandEventPayload,
+        description=f"Command {command_type}",
+    )
+    register_platform_event(
+        succeeded,
+        PlatformCommandEventPayload,
+        description=f"Command result {succeeded}",
+    )
+    register_platform_event(
+        failed,
+        PlatformCommandEventPayload,
+        description=f"Command result {failed}",
+    )
 
 
 def has_ws_command_handler(command_type: str) -> bool:

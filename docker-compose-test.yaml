@@ -52,6 +52,54 @@ services:
     networks:
       - test-net
 
+  redis-realtime-test:
+    platform: "linux/amd64"
+    image: redis:7-alpine
+    container_name: agentlab_redis_realtime_test
+    ports:
+      - "63793:6379"
+    command:
+      - redis-server
+      - --maxmemory
+      - 128mb
+      - --maxmemory-policy
+      - noeviction
+      - --save
+      - ""
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - test-net
+
+  centrifugo-test:
+    platform: "linux/amd64"
+    image: centrifugo/centrifugo:v6.9.3
+    container_name: agentlab_centrifugo_test
+    depends_on:
+      redis-realtime-test:
+        condition: service_healthy
+    ports:
+      - "19000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY: platform-test-hs256-jwt-secret-32b!
+      CENTRIFUGO_HTTP_API_KEY: platform-test-centrifugo-http-api-key
+    volumes:
+      - ./deploy/centrifugo/config.test.json:/centrifugo/config.json:ro
+    command: ["centrifugo", "-c", "/centrifugo/config.json"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8000/health"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    networks:
+      - test-net
+
   minio-test:
     platform: "linux/amd64"
     image: pgsty/silo:RELEASE.2026-09-03T13-18-01Z
@@ -235,6 +283,8 @@ services:
         condition: service_healthy
       livekit-test:
         condition: service_healthy
+      centrifugo-test:
+        condition: service_healthy
       onlyoffice-documentserver:
         condition: service_healthy
       loki-test:
@@ -255,6 +305,8 @@ services:
       - DATABASE__TRACING_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_tracing
       - DATABASE__SECRETS_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_secrets
       - SECRETS__ENCRYPTION_KEY=test-secrets-encryption-key-fixed
+      - DATABASE__WIKI_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_wiki
+      - DATABASE__REALTIME_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_realtime
       - DATABASE__REDIS_URL=redis://redis-test:6379/0
       - TASKS__BROKER_URL=redis://redis-test:6379/1
       - TESTING=true
@@ -280,7 +332,15 @@ services:
       - SERVER__CODE_RUNNER_NODE_SERVICE_URL=http://localhost:9018
       - SERVER__CODE_RUNNER_GO_SERVICE_URL=http://localhost:9019
       - SERVER__CODE_RUNNER_CSHARP_SERVICE_URL=http://localhost:9020
+      - SERVER__WIKI_SERVICE_URL=http://localhost:9023
+      - SERVER__GUEST_RUNTIME_SERVICE_URL=http://localhost:9024
+      - SERVER__REALTIME_SERVICE_URL=http://localhost:9025
+      - REALTIME__CENTRIFUGO_API_URL=http://centrifugo-test:8000/api
+      - REALTIME__CENTRIFUGO_API_KEY=platform-test-centrifugo-http-api-key
+      - CENTRIFUGO_WS_URL=ws://centrifugo-test:8000/connection/websocket
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy-test:4317
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: ["sh", "-c", "test -d /app/test-results || mkdir -p /app/test-results; test -d /app/htmlcov || mkdir -p /app/htmlcov; chmod -R 777 /app/test-results /app/htmlcov 2>/dev/null || true; python -m pytest tests/ -v -n ${PYTEST_WORKERS} --junitxml=/app/test-results/junit.xml --cov=apps --cov=core --cov-report=term-missing --cov-report=html"]
     restart: "no"
     volumes:

@@ -351,6 +351,12 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
             "GUEST_RUNTIME__MAX_LEASES_CLUSTER": "128",
         },
     ),
+    GranianService(
+        name="realtime",
+        app_path="apps.realtime.main:app",
+        port=9025,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
+    ),
 )
 
 

@@ -40,6 +40,7 @@ jq -n \
   --arg selectelSecretKey "${SELECTEL_SECRET_KEY:-}" \
   --arg livekitApiKey "${LIVEKIT_API_KEY:-}" \
   --arg livekitApiSecret "${LIVEKIT_API_SECRET:-}" \
+  --arg centrifugoApiKey "${CENTRIFUGO_API_KEY:-}" \
   --arg turnSecret "${TURN_SECRET:-}" \
   --arg onlyofficeJwtSecret "${ONLYOFFICE_JWT_SECRET:-}" \
   --arg grafanaAdminPassword "${GRAFANA_ADMIN_PASSWORD:-}" \
@@ -119,6 +120,7 @@ jq -n \
     selectelSecretKey: $selectelSecretKey,
     livekitApiKey: $livekitApiKey,
     livekitApiSecret: $livekitApiSecret,
+    centrifugoApiKey: $centrifugoApiKey,
     turnSecret: $turnSecret,
     onlyofficeJwtSecret: $onlyofficeJwtSecret,
     grafanaAdminPassword: $grafanaAdminPassword,

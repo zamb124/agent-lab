@@ -12,13 +12,14 @@ def test_scan_forbidden_passes_on_clean_repo() -> None:
     assert errors == []
 
 
-def test_kiq_allowlist_covers_evaluation_and_scheduler() -> None:
+def test_kiq_allowlist_covers_enqueue_and_scheduler() -> None:
     allow = canon.KIQ_ALLOWLIST
     assert "core/tasks/kicker.py" in allow
     assert "apps/scheduler/dispatch.py" in allow
-    assert "apps/flows/src/api/v1/evaluation.py" in allow
-    assert "apps/flows_worker/evaluation_tasks.py" in allow
     assert "core/scheduler/service.py" in allow
+    assert "apps/flows/src/api/v1/evaluation.py" not in allow
+    assert "apps/flows/realtime/evaluation_operations.py" not in allow
+    assert "apps/flows_worker/evaluation_tasks.py" not in allow
 
 
 def test_create_broker_allowlist_is_thin_brokers_only() -> None:

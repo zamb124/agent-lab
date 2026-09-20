@@ -2,15 +2,16 @@
 Базовая конфигурация приложения.
 """
 
-from typing import ClassVar, Self, override
+from typing import ClassVar, override
 
-from pydantic import Field, model_validator
+from pydantic import Field
 from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings as PydanticBaseSettings
 from pydantic_settings import PydanticBaseSettingsSource, SettingsConfigDict
 
 from core.config.loader import load_merged_config
 from core.config.models import (
+    AgentSettings,
     AuthConfig,
     BillingConfig,
     CalendarSyncConfig,
@@ -37,6 +38,7 @@ from core.config.models import (
     PublicSiteConfig,
     PushConfig,
     RAGConfig,
+    RealtimeConfig,
     S3Config,
     SecretsConfig,
     ServerConfig,
@@ -126,6 +128,7 @@ class BaseSettings(PydanticBaseSettings):
     billing: BillingConfig = Field(default_factory=BillingConfig)
     tasks: TasksConfig = Field(default_factory=TasksConfig)
     events: EventsConfig = Field(default_factory=EventsConfig)
+    realtime: RealtimeConfig = Field(default_factory=RealtimeConfig)
     openfga: OpenFGAConfig = Field(default_factory=OpenFGAConfig)
     calendar_sync: CalendarSyncConfig = Field(default_factory=CalendarSyncConfig)
     mail_sync: MailSyncConfig = Field(default_factory=MailSyncConfig)
@@ -142,30 +145,7 @@ class BaseSettings(PydanticBaseSettings):
         ge=60,
         description="TTL Redis SET NX для ключа sync:transcribe_audio:{company_id}:{message_id}.",
     )
-    ws_presence_heartbeat_interval_seconds: float = Field(
-        default=45.0,
-        ge=5.0,
-        description="Интервал продления ключа sync:ws:presence при открытом /sync/ws.",
-    )
-    ws_presence_ttl_seconds: int = Field(
-        default=120,
-        ge=30,
-        description="TTL Redis ключа sync:ws:presence:{user_id}.",
-    )
-    sync_taskiq_wait_result_timeout_seconds: float = Field(
-        default=300.0,
-        ge=30.0,
-        description="Таймаут task.wait_result для команд Sync из HTTP и /sync/ws.",
-    )
-
-    @model_validator(mode="after")
-    def _ws_presence_ttl_vs_heartbeat(self) -> Self:
-        min_ttl = int(2 * self.ws_presence_heartbeat_interval_seconds) + 1
-        if self.ws_presence_ttl_seconds < min_ttl:
-            raise ValueError(
-                f"ws_presence_ttl_seconds ({self.ws_presence_ttl_seconds}) должен быть >= {min_ttl} (удвоенный heartbeat + 1 с)."
-            )
-        return self
+    agent: AgentSettings = Field(default_factory=AgentSettings)
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         env_file=[".env"],
@@ -317,6 +297,10 @@ class _SettingsProxy:
         return get_settings().events
 
     @property
+    def realtime(self) -> RealtimeConfig:
+        return get_settings().realtime
+
+    @property
     def openfga(self) -> OpenFGAConfig:
         return get_settings().openfga
 
@@ -353,16 +337,8 @@ class _SettingsProxy:
         return get_settings().transcribe_audio_redis_lock_ttl_seconds
 
     @property
-    def ws_presence_heartbeat_interval_seconds(self) -> float:
-        return get_settings().ws_presence_heartbeat_interval_seconds
-
-    @property
-    def ws_presence_ttl_seconds(self) -> int:
-        return get_settings().ws_presence_ttl_seconds
-
-    @property
-    def sync_taskiq_wait_result_timeout_seconds(self) -> float:
-        return get_settings().sync_taskiq_wait_result_timeout_seconds
+    def agent(self) -> AgentSettings:
+        return get_settings().agent
 
     @override
     def __repr__(self) -> str:

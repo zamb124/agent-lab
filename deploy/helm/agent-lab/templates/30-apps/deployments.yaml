@@ -115,6 +115,15 @@ spec:
             - name: GUEST_RUNTIME__DATA_DIR
               value: /var/lib/guest-runtime
             {{- end }}
+            {{- if eq $name "realtime" }}
+            - name: REALTIME__CENTRIFUGO_API_URL
+              value: http://centrifugo:8000/api
+            - name: REALTIME__CENTRIFUGO_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.platformSecretName }}
+                  key: centrifugo-api-key
+            {{- end }}
             {{- include "agentlab.appEnv" $ | nindent 12 }}
           ports:
             - name: http

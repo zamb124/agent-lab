@@ -26,9 +26,7 @@ from core.events import (
     publish_event_to_user,
 )
 from core.logging import get_logger
-from core.push.delivery import deliver_offline_push
 from core.types import JsonArray, JsonObject, parse_json_object
-from core.websocket.manager import notification_manager
 
 logger = get_logger(__name__)
 
@@ -113,13 +111,8 @@ def _notification_payload(notification: Notification) -> JsonObject:
 
 async def notify_user(user_id: str, notification: Notification) -> None:
     """
-    Доставить уведомление пользователю.
-
-    1. Публикуется как событие шины `platform:events` с UI-доставкой
-       пользователю — фронт получает его через WebSocket и обрабатывает
-       в EventBus.
-    2. Если пользователь offline — отправляется Web Push / APNs через
-       `deliver_offline_push`.
+    Опубликовать notify PlatformEvent. Offline Web Push делает bus после
+    Centrifugo presence, не in-memory сокеты процесса.
     """
     event_type = _event_type_for(notification)
     payload = _notification_payload(notification)
@@ -130,17 +123,6 @@ async def notify_user(user_id: str, notification: Notification) -> None:
         notification.service,
         notification.type.value,
     )
-
-    if not notification_manager.is_user_connected(user_id):
-        _ = await deliver_offline_push(
-            user_id,
-            title=notification.title,
-            message=notification.message,
-            action_url=notification.action_url,
-            tag=notification.type.value,
-            priority=notification.priority,
-            data=notification.data,
-        )
 
 
 async def notify_company(company_id: str, notification: Notification) -> None:

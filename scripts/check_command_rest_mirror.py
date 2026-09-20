@@ -11,8 +11,8 @@ CI-проверка платформенного инварианта «REST-з�
   2. Push-события (`publish_event_to_user`, `publish_event_to_users`,
      `publish_event_to_company`, `publish_event_broadcast`) НЕ должны иметь
      REST-эндпоинт с тем же путём — REST-зеркала push-событий запрещены,
-     подписка только через шину `platform:events` ->
-     `/<svc>/api/ws/notifications`.
+     подписка только через шину `platform:events` -> bus `realtime` ->
+     Centrifugo `/realtime`.
 
 Проверка строится на статическом анализе (regex по существующим скриптам:
 см. `scripts/check_ui_factories.py`). FastAPI-роуты собираются обходом
@@ -50,7 +50,63 @@ FACTORY_CANON_SERVICES = {
     "sync",
     "flows",
     "wiki",
+    "worktracker",
 }
+
+COMMAND_WS_SERVICES = {
+    "sync",
+    "worktracker",
+    "wiki",
+    "rag",
+    "office",
+    "crm",
+    "flows",
+}
+
+COMMAND_WS_HTTP_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        "sync/call_join_info",
+        "sync/call_join_accept",
+        "sync/namespaces",
+        "sync/namespace_update",
+        "wiki/public_page",
+        "wiki/public_tree",
+        "wiki/public_site_page",
+        "rag/document_upload",
+        "office/document_upload",
+        "office/document_editor_config",
+        "office/public_resolve",
+        "office/public_open",
+        "office/public_catalog_binding_open",
+        "office/public_catalog_items",
+        "crm/entities_list",
+        "crm/notes_list",
+        "crm/relationships_list",
+        "crm/attachment_upload",
+        "flows/google_workspace_authorize",
+        "flows/data_table_snapshot",
+        "flows/editor",
+        "flows/api_console_run",
+        "flows/code_lsp_session",
+    }
+)
+
+CORE_FACTORY_RESOURCES = ROOT / "core" / "frontend" / "static" / "lib" / "events" / "resources"
+CORE_RAG_FACTORY_FILES = (
+    "rag-namespaces.resource.js",
+    "rag-documents.resource.js",
+    "rag-document-status.resource.js",
+    "rag-search.resource.js",
+    "rag-providers.resource.js",
+)
+CORE_OFFICE_FACTORY_FILES = (
+    "office-catalog-items.resource.js",
+    "office-documents-browse.resource.js",
+)
+CORE_FLOWS_FACTORY_FILES = (
+    "flows-agent-toolkits.resource.js",
+    "flows-flows-list.resource.js",
+)
 # Все мигрированные на event-канон сервисы. Парсер `_resolve_external_prefixes`
 # умеет резолвить вложенные `include_router(child, prefix='/...')`-цепочки
 # (используются в `apps/sync/api/__init__.py::get_api_router` и
@@ -170,8 +226,9 @@ def _balance_braces(text: str, start: int) -> int:
 
 
 def _normalize_path(path: str) -> str:
-    """Нормализовать путь: `:param` -> `{param}` для сравнения с FastAPI."""
-    return re.sub(r":(\w+)", r"{\1}", path)
+    """Нормализовать путь: FastAPI `{param:path}` и JS `:param` → `{param}`."""
+    without_converters = re.sub(r"\{(\w+):\w+\}", r"{\1}", path)
+    return re.sub(r":(\w+)", r"{\1}", without_converters)
 
 
 def _derive_collection_paths(base_url: str, id_field: str | None, operations: list[str]) -> dict[str, tuple[str, str]]:
@@ -574,8 +631,6 @@ def main() -> int:
             continue
 
         ui_resources = svc_dir / "ui" / "events" / "resources"
-        if not ui_resources.exists():
-            continue
 
         # Сервис вне FACTORY_CANON_SERVICES — пропускаем строгие проверки,
         # но всё ещё собираем roughCount.
@@ -585,7 +640,23 @@ def main() -> int:
         routes_total += len(routes)
         _collect_publish_event_types(svc_dir)
 
-        for path in sorted(ui_resources.rglob("*.js")):
+        factory_files = list(sorted(ui_resources.rglob("*.js"))) if ui_resources.exists() else []
+        if svc == "worktracker" and CORE_FACTORY_RESOURCES.exists():
+            factory_files.extend(sorted(CORE_FACTORY_RESOURCES.glob("work-items.resource.js")))
+            factory_files.extend(sorted(CORE_FACTORY_RESOURCES.glob("work-queues.resource.js")))
+        if svc == "rag" and CORE_FACTORY_RESOURCES.exists():
+            for factory_name in CORE_RAG_FACTORY_FILES:
+                factory_files.extend(sorted(CORE_FACTORY_RESOURCES.glob(factory_name)))
+        if svc == "office" and CORE_FACTORY_RESOURCES.exists():
+            for factory_name in CORE_OFFICE_FACTORY_FILES:
+                factory_files.extend(sorted(CORE_FACTORY_RESOURCES.glob(factory_name)))
+        if svc == "flows" and CORE_FACTORY_RESOURCES.exists():
+            for factory_name in CORE_FLOWS_FACTORY_FILES:
+                factory_files.extend(sorted(CORE_FACTORY_RESOURCES.glob(factory_name)))
+        if not factory_files:
+            continue
+
+        for path in factory_files:
             for rec in _parse_factories(path):
                 factories_total += 1
                 kind = rec["kind"]
@@ -606,6 +677,16 @@ def main() -> int:
                 ops = rec["operations"]
                 transport = rec["transport"]
                 rest_entries = _extract_rest_entries(rec["restMirrorBlock"])
+                owner = (name or "").split("/", 1)[0]
+                if (
+                    owner in COMMAND_WS_SERVICES
+                    and kind in {"createAsyncOp", "createResourceCollection", "createCursorList"}
+                    and transport != "ws"
+                    and name not in COMMAND_WS_HTTP_ALLOWLIST
+                ):
+                    errors.append(
+                        f"{prefix}: COMMAND_WS_SERVICES требует transport='ws' для {name}"
+                    )
 
                 if kind == "createResourceCollection":
                     expected = _derive_collection_paths(

@@ -54,6 +54,11 @@
       "name": "wiki",
       "models_module": "apps.wiki.db.models",
       "database_url_key": "wiki_url"
+    },
+    {
+      "name": "realtime",
+      "models_module": "apps.realtime.db.models",
+      "database_url_key": "realtime_url"
     }
   ],
     "postgres": {
@@ -69,6 +74,7 @@
       "platform_search",
       "platform_secrets",
       "platform_wiki",
+      "platform_realtime",
       "openfga"
     ],
     "vector_extensions": ["platform_shared", "platform_crm", "platform_rag"]

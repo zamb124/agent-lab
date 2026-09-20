@@ -1,0 +1,81 @@
+{{- if .Values.centrifugo.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-realtime
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: redis-realtime
+spec:
+  clusterIP: None
+  selector:
+    app: redis-realtime
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-realtime
+  namespace: {{ .Values.namespace }}
+spec:
+  serviceName: redis-realtime
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-realtime
+  template:
+    metadata:
+      labels:
+        app: redis-realtime
+    spec:
+{{- include "agentlab.nodeSchedule" (list . .Values.centrifugo.redis.nodeName) | nindent 6 }}
+      containers:
+        - name: redis
+          image: {{ .Values.centrifugo.redis.image }}
+          imagePullPolicy: IfNotPresent
+          command:
+            - redis-server
+            - --save
+            - "60"
+            - "1"
+            - --maxmemory
+            - {{ .Values.centrifugo.redis.maxmemory | quote }}
+            - --maxmemory-policy
+            - noeviction
+            - --loglevel
+            - notice
+            - --appendonly
+            - "yes"
+            - --dir
+            - /data
+          ports:
+            - name: redis
+              containerPort: 6379
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.centrifugo.redis.resources | nindent 12 }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: {{ .Values.storageClassName }}
+        resources:
+          requests:
+            storage: {{ .Values.centrifugo.redis.storage }}
+{{- end }}

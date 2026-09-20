@@ -5,6 +5,7 @@
   "scripts": {
     "build:codemirror": "node scripts/build_codemirror_bundle.mjs",
     "build:marked": "node scripts/build_marked_bundle.mjs",
+    "build:centrifuge": "node scripts/build_centrifuge_bundle.mjs",
     "build:prosemirror": "node scripts/build_prosemirror_bundle.mjs",
     "test:core": "npm run test:core-unit && npm run test:core-browser",
     "test:core-browser": "web-test-runner --config web-test-runner.config.mjs",
@@ -37,6 +38,7 @@
     "@web/test-runner": "^0.20.2",
     "@web/test-runner-commands": "^0.9.0",
     "@web/test-runner-playwright": "^0.11.0",
+    "centrifuge": "^5.7.4",
     "esbuild": "^0.28.0",
     "lit": "^3.2.1",
     "marked": "^15.0.12",

@@ -603,6 +603,39 @@ async def office_client_http(office_service):
 
 
 @pytest_asyncio.fixture
+async def sync_client_http(sync_service):
+    """HTTP клиент Sync API (реальный Granian :9005)."""
+    _ = sync_service
+    async with AsyncClient(
+        base_url="http://127.0.0.1:9005",
+        timeout=_E2E_HTTP_TIMEOUT_SECONDS,
+    ) as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def wiki_client_http(wiki_service_http):
+    """HTTP клиент Wiki API (реальный Granian :9023)."""
+    _ = wiki_service_http
+    async with AsyncClient(
+        base_url="http://localhost:9023",
+        timeout=_E2E_HTTP_TIMEOUT_SECONDS,
+    ) as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def rag_client_http(rag_service):
+    """HTTP клиент RAG API (реальный Granian :9002)."""
+    _ = rag_service
+    async with AsyncClient(
+        base_url="http://localhost:9002",
+        timeout=_E2E_HTTP_TIMEOUT_SECONDS,
+    ) as client:
+        yield client
+
+
+@pytest_asyncio.fixture
 async def worktracker_client_http(worktracker_http_service):
     """
     HTTP клиент для Worktracker API (реальный HTTP).
@@ -612,5 +645,58 @@ async def worktracker_client_http(worktracker_http_service):
     async with AsyncClient(
         base_url="http://localhost:9021",
         timeout=_E2E_HTTP_TIMEOUT_SECONDS,
+    ) as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def crm_client_http(crm_service):
+    """HTTP клиент CRM API (реальный Granian :9003)."""
+    _ = crm_service
+    async with AsyncClient(
+        base_url="http://localhost:9003",
+        timeout=_E2E_HTTP_TIMEOUT_SECONDS,
+    ) as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def realtime_client_http(realtime_service):
+    """HTTP клиент bus `realtime` (реальный Granian :9025)."""
+    async with AsyncClient(
+        base_url="http://localhost:9025",
+        timeout=_E2E_HTTP_TIMEOUT_SECONDS,
+    ) as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def realtime_session_client(realtime_service, auth_headers_system):
+    """SESSION JWT → bus :9025, как SPA GET /events."""
+    async with AsyncClient(
+        base_url="http://localhost:9025",
+        timeout=_E2E_HTTP_TIMEOUT_SECONDS,
+        headers=auth_headers_system,
+    ) as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def realtime_session_client_user2(realtime_service, auth_headers_system_user2):
+    async with AsyncClient(
+        base_url="http://localhost:9025",
+        timeout=_E2E_HTTP_TIMEOUT_SECONDS,
+        headers=auth_headers_system_user2,
+    ) as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def centrifugo_http(centrifugo_service):
+    """HTTP health Centrifugo :19000 (тот же процесс, что user WS)."""
+    _ = centrifugo_service
+    async with AsyncClient(
+        base_url="http://127.0.0.1:19000",
+        timeout=10.0,
     ) as client:
         yield client

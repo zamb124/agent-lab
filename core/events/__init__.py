@@ -53,6 +53,7 @@ from core.events.publisher import (
 from core.events.redis_client import events_redis_client
 from core.events.registry import (
     PlatformEventCatalogEntry,
+    PlatformEventCatalogResponse,
     assert_publishable_platform_event_type,
     catalog_entry_for_event_type,
     is_dynamic_notify_event_type,
@@ -71,6 +72,7 @@ __all__ = [
     "EventDelivery",
     "PlatformEvent",
     "PlatformEventCatalogEntry",
+    "PlatformEventCatalogResponse",
     "PlatformEventFilterField",
     "PlatformEventGroupConsumer",
     "PlatformEventHandler",

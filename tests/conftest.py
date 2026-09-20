@@ -81,6 +81,10 @@ os.environ["SERVER__CODE_RUNNER_CSHARP_SERVICE_URL"] = "http://localhost:9020"
 os.environ["SERVER__WORKTRACKER_SERVICE_URL"] = "http://localhost:9021"
 os.environ["SERVER__WIKI_SERVICE_URL"] = "http://localhost:9023"
 os.environ["SERVER__GUEST_RUNTIME_SERVICE_URL"] = "http://localhost:9024"
+os.environ["SERVER__REALTIME_SERVICE_URL"] = "http://localhost:9025"
+os.environ.setdefault("REALTIME__CENTRIFUGO_API_URL", "http://127.0.0.1:19000/api")
+os.environ.setdefault("REALTIME__CENTRIFUGO_API_KEY", "platform-test-centrifugo-http-api-key")
+os.environ.setdefault("CENTRIFUGO_WS_URL", "ws://127.0.0.1:19000/connection/websocket")
 os.environ.setdefault("GUEST_RUNTIME__EXECUTOR", "inprocess")
 os.environ.setdefault("GUEST_RUNTIME__MAX_LEASES_PER_COMPANY", "32")
 os.environ.setdefault("GUEST_RUNTIME__MAX_LEASES_CLUSTER", "128")
@@ -239,24 +243,6 @@ async def setup_database_before_tests():
             pytrace=False,
         )
     yield
-
-
-@pytest_asyncio.fixture(scope="session", autouse=True)
-async def platform_notification_manager_redis(setup_database_before_tests):
-    """Redis Pub/Sub для notify_user; без этого CRM и др. падают до старта flows lifespan."""
-    from core.websocket.manager import notification_manager
-
-    redis_url = os.environ.get("DATABASE__REDIS_URL", "redis://localhost:63792/0")
-    await notification_manager.start_redis_listener(redis_url)
-    yield
-    try:
-        await asyncio.wait_for(notification_manager.stop_redis_listener(), timeout=30.0)
-    except asyncio.TimeoutError:
-        from core.logging import get_logger
-
-        get_logger(__name__).warning(
-            "platform_notification_manager_redis.stop_redis_listener_timed_out"
-        )
 
 
 def pytest_configure(config):
@@ -524,9 +510,12 @@ def _skip_autouse_test_context(request: pytest.FixtureRequest) -> bool:
         "crm_client",
         "worktracker_client",
         "worktracker_client_http",
+        "wiki_client_http",
+        "rag_client_http",
         "office_client",
         "office_client_http",
         "sync_client",
+        "sync_client_http",
         "rag_client",
         "voice_client",
         "wiki_client",
@@ -880,7 +869,7 @@ def sync_tools(request: pytest.FixtureRequest):
     import apps.crm_worker.tasks.knowledge_import_tasks as crm_knowledge_import_tasks
     import apps.crm_worker.tasks.namespace_integration_tasks as crm_namespace_integration_tasks
     import apps.crm_worker.tasks.note_markdown_tasks as crm_note_markdown_tasks
-    import apps.flows.src.api.v1.company as flows_company_module
+    import apps.flows.realtime.company_operations as flows_company_module
     import apps.flows.src.api.v1.tasks as flows_tasks_api_module
     import apps.flows.src.channels.a2a as flows_a2a_channel_module
     import apps.flows.src.channels.base as flows_base_channel_module
@@ -890,7 +879,7 @@ def sync_tools(request: pytest.FixtureRequest):
     import apps.flows.src.triggers.executor as flows_trigger_executor_module
     import apps.idle_worker.tasks.push_notification_tasks as push_notification_tasks
     import apps.office.services.catalog_rag_index_service as office_catalog_rag_index_module
-    import apps.rag.api.documents as rag_documents_module
+    import apps.rag.realtime.operations as rag_operations_module
     import apps.rag_worker.tasks.indexing_tasks as rag_indexing_tasks
     import apps.sync.realtime.handlers as sync_handlers_module
     import apps.sync.realtime.notification_tasks as sync_notification_tasks
@@ -1172,7 +1161,7 @@ def sync_tools(request: pytest.FixtureRequest):
         sync_operations_module,
         sync_handlers_module,
         sync_realtime_tasks,
-        rag_documents_module,
+        rag_operations_module,
         office_catalog_rag_index_module,
         rag_indexing_tasks,
     ):

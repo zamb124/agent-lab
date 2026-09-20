@@ -10,7 +10,7 @@
 - flows 9001, rag 9002, crm 9003, frontend 9004, sync 9005, office 9008,
   search 9010, provider_litserve 9014, voice 9015, capability_gateway 9016,
   code_runner_{python,node,go,csharp} 9017-9020, worktracker 9021, secrets 9022,
-  wiki 9023.
+  wiki 9023, guest_runtime 9024, realtime 9025, centrifugo 19000.
 """
 
 import time
@@ -146,9 +146,9 @@ def voice_service():
 
 
 @pytest.fixture(scope="session")
-def crm_service(flows_service, rag_service, voice_service):
+def crm_service(flows_service, rag_service, voice_service, realtime_service):
     """CRM API на 9003 (entities, graph, attachments)."""
-    _ = flows_service, rag_service, voice_service
+    _ = flows_service, rag_service, voice_service, realtime_service
     require_http_service("crm", 9003)
 
 
@@ -159,8 +159,22 @@ def frontend_service():
 
 
 @pytest.fixture(scope="session")
-def sync_service():
-    """Sync на 9005 (чат, WebSocket realtime, Git)."""
+def centrifugo_service():
+    """Centrifugo user WS на 19000."""
+    require_http_service("centrifugo", 19000)
+
+
+@pytest.fixture(scope="session")
+def realtime_service(centrifugo_service):
+    """Bus PlatformEvent на 9025."""
+    _ = centrifugo_service
+    require_http_service("realtime", 9025)
+
+
+@pytest.fixture(scope="session")
+def sync_service(realtime_service):
+    """Sync на 9005 (чат, Git). User WS — Centrifugo."""
+    _ = realtime_service
     require_http_service("sync", 9005)
 
 

@@ -1,0 +1,34 @@
+{{- if and .Values.ingress.enabled .Values.applications.realtime.enabled }}
+{{- $platformDomains := .Values.ingress.platformDomains | default (list (dict "apexHost" .Values.ingress.apexHost "wildcardHost" .Values.ingress.wildcardHost)) }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: platform-realtime-api
+  namespace: {{ .Values.namespace }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.priority: "40"
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  tls:
+    - hosts:
+        {{- range $platformDomains }}
+        - {{ .apexHost | quote }}
+        - {{ .wildcardHost | quote }}
+        {{- end }}
+      secretName: platform-tls
+  rules:
+    {{- range $platformDomains }}
+    {{- range $host := list .apexHost .wildcardHost }}
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: /realtime/api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.realtime.serviceName }}
+                port:
+                  number: {{ $.Values.applications.realtime.port }}
+    {{- end }}
+    {{- end }}
+{{- end }}

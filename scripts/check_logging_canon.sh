@@ -97,7 +97,6 @@ CREATE_TASK_GLOBS=(
     --glob '!core/utils/background.py'
     --glob '!core/tasks/**'
     --glob '!core/scheduler/**'
-    --glob '!core/websocket/manager.py'
     --glob '!core/middleware/dev_inter_service_proxy.py'
     --glob '!apps/provider_litserve/**'
     --glob '!apps/flows/src/channels/a2a.py'
@@ -131,8 +130,6 @@ if rg -nq 'enter_request_scope\s*\(' \
     --glob '!core/middleware/auth/middleware.py' \
     --glob '!core/tasks/logging_middleware.py' \
     --glob '!core/utils/background.py' \
-    --glob '!core/websocket/router.py' \
-    --glob '!core/websocket/manager.py' \
     --glob '!apps/scheduler/dispatch.py' \
     --glob '!tests/**' \
     apps core; then
@@ -144,8 +141,6 @@ if rg -nq 'enter_request_scope\s*\(' \
         --glob '!core/middleware/auth/middleware.py' \
         --glob '!core/tasks/logging_middleware.py' \
         --glob '!core/utils/background.py' \
-        --glob '!core/websocket/router.py' \
-        --glob '!core/websocket/manager.py' \
         --glob '!apps/scheduler/dispatch.py' \
         --glob '!tests/**' \
         apps core >&2 || true
@@ -170,9 +165,9 @@ fi
 # 11. Прямой .kiq( / find_task( / AsyncKicker( / create_broker( вне whitelist —
 #     единый enqueue-канон. Полная проверка реестра — scripts/check_taskiq_canon.py.
 #     Здесь FAIL на очевидные call-site нарушения в apps/core.
-KIQ_ALLOW='core/tasks/kicker.py|core/tasks/logging_middleware.py|apps/scheduler/dispatch.py|core/scheduler/service.py|apps/flows/src/api/v1/evaluation.py|apps/flows_worker/evaluation_tasks.py'
+KIQ_ALLOW='core/tasks/kicker.py|core/tasks/logging_middleware.py|apps/scheduler/dispatch.py|core/scheduler/service.py'
 CREATE_BROKER_ALLOW='core/tasks/broker.py|apps/flows_worker/broker.py|apps/idle_worker/broker.py|apps/rag_worker/broker.py|apps/crm_worker/broker.py|apps/crm_worker/summary_broker.py|apps/search_worker/broker.py|apps/sync/realtime/broker.py'
-ASYNC_KICKER_ALLOW='core/tasks/kicker.py|apps/scheduler/dispatch.py|core/scheduler/service.py|apps/flows/src/api/v1/evaluation.py|apps/flows_worker/evaluation_tasks.py'
+ASYNC_KICKER_ALLOW='core/tasks/kicker.py|apps/scheduler/dispatch.py|core/scheduler/service.py'
 
 if rg -n '\.kiq\s*\(' --type py apps core | rg -v -E "$KIQ_ALLOW" >/tmp/taskiq_kiq_hits.txt 2>/dev/null; then
     if [ -s /tmp/taskiq_kiq_hits.txt ]; then

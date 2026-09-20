@@ -17,12 +17,6 @@ def setup_database_before_tests():
     yield
 
 
-@pytest.fixture(scope="session", autouse=True)
-def platform_notification_manager_redis(setup_database_before_tests):
-    _ = setup_database_before_tests
-    yield
-
-
 @pytest.fixture(scope="session")
 def shared_silero_vad_engine():
     """Session-scoped реальный VAD-движок: модель Silero загружается один раз.

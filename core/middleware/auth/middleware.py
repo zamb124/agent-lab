@@ -27,6 +27,7 @@ from core.app_state import (
 from core.config import get_settings
 from core.container import BaseContainer
 from core.context import reset_context, set_context
+from core.context.job_context import resolve_user_roles_in_company
 from core.identity.runtime_users import ensure_persisted_runtime_user
 from core.internal_context_headers import parse_internal_context_headers
 from core.logging import bind_log_context, get_logger
@@ -461,13 +462,19 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 roles=["guest"],
                 attributes={"kind": "internal_platform_context"},
             )
+        roles = resolve_user_roles_in_company(user, company)
+        auth_token = get_token_service().create_token(
+            user_id=user.user_id,
+            company_id=company.company_id,
+            roles=roles,
+        )
         return await context_factory.create(
             request,
             rule.context_type,
             company,
             user,
             token_data=None,
-            auth_token=None,
+            auth_token=auth_token,
             trace_id=trace_id,
         )
 

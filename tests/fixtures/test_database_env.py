@@ -7,8 +7,10 @@ URL PostgreSQL для pytest и дочерних процессов (uvicorn, Ta
 Сервисы тест-окружения используют нестандартные порты чтобы не конфликтовать с dev:
   postgres  → 54322 (dev: 54321)
   redis     → 63792 (dev: 63791)
+  redis-realtime → 63793 (dev: 8098)
   minio     → 19002 (dev: 19001)
   livekit   → 7890  (dev: 7880)
+  centrifugo → 19000 (dev: 8000)
   openfga   → 9093  (dev: 9090)
 """
 
@@ -49,6 +51,10 @@ _TEST_SERVICE_ENV: dict[str, str] = {
     "SERVER__SEARCH_SERVICE_URL": "http://localhost:9010",
     "SERVER__WIKI_SERVICE_URL": "http://localhost:9023",
     "SERVER__GUEST_RUNTIME_SERVICE_URL": "http://localhost:9024",
+    "SERVER__REALTIME_SERVICE_URL": "http://localhost:9025",
+    "REALTIME__CENTRIFUGO_API_URL": "http://127.0.0.1:19000/api",
+    "REALTIME__CENTRIFUGO_API_KEY": "platform-test-centrifugo-http-api-key",
+    "CENTRIFUGO_WS_URL": "ws://127.0.0.1:19000/connection/websocket",
     "GUEST_RUNTIME__EXECUTOR": "inprocess",
     "GUEST_RUNTIME__MAX_LEASES_PER_COMPANY": "32",
     "GUEST_RUNTIME__MAX_LEASES_CLUSTER": "128",
@@ -111,6 +117,7 @@ TEST_DATABASE_ENV: dict[str, str] = {
     "DATABASE__SECRETS_URL": f"{_POSTGRES_TEST}/platform_secrets",
     "DATABASE__TRACING_URL": f"{_POSTGRES_TEST}/platform_tracing",
     "DATABASE__WIKI_URL": f"{_POSTGRES_TEST}/platform_wiki",
+    "DATABASE__REALTIME_URL": f"{_POSTGRES_TEST}/platform_realtime",
     "DATABASE__REDIS_URL": "redis://localhost:63792/0",
     "TASKS__BROKER_URL": "redis://localhost:63792/1",
     "AUTH__JWT_SECRET_KEY": TEST_HS256_JWT_SECRET,

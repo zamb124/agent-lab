@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from core.config import get_settings
 from core.logging import get_logger
+from core.realtime.channels import SESSION_JWT_ISSUER, session_jwt_channels, session_jwt_meta
 from core.types import JsonObject, JsonValue, require_json_object
 
 logger = get_logger(__name__)
@@ -108,6 +109,10 @@ class TokenService:
         payload['iat'] = int(now.timestamp())
         payload['exp'] = int(expires_at.timestamp())
         payload['token_type'] = token_data.token_type.value
+        if token_type == TokenType.SESSION:
+            payload["iss"] = SESSION_JWT_ISSUER
+            payload["channels"] = session_jwt_channels(user_id, company_id)
+            payload["meta"] = session_jwt_meta(company_id)
 
         token = jwt.encode(payload, self.secret_key, algorithm=self.algorithm)
 

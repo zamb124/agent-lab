@@ -9,7 +9,7 @@
 Одно событие обслуживает два класса потребителей:
 
 - **UI-доставка** (частный случай): события с непустым ``delivery``
-  форвардятся WebSocket-менеджером в сокеты адресата. В WS-фрейм уходит
+  публикуются bus ``realtime`` в Centrifugo. В кадр сокета уходит
   событие без поля ``delivery``:
 
       {
@@ -74,6 +74,10 @@ class PlatformEventMeta(BaseModel):
     request_id: str | None = Field(
         default=None,
         description="E2E request_id запроса-инициатора события (HTTP/WS/TaskIQ).",
+    )
+    namespace: str = Field(
+        default="default",
+        description="Активный namespace актора (без префикса company_id).",
     )
 
 

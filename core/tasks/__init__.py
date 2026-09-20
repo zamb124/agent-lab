@@ -14,7 +14,7 @@
 """
 
 from core.tasks.broker import resolve_broker_for_task
-from core.tasks.kicker import enqueue, kicker_for_task_name_with_log_labels
+from core.tasks.kicker import enqueue
 from core.tasks.log_labels import build_log_labels
 from core.tasks.registry import (
     TaskPriority,
@@ -38,7 +38,6 @@ __all__ = [
     "declare_task",
     "enqueue",
     "get_task_spec",
-    "kicker_for_task_name_with_log_labels",
     "platform_task",
     "register_queue_broker",
     "registered_queue_brokers",

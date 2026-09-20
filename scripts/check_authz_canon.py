@@ -87,6 +87,7 @@ _TEST_MEMBERS_ALLOWLIST = frozenset(
     {
         Path("tests/fixtures/auth.py"),
         Path("scripts/check_authz_canon.py"),
+        Path("tests/core/db/test_company_repository_members.py"),
     }
 )
 

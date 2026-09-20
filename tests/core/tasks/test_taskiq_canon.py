@@ -142,6 +142,54 @@ async def test_enqueue_attaches_queue_and_priority_labels(
     assert "trace_id" in labels
 
 
+@pytest.mark.asyncio
+async def test_enqueue_sets_taskiq_task_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    name = _unique("enqueue_taskiq_id")
+    _ = declare_task(name, queue="idle")
+    captured_taskiq_task_id: list[str | None] = []
+
+    class _FakeKicker:
+        def __init__(self, task_name: str, broker: object, labels: dict[str, str]) -> None:
+            _ = task_name
+            _ = broker
+            _ = labels
+            self._taskiq_task_id: str | None = None
+
+        def with_task_id(self, task_id: str | None) -> "_FakeKicker":
+            self._taskiq_task_id = task_id
+            return self
+
+        async def kiq(self, *args: object, **kwargs: object) -> dict[str, bool]:
+            _ = args
+            _ = kwargs
+            captured_taskiq_task_id.append(self._taskiq_task_id)
+            return {"ok": True}
+
+    def _fake_resolve(spec: TaskSpec | str) -> object:
+        _ = get_task_spec(spec)
+        return object()
+
+    monkeypatch.setattr(kicker_module, "AsyncKicker", _FakeKicker)
+    monkeypatch.setattr(kicker_module, "resolve_broker_for_task", _fake_resolve)
+
+    result = await enqueue(
+        name,
+        "arg1",
+        background_kind="test",
+        taskiq_task_id="evaluation-run:abc",
+    )
+    assert result == {"ok": True}
+    assert captured_taskiq_task_id == ["evaluation-run:abc"]
+
+
+@pytest.mark.asyncio
+async def test_enqueue_rejects_blank_taskiq_task_id() -> None:
+    with pytest.raises(ValueError, match="taskiq_task_id пустой"):
+        _ = await enqueue("unused_task_never_resolved", taskiq_task_id="   ")
+
+
 def test_build_log_labels_rejects_empty_override() -> None:
     with pytest.raises(ValueError):
         _ = build_log_labels(override_request_id="")

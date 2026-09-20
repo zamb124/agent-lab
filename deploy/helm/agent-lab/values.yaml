@@ -384,6 +384,31 @@ applications:
       limits:
         cpu: "1"
         memory: 1Gi
+  realtime:
+    nodeName: master
+    enabled: true
+    port: 8025
+    replicas: 1
+    serviceName: realtime
+    command:
+      - granian
+      - --interface
+      - asgi
+      - apps.realtime.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8025"
+      - --http
+      - auto
+      - --ws
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
   scheduler-api:
     nodeName: master
     enabled: true
@@ -876,6 +901,32 @@ nvidiaDevicePlugin:
   image: nvcr.io/nvidia/k8s-device-plugin
   tag: v0.19.1
 
+centrifugo:
+  enabled: true
+  nodeName: master
+  image: centrifugo/centrifugo:v6.9.3
+  imagePullPolicy: IfNotPresent
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+  redis:
+    nodeName: master
+    image: redis:7-alpine
+    maxmemory: 512mb
+    storage: 5Gi
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: "1"
+        memory: 768Mi
+
 livekit:
   enabled: true
   nodeName: master
@@ -1001,6 +1052,7 @@ platformSecrets:
   selectelSecretKey: ""
   livekitApiKey: ""
   livekitApiSecret: ""
+  centrifugoApiKey: ""
   turnSecret: ""
   onlyofficeJwtSecret: ""
   grafanaAdminPassword: ""

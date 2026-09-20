@@ -84,6 +84,8 @@ def database_url_for_migration_key(
             return database.secrets_url
         case "wiki_url":
             return database.wiki_url
+        case "realtime_url":
+            return database.realtime_url
 
 
 def migration_entry_is_active(entry: MigrationServiceEntry) -> bool:

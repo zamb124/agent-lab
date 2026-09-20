@@ -16,7 +16,7 @@
         service_name="flows",
         settings_class=FlowSettings,
         get_container=get_container,
-        routers=[api_v1_router, registry_router],
+        routers=[api_v1_router],
         on_startup=my_startup_func,
     )
 """
@@ -78,12 +78,12 @@ from core.push.fcm_credentials import resolve_fcm_credentials
 from core.push.fcm_service import init_fcm_push_service
 from core.push.router import router as push_router
 from core.push.service import init_web_push_service
+from core.realtime.command_http import router as realtime_command_router
 from core.tracing import setup_tracing
 from core.tracing.tracer import set_span_repository, set_tracing_service_name
 from core.types import JsonObject, JsonValue
 from core.utils.background import run_with_log_context
-from core.websocket.manager import notification_manager
-from core.websocket.router import router as ws_router
+from core.websocket import WsCommandError, ws_command_error_status
 
 logger = get_logger(__name__)
 
@@ -166,7 +166,7 @@ def create_service_app(
         include_platform_lifecycle: Включать ли Redis/billing/push startup hooks
         include_platform_routers: Включать ли общие платформенные роутеры (files/auth/calendar/ws/i18n)
         mount_repo_documentation: Смонтировать статическую документацию (Zensical) из корня репозитория ``documentation-dist/`` на ``/documentation/``.
-        documentation_gateway_prefix: Если задан (например ``documents`` для office), первый сегмент публичных путей HTTP API и платформенных роутеров (team, ws, auth, …); плюс дублирование документации на ``/{prefix}/documentation/`` за ingress.
+        documentation_gateway_prefix: Если задан (например ``documents`` для office), первый сегмент публичных путей HTTP API и платформенных роутеров (team, files, auth, …); плюс дублирование документации на ``/{prefix}/documentation/`` за ingress. Internal command hop всегда ``/{service_name}/api/internal/realtime/command``.
         include_platform_pwa: Маршруты ``/manifest.json``, ``/sw.js``, ``/offline.html``. None: выключено при ``TESTING=true``, иначе включено.
         services_spa_index: Путь к ``index.html`` SPA; если файл существует, регистрируются
             ``GET /{public_segment}/services`` и ``GET /{public_segment}/services/`` с тем же HTML.
@@ -221,10 +221,6 @@ def create_service_app(
             logger.info("Трейсинг инициализирован")
 
         if include_platform_lifecycle:
-
-            # Tail-чтение шины platform:events для WebSocket UI-доставки
-            await notification_manager.start_redis_listener(settings.database.redis_url)
-            logger.info("Notification manager запущен")
 
             # Публикация зарегистрированных типов событий процесса в общий каталог
             await store_registered_platform_events()
@@ -309,9 +305,7 @@ def create_service_app(
         # на shutdown в тестах закрываем его, иначе следующий TestClient ловит
         # «Event loop is closed» на store_registered_platform_events / publish.
         if include_platform_lifecycle:
-            if not is_testing():
-                await notification_manager.stop_redis_listener()
-            else:
+            if is_testing():
                 await close_publisher_client()
 
     # Создание приложения
@@ -368,6 +362,21 @@ def create_service_app(
             content={"detail": str(exc), "code": "authz_unavailable"},
         )
     _ = _authz_config_error_handler
+
+    @app.exception_handler(WsCommandError)
+    async def _ws_command_error_handler(
+        _request: Request, exc: WsCommandError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=ws_command_error_status(exc),
+            content={
+                "error_code": exc.code,
+                "error_detail": exc.detail,
+                "detail": exc.detail,
+            },
+        )
+
+    _ = _ws_command_error_handler
 
     @app.exception_handler(Exception)
     async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -508,11 +517,13 @@ def create_service_app(
         logger.info("service.router_attached", router="platform_brand", prefix=f"{brand_prefix}/api/platform")
         app.include_router(platform_brand_router, prefix=brand_prefix, tags=["platform-brand"])
 
-        # WebSocket роутер для уведомлений (`/<svc>/api/ws/notifications`).
-        ws_prefix = f"/{public_segment}/api" if service_name != "core" else ""
-        ws_path = f"{ws_prefix}/ws/notifications" if service_name != "core" else "/ws/notifications"
-        logger.info("service.router_attached", router="ws_notifications", path=ws_path)
-        app.include_router(ws_router, prefix=ws_prefix, tags=["websocket"])
+        command_prefix = f"/{service_name}/api"
+        logger.info(
+            "service.router_attached",
+            router="realtime_command",
+            path=f"{command_prefix}/internal/realtime/command",
+        )
+        app.include_router(realtime_command_router, prefix=command_prefix, tags=["realtime-command"])
 
     # Pages роутеры (добавляем префикс сервиса к их собственному префиксу)
     if pages_routers:

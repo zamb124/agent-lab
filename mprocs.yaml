@@ -27,6 +27,12 @@ procs:
     shell: "uv run python scripts/run.py wiki"
   guest_runtime:
     shell: "uv run python scripts/run.py guest_runtime"
+  realtime:
+    shell: "uv run python scripts/run.py realtime"
+  redis-realtime:
+    shell: "uv run python scripts/run.py redis-realtime"
+  centrifugo:
+    shell: "uv run python scripts/run.py centrifugo"
   browser:
     shell: "uv run python scripts/run.py browser"
   search:
@@ -45,8 +51,6 @@ procs:
     shell: "uv run python scripts/run.py code_runner_go"
   code_runner_csharp:
     shell: "uv run python scripts/run.py code_runner_csharp"
-  guest_runtime:
-    shell: "uv run python scripts/run.py guest_runtime"
   flows_worker:
     shell: "uv run python scripts/run.py flows_worker"
   rag_worker:

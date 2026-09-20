@@ -4,45 +4,16 @@
 
 import os
 
-from pydantic import BaseModel, Field
-
 from core.config.loader import load_merged_config
+from core.config.models import AgentReleaseSettings, AgentSettings
 from core.types import JsonObject
 
-
-class AgentReleaseSettings(BaseModel):
-    """Источник артефактов LinnexAgent для download redirect."""
-
-    github_owner: str = Field(default="zamb124", description="GitHub org/user releases")
-    github_repo: str = Field(default="agent-lab", description="GitHub repo с арtefактами")
-    github_api_base_url: str | None = Field(
-        default=None,
-        description="Override GitHub API base; default https://api.github.com",
-    )
-    github_token: str | None = Field(
-        default=None,
-        description="PAT для GitHub Releases API; обязателен для private repo",
-    )
-    source: str = Field(
-        default="github",
-        description="github — GitHub Releases API; local — dist/ артефакт",
-    )
-
-
-class AgentSettings(BaseModel):
-    """Настройки LinnexAgent на frontend сервисе."""
-
-    releases: AgentReleaseSettings = Field(default_factory=AgentReleaseSettings)
-    pairing_ttl_seconds: int = Field(default=600, ge=60, le=3600)
-    tunnel_online_ttl_seconds: int = Field(default=120, ge=30, le=3600)
-    pairing_rate_limit_per_hour: int = Field(default=20, ge=1, le=200)
-    register_rate_limit_per_hour: int = Field(default=60, ge=1, le=500)
-    session_ttl_seconds: int = Field(
-        default=86400,
-        ge=300,
-        le=2592000,
-        description="TTL sticky A2A context_id Platform MCP сессии (MCP-сессия + flow), сек",
-    )
+__all__ = [
+    "AgentReleaseSettings",
+    "AgentSettings",
+    "get_agent_settings",
+    "reset_agent_settings",
+]
 
 
 _agent_settings: AgentSettings | None = None

@@ -1,112 +1,45 @@
-"""
-E2E тесты для системы уведомлений с реальными WebSocket и Redis.
+"""E2E notify_user → bus → Centrifugo publication (PlatformEvent)."""
 
-Канон: notify_user(...) публикует событие в шину `platform:events`. WS-роутер
-форвардит событие в сокеты `/<svc>/api/ws/notifications` как фрейм
-`{type: 'notify/<service>/<kind>_received', payload: {title, message, data,
-priority, action_url, created_at, service, kind}}`.
-
-БЕЗ МОКОВ — реальные WebSocket + Redis.
-"""
-
-import asyncio
-import json
-import time
-from typing import cast
+from __future__ import annotations
 
 import pytest
-import websockets
 
+from core.realtime.presence import fetch_user_presence
 from core.websocket.publisher import Notification, NotificationType, notify_user
-
-
-def _parse_ws_event(message: str | bytes) -> dict[str, object]:
-    if isinstance(message, bytes):
-        message = message.decode()
-    return cast(dict[str, object], json.loads(message))
-
-
-def _event_payload(event: dict[str, object]) -> dict[str, object]:
-    payload_raw = event.get("payload")
-    if not isinstance(payload_raw, dict):
-        raise AssertionError("WS event payload must be an object")
-    return cast(dict[str, object], payload_raw)
-
-
-def _payload_data(payload: dict[str, object]) -> dict[str, object]:
-    data_raw = payload.get("data")
-    if not isinstance(data_raw, dict):
-        raise AssertionError("notification payload.data must be an object")
-    return cast(dict[str, object], data_raw)
-
-
-async def _recv_event_by_type(ws, expected_type: str, timeout: float = 5.0) -> dict[str, object]:
-    """Ждать событие с конкретным `type` (отбрасывает чужие push'и из шины)."""
-    deadline = time.monotonic() + timeout
-    while True:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise AssertionError(f"Не получено ожидаемое событие type={expected_type}")
-        message = await asyncio.wait_for(ws.recv(), timeout=remaining)
-        event = _parse_ws_event(message)
-        if event.get("type") == expected_type:
-            return event
-
-
-async def _recv_event_by_payload_title(ws, expected_title: str, timeout: float = 5.0) -> dict[str, object]:
-    deadline = time.monotonic() + timeout
-    while True:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise AssertionError(f"Не получено ожидаемое уведомление: {expected_title}")
-        message = await asyncio.wait_for(ws.recv(), timeout=remaining)
-        event = _parse_ws_event(message)
-        payload_raw = event.get("payload")
-        payload = payload_raw if isinstance(payload_raw, dict) else {}
-        if payload.get("title") == expected_title:
-            return event
+from tests.realtime.centrifugo_ws import connect_centrifugo, wait_platform_event
 
 
 def _expected_event_type(service: str, notification_type: NotificationType) -> str:
     return f"notify/{service}/{notification_type.value}_received"
 
 
-async def _recv_pong(ws, timeout: float = 5.0) -> None:
-    """Дождаться pong на ping, пропуская push-события канала уведомлений.
+def _event_payload(event: dict[str, object]) -> dict[str, object]:
+    payload_raw = event.get("payload")
+    if not isinstance(payload_raw, dict):
+        raise AssertionError("WS event payload must be an object")
+    return payload_raw
 
-    Сокет `/notifications` несёт и request-reply (ping->pong), и push-события. Параллельные
-    тесты под общим system_user_id и общим crm_service могут доставить чужой push между ping и
-    pong, поэтому ждём именно литерал pong, отбрасывая JSON-фреймы событий.
-    """
-    deadline = time.monotonic() + timeout
-    while True:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise AssertionError("Не получен pong на ping")
-        message = await asyncio.wait_for(ws.recv(), timeout=remaining)
-        text = message.decode() if isinstance(message, bytes) else message
-        if text == "pong":
-            return
+
+def _payload_data(payload: dict[str, object]) -> dict[str, object]:
+    data_raw = payload.get("data")
+    if not isinstance(data_raw, dict):
+        raise AssertionError("notification payload.data must be an object")
+    return data_raw
 
 
 @pytest.mark.asyncio
 async def test_single_websocket_notification(
     crm_client,
-    ws_cookie_system,
+    auth_token_system,
     system_user_id,
     crm_service,
     unique_id: str,
 ) -> None:
-    """Одно WebSocket подключение получает уведомление."""
-
-    ws_url = "ws://localhost:9003/crm/api/ws/notifications"
+    _ = crm_client
     expected_type = _expected_event_type("test", NotificationType.SYSTEM)
-    # xdist: все тесты делят system_user_id — матчим по уникальному title, не по type.
     expected_title = f"Тестовое уведомление {unique_id}"
 
-    async with websockets.connect(ws_url, additional_headers=ws_cookie_system) as ws:
-        await ws.send("ping")
-        await _recv_pong(ws, timeout=5)
+    async with connect_centrifugo(auth_token_system) as ws:
         await notify_user(
             user_id=system_user_id,
             notification=Notification(
@@ -117,11 +50,13 @@ async def test_single_websocket_notification(
                 priority="normal",
             ),
         )
-
-        event = await _recv_event_by_payload_title(ws, expected_title, timeout=15)
-        assert event["type"] == expected_type
-        payload = _event_payload(event)
-        assert payload["title"] == expected_title
+        event = await wait_platform_event(
+            ws,
+            type_=expected_type,
+            where={"title": expected_title},
+            timeout=15.0,
+        )
+        payload = _event_payload(dict(event))
         assert payload["service"] == "test"
         assert payload["kind"] == NotificationType.SYSTEM.value
 
@@ -129,110 +64,96 @@ async def test_single_websocket_notification(
 @pytest.mark.asyncio
 async def test_multiple_tabs_same_user(
     crm_client,
-    ws_cookie_system,
+    auth_token_system,
     system_user_id,
     crm_service,
     unique_id: str,
 ) -> None:
-    """Несколько вкладок (WebSocket) одного пользователя."""
-
-    ws_url = "ws://localhost:9003/crm/api/ws/notifications"
+    _ = crm_client
     expected_type = _expected_event_type("crm", NotificationType.MENTION)
     expected_title = f"Multi-tab mention {unique_id}"
 
-    async with websockets.connect(ws_url, additional_headers=ws_cookie_system) as ws1:
-        async with websockets.connect(ws_url, additional_headers=ws_cookie_system) as ws2:
-            async with websockets.connect(ws_url, additional_headers=ws_cookie_system) as ws3:
-                await notify_user(
-                    user_id=system_user_id,
-                    notification=Notification(
-                        type=NotificationType.MENTION,
-                        title=expected_title,
-                        message="Пользователь упомянул вас в заметке",
-                        service="crm",
-                        priority="high",
-                    ),
-                )
-
-                ev1 = await _recv_event_by_payload_title(ws1, expected_title, timeout=15)
-                ev2 = await _recv_event_by_payload_title(ws2, expected_title, timeout=15)
-                ev3 = await _recv_event_by_payload_title(ws3, expected_title, timeout=15)
-
-                assert ev1["type"] == ev2["type"] == ev3["type"] == expected_type
-                p1 = _event_payload(ev1)
-                p2 = _event_payload(ev2)
-                p3 = _event_payload(ev3)
-                assert p1["title"] == p2["title"] == p3["title"]
+    async with (
+        connect_centrifugo(auth_token_system) as ws1,
+        connect_centrifugo(auth_token_system) as ws2,
+        connect_centrifugo(auth_token_system) as ws3,
+    ):
+        await notify_user(
+            user_id=system_user_id,
+            notification=Notification(
+                type=NotificationType.MENTION,
+                title=expected_title,
+                message="Пользователь упомянул вас в заметке",
+                service="crm",
+                priority="high",
+            ),
+        )
+        ev1 = await wait_platform_event(ws1, type_=expected_type, where={"title": expected_title}, timeout=15)
+        ev2 = await wait_platform_event(ws2, type_=expected_type, where={"title": expected_title}, timeout=15)
+        ev3 = await wait_platform_event(ws3, type_=expected_type, where={"title": expected_title}, timeout=15)
+        assert ev1["type"] == ev2["type"] == ev3["type"] == expected_type
 
 
 @pytest.mark.asyncio
-async def test_access_request_notification_flow(crm_client, unique_id, auth_headers_system, ws_cookie_system, system_user_id, crm_service):
-    """Полный flow уведомлений при запросе доступа."""
-
-    entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
-        "entity_type": "note",
-        "name": f"Private note {unique_id}",
-        "description": "Секретная заметка",
-        "user_id": system_user_id,
-    }, headers=auth_headers_system)
+async def test_access_request_notification_flow(
+    crm_client,
+    unique_id,
+    auth_headers_system,
+    auth_token_system,
+    system_user_id,
+    crm_service,
+) -> None:
+    entity_resp = await crm_client.post(
+        "/crm/api/v1/entities/",
+        json={
+            "entity_type": "note",
+            "name": f"Private note {unique_id}",
+            "description": "Секретная заметка",
+            "user_id": system_user_id,
+        },
+        headers=auth_headers_system,
+    )
 
     entity = entity_resp.json()
     entity_id = entity["entity_id"]
-
-    ws_url = "ws://localhost:9003/crm/api/ws/notifications"
     expected_type = _expected_event_type("crm", NotificationType.ACCESS_REQUEST)
 
-    async with websockets.connect(ws_url, additional_headers=ws_cookie_system) as ws_owner:
-        request_resp = await crm_client.post("/crm/api/v1/access-requests", json={
-            "resource_type": "entity",
-            "resource_id": entity_id,
-            "message": f"Нужен доступ для тестирования {unique_id}",
-        }, headers=auth_headers_system)
-
+    async with connect_centrifugo(auth_token_system) as ws_owner:
+        request_resp = await crm_client.post(
+            "/crm/api/v1/access-requests",
+            json={
+                "resource_type": "entity",
+                "resource_id": entity_id,
+                "message": f"Нужен доступ для тестирования {unique_id}",
+            },
+            headers=auth_headers_system,
+        )
         assert request_resp.status_code == 200
         access_request_id = request_resp.json()["access_request_id"]
-
-        event = await _recv_event_by_type(ws_owner, expected_type, timeout=5)
-        payload = _event_payload(event)
+        event = await wait_platform_event(ws_owner, type_=expected_type, timeout=15)
+        payload = _event_payload(dict(event))
         data = _payload_data(payload)
         assert payload["title"] == "Новый запрос доступа"
-        assert entity_id in data["entity_id"]
+        assert entity_id in str(data["entity_id"])
         assert data["access_request_id"] == access_request_id
-
-
-@pytest.mark.asyncio
-async def test_websocket_heartbeat(crm_client, ws_cookie_system, system_user_id, crm_service):
-    """Проверка heartbeat механизма."""
-
-    ws_url = "ws://localhost:9003/crm/api/ws/notifications"
-
-    async with websockets.connect(ws_url, additional_headers=ws_cookie_system) as ws:
-        await ws.send("ping")
-        await _recv_pong(ws, timeout=5)
 
 
 @pytest.mark.asyncio
 async def test_websocket_reconnection(
     crm_client,
-    ws_cookie_system,
+    auth_token_system,
     system_user_id,
     crm_service,
     unique_id: str,
 ) -> None:
-    """Проверка переподключения после разрыва."""
-
-    ws_url = "ws://localhost:9003/crm/api/ws/notifications"
+    _ = crm_client
     expected_type = _expected_event_type("test", NotificationType.SYSTEM)
     expected_title = f"После переподключения {unique_id}"
 
-    async with websockets.connect(ws_url, additional_headers=ws_cookie_system) as ws1:
-        await ws1.send("ping")
-        await _recv_pong(ws1, timeout=5)
+    async with connect_centrifugo(auth_token_system) as ws1:
+        _ = ws1
 
-    async with websockets.connect(ws_url, additional_headers=ws_cookie_system) as ws2:
-        await ws2.send("ping")
-        await _recv_pong(ws2, timeout=5)
-
+    async with connect_centrifugo(auth_token_system) as ws2:
         await notify_user(
             user_id=system_user_id,
             notification=Notification(
@@ -242,23 +163,24 @@ async def test_websocket_reconnection(
                 service="test",
             ),
         )
-
-        event = await _recv_event_by_payload_title(ws2, expected_title, timeout=15)
-        assert event["type"] == expected_type
-        assert _event_payload(event)["title"] == expected_title
+        event = await wait_platform_event(
+            ws2, type_=expected_type, where={"title": expected_title}, timeout=15
+        )
+        assert _event_payload(dict(event))["title"] == expected_title
 
 
 @pytest.mark.asyncio
-async def test_notification_priority_levels(crm_client, ws_cookie_system, system_user_id, crm_service):
-    """Проверка всех уровней приоритета."""
-
-    ws_url = "ws://localhost:9003/crm/api/ws/notifications"
+async def test_notification_priority_levels(
+    crm_client,
+    auth_token_system,
+    system_user_id,
+    crm_service,
+) -> None:
+    _ = crm_client
     expected_type = _expected_event_type("test", NotificationType.SYSTEM)
 
-    async with websockets.connect(ws_url, additional_headers=ws_cookie_system) as ws:
-        priorities = ["low", "normal", "high", "urgent"]
-
-        for priority in priorities:
+    async with connect_centrifugo(auth_token_system) as ws:
+        for priority in ("low", "normal", "high", "urgent"):
             expected_title = f"Priority {priority}"
             await notify_user(
                 user_id=system_user_id,
@@ -270,22 +192,24 @@ async def test_notification_priority_levels(crm_client, ws_cookie_system, system
                     priority=priority,
                 ),
             )
-
-            event = await _recv_event_by_payload_title(ws, expected_title, timeout=20)
-            assert event["type"] == expected_type
-            payload = _event_payload(event)
+            event = await wait_platform_event(
+                ws, type_=expected_type, where={"title": expected_title}, timeout=20
+            )
+            payload = _event_payload(dict(event))
             assert payload["priority"] == priority
-            assert payload["title"] == expected_title
 
 
 @pytest.mark.asyncio
-async def test_notification_with_action_url(crm_client, ws_cookie_system, system_user_id, crm_service):
-    """Проверка уведомления с action_url."""
-
-    ws_url = "ws://localhost:9003/crm/api/ws/notifications"
+async def test_notification_with_action_url(
+    crm_client,
+    auth_token_system,
+    system_user_id,
+    crm_service,
+) -> None:
+    _ = crm_client
     expected_type = _expected_event_type("crm", NotificationType.TASK_COMPLETED)
 
-    async with websockets.connect(ws_url, additional_headers=ws_cookie_system) as ws:
+    async with connect_centrifugo(auth_token_system) as ws:
         await notify_user(
             user_id=system_user_id,
             notification=Notification(
@@ -297,21 +221,23 @@ async def test_notification_with_action_url(crm_client, ws_cookie_system, system
                 data={"task_id": "task_123", "status": "completed"},
             ),
         )
-
-        event = await _recv_event_by_payload_title(ws, "Задача завершена", timeout=20)
-        assert event["type"] == expected_type
-        payload = _event_payload(event)
+        event = await wait_platform_event(
+            ws, type_=expected_type, where={"title": "Задача завершена"}, timeout=20
+        )
+        payload = _event_payload(dict(event))
         assert payload["action_url"] == "/crm/tasks/task_123"
         assert _payload_data(payload)["task_id"] == "task_123"
 
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(120)
-async def test_notification_types_coverage(crm_client, ws_cookie_system, system_user_id, crm_service):
-    """Проверка всех типов уведомлений."""
-
-    ws_url = "ws://localhost:9003/crm/api/ws/notifications"
-
+async def test_notification_types_coverage(
+    crm_client,
+    auth_token_system,
+    system_user_id,
+    crm_service,
+) -> None:
+    _ = crm_client
     notification_types = [
         NotificationType.ACCESS_REQUEST,
         NotificationType.ENTITY_UPDATED,
@@ -321,9 +247,7 @@ async def test_notification_types_coverage(crm_client, ws_cookie_system, system_
         NotificationType.SYNC_NEW_MESSAGE,
     ]
 
-    async with websockets.connect(ws_url, additional_headers=ws_cookie_system) as ws:
-        await ws.send("ping")
-        await _recv_pong(ws, timeout=10.0)
+    async with connect_centrifugo(auth_token_system) as ws:
         for notif_type in notification_types:
             title = f"types-cov-{system_user_id}-{notif_type.value}"
             await notify_user(
@@ -335,48 +259,29 @@ async def test_notification_types_coverage(crm_client, ws_cookie_system, system_
                     service="test",
                 ),
             )
-
-            event = await _recv_event_by_payload_title(ws, title, timeout=15.0)
-            expected_type = _expected_event_type("test", notif_type)
-            assert event["type"] == expected_type
-            assert _event_payload(event)["kind"] == notif_type.value
+            event = await wait_platform_event(
+                ws,
+                type_=_expected_event_type("test", notif_type),
+                where={"title": title},
+                timeout=15.0,
+            )
+            assert _event_payload(dict(event))["kind"] == notif_type.value
 
 
 @pytest.mark.asyncio
-async def test_ws_stats_endpoint(crm_client, auth_headers_system, ws_cookie_system, crm_service):
-    """Проверка endpoint статистики WebSocket."""
-
-    ws_url = "ws://localhost:9003/crm/api/ws/notifications"
-
-    connections = []
-    for _ in range(3):
-        ws = await websockets.connect(ws_url, additional_headers=ws_cookie_system)
-        await ws.send("ping")
-        await _recv_pong(ws, timeout=10.0)
-        connections.append(ws)
-
-    try:
-        import httpx
-        async with httpx.AsyncClient(follow_redirects=True) as http_client:
-            http_client.cookies.set(
-                "auth_token",
-                auth_headers_system["Authorization"].replace("Bearer ", ""),
-            )
-            stats_resp = await http_client.get(
-                "http://localhost:9003/crm/api/ws/stats",
-                headers=auth_headers_system,
-            )
-
-            assert stats_resp.status_code == 200, (
-                f"GET /crm/api/ws/stats ожидает 200 (cookie+Bearer); получено {stats_resp.status_code}: {stats_resp.text}"
-            )
-
-            stats = stats_resp.json()
-            # Формат stats: active_users / total_connections / tail_task_running.
-            assert "active_users" in stats
-            assert "total_connections" in stats
-            assert stats["total_connections"] >= 3
-
-    finally:
-        for ws in connections:
-            await ws.close()
+async def test_centrifugo_presence_stats(
+    crm_client,
+    auth_token_system,
+    system_user_id,
+    crm_service,
+) -> None:
+    _ = crm_client, crm_service
+    async with (
+        connect_centrifugo(auth_token_system) as ws1,
+        connect_centrifugo(auth_token_system) as ws2,
+        connect_centrifugo(auth_token_system) as ws3,
+    ):
+        _ = ws1, ws2, ws3
+        snapshot = await fetch_user_presence(system_user_id, company_id="system")
+        assert snapshot.connected is True
+        assert snapshot.num_clients >= 3

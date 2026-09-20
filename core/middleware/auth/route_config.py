@@ -28,6 +28,7 @@ SPA_FALLBACK_EXCLUDED_PREFIXES: tuple[str, ...] = (
     "/frontend/",
     "/browser/",
     "/search/api/",
+    "/realtime/",
     "/static/",
     "/assets/",
     "/src/",
@@ -468,7 +469,7 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("*/v1/files/*", context_type="api", auth_required=True),
     RouteRule("*/v1/files", context_type="api", auth_required=True),
 
-    # Тот же префикс ``/<svc>/api``, что и у WS notifications (например ``GET /crm/api/ws/stats``)
+    # Тот же префикс ``/<svc>/api``, что и у internal command bus
     RouteRule("*/api/ws/*", context_type="api", auth_required=True),
 
     # API агентов (новый путь)
@@ -513,9 +514,6 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/sync/api/auth/*", context_type="api", auth_required=True),
     RouteRule("/sync/api/push/vapid-public-key", context_type="anonymous", auth_required=False),
     RouteRule("/sync/api/push/*", context_type="api", auth_required=True),
-    # /sync/ws — auth внутри хендлера через get_user_from_websocket()
-    RouteRule("/sync/ws", auth_required=False, context_type="anonymous"),
-    RouteRule("/sync/ws/*", auth_required=False, context_type="anonymous"),
     # SPA catch-all — public, чтобы JS мог загрузиться и сделать redirect сам
     RouteRule("/sync", auth_required=False, context_type="anonymous"),
     RouteRule("/sync/", auth_required=False, context_type="anonymous"),
@@ -575,6 +573,17 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/wiki", auth_required=False, context_type="anonymous"),
     RouteRule("/wiki/", auth_required=False, context_type="anonymous"),
     RouteRule("/wiki/*", auth_required=False, context_type="anonymous"),
+
+    # Realtime bus: inbound от Centrifugo — anonymous; persist/presence — internal headers; GET events — session
+    RouteRule("/*/api/internal/realtime/command", context_type="api", auth_required=True),
+
+    # Realtime bus: inbound от Centrifugo — anonymous; persist/presence — internal headers; GET events — session
+    RouteRule("/realtime/api/v1/internal/centrifugo/*", auth_required=False, context_type="anonymous"),
+    RouteRule("/realtime/api/v1/internal/*", context_type="api", auth_required=True),
+    RouteRule("/realtime/api/v1/*", context_type="session", auth_required=True),
+    RouteRule("/realtime/api/auth/*", context_type="api", auth_required=True),
+    RouteRule("/realtime/api/push/vapid-public-key", context_type="anonymous", auth_required=False),
+    RouteRule("/realtime/api/push/*", context_type="api", auth_required=True),
 ]
 
 # Страницы где разрешен доступ без субдомена

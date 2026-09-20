@@ -1,0 +1,11 @@
+{{- if and .Values.ingress.enabled .Values.centrifugo.enabled }}
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: realtime-strip
+  namespace: {{ .Values.namespace }}
+spec:
+  stripPrefix:
+    prefixes:
+      - /realtime
+{{- end }}

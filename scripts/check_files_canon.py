@@ -360,12 +360,13 @@ def _check_chunked_only_upload() -> list[str]:
     forbidden_formdata_posts = (
         (
             REPO_ROOT
-            / "apps"
-            / "rag"
-            / "ui"
+            / "core"
+            / "frontend"
+            / "static"
+            / "lib"
             / "events"
             / "resources"
-            / "documents.resource.js",
+            / "rag-documents.resource.js",
             "/frontend/api/v1/files/",
         ),
         (

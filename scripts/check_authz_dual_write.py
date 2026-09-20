@@ -117,8 +117,8 @@ _MUTATORS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         ("authz.delete",),
     ),
     (
-        "create_catalog",
-        "apps/office/api/bff.py",
+        "op_catalogs_create",
+        "apps/office/realtime/operations.py",
         ("sync_catalog_created",),
     ),
     (
@@ -147,8 +147,8 @@ _MUTATORS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         ("authz.delete",),
     ),
     (
-        "_persist_flow_with_authz",
-        "apps/flows/src/api/v1/flows.py",
+        "persist_flow_with_authz",
+        "apps/flows/realtime/operations.py",
         ("sync_flow_saved",),
     ),
     (
@@ -246,8 +246,8 @@ _CREATE_COMPENSATE: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         ("except Exception", "_entity_repo.delete"),
     ),
     (
-        "_persist_flow_with_authz",
-        "apps/flows/src/api/v1/flows.py",
+        "persist_flow_with_authz",
+        "apps/flows/realtime/operations.py",
         ("except Exception", "flow_repository.delete"),
     ),
     (
@@ -258,11 +258,6 @@ _CREATE_COMPENSATE: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (
         "_load_flow_bundle",
         "apps/flows/src/services/flows_loader.py",
-        ("except Exception", "flow_repository.delete"),
-    ),
-    (
-        "_persist_flow_with_authz",
-        "apps/flows/src/channels/base.py",
         ("except Exception", "flow_repository.delete"),
     ),
     (
@@ -281,8 +276,8 @@ _CREATE_COMPENSATE: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         ("except Exception",),
     ),
     (
-        "create_catalog",
-        "apps/office/api/bff.py",
+        "op_catalogs_create",
+        "apps/office/realtime/operations.py",
         ("except Exception", "delete_catalog"),
     ),
     (

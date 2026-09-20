@@ -2,19 +2,23 @@
 
 from __future__ import annotations
 
-import json
+from types import SimpleNamespace
 
 import pytest
 
-from core.config import get_settings
+from core.context import reset_context, set_context
+from core.events.contract import PlatformEvent
 from core.logging.attributes import (
     LOG_WS_COMMAND,
     LOG_WS_COMMAND_DURATION_MS,
     LOG_WS_COMMAND_STATUS,
 )
+from core.models.context_models import Context
 from core.models.identity_models import User
+from core.realtime.command_http import execute_realtime_command
+from core.realtime.models import RealtimeCommandAccepted
+from core.types import JsonObject
 from core.websocket.command_router import has_ws_command_handler, register_ws_command_handler
-from core.websocket.router import _handle_command_frame
 from tests.fixtures.observability_log_capture import (
     find_caplog_record,
     require_log_fields,
@@ -27,20 +31,12 @@ pytestmark = pytest.mark.timeout(30)
 _TEST_COMMAND = "test/observability/ping_requested"
 
 
-class _FakeWebSocket:
-    def __init__(self) -> None:
-        self.sent: list[str] = []
-
-    async def send_text(self, data: str) -> None:
-        self.sent.append(data)
-
-
 async def _observability_ping_handler(
-    payload: dict[str, object],
+    payload: JsonObject,
     user: User,
-) -> tuple[str, dict[str, object]]:
+) -> JsonObject:
     _ = payload, user
-    return "test/observability/ping_succeeded", {"ok": True}
+    return {"ok": True}
 
 
 @pytest.fixture(autouse=True)
@@ -53,33 +49,52 @@ def _register_observability_ws_command() -> None:
 async def test_ws_command_finished_emitted_for_successful_command(
     observability_caplog: pytest.LogCaptureFixture,
     unique_id: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    settings = get_settings()
+    published: list[tuple[str, str, object]] = []
+
+    async def _capture_publish(
+        user_id: str,
+        type: str,
+        payload: object = None,
+        **kwargs: object,
+    ) -> None:
+        _ = kwargs
+        published.append((user_id, type, payload))
+
+    monkeypatch.setattr("core.realtime.command_http.publish_event_to_user", _capture_publish)
+
     user = User(
         user_id=f"user-ws-{unique_id}",
         name="WS Test",
         active_company_id="system",
     )
-    websocket = _FakeWebSocket()
-    request_id = f"req-{unique_id}"
-    await _handle_command_frame(
-        websocket,
-        {
-            "request_id": request_id,
-            "type": _TEST_COMMAND,
-            "payload": {},
-        },
-        user,
-        service_name=settings.server.name,
-        connection_request_id=f"ws-conn-{unique_id}",
-        connection_trace_id=f"ws-trace-{unique_id}",
+    context = Context(user=user, channel="ws")
+    token = set_context(context)
+    event = PlatformEvent(
+        event_id=f"e-{unique_id}",
+        type=_TEST_COMMAND,
+        company_id="system",
+        payload={},
     )
-    assert websocket.sent
+    request = SimpleNamespace(
+        app=SimpleNamespace(
+            state=SimpleNamespace(container=object(), settings=object()),
+        )
+    )
+    try:
+        accepted = await execute_realtime_command(event, request)  # type: ignore[arg-type]
+    finally:
+        reset_context(token)
+
+    assert isinstance(accepted, RealtimeCommandAccepted)
+    assert accepted.event_id == event.event_id
+    assert published == [(user.user_id, "test/observability/ping_succeeded", {"ok": True})]
 
     rec = find_caplog_record(
         observability_caplog,
         message=WS_COMMAND_FINISHED.message,
-        logger_name="core.websocket.router",
+        logger_name="core.realtime.command_http",
     )
     fields = require_log_fields(
         rec,
@@ -92,7 +107,3 @@ async def test_ws_command_finished_emitted_for_successful_command(
     assert fields[LOG_WS_COMMAND] == _TEST_COMMAND
     assert fields[LOG_WS_COMMAND_STATUS] == "ok"
     require_numeric_field(fields, LOG_WS_COMMAND_DURATION_MS, min_value=0.0)
-
-    reply = json.loads(websocket.sent[-1])
-    assert reply["request_id"] == request_id
-    assert reply["type"] == "test/observability/ping_succeeded"

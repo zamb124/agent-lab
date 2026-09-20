@@ -150,6 +150,19 @@ SERVICES = {
         "app": "apps.guest_runtime.main:app",
         "port": "8024",
     },
+    "realtime": {
+        "type": "granian",
+        "app": "apps.realtime.main:app",
+        "port": "8025",
+    },
+    "redis-realtime": {
+        "type": "centrifugo-compose",
+        "compose_service": "redis-realtime",
+    },
+    "centrifugo": {
+        "type": "centrifugo-compose",
+        "compose_service": "centrifugo",
+    },
     "browser": {
         "type": "granian",
         "app": "apps.browser.main:app",
@@ -202,11 +215,6 @@ SERVICES = {
         "type": "granian",
         "app": "apps.code_runner_csharp.main:app",
         "port": "8020",
-    },
-    "guest_runtime": {
-        "type": "granian",
-        "app": "apps.guest_runtime.main:app",
-        "port": "8024",
     },
 
     # TaskIQ workers
@@ -369,6 +377,20 @@ def build_command(service: str) -> list[str]:
             "scheduler",
             scheduler,
         ]
+    if service_type == "centrifugo-compose":
+        compose_service = config.get("compose_service")
+        if not isinstance(compose_service, str) or not compose_service:
+            raise ValueError(f"SERVICES[{service!r}].compose_service must be non-empty str")
+        compose_file = str(project_root / "deploy/centrifugo/docker-compose.yml")
+        return [
+            "docker",
+            "compose",
+            "-f",
+            compose_file,
+            "up",
+            "--abort-on-container-exit",
+            compose_service,
+        ]
     raise ValueError(f"Неизвестный тип сервиса: {service_type}")
 
 
@@ -382,6 +404,18 @@ def build_env(service: str) -> dict[str, str]:
         if v is None:
             continue
         out[str(k)] = str(v)
+    if cfg.get("type") == "centrifugo-compose":
+        from core.config import get_settings
+
+        settings = get_settings()
+        jwt_secret = settings.auth.jwt_secret_key
+        if jwt_secret is None or not jwt_secret.strip():
+            raise ValueError("auth.jwt_secret_key is required for Centrifugo")
+        api_key = settings.realtime.centrifugo_api_key
+        if api_key is None or not api_key.strip():
+            raise ValueError("realtime.centrifugo_api_key is required")
+        out["CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY"] = jwt_secret.strip()
+        out["CENTRIFUGO_HTTP_API_KEY"] = api_key.strip()
     return out
 
 

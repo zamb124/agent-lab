@@ -37,8 +37,6 @@ KIQ_ALLOWLIST: frozenset[str] = frozenset(
         "core/tasks/logging_middleware.py",
         "apps/scheduler/dispatch.py",
         "core/scheduler/service.py",
-        "apps/flows/src/api/v1/evaluation.py",
-        "apps/flows_worker/evaluation_tasks.py",
     }
 )
 
@@ -53,8 +51,6 @@ ASYNC_KICKER_ALLOWLIST: frozenset[str] = frozenset(
         "core/tasks/kicker.py",
         "apps/scheduler/dispatch.py",
         "core/scheduler/service.py",
-        "apps/flows/src/api/v1/evaluation.py",
-        "apps/flows_worker/evaluation_tasks.py",
     }
 )
 

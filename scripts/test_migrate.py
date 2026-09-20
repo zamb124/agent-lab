@@ -39,6 +39,7 @@ _EXTRA_DATABASES = (
     "platform_worktracker",
     "platform_secrets",
     "platform_wiki",
+    "platform_realtime",
     "openfga",
 )
 

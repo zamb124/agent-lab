@@ -2,8 +2,8 @@
 Publisher единой шины событий платформы.
 
 Единственный способ опубликовать событие из любого процесса (HTTP-сервис,
-TaskIQ worker): XADD в Redis Stream ``platform:events`` с approximate
-MAXLEN-трим по ``settings.events.stream_maxlen``.
+TaskIQ worker): ``submit_platform_event`` в bus ``realtime`` — persist лога,
+XADD в Redis Stream ``platform:events`` и publish в Centrifugo.
 
 Очень тонкий слой — никакой бизнес-логики. Бизнес-логика обязана сама
 формировать корректный ``PlatformEvent`` с типом из ``CoreFrontendEventTypes`` или
@@ -11,41 +11,26 @@ MAXLEN-трим по ``settings.events.stream_maxlen``.
 
 Событие наследует ``trace_id`` и ``request_id`` от текущего
 запроса-инициатора (HTTP/WS/TaskIQ), а ``company_id`` — от активной компании
-контекста, если они не заданы явно. Redis недоступен — публикация падает
+контекста, если они не заданы явно. Bus или Redis недоступны — публикация падает
 (Zero-Guess: событие не может быть потеряно молча).
 """
 
 from __future__ import annotations
 
-from collections.abc import Awaitable
-from typing import Protocol, cast
-
-from core.config import get_settings
 from core.context import get_context
 from core.events.contract import (
-    PLATFORM_EVENTS_STREAM,
     SYSTEM_COMPANY_ID,
     EventDelivery,
     PlatformEvent,
     PlatformEventMeta,
 )
-from core.events.redis_client import close_events_redis_client, events_redis_client
+from core.events.redis_client import close_events_redis_client
 from core.events.registry import assert_publishable_platform_event_type
 from core.logging import get_log_context, get_logger
+from core.realtime.submit import submit_platform_event
 from core.types import JsonValue
 
 logger = get_logger(__name__)
-
-
-class _RedisXAddCommand(Protocol):
-    def __call__(
-        self,
-        name: str,
-        fields: dict[str, str],
-        *,
-        maxlen: int,
-        approximate: bool,
-    ) -> Awaitable[str]: ...
 
 
 async def close_publisher_client() -> None:
@@ -81,7 +66,7 @@ def _resolve_company_id() -> str:
 
 
 async def publish_event(event: PlatformEvent) -> None:
-    """Опубликовать событие в Redis Stream `platform:events`."""
+    """Опубликовать событие: bus persist + XADD `platform:events` + Centrifugo."""
     _ = assert_publishable_platform_event_type(event.type)
     if not event.meta.trace_id:
         trace_id = _resolve_trace_id()
@@ -92,23 +77,15 @@ async def publish_event(event: PlatformEvent) -> None:
         if request_id:
             event.meta.request_id = request_id
 
-    settings = get_settings()
-    client = events_redis_client()
-    xadd = cast(_RedisXAddCommand, client.xadd)
-    _ = await xadd(
-        PLATFORM_EVENTS_STREAM,
-        {"event": event.model_dump_json()},
-        maxlen=settings.events.stream_maxlen,
-        approximate=True,
-    )
+    stored = await submit_platform_event(event)
     logger.debug(
         "platform_event.published",
-        event_type=event.type,
-        event_id=event.event_id,
-        company_id=event.company_id,
-        trace_id=event.meta.trace_id,
-        platform_event_request_id=event.meta.request_id,
-        delivery=event.delivery.model_dump(exclude_none=True) if event.delivery else None,
+        event_type=stored.type,
+        event_id=stored.event_id,
+        company_id=stored.company_id,
+        trace_id=stored.meta.trace_id,
+        platform_event_request_id=stored.meta.request_id,
+        delivery=stored.delivery.model_dump(exclude_none=True) if stored.delivery else None,
     )
 
 

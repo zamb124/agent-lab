@@ -135,6 +135,10 @@ class DatabaseConfig(BaseModel):
         default=None,
         description="PostgreSQL platform_wiki (страницы базы знаний, ревизии, ссылки)",
     )
+    realtime_url: str | None = Field(
+        default=None,
+        description="PostgreSQL platform_realtime (durable-лог PlatformEvent)",
+    )
     redis_url: str = "redis://localhost:8099"
     redis_inventory_interval_seconds: int = Field(
         default=900,
@@ -310,6 +314,7 @@ class ServerConfig(BaseModel):
     search_service_url: str | None = None
     wiki_service_url: str | None = None
     guest_runtime_service_url: str | None = None
+    realtime_service_url: str | None = None
     provider_litserve_service_url: str | None = None
     voice_service_url: str | None = None
     capability_gateway_service_url: str | None = None
@@ -355,6 +360,7 @@ class ServerConfig(BaseModel):
         "secrets": 8022,
         "wiki": 8023,
         "guest_runtime": 8024,
+        "realtime": 8025,
     }
 
     def get_service_url(self, service: str | None = None) -> str:
@@ -404,6 +410,8 @@ class ServerConfig(BaseModel):
                 return self.wiki_service_url
             case "guest_runtime":
                 return self.guest_runtime_service_url
+            case "realtime":
+                return self.realtime_service_url
             case "provider_litserve":
                 return self.provider_litserve_service_url
             case "voice":
@@ -1625,6 +1633,29 @@ class EventsConfig(BaseModel):
     )
 
 
+class RealtimeConfig(BaseModel):
+    """Bus `realtime` и HTTP API Centrifugo (единственный HTTP-peer CF)."""
+
+    centrifugo_api_url: str = Field(
+        default="http://127.0.0.1:8000/api",
+        description="Базовый URL HTTP API Centrifugo, включая путь /api.",
+    )
+    centrifugo_api_key: str | None = Field(
+        default=None,
+        description="Ключ http_api.key Centrifugo. Только процесс realtime.",
+    )
+    command_deadline_seconds: int = Field(
+        default=30,
+        ge=1,
+        description="Deadline обработки *_requested в логе bus.",
+    )
+    sweeper_interval_seconds: float = Field(
+        default=5.0,
+        ge=1.0,
+        description="Интервал sweeper'а просроченных команд.",
+    )
+
+
 class CalendarSyncConfig(BaseModel):
     """Конфигурация фоновой синхронизации календаря."""
 
@@ -2135,6 +2166,45 @@ class GuestRuntimeFarmConfig(BaseModel):
                 "guest_runtime.idle_ttl_seconds must be <= max_lifetime_seconds"
             )
         return self
+
+
+class AgentReleaseSettings(BaseModel):
+    """Источник артефактов LinnexAgent для download redirect."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    github_owner: str = Field(default="zamb124", description="GitHub org/user releases")
+    github_repo: str = Field(default="agent-lab", description="GitHub repo с артефактами")
+    github_api_base_url: str | None = Field(
+        default=None,
+        description="Override GitHub API base; default https://api.github.com",
+    )
+    github_token: str | None = Field(
+        default=None,
+        description="PAT для GitHub Releases API; обязателен для private repo",
+    )
+    source: str = Field(
+        default="github",
+        description="github — GitHub Releases API; local — dist/ артефакт",
+    )
+
+
+class AgentSettings(BaseModel):
+    """Настройки LinnexAgent (pairing, tunnel, releases)."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    releases: AgentReleaseSettings = Field(default_factory=AgentReleaseSettings)
+    pairing_ttl_seconds: int = Field(default=600, ge=60, le=3600)
+    tunnel_online_ttl_seconds: int = Field(default=120, ge=30, le=3600)
+    pairing_rate_limit_per_hour: int = Field(default=20, ge=1, le=200)
+    register_rate_limit_per_hour: int = Field(default=60, ge=1, le=500)
+    session_ttl_seconds: int = Field(
+        default=86400,
+        ge=300,
+        le=2592000,
+        description="TTL sticky A2A context_id Platform MCP сессии (MCP-сессия + flow), сек",
+    )
 
 
 class MCPBrandingConfig(BaseModel):

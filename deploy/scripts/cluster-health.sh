@@ -53,11 +53,11 @@ fi
 # При отключении компонента через Helm (*.enabled: false) уберите имя отсюда (см. deploy/README.md
 # «Состав приложений: Helm и cluster-health»).
 EXPECTED_DEPLOYMENTS=(
-  flows frontend crm rag sync worktracker office wiki guest-runtime scheduler-api voice browser search secrets capability-gateway code-runner-python code-runner-node code-runner-go code-runner-csharp
+  flows frontend crm rag sync worktracker office wiki guest-runtime realtime scheduler-api voice browser search secrets capability-gateway code-runner-python code-runner-node code-runner-go code-runner-csharp
   flows-worker scheduler rag-worker sync-worker crm-worker crm-summary-worker idle-worker search-worker
-  livekit livekit-egress onlyoffice grafana provider-litserve openfga
+  livekit livekit-egress onlyoffice grafana provider-litserve openfga centrifugo
 )
-EXPECTED_STATEFULSETS=(postgres redis loki tempo)
+EXPECTED_STATEFULSETS=(postgres redis redis-realtime loki tempo)
 EXPECTED_DAEMONSETS=(coturn alloy)
 
 log_section "Cluster Health Check"
@@ -252,15 +252,19 @@ if [ "$CHECK_PUBLIC" = "1" ]; then
   done
 fi
 
-# 14. WebSocket upgrade через Ingress (Traefik -> Granian HTTP/1.1 hop)
+# 14. User WebSocket — Centrifugo /realtime (не Granian сервисов)
 if [ "$CHECK_PUBLIC" = "1" ]; then
-  log_section "14) WebSocket upgrade (через Ingress)"
+  log_section "14) WebSocket upgrade Centrifugo /realtime"
   for apex in $PLATFORM_APEX_HOSTS; do
-    for svc in flows crm sync rag worktracker voice; do
-      check_step \
-        "WS upgrade https://${apex}/${svc}/api/ws/notifications (401 или 101, не 500)" \
-        "code=\$(curl -sS --http1.1 -o /dev/null -w '%{http_code}' --max-time 10 -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' 'https://${apex}/${svc}/api/ws/notifications'); [ \"\$code\" = '401' ] || [ \"\$code\" = '101' ]"
-    done
+    check_step \
+      "WS upgrade https://${apex}/realtime/connection/websocket (401 или 101, не 500)" \
+      "code=\$(curl -sS --http1.1 -o /dev/null -w '%{http_code}' --max-time 10 -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' 'https://${apex}/realtime/connection/websocket'); [ \"\$code\" = '401' ] || [ \"\$code\" = '101' ]"
+    check_step \
+      "Centrifugo /realtime/health" \
+      "curl -fsS --max-time 10 https://${apex}/realtime/health >/dev/null"
+    check_step \
+      "realtime bus /realtime/api (401 или 404, не 500)" \
+      "code=\$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 'https://${apex}/realtime/api/v1/events/missing'); [ \"\$code\" = '401' ] || [ \"\$code\" = '404' ] || [ \"\$code\" = '403' ]"
   done
 fi
 

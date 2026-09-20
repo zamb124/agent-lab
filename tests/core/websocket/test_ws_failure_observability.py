@@ -5,13 +5,13 @@ from types import SimpleNamespace
 import pytest
 
 from core.config.models import LoggingConfig
-from core.websocket.router import _merge_ws_failure_payload
+from core.realtime.command_http import merge_command_failure_payload
 
 
 @pytest.fixture(autouse=True)
 def _fake_grafana(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "core.websocket.router.get_settings",
+        "core.realtime.command_http.get_settings",
         lambda: SimpleNamespace(
             logging=LoggingConfig(
                 grafana_public_url="https://grafana.ws.test",
@@ -23,7 +23,7 @@ def _fake_grafana(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_ws_merge_demo_no_observability() -> None:
-    out = _merge_ws_failure_payload(
+    out = merge_command_failure_payload(
         {"error_code": "e1", "error_detail": "d"},
         trace_id="tw",
         platform_request_id="rw",
@@ -37,7 +37,7 @@ def test_ws_merge_demo_no_observability() -> None:
 
 
 def test_ws_merge_system_has_logs_url() -> None:
-    out = _merge_ws_failure_payload(
+    out = merge_command_failure_payload(
         {"error_code": "e1", "error_detail": "d"},
         trace_id="tw",
         platform_request_id="rw",

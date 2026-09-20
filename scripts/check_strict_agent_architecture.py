@@ -43,7 +43,7 @@ FLOW_FROM_CONFIG_PATHS: tuple[str, ...] = (
 JSON_BUNDLE_ROOT = "apps/flows/bundles"
 
 UI_REFLECTION_CONTRACTS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("apps/flows/src/api/v1/metadata.py", ('"type": "reflection"',)),
+    ("apps/flows/src/models/flow_api.py", ('type="reflection"',)),
     ("apps/flows/ui/constants/node-icons.js", ("reflection:",)),
     (
         "apps/flows/ui/components/editor/flows-node-editor-surface.js",
@@ -56,7 +56,7 @@ UI_REFLECTION_CONTRACTS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 UI_CODE_AGENT_CONTRACTS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("apps/flows/src/api/v1/metadata.py", ('"type": "code_agent"',)),
+    ("apps/flows/src/models/flow_api.py", ('type="code_agent"',)),
     ("apps/flows/ui/constants/node-icons.js", ("code_agent:", "icon: 'code_agent'")),
     (
         "apps/flows/ui/components/editor/flows-node-editor-surface.js",
