@@ -8,7 +8,7 @@ SQLAlchemy модели БД `platform_wiki`.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import override
 
 from sqlalchemy import (
@@ -27,6 +27,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from core.db.models import Base
 from core.types import JsonObject
+from core.utils.time import utcnow
 
 SEARCH_VECTOR_EXPRESSION: str = (
     "setweight(to_tsvector('simple', coalesce(title, '')), 'A') || "
@@ -39,8 +40,6 @@ SEARCH_VECTOR_EXPRESSION: str = (
 """
 
 
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 class WikiPageRow(Base):
@@ -75,9 +74,9 @@ class WikiPageRow(Base):
         Computed(SEARCH_VECTOR_EXPRESSION, persisted=True),
         nullable=True,
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -111,7 +110,7 @@ class WikiRevisionRow(Base):
     content: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
     text_markdown: Mapped[str] = mapped_column(Text, nullable=False, default="")
     author_user_id: Mapped[str] = mapped_column(String(100), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     __table_args__: tuple[object, ...] = (
         Index("ix_wiki_revisions_page", "company_id", "namespace", "wiki_page_id", "created_at"),
@@ -128,7 +127,7 @@ class WikiPageLinkRow(Base):
     target_kind: Mapped[str] = mapped_column(String(32), nullable=False)
     target_id: Mapped[str] = mapped_column(String(255), nullable=False)
     target_label: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     __table_args__: tuple[object, ...] = (
         UniqueConstraint(
@@ -155,9 +154,9 @@ class WikiCommentRow(Base):
     anchor_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     resolved_by_user_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
 
     __table_args__: tuple[object, ...] = (

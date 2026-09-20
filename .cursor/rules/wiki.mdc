@@ -12,7 +12,7 @@ alwaysApply: false
 
 ## Границы запроса
 
-Компания, пользователь и пространство — `core.request_scope.require_namespace` (имя из `Context.active_namespace`: HTTP `X-Platform-Namespace`, WS `PlatformEvent.meta.namespace`). Несуществующее пространство — ошибка, не молчаливый уход в `default`. Аноним (`user_id == "anonymous"`) — 403. В `op_*` `_scope` после `require_namespace` делает Check `require_can_view(platform_namespace)`. Публичные маршруты `/public/*` — без этой границы. `apps/wiki/request_scope.py` держит только `load_viewable_page` / `wiki_page_response`.
+Компания, пользователь и пространство — `core.request_scope.require_namespace` (имя из `Context.active_namespace`: HTTP `X-Platform-Namespace`, WS `PlatformEvent.meta.namespace`). Несуществующее пространство — ошибка, не молчаливый уход в `default`. Аноним (`user_id == "anonymous"`) — 403. В `op_*` `_scope` после `require_namespace` делает Check `require_can_view(platform_namespace)`. Публичные маршруты `/public/*` — без этой границы. Страница на чтение — `WikiService.require_viewable_page`, ответ с `can_edit`/`can_admin` — `WikiService.page_response`.
 
 UI обязан слать заголовок сам: фабрики используют `platformNamespaceHeader(ctx)` из `@platform/lib/utils/platform-namespace-header.js`.
 

@@ -7,9 +7,10 @@ from typing import final
 
 from sqlalchemy import desc, select, update
 
-from apps.flows.src.db.models import FlowUIShareGrants, utc_now
+from apps.flows.src.db.models import FlowUIShareGrants
 from core.db.storage import Storage
 from core.models.flow_ui_share import FlowUIShareGrant
+from core.utils.time import utcnow
 
 
 def _grant(row: FlowUIShareGrants) -> FlowUIShareGrant:
@@ -98,7 +99,7 @@ class FlowUIShareRepository:
                         FlowUIShareGrants.created_by_user_id == created_by_user_id,
                         FlowUIShareGrants.revoked_at.is_(None),
                     )
-                    .values(revoked_at=utc_now())
+                    .values(revoked_at=utcnow())
                     .returning(FlowUIShareGrants.grant_id)
                 )
                 return result.scalar_one_or_none() is not None

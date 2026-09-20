@@ -8,13 +8,12 @@ from apps.rag.models import NamespaceCreateRequest, NamespaceDeleteResponse
 from apps.rag.realtime.operations import (
     RagNamespaceCreatePayload,
     RagNamespaceDeletePayload,
-    RagNamespacesListPayload,
     op_namespaces_create,
-    op_namespaces_list,
     op_namespaces_remove,
 )
 from core.context import require_context
 from core.models.identity_models import Namespace
+from core.namespace.operations import NamespacesListPayload, op_namespaces_list
 from core.pagination import OffsetPage
 
 from ..dependencies import ContainerDep
@@ -29,7 +28,7 @@ async def list_namespaces(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[Namespace]:
     return await op_namespaces_list(
-        RagNamespacesListPayload(limit=limit, offset=offset),
+        NamespacesListPayload(limit=limit, offset=offset),
         user=require_context().user,
         container=container,
     )

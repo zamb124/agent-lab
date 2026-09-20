@@ -7,9 +7,10 @@ from __future__ import annotations
 from typing import ClassVar, Protocol
 from urllib.parse import quote
 
-from apps.crm.models.api import EntityCreate, EntityResponse
 from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.services.lara_action_engine import LaraActionEngine, LaraPendingAction
+from core.clients.crm_client import CrmClient
+from core.clients.crm_models import CrmCapabilityCreateNoteArgs
 from core.clients.service_client import ServiceClient
 from core.context import get_context
 from core.types import JsonObject, require_json_object
@@ -107,9 +108,16 @@ def flow_config_from_flow_api_response(response: JsonObject) -> FlowConfig:
 class LaraFacade:
     """Безопасный фасад для тулов: preview/apply через LaraActionEngine."""
 
-    def __init__(self, action_engine: LaraActionEngine):
+    def __init__(
+        self,
+        action_engine: LaraActionEngine,
+        *,
+        crm_client: CrmClient,
+        service_client: ServiceClient,
+    ):
         self._action_engine: LaraActionEngine = action_engine
-        self._client: ServiceClient = ServiceClient()
+        self._crm: CrmClient = crm_client
+        self._client: ServiceClient = service_client
 
     @staticmethod
     def _encode_flow_id(flow_id: str) -> str:
@@ -193,24 +201,10 @@ class LaraFacade:
         company_id, user_id, context_id = self._require_runtime_ids(state)
 
         async def _apply(action: LaraPendingAction) -> JsonObject:
-            entity_create = EntityCreate.model_validate(
-                {
-                    "entity_type": "note",
-                    **action.payload,
-                }
-            )
-            body = require_json_object(
-                entity_create.model_dump(mode="json", exclude_none=True),
-                "crm.note.create.body",
-            )
-            response = await self._client.post("crm", "/crm/api/v1/entities", json=body)
-            entity = EntityResponse.model_validate(response)
-            entity_payload = require_json_object(
-                entity.model_dump(mode="json"),
-                "crm.note.create.response",
-            )
+            note_args = CrmCapabilityCreateNoteArgs.model_validate(action.payload)
+            created = await self._crm.create_note(note_args)
             return {
-                "entity": entity_payload,
+                "entity": require_json_object(created["entity"], "crm.note.create.entity"),
                 "message": "Заметка создана",
             }
 

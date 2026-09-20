@@ -25,7 +25,6 @@ from apps.flows.src.db.models import (
     A2ATaskEventDedup,
     A2ATaskMessages,
     A2ATaskProjections,
-    utc_now,
 )
 from core.a2a import (
     TaskProjectionAccumulator,
@@ -45,6 +44,7 @@ from core.a2a import (
 from core.a2a.task_projection import TaskProjectionEvent
 from core.db.storage import Storage
 from core.types import JsonObject, require_json_object
+from core.utils.time import utcnow
 
 _TASK_SNAPSHOT_KIND = "task"
 _ARTIFACT_UPDATE_KIND = "artifact_update"
@@ -181,7 +181,7 @@ class A2ATaskRepository:
         )
         task_json = task_to_json_dict(task)
         task_metadata = mapping_from_struct(task.metadata) if task.HasField("metadata") else {}
-        now = utc_now()
+        now = utcnow()
         async with self._storage.get_session() as session:
             async with session.begin():
                 created_result = await session.execute(
@@ -345,7 +345,7 @@ class A2ATaskRepository:
                 task_row.is_terminal = is_terminal_a2a_task_state(
                     next_task.status.state
                 )
-                updated_at = utc_now()
+                updated_at = utcnow()
                 task_row.updated_at = updated_at
                 if task_row.is_terminal and task_row.completed_at is None:
                     task_row.completed_at = updated_at
@@ -371,7 +371,7 @@ class A2ATaskRepository:
                         event_json=_event_to_json(stored_event),
                         source_fingerprint=source_fingerprint,
                         published_at=None,
-                        created_at=utc_now(),
+                        created_at=utcnow(),
                     )
                 )
                 return A2AEventAppendResult(
@@ -398,7 +398,7 @@ class A2ATaskRepository:
                         A2ATaskEventDedup.event_identity == event_identity,
                         A2ATaskEventDedup.published_at.is_(None),
                     )
-                    .values(published_at=utc_now())
+                    .values(published_at=utcnow())
                     .returning(A2ATaskEventDedup.task_event_id)
                 )
                 if update_result.scalar_one_or_none() is None:
@@ -943,7 +943,7 @@ class A2ATaskRepository:
         is_closed = event.last_chunk or (existing.is_closed if existing is not None else False)
         revision = 1 if existing is None else int(existing.revision) + 1
         payload_hash = artifact_payload_hash(materialized)
-        now = utc_now()
+        now = utcnow()
         _ = await session.execute(
             insert(A2AArtifactProjections)
             .values(

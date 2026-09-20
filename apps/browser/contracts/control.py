@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from apps.browser.contracts.control_types import BrowserControlFeatures
 from apps.browser.engine.types import (
     BrowserAcquireRequest,
     BrowserAcquireResult,
@@ -14,6 +13,7 @@ from apps.browser.engine.types import (
     BrowserFetchResult,
     BrowserPage,
 )
+from core.clients.browser.control_types import BrowserControlFeatures
 from core.types import JsonObject
 
 

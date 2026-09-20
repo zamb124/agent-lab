@@ -4,10 +4,10 @@
 
 from __future__ import annotations
 
-from apps.flows.config import get_settings
 from apps.idle_worker.container import get_container
 from apps.idle_worker.tasks.task_names import TASK_PAYMENT_SYNC_TICK
 from core.clients.payment.factory import PaymentProviderFactory
+from core.config import get_settings
 from core.logging import get_logger
 from core.payments.service import PaymentService
 from core.payments.sync_service import PaymentSyncService

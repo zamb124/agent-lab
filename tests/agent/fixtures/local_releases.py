@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from apps.agent.config import reset_agent_settings
 from scripts.agent_build import detect_host_platform
+from tests.agent.fixtures.settings import reset_agent_settings
 
 
 @pytest.fixture(scope="session")

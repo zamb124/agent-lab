@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 
-from apps.flows.config import get_settings
 from apps.idle_worker.container import get_container
+from core.config import get_settings
 from core.logging import get_logger
 from core.mail.enqueue import enqueue_mail_sync_binding
 from core.mail.models import MailboxBinding, MailboxBindingKind, MailIdleWakeKind

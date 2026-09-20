@@ -20,7 +20,6 @@ from apps.wiki.realtime.operations import (
     WikiMarkdownImportPagePayload,
     WikiMemberRemovePayload,
     WikiMemberUpsertPayload,
-    WikiNamespacesListPayload,
     WikiPageContentUpdatePayload,
     WikiPageIdPayload,
     WikiPageMoveNamespacePayload,
@@ -32,7 +31,6 @@ from apps.wiki.realtime.operations import (
     op_backlinks_list,
     op_comments_remove,
     op_comments_resolve,
-    op_namespaces_list,
     op_pages_access,
     op_pages_children_list,
     op_pages_comment_create,
@@ -61,6 +59,7 @@ from apps.wiki.realtime.operations import (
     op_search_run,
 )
 from core.logging import get_logger
+from core.namespace.operations import NamespacesListPayload, op_namespaces_list
 from core.websocket import Operation, RegisteredOperation, register_service_operations
 
 logger = get_logger(__name__)
@@ -148,7 +147,7 @@ WIKI_OPERATIONS: dict[str, RegisteredOperation[WikiContainer]] = {
         payload_model=WikiBacklinksPayload, fn=op_backlinks_list
     ),
     "wiki/namespaces/list_requested": Operation(
-        payload_model=WikiNamespacesListPayload, fn=op_namespaces_list
+        payload_model=NamespacesListPayload, fn=op_namespaces_list
     ),
 }
 

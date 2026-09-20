@@ -7,8 +7,7 @@
 from pydantic import Field
 
 from core.config import BaseSettings
-from core.config import set_settings as core_set_settings
-from core.config.loader import load_merged_config
+from core.config.service_settings import ServiceSettingsCache
 
 
 class CRMSettings(BaseSettings):
@@ -102,26 +101,6 @@ class CRMSettings(BaseSettings):
     )
 
 
-_crm_settings: CRMSettings | None = None
-
-
-def get_crm_settings() -> CRMSettings:
-    """
-    Получает настройки CRM сервиса.
-
-    Создает CRMSettings из конфигурации, загружая базовые настройки
-    и добавляя специфичные для CRM.
-    """
-    global _crm_settings
-    if _crm_settings is None:
-        merged_config = load_merged_config(service_name="crm", silent=True)
-        _crm_settings = CRMSettings.model_validate(merged_config)
-        core_set_settings(_crm_settings)
-
-    return _crm_settings
-
-
-def reset_crm_settings():
-    """Сбрасывает настройки (для тестов)"""
-    global _crm_settings
-    _crm_settings = None
+_settings_cache = ServiceSettingsCache("crm", CRMSettings, register_platform_settings=True)
+get_crm_settings = _settings_cache.get
+reset_crm_settings = _settings_cache.reset

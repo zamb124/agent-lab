@@ -8,7 +8,7 @@ import uuid
 
 import pytest
 
-from apps.browser.contracts.control_types import BrowserCapabilityError
+from core.clients.browser.control_types import BrowserCapabilityError
 from apps.browser.engine.types import (
     BrowserAcquireRequest,
     BrowserFetchRequest,

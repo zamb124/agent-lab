@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from typing import Generic, Protocol, TypeVar
+from typing import Generic, Never, Protocol, TypeVar
 
 from pydantic import BaseModel
 
@@ -69,6 +69,34 @@ def ws_command_error_status(error: WsCommandError) -> int:
     if error.code not in WS_COMMAND_ERROR_HTTP_STATUS:
         raise ValueError(f"неизвестный WsCommandError.code: {error.code}")
     return WS_COMMAND_ERROR_HTTP_STATUS[error.code]
+
+
+def raise_forbidden(exc: Exception) -> Never:
+    raise WsCommandError("forbidden", str(exc)) from exc
+
+
+def raise_not_found(exc: Exception, detail: str | None = None) -> Never:
+    raise WsCommandError("not_found", detail if detail is not None else str(exc)) from exc
+
+
+def raise_invalid(exc: Exception) -> Never:
+    raise WsCommandError("ws_invalid_payload", str(exc)) from exc
+
+
+def raise_conflict(exc: Exception, detail: str | None = None) -> Never:
+    raise WsCommandError("conflict", detail if detail is not None else str(exc)) from exc
+
+
+def raise_internal(exc: Exception) -> Never:
+    raise WsCommandError("internal", str(exc)) from exc
+
+
+def raise_upstream(exc: Exception) -> Never:
+    raise WsCommandError("upstream", str(exc)) from exc
+
+
+def raise_unavailable(exc: Exception) -> Never:
+    raise WsCommandError("unavailable", str(exc)) from exc
 
 
 @dataclass(frozen=True)

@@ -48,7 +48,6 @@ from apps.office.models.api import (
     OfficeIntegrationStatusResponse,
     OfficeNamespaceCreateRequest,
     OfficeNamespaceCreateResponse,
-    OfficeNamespaceItem,
     OfficeNamespaceTemplateItem,
     OfficeResourceAccessPatchRequest,
     OfficeResourceAccessResponse,
@@ -77,7 +76,6 @@ from apps.office.realtime.operations import (
     OfficeDocumentUpdateCellsPayload,
     OfficeEmptyPayload,
     OfficeFileIdPayload,
-    OfficeNamespacesListPayload,
     op_catalogs_access,
     op_catalogs_access_rotate_link,
     op_catalogs_access_update,
@@ -128,7 +126,6 @@ from apps.office.realtime.operations import (
     op_documents_update_cells,
     op_integration_status,
     op_namespaces_create,
-    op_namespaces_list,
     op_namespaces_templates,
 )
 from core.api.team import TeamMemberResponse
@@ -140,6 +137,8 @@ from core.documents.placement import (
     DocsPlacement,
 )
 from core.middleware.auth.company_resolver import build_service_base_url
+from core.models.identity_models import Namespace
+from core.namespace.operations import NamespacesListPayload, op_namespaces_list
 from core.pagination import ListResponse, OffsetPage
 
 router = APIRouter(tags=["office-commands"])
@@ -159,14 +158,14 @@ async def integration_status(container: ContainerDep) -> OfficeIntegrationStatus
     )
 
 
-@router.get("/namespaces", response_model=OffsetPage[OfficeNamespaceItem])
+@router.get("/namespaces", response_model=OffsetPage[Namespace])
 async def list_namespaces(
     container: ContainerDep,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> OffsetPage[OfficeNamespaceItem]:
+) -> OffsetPage[Namespace]:
     return await op_namespaces_list(
-        OfficeNamespacesListPayload(limit=limit, offset=offset),
+        NamespacesListPayload(limit=limit, offset=offset),
         user=require_context().user,
         container=container,
     )

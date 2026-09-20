@@ -5,9 +5,9 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from apps.wiki.dependencies import ContainerDep
-from apps.wiki.realtime.operations import WikiNamespacesListPayload, op_namespaces_list
 from core.context import require_context
 from core.models.identity_models import Namespace
+from core.namespace.operations import NamespacesListPayload, op_namespaces_list
 from core.pagination import OffsetPage
 
 router = APIRouter(prefix="/namespaces", tags=["wiki-namespaces"])
@@ -20,7 +20,7 @@ async def list_wiki_namespaces(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[Namespace]:
     return await op_namespaces_list(
-        WikiNamespacesListPayload(limit=limit, offset=offset),
+        NamespacesListPayload(limit=limit, offset=offset),
         user=require_context().user,
         container=container,
     )

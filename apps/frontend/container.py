@@ -16,7 +16,6 @@ from apps.search.db.crawl_repositories import (
 )
 from apps.search.services.crawl.report_service import CrawlReportService
 from core.clients.rag_client import RagClient
-from core.clients.redis_client import RedisClient
 from core.clients.search_client import SearchClient
 from core.config import get_settings
 from core.container import BaseContainer, ContainerRegistry, lazy
@@ -88,10 +87,6 @@ class FrontendContainer(BaseContainer):
             authz=self.authz_service,
             hydrator=self.authz_explorer_hydrator,
         )
-
-    @lazy
-    def redis_client(self) -> RedisClient:
-        return RedisClient(get_settings().database.redis_url)
 
     @lazy
     def search_database(self) -> SearchDatabase:

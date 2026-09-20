@@ -19,10 +19,9 @@ Namespace передаётся во все методы явно и уходит
 
 from __future__ import annotations
 
-import hashlib
 import secrets
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 from apps.wiki.content.markdown_file import (
     WikiMarkdownFrontMatter,
@@ -48,6 +47,7 @@ from apps.wiki.events import (
     publish_wiki_page_event,
     publish_wiki_page_moved,
 )
+from apps.wiki.models.api import WikiPageResponse
 from apps.wiki.models.domain import (
     WikiAccessMemberRelation,
     WikiBacklink,
@@ -72,11 +72,13 @@ from apps.wiki.services.rag_metadata import (
     ensure_page_filter_size,
 )
 from apps.wiki.services.wiki_access_service import WikiAccessService
+from core.auth.utils import hash_token
 from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
 from core.authz.types import AuthzRelation
 from core.logging import get_logger
+from core.utils.time import utcnow
 
 logger = get_logger(__name__)
 
@@ -94,16 +96,10 @@ class WikiAccessDeniedError(PermissionError):
     """Пользователю нельзя выполнить операцию над страницей."""
 
 
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def _new_id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex[:24]}"
-
-
-def _hash_link_token(raw_token: str) -> str:
-    return hashlib.sha256(raw_token.encode()).hexdigest()
 
 
 class WikiService:
@@ -130,6 +126,13 @@ class WikiService:
         if page is None:
             raise WikiPageNotFoundError(f"Страница {wiki_page_id} не найдена в {namespace}")
         return page
+
+    async def page_response(self, page: WikiPage, *, user_id: str) -> WikiPageResponse:
+        """can_edit / can_admin только из AuthzService (включая mutating-ответы)."""
+        obj = AuthzObject.wiki_page(page.wiki_page_id)
+        can_edit = await self._authz.can_edit(obj, user_id=user_id)
+        can_admin = await self._authz.can_admin(obj, user_id=user_id)
+        return WikiPageResponse(page=page, can_edit=can_edit, can_admin=can_admin)
 
     async def require_viewable_page(
         self, company_id: str, namespace: str, wiki_page_id: str, user_id: str
@@ -184,7 +187,7 @@ class WikiService:
         готовым текстом, а `is_published=False` говорит обратное. Проверка живёт
         в запросе репозитория, поэтому обойти её другим вызовом нельзя.
         """
-        return await self._repo.get_public_page_by_link_token(_hash_link_token(raw_token))
+        return await self._repo.get_public_page_by_link_token(hash_token(raw_token))
 
     async def get_public_site_tree(self, raw_token: str) -> list[WikiPageSummary]:
         """Навигация публичного сайта.
@@ -264,7 +267,7 @@ class WikiService:
             )
 
         document = normalize_document(content) if content is not None else empty_document()
-        now = _utcnow()
+        now = utcnow()
         wiki_page_id = _new_id("wpg")
         position = await self._repo.next_position(company_id, namespace, parent_page_id)
 
@@ -363,7 +366,7 @@ class WikiService:
         if is_published is not None:
             page.is_published = is_published
             if is_published and page.published_at is None:
-                page.published_at = _utcnow()
+                page.published_at = utcnow()
         if is_template is not None:
             page.is_template = is_template
         if is_full_width is not None:
@@ -646,7 +649,7 @@ class WikiService:
             content=page.content,
             text_markdown=page.text_markdown,
             author_user_id=page.last_edited_by_user_id,
-            created_at=_utcnow(),
+            created_at=utcnow(),
         )
         await self._repo.insert_revision(revision)
 
@@ -812,7 +815,7 @@ class WikiService:
             company_id,
             namespace,
             wiki_page_id,
-            _hash_link_token(raw_token),
+            hash_token(raw_token),
             True,
             permission,
         )
@@ -890,7 +893,7 @@ class WikiService:
 
     async def _sync_links(self, page: WikiPage) -> None:
         extracted = extract_links(page.content)
-        now = _utcnow()
+        now = utcnow()
         links = [
             WikiPageLink(
                 wiki_page_link_id=_new_id("wlk"),
@@ -1054,7 +1057,7 @@ class WikiService:
         parent_comment_id: str | None = None,
     ) -> WikiComment:
         _ = await self.require_viewable_page(company_id, namespace, wiki_page_id, user_id)
-        now = _utcnow()
+        now = utcnow()
         comment = WikiComment(
             wiki_comment_id=_new_id("wcm"),
             wiki_page_id=wiki_page_id,

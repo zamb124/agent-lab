@@ -25,12 +25,12 @@ from apps.flows.tools.work_item_tools import (
     work_item_create,
     work_item_list,
 )
-from apps.worktracker.services.work_queue_access_service import WorkQueueAccessService
 from core.files.file_ref import FileRef
 from core.identity.flow_employee import flow_employee_user_id
 from core.state import ExecutionState
 from core.state.interrupt import HandoffMode
 from core.variables.models import normalize_variables_map
+from core.worktracker.access_service import WorkQueueAccessService
 from core.worktracker.models import (
     TERMINAL_WORK_ITEM_STATES,
     BoardColumn,

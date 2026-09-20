@@ -6,7 +6,7 @@ import pytest
 
 from core.data_tables.import_tabular import parse_tabular_bytes
 from core.data_tables.models import DATA_TABLE_CONTENT_TYPE
-from core.utils.subdomain import slugify
+from core.utils.slug import slugify
 from tests.fixtures.s3 import require_s3_configured
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.timeout(120)]

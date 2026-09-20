@@ -239,13 +239,6 @@ class OnlyOfficeCallbackContextClaims(BaseModel):
         return self
 
 
-class OfficeNamespaceItem(BaseModel):
-    """Рабочее пространство компании; данные из shared storage (`NamespaceRepository`)."""
-
-    name: str
-    is_default: bool = False
-
-
 class OfficeNamespaceTemplateItem(BaseModel):
     """Шаблон пространства (ответ CRM), для модалки создания namespace."""
 
@@ -337,12 +330,6 @@ class OfficeCatalogMemberItem(BaseModel):
     relation: OfficeAccessMemberRelation = "viewer"
 
 
-class OfficeCatalogRagIndexBindingItem(BaseModel):
-    file_id: str
-    title: str
-    file_category: str
-
-
 class OfficeCatalogRagIndexStatusTotals(BaseModel):
     ready: int = 0
     pending: int = 0
@@ -360,7 +347,8 @@ class OfficeCatalogRagIndexDisableResponse(BaseModel):
 
 
 class OfficeCatalogRagIndexRebuildResponse(BaseModel):
-    task_id: str
+    task_id: str | None = None
+    enqueued_documents: int = 0
 
 
 class OfficeCatalogRagIndexStatusResponse(BaseModel):

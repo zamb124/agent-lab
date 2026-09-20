@@ -7,9 +7,11 @@ from apps.flows.realtime.company_operations import (
     CompanyInitScheduledResponse,
     op_flows_company_init,
 )
-from apps.flows.realtime.operations import raise_invalid
 from apps.flows.src.dependencies import ContainerDep
 from core.context import require_context
+from core.websocket import (
+    raise_invalid,
+)
 
 router = APIRouter(prefix="/company", tags=["company"])
 

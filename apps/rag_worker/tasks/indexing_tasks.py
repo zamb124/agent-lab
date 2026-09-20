@@ -8,7 +8,6 @@ from apps.rag.events import publish_rag_document_status_updated
 from apps.rag_worker.tasks.task_names import (
     RAG_DELETE_DOCUMENT,
     RAG_INDEX_DOCUMENT_S3,
-    RAG_INDEX_OFFICE_CATALOG,
 )
 from core.config import get_settings
 from core.context import Context, clear_context, set_context
@@ -23,7 +22,7 @@ from core.rag.indexable import (
 from core.rag.models import RAGMetadata
 from core.rag.ttl import ensure_ttl_seconds_in_metadata
 from core.rag.upload_profile_binding import UploadProfileBinding
-from core.tasks import enqueue, platform_task
+from core.tasks import platform_task
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, require_json_object
 
@@ -228,134 +227,6 @@ async def index_rag_document_s3_task(
             }
     finally:
         clear_context()
-
-
-@platform_task(RAG_INDEX_OFFICE_CATALOG)
-async def index_office_catalog_task(
-    company_id: str,
-    workspace_namespace: str,
-    catalog_id: str,
-    catalog_title: str,
-    user_id: str,
-    rag_namespace_id: str,
-    items: list[JsonObject],
-) -> JsonObject:
-    """Batch enqueue index-file jobs for all bindings in an Office catalog."""
-    if company_id.strip() == "":
-        raise ValueError("company_id обязателен")
-    if workspace_namespace.strip() == "":
-        raise ValueError("workspace_namespace обязателен")
-    if catalog_id.strip() == "":
-        raise ValueError("catalog_id обязателен")
-    if user_id.strip() == "":
-        raise ValueError("user_id обязателен")
-    if rag_namespace_id.strip() == "":
-        raise ValueError("rag_namespace_id обязателен")
-
-    container = get_rag_container()
-    status_repo = container.document_status_repository
-    enqueued_task_ids: list[str] = []
-
-    for raw_item in items:
-        item = require_json_object(raw_item, "office catalog index item")
-        file_id_value = item.get("file_id")
-        title_value = item.get("title")
-        file_category_value = item.get("file_category")
-        if not isinstance(file_id_value, str) or file_id_value.strip() == "":
-            raise ValueError("items[].file_id обязателен")
-        if not isinstance(title_value, str) or title_value.strip() == "":
-            raise ValueError("items[].title обязателен")
-        if not isinstance(file_category_value, str) or file_category_value.strip() == "":
-            raise ValueError("items[].file_category обязателен")
-
-        file_id = file_id_value.strip()
-        file_record = await container.file_repository.get(file_id)
-        if file_record is None:
-            logger.warning(
-                "Office catalog index skip: FileRecord не найден file_id=%s catalog_id=%s",
-                file_id,
-                catalog_id,
-            )
-            continue
-        if file_record.company_id != company_id:
-            raise ValueError(f"FileRecord {file_id} не принадлежит company_id={company_id}")
-
-        resolved_category = effective_rag_file_category(
-            file_category=file_category_value,
-            document_name=file_record.original_name,
-        )
-        if not is_rag_indexable_file_category(resolved_category):
-            logger.info(
-                (
-                    "Office catalog index skip: non-indexable file_id=%s "
-                    "catalog_id=%s file_category=%s document_name=%s"
-                ),
-                file_id,
-                catalog_id,
-                resolved_category,
-                file_record.original_name,
-            )
-            continue
-
-        metadata: RAGMetadata = {
-            "source": "office",
-            "company_id": company_id,
-            "office_namespace": workspace_namespace.strip(),
-            "catalog_id": catalog_id.strip(),
-            "document_title": title_value.strip(),
-            "file_category": file_category_value.strip(),
-            "uploaded_by_user_id": user_id.strip(),
-            "ttl_seconds": 0,
-            "external_file_owner": "peer",
-            "document_id": file_id,
-            "s3_bucket": file_record.s3_bucket,
-        }
-        settings = get_settings()
-        metadata = ensure_ttl_seconds_in_metadata(
-            metadata,
-            default_ttl_seconds=settings.rag.ttl.default_ttl_seconds,
-        )
-        ttl_raw = metadata["ttl_seconds"]
-        if not isinstance(ttl_raw, int) or isinstance(ttl_raw, bool):
-            raise RuntimeError("ensure_ttl_seconds_in_metadata returned non-integer ttl_seconds")
-        ttl_sec = ttl_raw
-
-        document_name = file_record.original_name
-        task_id_placeholder = f"pending_{file_id}"
-        _ = await status_repo.create_status(
-            document_id=file_id,
-            task_id=task_id_placeholder,
-            namespace_id=rag_namespace_id.strip(),
-            document_name=document_name,
-            file_size=file_record.file_size,
-            ttl_seconds=ttl_sec,
-            extra_metadata={},
-        )
-        task = await enqueue(
-            RAG_INDEX_DOCUMENT_S3,
-            company_id=company_id.strip(),
-            namespace_id=rag_namespace_id.strip(),
-            s3_key=file_record.s3_key,
-            document_name=document_name,
-            metadata=dict(metadata),
-            provider=None,
-        )
-        _ = await status_repo.finalize_enqueued_indexing_task(file_id, task.task_id)
-        enqueued_task_ids.append(task.task_id)
-
-    logger.info(
-        "Office catalog batch index enqueued catalog_id=%s rag_namespace_id=%s items=%s",
-        catalog_id,
-        rag_namespace_id,
-        len(enqueued_task_ids),
-    )
-    return {
-        "catalog_id": catalog_id.strip(),
-        "catalog_title": catalog_title,
-        "rag_namespace_id": rag_namespace_id.strip(),
-        "enqueued_count": len(enqueued_task_ids),
-        "task_ids": enqueued_task_ids,
-    }
 
 
 @platform_task(RAG_DELETE_DOCUMENT)

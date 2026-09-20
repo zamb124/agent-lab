@@ -31,8 +31,8 @@ Worker lifecycle
 
 from __future__ import annotations
 
-from apps.flows.config import get_settings
 from apps.flows.src.container import FlowContainer
+from core.config import get_settings
 from core.container import ContainerRegistry
 from core.logging import get_logger
 

@@ -4,7 +4,7 @@
 
 
 from core.config import BaseSettings
-from core.config.loader import load_merged_config
+from core.config.service_settings import ServiceSettingsCache
 
 
 class RAGSettings(BaseSettings):
@@ -17,25 +17,6 @@ class RAGSettings(BaseSettings):
     pass
 
 
-_rag_settings: RAGSettings | None = None
-
-
-def get_rag_settings() -> RAGSettings:
-    """
-    Получает настройки RAG сервиса.
-
-    Создает RAGSettings из конфигурации, загружая базовые настройки
-    и добавляя специфичные для RAG.
-    """
-    global _rag_settings
-    if _rag_settings is None:
-        merged_config = load_merged_config(service_name="rag", silent=True)
-        _rag_settings = RAGSettings.model_validate(merged_config)
-
-    return _rag_settings
-
-
-def reset_rag_settings() -> None:
-    """Сбрасывает настройки (для тестов)"""
-    global _rag_settings
-    _rag_settings = None
+_settings_cache = ServiceSettingsCache("rag", RAGSettings)
+get_rag_settings = _settings_cache.get
+reset_rag_settings = _settings_cache.reset

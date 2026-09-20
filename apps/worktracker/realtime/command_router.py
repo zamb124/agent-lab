@@ -3,11 +3,6 @@
 from __future__ import annotations
 
 from apps.worktracker.container import WorktrackerContainer, get_worktracker_container
-from apps.worktracker.models.api import (
-    BoardCreateRequest,
-    WorkItemCreateRequest,
-    WorkQueueCreateRequest,
-)
 from apps.worktracker.realtime.operations import (
     BoardIdPayload,
     BoardsListPayload,
@@ -51,6 +46,11 @@ from apps.worktracker.realtime.operations import (
 )
 from core.logging import get_logger
 from core.websocket import Operation, RegisteredOperation, register_service_operations
+from core.worktracker.requests import (
+    BoardCreateRequest,
+    WorkItemCreateRequest,
+    WorkQueueCreateRequest,
+)
 
 logger = get_logger(__name__)
 

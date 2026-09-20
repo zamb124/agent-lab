@@ -160,7 +160,7 @@ def test_resolve_asset_url_missing_platform() -> None:
 
 
 def test_github_api_headers_include_bearer_token(monkeypatch: pytest.MonkeyPatch) -> None:
-    from apps.agent.config import reset_agent_settings
+    from tests.agent.fixtures.settings import reset_agent_settings
 
     monkeypatch.setenv("AGENT__RELEASES__GITHUB_TOKEN", "ghp_test_token")
     reset_agent_settings()

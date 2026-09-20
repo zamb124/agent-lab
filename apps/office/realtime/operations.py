@@ -63,7 +63,6 @@ from apps.office.models.api import (
     OfficeIntegrationStatusResponse,
     OfficeNamespaceCreateRequest,
     OfficeNamespaceCreateResponse,
-    OfficeNamespaceItem,
     OfficeNamespaceTemplateItem,
     OfficeResourceAccessPatchRequest,
     OfficeResourceAccessResponse,
@@ -115,7 +114,13 @@ from core.models.identity_models import User
 from core.pagination import ListResponse, OffsetPage
 from core.request_scope import CompanyScope, NamespaceScope, require_company, require_namespace
 from core.types import JsonObject, parse_json_object, require_json_array
-from core.websocket import WsCommandError
+from core.websocket import (
+    WsCommandError,
+    raise_conflict,
+    raise_forbidden,
+    raise_invalid,
+    raise_not_found,
+)
 
 logger = get_logger(__name__)
 
@@ -138,11 +143,6 @@ _ONLYOFFICE_COMMAND_ERROR_DETAILS = {
 
 class OfficeEmptyPayload(StrictBaseModel):
     pass
-
-
-class OfficeNamespacesListPayload(StrictBaseModel):
-    limit: int = Field(default=200, ge=1, le=1000)
-    offset: int = Field(default=0, ge=0)
 
 
 class OfficeCatalogIdPayload(StrictBaseModel):
@@ -234,20 +234,8 @@ class OfficeDocumentShareCreatePayload(OfficeDocumentShareCreateRequest):
     origin: str = Field(min_length=1)
 
 
-def _not_found(exc: Exception, detail: str) -> Never:
-    raise WsCommandError("not_found", detail) from exc
 
 
-def _invalid(exc: Exception) -> Never:
-    raise WsCommandError("ws_invalid_payload", str(exc)) from exc
-
-
-def _forbidden(exc: PermissionError | AuthzDenied) -> Never:
-    raise WsCommandError("forbidden", str(exc)) from exc
-
-
-def _conflict(exc: Exception, detail: str) -> Never:
-    raise WsCommandError("conflict", detail) from exc
 
 
 async def _namespace_scope(container: OfficeContainer) -> NamespaceScope:
@@ -438,7 +426,7 @@ async def _require_catalog_admin(
             user_id=user_id,
         )
     except AuthzDenied as exc:
-        _forbidden(exc)
+        raise_forbidden(exc)
 
 
 async def _require_catalog_share(
@@ -453,7 +441,7 @@ async def _require_catalog_share(
             user_id=user_id,
         )
     except AuthzDenied as exc:
-        _forbidden(exc)
+        raise_forbidden(exc)
 
 
 async def _require_binding_catalog_access(
@@ -860,29 +848,6 @@ async def op_integration_status(
     return OfficeIntegrationStatusResponse(configured=configured, detail=detail)
 
 
-async def op_namespaces_list(
-    payload: OfficeNamespacesListPayload,
-    *,
-    user: User,
-    container: OfficeContainer,
-) -> OffsetPage[OfficeNamespaceItem]:
-    _ = user
-    _ = _company_scope()
-    rows = await container.namespace_service.list_company_workspaces(limit=1000)
-    items: list[OfficeNamespaceItem] = [
-        OfficeNamespaceItem(name=namespace.name.strip(), is_default=bool(namespace.is_default))
-        for namespace in rows
-        if namespace.name and namespace.name.strip()
-    ]
-    sliced = items[payload.offset : payload.offset + payload.limit]
-    return OffsetPage[OfficeNamespaceItem](
-        items=sliced,
-        total=len(items),
-        limit=payload.limit,
-        offset=payload.offset,
-    )
-
-
 async def op_namespaces_templates(
     payload: OfficeEmptyPayload,
     *,
@@ -1065,7 +1030,7 @@ async def op_catalogs_create(
             parent_catalog_id=payload.parent_catalog_id,
         )
     except ValueError as exc:
-        _not_found(exc, str(exc))
+        raise_not_found(exc, str(exc))
     await _sync_catalog_created_or_rollback(
         container,
         catalog,
@@ -1214,7 +1179,7 @@ async def op_catalogs_remove(
             scope.namespace,
         )
     except ValueError as exc:
-        _conflict(exc, str(exc))
+        raise_conflict(exc, str(exc))
     if not deleted:
         raise WsCommandError("not_found", "Каталог не найден")
     await container.office_access_service.sync_catalog_deleted(payload.catalog_id)
@@ -1378,7 +1343,7 @@ async def op_catalogs_member_add(
             relation=_catalog_member_relation_to_authz(payload.relation),
         )
     except ValueError as exc:
-        _invalid(exc)
+        raise_invalid(exc)
     items = await _list_catalog_member_items(
         container,
         catalog_id=payload.catalog_id,
@@ -1410,7 +1375,7 @@ async def op_catalogs_member_remove(
             payload.member_user_id,
         )
     except ValueError as exc:
-        _invalid(exc)
+        raise_invalid(exc)
 
 
 async def op_catalogs_access(
@@ -1429,7 +1394,7 @@ async def op_catalogs_access(
             scope.namespace,
         )
     except ValueError as exc:
-        _not_found(exc, str(exc))
+        raise_not_found(exc, str(exc))
 
 
 async def op_catalogs_access_update(
@@ -1453,7 +1418,7 @@ async def op_catalogs_access_update(
             payload.origin,
         )
     except ValueError as exc:
-        _invalid(exc)
+        raise_invalid(exc)
     return response
 
 
@@ -1474,7 +1439,7 @@ async def op_catalogs_access_rotate_link(
             payload.origin,
         )
     except ValueError as exc:
-        _invalid(exc)
+        raise_invalid(exc)
 
 
 async def op_documents_list(
@@ -2197,7 +2162,7 @@ async def op_documents_access_update(
             payload.origin,
         )
     except ValueError as exc:
-        _invalid(exc)
+        raise_invalid(exc)
     return response
 
 
@@ -2214,7 +2179,7 @@ async def op_documents_access_rotate_link(
     try:
         return await container.office_access_service.rotate_binding_link(row, payload.origin)
     except ValueError as exc:
-        _invalid(exc)
+        raise_invalid(exc)
 
 
 async def op_documents_preview(
@@ -2265,7 +2230,7 @@ async def op_documents_share_create(
                 raise ValueError("Не удалось создать публичную ссылку")
             public_url = access_response.public_url
     except ValueError as exc:
-        _invalid(exc)
+        raise_invalid(exc)
     await record_document_event(
         container,
         file_id=payload.file_id,

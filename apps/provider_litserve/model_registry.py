@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Sequence
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import ClassVar, Literal, Protocol, cast
 from uuid import uuid4
@@ -17,6 +16,7 @@ from core.config.models import (
     ProviderLitserveTTSModelEntry,
     ProviderLitserveVADModelEntry,
 )
+from core.utils.time import utcnow_iso
 
 ModelKind = Literal["embedding", "rerank", "stt", "tts", "vad"]
 ModelStatus = Literal["pending", "downloading", "ready", "failed", "deleted"]
@@ -90,8 +90,6 @@ def _registry_model_from_row(row: sqlite3.Row) -> RegistryModel:
     )
 
 
-def _now_iso() -> str:
-    return datetime.now(UTC).isoformat()
 
 
 def _api_key_norm(s: str) -> str:
@@ -367,7 +365,7 @@ def bootstrap_defaults_if_empty(cfg: ProviderLitserveInfraConfig) -> None:
             raise RuntimeError("model registry count query returned no row")
         if _row_required_int(row, "total") > 0:
             return
-        created_at = _now_iso()
+        created_at = utcnow_iso()
         seed_models = _default_seed_models(cfg)
 
         for kind, hf_model_id, api_model_id in seed_models:
@@ -382,7 +380,7 @@ def bootstrap_defaults_if_empty(cfg: ProviderLitserveInfraConfig) -> None:
 
 def sync_defaults_from_config(cfg: ProviderLitserveInfraConfig) -> None:
     """Идемпотентно синхронизирует дефолтные модели из конфига в реестр."""
-    now = _now_iso()
+    now = utcnow_iso()
     seed_models = _default_seed_models(cfg)
     with _connect(cfg) as conn:
         for kind, hf_model_id, api_model_id in seed_models:
@@ -447,7 +445,7 @@ def create_or_replace_model(cfg: ProviderLitserveInfraConfig, *, kind: ModelKind
         raise ValueError("hf_model_id is required")
     if not api_model_id.strip():
         raise ValueError("api_model_id is required")
-    now = _now_iso()
+    now = utcnow_iso()
     model_id = str(uuid4())
     with _connect(cfg) as conn:
         existing = cast(
@@ -486,7 +484,7 @@ def create_or_replace_model(cfg: ProviderLitserveInfraConfig, *, kind: ModelKind
 
 
 def mark_model_status(cfg: ProviderLitserveInfraConfig, *, model_id: str, status: ModelStatus, error: str | None = None) -> None:
-    now = _now_iso()
+    now = utcnow_iso()
     with _connect(cfg) as conn:
         updated = conn.execute(
             "UPDATE models SET status = ?, error = ?, updated_at = ? WHERE model_id = ?",

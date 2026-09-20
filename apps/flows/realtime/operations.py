@@ -8,13 +8,12 @@ import uuid
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Never, cast
+from typing import cast
 
 import yaml
 from pydantic import Field, TypeAdapter, field_validator
 
 from apps.flows.config import get_settings
-from apps.flows.errors import FlowsConflictError, FlowsNotFoundError
 from apps.flows.src.constants.execution_limits import get_graph_max_iterations
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.models import (
@@ -83,6 +82,7 @@ from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzCheckItem, AuthzObject, AuthzSubject
 from core.authz.types import AuthzRelation
 from core.datasources.models import DatasourceConnectorSpec
+from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
 from core.events import publish_event_to_user
 from core.flow_ui.document import FlowUIDocument
 from core.flow_ui.problems import assert_flow_ui_publishable
@@ -107,7 +107,13 @@ from core.types import (
     require_json_value,
 )
 from core.utils.tokens import get_token_service
-from core.websocket import WsCommandError
+from core.websocket import (
+    raise_conflict,
+    raise_forbidden,
+    raise_internal,
+    raise_invalid,
+    raise_not_found,
+)
 
 _FLOW_PREVIEW_SHARE_TTL_SECONDS = 86400
 
@@ -184,32 +190,11 @@ _GRAPH_NODE_MAP_ADAPTER: TypeAdapter[dict[str, GraphNodeConfig]] = TypeAdapter(
 )
 
 
-def raise_forbidden(exc: Exception) -> Never:
-    raise WsCommandError("forbidden", str(exc)) from exc
 
 
-def raise_not_found(exc: Exception) -> Never:
-    raise WsCommandError("not_found", str(exc)) from exc
 
 
-def raise_invalid(exc: Exception) -> Never:
-    raise WsCommandError("ws_invalid_payload", str(exc)) from exc
 
-
-def _internal(exc: Exception) -> Never:
-    raise WsCommandError("internal", str(exc)) from exc
-
-
-def raise_conflict(exc: Exception) -> Never:
-    raise WsCommandError("conflict", str(exc)) from exc
-
-
-def raise_upstream(exc: Exception) -> Never:
-    raise WsCommandError("upstream", str(exc)) from exc
-
-
-def raise_unavailable(exc: Exception) -> Never:
-    raise WsCommandError("unavailable", str(exc)) from exc
 
 
 def company_scope() -> CompanyScope:
@@ -485,12 +470,12 @@ def build_bundle_index(flows_root: Path) -> dict[str, str]:
     registry_path = flows_root / "registry.yaml"
     bundles_dir = flows_root / "bundles"
     if not registry_path.exists():
-        _internal(RuntimeError(f"Registry not found: {registry_path}"))
+        raise_internal(RuntimeError(f"Registry not found: {registry_path}"))
 
     with open(registry_path, "r", encoding="utf-8") as registry_file:
         loaded_raw: object = cast(object, yaml.safe_load(registry_file))
     if loaded_raw is None:
-        _internal(RuntimeError("registry.yaml is empty"))
+        raise_internal(RuntimeError("registry.yaml is empty"))
     registry_data = require_json_object(loaded_raw, "registry.yaml")
     registry_flows = require_json_array(registry_data.get("flows"), "registry.flows")
 
@@ -501,21 +486,21 @@ def build_bundle_index(flows_root: Path) -> dict[str, str]:
         elif isinstance(entry, dict):
             raw_id = entry.get("id")
             if not isinstance(raw_id, str) or not raw_id:
-                _internal(RuntimeError("Registry flow entry must include non-empty string 'id'"))
+                raise_internal(RuntimeError("Registry flow entry must include non-empty string 'id'"))
             bundle_id = raw_id
         else:
-            _internal(RuntimeError("Registry flow entry must be string or object"))
+            raise_internal(RuntimeError("Registry flow entry must be string or object"))
 
         flow_path = bundles_dir / bundle_id / "flow.json"
         if not flow_path.exists():
-            _internal(RuntimeError(f"Bundle flow.json not found for '{bundle_id}'"))
+            raise_internal(RuntimeError(f"Bundle flow.json not found for '{bundle_id}'"))
 
         with open(flow_path, "r", encoding="utf-8") as flow_file:
             raw_flow = parse_json_object(flow_file.read(), f"bundles.{bundle_id}.flow")
 
         flow_id = raw_flow.get("flow_id")
         if not isinstance(flow_id, str) or not flow_id:
-            _internal(RuntimeError(f"Bundle '{bundle_id}' must define non-empty flow_id"))
+            raise_internal(RuntimeError(f"Bundle '{bundle_id}' must define non-empty flow_id"))
         flow_to_bundle[flow_id] = bundle_id
     return flow_to_bundle
 
@@ -543,10 +528,10 @@ async def get_bundle_update_flags(
     for flow_cfg in file_flows:
         bundle_id = flow_to_bundle.get(flow_cfg.flow_id)
         if bundle_id is None:
-            _internal(RuntimeError(f"bundle_mapping_not_found for flow_id={flow_cfg.flow_id}"))
+            raise_internal(RuntimeError(f"bundle_mapping_not_found for flow_id={flow_cfg.flow_id}"))
         bundle_cfg = await loader.build_flow_bundle_config(bundle_id)
         if bundle_cfg is None:
-            _internal(RuntimeError(f"bundle_config_none for bundle_id={bundle_id}"))
+            raise_internal(RuntimeError(f"bundle_config_none for bundle_id={bundle_id}"))
         flags[flow_cfg.flow_id] = _flow_semantic_payload(flow_cfg) != _flow_semantic_payload(
             bundle_cfg
         )
@@ -798,7 +783,7 @@ async def op_flows_item(
     _ = await require_view_flow(container, payload.flow_id)
     flow_cfg = await container.flow_repository.get(payload.flow_id)
     if flow_cfg is None:
-        raise_not_found(FlowsNotFoundError("Flow not found"))
+        raise_not_found(PlatformNotFoundError("Flow not found"))
     bundle_flags = await get_bundle_update_flags([flow_cfg], container, _flows_root())
     has_bundle_update = bundle_flags[flow_cfg.flow_id]
     return _flow_item_response(
@@ -887,7 +872,7 @@ async def op_flows_update(
     _ = await require_edit_flow(container, payload.flow_id)
     existing = await container.flow_repository.get(payload.flow_id)
     if existing is None:
-        raise_not_found(FlowsNotFoundError("Flow not found"))
+        raise_not_found(PlatformNotFoundError("Flow not found"))
     try:
         variables = flow_variable_models(payload.variables, "variables")
     except ValueError as exc:
@@ -951,7 +936,7 @@ async def op_flows_remove(
     existing = await container.flow_repository.get(payload.flow_id)
     deleted = await container.flow_repository.delete(payload.flow_id)
     if not deleted:
-        raise_not_found(FlowsNotFoundError("Flow not found"))
+        raise_not_found(PlatformNotFoundError("Flow not found"))
     branch_ids = list(existing.branches.keys()) if existing is not None else []
     await container.flow_access_service.sync_flow_deleted(
         payload.flow_id, company_id=scope.company_id, branch_ids=branch_ids
@@ -969,11 +954,11 @@ def _store_bundle_tags(raw_tags: JsonValue | None, bundle_id: str) -> list[str]:
     if raw_tags is None:
         return []
     if not isinstance(raw_tags, list):
-        _internal(RuntimeError(f"Bundle '{bundle_id}' field 'tags' must be list[str]"))
+        raise_internal(RuntimeError(f"Bundle '{bundle_id}' field 'tags' must be list[str]"))
     tags: list[str] = []
     for tag in raw_tags:
         if not isinstance(tag, str):
-            _internal(RuntimeError(f"Bundle '{bundle_id}' field 'tags' must be list[str]"))
+            raise_internal(RuntimeError(f"Bundle '{bundle_id}' field 'tags' must be list[str]"))
         tags.append(tag)
     return tags
 
@@ -991,11 +976,11 @@ async def op_flows_store_bundles(
     registry_path = flows_root / "registry.yaml"
     bundles_dir = flows_root / "bundles"
     if not registry_path.exists():
-        _internal(RuntimeError(f"Registry not found: {registry_path}"))
+        raise_internal(RuntimeError(f"Registry not found: {registry_path}"))
     with open(registry_path, "r", encoding="utf-8") as registry_file:
         loaded_raw: object = cast(object, yaml.safe_load(registry_file))
     if loaded_raw is None:
-        _internal(RuntimeError("registry.yaml is empty"))
+        raise_internal(RuntimeError("registry.yaml is empty"))
     registry_data = require_json_object(loaded_raw, "registry.yaml")
     registry_flows = require_json_array(registry_data.get("flows"), "registry.flows")
     result: list[FlowStoreBundleResponse] = []
@@ -1006,7 +991,7 @@ async def op_flows_store_bundles(
         elif isinstance(entry, dict):
             raw_id = entry.get("id")
             if not isinstance(raw_id, str) or not raw_id:
-                _internal(RuntimeError("Registry flow entry must include non-empty string 'id'"))
+                raise_internal(RuntimeError("Registry flow entry must include non-empty string 'id'"))
             bundle_id = raw_id
             raw_public = entry.get("public")
             if raw_public is None:
@@ -1014,32 +999,32 @@ async def op_flows_store_bundles(
             elif isinstance(raw_public, bool):
                 is_public = raw_public
             else:
-                _internal(RuntimeError("Registry flow entry field 'public' must be boolean"))
+                raise_internal(RuntimeError("Registry flow entry field 'public' must be boolean"))
         else:
-            _internal(RuntimeError("Registry flow entry must be string or object"))
+            raise_internal(RuntimeError("Registry flow entry must be string or object"))
         if not is_public:
             continue
         flow_path = bundles_dir / bundle_id / "flow.json"
         if not flow_path.exists():
-            _internal(RuntimeError(f"Bundle flow.json not found for '{bundle_id}'"))
+            raise_internal(RuntimeError(f"Bundle flow.json not found for '{bundle_id}'"))
         with open(flow_path, "r", encoding="utf-8") as flow_file:
             raw_flow = parse_json_object(flow_file.read(), f"bundles.{bundle_id}.flow")
         hidden_value = raw_flow.get("hidden")
         if hidden_value is None:
             hidden_value = False
         if not isinstance(hidden_value, bool):
-            _internal(RuntimeError(f"Field 'hidden' must be boolean in bundle '{bundle_id}'"))
+            raise_internal(RuntimeError(f"Field 'hidden' must be boolean in bundle '{bundle_id}'"))
         if hidden_value:
             continue
         flow_id = raw_flow.get("flow_id")
         if not isinstance(flow_id, str) or not flow_id:
-            _internal(RuntimeError(f"Bundle '{bundle_id}' must define non-empty flow_id"))
+            raise_internal(RuntimeError(f"Bundle '{bundle_id}' must define non-empty flow_id"))
         name = raw_flow.get("name")
         if not isinstance(name, str) or not name:
-            _internal(RuntimeError(f"Bundle '{bundle_id}' must define non-empty name"))
+            raise_internal(RuntimeError(f"Bundle '{bundle_id}' must define non-empty name"))
         description = raw_flow.get("description")
         if description is not None and not isinstance(description, str):
-            _internal(RuntimeError(f"Bundle '{bundle_id}' field 'description' must be string"))
+            raise_internal(RuntimeError(f"Bundle '{bundle_id}' field 'description' must be string"))
         installed = await container.flow_repository.get(flow_id) is not None
         result.append(
             FlowStoreBundleResponse(
@@ -1127,7 +1112,7 @@ async def op_flows_reload_from_bundle(
         raise_invalid(exc)
     reloaded_cfg = await container.flow_repository.get(loaded_id)
     if reloaded_cfg is None:
-        _internal(RuntimeError(f"Flow '{loaded_id}' missing after reload-from-bundle"))
+        raise_internal(RuntimeError(f"Flow '{loaded_id}' missing after reload-from-bundle"))
     await publish_event_to_user(
         user_id=company_scope().user_id,
         type="flows/flow/updated",
@@ -1161,7 +1146,7 @@ async def op_flows_version_item(
     _ = await require_view_flow(container, payload.flow_id)
     version_cfg = await container.flow_repository.get_version(payload.flow_id, payload.version)
     if version_cfg is None:
-        raise_not_found(FlowsNotFoundError("Version not found"))
+        raise_not_found(PlatformNotFoundError("Version not found"))
     return _flow_item_response(
         version_cfg,
         agent_toolkit_ids=await flow_agent_toolkit_ids(container, version_cfg.flow_id),
@@ -1179,7 +1164,7 @@ async def op_flows_version_rollback(
     _ = await require_edit_flow(container, payload.flow_id)
     success = await container.flow_repository.rollback_to_version(payload.flow_id, payload.version)
     if not success:
-        raise_not_found(FlowsNotFoundError("Version not found"))
+        raise_not_found(PlatformNotFoundError("Version not found"))
     return FlowVersionRollbackResponse(
         status="success",
         message=f"Flow '{payload.flow_id}' rolled back to version {payload.version}",
@@ -1243,9 +1228,9 @@ async def op_flows_branch_create(
     _ = await require_edit_flow(container, flow_id)
     flow_config = await container.flow_repository.get(flow_id)
     if flow_config is None:
-        raise_not_found(FlowsNotFoundError(f"Flow '{flow_id}' not found"))
+        raise_not_found(PlatformNotFoundError(f"Flow '{flow_id}' not found"))
     if payload.branch_id in flow_config.branches:
-        raise_conflict(FlowsConflictError(f"Ветка '{payload.branch_id}' уже существует"))
+        raise_conflict(PlatformConflictError(f"Ветка '{payload.branch_id}' уже существует"))
     candidate = flow_config.model_copy(deep=True)
     candidate.branches[payload.branch_id] = branch_payload_to_config(payload)
     await _validate_merged_branch(container, candidate, payload.branch_id)
@@ -1274,9 +1259,9 @@ async def op_flows_branch_update(
     _ = await require_edit_flow(container, flow_id)
     flow_config = await container.flow_repository.get(flow_id)
     if flow_config is None:
-        raise_not_found(FlowsNotFoundError(f"Flow '{flow_id}' not found"))
+        raise_not_found(PlatformNotFoundError(f"Flow '{flow_id}' not found"))
     if branch_id not in flow_config.branches:
-        raise_not_found(FlowsNotFoundError(f"Branch '{branch_id}' not found. Use POST to create."))
+        raise_not_found(PlatformNotFoundError(f"Branch '{branch_id}' not found. Use POST to create."))
     candidate = flow_config.model_copy(deep=True)
     candidate.branches[branch_id] = branch_payload_to_config(payload)
     await _validate_merged_branch(container, candidate, branch_id)
@@ -1303,9 +1288,9 @@ async def op_flows_branch_remove(
     scope = await require_edit_flow(container, payload.flow_id)
     flow_config = await container.flow_repository.get(payload.flow_id)
     if flow_config is None:
-        raise_not_found(FlowsNotFoundError(f"Flow '{payload.flow_id}' not found"))
+        raise_not_found(PlatformNotFoundError(f"Flow '{payload.flow_id}' not found"))
     if payload.branch_id not in flow_config.branches:
-        raise_not_found(FlowsNotFoundError(f"Ветка '{payload.branch_id}' не найдена"))
+        raise_not_found(PlatformNotFoundError(f"Ветка '{payload.branch_id}' не найдена"))
     candidate = flow_config.model_copy(deep=True)
     del candidate.branches[payload.branch_id]
     _ = await container.flow_repository.set(candidate)
@@ -1344,7 +1329,7 @@ async def op_flows_voice_session_query(
     scope = await require_view_flow(container, payload.flow_id)
     cfg = await container.flow_repository.get(payload.flow_id)
     if cfg is None:
-        raise_not_found(FlowsNotFoundError(f"Flow '{payload.flow_id}' not found"))
+        raise_not_found(PlatformNotFoundError(f"Flow '{payload.flow_id}' not found"))
     branch_id = _require_path_id(payload.branch_id, "branch_id")
     eff = effective_flow_speech_settings(cfg, branch_id)
     stt, tts, vad = flow_speech_to_triple_override(eff)
@@ -1378,7 +1363,7 @@ async def op_flows_preview_share(
     scope = await require_share_flow(container, flow_id)
     flow_cfg = await container.flow_repository.get(flow_id)
     if flow_cfg is None:
-        raise_not_found(FlowsNotFoundError(f"Flow '{flow_id}' not found"))
+        raise_not_found(PlatformNotFoundError(f"Flow '{flow_id}' not found"))
     branch_id = _require_path_id(payload.branch_id, "branch_id")
     if flow_cfg.type == FlowType.EXTERNAL:
         branch_id = "default"
@@ -1486,7 +1471,7 @@ async def op_flows_nodes_bulk_delete(
     scope = await require_edit_flow(container, flow_id)
     existing = await container.flow_repository.get(flow_id)
     if existing is None:
-        raise_not_found(FlowsNotFoundError(f"Flow '{flow_id}' not found"))
+        raise_not_found(PlatformNotFoundError(f"Flow '{flow_id}' not found"))
     nodes = existing.nodes
     if nodes is None:
         raise_invalid(ValueError("flow.nodes is required"))
@@ -1530,7 +1515,7 @@ async def op_flows_metadata_update(
     _ = await require_edit_flow(container, flow_id)
     existing = await container.flow_repository.get(flow_id)
     if existing is None:
-        raise_not_found(FlowsNotFoundError(f"Flow '{flow_id}' not found"))
+        raise_not_found(PlatformNotFoundError(f"Flow '{flow_id}' not found"))
     metadata: JsonObject = dict(existing.metadata)
     if payload.sticky_notes is not None:
         metadata["sticky_notes"] = payload.sticky_notes
@@ -1556,7 +1541,7 @@ async def _attach_nested_dataflow_for_editor(
             continue
         nested_cfg = await container.flow_repository.get(nested_flow_id)
         if nested_cfg is None:
-            raise_not_found(FlowsNotFoundError(f"Flow '{nested_flow_id}' not found"))
+            raise_not_found(PlatformNotFoundError(f"Flow '{nested_flow_id}' not found"))
         raw_nested_branch_id = node.get("branch_id")
         if raw_nested_branch_id is None:
             nested_branch_id = "default"
@@ -1609,7 +1594,7 @@ async def op_flows_dataflow_inspect(
         _ = await require_view_flow(container, payload.flow_id)
         flow_cfg = await container.flow_repository.get(payload.flow_id)
         if flow_cfg is None:
-            raise_not_found(FlowsNotFoundError(f"Flow '{payload.flow_id}' not found"))
+            raise_not_found(PlatformNotFoundError(f"Flow '{payload.flow_id}' not found"))
         effective = container.flow_factory.apply_branch(flow_cfg, payload.branch_id)
         nodes = _GRAPH_NODE_MAP_ADAPTER.validate_python(effective["nodes"])
         edges = effective["edges"]

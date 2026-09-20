@@ -4,10 +4,6 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
 
-from apps.agent.device_auth import (
-    extract_device_id_from_bearer,
-    reject_revoked_device_bearer_if_present,
-)
 from apps.agent.service import (
     build_toolkit_mcp_url_for_frontend,
     resolve_brand_frontend_base_url,
@@ -21,6 +17,10 @@ from apps.flows.realtime.agent_toolkit_operations import (
     op_flows_agent_toolkits_update,
 )
 from apps.flows.realtime.operations import FlowsEmptyPayload
+from apps.flows.src.agent.device_auth import (
+    extract_device_id_from_bearer,
+    reject_revoked_device_bearer_if_present,
+)
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.agent_toolkit import (
     AgentToolkit,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from core.documents.placement import DocsPlacementAnchor
-from core.utils.subdomain import slugify
+from core.utils.slug import slugify
 
 
 def validate_relative_dir(relative_dir: str) -> list[str]:
@@ -25,12 +25,16 @@ def _flow_label(anchor: DocsPlacementAnchor) -> str:
     flow_label = anchor.flow_slug if anchor.flow_slug else anchor.flow_id
     if not flow_label:
         raise ValueError("flow_slug or flow_id required for flow placement")
-    return slugify(flow_label)
+    slug = slugify(flow_label)
+    if slug == "":
+        raise ValueError(f"flow label {flow_label!r} has no slug characters")
+    return slug
 
 
 def _mail_title_segment(anchor: DocsPlacementAnchor) -> str:
-    if anchor.mail_subject and anchor.mail_subject.strip():
-        return slugify(anchor.mail_subject.strip())
+    subject_slug = slugify(anchor.mail_subject) if anchor.mail_subject else ""
+    if subject_slug != "":
+        return subject_slug
     if anchor.mail_uid and anchor.mail_uid.strip():
         return anchor.mail_uid.strip()
     raise ValueError("mail_subject or mail_uid required for mail_message placement")
@@ -41,10 +45,11 @@ def build_path_segments(anchor: DocsPlacementAnchor) -> list[str]:
     if kind == "crm_entity":
         if not anchor.entity_type:
             raise ValueError("entity_type required for crm_entity placement")
-        label = anchor.entity_title if anchor.entity_title else anchor.entity_id
+        title_slug = slugify(anchor.entity_title) if anchor.entity_title else ""
+        label = title_slug if title_slug != "" else anchor.entity_id
         if not label:
             raise ValueError("entity_title or entity_id required for crm_entity placement")
-        return ["Networkle", anchor.entity_type, slugify(label)]
+        return ["Networkle", anchor.entity_type, label]
     if kind == "flow_session":
         if not anchor.session_id:
             raise ValueError("session_id required for flow_session placement")

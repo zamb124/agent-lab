@@ -16,14 +16,6 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from playwright.async_api import Error as PlaywrightError
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.browser.contracts.control_types import (
-    BrowserCapabilityError,
-    ControlHumanTakeoverBody,
-    ControlPointerClickBody,
-    ControlPointerKeyBody,
-    ControlPointerTextBody,
-    ControlSessionStatusResponse,
-)
 from apps.browser.dependencies import ContainerDep
 from apps.browser.engine.types import (
     BrowserAcquireRequest,
@@ -46,6 +38,14 @@ from apps.browser.observe.snapshot_refs import (
 )
 from apps.browser.orchestration.runtime_facade import BrowserRuntimeFacade
 from core.authz.models import AuthzObject
+from core.clients.browser.control_types import (
+    BrowserCapabilityError,
+    ControlHumanTakeoverBody,
+    ControlPointerClickBody,
+    ControlPointerKeyBody,
+    ControlPointerTextBody,
+    ControlSessionStatusResponse,
+)
 from core.context import get_context
 from core.logging import get_logger
 from core.types import JsonObject

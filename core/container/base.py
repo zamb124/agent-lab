@@ -38,6 +38,7 @@ from core.calendar.repositories import CalendarEventSqlRepository
 from core.calendar.service import CalendarService
 from core.clients.documents_client import DocumentsClient
 from core.clients.rag_client import RagClient
+from core.clients.redis_client import RedisClient
 from core.clients.scheduler_client import SchedulerClient
 from core.clients.secrets_client import SecretsClient
 from core.clients.service_client import ServiceClient
@@ -461,6 +462,14 @@ class BaseContainer:
     def s3_factory(self):
         """S3ClientFactory для работы с S3"""
         return S3ClientFactory
+
+    @lazy
+    def redis_client(self) -> RedisClient:
+        """Один Redis-клиент на процесс: блокировки, кэши, pub/sub, TTL-ключи сервиса."""
+        redis_url = get_settings().database.redis_url
+        if redis_url.strip() == "":
+            raise ValueError("database.redis_url is required")
+        return RedisClient(redis_url)
 
     @lazy
     def service_client(self) -> ServiceClient:

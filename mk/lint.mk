@@ -42,6 +42,8 @@ _lint-py:
 	uv run python scripts/check_tool_contracts.py
 	@echo "=== lint: no binding_id ==="
 	uv run python scripts/check_office_file_id_canon.py
+	@echo "=== lint: cross-service imports ==="
+	uv run python scripts/check_cross_service_imports.py
 
 	@echo "=== lint: mcp branding bundle ==="
 	uv run python scripts/check_mcp_branding_bundle.py

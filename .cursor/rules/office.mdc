@@ -73,7 +73,7 @@ Authenticated ACL — **только OpenFGA** (`AuthzService` через `Offic
 | Слой | Канон |
 |---|---|
 | API | `/flows/api/v1/agent/llm` (+ addon `v1`); proxy unwrap — `…/v1/proxy` |
-| Auth | Editor JWT целиком (`Asc.plugin.info.jwt`) → multi-auth в `apps/agent/llm_auth.py` |
+| Auth | Editor JWT целиком (`Asc.plugin.info.jwt`) → multi-auth в `apps/flows/src/agent/llm_auth.py` |
 | Claims | Top-level `platformAi` в signed editor config: `company_id`, `user_id`, `namespace`, `file_id`, `viewer_scope` (`catalog`|`file`) (`OnlyOfficeViewerHandler`) |
 | Autostart | `editorConfig.plugins.autostart = ["asc.{9DC93CDB-B576-4F0C-B55E-FCC9C48DD007}"]` для session editors; **public link** (`public_link_token_hash`) — без AI claims и без autostart |
 | Actions | Chat → `lara:documents`; Summarization/Translation/TextAnalyze/OCR/Vision → `auto`; ImageGeneration → `image-auto` |
@@ -206,9 +206,9 @@ Deep-link проводника: `/documents?namespace=<slug>&catalog_id=<id>` (`
 - **Флаг:** `office_document_catalogs.rag_index_enabled` (+ `rag_index_updated_at`, `rag_index_include_subcatalogs`).
 - **RAG namespace:** детерминированно `office-catalog-{catalog_id}` (отдельный namespace на каталог); создаётся через `RagClient.create_namespace` при enable.
 - **Индексация файла:** `RagClient.index_file` → TaskIQ `rag_index_document_s3` по существующему `FileRecord.s3_key` (`document_id = file_id`). **Не** `upload_namespace_document` и **не** `delete_namespace_document` (удаляет S3).
-- **Только RAG-indexable категории:** whitelist `core/rag/indexable.py::RAG_INDEXABLE_FILE_CATEGORIES` (`is_rag_indexable_file_category` / `effective_rag_file_category`). Skip до enqueue в `index_document` и `rag_index_office_catalog`; defense в `rag_index_document_s3`. Не indexable: `signature` (`.sig`/`.p7s`/`.sgn`), `archive`, `unknown`. В `GET …/rag-index/status` такие документы всегда в `totals.absent` (старые failed-статусы подписей не считаются ошибками).
+- **Только RAG-indexable категории:** whitelist `core/rag/indexable.py::RAG_INDEXABLE_FILE_CATEGORIES` (`is_rag_indexable_file_category` / `effective_rag_file_category`). Skip до enqueue в `index_binding`; defense в `rag_index_document_s3`. Не indexable: `signature` (`.sig`/`.p7s`/`.sgn`), `archive`, `unknown`. В `GET …/rag-index/status` такие документы всегда в `totals.absent` (старые failed-статусы подписей не считаются ошибками).
 - **Деиндексация:** только если `rag_index_enabled` (как index); `RagClient.delete_document_index` (vector chunks + processing status). Каталог без RAG не ходит в RAG — иначе Check `platform_namespace:office-catalog-{id}` без tuples даёт 403 на move/delete.
-- **Batch rebuild:** TaskIQ `rag_index_office_catalog` (очередь `rag`), payload — список file_id из Office BFF.
+- **Rebuild:** `CatalogRagIndexService.rebuild_catalog` идёт по bindings каталога и ставит каждый документ через `RagClient.index_file` (владелец индекса — RAG); своих задач в очереди `rag` у office нет. Ответ — `task_id` последнего документа и `enqueued_documents`.
 - **REST:** `POST /documents/api/v1/catalogs/{catalog_id}/rag-index/{enable,disable,rebuild}`, `GET .../status` (`search_options` = catalog overrides, `platform_defaults` = `resolve_platform_search_options` для UI placeholders), `PATCH .../settings` (`include_subcatalogs`), `POST .../search` (семантический поиск по scope каталога; управление settings — только owner, search/status — access как у каталога).
 - **Per-file status:** `OfficeDocumentItem.rag_index_status` ∈ `ready|pending|failed|absent|null`. `null` если у каталога `rag_index_enabled=false`; иначе batch через `RagClient.get_documents_processing_statuses` → `POST /rag/api/v1/documents/statuses`. Totals в `GET …/rag-index/status` тоже через batch.
 - **Callback save path (as-is):** после записи S3 (статусы 2/6) — `notify_user` (toast) **и** domain push `office/document/saved` на `platform:events` (UI merge в `office/documents`). Не toast-only.

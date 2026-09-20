@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from apps.agent.platform_mcp import (
+from apps.flows.src.agent.platform_mcp import (
     _device_session_context_key,
     _mcp_initialize_instructions,
     _resolve_flow_context_id,

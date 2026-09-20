@@ -134,6 +134,7 @@ from core.namespace import (
 )
 from core.pagination import decode_cursor, encode_cursor
 from core.rag.models import RAGMetadata
+from core.utils.time import utcnow
 
 logger = get_logger(__name__)
 
@@ -161,8 +162,6 @@ def _default_folder_sort_key(folder: MailFolder) -> tuple[int, str]:
     return (_FOLDER_ROLE_SORT_ORDER.get(folder.role, 6), folder.name.lower())
 
 
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def _slug_local_part(user: User) -> str:
@@ -441,7 +440,7 @@ class MailService:
             raise MailSystemConnectionReadOnlyError()
 
         existing = await self._connection_repository.get_by_company(resolved_company_id)
-        now = _utcnow()
+        now = utcnow()
         connection_id = (
             existing.company_mail_connection_id
             if existing is not None
@@ -647,7 +646,7 @@ class MailService:
             except_binding_id=binding.mailbox_binding_id,
         )
         updated = binding.model_copy(
-            update={"is_default": True, "updated_at": _utcnow()}
+            update={"is_default": True, "updated_at": utcnow()}
         )
         return await self._binding_repository.upsert(updated)
 
@@ -761,7 +760,7 @@ class MailService:
                     "use_ssl": (
                         payload.use_ssl if payload.use_ssl is not None else connection.use_ssl
                     ),
-                    "updated_at": _utcnow(),
+                    "updated_at": utcnow(),
                 }
             )
             if not updated_connection.imap_host.strip():
@@ -776,7 +775,7 @@ class MailService:
                 "sync_enabled": sync_enabled,
                 "password_encrypted": password_encrypted,
                 "calendar_color": calendar_color,
-                "updated_at": _utcnow(),
+                "updated_at": utcnow(),
             }
         )
         stored = await self._binding_repository.upsert(updated)
@@ -848,7 +847,7 @@ class MailService:
         existing = await self._binding_repository.get_by_email(
             resolved_company_id, email_address
         )
-        now = _utcnow()
+        now = utcnow()
         if existing is not None:
             existing_connection = await self._require_connection_for_binding(existing)
             if existing_connection.scope != MailConnectionScope.PERSONAL:
@@ -1121,7 +1120,7 @@ class MailService:
             update={
                 "calendar_autolink_status": status,
                 "calendar_autolink_detail": detail,
-                "updated_at": _utcnow(),
+                "updated_at": utcnow(),
             }
         )
         return await self._binding_repository.upsert(updated)
@@ -1217,7 +1216,7 @@ class MailService:
         if not imap_host or not smtp_host:
             raise ValueError("imap_host and smtp_host are required")
         _, mail_domain = email_address.split("@", 1)
-        now = _utcnow()
+        now = utcnow()
         ephemeral = CompanyMailConnection(
             company_mail_connection_id=f"mailconn_health_{uuid.uuid4().hex}",
             company_id=self._active_company_id(),
@@ -1398,7 +1397,7 @@ class MailService:
                 repaired = existing.model_copy(
                     update={
                         "password_encrypted": encrypt_secret(password),
-                        "updated_at": _utcnow(),
+                        "updated_at": utcnow(),
                     }
                 )
                 stored_repaired = await self._binding_repository.upsert(repaired)
@@ -1444,7 +1443,7 @@ class MailService:
                         + f"add mailbox_passwords[{email_address!r}] in conf.local.json"
                     )
 
-        now = _utcnow()
+        now = utcnow()
         password_encrypted: str | None
         if payload.password is not None and payload.password.strip():
             password_encrypted = encrypt_secret(password)
@@ -1735,7 +1734,7 @@ class MailService:
     ) -> None:
         if self._folder_repository is None:
             return
-        now = _utcnow()
+        now = utcnow()
         existing = await self._folder_repository.list_for_binding(binding.mailbox_binding_id)
         existing_index = {item.folder_name: item.sort_index for item in existing}
         is_bootstrap = len(existing) == 0
@@ -2459,7 +2458,7 @@ class MailService:
             raise MailConfigError("members only for kind=role bindings")
         await self._require_binding_access(binding, company_id=resolved_company_id, level="admin")
         items: list[MailboxBindingMember] = []
-        now = _utcnow()
+        now = utcnow()
         for relation, role in (
             (AuthzRelation.MEMBER, MailboxBindingMemberRole.MEMBER),
             (AuthzRelation.MANAGER, MailboxBindingMemberRole.MANAGER),
@@ -2514,7 +2513,7 @@ class MailService:
             user_id=payload.user_id,
             company_id=resolved_company_id,
             role=payload.role,
-            created_at=_utcnow(),
+            created_at=utcnow(),
         )
 
     async def remove_binding_member(
@@ -2722,7 +2721,7 @@ class MailService:
             int(uuid.uuid5(uuid.NAMESPACE_URL, f"pending-send:{message_id}").int % 1_000_000_000)
             or 1
         )
-        now = _utcnow()
+        now = utcnow()
         snippet = mail_snippet(body_text=payload.body_text, body_html=payload.body_html)
         inbound = InboundMailMessage(
             uid=str(temp_uid),
@@ -2892,7 +2891,7 @@ class MailService:
             updated = binding.model_copy(
                 update={
                     "password_encrypted": encrypt_secret(password),
-                    "updated_at": _utcnow(),
+                    "updated_at": utcnow(),
                 }
             )
             _ = await self._binding_repository.upsert(updated)
@@ -2967,7 +2966,7 @@ class MailService:
         error_kind: MailSyncErrorKind,
         error_message: str,
     ) -> None:
-        now = _utcnow()
+        now = utcnow()
         existing = await self._sync_cursor_repository.get(
             binding.mailbox_binding_id, folder=INBOX_FOLDER
         )
@@ -3073,7 +3072,7 @@ class MailService:
                 )
             ]
 
-        now = _utcnow()
+        now = utcnow()
         inbox_notify: list[InboundMailMessage] = []
         inbox_bootstrap = False
         backfill_remaining = False
@@ -3443,7 +3442,7 @@ class MailService:
                 )
                 rag_namespace = technical_name
 
-        now = _utcnow()
+        now = utcnow()
         for message in to_store:
             file_ids = await self._materialize_attachments(
                 message,
@@ -3617,7 +3616,7 @@ class MailService:
             updated = stored.model_copy(
                 update={
                     "rag_index_status": MailRagIndexStatus.SKIPPED,
-                    "updated_at": _utcnow(),
+                    "updated_at": utcnow(),
                 }
             )
             return await self._message_repository.upsert(updated)
@@ -3655,7 +3654,7 @@ class MailService:
                 update={
                     "rag_namespace": rag_namespace,
                     "rag_index_status": MailRagIndexStatus.FAILED,
-                    "updated_at": _utcnow(),
+                    "updated_at": utcnow(),
                 }
             )
             _ = await self._message_repository.upsert(failed)
@@ -3671,7 +3670,7 @@ class MailService:
                 "rag_document_id": ingest.document_id,
                 "rag_namespace": rag_namespace,
                 "rag_index_status": MailRagIndexStatus.READY,
-                "updated_at": _utcnow(),
+                "updated_at": utcnow(),
             }
         )
         return await self._message_repository.upsert(ready)
@@ -3711,7 +3710,7 @@ class MailService:
             skipped = stored.model_copy(
                 update={
                     "rag_index_status": MailRagIndexStatus.SKIPPED,
-                    "updated_at": _utcnow(),
+                    "updated_at": utcnow(),
                 }
             )
             _ = await self._message_repository.upsert(skipped)
@@ -3725,7 +3724,7 @@ class MailService:
         pending = stored.model_copy(
             update={
                 "rag_index_status": MailRagIndexStatus.PENDING,
-                "updated_at": _utcnow(),
+                "updated_at": utcnow(),
             }
         )
         _ = await self._message_repository.upsert(pending)
@@ -3755,7 +3754,7 @@ class MailService:
 
         provider = MailProvider(system_cfg.provider)
         existing = await self._connection_repository.get_by_company(SYSTEM_COMPANY_ID)
-        now = _utcnow()
+        now = utcnow()
         connection_id = (
             existing.company_mail_connection_id
             if existing is not None

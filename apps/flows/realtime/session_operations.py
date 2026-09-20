@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from apps.flows.realtime.operations import raise_not_found, require_company_member
+from apps.flows.realtime.operations import (
+    require_company_member,
+)
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.session_config import (
     SessionConfig,
@@ -12,6 +14,9 @@ from apps.flows.src.models.session_config import (
 )
 from core.models.identity_models import User
 from core.pagination import OffsetPage
+from core.websocket import (
+    raise_not_found,
+)
 
 
 async def op_flows_sessions_list(

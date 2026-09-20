@@ -18,7 +18,7 @@ from a2a.types import (
 from a2a.types.a2a_pb2 import ROLE_AGENT, TASK_STATE_COMPLETED
 from fastapi import HTTPException
 
-from apps.agent.llm_proxy import (
+from apps.flows.src.agent.llm_proxy import (
     AgentOpenAIChatCompletionsRequest,
     AgentOpenAIChatMessage,
     _agent_llm_error_message,
@@ -83,7 +83,7 @@ async def test_read_agent_llm_model_ids_uses_catalog_and_llm_models_service(
         return_value=[],
     )
     monkeypatch.setattr(
-        "apps.agent.llm_proxy.load_lara_branch_ids",
+        "apps.flows.src.agent.llm_proxy.load_lara_branch_ids",
         AsyncMock(return_value=["documents"]),
     )
 
@@ -114,7 +114,7 @@ async def test_read_agent_llm_model_ids_falls_back_to_humanitec_llm_options(
         ],
     )
     monkeypatch.setattr(
-        "apps.agent.llm_proxy.load_lara_branch_ids",
+        "apps.flows.src.agent.llm_proxy.load_lara_branch_ids",
         AsyncMock(return_value=["documents"]),
     )
 
@@ -149,7 +149,7 @@ def test_resolve_agent_llm_model_auto_uses_humanitec_llm(
         assert getattr(selection, "model") == HUMANITEC_LLM_AUTO_MODEL
         return expected
 
-    monkeypatch.setattr("apps.agent.llm_proxy.resolve_ai_model", fake_resolve_ai_model)
+    monkeypatch.setattr("apps.flows.src.agent.llm_proxy.resolve_ai_model", fake_resolve_ai_model)
     resolved = _resolve_agent_llm_model(HUMANITEC_LLM_AUTO_MODEL)
     assert resolved == expected
 
@@ -178,7 +178,7 @@ def test_resolve_agent_llm_auto_mock_bridge_uses_mock_when_env_set(
         return expected
 
     monkeypatch.setenv("AGENT_LLM_PROXY_USE_MOCK_AUTO", "1")
-    monkeypatch.setattr("apps.agent.llm_proxy.resolve_ai_model", fake_resolve_ai_model)
+    monkeypatch.setattr("apps.flows.src.agent.llm_proxy.resolve_ai_model", fake_resolve_ai_model)
     bridged = _resolve_agent_llm_auto_mock_bridge(HUMANITEC_LLM_AUTO_MODEL)
     assert bridged == expected
     resolved = _resolve_agent_llm_model(HUMANITEC_LLM_AUTO_MODEL)
@@ -208,7 +208,7 @@ def test_resolve_agent_llm_model_provider_prefixed_uses_direct_provider(
         assert getattr(selection, "model") == "qwen/qwen3-coder:free"
         return expected
 
-    monkeypatch.setattr("apps.agent.llm_proxy.resolve_ai_model", fake_resolve_ai_model)
+    monkeypatch.setattr("apps.flows.src.agent.llm_proxy.resolve_ai_model", fake_resolve_ai_model)
     resolved = _resolve_agent_llm_model("openrouter:qwen/qwen3-coder:free")
     assert resolved == expected
 
@@ -281,7 +281,7 @@ async def test_stream_agent_llm_sse_emits_rate_limit_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "apps.agent.llm_proxy.create_llm_client_from_ai_model",
+        "apps.flows.src.agent.llm_proxy.create_llm_client_from_ai_model",
         _rate_limited_client_factory,
     )
     resolved = ResolvedAIModel(
@@ -367,7 +367,7 @@ async def test_stream_agent_llm_sse_does_not_run_platform_context_layer(
         return recording_llm
 
     monkeypatch.setattr(
-        "apps.agent.llm_proxy.create_llm_client_from_ai_model",
+        "apps.flows.src.agent.llm_proxy.create_llm_client_from_ai_model",
         _recording_client_factory,
     )
     resolved = ResolvedAIModel(

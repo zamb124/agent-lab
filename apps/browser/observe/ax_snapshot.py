@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from typing import cast
 
-from apps.browser.contracts.control_types import BrowserCapabilityError
 from apps.browser.engine.types import BrowserPage
+from core.clients.browser.control_types import BrowserCapabilityError
 from core.types import JsonObject, require_json_object
 
 

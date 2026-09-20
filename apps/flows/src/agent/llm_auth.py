@@ -16,7 +16,7 @@ from typing import Literal
 
 from fastapi import HTTPException, Request
 
-from apps.agent.device_auth import require_active_device_bearer
+from apps.flows.src.agent.device_auth import require_active_device_bearer
 from apps.flows.src.dependencies import ContainerDep
 from core.capabilities import verify_execution_token
 from core.clients.onlyoffice import OnlyOfficeJwtError, verify_onlyoffice_jwt_hs256

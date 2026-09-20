@@ -8,7 +8,6 @@ import platform
 import subprocess
 from pathlib import Path
 
-from apps.agent.config import get_agent_settings
 from apps.agent.desktop.artifact_verify import MIN_RELEASE_BYTES, is_placeholder_artifact
 from apps.agent.desktop.build_contract import (
     artifact_path as contract_artifact_path,
@@ -17,6 +16,7 @@ from apps.agent.desktop.build_contract import (
     load_default_distro_config,
 )
 from apps.agent.models import AgentReleaseAssetChecksum, AgentReleaseStatusResponse
+from core.config import get_settings
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -95,7 +95,7 @@ def local_release_artifact_route(platform: str) -> str:
 
 
 def build_local_release_status(platform: str) -> AgentReleaseStatusResponse:
-    settings = get_agent_settings()
+    settings = get_settings().agent
     artifact = resolve_local_release_artifact_path(platform)
     digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
     return AgentReleaseStatusResponse(
@@ -110,7 +110,7 @@ def build_local_release_status(platform: str) -> AgentReleaseStatusResponse:
 
 
 def build_local_release_unavailable_status(platform: str, detail: str) -> AgentReleaseStatusResponse:
-    settings = get_agent_settings()
+    settings = get_settings().agent
     logger.warning(
         "agent.releases.local_unavailable",
         platform=platform,

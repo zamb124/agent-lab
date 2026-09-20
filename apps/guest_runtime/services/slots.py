@@ -9,7 +9,6 @@ import shutil
 import socket
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import assert_never, cast
 from urllib.parse import urlparse
@@ -509,5 +508,3 @@ async def stop_slot(slot: GuestSlot) -> None:
     raise RuntimeError(f"unknown executor: {slot.executor}")
 
 
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc)

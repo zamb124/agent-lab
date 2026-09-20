@@ -5,14 +5,16 @@ from __future__ import annotations
 from pydantic import Field
 
 from apps.flows.realtime.operations import (
-    raise_forbidden,
-    raise_invalid,
     require_company_member,
 )
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.services.lara_action_engine import LaraPendingAction
 from core.models.base import StrictBaseModel
 from core.models.identity_models import User
+from core.websocket import (
+    raise_forbidden,
+    raise_invalid,
+)
 
 
 class LaraPendingActionApplyPayload(StrictBaseModel):

@@ -7,8 +7,6 @@ from typing import Never, TypeVar
 
 from apps.flows.realtime.operations import (
     FlowsEmptyPayload,
-    raise_invalid,
-    raise_not_found,
     require_company_member,
 )
 from apps.flows.src.container import FlowContainer
@@ -96,6 +94,10 @@ from core.models.identity_models import User
 from core.pagination import ListResponse
 from core.tasks import enqueue
 from core.tracing.context import get_current_trace_context
+from core.websocket import (
+    raise_invalid,
+    raise_not_found,
+)
 
 T = TypeVar("T")
 

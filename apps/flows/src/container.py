@@ -75,18 +75,17 @@ from apps.flows.src.triggers.handlers.platform_event import PlatformEventTrigger
 from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
 from apps.flows.src.triggers.handlers.webhook import WebhookTriggerHandler
 from apps.flows.src.triggers.registry import TriggerRegistry
-from apps.worktracker.services.work_queue_access_service import WorkQueueAccessService
 from core.authz.errors import AuthzDenied
 from core.authz.ids import PLATFORM_ADMIN_GROUP
 from core.authz.models import AuthzObject, AuthzSubject
 from core.authz.types import AuthzRelation
 from core.capabilities import CAPABILITY_LANGUAGE_SET
 from core.clients.a2a_client import A2AClient
+from core.clients.crm_client import CrmClient
 from core.clients.documents_client import DocumentsClient
 from core.clients.files_client import FilesClient
 from core.clients.guest_runtime_client import GuestRuntimeClient
 from core.clients.loki_client import LokiClient
-from core.clients.redis_client import RedisClient
 from core.clients.tempo_client import TempoClient
 from core.compiler import GraphCompiler
 from core.config.testing import is_testing
@@ -99,6 +98,7 @@ from core.db.repositories.embed_mapping_repository import EmbedMappingRepository
 from core.logging import get_logger
 from core.scheduler import SchedulerTaskRepository
 from core.utils.tokens import get_token_service
+from core.worktracker.access_service import WorkQueueAccessService
 from core.worktracker.db import WorktrackerDatabase
 from core.worktracker.repository import WorktrackerRepository
 from core.worktracker.service import WorkItemService
@@ -202,13 +202,6 @@ class FlowContainer(BaseContainer):
     @lazy
     def flow_access_service(self) -> FlowAccessService:
         return FlowAccessService(authz=self.authz_service)
-
-    @lazy
-    def redis_client(self) -> RedisClient:
-        settings = get_settings()
-        redis_url = settings.database.redis_url
-        client = RedisClient(redis_url)
-        return client
 
     @lazy
     def data_table_service(self) -> DataTableService:
@@ -466,7 +459,11 @@ class FlowContainer(BaseContainer):
 
     @lazy
     def lara_facade(self) -> LaraFacade:
-        return LaraFacade(action_engine=self.lara_action_engine)
+        return LaraFacade(
+            self.lara_action_engine,
+            crm_client=CrmClient(self.service_client),
+            service_client=self.service_client,
+        )
 
     @lazy
     def flow_factory(self) -> FlowFactory:

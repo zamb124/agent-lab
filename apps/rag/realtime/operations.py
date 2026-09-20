@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
-from typing import Never
-
 from pydantic import Field
 
 import core.tracing.attributes as trace_attributes
 from apps.rag.config import get_rag_settings
 from apps.rag.container import RAGContainer
-from apps.rag.errors import RagAccessDeniedError, RagNotFoundError
 from apps.rag.models import (
     DocumentStatusesBatchRequest,
     DocumentStatusesBatchResponse,
@@ -34,6 +30,7 @@ from apps.rag_worker.tasks.task_names import RAG_INDEX_DOCUMENT_S3
 from core.ai.rerank_client import AIRerankerClientError
 from core.authz.models import AuthzObject
 from core.context import require_active_company, require_context
+from core.errors.boundary import PlatformAccessDeniedError, PlatformNotFoundError
 from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.models.identity_models import Namespace, User
@@ -59,18 +56,18 @@ from core.rag.search_options_resolver import resolve_platform_search_options
 from core.rag.ttl import ensure_ttl_seconds_in_metadata
 from core.tasks import enqueue
 from core.tracing.operation_span import traced_operation
-from core.websocket import WsCommandError
+from core.websocket import (
+    WsCommandError,
+    raise_forbidden,
+    raise_invalid,
+    raise_not_found,
+)
 
 logger = get_logger(__name__)
 
 
 class RagEmptyPayload(StrictBaseModel):
     pass
-
-
-class RagNamespacesListPayload(StrictBaseModel):
-    limit: int = Field(default=200, ge=1, le=1000)
-    offset: int = Field(default=0, ge=0)
 
 
 class RagNamespaceCreatePayload(NamespaceCreateRequest):
@@ -118,16 +115,7 @@ class RagGlobalSearchPayload(RAGGlobalSearchRequest):
     provider: str | None = None
 
 
-def _not_found(exc: Exception, detail: str) -> Never:
-    raise WsCommandError("not_found", detail) from exc
 
-
-def _invalid(exc: Exception) -> Never:
-    raise WsCommandError("ws_invalid_payload", str(exc)) from exc
-
-
-def _forbidden(exc: Exception) -> Never:
-    raise WsCommandError("forbidden", str(exc)) from exc
 
 
 def _resolve_provider(provider: str | None) -> tuple[BaseRAGProvider, str]:
@@ -156,28 +144,10 @@ async def _company_admin(container: RAGContainer) -> str:
 async def _namespace(container: RAGContainer, namespace_id: str) -> None:
     try:
         await require_registered_rag_namespace(namespace_id, container)
-    except RagAccessDeniedError as exc:
-        _forbidden(exc)
-    except RagNotFoundError as exc:
-        _not_found(exc, str(exc))
-
-
-async def op_namespaces_list(
-    payload: RagNamespacesListPayload,
-    *,
-    user: User,
-    container: RAGContainer,
-) -> OffsetPage[Namespace]:
-    _ = user
-    company_id = await _company_view(container)
-    namespace_service = container.namespace_service
-    namespaces, total = await asyncio.gather(
-        namespace_service.list_by_company(company_id, limit=payload.limit, offset=payload.offset),
-        namespace_service.count(),
-    )
-    return OffsetPage[Namespace](
-        items=namespaces, total=total, limit=payload.limit, offset=payload.offset
-    )
+    except PlatformAccessDeniedError as exc:
+        raise_forbidden(exc)
+    except PlatformNotFoundError as exc:
+        raise_not_found(exc, str(exc))
 
 
 async def op_namespaces_create(
@@ -197,7 +167,7 @@ async def op_namespaces_create(
             payload.name, description=payload.description
         )
     except ValueError as exc:
-        _invalid(exc)
+        raise_invalid(exc)
     logger.info("Создан namespace: %s для компании %s", payload.name, company_id)
     return namespace
 
@@ -268,7 +238,7 @@ async def op_documents_ingest_text(
         validate_rag_user_metadata(payload.metadata)
         text = validate_ingest_text_body(payload.text)
     except ValueError as exc:
-        _invalid(exc)
+        raise_invalid(exc)
     context = require_context()
     company_id = require_active_company().company_id
     merged_meta: RAGMetadata = dict(payload.metadata)
@@ -282,7 +252,7 @@ async def op_documents_ingest_text(
             merged_meta, default_ttl_seconds=settings.rag.ttl.default_ttl_seconds
         )
     except ValueError as exc:
-        _invalid(exc)
+        raise_invalid(exc)
     rag_provider, provider_name = _resolve_provider(payload.provider)
     doc = await rag_provider.upload_document_from_text(
         namespace_id=payload.namespace_id,
@@ -316,7 +286,7 @@ async def _enqueue_s3_indexing_task(
             metadata_dict, default_ttl_seconds=settings.rag.ttl.default_ttl_seconds
         )
     except ValueError as exc:
-        _invalid(exc)
+        raise_invalid(exc)
     ttl_raw = metadata_dict["ttl_seconds"]
     if not isinstance(ttl_raw, int) or isinstance(ttl_raw, bool):
         raise RuntimeError("ensure_ttl_seconds_in_metadata returned non-integer ttl_seconds")
@@ -356,7 +326,7 @@ async def op_documents_index_file(
     try:
         validate_rag_user_metadata(payload.metadata)
     except ValueError as exc:
-        _invalid(exc)
+        raise_invalid(exc)
     file_id = payload.file_id.strip()
     if file_id == "":
         raise WsCommandError("ws_invalid_payload", "file_id обязателен")
@@ -519,7 +489,7 @@ async def op_search_namespace(
         try:
             validate_metadata_filters(payload.filters)
         except ValueError as exc:
-            _invalid(exc)
+            raise_invalid(exc)
     rag_provider, provider_name = _resolve_provider(payload.provider)
     settings = get_rag_settings()
     resolved_search_options = resolve_platform_search_options(
@@ -582,7 +552,7 @@ async def op_search_global(
         try:
             validate_metadata_filters(payload.filters)
         except ValueError as exc:
-            _invalid(exc)
+            raise_invalid(exc)
     rag_provider, provider_name = _resolve_provider(payload.provider)
     settings = get_rag_settings()
     resolved_search_options = resolve_platform_search_options(

@@ -24,8 +24,8 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.responses import Response as StarletteResponse
 
-from apps.agent.llm_auth import LlmProxyAuthResult, require_llm_proxy_auth
-from apps.agent.llm_lara import (
+from apps.flows.src.agent.llm_auth import LlmProxyAuthResult, require_llm_proxy_auth
+from apps.flows.src.agent.llm_lara import (
     list_lara_branch_model_ids,
     load_lara_branch_ids,
     run_lara_chat_completion,

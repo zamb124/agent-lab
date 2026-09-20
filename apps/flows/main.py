@@ -24,14 +24,14 @@ from fastapi.responses import HTMLResponse, RedirectResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from starlette.middleware.sessions import SessionMiddleware  # noqa: E402
 
-from apps.agent import llm_proxy as agent_llm_proxy  # noqa: E402
-from apps.agent.platform_mcp import router as agent_platform_mcp_router  # noqa: E402
 from apps.agent.tunnel_bus import (  # noqa: E402
     configure_tunnel_bus_storage,
     start_tunnel_bus_listener,
 )
 from apps.flows.config import FlowSettings, get_settings  # noqa: E402
 from apps.flows.realtime.command_router import register_flows_ws_commands  # noqa: E402
+from apps.flows.src.agent import llm_proxy as agent_llm_proxy  # noqa: E402
+from apps.flows.src.agent.platform_mcp import router as agent_platform_mcp_router  # noqa: E402
 from apps.flows.src.api import (  # noqa: E402
     a2a_router,
     websocket_router,

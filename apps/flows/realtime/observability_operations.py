@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Awaitable
 from typing import Never
 
-from apps.flows.realtime.operations import raise_invalid, raise_not_found, raise_unavailable
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.observability_api import (
     ObservabilityLogsQueryPayload,
@@ -20,6 +19,11 @@ from core.clients.tempo_client import TempoClientError
 from core.models.identity_models import User
 from core.tracing.span_tree import build_span_tree
 from core.types import JsonObject
+from core.websocket import (
+    raise_invalid,
+    raise_not_found,
+    raise_unavailable,
+)
 
 _ATTR_SESSION_AGENT = "platform.session.agent"
 _ATTR_TASK_ID = "platform.task_id"

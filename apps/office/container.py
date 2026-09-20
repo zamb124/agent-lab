@@ -18,7 +18,6 @@ from apps.office.services.docs_placement_service import DocsPlacementService
 from apps.office.services.office_access_service import OfficeAccessService
 from apps.office.services.viewer_service import DocumentViewerService
 from core.clients.rag_client import RagClient
-from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.container import BaseContainer, ContainerRegistry, lazy
 from core.data_tables.service import DataTableService
@@ -63,18 +62,6 @@ class OfficeContainer(BaseContainer):
     @lazy
     def document_event_repository(self) -> DocumentEventRepository:
         return DocumentEventRepository(db=self.office_db)
-
-    @lazy
-    def redis_client(self) -> RedisClient:
-        """
-        Долгоживущий Redis-клиент сервиса: используется для распределённых блокировок
-        (mutation lock на binding) и pub/sub-уведомлений о release.
-
-        Один экземпляр на процесс — без RedisClient() на каждый HTTP-запрос,
-        иначе по 1+ TCP-подключению на запрос и накопление полузакрытых сокетов.
-        """
-        redis_url = get_settings().database.redis_url
-        return RedisClient(redis_url)
 
     @lazy
     @override

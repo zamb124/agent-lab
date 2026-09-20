@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Sequence
 
-from core.utils.subdomain import TRANSLIT_MAP
+from core.utils.slug import TRANSLIT_MAP
 
 _LATIN_A_Z = re.compile(r"[A-Za-z]+")
 

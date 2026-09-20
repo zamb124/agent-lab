@@ -9,7 +9,6 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
-from apps.agent.config import get_agent_settings
 from apps.agent.desktop.build_contract import VALID_PLATFORMS
 from apps.agent.local_releases import (
     resolve_local_release_artifact_path,
@@ -48,7 +47,7 @@ async def download_agent(platform: str, request: Request) -> RedirectResponse:
             status_code=400,
             detail=f"Неподдерживаемая платформа: {platform!r}. Допустимые: {sorted(VALID_PLATFORMS)}",
         )
-    settings = get_agent_settings()
+    settings = get_settings().agent
     brand_host = request.headers.get("host")
     if brand_host is not None:
         brand_host = str(brand_host).strip() or None

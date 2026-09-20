@@ -11,7 +11,6 @@ from datetime import datetime, timezone
 
 import httpx
 
-from apps.flows.config import get_settings
 from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.triggers.handlers.email import dispatch_email_triggers_for_messages
 from apps.idle_worker.container import IdleWorkerContainer, get_container
@@ -20,6 +19,7 @@ from apps.idle_worker.tasks.mail_job_context import (
     leave_mail_binding_context,
 )
 from apps.idle_worker.tasks.mail_recipients import mailbox_recipient_user_ids
+from core.config import get_settings
 from core.events import publish_event_to_users
 from core.logging import get_logger
 from core.mail.enqueue import enqueue_mail_sync_tick_continuation

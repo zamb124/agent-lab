@@ -2,8 +2,8 @@
 Utils - общие утилиты.
 """
 
-from core.utils.slug import generate_slug
+from core.utils.slug import slugify
 
 __all__ = [
-    "generate_slug",
+    "slugify",
 ]

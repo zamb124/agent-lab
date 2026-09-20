@@ -12,7 +12,6 @@ import httpx
 from fastapi import HTTPException
 
 from apps.agent.authz.tuples import agent_device_company_link, agent_device_owner_tuple
-from apps.agent.config import get_agent_settings
 from apps.agent.desktop.build_contract import (
     load_default_distro_config,
     matches_release_asset_name,
@@ -42,16 +41,17 @@ from apps.agent.models import (
 )
 from apps.agent.tunnel_bus import publish_tunnel_disconnect
 from apps.agent.tunnel_registry import push_device_policy_to_tunnel
-from apps.frontend.config import get_frontend_public_base_url
-from apps.frontend.container import FrontendContainer
 from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzObject, AuthzSubject
 from core.authz.types import AuthzObjectType, AuthzRelation
 from core.clients.redis_client import RedisClient
+from core.config import get_settings
+from core.container.base import BaseContainer
 from core.db.storage import Storage
 from core.logging import get_logger
 from core.platform_brand.resolver import (
     UnknownPlatformDomainError,
+    platform_public_base_url,
     resolve_brand,
     resolve_oauth_brand_origin,
 )
@@ -99,7 +99,7 @@ def _audit_storage_key(company_id: str) -> str:
 
 
 def _github_api_base() -> str:
-    settings = get_agent_settings()
+    settings = get_settings().agent
     configured = settings.releases.github_api_base_url
     if configured is None:
         return "https://api.github.com"
@@ -110,7 +110,7 @@ def _github_api_base() -> str:
 
 
 def _github_api_headers() -> dict[str, str]:
-    settings = get_agent_settings()
+    settings = get_settings().agent
     headers = {"Accept": "application/vnd.github+json"}
     token = settings.releases.github_token
     if token is not None:
@@ -154,7 +154,7 @@ async def is_device_token_denied_shared(
 
 
 async def is_device_token_denied(
-    container: FrontendContainer,
+    container: BaseContainer,
     device_id: str,
     *,
     device_jti: str | None = None,
@@ -167,7 +167,7 @@ async def is_device_token_denied(
 
 
 async def record_agent_audit_event(
-    container: FrontendContainer,
+    container: BaseContainer,
     *,
     company_id: str,
     event_type: str,
@@ -201,8 +201,8 @@ return 1
     )
 
 
-async def _enforce_pairing_rate_limit(container: FrontendContainer, user_id: str) -> None:
-    settings = get_agent_settings()
+async def _enforce_pairing_rate_limit(container: BaseContainer, user_id: str) -> None:
+    settings = get_settings().agent
     rate_key = _pairing_rate_key(user_id)
     count_raw = await container.redis_client.eval(
         """
@@ -225,8 +225,8 @@ return current
         )
 
 
-async def _enforce_register_rate_limit(container: FrontendContainer, client_key: str) -> None:
-    settings = get_agent_settings()
+async def _enforce_register_rate_limit(container: BaseContainer, client_key: str) -> None:
+    settings = get_settings().agent
     rate_key = _register_rate_key(client_key)
     count_raw = await container.redis_client.eval(
         """
@@ -250,7 +250,7 @@ return current
 
 
 async def list_agent_audit_events(
-    container: FrontendContainer,
+    container: BaseContainer,
     *,
     company_id: str,
     limit: int = 50,
@@ -303,7 +303,7 @@ return 1
 
 
 def _platform_mcp_url(frontend_base_url: str | None = None) -> str:
-    base = frontend_base_url if frontend_base_url is not None else get_frontend_public_base_url()
+    base = frontend_base_url if frontend_base_url is not None else platform_public_base_url()
     return f"{base.rstrip('/')}/flows/api/v1/agent/platform-mcp"
 
 
@@ -311,17 +311,17 @@ def build_toolkit_mcp_url_for_frontend(
     toolkit_id: str,
     frontend_base_url: str | None = None,
 ) -> str:
-    base = frontend_base_url if frontend_base_url is not None else get_frontend_public_base_url()
+    base = frontend_base_url if frontend_base_url is not None else platform_public_base_url()
     return f"{base.rstrip('/')}/flows/api/v1/agent/platform-mcp/{toolkit_id}"
 
 
 def build_toolkits_catalog_url_for_frontend(frontend_base_url: str | None = None) -> str:
-    base = frontend_base_url if frontend_base_url is not None else get_frontend_public_base_url()
+    base = frontend_base_url if frontend_base_url is not None else platform_public_base_url()
     return f"{base.rstrip('/')}/flows/api/v1/agent/toolkits"
 
 
 def _llm_api_url(frontend_base_url: str | None = None) -> str:
-    base = frontend_base_url if frontend_base_url is not None else get_frontend_public_base_url()
+    base = frontend_base_url if frontend_base_url is not None else platform_public_base_url()
     return f"{base.rstrip('/')}/flows/api/v1/agent/llm/v1"
 
 
@@ -351,7 +351,7 @@ def resolve_brand_frontend_base_url(request_host: str | None) -> str | None:
         _ = resolve_brand(host)
     except UnknownPlatformDomainError:
         return None
-    return get_frontend_public_base_url(host)
+    return platform_public_base_url(host)
 
 
 def resolve_frontend_base_url(
@@ -361,10 +361,10 @@ def resolve_frontend_base_url(
     url_scheme: str | None = None,
 ) -> str:
     """Reachable frontend base for register/discover/tunnel (sandbox allowlist + platform public)."""
-    platform_public_base_url = get_frontend_public_base_url()
+    public_base = platform_public_base_url()
     if origin_override is not None:
         ro = origin_override.rstrip("/")
-        if not is_allowed_integration_return_origin(ro, platform_public_base_url):
+        if not is_allowed_integration_return_origin(ro, public_base):
             raise HTTPException(
                 status_code=400,
                 detail="origin не разрешён для register/discover",
@@ -374,9 +374,9 @@ def resolve_frontend_base_url(
         host = str(request_host).strip()
         resolved_scheme = url_scheme if url_scheme in ("http", "https") else get_protocol(host)
         host_origin = _frontend_origin_from_request_host(host, resolved_scheme)
-        if is_allowed_integration_return_origin(host_origin, platform_public_base_url):
+        if is_allowed_integration_return_origin(host_origin, public_base):
             return host_origin
-    return platform_public_base_url
+    return public_base
 
 
 def build_tunnel_ws_url(frontend_base_url: str) -> str:
@@ -412,7 +412,7 @@ def build_device_register_response(
 
 
 async def fetch_agent_discover(
-    container: FrontendContainer,
+    container: BaseContainer,
     *,
     origin_override: str | None = None,
     request_host: str | None = None,
@@ -436,7 +436,7 @@ async def fetch_agent_discover(
 
 
 async def _fetch_latest_github_release() -> JsonObject:
-    settings = get_agent_settings()
+    settings = get_settings().agent
     owner = settings.releases.github_owner
     repo = settings.releases.github_repo
     github_api = _github_api_base()
@@ -576,7 +576,7 @@ def build_agent_release_status_from_github_payload(
 
 
 async def fetch_latest_release_status() -> AgentReleaseStatusResponse:
-    settings = get_agent_settings()
+    settings = get_settings().agent
     owner = settings.releases.github_owner
     repo = settings.releases.github_repo
     if use_local_release_artifact():
@@ -622,12 +622,12 @@ def _generate_pairing_code() -> str:
 
 
 async def create_pairing_code(
-    container: FrontendContainer,
+    container: BaseContainer,
     *,
     user_id: str,
     company_id: str,
 ) -> PairingCodeResponse:
-    settings = get_agent_settings()
+    settings = get_settings().agent
     await _enforce_pairing_rate_limit(container, user_id)
     pairing_code = _generate_pairing_code()
     storage_key = _pairing_storage_key(pairing_code)
@@ -659,7 +659,7 @@ async def create_pairing_code(
 
 
 async def register_device(
-    container: FrontendContainer,
+    container: BaseContainer,
     request: DeviceRegisterRequest,
     *,
     client_key: str,
@@ -772,7 +772,7 @@ async def register_device(
 
 
 async def register_device_with_auth(
-    container: FrontendContainer,
+    container: BaseContainer,
     request: DeviceRegisterWithAuthRequest,
     *,
     user_id: str,
@@ -877,7 +877,7 @@ async def register_device_with_auth(
 
 
 async def list_company_devices(
-    container: FrontendContainer,
+    container: BaseContainer,
     *,
     company_id: str,
     viewer_user_id: str,
@@ -926,7 +926,7 @@ async def list_company_devices(
 
 
 async def get_device_record(
-    container: FrontendContainer,
+    container: BaseContainer,
     device_id: str,
 ) -> AgentDeviceRecord:
     raw_value = await container.shared_storage.get(
@@ -939,11 +939,11 @@ async def get_device_record(
 
 
 async def mark_device_tunnel_online(
-    container: FrontendContainer,
+    container: BaseContainer,
     *,
     device_id: str,
 ) -> None:
-    settings = get_agent_settings()
+    settings = get_settings().agent
     device = await get_device_record(container, device_id)
     if not device.is_active:
         raise HTTPException(status_code=403, detail="Устройство деактивировано")
@@ -963,7 +963,7 @@ async def mark_device_tunnel_online(
 
 
 async def mark_device_tunnel_offline(
-    container: FrontendContainer,
+    container: BaseContainer,
     *,
     device_id: str,
 ) -> None:
@@ -979,14 +979,14 @@ async def device_tunnel_is_online(storage: Storage, device_id: str) -> bool:
 
 
 async def is_device_tunnel_online(
-    container: FrontendContainer,
+    container: BaseContainer,
     device_id: str,
 ) -> bool:
     return await device_tunnel_is_online(container.shared_storage, device_id)
 
 
 async def update_device_policy(
-    container: FrontendContainer,
+    container: BaseContainer,
     *,
     device_id: str,
     company_id: str,
@@ -1014,7 +1014,7 @@ async def update_device_policy(
 
 
 async def revoke_device(
-    container: FrontendContainer,
+    container: BaseContainer,
     *,
     device_id: str,
     company_id: str,

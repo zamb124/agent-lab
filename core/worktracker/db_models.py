@@ -8,7 +8,7 @@ SQLAlchemy модели БД `platform_worktracker` (ядро задач WorkIte
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import override
 
 from sqlalchemy import (
@@ -24,10 +24,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from core.db.models import Base
 from core.types import JsonArray, JsonObject
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+from core.utils.time import utcnow
 
 
 class WorkItemRow(Base):
@@ -54,9 +51,9 @@ class WorkItemRow(Base):
     links: Mapped[JsonArray] = mapped_column(JSONB, nullable=False, default=list)
     variables: Mapped[JsonObject] = mapped_column(JSONB, nullable=False, default=dict)
     attachments: Mapped[JsonArray] = mapped_column(JSONB, nullable=False, default=list)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
 
     __table_args__: tuple[Index, ...] = (
@@ -80,9 +77,9 @@ class WorkQueueRow(Base):
     slug: Mapped[str] = mapped_column(String(120), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     owner_user_id: Mapped[str] = mapped_column(String(100), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
 
     __table_args__: tuple[object, ...] = (
@@ -100,9 +97,9 @@ class BoardRow(Base):
     board_key: Mapped[str] = mapped_column(String(120), nullable=False, default="generic")
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     columns: Mapped[JsonArray] = mapped_column(JSONB, nullable=False, default=list)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
 
     __table_args__: tuple[Index, ...] = (
@@ -121,7 +118,7 @@ class WorkItemCommentRow(Base):
     role: Mapped[str] = mapped_column(String(16), nullable=False, default="system")
     text: Mapped[str] = mapped_column(Text, nullable=False, default="")
     files: Mapped[JsonArray] = mapped_column(JSONB, nullable=False, default=list)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     __table_args__: tuple[Index, ...] = (
         Index("ix_work_item_comments_work_item", "work_item_id"),

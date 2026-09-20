@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import ClassVar, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from core.config import BaseSettings
-from core.config.loader import get_project_root, load_merged_config
+from core.config.loader import get_project_root
+from core.config.service_settings import ServiceSettingsCache
 from core.search.index_models import SearchIndexCrawlTaxonomy
 from core.types import parse_json_object
 
@@ -173,28 +173,6 @@ class SearchSettings(BaseSettings):
         return self
 
 
-_search_settings: SearchSettings | None = None
-
-
-def _apply_crawl_env_overrides(settings: SearchSettings) -> SearchSettings:
-    min_extract_chars = os.getenv("CRAWL__MIN_EXTRACT_CHARS")
-    if min_extract_chars is None:
-        return settings
-    return settings.model_copy(
-        update={
-            "crawl": settings.crawl.model_copy(update={"min_extract_chars": int(min_extract_chars)}),
-        }
-    )
-
-
-def get_search_settings() -> SearchSettings:
-    global _search_settings
-    if _search_settings is None:
-        merged = load_merged_config(service_name="search", silent=True)
-        _search_settings = _apply_crawl_env_overrides(SearchSettings.model_validate(merged))
-    return _search_settings
-
-
-def reset_search_settings() -> None:
-    global _search_settings
-    _search_settings = None
+_settings_cache = ServiceSettingsCache("search", SearchSettings)
+get_search_settings = _settings_cache.get
+reset_search_settings = _settings_cache.reset

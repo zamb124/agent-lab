@@ -3,24 +3,13 @@
 from __future__ import annotations
 
 from core.config import BaseSettings
-from core.config.loader import load_merged_config
+from core.config.service_settings import ServiceSettingsCache
 
 
 class CodeRunnerCsharpSettings(BaseSettings):
     """Настройки C# sandbox runner."""
 
 
-_code_runner_csharp_settings: CodeRunnerCsharpSettings | None = None
-
-
-def get_code_runner_csharp_settings() -> CodeRunnerCsharpSettings:
-    global _code_runner_csharp_settings
-    if _code_runner_csharp_settings is None:
-        merged_config = load_merged_config(service_name="code_runner_csharp", silent=True)
-        _code_runner_csharp_settings = CodeRunnerCsharpSettings.model_validate(merged_config)
-    return _code_runner_csharp_settings
-
-
-def reset_code_runner_csharp_settings() -> None:
-    global _code_runner_csharp_settings
-    _code_runner_csharp_settings = None
+_settings_cache = ServiceSettingsCache("code_runner_csharp", CodeRunnerCsharpSettings)
+get_code_runner_csharp_settings = _settings_cache.get
+reset_code_runner_csharp_settings = _settings_cache.reset

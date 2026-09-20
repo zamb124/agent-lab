@@ -4,7 +4,7 @@ alwaysApply: false
 ---
 # LinnexAgent и Platform MCP (LaraOnly)
 
-LinnexAgent — desktop-клиент (Goose fork). **Канон продукта: LaraOnly** — единственное platform-окно = flow `lara` на branch `linnex_agent`; локальный ПК — через tunnel device tools внутри Lara. На legacy brand `humanitec.ru` продукт называется **HumanitecAgent**. **Код домена** — `apps/agent/`.
+LinnexAgent — desktop-клиент (Goose fork). **Канон продукта: LaraOnly** — единственное platform-окно = flow `lara` на branch `linnex_agent`; локальный ПК — через tunnel device tools внутри Lara. На legacy brand `humanitec.ru` продукт называется **HumanitecAgent**. **Код домена** — `apps/agent/` (библиотека без импортов хостов: модели, `service.py` на `BaseContainer`, device binding, tunnel bus/registry, authz, desktop build); хост-специфичные части живут у хостов — Platform MCP / LLM proxy / device auth в `apps/flows/src/agent/`, control plane и tunnel WS в `apps/frontend/api/agent_devices.py` и `agent_tunnel.py`. Настройки — секция `agent` платформенных `BaseSettings` (`get_settings().agent`, ENV `AGENT__*`).
 
 ## Два HTTP-surface
 
@@ -19,19 +19,19 @@ LinnexAgent — desktop-клиент (Goose fork). **Канон продукта
 | **A2A** | `flows` | `/flows/api/v1/a2a/*` | исполнение flow |
 | **OpenAI LLM proxy** | `flows` | `/flows/api/v1/agent/llm/v1` | OpenAI-compatible: models, chat/completions, images/generations, OnlyOffice `/proxy` |
 
-**Platform MCP не в frontend.** Router `apps/agent/platform_mcp.py` → `apps/flows/main.py`.
+**Platform MCP не в frontend.** Router `apps/flows/src/agent/platform_mcp.py` → `apps/flows/main.py`.
 
-## OpenAI LLM proxy (`apps/agent/llm_proxy.py`)
+## OpenAI LLM proxy (`apps/flows/src/agent/llm_proxy.py`)
 
 Единый OpenAI-compatible surface для **LinnexAgent** и **OnlyOffice AI** (без второго completions API).
 
 | Инвариант | Деталь |
 |---|---|
 | Path | `/flows/api/v1/agent/llm/v1` (BC: device flow не меняется) |
-| Auth | Route `/flows/api/v1/agent/llm/*` — `anonymous` в `route_config` (middleware не режет OO JWT); handler: **device JWT** (`token_purpose=device`) **или** OnlyOffice editor JWT с claim `platformAi` (`apps/agent/llm_auth.py`) |
+| Auth | Route `/flows/api/v1/agent/llm/*` — `anonymous` в `route_config` (middleware не режет OO JWT); handler: **device JWT** (`token_purpose=device`) **или** OnlyOffice editor JWT с claim `platformAi` (`apps/flows/src/agent/llm_auth.py`) |
 | Company context | После auth — `set_context(active_company)` **только** из `company_id` токена/claims. Нет `company_id` / нет membership → 401/403. **Запрещён** фолбек на company `system` для Lara/flows/billing |
 | Models | `auto`, free-pool refs, `lara:<branch_id>`, `image-auto` (`GET /models`) — OpenAI list shape (`object=list`, без OR `total_count`/`links`) |
-| Chat routing | `auto` / `<provider>:<model>` → `core.ai` + **`LLMClient` only**; `lara:<branch>` → Lara A2A (`apps/agent/llm_lara.py`); unknown → 400 |
+| Chat routing | `auto` / `<provider>:<model>` → `core.ai` + **`LLMClient` only**; `lara:<branch>` → Lara A2A (`apps/flows/src/agent/llm_lara.py`); unknown → 400 |
 | Lara flow | `flow_repository.get("lara")` только в namespace `active_company`; нет flow → 503 (не читать из `system`) |
 | Images | `POST /images/generations` model=`image-auto` → `NanoBananaClient` / `AICapability.IMAGE_GEN` |
 | OnlyOffice | `POST /proxy` unwrap `{target,method,headers,data}` + Bearer editor JWT; flows CORS обязан включать `ONLYOFFICE_AI_BROWSER_CORS_ORIGINS` |
@@ -42,7 +42,7 @@ LinnexAgent — desktop-клиент (Goose fork). **Канон продукта
 
 **Contract fixtures / tests:** `tests/agent/fixtures/openrouter.openapi.json` (ChatRequest/ChatResult/ChatStreamChunk); строгий suite — `tests/agent/contract/` (MockLLM-only, schema validate, без monkeypatch `LLMClient`/`resolve_ai_model`/Lara). Smoke BC — `tests/agent/e2e/test_agent_llm_proxy_e2e.py`.
 
-Файлы: `apps/agent/llm_proxy.py`, `llm_auth.py`, `llm_lara.py`; claims — `core/office/platform_ai_claims.py`; DS `aiSettings` — `core/office/ai_settings.py`.
+Файлы: `apps/flows/src/agent/llm_proxy.py`, `llm_auth.py`, `llm_lara.py`; claims — `core/office/platform_ai_claims.py`; DS `aiSettings` — `core/office/ai_settings.py`.
 
 ## LaraOnly
 
@@ -115,6 +115,6 @@ Desktop E2E / LLM setup: device JWT читает `lara` только в namespac
 - `apps/flows/bundles/lara/` — branch `linnex_agent`, `prompts/linnex_agent.md`
 - `apps/flows/tools/device_tools.py` — `device_tools_list` / `device_tools_call`
 - `apps/agent/device_binding.py` — resolve/bind online device → variables
-- `apps/agent/platform_mcp.py`, `device_auth.py`, `tunnel*.py`
+- `apps/flows/src/agent/platform_mcp.py`, `device_auth.py`; `apps/frontend/api/agent_tunnel.py`, `apps/agent/tunnel_bus.py`, `tunnel_registry.py`
 - `apps/agent/desktop/branding/humanitecLocalDeviceMcp.ts`
 - `.cursor/rules/agent_skills.mdc` — Agent Skills ≠ AgentToolkit; Lara branch entry

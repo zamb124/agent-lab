@@ -14,7 +14,6 @@ from apps.flows.realtime.code_operations import (
     op_flows_code_tool_source,
     op_flows_code_validate,
 )
-from apps.flows.realtime.operations import raise_invalid
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.code_api import (
     CodeDocumentationPayload,
@@ -36,6 +35,9 @@ from apps.flows.src.models.code_api import (
 )
 from core.context import require_context
 from core.types import JsonObject
+from core.websocket import (
+    raise_invalid,
+)
 
 router = APIRouter(tags=["code"])
 

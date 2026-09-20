@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
 from typing import ClassVar, Literal, Protocol
 from uuid import uuid4
 
@@ -14,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from core.logging import get_logger
 from core.types import JsonObject
+from core.utils.time import utcnow_iso
 
 logger = get_logger(__name__)
 
@@ -82,10 +82,6 @@ class LaraActionEngine:
         self._ttl_seconds: int = ttl_seconds
 
     @staticmethod
-    def _now_iso() -> str:
-        return datetime.now(UTC).isoformat()
-
-    @staticmethod
     def _pending_key(company_id: str, pending_action_id: str) -> str:
         return f"assistant:pending_action:{company_id}:{pending_action_id}"
 
@@ -133,7 +129,7 @@ class LaraActionEngine:
         action_id = str(uuid4())
         pending_action_id = str(uuid4())
         resolved_idempotency_key = idempotency_key or action_id
-        now_iso = self._now_iso()
+        now_iso = utcnow_iso()
         action = LaraPendingAction(
             action_id=action_id,
             pending_action_id=pending_action_id,
@@ -235,7 +231,7 @@ class LaraActionEngine:
                 raise ValueError("idempotency_key mismatch")
 
             result = await apply_fn(action)
-            now_iso = self._now_iso()
+            now_iso = utcnow_iso()
             action = action.model_copy(
                 update={
                     "status": "applied",
@@ -270,7 +266,7 @@ class LaraActionEngine:
         self._validate_owner(action, company_id, user_id, context_id)
         if action.status == "applied":
             raise ValueError("Applied action cannot be rejected")
-        now_iso = self._now_iso()
+        now_iso = utcnow_iso()
         action = action.model_copy(
             update={
                 "status": "rejected",

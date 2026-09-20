@@ -12,7 +12,6 @@ from playwright._impl._errors import is_target_closed_error
 from playwright.async_api import Route
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
-from apps.browser.contracts.control_types import BrowserCapabilityError
 from apps.browser.dependencies import ContainerDep
 from apps.browser.engine.types import (
     BrowserAcquireRequest,
@@ -23,6 +22,7 @@ from apps.browser.engine.types import (
 from apps.browser.interaction.human_interaction import HumanInteraction, InteractionRng
 from apps.browser.interaction.interaction_profiles import get_interaction_profile
 from core.authz.models import AuthzObject
+from core.clients.browser.control_types import BrowserCapabilityError
 from core.clients.browser.crawl_fetch_types import (
     BrowserCrawlFetchRequest,
     BrowserCrawlFetchResponse,

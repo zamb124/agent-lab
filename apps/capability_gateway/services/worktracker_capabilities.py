@@ -7,7 +7,12 @@ from urllib.parse import quote
 
 from pydantic import BaseModel, Field, ValidationError
 
-from apps.worktracker.models.api import (
+from core.capabilities import CAPABILITY_LANGUAGES, CapabilityDefinition
+from core.clients.service_client import ServiceClient, ServiceClientError
+from core.models import StrictBaseModel
+from core.types import JsonObject, JsonValue, require_json_object
+from core.worktracker.models import WorkItemKind, WorkItemState
+from core.worktracker.requests import (
     BoardCreateRequest,
     BoardUpdateRequest,
     WorkItemAssignRequest,
@@ -21,11 +26,6 @@ from apps.worktracker.models.api import (
     WorkQueueMemberRemoveRequest,
     WorkQueueUpdateRequest,
 )
-from core.capabilities import CAPABILITY_LANGUAGES, CapabilityDefinition
-from core.clients.service_client import ServiceClient, ServiceClientError
-from core.models import StrictBaseModel
-from core.types import JsonObject, JsonValue, require_json_object
-from core.worktracker.models import WorkItemKind, WorkItemState
 
 WorktrackerArgsModel: TypeAlias = type[BaseModel]
 

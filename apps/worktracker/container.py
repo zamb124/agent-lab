@@ -1,9 +1,9 @@
 """WorktrackerContainer — DI контейнер сервиса ядра задач."""
 
-from apps.worktracker.services.work_queue_access_service import WorkQueueAccessService
 from core.config import get_settings
 from core.container import BaseContainer, ContainerRegistry, lazy
 from core.logging import get_logger
+from core.worktracker.access_service import WorkQueueAccessService
 from core.worktracker.db import WorktrackerDatabase
 from core.worktracker.repository import WorktrackerRepository
 from core.worktracker.service import WorkItemService

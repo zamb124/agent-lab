@@ -10,7 +10,7 @@ from __future__ import annotations
 from pydantic import model_validator
 
 from core.config import BaseSettings
-from core.config.loader import load_merged_config  #
+from core.config.service_settings import ServiceSettingsCache
 
 
 class ProviderLitserveServiceSettings(BaseSettings):
@@ -23,12 +23,5 @@ class ProviderLitserveServiceSettings(BaseSettings):
         return self
 
 
-_provider_litserve_settings: ProviderLitserveServiceSettings | None = None
-
-
-def get_provider_litserve_settings() -> ProviderLitserveServiceSettings:
-    global _provider_litserve_settings
-    if _provider_litserve_settings is None:
-        merged = load_merged_config(service_name="provider_litserve", silent=True)
-        _provider_litserve_settings = ProviderLitserveServiceSettings.model_validate(merged)
-    return _provider_litserve_settings
+_settings_cache = ServiceSettingsCache("provider_litserve", ProviderLitserveServiceSettings)
+get_provider_litserve_settings = _settings_cache.get

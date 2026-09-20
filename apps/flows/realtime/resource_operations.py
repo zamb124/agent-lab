@@ -5,9 +5,6 @@ from __future__ import annotations
 import asyncio
 
 from apps.flows.realtime.operations import (
-    raise_conflict,
-    raise_invalid,
-    raise_not_found,
     require_company_member,
 )
 from apps.flows.src.container import FlowContainer
@@ -21,6 +18,11 @@ from apps.flows.src.models.resource import (
 from core.logging import get_logger
 from core.models.identity_models import User
 from core.pagination import OffsetPage
+from core.websocket import (
+    raise_conflict,
+    raise_invalid,
+    raise_not_found,
+)
 
 logger = get_logger(__name__)
 

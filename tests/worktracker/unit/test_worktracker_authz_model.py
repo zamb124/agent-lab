@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from apps.worktracker.authz.tuples import work_queue_member_tuple, work_queue_owner_tuple
-from apps.worktracker.services.work_queue_access_service import WorkQueueAccessService
 from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
 from core.authz.types import AuthzRelation, AuthzSubjectKind
+from core.worktracker.access_service import WorkQueueAccessService
+from core.worktracker.authz_tuples import work_queue_member_tuple, work_queue_owner_tuple
 
 pytestmark = [pytest.mark.timeout(60)]
 

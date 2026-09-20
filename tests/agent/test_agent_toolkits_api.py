@@ -6,7 +6,7 @@ import pytest
 from httpx import AsyncClient
 
 from apps.flows.src.models.agent_toolkit import AgentToolkit
-from apps.frontend.config import get_frontend_public_base_url
+from core.platform_brand.resolver import platform_public_base_url
 from tests.agent._helpers import AGENT_API_PREFIX
 
 
@@ -45,7 +45,7 @@ async def test_catalog_shape_and_mcp_url(
                 None,
             )
             assert matched is not None
-            frontend_base = get_frontend_public_base_url("humanitec.ru").rstrip("/")
+            frontend_base = platform_public_base_url("humanitec.ru").rstrip("/")
             assert matched["mcp_url"] == (
                 f"{frontend_base}/flows/api/v1/agent/platform-mcp/{toolkit_id}"
             )

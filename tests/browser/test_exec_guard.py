@@ -3,7 +3,7 @@
 import pytest
 
 from apps.browser.adapters.playwright_control_adapter import PlaywrightAdapter
-from apps.browser.contracts.control_types import BrowserCapabilityError
+from core.clients.browser.control_types import BrowserCapabilityError
 
 
 @pytest.mark.asyncio

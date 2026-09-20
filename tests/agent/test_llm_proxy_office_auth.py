@@ -32,7 +32,7 @@ pytestmark = pytest.mark.asyncio
 def _stub_lara_branches_for_asgi_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     """ASGI pytest app не гарантирует seeded flow ``lara``; contract HTTP suite — без stub."""
     monkeypatch.setattr(
-        "apps.agent.llm_proxy.load_lara_branch_ids",
+        "apps.flows.src.agent.llm_proxy.load_lara_branch_ids",
         AsyncMock(return_value=["documents", "linnex_agent"]),
     )
 

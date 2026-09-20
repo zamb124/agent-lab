@@ -157,3 +157,13 @@ def resolve_oauth_brand_origin(
     if parsed.scheme in ("http", "https") and parsed.netloc:
         return f"{parsed.scheme}://{parsed.netloc}"
     raise ValueError("cannot resolve OAuth brand origin: host and platform_public_base_url missing")
+
+
+def platform_public_base_url(host: str | None = None) -> str:
+    """Публичный origin платформы: из Host запроса или `server.platform_public_base_url`."""
+    if host is not None and host.strip():
+        return resolve_public_base_url(host.strip()).rstrip("/")
+    base_url = get_settings().server.platform_public_base_url
+    if base_url is None or base_url.strip() == "":
+        raise ValueError("server.platform_public_base_url must be configured for public URLs")
+    return base_url.rstrip("/")

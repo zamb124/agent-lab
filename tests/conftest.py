@@ -878,7 +878,6 @@ def sync_tools(request: pytest.FixtureRequest):
     import apps.flows.src.services.hitl_work_item_service as flows_hitl_work_item_module
     import apps.flows.src.triggers.executor as flows_trigger_executor_module
     import apps.idle_worker.tasks.push_notification_tasks as push_notification_tasks
-    import apps.office.services.catalog_rag_index_service as office_catalog_rag_index_module
     import apps.rag.realtime.operations as rag_operations_module
     import apps.rag_worker.tasks.indexing_tasks as rag_indexing_tasks
     import apps.sync.realtime.handlers as sync_handlers_module
@@ -923,10 +922,7 @@ def sync_tools(request: pytest.FixtureRequest):
         TASK_SEND_TASK_INPUT_REQUIRED,
         TASK_SEND_TASK_UPDATE,
     )
-    from apps.rag_worker.tasks.task_names import (
-        RAG_INDEX_DOCUMENT_S3,
-        RAG_INDEX_OFFICE_CATALOG,
-    )
+    from apps.rag_worker.tasks.task_names import RAG_INDEX_DOCUMENT_S3
     from apps.sync.realtime.task_names import (
         DELIVER_CHANNEL_MESSAGE_NOTIFICATION,
         DELIVER_SYNC_MENTION_NOTIFICATION,
@@ -1080,7 +1076,6 @@ def sync_tools(request: pytest.FixtureRequest):
             sync_notification_tasks.deliver_sync_mention_notification
         ),
         RAG_INDEX_DOCUMENT_S3: rag_indexing_tasks.index_rag_document_s3_task,
-        RAG_INDEX_OFFICE_CATALOG: rag_indexing_tasks.index_office_catalog_task,
         # Mail worker tasks требуют IdleWorkerContainer + IMAP port теста.
         # Offline-тесты бьют MailService напрямую; worker path — в
         # test_mail_complete_client_taskiq с patched get_container.
@@ -1162,8 +1157,6 @@ def sync_tools(request: pytest.FixtureRequest):
         sync_handlers_module,
         sync_realtime_tasks,
         rag_operations_module,
-        office_catalog_rag_index_module,
-        rag_indexing_tasks,
     ):
         monkeypatch.setattr(module, "enqueue", sync_enqueue)
     yield None

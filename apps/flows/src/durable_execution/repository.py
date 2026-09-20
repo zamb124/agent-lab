@@ -17,7 +17,6 @@ from apps.flows.src.db.models import (
     WorkflowEvents,
     WorkflowInstances,
     WorkflowSnapshots,
-    utc_now,
 )
 from apps.flows.src.durable_execution.hashing import hash_state_json
 from apps.flows.src.durable_execution.models import (
@@ -44,6 +43,7 @@ from apps.flows.src.durable_execution.state_delta import apply_state_delta, buil
 from core.db.storage import Storage
 from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
+from core.utils.time import utcnow
 
 
 class WorkflowConcurrencyError(RuntimeError):
@@ -335,7 +335,7 @@ class DurableWorkflowRepository:
                 )
                 instance = result.scalar_one_or_none()
 
-                now = utc_now()
+                now = utcnow()
                 if instance is None:
                     if expected_head_sequence is not None or expected_execution_branch_id is not None:
                         raise WorkflowConcurrencyError(
@@ -478,7 +478,7 @@ class DurableWorkflowRepository:
                 )
                 instance = result.scalar_one_or_none()
 
-                now = utc_now()
+                now = utcnow()
                 if instance is None:
                     if expected_head_sequence is not None or expected_execution_branch_id is not None:
                         raise WorkflowConcurrencyError(
@@ -726,7 +726,7 @@ class DurableWorkflowRepository:
                 )
                 source_events_after_base = int(events_after_result.scalar_one())
 
-                now = utc_now()
+                now = utcnow()
                 session.add(
                     ExecutionBranches(
                         execution_branch_id=branch_id,
@@ -901,7 +901,7 @@ class DurableWorkflowRepository:
         side_effect_policy: SideEffectPolicy,
     ) -> ActivityRecord:
         resolved_side_effect_policy = self._require_side_effect_policy(side_effect_policy)
-        now = utc_now()
+        now = utcnow()
         async with self._storage.get_session() as session:
             stmt = (
                 insert(ActivityTasks)
@@ -1040,7 +1040,7 @@ class DurableWorkflowRepository:
         error: str | None = None,
     ) -> ActivityRecord | None:
         status = ActivityStatus.failed.value if error else ActivityStatus.completed.value
-        now = utc_now()
+        now = utcnow()
         async with self._storage.get_session() as session:
             task_result = await session.execute(
                 select(ActivityTasks).where(ActivityTasks.activity_id == activity_id)
@@ -1081,7 +1081,7 @@ class DurableWorkflowRepository:
         *,
         activity_id: str,
     ) -> ActivityRecord | None:
-        now = utc_now()
+        now = utcnow()
         lease_until = now + timedelta(seconds=ACTIVITY_LEASE_SECONDS)
         async with self._storage.get_session() as session:
             task_result = await session.execute(
@@ -1121,7 +1121,7 @@ class DurableWorkflowRepository:
         *,
         activity_id: str,
     ) -> ActivityRescheduleResult | None:
-        now = utc_now()
+        now = utcnow()
         async with self._storage.get_session() as session:
             task_result = await session.execute(
                 select(ActivityTasks).where(ActivityTasks.activity_id == activity_id)

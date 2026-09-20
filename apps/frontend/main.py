@@ -18,10 +18,10 @@ from fastapi.responses import (
 from fastapi.staticfiles import StaticFiles
 from starlette.routing import Route
 
-from apps.agent.api import router as agent_router
-from apps.agent.tunnel import router as agent_tunnel_router
 from apps.agent.tunnel_bus import configure_tunnel_bus_storage, start_tunnel_bus_listener
 from apps.frontend.api.agent import router as agent_settings_router
+from apps.frontend.api.agent_devices import router as agent_router
+from apps.frontend.api.agent_tunnel import router as agent_tunnel_router
 from apps.frontend.api.ai_providers import router as ai_providers_router
 from apps.frontend.api.api_keys import router as api_keys_router
 from apps.frontend.api.auth import router as auth_router

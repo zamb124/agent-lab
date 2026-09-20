@@ -11,11 +11,11 @@ from __future__ import annotations
 from pydantic import Field
 
 from core.config import BaseSettings
-from core.config.loader import load_merged_config
 from core.config.models import (
     VoiceBargeInSettings,
     VoiceQueueSettings,
 )
+from core.config.service_settings import ServiceSettingsCache
 
 
 class VoiceServiceSettings(BaseSettings):
@@ -25,17 +25,6 @@ class VoiceServiceSettings(BaseSettings):
     queue: VoiceQueueSettings = Field(default_factory=VoiceQueueSettings)
 
 
-_voice_settings: VoiceServiceSettings | None = None
-
-
-def get_voice_settings() -> VoiceServiceSettings:
-    global _voice_settings
-    if _voice_settings is None:
-        merged_config = load_merged_config(service_name="voice", silent=True)
-        _voice_settings = VoiceServiceSettings.model_validate(merged_config)
-    return _voice_settings
-
-
-def reset_voice_settings() -> None:
-    global _voice_settings
-    _voice_settings = None
+_settings_cache = ServiceSettingsCache("voice", VoiceServiceSettings)
+get_voice_settings = _settings_cache.get
+reset_voice_settings = _settings_cache.reset

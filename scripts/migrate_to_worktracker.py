@@ -27,12 +27,13 @@ from datetime import date, datetime, time, timezone
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from apps.worktracker.services.work_queue_access_service import WorkQueueAccessService
+from core.worktracker.access_service import WorkQueueAccessService
 from core.authz.factory import build_authz_service
 from core.config import get_settings
 from core.files.file_attachments import minimal_file_refs_from_file_ids
 from core.logging import get_logger
 from core.types import JsonObject
+from core.utils.time import utcnow
 from core.worktracker.db import WorktrackerDatabase
 from core.worktracker.models import (
     CrmEntityLink,
@@ -92,10 +93,6 @@ _COMMENT_ROLE_MAP: dict[str, WorkItemCommentRole] = {
 }
 
 
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
-
-
 def _session_factory(url: str) -> async_sessionmaker[AsyncSession]:
     engine = create_async_engine(url, poolclass=None)
     return async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
@@ -136,8 +133,8 @@ async def migrate_operator_queues(
                 name=queue["name"],
                 work_queue_slug=queue["slug"],
                 description=queue["description"],
-                created_at=queue["created_at"] or _utcnow(),
-                updated_at=queue["updated_at"] or _utcnow(),
+                created_at=queue["created_at"] or utcnow(),
+                updated_at=queue["updated_at"] or utcnow(),
             )
         )
         queue_id_map[queue["id"]] = created.work_queue_id
@@ -198,7 +195,7 @@ async def migrate_operator_tasks(
             "interrupt_snapshot": snapshot,
             "context_data_snapshot": task["context_data_snapshot"] or {},
         }
-        now = _utcnow()
+        now = utcnow()
         work_item_id = f"wi_{task['id']}"
         item = WorkItem(
             work_item_id=work_item_id,
@@ -278,7 +275,7 @@ async def _migrate_dialog_log(
                 role=role,
                 text=text_value if isinstance(text_value, str) else "",
                 files=minimal_file_refs_from_file_ids(file_ids),
-                created_at=_utcnow(),
+                created_at=utcnow(),
             )
         )
 
@@ -325,7 +322,7 @@ async def migrate_crm_tasks(
             due_at = datetime.combine(due_date, time.min, tzinfo=timezone.utc)
         else:
             due_at = None
-        now = _utcnow()
+        now = utcnow()
         item = WorkItem(
             work_item_id=work_item_id,
             company_id=company_id,

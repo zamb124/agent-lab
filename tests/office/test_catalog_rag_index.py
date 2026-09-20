@@ -81,7 +81,6 @@ async def _enable_rag_index(office_client, catalog_id: str, headers: dict[str, s
     assert response.status_code == 200
     payload = response.json()
     assert payload["rag_namespace_id"] == _rag_namespace_id(catalog_id)
-    assert payload["initial_task_id"]
     return payload
 
 
@@ -395,9 +394,15 @@ async def test_enable_idempotent_triggers_rebuild_task(
         auth_headers_system,
         f"rag-idempotent-{unique_id}",
     )
+    empty = await _enable_rag_index(office_client, catalog_id, auth_headers_system)
+    assert empty["initial_task_id"] is None
+    _ = await _upload_searchable_csv(
+        office_client, auth_headers_system, catalog_id, unique_id, title_suffix="idempotent"
+    )
     first = await _enable_rag_index(office_client, catalog_id, auth_headers_system)
     second = await _enable_rag_index(office_client, catalog_id, auth_headers_system)
     assert second["rag_namespace_id"] == first["rag_namespace_id"]
+    assert first["initial_task_id"]
     assert second["initial_task_id"]
     assert second["initial_task_id"] != first["initial_task_id"]
 

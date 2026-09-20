@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from apps.flows.realtime.operations import raise_invalid, require_company_member
+from apps.flows.realtime.operations import (
+    require_company_member,
+)
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.llm_context_api import (
     LlmContextResolveParentRequest,
@@ -18,6 +20,9 @@ from core.llm_context.resolver import (
 from core.logging import get_logger
 from core.models.identity_models import User
 from core.types import require_json_object
+from core.websocket import (
+    raise_invalid,
+)
 
 logger = get_logger(__name__)
 

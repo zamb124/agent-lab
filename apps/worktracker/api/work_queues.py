@@ -7,13 +7,6 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from apps.worktracker.dependencies import ContainerDep
-from apps.worktracker.models.api import (
-    WorkQueueCreateRequest,
-    WorkQueueMemberAddRequest,
-    WorkQueueMemberRemoveRequest,
-    WorkQueueMembersList,
-    WorkQueueUpdateRequest,
-)
 from apps.worktracker.realtime.operations import (
     WorkQueueIdPayload,
     WorkQueueMemberAddPayload,
@@ -31,6 +24,13 @@ from apps.worktracker.realtime.operations import (
 from core.context import require_context
 from core.pagination import OffsetPage
 from core.worktracker.models import WorkQueue, WorkQueueMember
+from core.worktracker.requests import (
+    WorkQueueCreateRequest,
+    WorkQueueMemberAddRequest,
+    WorkQueueMemberRemoveRequest,
+    WorkQueueMembersList,
+    WorkQueueUpdateRequest,
+)
 
 router = APIRouter(prefix="/work-queues", tags=["work-queues"])
 

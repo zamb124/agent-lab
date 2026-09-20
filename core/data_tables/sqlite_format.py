@@ -29,6 +29,7 @@ from core.data_tables.models import (
 from core.documents.viewer.models import DataTableColumnSnapshot
 from core.pagination import CursorPage, decode_cursor, encode_cursor
 from core.types import JsonObject, JsonValue, parse_json_value
+from core.utils.time import utcnow
 
 _SQLITE_TYPE: dict[DataTableColumnType, str] = {
     "text": "TEXT",
@@ -88,7 +89,7 @@ def _fetchone(
 
 
 def _utcnow_iso() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat()
+    return utcnow().replace(microsecond=0).isoformat()
 
 
 def _parse_datetime(value: str) -> datetime:

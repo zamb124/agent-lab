@@ -32,7 +32,6 @@ from apps.office.realtime.operations import (
     OfficeDocumentUpdateCellsPayload,
     OfficeEmptyPayload,
     OfficeFileIdPayload,
-    OfficeNamespacesListPayload,
     op_catalogs_access,
     op_catalogs_access_rotate_link,
     op_catalogs_access_update,
@@ -83,11 +82,11 @@ from apps.office.realtime.operations import (
     op_documents_update_cells,
     op_integration_status,
     op_namespaces_create,
-    op_namespaces_list,
     op_namespaces_templates,
 )
 from core.documents.placement import DocsEnsurePathRequest, DocsPlacement
 from core.logging import get_logger
+from core.namespace.operations import NamespacesListPayload, op_namespaces_list
 from core.websocket import Operation, RegisteredOperation, register_service_operations
 
 logger = get_logger(__name__)
@@ -97,7 +96,7 @@ OFFICE_OPERATIONS: dict[str, RegisteredOperation[OfficeContainer]] = {
         payload_model=OfficeEmptyPayload, fn=op_integration_status
     ),
     "office/namespaces/list_requested": Operation(
-        payload_model=OfficeNamespacesListPayload, fn=op_namespaces_list
+        payload_model=NamespacesListPayload, fn=op_namespaces_list
     ),
     "office/namespaces/templates_requested": Operation(
         payload_model=OfficeEmptyPayload, fn=op_namespaces_templates

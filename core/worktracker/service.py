@@ -10,7 +10,7 @@ WorkItemService — чистая стейт-машина и валидация �
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 from pydantic import Field
 from sqlalchemy.exc import IntegrityError
@@ -20,6 +20,7 @@ from core.authz.service import AuthzService
 from core.files.file_ref import FileRef
 from core.identity.flow_employee import is_flow_employee_user_id
 from core.logging import get_logger
+from core.utils.time import utcnow
 from core.variables.models import VariableMap, normalize_variables_map
 from core.websocket.publisher import Notification, NotificationType, notify_user
 from core.worktracker.events import (
@@ -66,8 +67,6 @@ from core.worktracker.repository import WorktrackerRepository
 logger = get_logger(__name__)
 
 
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 class WorkItemCompletion:
@@ -237,7 +236,7 @@ class WorkItemService:
         state, resolved_column_id = await self._resolve_board_placement(
             company_id, board_id, board_column_id
         )
-        now = _utcnow()
+        now = utcnow()
         item = WorkItem(
             work_item_id=f"wi_{uuid.uuid4().hex}",
             company_id=company_id,
@@ -357,7 +356,7 @@ class WorkItemService:
             item.variables = normalize_variables_map(variables)
         if attachments is not None:
             item.attachments = list(attachments)
-        item.updated_at = _utcnow()
+        item.updated_at = utcnow()
         saved = await self._repo.save_work_item(item)
         await self._publish(saved, WORK_ITEM_UPDATED)
         if title is not None or description is not None:
@@ -381,7 +380,7 @@ class WorkItemService:
                 f"WorkItem {work_item_id!r} в терминальном состоянии {item.state.value!r}"
             )
         item.assignment = assignment
-        item.updated_at = _utcnow()
+        item.updated_at = utcnow()
         saved = await self._repo.save_work_item(item)
         await self._publish(saved, WORK_ITEM_UPDATED)
         await self._after_assignment_change(saved)
@@ -408,7 +407,7 @@ class WorkItemService:
         if target_state is not None:
             self._assert_transition(item.state)
             item.state = target_state
-        item.updated_at = _utcnow()
+        item.updated_at = utcnow()
         saved = await self._repo.save_work_item(item)
         await self._publish(saved, WORK_ITEM_MOVED)
         return saved
@@ -438,7 +437,7 @@ class WorkItemService:
         )
         if item.state == WorkItemState.OPEN:
             item.state = WorkItemState.IN_PROGRESS
-        item.updated_at = _utcnow()
+        item.updated_at = utcnow()
         saved = await self._repo.save_work_item(item)
         await self._publish(saved, WORK_ITEM_UPDATED)
         return saved
@@ -474,7 +473,7 @@ class WorkItemService:
         item.state = terminal_state
         if resolution is not None:
             item.resolution = resolution
-        item.updated_at = _utcnow()
+        item.updated_at = utcnow()
         saved = await self._repo.save_work_item(item)
         await self._publish(saved, WORK_ITEM_COMPLETED)
         logger.info(
@@ -522,7 +521,7 @@ class WorkItemService:
             role=role,
             text=text,
             files=files or [],
-            created_at=_utcnow(),
+            created_at=utcnow(),
         )
         saved = await self._repo.append_comment(comment)
         await publish_work_item_events(
@@ -570,7 +569,7 @@ class WorkItemService:
             owner_user_id = creator.user_id
         else:
             owner_user_id = await self._queue_access.resolve_company_admin_owner(company_id)
-        now = _utcnow()
+        now = utcnow()
         queue = WorkQueue(
             work_queue_id=f"wq_{uuid.uuid4().hex}",
             company_id=company_id,
@@ -635,7 +634,7 @@ class WorkItemService:
             queue.name = name
         if description is not None:
             queue.description = description
-        queue.updated_at = _utcnow()
+        queue.updated_at = utcnow()
         return await self._repo.save_queue(queue)
 
     async def get_queue_by_slug(self, company_id: str, slug: str) -> WorkQueue:
@@ -736,7 +735,7 @@ class WorkItemService:
         board_key: str = "generic",
     ) -> Board:
         resolved_columns = columns if columns else build_generic_board_columns()
-        now = _utcnow()
+        now = utcnow()
         board = Board(
             board_id=f"wb_{uuid.uuid4().hex}",
             company_id=company_id,
@@ -762,7 +761,7 @@ class WorkItemService:
             board.name = name
         if columns is not None:
             board.columns = columns
-        board.updated_at = _utcnow()
+        board.updated_at = utcnow()
         return await self._repo.save_board(board)
 
     async def get_board(self, company_id: str, board_id: str) -> Board:

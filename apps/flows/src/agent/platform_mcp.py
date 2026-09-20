@@ -16,17 +16,16 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from google.protobuf.json_format import MessageToDict
 
-from apps.agent.config import get_agent_settings
-from apps.agent.device_auth import (
-    extract_device_id_from_bearer,
-    reject_revoked_device_bearer_if_present,
-)
 from apps.agent.service import (
     build_flow_mcp_tools,
     device_tunnel_is_online,
     record_agent_audit_event_redis,
 )
 from apps.agent.tunnel_bus import send_mcp_request_to_device
+from apps.flows.src.agent.device_auth import (
+    extract_device_id_from_bearer,
+    reject_revoked_device_bearer_if_present,
+)
 from apps.flows.src.channels.a2a import A2AChannel
 from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.dependencies import ContainerDep as FlowsContainerDep
@@ -42,6 +41,7 @@ from core.a2a import (
     struct_from_mapping,
     wire_task_state_to_platform,
 )
+from core.config import get_settings
 from core.context import get_context, require_context
 from core.logging import get_logger
 from core.state import ExecutionState
@@ -210,7 +210,7 @@ async def _persist_sticky_context_id(
     context_id: str,
 ) -> None:
     """Persist sticky context. MCP session wins over device (no cross-dialog reuse)."""
-    ttl_seconds = get_agent_settings().session_ttl_seconds
+    ttl_seconds = get_settings().agent.session_ttl_seconds
     if mcp_session_id is not None:
         _ = await container.redis_client.set(
             _session_context_key(mcp_session_id, flow_id),

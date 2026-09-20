@@ -12,7 +12,6 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 
-from apps.flows.config import get_settings
 from apps.idle_worker.container import IdleWorkerContainer, get_container
 from apps.idle_worker.tasks.task_names import (
     TASK_CALENDAR_SYNC_MEETING_REMINDER_TICK,
@@ -26,6 +25,7 @@ from core.calendar.service import (
     calendar_integration_from_credential,
     calendar_source_for_provider,
 )
+from core.config import get_settings
 from core.events import publish_event_to_user
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.logging import get_logger

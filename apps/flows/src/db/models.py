@@ -2,7 +2,7 @@
 Модели базы данных сервиса flows.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import override
 
 from sqlalchemy import (
@@ -22,11 +22,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from core.db.models import Base
 from core.types import JsonArray, JsonObject
-
-
-def utc_now() -> datetime:
-    """Возвращает текущее время UTC."""
-    return datetime.now(timezone.utc)
+from core.utils.time import utcnow
 
 
 class Flows(Base):
@@ -40,8 +36,8 @@ class Flows(Base):
 
     key: Mapped[str] = mapped_column(String, primary_key=True, index=True)
     value: Mapped[JsonObject] = mapped_column(JSONB)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow, onupdate=utcnow)
     expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
@@ -67,8 +63,8 @@ class FlowsVersions(Base):
 
     key: Mapped[str] = mapped_column(String, primary_key=True, index=True)
     value: Mapped[JsonObject] = mapped_column(JSONB)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow, onupdate=utcnow)
     expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
@@ -94,8 +90,8 @@ class Nodes(Base):
 
     key: Mapped[str] = mapped_column(String, primary_key=True, index=True)
     value: Mapped[JsonObject] = mapped_column(JSONB)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow, onupdate=utcnow)
     expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
@@ -121,8 +117,8 @@ class Tools(Base):
 
     key: Mapped[str] = mapped_column(String, primary_key=True, index=True)
     value: Mapped[JsonObject] = mapped_column(JSONB)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow, onupdate=utcnow)
     expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
@@ -161,8 +157,8 @@ class AgentSkills(Base):
 
     key: Mapped[str] = mapped_column(String, primary_key=True, index=True)
     value: Mapped[JsonObject] = mapped_column(JSONB)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow, onupdate=utcnow)
     expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
@@ -188,8 +184,8 @@ class ToolTagGroups(Base):
 
     key: Mapped[str] = mapped_column(String, primary_key=True, index=True)
     value: Mapped[JsonObject] = mapped_column(JSONB)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow, onupdate=utcnow)
     expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
@@ -223,8 +219,8 @@ class WorkflowInstances(Base):
     latest_snapshot_id: Mapped[str | None] = mapped_column(String, default=None)
     status: Mapped[str] = mapped_column(String, nullable=False, default="running")
     last_event_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow, onupdate=utcnow)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
         UniqueConstraint("company_id", "session_id", name="uq_workflow_instances_company_session"),
@@ -249,7 +245,7 @@ class ExecutionBranches(Base):
     base_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     base_state_hash: Mapped[str | None] = mapped_column(String, default=None)
     reason: Mapped[str] = mapped_column(String, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
 
     __table_args__: tuple[Index, ...] = (
         Index("ix_execution_branches_company_session", "company_id", "session_id"),
@@ -275,7 +271,7 @@ class WorkflowEvents(Base):
     causation_id: Mapped[str | None] = mapped_column(String, default=None)
     correlation_id: Mapped[str | None] = mapped_column(String, default=None)
     schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
         UniqueConstraint(
@@ -304,7 +300,7 @@ class WorkflowSnapshots(Base):
     state_json: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
     state_hash: Mapped[str] = mapped_column(String, nullable=False)
     schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
         UniqueConstraint(
@@ -339,9 +335,9 @@ class A2ATaskProjections(Base):
     latest_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     is_terminal: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now
+        DateTime(timezone=True), insert_default=utcnow, onupdate=utcnow
     )
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
@@ -369,7 +365,7 @@ class A2ATaskMessages(Base):
     message_id: Mapped[str] = mapped_column(String, nullable=False)
     ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
     message_json: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
         UniqueConstraint("task_id", "message_id", name="uq_a2a_task_messages_task_message"),
@@ -397,9 +393,9 @@ class A2AArtifactProjections(Base):
     is_closed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     latest_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
     payload_hash: Mapped[str] = mapped_column(String, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now
+        DateTime(timezone=True), insert_default=utcnow, onupdate=utcnow
     )
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
@@ -427,7 +423,7 @@ class A2ATaskEventDedup(Base):
     event_json: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
     source_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
         UniqueConstraint("task_id", "event_identity", name="uq_a2a_events_task_identity"),
@@ -452,7 +448,7 @@ class FlowUIShareGrants(Base):
     created_by_user_id: Mapped[str] = mapped_column(String, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
 
     __table_args__: tuple[Index, ...] = (
         Index("ix_flow_ui_share_company_context", "company_id", "context_id"),
@@ -475,7 +471,7 @@ class ActivityTasks(Base):
     input_hash: Mapped[str] = mapped_column(String, nullable=False)
     idempotency_key: Mapped[str | None] = mapped_column(String, default=None)
     side_effect_policy: Mapped[str] = mapped_column(String, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
         UniqueConstraint(
@@ -510,7 +506,7 @@ class ActivityAttempts(Base):
     result_json: Mapped[JsonObject | None] = mapped_column(JSONB, default=None)
     error: Mapped[str | None] = mapped_column(Text, default=None)
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
-    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
@@ -538,8 +534,8 @@ class EvaluationSuites(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     tags: Mapped[JsonArray] = mapped_column(JSONB, default=list)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow, onupdate=utcnow)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
         UniqueConstraint("company_id", "flow_id", "name", name="uq_evaluation_suites_company_flow_name"),
@@ -568,8 +564,8 @@ class EvaluationCases(Base):
     enabled: Mapped[bool] = mapped_column(default=True)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     payload: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow, onupdate=utcnow)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
         UniqueConstraint("company_id", "suite_id", "name", name="uq_evaluation_cases_suite_name"),
@@ -594,8 +590,8 @@ class EvaluationRubrics(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     tags: Mapped[JsonArray] = mapped_column(JSONB, default=list)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow, onupdate=utcnow)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
         UniqueConstraint("company_id", "flow_id", "name", name="uq_evaluation_rubrics_company_flow_name"),
@@ -623,7 +619,7 @@ class EvaluationRubricVersions(Base):
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
     pass_threshold: Mapped[float] = mapped_column(nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
         UniqueConstraint("company_id", "rubric_id", "version", name="uq_evaluation_rubric_versions_version"),
@@ -652,7 +648,7 @@ class EvaluationSuiteVersions(Base):
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     suite_snapshot: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
     cases_snapshot: Mapped[JsonArray] = mapped_column(JSONB, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
         UniqueConstraint("company_id", "suite_id", "version", name="uq_evaluation_suite_versions_version"),
@@ -703,8 +699,8 @@ class EvaluationRuns(Base):
     billing_quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow, onupdate=utcnow)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
         UniqueConstraint(
@@ -741,8 +737,8 @@ class EvaluationRunJobs(Base):
     trace_context: Mapped[JsonObject | None] = mapped_column(JSONB, default=None)
     error: Mapped[str | None] = mapped_column(Text, default=None)
     enqueued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow, onupdate=utcnow)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
         UniqueConstraint("company_id", "run_id", name="uq_evaluation_run_jobs_run"),
@@ -790,8 +786,8 @@ class EvaluationCaseRuns(Base):
     error: Mapped[str | None] = mapped_column(Text, default=None)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow, onupdate=utcnow)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
         UniqueConstraint(
@@ -829,7 +825,7 @@ class EvaluationRunEvents(Base):
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
     event_type: Mapped[str] = mapped_column(String, nullable=False)
     payload: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
         UniqueConstraint("company_id", "run_id", "sequence", name="uq_evaluation_run_events_sequence"),
@@ -863,8 +859,8 @@ class EvaluationAnnotations(Base):
     comment: Mapped[str] = mapped_column(Text, nullable=False, default="")
     payload: Mapped[JsonObject] = mapped_column(JSONB, nullable=False, default=dict)
     created_by: Mapped[str] = mapped_column(String, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow, onupdate=utcnow)
 
     __table_args__: tuple[Index, ...] = (
         Index("ix_evaluation_annotations_company_run", "company_id", "run_id"),
@@ -900,8 +896,8 @@ class EvaluationBaselines(Base):
         nullable=False,
     )
     created_by: Mapped[str] = mapped_column(String, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow, onupdate=utcnow)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
         UniqueConstraint("company_id", "suite_id", "branch_id", name="uq_evaluation_baselines_suite_branch"),
@@ -937,8 +933,8 @@ class EvaluationGatePolicies(Base):
     min_baseline_score_delta: Mapped[float | None] = mapped_column(default=None)
     max_baseline_duration_delta_ms: Mapped[int | None] = mapped_column(Integer, default=None)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow, onupdate=utcnow)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
         UniqueConstraint("company_id", "suite_id", "branch_id", "name", name="uq_evaluation_gate_policy_name"),
@@ -970,7 +966,7 @@ class EvaluationGateResults(Base):
     state: Mapped[str] = mapped_column(String, nullable=False)
     metrics: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
     violations: Mapped[JsonArray] = mapped_column(JSONB, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
         UniqueConstraint("company_id", "run_id", name="uq_evaluation_gate_results_run"),
@@ -1008,8 +1004,8 @@ class EvaluationMonitors(Base):
         default=None,
     )
     created_by: Mapped[str] = mapped_column(String, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow, onupdate=utcnow)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
         UniqueConstraint(
@@ -1053,7 +1049,7 @@ class EvaluationMonitorObservations(Base):
     state: Mapped[str] = mapped_column(String, nullable=False)
     span_count: Mapped[int] = mapped_column(Integer, nullable=False)
     payload: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
-    sampled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    sampled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
     curated_case_id: Mapped[str | None] = mapped_column(String, default=None)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
@@ -1121,7 +1117,7 @@ class EvaluationPairwiseJudgments(Base):
     scores: Mapped[JsonObject] = mapped_column(JSONB, nullable=False, default=dict)
     feedback: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_by: Mapped[str] = mapped_column(String, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
 
     __table_args__: tuple[Index, ...] = (
         Index(
@@ -1162,8 +1158,8 @@ class Resources(Base):
 
     key: Mapped[str] = mapped_column(String, primary_key=True, index=True)
     value: Mapped[JsonObject] = mapped_column(JSONB)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utcnow, onupdate=utcnow)
     expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (

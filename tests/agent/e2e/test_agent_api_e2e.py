@@ -30,7 +30,7 @@ async def test_e2e_download_redirect_local_artifact(
 ) -> None:
     from pathlib import Path
 
-    from apps.agent.config import reset_agent_settings
+    from tests.agent.fixtures.settings import reset_agent_settings
 
     reset_agent_settings()
     artifact_path = Path(agent_local_release_artifact)
@@ -53,7 +53,7 @@ async def test_e2e_releases_status_ready(
 ) -> None:
     from pathlib import Path
 
-    from apps.agent.config import reset_agent_settings
+    from tests.agent.fixtures.settings import reset_agent_settings
 
     reset_agent_settings()
     _ = require_local_release_asset_name(Path(agent_local_release_artifact))
@@ -67,8 +67,8 @@ async def test_e2e_releases_status_ready(
 async def test_e2e_releases_status_github_404(
     agent_release_github_missing_repo: None,
 ) -> None:
-    from apps.agent.config import reset_agent_settings
     from apps.agent.service import fetch_latest_release_status
+    from tests.agent.fixtures.settings import reset_agent_settings
 
     _ = agent_release_github_missing_repo
     reset_agent_settings()
@@ -82,9 +82,9 @@ async def test_e2e_download_asset_name_mismatch(
 ) -> None:
     import httpx
 
-    from apps.agent.config import reset_agent_settings
     from apps.agent.service import fetch_latest_release_asset_url
     from scripts.agent_build import detect_host_platform
+    from tests.agent.fixtures.settings import reset_agent_settings
 
     _ = agent_release_github_missing_repo
     reset_agent_settings()
@@ -108,9 +108,9 @@ async def test_e2e_create_pairing_code_rate_limit(
     user_id = user_id_from_auth_token(auth_token)
     rate_key = f"{PAIRING_RATE_PREFIX}{user_id}"
     await frontend_container.redis_client.delete(rate_key)
-    from apps.agent.config import get_agent_settings
+    from core.config import get_settings
 
-    settings = get_agent_settings()
+    settings = get_settings().agent
     for _ in range(settings.pairing_rate_limit_per_hour):
         response = await agent_frontend_http_client.post(f"{AGENT_API_PREFIX}/pairing")
         assert response.status_code == 200
@@ -350,13 +350,13 @@ async def test_e2e_register_rate_limit_429(
     frontend_container,
     unique_id: str,
 ) -> None:
-    from apps.agent.config import get_agent_settings
+    from core.config import get_settings
 
     device_id = f"device-rate-{unique_id}"
     client_key = f"127.0.0.1:{device_id}"
     rate_key = f"{REGISTER_RATE_PREFIX}{client_key}"
     await frontend_container.redis_client.delete(rate_key)
-    settings = get_agent_settings()
+    settings = get_settings().agent
     register_payload = {
         "pairing_code": "000000",
         "device_id": device_id,

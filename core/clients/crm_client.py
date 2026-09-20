@@ -53,8 +53,8 @@ class CrmClient:
             service_client if service_client is not None else ServiceClient()
         )
 
-    def _ns_headers(self) -> dict[str, str]:
-        return {NAMESPACE_HEADER: resolve_namespace_or_raise()}
+    def _ns_headers(self, namespace: str | None = None) -> dict[str, str]:
+        return {NAMESPACE_HEADER: self._resolve_namespace(namespace)}
 
     def _resolve_namespace(self, namespace: str | None) -> str:
         if namespace is not None and str(namespace).strip():
@@ -211,7 +211,7 @@ class CrmClient:
             "crm",
             f"{_API}/entities",
             json=body,
-            headers=self._ns_headers(),
+            headers=self._ns_headers(ns),
         )
         entity = self._entity_brief(require_json_object(raw, "crm.create_note"))
         entity_id = entity.get("entity_id")
@@ -376,7 +376,7 @@ class CrmClient:
             "crm",
             f"{_API}/entities",
             json=body,
-            headers=self._ns_headers(),
+            headers=self._ns_headers(ns),
         )
         entity = self._entity_brief(require_json_object(raw, "crm.create_entity"))
         entity_id = entity.get("entity_id")

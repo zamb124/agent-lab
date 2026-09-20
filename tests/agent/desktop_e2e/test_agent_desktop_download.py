@@ -7,11 +7,11 @@ from pathlib import Path
 import pytest
 from httpx import AsyncClient
 
-from apps.agent.config import reset_agent_settings
 from apps.agent.desktop.artifact_verify import is_placeholder_artifact
 from scripts.agent_build import detect_host_platform
 from tests.agent._helpers import AGENT_API_PREFIX
 from tests.agent.fixtures.local_releases import require_local_release_asset_name
+from tests.agent.fixtures.settings import reset_agent_settings
 
 
 @pytest.mark.asyncio

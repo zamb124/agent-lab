@@ -30,6 +30,9 @@ class AuthProvider(str, Enum):
     DEMO = "demo"
 
 
+ANONYMOUS_USER_ID = "anonymous"
+
+
 class User(BaseModel):
     """
     Основная модель пользователя (хранится в user:user_id).

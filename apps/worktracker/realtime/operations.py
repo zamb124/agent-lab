@@ -2,12 +2,37 @@
 
 from __future__ import annotations
 
-from typing import Never
-
 from pydantic import Field
 
 from apps.worktracker.container import WorktrackerContainer
-from apps.worktracker.models.api import (
+from core.authz.errors import AuthzDenied
+from core.authz.models import AuthzObject
+from core.context import require_active_company
+from core.models import StrictBaseModel
+from core.models.identity_models import User
+from core.pagination import OffsetPage
+from core.websocket import (
+    WsCommandError,
+    raise_conflict,
+    raise_forbidden,
+    raise_invalid,
+    raise_not_found,
+)
+from core.worktracker.models import (
+    Board,
+    UserActor,
+    WorkItem,
+    WorkItemComment,
+    WorkItemCommentRole,
+    WorkItemKind,
+    WorkItemResolution,
+    WorkItemState,
+    WorkQueue,
+    WorkQueueMember,
+    WorktrackerModel,
+    build_interaction_policy,
+)
+from core.worktracker.requests import (
     BoardCreateRequest,
     BoardUpdateRequest,
     WorkItemAssignRequest,
@@ -22,27 +47,6 @@ from apps.worktracker.models.api import (
     WorkQueueMemberRemoveRequest,
     WorkQueueMembersList,
     WorkQueueUpdateRequest,
-)
-from core.authz.errors import AuthzDenied
-from core.authz.models import AuthzObject
-from core.context import require_active_company
-from core.models import StrictBaseModel
-from core.models.identity_models import User
-from core.pagination import OffsetPage
-from core.websocket import WsCommandError
-from core.worktracker.models import (
-    Board,
-    UserActor,
-    WorkItem,
-    WorkItemComment,
-    WorkItemCommentRole,
-    WorkItemKind,
-    WorkItemResolution,
-    WorkItemState,
-    WorkQueue,
-    WorkQueueMember,
-    WorktrackerModel,
-    build_interaction_policy,
 )
 from core.worktracker.service import WorkItemMineSummary
 
@@ -133,20 +137,8 @@ def _actor(user: User) -> UserActor:
     return UserActor(user_id=user.user_id)
 
 
-def _not_found(exc: ValueError) -> Never:
-    raise WsCommandError("not_found", str(exc)) from exc
 
 
-def _invalid(exc: ValueError) -> Never:
-    raise WsCommandError("ws_invalid_payload", str(exc)) from exc
-
-
-def _forbidden(exc: PermissionError | AuthzDenied) -> Never:
-    raise WsCommandError("forbidden", str(exc)) from exc
-
-
-def _conflict(exc: ValueError) -> Never:
-    raise WsCommandError("conflict", str(exc)) from exc
 
 
 async def _with_policy(
@@ -220,7 +212,7 @@ async def op_work_items_get(
     try:
         item = await container.work_item_service.get(_company_id(), payload.work_item_id)
     except ValueError as exc:
-        _not_found(exc)
+        raise_not_found(exc)
     return await _with_policy(container, item, user)
 
 
@@ -290,7 +282,7 @@ async def op_work_items_update(
             attachments=payload.attachments,
         )
     except ValueError as exc:
-        _not_found(exc)
+        raise_not_found(exc)
 
 
 async def op_work_items_assign(
@@ -307,7 +299,7 @@ async def op_work_items_assign(
             assignment=payload.assignment,
         )
     except ValueError as exc:
-        _invalid(exc)
+        raise_invalid(exc)
 
 
 async def op_work_items_move(
@@ -325,7 +317,7 @@ async def op_work_items_move(
             state=payload.state,
         )
     except ValueError as exc:
-        _invalid(exc)
+        raise_invalid(exc)
 
 
 async def op_work_items_claim(
@@ -341,9 +333,9 @@ async def op_work_items_claim(
             user_id=user.user_id,
         )
     except PermissionError as exc:
-        _forbidden(exc)
+        raise_forbidden(exc)
     except ValueError as exc:
-        _invalid(exc)
+        raise_invalid(exc)
     return await _with_policy(container, item, user)
 
 
@@ -363,7 +355,7 @@ async def op_work_items_comment(
             files=payload.files,
         )
     except ValueError as exc:
-        _not_found(exc)
+        raise_not_found(exc)
 
 
 async def op_work_items_comments_list(
@@ -398,7 +390,7 @@ async def op_work_items_complete(
             terminal_state=payload.terminal_state,
         )
     except ValueError as exc:
-        _invalid(exc)
+        raise_invalid(exc)
     return await _with_policy(container, completion.work_item, user)
 
 
@@ -414,7 +406,7 @@ async def op_work_items_cancel(
             work_item_id=payload.work_item_id,
         )
     except ValueError as exc:
-        _invalid(exc)
+        raise_invalid(exc)
     return await _with_policy(container, completion.work_item, user)
 
 
@@ -445,7 +437,7 @@ async def op_boards_get(
     try:
         return await container.work_item_service.get_board(_company_id(), payload.board_id)
     except ValueError as exc:
-        _not_found(exc)
+        raise_not_found(exc)
 
 
 async def op_boards_create(
@@ -479,7 +471,7 @@ async def op_boards_update(
             columns=payload.columns,
         )
     except ValueError as exc:
-        _not_found(exc)
+        raise_not_found(exc)
 
 
 async def op_work_queues_list(
@@ -513,7 +505,7 @@ async def op_work_queues_create(
             creator=_actor(user),
         )
     except ValueError as exc:
-        _conflict(exc)
+        raise_conflict(exc)
 
 
 async def op_work_queues_update(
@@ -531,9 +523,9 @@ async def op_work_queues_update(
             actor_user_id=user.user_id,
         )
     except AuthzDenied as exc:
-        _forbidden(exc)
+        raise_forbidden(exc)
     except ValueError as exc:
-        _not_found(exc)
+        raise_not_found(exc)
 
 
 async def op_work_queues_delete(
@@ -549,9 +541,9 @@ async def op_work_queues_delete(
             actor_user_id=user.user_id,
         )
     except AuthzDenied as exc:
-        _forbidden(exc)
+        raise_forbidden(exc)
     except ValueError as exc:
-        _not_found(exc)
+        raise_not_found(exc)
 
 
 async def op_work_queues_members_list(
@@ -565,7 +557,7 @@ async def op_work_queues_members_list(
             AuthzObject.work_queue(payload.work_queue_id), user_id=user.user_id
         )
     except AuthzDenied as exc:
-        _forbidden(exc)
+        raise_forbidden(exc)
     items = await container.work_item_service.list_queue_members(payload.work_queue_id)
     return WorkQueueMembersList(items=items)
 
@@ -585,9 +577,9 @@ async def op_work_queues_member_add(
             actor_user_id=user.user_id,
         )
     except AuthzDenied as exc:
-        _forbidden(exc)
+        raise_forbidden(exc)
     except ValueError as exc:
-        _invalid(exc)
+        raise_invalid(exc)
 
 
 async def op_work_queues_member_remove(
@@ -603,6 +595,6 @@ async def op_work_queues_member_remove(
             actor_user_id=user.user_id,
         )
     except AuthzDenied as exc:
-        _forbidden(exc)
+        raise_forbidden(exc)
     if not removed:
         raise WsCommandError("not_found", "Участник очереди не найден")

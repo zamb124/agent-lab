@@ -9,9 +9,6 @@ from core.tasks import declare_task
 RAG_INDEX_DOCUMENT_S3 = declare_task(
     "rag_index_document_s3", queue="rag", retry=True, max_retries=3
 )
-RAG_INDEX_OFFICE_CATALOG = declare_task(
-    "rag_index_office_catalog", queue="rag", retry=True, max_retries=3
-)
 RAG_REINDEX_DOCUMENT = declare_task(
     "rag_reindex_document", queue="rag", retry=True, max_retries=3
 )
@@ -36,7 +33,6 @@ __all__ = [
     "RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TICK",
     "RAG_DELETE_DOCUMENT",
     "RAG_INDEX_DOCUMENT_S3",
-    "RAG_INDEX_OFFICE_CATALOG",
     "RAG_LIST_DOCUMENTS",
     "RAG_REEMBED_STALE_DOCUMENTS_TICK",
     "RAG_REINDEX_DOCUMENT",

@@ -4,13 +4,9 @@ from __future__ import annotations
 
 from pydantic import ValidationError
 
-from apps.flows.errors import FlowsNotFoundError
 from apps.flows.realtime.operations import (
     FlowsEmptyPayload,
     FlowsFlowIdPayload,
-    raise_conflict,
-    raise_invalid,
-    raise_not_found,
     require_company_member,
     require_edit_flow,
     require_view_flow,
@@ -45,12 +41,18 @@ from apps.flows.src.triggers.trigger_type_contract import (
     effective_output_actions_for_trigger,
 )
 from apps.flows.src.triggers.verify_draft import verify_trigger_draft as run_verify
+from core.errors.boundary import PlatformNotFoundError
 from core.events import PlatformEventCatalogResponse, load_platform_event_catalog
 from core.logging import get_logger
 from core.models.identity_models import User
 from core.pagination import ListResponse
 from core.types import JsonObject
 from core.variables.resolver import VariableResolutionError
+from core.websocket import (
+    raise_conflict,
+    raise_invalid,
+    raise_not_found,
+)
 
 logger = get_logger(__name__)
 
@@ -94,7 +96,7 @@ async def _flow_for_view(container: FlowContainer, flow_id: str) -> FlowConfig:
     _ = await require_view_flow(container, flow_id)
     flow_config = await container.flow_repository.get(flow_id)
     if flow_config is None:
-        raise_not_found(FlowsNotFoundError(f"Flow not found: {flow_id}"))
+        raise_not_found(PlatformNotFoundError(f"Flow not found: {flow_id}"))
     return flow_config
 
 
@@ -102,7 +104,7 @@ async def _flow_for_edit(container: FlowContainer, flow_id: str) -> FlowConfig:
     _ = await require_edit_flow(container, flow_id)
     flow_config = await container.flow_repository.get(flow_id)
     if flow_config is None:
-        raise_not_found(FlowsNotFoundError(f"Flow not found: {flow_id}"))
+        raise_not_found(PlatformNotFoundError(f"Flow not found: {flow_id}"))
     return flow_config
 
 
@@ -153,7 +155,7 @@ async def op_flows_triggers_verify(
     scope = await require_edit_flow(container, payload.flow_id)
     flow_config = await container.flow_repository.get(payload.flow_id)
     if flow_config is None:
-        raise_not_found(FlowsNotFoundError(f"Flow not found: {payload.flow_id}"))
+        raise_not_found(PlatformNotFoundError(f"Flow not found: {payload.flow_id}"))
 
     cfg: JsonObject = dict(payload.config)
     if payload.type == TriggerType.TELEGRAM:

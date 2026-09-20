@@ -9,7 +9,7 @@ import pytest
 from httpx import AsyncClient
 
 from apps.flows.src.services.agent_toolkit_notify import TUNNEL_TOOLKITS_UPDATED_CHANNEL
-from apps.frontend.config import get_frontend_public_base_url
+from core.platform_brand.resolver import platform_public_base_url
 from tests.agent._helpers import AGENT_API_PREFIX
 
 
@@ -114,7 +114,7 @@ async def test_register_includes_toolkits_url(
     )
     assert register.status_code == 200, register.text
     body = register.json()
-    frontend_base = get_frontend_public_base_url().rstrip("/")
+    frontend_base = platform_public_base_url().rstrip("/")
     assert body["toolkits_url"] == f"{frontend_base}/flows/api/v1/agent/toolkits"
 
 
@@ -125,5 +125,5 @@ async def test_discover_includes_toolkits_url(
     response = await frontend_client.get(f"{AGENT_API_PREFIX}/discover")
     assert response.status_code == 200
     body = response.json()
-    frontend_base = get_frontend_public_base_url().rstrip("/")
+    frontend_base = platform_public_base_url().rstrip("/")
     assert body["toolkits_url"] == f"{frontend_base}/flows/api/v1/agent/toolkits"

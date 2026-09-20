@@ -8,6 +8,7 @@ from core.clients.service_client import ServiceClient
 from core.context import get_context
 from core.events.contract import PlatformEvent
 from core.internal_context_headers import build_internal_context_headers
+from core.models.identity_models import ANONYMOUS_USER_ID
 from core.types import require_json_object
 
 LocalEventIngest = Callable[[PlatformEvent], Awaitable[PlatformEvent]]
@@ -18,7 +19,14 @@ PLATFORM_EVENT_SUBMIT_USER_ID = "platform.event.publisher"
 
 
 def _submit_headers(event: PlatformEvent) -> dict[str, str] | None:
-    if get_context() is not None:
+    """Аутентифицированный запрос несёт свой JWT; фон и анонимные callbacks (OnlyOffice DS,
+    вебхуки) идут с подписанным internal context компании события."""
+    context = get_context()
+    if (
+        context is not None
+        and context.active_company is not None
+        and context.user.user_id not in ("", ANONYMOUS_USER_ID)
+    ):
         return None
     if not event.company_id:
         raise ValueError("PlatformEvent.company_id is required to submit without request context")

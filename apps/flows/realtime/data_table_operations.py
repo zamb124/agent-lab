@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from apps.flows.realtime.operations import (
-    raise_invalid,
     require_company_member,
     require_edit_flow,
 )
@@ -12,6 +11,9 @@ from core.data_tables.models import DataTableCreateRequest, DataTableScope
 from core.data_tables.service import DataTableNotFoundError
 from core.files.models import FileRecord
 from core.models.identity_models import User
+from core.websocket import (
+    raise_invalid,
+)
 
 _FLOW_SCOPES: frozenset[DataTableScope] = frozenset({"flow_asset", "flow_session"})
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import TypedDict
 
-from apps.flows.config import get_settings
 from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.services.mcp_branding_seed import seed_mcp_branding_from_bundle
 from apps.flows.src.services.mcp_catalog_crawler import MCPCatalogCrawlStats, crawl_mcp_registry
@@ -19,6 +18,7 @@ from apps.idle_worker.tasks.task_names import (
     TASK_MCP_CATALOG_PROVISION_COMPANIES,
     TASK_MCP_CATALOG_RESYNC_TOOLS,
 )
+from core.config import get_settings
 from core.context import Context, clear_context, set_context
 from core.logging import get_logger
 from core.models.i18n_models import Language

@@ -11,13 +11,6 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
-from apps.browser.contracts.control_types import (
-    ControlHumanTakeoverBody,
-    ControlPointerClickBody,
-    ControlPointerKeyBody,
-    ControlPointerTextBody,
-    ControlSessionStatusResponse,
-)
 from apps.flows.config import FLOWS_PUBLIC_API_PREFIX, get_settings
 from apps.flows.src.services.browser_preview import (
     BrowserPreviewActiveSessionResponse,
@@ -26,6 +19,13 @@ from apps.flows.src.services.browser_preview import (
     get_active_browser_session_for_task,
     verify_browser_preview_token,
     verify_browser_preview_token_for_task,
+)
+from core.clients.browser.control_types import (
+    ControlHumanTakeoverBody,
+    ControlPointerClickBody,
+    ControlPointerKeyBody,
+    ControlPointerTextBody,
+    ControlSessionStatusResponse,
 )
 from core.http import ProxyStrategy, get_httpx_client
 from core.types import JsonObject, parse_json_object, require_json_object

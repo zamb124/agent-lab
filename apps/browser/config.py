@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from apps.browser.engine.types import BrowserRuntimeSettingsView
 from core.config import BaseSettings
-from core.config.loader import load_merged_config
+from core.config.service_settings import ServiceSettingsCache
 
 
 class BrowserRuntimeIntegrationConfig(BaseModel):
@@ -100,20 +100,9 @@ class HasBrowserRuntimeConfig(Protocol):
     browser: BrowserRuntimeIntegrationConfig
 
 
-_browser_settings: BrowserSettings | None = None
-
-
-def get_browser_settings() -> BrowserSettings:
-    global _browser_settings
-    if _browser_settings is None:
-        merged = load_merged_config(service_name="browser", silent=True)
-        _browser_settings = BrowserSettings.model_validate(merged)
-    return _browser_settings
-
-
-def reset_browser_settings() -> None:
-    global _browser_settings
-    _browser_settings = None
+_settings_cache = ServiceSettingsCache("browser", BrowserSettings)
+get_browser_settings = _settings_cache.get
+reset_browser_settings = _settings_cache.reset
 
 
 def settings_to_runtime_view(settings: HasBrowserRuntimeConfig) -> BrowserRuntimeSettingsView:

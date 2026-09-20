@@ -30,7 +30,6 @@ from apps.search.services.serp_cache import SerpCacheService
 from apps.search.services.system_context import build_search_system_context
 from core.clients.browser_fetch_client import BrowserFetchClient
 from core.clients.rag_client import RagClient
-from core.clients.redis_client import RedisClient
 from core.container import BaseContainer, ContainerRegistry, lazy
 
 
@@ -43,11 +42,6 @@ class SearchContainer(BaseContainer):
         if not settings.database.search_url:
             raise ValueError("database.search_url is required")
         return SearchDatabase.get_instance(settings.database.search_url)
-
-    @lazy
-    def redis_client(self) -> RedisClient:
-        settings = get_search_settings()
-        return RedisClient(settings.database.redis_url)
 
     @lazy
     def search_index_repository(self) -> SearchIndexRepository:

@@ -15,7 +15,6 @@ from apps.rag.realtime.operations import (
     RagNamespaceCreatePayload,
     RagNamespaceDeletePayload,
     RagNamespaceSearchPayload,
-    RagNamespacesListPayload,
     op_documents_content,
     op_documents_index_file,
     op_documents_index_remove,
@@ -25,7 +24,6 @@ from apps.rag.realtime.operations import (
     op_documents_status,
     op_documents_statuses,
     op_namespaces_create,
-    op_namespaces_list,
     op_namespaces_remove,
     op_providers_list,
     op_search_defaults,
@@ -33,13 +31,14 @@ from apps.rag.realtime.operations import (
     op_search_namespace,
 )
 from core.logging import get_logger
+from core.namespace.operations import NamespacesListPayload, op_namespaces_list
 from core.websocket import Operation, RegisteredOperation, register_service_operations
 
 logger = get_logger(__name__)
 
 RAG_OPERATIONS: dict[str, RegisteredOperation[RAGContainer]] = {
     "rag/namespaces/list_requested": Operation(
-        payload_model=RagNamespacesListPayload, fn=op_namespaces_list
+        payload_model=NamespacesListPayload, fn=op_namespaces_list
     ),
     "rag/namespaces/create_requested": Operation(
         payload_model=RagNamespaceCreatePayload, fn=op_namespaces_create

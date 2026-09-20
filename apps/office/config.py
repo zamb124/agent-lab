@@ -6,9 +6,8 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 from core.config import BaseSettings
-from core.config import set_settings as core_set_settings
-from core.config.loader import load_merged_config
 from core.config.models import ServerConfig
+from core.config.service_settings import ServiceSettingsCache
 
 
 class OfficeEditorCustomizationSettings(BaseModel):
@@ -77,18 +76,6 @@ class OfficeSettings(BaseSettings):
         return self
 
 
-_office_settings: OfficeSettings | None = None
-
-
-def get_office_settings() -> OfficeSettings:
-    global _office_settings
-    if _office_settings is None:
-        merged = load_merged_config(service_name="office", silent=True)
-        _office_settings = OfficeSettings.model_validate(merged)
-        core_set_settings(_office_settings)
-    return _office_settings
-
-
-def reset_office_settings() -> None:
-    global _office_settings
-    _office_settings = None
+_settings_cache = ServiceSettingsCache("office", OfficeSettings, register_platform_settings=True)
+get_office_settings = _settings_cache.get
+reset_office_settings = _settings_cache.reset

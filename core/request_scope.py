@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from core.context import get_context, resolve_namespace_or_raise
 from core.models.base import StrictBaseModel
+from core.models.identity_models import ANONYMOUS_USER_ID
 from core.namespace.service import NamespaceService
 from core.websocket import WsCommandError
-
-ANONYMOUS_USER_ID = "anonymous"
 
 
 class CompanyScope(StrictBaseModel):

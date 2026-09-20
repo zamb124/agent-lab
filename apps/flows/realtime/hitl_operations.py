@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from apps.flows.realtime.operations import raise_forbidden, raise_invalid, raise_not_found
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.hitl_conversation import (
     ConversationSnapshot,
@@ -12,6 +11,11 @@ from apps.flows.src.models.hitl_conversation import (
 )
 from core.context import require_active_company
 from core.models.identity_models import User
+from core.websocket import (
+    raise_forbidden,
+    raise_invalid,
+    raise_not_found,
+)
 
 
 def _require_work_item_id(work_item_id: str) -> str:

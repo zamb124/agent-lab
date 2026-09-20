@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from apps.agent.config import AgentSettings
+from core.config import AgentSettings
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONF_PATH = REPO_ROOT / "conf.json"

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Never
 from urllib.parse import quote
 
 from pydantic import Field
@@ -49,24 +48,23 @@ from apps.wiki.models.domain import (
     WikiRevisionSummary,
     WikiSearchHit,
 )
-from apps.wiki.request_scope import load_viewable_page, wiki_page_response
 from apps.wiki.services.wiki_service import WikiAccessDeniedError, WikiPageNotFoundError
 from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzObject
 from core.models import StrictBaseModel
-from core.models.identity_models import Namespace, User
-from core.pagination import ListResponse, OffsetPage
+from core.models.identity_models import User
+from core.pagination import ListResponse
 from core.request_scope import NamespaceScope, require_company, require_namespace
-from core.websocket import WsCommandError
+from core.websocket import (
+    WsCommandError,
+    raise_forbidden,
+    raise_invalid,
+    raise_not_found,
+)
 
 
 class WikiEmptyPayload(StrictBaseModel):
     pass
-
-
-class WikiNamespacesListPayload(StrictBaseModel):
-    limit: int = Field(default=200, ge=1, le=1000)
-    offset: int = Field(default=0, ge=0)
 
 
 class WikiPageIdPayload(StrictBaseModel):
@@ -148,16 +146,7 @@ class WikiMarkdownFileResult(StrictBaseModel):
     file_name: str
 
 
-def _not_found(exc: Exception, detail: str) -> Never:
-    raise WsCommandError("not_found", detail) from exc
 
-
-def _invalid(exc: Exception) -> Never:
-    raise WsCommandError("ws_invalid_payload", str(exc)) from exc
-
-
-def _forbidden(exc: PermissionError | AuthzDenied) -> Never:
-    raise WsCommandError("forbidden", str(exc)) from exc
 
 
 async def _scope(container: WikiContainer) -> NamespaceScope:
@@ -168,7 +157,7 @@ async def _scope(container: WikiContainer) -> NamespaceScope:
             user_id=scope.user_id,
         )
     except AuthzDenied as exc:
-        _forbidden(exc)
+        raise_forbidden(exc)
     return scope
 
 
@@ -231,14 +220,14 @@ async def op_pages_create(
             icon=payload.icon,
         )
     except WikiSchemaError as exc:
-        _invalid(exc)
+        raise_invalid(exc)
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Родительская страница не найдена")
+        raise_not_found(exc, "Родительская страница не найдена")
     except WikiAccessDeniedError as exc:
         raise WsCommandError("forbidden", "Нет прав на создание страницы") from exc
     except ValueError as exc:
-        _invalid(exc)
-    return await wiki_page_response(container, page, user_id=scope.user_id)
+        raise_invalid(exc)
+    return await container.wiki_service.page_response(page, user_id=scope.user_id)
 
 
 async def op_pages_get(
@@ -250,12 +239,14 @@ async def op_pages_get(
     _ = user
     scope = await _scope(container)
     try:
-        page = await load_viewable_page(container, scope, payload.wiki_page_id)
+        page = await container.wiki_service.require_viewable_page(
+            scope.company_id, scope.namespace, payload.wiki_page_id, scope.user_id
+        )
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Страница не найдена")
+        raise_not_found(exc, "Страница не найдена")
     except WikiAccessDeniedError as exc:
         raise WsCommandError("forbidden", "Нет доступа к странице") from exc
-    return await wiki_page_response(container, page, user_id=scope.user_id)
+    return await container.wiki_service.page_response(page, user_id=scope.user_id)
 
 
 async def op_pages_markdown(
@@ -267,9 +258,11 @@ async def op_pages_markdown(
     _ = user
     scope = await _scope(container)
     try:
-        page = await load_viewable_page(container, scope, payload.wiki_page_id)
+        page = await container.wiki_service.require_viewable_page(
+            scope.company_id, scope.namespace, payload.wiki_page_id, scope.user_id
+        )
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Страница не найдена")
+        raise_not_found(exc, "Страница не найдена")
     except WikiAccessDeniedError as exc:
         raise WsCommandError("forbidden", "Нет доступа к странице") from exc
     return WikiMarkdownResponse(
@@ -288,9 +281,11 @@ async def op_pages_markdown_file(
     _ = user
     scope = await _scope(container)
     try:
-        page = await load_viewable_page(container, scope, payload.wiki_page_id)
+        page = await container.wiki_service.require_viewable_page(
+            scope.company_id, scope.namespace, payload.wiki_page_id, scope.user_id
+        )
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Страница не найдена")
+        raise_not_found(exc, "Страница не найдена")
     except WikiAccessDeniedError as exc:
         raise WsCommandError("forbidden", "Нет доступа к странице") from exc
     return WikiMarkdownFileResult(
@@ -337,7 +332,7 @@ async def op_pages_markdown_create(
     except WikiMarkdownError as exc:
         raise WsCommandError("ws_invalid_payload", f"Markdown не разобран: {exc}") from exc
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Родительская страница не найдена")
+        raise_not_found(exc, "Родительская страница не найдена")
     except WikiAccessDeniedError as exc:
         raise WsCommandError("forbidden", "Нет прав на создание страницы") from exc
     return WikiMarkdownImportResponse(page=page, notices=notices)
@@ -363,7 +358,7 @@ async def op_pages_markdown_import(
     except WikiMarkdownError as exc:
         raise WsCommandError("ws_invalid_payload", f"Markdown не разобран: {exc}") from exc
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Страница не найдена")
+        raise_not_found(exc, "Страница не найдена")
     except WikiAccessDeniedError as exc:
         raise WsCommandError("forbidden", "Нет прав на изменение страницы") from exc
     return WikiMarkdownImportResponse(page=page, notices=notices)
@@ -391,14 +386,14 @@ async def op_pages_content_update(
             create_revision=payload.create_revision,
         )
     except WikiSchemaError as exc:
-        _invalid(exc)
+        raise_invalid(exc)
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Страница не найдена")
+        raise_not_found(exc, "Страница не найдена")
     except WikiAccessDeniedError as exc:
         raise WsCommandError("forbidden", "Нет прав на изменение страницы") from exc
     except ValueError as exc:
-        _invalid(exc)
-    return await wiki_page_response(container, page, user_id=scope.user_id)
+        raise_invalid(exc)
+    return await container.wiki_service.page_response(page, user_id=scope.user_id)
 
 
 async def op_pages_properties_update(
@@ -423,10 +418,10 @@ async def op_pages_properties_update(
             is_full_width=payload.is_full_width,
         )
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Страница не найдена")
+        raise_not_found(exc, "Страница не найдена")
     except WikiAccessDeniedError as exc:
         raise WsCommandError("forbidden", "Нет прав на изменение страницы") from exc
-    return await wiki_page_response(container, page, user_id=scope.user_id)
+    return await container.wiki_service.page_response(page, user_id=scope.user_id)
 
 
 async def op_pages_move(
@@ -447,12 +442,12 @@ async def op_pages_move(
             position=payload.position,
         )
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Страница не найдена")
+        raise_not_found(exc, "Страница не найдена")
     except WikiAccessDeniedError as exc:
         raise WsCommandError("forbidden", "Нет прав на перемещение") from exc
     except ValueError as exc:
-        _invalid(exc)
-    return await wiki_page_response(container, page, user_id=scope.user_id)
+        raise_invalid(exc)
+    return await container.wiki_service.page_response(page, user_id=scope.user_id)
 
 
 async def op_pages_move_namespace(
@@ -476,12 +471,12 @@ async def op_pages_move_namespace(
             new_parent_page_id=payload.parent_page_id,
         )
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Страница не найдена")
+        raise_not_found(exc, "Страница не найдена")
     except WikiAccessDeniedError as exc:
         raise WsCommandError("forbidden", "Нет прав на перенос страницы") from exc
     except ValueError as exc:
-        _invalid(exc)
-    return await wiki_page_response(container, page, user_id=scope.user_id)
+        raise_invalid(exc)
+    return await container.wiki_service.page_response(page, user_id=scope.user_id)
 
 
 async def op_pages_remove(
@@ -497,7 +492,7 @@ async def op_pages_remove(
             scope.company_id, scope.namespace, scope.user_id, payload.wiki_page_id
         )
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Страница не найдена")
+        raise_not_found(exc, "Страница не найдена")
     except WikiAccessDeniedError as exc:
         raise WsCommandError("forbidden", "Нет прав на удаление") from exc
 
@@ -515,8 +510,8 @@ async def op_pages_restore(
             scope.company_id, scope.namespace, scope.user_id, payload.wiki_page_id
         )
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Страница не найдена")
-    return await wiki_page_response(container, page, user_id=scope.user_id)
+        raise_not_found(exc, "Страница не найдена")
+    return await container.wiki_service.page_response(page, user_id=scope.user_id)
 
 
 async def op_pages_children_list(
@@ -528,9 +523,11 @@ async def op_pages_children_list(
     _ = user
     scope = await _scope(container)
     try:
-        _ = await load_viewable_page(container, scope, payload.wiki_page_id)
+        _ = await container.wiki_service.require_viewable_page(
+            scope.company_id, scope.namespace, payload.wiki_page_id, scope.user_id
+        )
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Страница не найдена")
+        raise_not_found(exc, "Страница не найдена")
     except WikiAccessDeniedError as exc:
         raise WsCommandError("forbidden", "Нет доступа к странице") from exc
     tree = await container.wiki_service.list_tree(
@@ -555,7 +552,7 @@ async def op_pages_access(
             scope.company_id, scope.namespace, scope.user_id, payload.wiki_page_id
         )
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Страница не найдена")
+        raise_not_found(exc, "Страница не найдена")
     except WikiAccessDeniedError as exc:
         raise WsCommandError("forbidden", "Нет доступа к странице") from exc
 
@@ -577,11 +574,11 @@ async def op_pages_company_visible(
             company_visible=payload.company_visible,
         )
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Страница не найдена")
+        raise_not_found(exc, "Страница не найдена")
     except WikiAccessDeniedError as exc:
         raise WsCommandError("forbidden", "Нет прав на изменение доступа") from exc
     except ValueError as exc:
-        _invalid(exc)
+        raise_invalid(exc)
 
 
 async def op_pages_member_add(
@@ -602,11 +599,11 @@ async def op_pages_member_add(
             relation=payload.relation,
         )
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Страница не найдена")
+        raise_not_found(exc, "Страница не найдена")
     except WikiAccessDeniedError as exc:
         raise WsCommandError("forbidden", "Нет прав на изменение доступа") from exc
     except ValueError as exc:
-        _invalid(exc)
+        raise_invalid(exc)
 
 
 async def op_pages_member_remove(
@@ -626,7 +623,7 @@ async def op_pages_member_remove(
             member_user_id=payload.member_user_id,
         )
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Страница не найдена")
+        raise_not_found(exc, "Страница не найдена")
     except WikiAccessDeniedError as exc:
         raise WsCommandError("forbidden", "Нет прав на изменение доступа") from exc
 
@@ -649,7 +646,7 @@ async def op_pages_public_link(
             permission=payload.permission,
         )
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Страница не найдена")
+        raise_not_found(exc, "Страница не найдена")
     except WikiAccessDeniedError as exc:
         raise WsCommandError("forbidden", "Нет прав на публикацию ссылки") from exc
     if raw_token is None:
@@ -679,7 +676,7 @@ async def op_pages_revisions_list(
             payload.limit,
         )
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Страница не найдена")
+        raise_not_found(exc, "Страница не найдена")
     except WikiAccessDeniedError as exc:
         raise WsCommandError("forbidden", "Нет доступа к странице") from exc
     return ListResponse[WikiRevisionSummary](items=items)
@@ -698,7 +695,7 @@ async def op_revisions_get(
             scope.company_id, scope.namespace, scope.user_id, payload.wiki_revision_id
         )
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Ревизия не найдена")
+        raise_not_found(exc, "Ревизия не найдена")
     except WikiAccessDeniedError as exc:
         raise WsCommandError("forbidden", "Нет доступа к странице") from exc
 
@@ -716,10 +713,10 @@ async def op_revisions_restore(
             scope.company_id, scope.namespace, scope.user_id, payload.wiki_revision_id
         )
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Ревизия не найдена")
+        raise_not_found(exc, "Ревизия не найдена")
     except WikiAccessDeniedError as exc:
         raise WsCommandError("forbidden", "Нет прав на изменение страницы") from exc
-    return await wiki_page_response(container, page, user_id=scope.user_id)
+    return await container.wiki_service.page_response(page, user_id=scope.user_id)
 
 
 async def op_pages_comments_list(
@@ -735,7 +732,7 @@ async def op_pages_comments_list(
             scope.company_id, scope.namespace, scope.user_id, payload.wiki_page_id
         )
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Страница не найдена")
+        raise_not_found(exc, "Страница не найдена")
     except WikiAccessDeniedError as exc:
         raise WsCommandError("forbidden", "Нет доступа к странице") from exc
     return ListResponse[WikiComment](items=items)
@@ -760,7 +757,7 @@ async def op_pages_comment_create(
             parent_comment_id=payload.parent_comment_id,
         )
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Страница не найдена")
+        raise_not_found(exc, "Страница не найдена")
     except WikiAccessDeniedError as exc:
         raise WsCommandError("forbidden", "Нет доступа к странице") from exc
 
@@ -782,7 +779,7 @@ async def op_comments_resolve(
             payload.resolved,
         )
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Комментарий не найден")
+        raise_not_found(exc, "Комментарий не найден")
 
 
 async def op_comments_remove(
@@ -798,7 +795,7 @@ async def op_comments_remove(
             scope.company_id, scope.namespace, scope.user_id, payload.wiki_comment_id
         )
     except WikiPageNotFoundError as exc:
-        _not_found(exc, "Комментарий не найден")
+        raise_not_found(exc, "Комментарий не найден")
 
 
 async def op_search_run(
@@ -864,22 +861,6 @@ async def op_backlinks_list(
         limit=payload.limit,
     )
     return ListResponse[WikiBacklink](items=items)
-
-
-async def op_namespaces_list(
-    payload: WikiNamespacesListPayload,
-    *,
-    user: User,
-    container: WikiContainer,
-) -> OffsetPage[Namespace]:
-    _ = user
-    _ = require_company()
-    rows = await container.namespace_service.list_company_workspaces(limit=1000)
-    items = [namespace for namespace in rows if namespace.name.strip()]
-    page_items = items[payload.offset : payload.offset + payload.limit]
-    return OffsetPage[Namespace](
-        items=page_items, total=len(items), limit=payload.limit, offset=payload.offset
-    )
 
 
 def markdown_file_disposition(file_name: str) -> str:

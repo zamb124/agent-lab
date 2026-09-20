@@ -8,8 +8,7 @@
 from pydantic import Field
 
 from core.config import BaseSettings
-from core.config.loader import load_merged_config
-from core.platform_brand.resolver import resolve_public_base_url
+from core.config.service_settings import ServiceSettingsCache
 
 
 class FrontendSettings(BaseSettings):
@@ -24,35 +23,6 @@ class FrontendSettings(BaseSettings):
     cors_allow_origin_regex: str | None = None
 
 
-_frontend_settings: FrontendSettings | None = None
-
-
-def get_frontend_settings() -> FrontendSettings:
-    """
-    Получает настройки Frontend сервиса.
-
-    Создает FrontendSettings из конфигурации, загружая базовые настройки
-    и добавляя специфичные для Frontend.
-    """
-    global _frontend_settings
-    if _frontend_settings is None:
-        merged_config = load_merged_config(service_name="frontend", silent=True)
-        _frontend_settings = FrontendSettings.model_validate(merged_config)
-
-    return _frontend_settings
-
-
-def get_frontend_public_base_url(host: str | None = None) -> str:
-    """Публичный origin frontend для SEO, каталогов и MCP URL."""
-    if host is not None and str(host).strip():
-        return resolve_public_base_url(str(host).strip()).rstrip("/")
-    base_url = get_frontend_settings().server.platform_public_base_url
-    if base_url is None or base_url.strip() == "":
-        raise ValueError("server.platform_public_base_url must be configured for public frontend URLs")
-    return base_url.rstrip("/")
-
-
-def reset_frontend_settings() -> None:
-    """Сбрасывает настройки (для тестов)"""
-    global _frontend_settings
-    _frontend_settings = None
+_settings_cache = ServiceSettingsCache("frontend", FrontendSettings)
+get_frontend_settings = _settings_cache.get
+reset_frontend_settings = _settings_cache.reset

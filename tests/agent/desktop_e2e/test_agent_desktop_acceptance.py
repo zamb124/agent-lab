@@ -236,9 +236,9 @@ async def test_acc_03_discover_download_matches_local_release(
 ) -> None:
     from pathlib import Path
 
-    from apps.agent.config import reset_agent_settings
     from scripts.agent_build import detect_host_platform
     from tests.agent.fixtures.local_releases import require_local_release_asset_name
+    from tests.agent.fixtures.settings import reset_agent_settings
 
     reset_agent_settings()
     platform_name = detect_host_platform()

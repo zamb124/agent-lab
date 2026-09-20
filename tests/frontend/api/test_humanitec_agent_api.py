@@ -12,8 +12,8 @@ from starlette.websockets import WebSocket
 
 from apps.agent.models import AgentDeviceRecord
 from apps.agent.service import DEVICE_KEY_PREFIX, PAIRING_CODE_PREFIX
-from apps.frontend.config import get_frontend_public_base_url
 from core.models.identity_models import User
+from core.platform_brand.resolver import platform_public_base_url
 from core.utils.tokens import get_token_service
 
 AGENT_API_PREFIX = "/frontend/api/agent"
@@ -250,9 +250,9 @@ async def test_register_success(
         assert body["device_id"] == device_id
         assert isinstance(body["token"], str)
         assert body["platform_mcp_url"] == (
-            f"{get_frontend_public_base_url()}/flows/api/v1/agent/platform-mcp"
+            f"{platform_public_base_url()}/flows/api/v1/agent/platform-mcp"
         )
-        assert body["frontend_base_url"] == get_frontend_public_base_url()
+        assert body["frontend_base_url"] == platform_public_base_url()
         assert body["tunnel_ws_url"] == "ws://system.lvh.me:9004/frontend/api/agent/tunnel"
         assert body["company_id"] == token_data.company_id
 
@@ -359,15 +359,15 @@ async def test_agent_discover(
 ) -> None:
     from pathlib import Path
 
-    from apps.agent.config import reset_agent_settings
     from tests.agent.fixtures.local_releases import require_local_release_asset_name
+    from tests.agent.fixtures.settings import reset_agent_settings
 
     reset_agent_settings()
     _ = require_local_release_asset_name(Path(agent_local_release_artifact))
     response = await frontend_client.get(f"{AGENT_API_PREFIX}/discover")
     assert response.status_code == 200
     body = response.json()
-    assert body["frontend_base_url"] == get_frontend_public_base_url()
+    assert body["frontend_base_url"] == platform_public_base_url()
     assert body["releases"]["ready"] is True
 
 
@@ -391,7 +391,7 @@ async def test_revoke_blocks_tunnel_reconnect(
     from starlette.websockets import WebSocketDisconnect
 
     from apps.agent.service import TOKEN_DENY_PREFIX
-    from apps.agent.tunnel import agent_tunnel_websocket
+    from apps.frontend.api.agent_tunnel import agent_tunnel_websocket
 
     pairing_response = await frontend_client_with_auth.post(f"{AGENT_API_PREFIX}/pairing")
     assert pairing_response.status_code == 200
@@ -517,9 +517,9 @@ async def test_download_redirect_resolves_asset(
 ) -> None:
     from pathlib import Path
 
-    from apps.agent.config import reset_agent_settings
     from scripts.agent_build import detect_host_platform
     from tests.agent.fixtures.local_releases import require_local_release_asset_name
+    from tests.agent.fixtures.settings import reset_agent_settings
 
     reset_agent_settings()
     asset_name = require_local_release_asset_name(Path(agent_local_release_artifact))
@@ -541,8 +541,8 @@ async def test_releases_status_ready(
 ) -> None:
     from pathlib import Path
 
-    from apps.agent.config import reset_agent_settings
     from tests.agent.fixtures.local_releases import require_local_release_asset_name
+    from tests.agent.fixtures.settings import reset_agent_settings
 
     reset_agent_settings()
     _ = require_local_release_asset_name(Path(agent_local_release_artifact))
@@ -560,9 +560,9 @@ async def test_download_redirect_serves_local_artifact(
 ) -> None:
     from pathlib import Path
 
-    from apps.agent.config import reset_agent_settings
     from scripts.agent_build import detect_host_platform
     from tests.agent.fixtures.local_releases import require_local_release_asset_name
+    from tests.agent.fixtures.settings import reset_agent_settings
 
     reset_agent_settings()
     artifact_path = Path(agent_local_release_artifact)
@@ -633,7 +633,7 @@ async def test_agent_tunnel_ping_pong(
 ) -> None:
     from starlette.websockets import WebSocketDisconnect
 
-    from apps.agent.tunnel import agent_tunnel_websocket
+    from apps.frontend.api.agent_tunnel import agent_tunnel_websocket
 
     device_id = f"device-tunnel-{unique_id}"
 

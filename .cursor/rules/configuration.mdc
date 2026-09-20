@@ -120,6 +120,8 @@ settings.auth.jwt_secret_key
 settings.server.get_service_url("flows")
 ```
 
+Сервисный `get_<svc>_settings` / `reset_<svc>_settings` в `apps/<svc>/config.py` — методы одного `core.config.service_settings.ServiceSettingsCache("<svc>", <Svc>Settings)` (`register_platform_settings=True`, если процесс регистрирует их как платформенные через `set_settings`). ENV-каскад применяется pydantic-settings при `model_validate(merged)` — ручные `os.getenv`-оверлеи в `config.py` запрещены. Глобальные (не сервисные) секции вроде `agent` читаются как `get_settings().agent`; `reset` для тестов — `tests/agent/fixtures/settings.py`.
+
 ## Секреты
 
 Только в ENV / секрет-хранилище, не в коммитимом `conf.json`. Прод (GitHub Actions → Helm): `LLM_BOTHUB_API_KEY` / `LLM_OPENROUTER_API_KEY` / `LLM__YANDEX__API_KEY` / `LLM__YANDEX__FOLDER_ID` в GitHub Secrets → Kubernetes Secret `platform-secrets` → ENV `LLM__BOTHUB__API_KEY` / `LLM__OPENROUTER__API_KEY` / `LLM__YANDEX__API_KEY` / `LLM__YANDEX__FOLDER_ID` через `valueFrom.secretKeyRef` в `agentlab.appEnv` (`.github/workflows/deploy.yml`, `deploy/helm/agent-lab/templates/_helpers.tpl`). Пустое ENV не перетирает JSON (`env_ignore_empty`, `remove_env_overridden_values`).

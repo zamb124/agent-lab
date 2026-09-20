@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-from apps.browser.contracts.control_types import BrowserCapabilityError, BrowserControlFeatures
 from apps.browser.contracts.runtime import BrowserInteractor
 from apps.browser.engine.types import (
     BrowserAcquireRequest,
@@ -13,6 +12,7 @@ from apps.browser.engine.types import (
     BrowserFetchResult,
     BrowserPage,
 )
+from core.clients.browser.control_types import BrowserCapabilityError, BrowserControlFeatures
 from core.types import JsonObject
 
 

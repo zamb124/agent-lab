@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import DateTime, Index, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
@@ -11,10 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from core.db.models import Base
 from core.realtime.models import BusProcessingState
 from core.types import JsonObject, JsonValue
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+from core.utils.time import utcnow
 
 
 class PlatformEventLogRow(Base):
@@ -31,10 +28,10 @@ class PlatformEventLogRow(Base):
     causation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=_utcnow
+        DateTime(timezone=True), nullable=False, default=utcnow
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=_utcnow, onupdate=_utcnow
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
     )
 
     __table_args__: tuple[object, ...] = (

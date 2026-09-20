@@ -6,12 +6,17 @@ from typing import Literal
 
 from pydantic import Field
 
-from apps.flows.realtime.operations import company_scope, raise_forbidden
+from apps.flows.realtime.operations import (
+    company_scope,
+)
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.tasks.task_names import TASK_INIT_COMPANY_RESOURCES
 from core.models.base import StrictBaseModel
 from core.models.identity_models import User
 from core.tasks import enqueue
+from core.websocket import (
+    raise_forbidden,
+)
 
 
 class CompanyInitPayload(StrictBaseModel):

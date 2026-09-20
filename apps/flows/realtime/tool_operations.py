@@ -8,9 +8,6 @@ from typing import Literal
 
 from apps.flows.realtime.operations import (
     company_scope,
-    raise_conflict,
-    raise_invalid,
-    raise_not_found,
     require_company_member,
     require_view_tool,
     require_view_tool_or_flow,
@@ -49,6 +46,11 @@ from apps.flows.tools.builtin_specs import builtin_tool_ids
 from core.models.identity_models import User
 from core.pagination import OffsetPage
 from core.types import JsonObject
+from core.websocket import (
+    raise_conflict,
+    raise_invalid,
+    raise_not_found,
+)
 
 
 @dataclass(frozen=True, slots=True)

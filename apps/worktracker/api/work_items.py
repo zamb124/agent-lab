@@ -7,15 +7,6 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from apps.worktracker.dependencies import ContainerDep
-from apps.worktracker.models.api import (
-    WorkItemAssignRequest,
-    WorkItemCommentRequest,
-    WorkItemCommentsList,
-    WorkItemCompleteRequest,
-    WorkItemCreateRequest,
-    WorkItemMoveRequest,
-    WorkItemUpdateRequest,
-)
 from apps.worktracker.realtime.operations import (
     WorkItemAssignPayload,
     WorkItemCommentPayload,
@@ -41,6 +32,15 @@ from apps.worktracker.realtime.operations import (
 from core.context import require_context
 from core.pagination import OffsetPage
 from core.worktracker.models import WorkItem, WorkItemComment, WorkItemKind, WorkItemState
+from core.worktracker.requests import (
+    WorkItemAssignRequest,
+    WorkItemCommentRequest,
+    WorkItemCommentsList,
+    WorkItemCompleteRequest,
+    WorkItemCreateRequest,
+    WorkItemMoveRequest,
+    WorkItemUpdateRequest,
+)
 from core.worktracker.service import WorkItemMineSummary
 
 router = APIRouter(prefix="/work-items", tags=["work-items"])

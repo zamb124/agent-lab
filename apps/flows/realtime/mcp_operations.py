@@ -3,11 +3,6 @@
 from __future__ import annotations
 
 from apps.flows.realtime.operations import (
-    raise_conflict,
-    raise_forbidden,
-    raise_invalid,
-    raise_not_found,
-    raise_upstream,
     require_company_member,
 )
 from apps.flows.src.clients.mcp_client import MCPClient, MCPClientError
@@ -55,6 +50,13 @@ from apps.flows.src.services.mcp_sync import resolve_mcp_client_variables, sync_
 from apps.flows.tools.builtin_specs import require_not_builtin_tool_id
 from core.models.identity_models import User
 from core.pagination import OffsetPage
+from core.websocket import (
+    raise_conflict,
+    raise_forbidden,
+    raise_invalid,
+    raise_not_found,
+    raise_upstream,
+)
 
 
 async def attach_mcp_server_icon(

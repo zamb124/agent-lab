@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Literal
 
 from apps.office.db.models import OfficeDocumentBinding, OfficeDocumentCatalog
 from apps.office.models.api import (
-    OfficeCatalogRagIndexBindingItem,
     OfficeCatalogRagIndexEnableResponse,
     OfficeCatalogRagIndexRebuildResponse,
     OfficeCatalogRagIndexSettingsPatchRequest,
@@ -17,7 +16,6 @@ from apps.office.models.api import (
     OfficeCatalogSemanticSearchRequest,
     OfficeCatalogSemanticSearchResponse,
 )
-from apps.rag_worker.tasks.task_names import RAG_INDEX_OFFICE_CATALOG
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
 from core.config import get_settings
@@ -30,7 +28,6 @@ from core.rag.rag_http_namespace_search import (
     merge_search_request_options,
 )
 from core.rag.search_options_resolver import resolve_platform_search_options
-from core.tasks import enqueue
 from core.types import JsonObject, JsonValue, require_json_object
 
 if TYPE_CHECKING:
@@ -268,39 +265,40 @@ class OfficeCatalogRagIndexService:
             include_subcatalogs=catalog.rag_index_include_subcatalogs,
         )
 
-    async def _enqueue_catalog_rebuild(
+    async def _reindex_catalog_bindings(
         self,
         catalog: OfficeDocumentCatalog,
         *,
         company_id: str,
         workspace_namespace: str,
         user_id: str,
-    ) -> str:
+    ) -> tuple[str | None, int]:
+        """Ставит каждый документ каталога в очередь RAG через владельца индекса.
+
+        Возвращает task_id последнего поставленного документа и число поставленных.
+        """
         bindings = await self._document_binding_repository.list_by_company_namespace_and_catalog(
             company_id,
             workspace_namespace,
             catalog.catalog_id,
         )
-        items = [
-            OfficeCatalogRagIndexBindingItem(
-                file_id=binding.file_id,
-                title=binding.title,
-                file_category=binding.file_category,
+        last_task_id: str | None = None
+        enqueued = 0
+        for binding in bindings:
+            response = await self.index_binding(
+                binding,
+                scope_company_id=company_id,
+                scope_workspace_namespace=workspace_namespace,
+                scope_user_id=user_id,
             )
-            for binding in bindings
-        ]
-        rag_namespace_id = self.rag_namespace_id(catalog.catalog_id)
-        task = await enqueue(
-            RAG_INDEX_OFFICE_CATALOG,
-            company_id=company_id,
-            workspace_namespace=workspace_namespace,
-            catalog_id=catalog.catalog_id,
-            catalog_title=catalog.title,
-            user_id=user_id,
-            rag_namespace_id=rag_namespace_id,
-            items=[item.model_dump() for item in items],
-        )
-        return task.task_id
+            if response is None:
+                continue
+            task_id = response.get("task_id")
+            if not isinstance(task_id, str) or task_id.strip() == "":
+                raise ValueError(f"RAG index_file без task_id для file_id={binding.file_id}")
+            last_task_id = task_id
+            enqueued += 1
+        return last_task_id, enqueued
 
     async def patch_rag_index_settings(
         self,
@@ -370,7 +368,8 @@ class OfficeCatalogRagIndexService:
         if not searchable_catalog_ids:
             raise ValueError("RAG-индекс для каталога не включён")
 
-        last_task_id = ""
+        last_task_id: str | None = None
+        enqueued_total = 0
         for searchable_catalog_id in searchable_catalog_ids:
             searchable_catalog = await self._get_catalog_or_raise(
                 searchable_catalog_id,
@@ -379,21 +378,24 @@ class OfficeCatalogRagIndexService:
             )
             if not searchable_catalog.rag_index_enabled:
                 continue
-            last_task_id = await self._enqueue_catalog_rebuild(
+            task_id, enqueued = await self._reindex_catalog_bindings(
                 searchable_catalog,
                 company_id=company_id,
                 workspace_namespace=workspace_namespace,
                 user_id=user_id,
             )
+            if task_id is not None:
+                last_task_id = task_id
+            enqueued_total += enqueued
             _ = await self._catalog_repository.set_rag_index_enabled(
                 searchable_catalog.catalog_id,
                 company_id,
                 workspace_namespace,
                 enabled=True,
             )
-        if last_task_id == "":
-            raise ValueError("RAG-индекс для каталога не включён")
-        return OfficeCatalogRagIndexRebuildResponse(task_id=last_task_id)
+        return OfficeCatalogRagIndexRebuildResponse(
+            task_id=last_task_id, enqueued_documents=enqueued_total
+        )
 
     async def get_status(self, catalog_id: str) -> OfficeCatalogRagIndexStatusResponse:
         company_id, workspace_namespace, _user_id = self._require_context()

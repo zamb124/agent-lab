@@ -12,7 +12,7 @@ SQLAlchemy модели БД `platform_secrets`.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import override
 
 from sqlalchemy import (
@@ -28,10 +28,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from core.db.models import Base
 from core.types import JsonArray, JsonObject
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+from core.utils.time import utcnow
 
 
 class SecretVariableRow(Base):
@@ -50,9 +47,9 @@ class SecretVariableRow(Base):
     groups: Mapped[JsonArray] = mapped_column(JSONB, nullable=False, default=list)
     value_payload: Mapped[JsonObject | None] = mapped_column(JSONB, nullable=True)
     value_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
 
     __table_args__: tuple[Index, ...] = (
@@ -80,7 +77,7 @@ class SecretVariableVersionRow(Base):
     groups: Mapped[JsonArray] = mapped_column(JSONB, nullable=False, default=list)
     value_payload: Mapped[JsonObject | None] = mapped_column(JSONB, nullable=True)
     value_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     __table_args__: tuple[Index, ...] = (
         Index("ix_secret_variable_versions_company", "company_id"),

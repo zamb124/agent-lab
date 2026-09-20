@@ -30,7 +30,7 @@ from core.rag.upload_profile_binding import UploadProfileBinding
 from core.types import JsonObject, JsonValue, require_json_object
 
 # S3ClientFactory используется через базовый класс BaseRAGProvider
-from core.utils.slug import generate_slug
+from core.utils.slug import slugify
 
 from ..base_provider import BaseRAGProvider, validate_metadata_filters
 
@@ -90,7 +90,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
             name: Имя namespace (используется как slug если slug не передан)
             description: Описание namespace
         """
-        slug = generate_slug(name, add_hash=True)
+        slug = slugify(name, max_length=47, hash_suffix=True)
 
         payload: JsonObject = {
             "name": name,

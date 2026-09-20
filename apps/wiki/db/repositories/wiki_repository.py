@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime, timezone
 
 from sqlalchemy import Select, delete, func, select, update
 
@@ -36,10 +35,7 @@ from apps.wiki.models.domain import (
 )
 from core.db.utils import get_rowcount
 from core.types import JsonObject, require_json_object
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+from core.utils.time import utcnow
 
 
 def _content_to_json(content: ProseMirrorNode) -> JsonObject:
@@ -403,7 +399,7 @@ class WikiRepository:
             row.link_permission = page.link_permission.value
             row.last_edited_by_user_id = page.last_edited_by_user_id
             row.revision_count = page.revision_count
-            row.updated_at = _utcnow()
+            row.updated_at = utcnow()
             await session.commit()
             await session.refresh(row)
             return _row_to_page(row)
@@ -429,7 +425,7 @@ class WikiRepository:
                     link_token_hash=link_token_hash,
                     link_enabled=link_enabled,
                     link_permission=link_permission.value,
-                    updated_at=_utcnow(),
+                    updated_at=utcnow(),
                 )
             )
             _ = await session.execute(stmt)
@@ -483,7 +479,7 @@ class WikiRepository:
                     namespace=target_namespace,
                     root_page_id=root_page_id,
                     depth=WikiPageRow.depth + depth_shift,
-                    updated_at=_utcnow(),
+                    updated_at=utcnow(),
                 )
             )
             _ = await session.execute(stmt)
@@ -547,7 +543,7 @@ class WikiRepository:
                     parent_page_id=parent_page_id,
                     root_page_id=root_page_id,
                     position=position,
-                    updated_at=_utcnow(),
+                    updated_at=utcnow(),
                 )
             )
             _ = await session.execute(stmt)
@@ -588,7 +584,7 @@ class WikiRepository:
                     WikiPageRow.namespace == namespace,
                     WikiPageRow.wiki_page_id.in_(page_ids),
                 )
-                .values(deleted_at=_utcnow())
+                .values(deleted_at=utcnow())
             )
             _ = await session.execute(stmt)
             await session.commit()
@@ -898,7 +894,7 @@ class WikiRepository:
             row = (await session.execute(stmt)).scalar_one_or_none()
             if row is None:
                 return None
-            row.resolved_at = _utcnow() if resolved_by_user_id is not None else None
+            row.resolved_at = utcnow() if resolved_by_user_id is not None else None
             row.resolved_by_user_id = resolved_by_user_id
             await session.commit()
             await session.refresh(row)

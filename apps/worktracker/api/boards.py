@@ -7,7 +7,6 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from apps.worktracker.dependencies import ContainerDep
-from apps.worktracker.models.api import BoardCreateRequest, BoardUpdateRequest
 from apps.worktracker.realtime.operations import (
     BoardIdPayload,
     BoardsListPayload,
@@ -20,6 +19,7 @@ from apps.worktracker.realtime.operations import (
 from core.context import require_context
 from core.pagination import OffsetPage
 from core.worktracker.models import Board
+from core.worktracker.requests import BoardCreateRequest, BoardUpdateRequest
 
 router = APIRouter(prefix="/boards", tags=["boards"])
 

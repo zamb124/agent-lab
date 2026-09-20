@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from apps.flows.realtime.operations import raise_invalid, require_company_member
+from apps.flows.realtime.operations import (
+    require_company_member,
+)
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.registry_contracts import (
     RegistryCatalogPayload,
@@ -21,6 +23,9 @@ from core.platform_brand.resolver import (
     resolve_context_host,
 )
 from core.types import JsonObject
+from core.websocket import (
+    raise_invalid,
+)
 
 _LLM_CAPABILITY_VALUES = {
     AICapability.LLM_CHAT.value,

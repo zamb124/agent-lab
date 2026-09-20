@@ -9,13 +9,13 @@ from typing import cast
 
 from sqlalchemy import text
 
-from apps.worktracker.authz.tuples import (
-    work_queue_company_link,
-    work_queue_owner_tuple,
-)
 from apps.worktracker.container import get_worktracker_container
 from core.config import get_settings
 from core.logging import get_logger
+from core.worktracker.authz_tuples import (
+    work_queue_company_link,
+    work_queue_owner_tuple,
+)
 
 logger = get_logger(__name__)
 

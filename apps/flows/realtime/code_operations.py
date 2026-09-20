@@ -14,11 +14,8 @@ from pathlib import Path
 from types import FrameType, FunctionType, MethodType, ModuleType, TracebackType
 from typing import TypedDict, cast
 
-from apps.flows.errors import FlowsNotFoundError
 from apps.flows.realtime.operations import (
     inline_tools_list,
-    raise_invalid,
-    raise_not_found,
     require_company_member,
     require_view_flow,
 )
@@ -71,6 +68,7 @@ from core.clients.capability_gateway_client import CapabilityGatewayClient
 from core.context import get_context
 from core.docs.models import CodeTemplate
 from core.errors import CodeExecutionRuntimeError, ImanBaseError
+from core.errors.boundary import PlatformNotFoundError
 from core.files.file_ref import FileRef
 from core.flow_ui.document import FlowUIDocument
 from core.flow_ui.templates import default_chat_document
@@ -83,6 +81,10 @@ from core.types import (
     parse_json_object,
     require_json_array,
     require_json_object,
+)
+from core.websocket import (
+    raise_invalid,
+    raise_not_found,
 )
 
 logger = get_logger(__name__)
@@ -460,7 +462,7 @@ async def op_flows_code_editor_state(
     scope = await require_view_flow(container, payload.flow_id)
     runtime_flow = await container.flow_factory.get_flow(payload.flow_id, payload.branch_id)
     if runtime_flow is None:
-        raise_not_found(FlowsNotFoundError(f"Flow not found: {payload.flow_id}"))
+        raise_not_found(PlatformNotFoundError(f"Flow not found: {payload.flow_id}"))
 
     task_id = str(uuid.uuid4())
     context_id = str(uuid.uuid4())
@@ -519,7 +521,7 @@ async def op_flows_code_flow_functions(
         spec = importlib.util.find_spec(module_path)
         if spec is None or spec.origin is None:
             raise_not_found(
-                FlowsNotFoundError(f"Module apps.flows.bundles.{flow_id}.functions not found")
+                PlatformNotFoundError(f"Module apps.flows.bundles.{flow_id}.functions not found")
             )
         source = Path(spec.origin).read_text(encoding="utf-8")
         tree = ast.parse(source, filename=spec.origin)
@@ -543,7 +545,7 @@ async def op_flows_code_flow_functions(
         )
     except ModuleNotFoundError:
         raise_not_found(
-            FlowsNotFoundError(f"Module apps.flows.bundles.{flow_id}.functions not found")
+            PlatformNotFoundError(f"Module apps.flows.bundles.{flow_id}.functions not found")
         )
     except (OSError, SyntaxError) as exc:
         raise_invalid(exc)
@@ -563,9 +565,9 @@ async def op_flows_code_tool_source(
     registry.register_builtin_tools()
     tool = registry.get(tool_path)
     if tool is None:
-        raise_not_found(FlowsNotFoundError(f"Unknown builtin tool_id: {tool_path}"))
+        raise_not_found(PlatformNotFoundError(f"Unknown builtin tool_id: {tool_path}"))
     if not isinstance(tool, FunctionTool):
-        raise_not_found(FlowsNotFoundError(f"Source not available for tool_id: {tool_path}"))
+        raise_not_found(PlatformNotFoundError(f"Source not available for tool_id: {tool_path}"))
     return SourceResponse(path=tool_path, source=tool.get_source_code())
 
 

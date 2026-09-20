@@ -7,7 +7,7 @@ Google Workspace SA: token_type=service_account, access_token=Fernet(SA JSON).
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import uuid4
 
 from core.ai.company_settings import decrypt_secret, encrypt_secret
@@ -30,6 +30,7 @@ from core.integrations.repository import IntegrationCredentialRepository
 from core.logging import get_logger
 from core.models.base import StrictBaseModel
 from core.types import JsonObject, parse_json_object
+from core.utils.time import utcnow
 
 logger = get_logger(__name__)
 
@@ -104,8 +105,6 @@ def _optional_impersonate_email(metadata: JsonObject) -> str | None:
     return stripped
 
 
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def _validate_service_account_json(service_account_json: str) -> str:
@@ -215,7 +214,7 @@ class CompanyIntegrationCredentialService:
 
         sa_json = _validate_service_account_json(payload.service_account_json)
         impersonate = _normalize_impersonate_email(payload.impersonate_email)
-        now = _utcnow()
+        now = utcnow()
         existing = await self._repository.get_by_user_provider_service(
             company_id=company_id,
             user_id=COMPANY_INTEGRATION_USER_ID,

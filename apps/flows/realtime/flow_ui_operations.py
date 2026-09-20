@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from apps.flows.realtime.operations import (
     FlowsEmptyPayload,
-    raise_upstream,
     require_company_member,
     require_edit_flow,
 )
@@ -20,6 +19,9 @@ from core.flow_ui.templates import FlowUITemplate, FlowUITemplatesPayload, flow_
 from core.models.identity_models import User
 from core.pagination import OffsetPage
 from core.types import JsonObject
+from core.websocket import (
+    raise_upstream,
+)
 
 
 async def op_flows_flow_ui_schema(

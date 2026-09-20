@@ -6,11 +6,11 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from apps.flows.config import get_settings
 from apps.idle_worker.container import get_container
 from apps.idle_worker.tasks.task_names import TASK_SPAN_BILLING_SETTLEMENT_TICK
 from core.billing.settlement_rules import SettlementRulesDocument
 from core.billing.span_billing_settlement import SpanBillingSettlement
+from core.config import get_settings
 from core.context import Context, set_context
 from core.logging import get_logger
 from core.logging.attributes import (

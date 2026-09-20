@@ -7,7 +7,6 @@ from apps.guest_runtime.db.repository import GuestRuntimeRepository
 from apps.guest_runtime.services.farm_service import GuestFarmService
 from apps.guest_runtime.services.lease_store import GuestLeaseStore
 from core.clients.files_client import FilesClient
-from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.container import BaseContainer, ContainerRegistry, lazy
 from core.logging import get_logger
@@ -17,13 +16,6 @@ logger = get_logger(__name__)
 
 class GuestRuntimeContainer(BaseContainer):
     """Composition root фермы guest_runtime."""
-
-    @lazy
-    def redis_client(self) -> RedisClient:
-        redis_url = get_settings().database.redis_url
-        if redis_url.strip() == "":
-            raise ValueError("database.redis_url is required for guest_runtime")
-        return RedisClient(redis_url)
 
     @lazy
     def guest_runtime_repository(self) -> GuestRuntimeRepository:

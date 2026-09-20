@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from apps.worktracker.authz.tuples import (
+from core.authz.models import AuthzObject, AuthzSubject, AuthzTuple
+from core.authz.service import AuthzService
+from core.authz.types import AuthzObjectType, AuthzRelation, AuthzSubjectKind
+from core.worktracker.authz_tuples import (
     work_queue_company_link,
     work_queue_member_tuple,
     work_queue_owner_tuple,
 )
-from core.authz.models import AuthzObject, AuthzSubject, AuthzTuple
-from core.authz.service import AuthzService
-from core.authz.types import AuthzObjectType, AuthzRelation, AuthzSubjectKind
 from core.worktracker.queue_access import WorkQueueMemberRelation
 
 _QUEUE_RELATIONS: tuple[AuthzRelation, ...] = (

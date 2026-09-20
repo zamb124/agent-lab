@@ -25,7 +25,8 @@ alwaysApply: true
 - `apps/<svc>/realtime/operations.py` — `async def op_<entity>_<verb>(payload, *, user, container) -> Result | None`; один `op_*` на verb, вся бизнес-логика внутри или в `services/`.
 - `apps/<svc>/realtime/command_router.py` — `<SVC>_OPERATIONS: {canonical_type → Operation(payload_model, fn)}` (`core/websocket/operation.py`); регистрация на старте `register_service_operations(catalog, get_container)`.
 - REST-обвязка в `apps/<svc>/api/**` собирает тот же Pydantic payload и зовёт тот же `op_*`; path-id обязан совпасть с полем payload. Twin-модели `_FooBody`, ручная сборка `OffsetPage`/`{"status"}` запрещены.
-- Ошибки в `op_*` — только `WsCommandError` (WS → `*_failed`, REST → HTTP по `WS_COMMAND_ERROR_HTTP_STATUS`); `HTTPException` внутри `op_*` запрещён.
+- Ошибки в `op_*` — только `WsCommandError` (WS → `*_failed`, REST → HTTP по `WS_COMMAND_ERROR_HTTP_STATUS`); `HTTPException` внутри `op_*` запрещён. Исход границы поднимают только хелперы `core.websocket.raise_forbidden` / `raise_not_found(exc, detail=None)` / `raise_invalid` / `raise_conflict` / `raise_internal` / `raise_upstream` / `raise_unavailable` — локальные `_forbidden`/`_not_found` в сервисах запрещены. Доменные ошибки `services/` — `core/errors/boundary.py` (`PlatformNotFoundError`, `PlatformConflictError`, `PlatformAccessDeniedError`).
+- Общие для нескольких сервисов `op_*` живут в `core/`: picker пространств — `core/namespace/operations.py::op_namespaces_list` (`NamespacesListPayload{limit, offset, kinds}`, Check `company` viewer, `OffsetPage[Namespace]`) регистрируется в каталогах office/rag/wiki; CRM держит свой `op_namespaces_list` только потому, что отдаёт `NamespaceResponse` с integration badges.
 - TaskIQ — только heavy jobs (STT, индексация, импорт), не транспорт команды.
 
 Эталон 100% симметрии и порядок добавления новой команды — **`sync.mdc`** § «Command-First».
@@ -100,6 +101,8 @@ WS `*_failed`: те же поля мерджатся в `payload` рядом с 
 ## Dependency Injection
 
 ### Контейнер и `@lazy`
+
+`BaseContainer` уже даёт `redis_client` (один `RedisClient` на процесс из `database.redis_url`), `service_client`, `namespace_service`, `authz_service` и репозитории shared БД — сервисный контейнер их не переопределяет.
 
 `BaseContainer` (`core/container/base.py`) с декоратором `@lazy` — кешированный property. Каждый сервис наследует и добавляет свои `@lazy`. Singleton — `get_<svc>_container()` на процесс; при старте `create_service_app` кладёт его в `app.state.container`.
 

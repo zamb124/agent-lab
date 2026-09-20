@@ -2,7 +2,7 @@
  * Office Namespaces — рабочие пространства компании.
  *
  * Backend (`/documents/api/v1/namespaces`):
- *   GET  /                   → OffsetPage[OfficeNamespaceItem] { items, total, limit, offset }
+ *   GET  /                   → OffsetPage[Namespace] { items, total, limit, offset }
  *   POST /                   → OfficeNamespaceCreateResponse { name, company_id, description, is_default }
  *
  * Templates: BFF проксирует CRM:
