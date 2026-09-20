@@ -43,7 +43,6 @@ TEST_HTTP_PORTS = {
     9023,
     9024,
     9025,
-    19000,
 }
 
 TEST_GRANIAN_APPS = (
@@ -150,9 +149,16 @@ def _runtime_dir_from_command(command: str) -> Path | None:
     return None
 
 
+# Порт-форварды docker compose (Centrifugo :19000, Postgres, Redis, MinIO) держит Docker Desktop:
+# его процессы — не stale-тест, их убийство валит весь compose-стек.
+_DOCKER_COMMAND_MARKERS: tuple[str, ...] = ("Docker.app", "com.docker.", "docker-proxy")
+
+
 def _candidate_reason(process: psutil.Process, ports_by_pid: dict[int, set[int]]) -> str | None:
     command = _command(process)
     if not command:
+        return None
+    if any(marker in command for marker in _DOCKER_COMMAND_MARKERS):
         return None
 
     ports = ports_by_pid.get(process.pid)
