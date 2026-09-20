@@ -159,7 +159,8 @@ async def test_company_members_lists_company_from_shared_storage(
             headers=auth_headers_system,
         )
         assert response.status_code == 200
-        rows = response.json()
+        payload = response.json()
+        rows = payload["items"]
         assert isinstance(rows, list)
         member_ids = {row["user_id"] for row in rows}
         if system_user_id in member_ids:

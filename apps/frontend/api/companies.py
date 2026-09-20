@@ -152,6 +152,7 @@ async def create_company(
         metadata={"initialization_status": "pending"},
     )
 
+    _ = await company_repo.set(company)
     user.companies[company.company_id] = ["owner"]
     user.active_company_id = company.company_id
     _ = await set_company_member_roles(

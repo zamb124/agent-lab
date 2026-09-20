@@ -411,11 +411,10 @@ class CodeAgentSourceService:
             )
         )
         ensured = await self._documents.ensure_catalog_path(segments)
+        # Дерево исходников создаётся и до сохранения ноды в графе (редактор ещё не нажал
+        # «сохранить»): catalog_id закрепляем на ноде только когда она уже в конфиге.
         node = await self._find_node(flow_id, node_id, branch_id)
-        if node is None:
-            raise LookupError(f"code_agent node not found: {node_id}")
-        stored_catalog_id = _node_string(node, "catalog_id")
-        if stored_catalog_id != ensured.catalog_id:
+        if node is not None and _node_string(node, "catalog_id") != ensured.catalog_id:
             await self._patch_node(
                 flow,
                 node_id=node_id,

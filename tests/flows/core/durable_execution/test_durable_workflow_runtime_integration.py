@@ -13,7 +13,7 @@ from sqlalchemy import select, update
 from apps.flows.src.a2a.task_projection_service import A2ATaskProjectionService
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.db.a2a_task_repository import A2ATaskRepository
-from apps.flows.src.db.models import ActivityAttempts, utc_now
+from apps.flows.src.db.models import ActivityAttempts
 from apps.flows.src.durable_execution import (
     ActivityLifecyclePayload,
     ActivityStatus,
@@ -46,6 +46,7 @@ from core.errors import FlowPrematureCompletionError
 from core.flow_ui.templates import default_chat_document
 from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
+from core.utils.time import utcnow
 
 pytestmark = [
     pytest.mark.integration,
@@ -1238,7 +1239,7 @@ async def test_idempotent_started_activity_retries_only_after_lease_expiry(
         _ = await session.execute(
             update(ActivityAttempts)
             .where(ActivityAttempts.activity_attempt_id == f"{activity_id}:attempt:1")
-            .values(lease_until=utc_now() - timedelta(seconds=1))
+            .values(lease_until=utcnow() - timedelta(seconds=1))
         )
         await session.commit()
 

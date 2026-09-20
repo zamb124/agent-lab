@@ -13,7 +13,7 @@ from enum import StrEnum
 import pytest
 from pydantic import BaseModel, Field
 
-from apps.crm.services import crm_entity_events as _crm_entity_events
+from apps.crm import events as _crm_events
 from apps.flows.src.models import FlowConfig, TriggerType
 from apps.flows.src.services.platform_event_consumer import PlatformEventConsumerService
 from apps.flows.src.triggers.handlers.platform_event import (
@@ -37,7 +37,7 @@ from core.worktracker import events as _worktracker_events
 from core.worktracker.events import WORK_ITEM_COMMENT_CREATED
 from tests.flows.conftest import persist_owned_flow
 
-_ = (_crm_entity_events, _worktracker_events)
+_ = (_crm_events, _worktracker_events)
 
 
 async def _await_completed_state(container, session_id: str, *, timeout_sec: float = 20.0):

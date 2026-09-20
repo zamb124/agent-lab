@@ -7,7 +7,7 @@ import asyncio
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from apps.crm.services import crm_entity_events as _crm_entity_events
+from apps.crm import events as _crm_events
 from core.config import get_settings
 from core.events import (
     PLATFORM_EVENT_CATALOG_KEY,
@@ -27,7 +27,7 @@ from core.events.redis_client import events_redis_client
 from core.worktracker import events as _worktracker_events
 from tests.fixtures.platform_events import initial_platform_events_cursor, platform_events_listener
 
-_ = (_crm_entity_events, _worktracker_events)
+_ = (_crm_events, _worktracker_events)
 
 class _ProbePayload(BaseModel):
     probe_id: str
@@ -71,7 +71,7 @@ async def test_publish_to_users_delivers_one_stream_entry(unique_id: str) -> Non
         await publish_event_to_users(
             [f"u1_{unique_id}", f"u2_{unique_id}"],
             event_type,
-            {"marker": marker},
+            {"marker": marker, "title": "bus", "message": marker, "kind": "info", "priority": "normal", "data": {}},
             company_id="system",
         )
         events = await receive(event_type, f"u2_{unique_id}", 3.0)

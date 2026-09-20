@@ -27,9 +27,11 @@ from pathlib import Path
 from typing import TypeVar
 
 from fastapi import APIRouter, FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import ValidationError as PydanticValidationError
 
 from core.api.auth import router as core_auth_router
 from core.api.calendar import router as core_calendar_router
@@ -406,6 +408,22 @@ def create_service_app(
         return _boundary_error_response("forbidden", str(exc))
 
     _ = _platform_access_denied_handler
+
+    @app.exception_handler(PydanticValidationError)
+    async def _payload_validation_handler(
+        _request: Request, exc: PydanticValidationError
+    ) -> JSONResponse:
+        """REST-зеркало собирает payload `op_*` вручную — ошибка модели равна ошибке валидации запроса."""
+        return JSONResponse(
+            status_code=422,
+            content={
+                "error_code": "ws_invalid_payload",
+                "error_detail": str(exc),
+                "detail": jsonable_encoder(exc.errors(include_url=False)),
+            },
+        )
+
+    _ = _payload_validation_handler
 
     @app.exception_handler(Exception)
     async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:

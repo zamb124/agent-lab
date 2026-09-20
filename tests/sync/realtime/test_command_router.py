@@ -47,8 +47,9 @@ def test_register_sync_ws_commands_command_count_is_stable() -> None:
     assert len(sync_handlers) == len(SYNC_OPERATIONS)
 
 
-def test_each_operation_canonical_type_matches_key() -> None:
-    """SYNC_OPERATIONS ключ должен совпадать с Operation.canonical_type."""
+def test_each_operation_key_is_sync_command_type() -> None:
+    """Ключ SYNC_OPERATIONS — канонический тип команды владельца sync."""
     for canonical, op in SYNC_OPERATIONS.items():
-        assert canonical == op.canonical_type
+        assert canonical.startswith("sync/")
         assert canonical.endswith("_requested")
+        assert op.fn.__name__.startswith("op_")

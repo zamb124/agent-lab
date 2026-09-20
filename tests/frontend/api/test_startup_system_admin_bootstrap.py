@@ -38,6 +38,13 @@ class _InMemoryRepo:
         items = list(self._entities.values())
         return items[offset:offset + limit]
 
+    async def put_member_roles(self, company_id: str, user_id: str, roles: list[str]):
+        company = self._entities.get(company_id)
+        if not isinstance(company, Company):
+            raise ValueError(f"company not found: {company_id}")
+        company.members[user_id] = list(roles)
+        return company
+
     async def find_all_by_email_ci(self, email: str):
         norm = email.strip().lower()
         if not norm:

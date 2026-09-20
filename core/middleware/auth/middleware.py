@@ -453,15 +453,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if company is None:
             raise HTTPException(status_code=403, detail=f"Company {internal.company_id} not found")
         user = await container.user_repository.get(internal.user_id)
-        if user is not None and company.company_id not in user.companies:
-            # Runtime-идентичность (публикатор событий, воркеры) получает guest-членство
-            # в каждой компании, от имени которой работает; человек вне компании — 403.
-            if user.attributes.get("runtime_identity") is not True:
-                raise HTTPException(
-                    status_code=403,
-                    detail=f"User {internal.user_id} is not a member of company {company.company_id}",
-                )
-            user = None
         if user is None:
             user = await ensure_persisted_runtime_user(
                 container,
@@ -471,7 +462,19 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 roles=["guest"],
                 attributes={"kind": "internal_platform_context"},
             )
-        roles = resolve_user_roles_in_company(user, company)
+        is_member = company.company_id in user.companies or user.user_id in company.members
+        if is_member:
+            roles = resolve_user_roles_in_company(user, company)
+        elif user.attributes.get("runtime_identity") is True:
+            # Runtime-идентичность (публикатор событий, воркеры, system-init) работает от имени
+            # любой компании; права решает OpenFGA (tuples пишет владелец операции), roster и
+            # FGA здесь не трогаем — иначе guest затёр бы owner/admin, выданные инициализацией.
+            roles = ["guest"]
+        else:
+            raise HTTPException(
+                status_code=403,
+                detail=f"User {internal.user_id} is not a member of company {company.company_id}",
+            )
         auth_token = get_token_service().create_token(
             user_id=user.user_id,
             company_id=company.company_id,
