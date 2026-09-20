@@ -1,10 +1,6 @@
 /**
- * ProviderSelector — выбор активного RAG-провайдера на странице настроек.
- *
- * Чтение списка и текущего провайдера — из slice фабрики `rag/providers`
- * (`useOp`); переключение — `useOp('rag/provider_switch').run({ providerName })`.
- * Список загружается фабрикой при первом mount (sidebar или эта страница —
- * что окажется раньше).
+ * ProviderSelector — список включённых RAG-провайдеров и текущего
+ * `rag.default_provider` из slice `rag/providers`.
  */
 
 import { html, css } from 'lit';
@@ -57,22 +53,6 @@ export class ProviderSelector extends PlatformElement {
                 color: var(--text-tertiary);
             }
             .badge.active { background: var(--accent); color: var(--platform-btn-primary-text); }
-            .switch-btn {
-                background: var(--glass-solid-strong);
-                border: 1px solid var(--glass-border-medium);
-                color: var(--text-primary);
-                padding: var(--space-1) var(--space-3);
-                border-radius: var(--radius-md);
-                font-size: var(--text-xs);
-                cursor: pointer;
-                transition: var(--motion-transition-interactive);
-            }
-            .switch-btn:hover:not(:disabled) {
-                background: var(--accent-subtle);
-                border-color: var(--accent);
-                color: var(--accent);
-            }
-            .switch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
             .empty { color: var(--text-tertiary); font-size: var(--text-sm); }
         `,
     ];
@@ -80,25 +60,18 @@ export class ProviderSelector extends PlatformElement {
     constructor() {
         super();
         this._providers = this.useOp('rag/providers');
-        this._switch = this.useOp('rag/provider_switch');
     }
 
     connectedCallback() {
         super.connectedCallback();
         if (!this._providers.lastResult && !this._providers.busy) {
-            this._providers.run(null);
+            this._providers.run({});
         }
-    }
-
-    _onSelect(name) {
-        if (name === this._providers.state.current) return;
-        this._switch.run({ providerName: name });
     }
 
     render() {
         const items = this._providers.state.items;
         const current = this._providers.state.current;
-        const switching = this._switch.busy;
 
         if (this._providers.busy && items.length === 0) {
             return html`<div class="empty"><glass-spinner></glass-spinner></div>`;
@@ -118,11 +91,7 @@ export class ProviderSelector extends PlatformElement {
                                 ${p.is_default ? html`<span class="badge">${this.t('settings_view.providers_default_badge')}</span>` : ''}
                                 ${isActive
                                     ? html`<span class="badge active">${this.t('settings_view.providers_active_badge')}</span>`
-                                    : html`<button class="switch-btn"
-                                                   ?disabled=${switching}
-                                                   @click=${() => this._onSelect(p.name)}>
-                                        ${this.t('settings_view.providers_switch_button')}
-                                    </button>`}
+                                    : ''}
                             </div>
                         </div>
                     `;

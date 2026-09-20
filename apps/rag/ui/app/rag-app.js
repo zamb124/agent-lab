@@ -2,7 +2,7 @@
  * RagApp — корневой компонент сервиса RAG.
  *
  * Полностью event-driven canon: все доменные сущности описаны фабриками
- * в `events/resources/*.resource.js` и регистрируются через `static factories`.
+ * в `@platform/lib/events/resources/rag-*.resource.js` и регистрируются через `static factories`.
  * Никаких ручных slice/effect/reducer/selectors. Маршрутизация — через
  * core router.effect (`createRouterEffect`), SPA сервится по `/rag`.
  *
@@ -18,16 +18,15 @@ import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
 
-import { providersResource, providerSwitchOp } from '../events/resources/providers.resource.js';
-import { namespacesResource, namespaceCreateForm } from '../events/resources/namespaces.resource.js';
+import { providersResource } from '@platform/lib/events/resources/rag-providers.resource.js';
+import { namespacesResource, namespaceCreateForm } from '@platform/lib/events/resources/rag-namespaces.resource.js';
 import {
     documentsResource,
     documentUploadOp,
     documentRemoveOp,
-    documentIngestTextOp,
-} from '../events/resources/documents.resource.js';
-import { documentStatusResource } from '../events/resources/document-status.resource.js';
-import { searchOp, searchDefaultsOp } from '../events/resources/search.resource.js';
+} from '@platform/lib/events/resources/rag-documents.resource.js';
+import { documentStatusResource } from '@platform/lib/events/resources/rag-document-status.resource.js';
+import { searchOp, searchDefaultsOp } from '@platform/lib/events/resources/rag-search.resource.js';
 import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 import { buildRagAssistantContext } from '../_helpers/platform-assistant-context.js';
@@ -76,13 +75,11 @@ export class RagApp extends PlatformApp {
 
     static factories = [
         providersResource,
-        providerSwitchOp,
         namespacesResource,
         namespaceCreateForm,
         documentsResource,
         documentUploadOp,
         documentRemoveOp,
-        documentIngestTextOp,
         documentStatusResource,
         searchOp,
         searchDefaultsOp,

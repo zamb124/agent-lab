@@ -2,8 +2,7 @@
 Тесты API провайдеров RAG Service.
 
 Тестирует:
-- GET /rag/api/v1/providers - список провайдеров
-- POST /rag/api/v1/providers/switch - переключение провайдера
+- GET /rag/api/v1/providers - список провайдеров и current_provider из конфига
 """
 
 import pytest
@@ -38,46 +37,3 @@ async def test_list_providers_pgvector_present(rag_client, auth_headers_system):
 
     assert pgvector is not None
     assert pgvector["enabled"] is True
-
-
-@pytest.mark.asyncio
-async def test_switch_provider_pgvector(rag_client, auth_headers_system):
-    """POST /providers/switch переключает на pgvector"""
-    response = await rag_client.post(
-        "/rag/api/v1/providers/switch",
-        json={"provider_name": "pgvector"},
-        headers=auth_headers_system
-    )
-    assert response.status_code == 200
-    data = response.json()
-
-    assert data["success"] is True
-    assert data["provider"] == "pgvector"
-    assert "message" in data
-
-
-@pytest.mark.asyncio
-async def test_switch_provider_invalid(rag_client, auth_headers_system):
-    """POST /providers/switch с невалидным провайдером возвращает ошибку"""
-    response = await rag_client.post(
-        "/rag/api/v1/providers/switch",
-        json={"provider_name": "invalid_provider"},
-        headers=auth_headers_system
-    )
-    assert response.status_code == 400
-    data = response.json()
-
-    assert "detail" in data
-    assert "invalid_provider" in data["detail"].lower()
-
-
-@pytest.mark.asyncio
-async def test_switch_provider_missing_name(rag_client, auth_headers_system):
-    """POST /providers/switch без имени провайдера возвращает ошибку валидации"""
-    response = await rag_client.post(
-        "/rag/api/v1/providers/switch",
-        json={},
-        headers=auth_headers_system
-    )
-    assert response.status_code == 422
-

@@ -92,7 +92,7 @@ export class NamespacePage extends PlatformPage {
         super.updated && super.updated(changed);
         if (changed.has('namespaceId') && typeof this.namespaceId === 'string' && this.namespaceId.length > 0) {
             if (this._docs.state.loadedNamespaceId !== this.namespaceId) {
-                this._docs.run({ namespaceId: this.namespaceId });
+                this._docs.run({ namespace_id: this.namespaceId });
             }
         }
     }
@@ -113,7 +113,7 @@ export class NamespacePage extends PlatformPage {
         if (!this.namespaceId) {
             throw new Error('NamespacePage: namespaceId is empty, cannot upload');
         }
-        this._upload.run({ namespaceId: this.namespaceId, file, metadata: {} });
+        this._upload.run({ namespace_id: this.namespaceId, file, metadata: {} });
     }
 
     _deleteDocument(documentId) {
@@ -121,7 +121,7 @@ export class NamespacePage extends PlatformPage {
             throw new Error('NamespacePage: namespaceId is empty, cannot delete');
         }
         if (!confirm(this.t('namespace_detail.delete_confirm'))) return;
-        this._remove.run({ namespaceId: this.namespaceId, documentId });
+        this._remove.run({ namespace_id: this.namespaceId, document_id: documentId });
     }
 
     _handleDragOver(e) { e.preventDefault(); e.stopPropagation(); this._dragOver = true; }

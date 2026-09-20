@@ -21,11 +21,10 @@ from .api import (
 )
 from .config import RAGSettings, get_rag_settings
 from .container import RAGContainer, get_rag_container
+from .realtime.command_router import register_rag_ws_commands
 
 logger = get_logger(__name__)
 _ = importlib.import_module("apps.rag.events")
-
-logger = get_logger(__name__)
 
 
 async def on_startup(app: FastAPI, container: RAGContainer, settings: RAGSettings) -> None:
@@ -33,10 +32,10 @@ async def on_startup(app: FastAPI, container: RAGContainer, settings: RAGSetting
     _ = app
     logger.info("RAG Service запускается...")
 
+    register_rag_ws_commands()
     if not settings.rag.enabled:
         logger.warning("RAG отключен в конфигурации")
         return
-
     _ = container.rag_provider
     FileReader.configure_asset_persist(container.files_service)
     logger.info(f"RAG провайдер по умолчанию: {settings.rag.default_provider}")

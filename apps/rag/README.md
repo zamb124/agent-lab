@@ -18,7 +18,6 @@
 | Метод | Путь |
 |-------|------|
 | GET | `/rag/api/v1/providers` |
-| POST | `/rag/api/v1/providers/switch` — тело: `{ "provider_name": "<имя>" }` |
 
 ### Namespaces
 
@@ -69,7 +68,7 @@
 
 ## UI (`apps/rag/ui/`)
 
-- **Состояние и HTTP**: фабрики в **`apps/rag/ui/events/resources/*.resource.js`** (`rag/namespaces`, `rag/documents`, `rag/search`, `rag/document_upload`, …) с REST mirror на эндпоинты выше.
+- **Состояние и HTTP**: фабрики в **`core/frontend/static/lib/events/resources/rag-*.resource.js`** (`rag/namespaces`, `rag/documents`, `rag/search`, `rag/document_upload`, …) с REST mirror на эндпоинты выше. RagApp и flows editor регистрируют тот же объект.
 - **Счётчики документов** на карточке namespace берутся из **`document_status_counts_by_namespace`**.
 - **Маршрутизация**: `createRouterEffect` — `namespaces`, `namespace_detail`, `search`, `settings` (см. **`rag.mdc`**).
 - Канон фронтенда платформы — **`frontend.mdc`**, **`ui_factories.mdc`**.

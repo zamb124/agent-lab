@@ -100,7 +100,6 @@ uv run pytest tests/rag/test_providers_api.py::test_list_providers -v
 ### API Endpoints
 
 - ✅ `GET /rag/api/v1/providers` - список провайдеров
-- ✅ `POST /rag/api/v1/providers/switch` - переключение провайдера
 - ✅ `GET /rag/api/v1/namespaces` - список namespaces
 - ✅ `POST /rag/api/v1/namespaces` - создание namespace
 - ✅ `DELETE /rag/api/v1/namespaces/{id}` - удаление namespace

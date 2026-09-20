@@ -91,7 +91,7 @@ export class SearchPage extends PlatformPage {
 
     connectedCallback() {
         super.connectedCallback();
-        this._searchDefaults.run();
+        this._searchDefaults.run({});
     }
 
     _platformDefaults() {
@@ -111,7 +111,7 @@ export class SearchPage extends PlatformPage {
             return;
         }
         this._search.run({
-            namespaceId: ns,
+            namespace_id: ns,
             query: q,
             limit: this._limit,
             ...buildAdvancedRetrievalPayloadFromPanel(this._retrievalPanel),

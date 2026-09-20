@@ -89,30 +89,6 @@ async def test_full_rag_workflow(
 
 
 @pytest.mark.asyncio
-async def test_provider_switch_persistence(rag_client, rag_provider_pgvector, auth_headers_system):
-    """
-    Переключение провайдеров и проверка изоляции данных.
-
-    Проверяет что данные pgvector изолированы от других провайдеров.
-    """
-    # Получаем список провайдеров
-    response = await rag_client.get("/rag/api/v1/providers", headers=auth_headers_system)
-    assert response.status_code == 200
-
-    providers = response.json()["items"]
-    assert any(p["name"] == "pgvector" for p in providers)
-
-    # Переключаемся на pgvector
-    switch_response = await rag_client.post(
-        "/rag/api/v1/providers/switch",
-        json={"provider_name": "pgvector"},
-        headers=auth_headers_system
-    )
-    assert switch_response.status_code == 200
-    assert switch_response.json()["provider"] == "pgvector"
-
-
-@pytest.mark.asyncio
 async def test_multiple_namespaces_isolation(
     frontend_client,
     rag_client,

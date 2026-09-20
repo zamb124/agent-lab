@@ -46,8 +46,7 @@ tests/rag/
 
 | Endpoint | Метод | Тесты |
 |----------|-------|-------|
-| `/providers` | GET | ✅ 3 теста |
-| `/providers/switch` | POST | ✅ 3 теста |
+| `/providers` | GET | ✅ 2 теста |
 | `/namespaces` | GET | ✅ 2 теста |
 | `/namespaces` | POST | ✅ 3 теста |
 | `/namespaces/{id}` | DELETE | ✅ 2 теста |
@@ -60,8 +59,7 @@ tests/rag/
 ### 4. E2E Сценарии ✅
 
 1. **test_full_rag_workflow** - Полный цикл от создания до удаления
-2. **test_provider_switch_persistence** - Переключение провайдеров
-3. **test_multiple_namespaces_isolation** - Изоляция данных
+2. **test_multiple_namespaces_isolation** - Изоляция данных
 4. **test_large_document_processing** - Обработка больших документов
 5. **test_concurrent_operations** - Параллельные операции
 6. **test_error_recovery** - Восстановление после ошибок

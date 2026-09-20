@@ -90,7 +90,7 @@ export class RagSidebar extends PlatformElement {
     connectedCallback() {
         super.connectedCallback();
         if (!this._providers.lastResult && !this._providers.busy) {
-            this._providers.run(null);
+            this._providers.run({});
         }
     }
 
