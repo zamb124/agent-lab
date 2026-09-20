@@ -6,8 +6,8 @@
  *
  * Поток:
  *   1. На open: `entitiesResource.get(entityId)` подгружает имя/тип/namespace
- *      для шапки; `entityGrantsListOp.run({ entity_id })` загружает текущие
- *      гранты. Список грантов читается из `_grantsListOp.lastResult.items`.
+ *      для шапки; `grantsListOp.run({ resource_type, resource_id })` загружает
+ *      гранты. Список читается из `_grantsListOp.lastResult.items`.
  *   2. UI разделён на две части:
  *        - список существующих грантов (public/user/company с ролью + revoke);
  *        - форма создания нового гранта.
@@ -19,7 +19,7 @@
  *          { user_id, label }).
  *        - для subject=company — текстовый ввод company_id.
  *        - для subject=public — никаких дополнительных полей.
- *   4. Отправка → `entityGrantCreateOp.run({ entity_id, subject, body })`.
+ *   4. Отправка → `grantCreateOp.run({ resource_type, resource_id, subject, ... })`.
  *      На SUCCEEDED перезагружаем список и сбрасываем форму.
  *   5. Отзыв → `grantRevokeOp.run({ grant_id })`. На SUCCEEDED — refresh.
  */
@@ -32,8 +32,8 @@ import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/fields/platform-field.js';
 
 const ENTITIES_NAME = 'crm/entities';
-const GRANTS_LIST_OP = 'crm/entity_grants_list';
-const GRANT_CREATE_OP = 'crm/entity_grant_create';
+const GRANTS_LIST_OP = 'crm/grants_list';
+const GRANT_CREATE_OP = 'crm/grant_create';
 const GRANT_REVOKE_OP = 'crm/grant_revoke';
 const TEAM_SEARCH_FACETS = 'crm/team_search';
 
@@ -409,7 +409,7 @@ export class CRMShareModal extends PlatformModal {
     }
 
     _reloadGrants() {
-        this._grantsListOp.run({ entity_id: this.entityId });
+        this._grantsListOp.run({ resource_type: 'entity', resource_id: this.entityId });
     }
 
     _resetForm() {
@@ -497,25 +497,28 @@ export class CRMShareModal extends PlatformModal {
 
         if (this._subject === SUBJECT_PUBLIC) {
             this._grantCreateOp.run({
-                entity_id: this.entityId,
+                resource_type: 'entity',
+                resource_id: this.entityId,
                 subject: SUBJECT_PUBLIC,
             });
             return;
         }
         if (this._subject === SUBJECT_USER) {
-            const body = { user_id: this._selectedUser.user_id, role: this._role };
             this._grantCreateOp.run({
-                entity_id: this.entityId,
+                resource_type: 'entity',
+                resource_id: this.entityId,
                 subject: SUBJECT_USER,
-                body,
+                user_id: this._selectedUser.user_id,
+                role: this._role,
             });
             return;
         }
-        const body = { company_id: this._companyId.trim(), role: this._role };
         this._grantCreateOp.run({
-            entity_id: this.entityId,
+            resource_type: 'entity',
+            resource_id: this.entityId,
             subject: SUBJECT_COMPANY,
-            body,
+            company_id: this._companyId.trim(),
+            role: this._role,
         });
     }
 

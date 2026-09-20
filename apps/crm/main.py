@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from apps.crm.api.router import router as api_router
 from apps.crm.config import CRMSettings
 from apps.crm.container import CRMContainer, get_crm_container
+from apps.crm.realtime.command_router import register_crm_ws_commands
 from core.app import create_service_app
 from core.config import get_settings
 from core.context import clear_context, get_context, set_context
@@ -33,6 +34,7 @@ logger = get_logger(__name__)
 
 async def on_startup(_app: FastAPI, container: CRMContainer, _settings: CRMSettings) -> None:
     """Кастомная логика при старте"""
+    register_crm_ws_commands()
     _ = set_context(
         Context(
             user=User(user_id="system", name="System"),

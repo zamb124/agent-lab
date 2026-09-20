@@ -48,7 +48,7 @@ async def test_integration_auto_sync_patch_unknown_namespace_404(
 
 
 @pytest.mark.asyncio
-async def test_integration_auto_sync_patch_invalid_cron_422(
+async def test_integration_auto_sync_patch_invalid_cron_400(
     crm_client: AsyncClient,
     auth_headers_system: dict,
     unique_id: str,
@@ -63,11 +63,12 @@ async def test_integration_auto_sync_patch_invalid_cron_422(
             "auto_sync_timezone": "UTC",
         },
     )
-    assert resp.status_code == 422, resp.text
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["error_code"] == "ws_invalid_payload"
 
 
 @pytest.mark.asyncio
-async def test_integration_auto_sync_patch_enable_without_oauth_422(
+async def test_integration_auto_sync_patch_enable_without_oauth_400(
     crm_client: AsyncClient,
     auth_headers_system: dict,
     unique_id: str,
@@ -82,7 +83,8 @@ async def test_integration_auto_sync_patch_enable_without_oauth_422(
             "auto_sync_timezone": "UTC",
         },
     )
-    assert resp.status_code == 422, resp.text
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["error_code"] == "ws_invalid_payload"
     detail = resp.json().get("detail")
     assert isinstance(detail, str)
     assert len(detail) > 0

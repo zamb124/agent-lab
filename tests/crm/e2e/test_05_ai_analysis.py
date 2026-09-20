@@ -561,12 +561,12 @@ class TestAIAnalysis:
     async def test_entity_creation_rejects_missing_namespace(
         self, crm_client: AsyncClient, auth_headers_system: dict[str, str]
     ):
-        """422 при попытке создать entity в несуществующем namespace."""
+        """404 при попытке создать entity в несуществующем namespace."""
         note_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
             "name": "Заметка в несуществующем namespace",
             "description": "Текст для анализа",
             "namespace": "missing_namespace_for_ai",
         }, headers=auth_headers_system)
-        assert note_resp.status_code == 422
+        assert note_resp.status_code == 404
 

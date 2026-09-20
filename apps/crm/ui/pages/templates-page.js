@@ -812,14 +812,12 @@ export class CRMTemplatesPage extends PlatformPage {
         const voiceMode = normalizeDefaultNoteVoiceMode(this._metaDraft.default_note_voice);
         this._updateMetaOp.run({
             template_id: this._selectedTemplateId,
-            body: {
-                name,
-                description: this._metaDraft.description.trim() || null,
-                icon: this._metaDraft.icon.trim() || null,
-                crm_settings: {
-                    default_note_voice: voiceMode,
-                    show_note_voice_ui: this._metaDraft.show_note_voice_ui === true,
-                },
+            name,
+            description: this._metaDraft.description.trim() || null,
+            icon: this._metaDraft.icon.trim() || null,
+            crm_settings: {
+                default_note_voice: voiceMode,
+                show_note_voice_ui: this._metaDraft.show_note_voice_ui === true,
             },
         });
     }
@@ -975,23 +973,21 @@ export class CRMTemplatesPage extends PlatformPage {
         this._savingType = true;
         this._upsertTypeOp.run({
             template_id: this._selectedTemplateId,
-            body: {
-                type_id: typeId,
-                parent_type_id: this._typeDraft.parent_type_id.trim() || null,
-                name,
-                description: this._typeDraft.description.trim() || null,
-                prompt: this._typeDraft.prompt.trim() || null,
-                required_fields: requiredFields,
-                optional_fields: optionalFields,
-                namespace_ids: [...new Set(normalizedNamespaceIds)],
-                icon: this._typeDraft.icon.trim() || null,
-                color: this._typeDraft.color.trim() || null,
-                is_event: this._typeDraft.is_event === true,
-                check_duplicates: this._typeDraft.check_duplicates !== false,
-                is_context_anchor: noteLocked ? false : this._typeDraft.is_context_anchor === true,
-                is_voice_target: noteLocked ? false : this._typeDraft.is_voice_target === true,
-                weight_coefficient: Number.parseFloat(this._typeDraft.weight_coefficient || '1') || 1,
-            },
+            type_id: typeId,
+            parent_type_id: this._typeDraft.parent_type_id.trim() || null,
+            name,
+            description: this._typeDraft.description.trim() || null,
+            prompt: this._typeDraft.prompt.trim() || null,
+            required_fields: requiredFields,
+            optional_fields: optionalFields,
+            namespace_ids: [...new Set(normalizedNamespaceIds)],
+            icon: this._typeDraft.icon.trim() || null,
+            color: this._typeDraft.color.trim() || null,
+            is_event: this._typeDraft.is_event === true,
+            check_duplicates: this._typeDraft.check_duplicates !== false,
+            is_context_anchor: noteLocked ? false : this._typeDraft.is_context_anchor === true,
+            is_voice_target: noteLocked ? false : this._typeDraft.is_voice_target === true,
+            weight_coefficient: Number.parseFloat(this._typeDraft.weight_coefficient || '1') || 1,
         });
     }
 

@@ -36,6 +36,10 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
             stmt = (
                 select(NamespaceTemplate)
                 .where(NamespaceTemplate.company_id == effective_company_id)
+                .order_by(
+                    NamespaceTemplate.created_at.desc(),
+                    NamespaceTemplate.template_id.desc(),
+                )
                 .limit(limit)
                 .offset(offset)
             )

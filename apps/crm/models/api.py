@@ -7,11 +7,11 @@ from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from core.models.identity_models import NamespaceCRMSettings, NamespaceKind
 from core.types import JsonObject, JsonValue
+from core.worktracker.models import WorkItem, WorkItemPriority
 
 SemanticTextIndexStatus = Literal["absent", "pending_embedding", "ready"]
-
-from core.models.identity_models import NamespaceCRMSettings, NamespaceKind  # noqa: E402
 
 
 class EntityCreate(BaseModel):
@@ -363,7 +363,7 @@ class RelationshipCreate(BaseModel):
         le=1.0,
         description="Достоверность связи (например из AI); не участвует в ранжировании поиска сущностей и не входит в стоимость кратчайшего пути.",
     )
-    attributes: JsonObject | None = None
+    attributes: JsonObject = Field(default_factory=dict)
 
 
 class RelationshipResponse(BaseModel):
@@ -384,6 +384,20 @@ class RelationshipResponse(BaseModel):
         description="Достоверность связи; на длину пути и на поиск сущностей не влияет.",
     )
     attributes: JsonObject
+    created_at: datetime
+    updated_at: datetime
+
+
+class SuggestResponse(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
+
+    suggest_id: str
+    company_id: str
+    namespace: str
+    suggest_type: str
+    status: str
+    target_entity_ids: list[str]
+    payload: JsonObject
     created_at: datetime
     updated_at: datetime
 
@@ -424,11 +438,39 @@ class NamespaceCreateRequest(BaseModel):
     )
 
 
-class NamespaceIntegrationBadge(BaseModel):
-    """Статус подключения интеграции в пространстве (для UI)."""
+class IntegrationManifestItem(BaseModel):
+    """Строка манифеста интеграции namespace."""
 
     provider_id: str
     connected: bool
+    display: str | None = None
+    auto_sync_enabled: bool | None = None
+    auto_sync_cron: str | None = None
+    auto_sync_timezone: str | None = None
+    auto_sync_schedule_task_id: str | None = None
+    auto_note_ai_analyze: bool | None = None
+
+
+class IntegrationAuthorizeResponse(BaseModel):
+    authorize_url: str = Field(..., min_length=1)
+
+
+class IntegrationAutoSyncUpdateRequest(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    auto_sync_enabled: bool
+    auto_sync_cron: str | None = None
+    auto_sync_timezone: str | None = None
+
+
+class AutoNoteAiAnalyzeUpdateRequest(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    auto_note_ai_analyze: bool
+
+
+class IntegrationSyncStats(BaseModel):
+    items: dict[str, int]
 
 
 class NamespaceResponse(BaseModel):
@@ -441,7 +483,7 @@ class NamespaceResponse(BaseModel):
     kind: NamespaceKind = NamespaceKind.COMPANY_WORKSPACE
     owner_user_id: str | None = None
     crm_settings: NamespaceCRMSettings | None = None
-    integration_badges: list[NamespaceIntegrationBadge] = Field(default_factory=list)
+    integration_badges: list[IntegrationManifestItem] = Field(default_factory=list)
 
 
 class NamespaceUpdateRequest(BaseModel):
@@ -855,24 +897,6 @@ class KnowledgeImportCreatedEntityItem(BaseModel):
     status: str
 
 
-class KnowledgeImportCreatedEntitiesResponse(BaseModel):
-    import_id: str
-    namespace: str
-    status: str
-    review_completed_at: datetime | None = None
-    relationships_created_count: int = 0
-    entities: list[KnowledgeImportCreatedEntityItem] = Field(default_factory=list)
-    missing_entity_ids: list[str] = Field(default_factory=list)
-
-
-class StructuredKnowledgeImportRequest(BaseModel):
-    """Запрос структурированного импорта (массовое создание без LLM)."""
-
-    namespace: str
-    entities: list[JsonObject] = Field(default_factory=list)
-    relationships: list[JsonObject] = Field(default_factory=list)
-
-
 # ── Unified task models ────────────────────────────────────────────────────────
 
 
@@ -978,3 +1002,55 @@ class PeriodSummaryRequest(BaseModel):
     date_to: str = Field(..., min_length=1, description="Конец периода YYYY-MM-DD")
     namespace: str | None = Field(default=None, description="Пространство назначения")
     force_rebuild: bool = Field(default=False)
+
+
+class ActivityTaskCreateRequest(BaseModel):
+    """Создание пары графовый узел task + WorkItem(crm_activity)."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    title: str = Field(..., min_length=1)
+    description: str | None = None
+    namespace: str = Field(..., min_length=1)
+    entity_subtype: str | None = None
+    priority: WorkItemPriority | None = None
+    due_date: date | None = None
+    assignees: list[str] | None = None
+    tags: list[str] | None = None
+
+
+class ActivityTaskResponse(BaseModel):
+    """Ответ create: CRM-узел + парный WorkItem."""
+
+    entity: EntityResponse
+    work_item: WorkItem
+
+
+class AttachmentAttachRequest(BaseModel):
+    """Привязка уже загруженного FileRecord к entity."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    file_id: str = Field(..., min_length=1)
+
+
+class AttachmentAttachResponse(BaseModel):
+    """Результат привязки файла к entity."""
+
+    document_id: str
+    filename: str
+    status: str
+    task_id: str | None = None
+    markdown_format_queued: bool
+
+
+class EntityAttachment(BaseModel):
+    """Вложение entity: file_id в поле document_id (канон списка/карточки)."""
+
+    document_id: str
+    filename: str
+    status: str
+    metadata: JsonObject
+    size_bytes: int
+    content_type: str
+    download_url: str

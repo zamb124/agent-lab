@@ -34,8 +34,11 @@ async def test_01_entity_public_grant(
 
     public_fields_response = await crm_client.put(
         "/crm/api/v1/entity-types/note/public-fields",
-        params={"namespace": "default"},
-        json={"public_fields": ["name", "tags"]},
+        json={
+            "type_id": "note",
+            "namespace": "default",
+            "public_fields": ["name", "tags"],
+        },
         headers=auth_headers_system,
     )
     assert public_fields_response.status_code == 200, public_fields_response.text
@@ -61,7 +64,12 @@ async def test_01_entity_public_grant(
     entity_id = object_str(entity.get("entity_id"), field="entity_id")
 
     grant_response = await crm_client.post(
-        f"/crm/api/v1/entities/{entity_id}/grants/public",
+        "/crm/api/v1/grants",
+        json={
+            "resource_type": "entity",
+            "resource_id": entity_id,
+            "subject": "public",
+        },
         headers=auth_headers_system,
     )
     assert grant_response.status_code == 200, grant_response.text
@@ -134,12 +142,15 @@ async def test_02_entity_user_grant(
     )
 
     grant_request = {
+        "resource_type": "entity",
+        "resource_id": entity_id,
+        "subject": "user",
         "user_id": user_b_id,
         "role": "editor",
     }
 
     grant_response = await crm_client.post(
-        f"/crm/api/v1/entities/{entity_id}/grants/user",
+        "/crm/api/v1/grants",
         json=grant_request,
         headers=auth_headers_system,
     )

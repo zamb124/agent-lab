@@ -13,7 +13,7 @@
  *   - `edit`: inline-форма — title, описание (диктовка через platform-markdown-editor), дата, теги,
  *     аплоад вложений. Текст из файлов добавляется в описание на сервере.
  *     `entitiesResource.create` (для note === null) или
- *     `entityUpdateOp.run({ id, body })` (для существующей заметки).
+ *     `entityUpdateOp.run({ entity_id, ...EntityUpdate })` (для существующей заметки).
  *
  * Принимает:
  *   - `note: Entity | null` — заметка. null = режим создания (entity_type='note').
@@ -2295,7 +2295,7 @@ export class CRMNoteCardView extends PlatformElement {
         this._mentionDebounce = setTimeout(() => {
             this._mentionDebounce = null;
             const namespace = this._currentNamespaceForSearch();
-            const payload = { q: this._mentionQuery, limit: 10 };
+            const payload = { query: this._mentionQuery, limit: 10 };
             if (typeof namespace === 'string' && namespace.length > 0) {
                 payload.namespace = namespace;
             }
@@ -2411,7 +2411,7 @@ export class CRMNoteCardView extends PlatformElement {
         }
         this._voiceSearchLoading = true;
         this._voiceSearchFilteredNoMatch = false;
-        const payload = { q, limit: 22 };
+        const payload = { query: q, limit: 22 };
         const ns = this._currentNamespaceForSearch();
         if (typeof ns === 'string' && ns.length > 0) {
             payload.namespace = ns;
@@ -2430,7 +2430,7 @@ export class CRMNoteCardView extends PlatformElement {
         }
         this._contextSearchLoading = true;
         this._contextSearchFilteredNoMatch = false;
-        const payload = { q, limit: 22 };
+        const payload = { query: q, limit: 22 };
         const ns = this._currentNamespaceForSearch();
         if (typeof ns === 'string' && ns.length > 0) {
             payload.namespace = ns;
@@ -3171,8 +3171,8 @@ export class CRMNoteCardView extends PlatformElement {
         }
         const body = this._buildEditBody(false);
         this._updateOp.run({
-            id: this.note.entity_id,
-            body,
+            entity_id: this.note.entity_id,
+            ...body,
         });
     }
 

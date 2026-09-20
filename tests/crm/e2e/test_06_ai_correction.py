@@ -248,7 +248,7 @@ class TestAICorrection:
         if incorrect_entity_id is None:
             raise ValueError("Ошибочный контакт не найден")
         delete_resp = await crm_client.delete(f"/crm/api/v1/entities/{incorrect_entity_id}", headers=auth_headers_system)
-        assert delete_resp.status_code == 200
+        assert delete_resp.status_code == 204
 
         get_resp = await crm_client.get(f"/crm/api/v1/entities/{incorrect_entity_id}", headers=auth_headers_system)
         assert get_resp.status_code == 404

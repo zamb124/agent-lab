@@ -10,11 +10,9 @@ from apps.crm.api.access_requests import router as access_requests_router
 from apps.crm.api.activity_tasks import router as activity_tasks_router
 from apps.crm.api.attachments import router as attachments_router
 from apps.crm.api.entities import router as entities_router
-from apps.crm.api.entity_grants import router as entity_grants_router
 from apps.crm.api.entity_types import router as entity_types_router
 from apps.crm.api.grants import router as grants_router
 from apps.crm.api.graph import router as graph_router
-from apps.crm.api.namespace_grants import router as namespace_grants_router
 from apps.crm.api.namespace_integrations import router as namespace_integrations_router
 from apps.crm.api.namespace_summary import router as namespace_summary_router
 from apps.crm.api.namespaces import router as namespaces_router
@@ -31,8 +29,6 @@ router.include_router(relationships_router)
 router.include_router(attachments_router)
 router.include_router(access_requests_router)
 router.include_router(namespaces_router)
-router.include_router(entity_grants_router)
-router.include_router(namespace_grants_router)
 router.include_router(grants_router)
 router.include_router(graph_router)
 router.include_router(tasks_router)

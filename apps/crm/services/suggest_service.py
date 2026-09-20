@@ -4,10 +4,11 @@ from datetime import UTC, date, datetime
 from apps.crm.db.models import CRMEntity, CRMSuggest
 from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
-from apps.crm.db.repositories.suggest_repository import CRMSuggestPage, SuggestRepository
-from apps.crm.models.api import EntityMergeRequest, MergeSide
+from apps.crm.db.repositories.suggest_repository import SuggestRepository
+from apps.crm.models.api import EntityMergeRequest, MergeSide, SuggestResponse
 from apps.crm.services.entity_service import EntityService
 from apps.crm.services.note_processing_service import NoteProcessingService
+from core.pagination import OffsetPage
 from core.types import JsonObject, require_json_object
 
 _DUPLICATE_SIMILARITY_THRESHOLD = 0.85
@@ -37,21 +38,20 @@ class SuggestService:
         self._entity_repository: EntityRepository = entity_repository
         self._entity_type_repository: EntityTypeRepository = entity_type_repository
 
-    @staticmethod
-    def _as_json_object(value: object) -> JsonObject | None:
-        try:
-            return require_json_object(value, "suggest json object")
-        except ValueError:
-            return None
-
     async def list_suggests(
         self,
         namespace: str,
         status: str | None = "pending",
         limit: int = 50,
         offset: int = 0,
-    ) -> CRMSuggestPage:
-        return await self._repository.list_suggests(namespace, status, limit, offset)
+    ) -> OffsetPage[SuggestResponse]:
+        items, total = await self._repository.list_suggests(namespace, status, limit, offset)
+        return OffsetPage[SuggestResponse](
+            items=[SuggestResponse.model_validate(row) for row in items],
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
 
     async def get_suggest(self, suggest_id: str, *, namespace: str) -> CRMSuggest | None:
         return await self._repository.get(suggest_id, namespace=namespace)
@@ -79,8 +79,11 @@ class SuggestService:
             note = await self._entity_service.get_entity(note_id)
             if note is None:
                 raise ValueError(f"Note {note_id} not found")
-            draft = self._as_json_object(note.attributes.get("ai_analysis_draft"))
-            if draft is None or draft.get("draft_version") != expected_draft_version:
+            draft_raw = note.attributes.get("ai_analysis_draft")
+            if draft_raw is None:
+                raise ValueError("missed_entity suggest draft version is stale")
+            draft = require_json_object(draft_raw, "ai_analysis_draft")
+            if draft.get("draft_version") != expected_draft_version:
                 raise ValueError("missed_entity suggest draft version is stale")
             _ = await self._note_processing_service.apply(note_id)
         else:
@@ -208,9 +211,9 @@ class SuggestService:
                 )
 
             merge_request = self._build_merge_request(entity, candidate)
-            merge_payload = self._as_json_object(merge_request.model_dump(mode="json"))
-            if merge_payload is None:
-                raise ValueError("EntityMergeRequest payload must be JSON object")
+            merge_payload = require_json_object(
+                merge_request.model_dump(mode="json"), "EntityMergeRequest"
+            )
 
             if entity_type.auto_resolve_suggests:
                 _ = await self._entity_service.merge_entities(merge_request)
@@ -253,9 +256,10 @@ class SuggestService:
         )
         created_count = 0
         for note in notes:
-            draft = self._as_json_object(note.attributes.get("ai_analysis_draft"))
-            if draft is None:
+            draft_raw = note.attributes.get("ai_analysis_draft")
+            if draft_raw is None:
                 raise ValueError(f"Note {note.entity_id} has invalid ai_analysis_draft")
+            draft = require_json_object(draft_raw, "ai_analysis_draft")
             raw_draft_version = draft.get("draft_version")
             if not isinstance(raw_draft_version, int):
                 raise ValueError(f"Note {note.entity_id} has invalid ai_analysis_draft")

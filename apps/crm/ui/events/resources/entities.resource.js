@@ -2,24 +2,23 @@
  * Entities — сущности CRM (cursor-paginated по `created_at, id`).
  *
  * Backend (`/crm/api/v1/entities`):
- *   GET    /                    → CursorPage[EntityResponse]   (list / search)
- *   GET    /search              → CursorPage[EntityResponse]
  *   POST   /query               → CursorPage[EntityResponse]
  *   GET    /aggregate           → { types: [...], statuses: [...], months: [...] }
- *   GET    /{id}                → EntityResponse
- *   POST   /                    → EntityResponse               (create)
- *   PUT    /{id}                → EntityResponse               (update via PUT)
+ *   GET    /{entity_id}         → EntityResponse | JsonObject
+ *   POST   /                    → EntityResponse
+ *   PUT    /{entity_id}         → EntityResponse
  *   PUT    /bulk                → BulkUpdateResponse
- *   DELETE /{id}                → 204
+ *   DELETE /{entity_id}         → 204
  *   POST   /merge               → EntityMergeResponse
  *   POST   /bulk-delete         → BulkDeleteResponse
+ *   GET    /{entity_id}/card    → card bundle
  *
  * `crm/entities_list` — основная cursor-лента с фильтрами namespace/типа/тегов/
  *   диапазона дат/режима поиска (text|semantic|hybrid).
  * `crm/entity_update` — отдельный AsyncOp с PUT (ResourceCollection по умолчанию
- *   шлёт PATCH, что CRM не принимает).
- * `crm/entity_bulk_update`/`crm/entity_bulk_delete` — массовые операции.
- * `crm/entity_aggregate` — фасетная сводка для счётчиков и таймлайна.
+ *   шлёт PATCH, что CRM не принимает). Payload = EntityUpdate + entity_id.
+ * Лента `crm/entities_list` остаётся HTTP: createCursorList шлёт UI-filters,
+ * а команда `crm/entities/query_requested` принимает EntitySearchQueryRequest.
  */
 
 import {
@@ -28,7 +27,6 @@ import {
     createCursorList,
     createForm,
 } from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
 
 const ENTITY_NAME_MAX = 256;
 const ENTITY_DESCRIPTION_MAX = 4096;
@@ -39,6 +37,8 @@ export const entitiesResource = createResourceCollection({
     baseUrl: '/crm/api/v1/entities',
     idField: 'entity_id',
     operations: ['get', 'create', 'remove'],
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
     toastKeys: {
         create: 'crm:toast.entity.created',
         create_error: 'crm:toast.entity.create_failed',
@@ -86,33 +86,20 @@ export const entitiesResource = createResourceCollection({
 export const entityCardOp = createAsyncOp({
     name: 'crm/entity_card',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/entities/card_requested',
     restMirror: { method: 'GET', path: '/crm/api/v1/entities/:entity_id/card' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.entity_id !== 'string' || payload.entity_id.length === 0) {
-            throw new Error('entityCardOp: payload.entity_id required');
-        }
-        return await httpRequest({
-            method: 'GET',
-            url: `/crm/api/v1/entities/${encodeURIComponent(payload.entity_id)}/card`,
-        });
-    },
 });
 
 export const entityUpdateOp = createAsyncOp({
     name: 'crm/entity_update',
     successToastKey: 'crm:toast.entity.updated',
     errorToastKey: 'crm:toast.entity.update_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/entities/update_requested',
     restMirror: { method: 'PUT', path: '/crm/api/v1/entities/:entity_id' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.id !== 'string' || !payload.body) {
-            throw new Error('entityUpdateOp: { id, body } required');
-        }
-        return await httpRequest({
-            method: 'PUT',
-            url: `/crm/api/v1/entities/${encodeURIComponent(payload.id)}`,
-            body: payload.body,
-        });
-    },
 });
 
 function _buildEntityQueryFilters(filters, dateField) {
@@ -254,124 +241,57 @@ export const entityMergeOp = createAsyncOp({
     name: 'crm/entity_merge',
     successToastKey: 'crm:toast.entity.merged',
     errorToastKey: 'crm:toast.entity.merge_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/entities/merge_requested',
     restMirror: { method: 'POST', path: '/crm/api/v1/entities/merge' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('entityMergeOp: payload required');
-        }
-        return await httpRequest({
-            method: 'POST',
-            url: '/crm/api/v1/entities/merge',
-            body: payload,
-        });
-    },
 });
 
 export const entityBulkDeleteOp = createAsyncOp({
     name: 'crm/entity_bulk_delete',
     successToastKey: 'crm:toast.entity.bulk_deleted',
     errorToastKey: 'crm:toast.entity.bulk_delete_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/entities/bulk_delete_requested',
     restMirror: { method: 'POST', path: '/crm/api/v1/entities/bulk-delete' },
-    request: async ({ payload }) => {
-        if (!payload || !Array.isArray(payload.entity_ids) || payload.entity_ids.length === 0) {
-            throw new Error('entityBulkDeleteOp: payload.entity_ids (non-empty) required');
-        }
-        return await httpRequest({
-            method: 'POST',
-            url: '/crm/api/v1/entities/bulk-delete',
-            body: { entity_ids: payload.entity_ids },
-        });
-    },
 });
 
 export const entityBulkUpdateOp = createAsyncOp({
     name: 'crm/entity_bulk_update',
     successToastKey: 'crm:toast.entity.bulk_updated',
     errorToastKey: 'crm:toast.entity.bulk_update_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/entities/bulk_update_requested',
     restMirror: { method: 'PUT', path: '/crm/api/v1/entities/bulk' },
-    request: async ({ payload }) => {
-        if (!payload || !Array.isArray(payload.items) || payload.items.length === 0) {
-            throw new Error('entityBulkUpdateOp: payload.items (non-empty) required');
-        }
-        return await httpRequest({
-            method: 'PUT',
-            url: '/crm/api/v1/entities/bulk',
-            body: { items: payload.items },
-        });
-    },
 });
 
 export const entitiesLookupOp = createAsyncOp({
     name: 'crm/entities_lookup',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/entities/query_requested',
     restMirror: { method: 'POST', path: '/crm/api/v1/entities/query' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('entitiesLookupOp: payload required');
-        }
-        const body = {};
-        if (typeof payload.namespace === 'string' && payload.namespace.length > 0) body.namespace = payload.namespace;
-        if (typeof payload.entity_type === 'string' && payload.entity_type.length > 0) body.entity_type = payload.entity_type;
-        if (typeof payload.entity_subtype === 'string' && payload.entity_subtype.length > 0) {
-            body.entity_subtype = payload.entity_subtype;
-        }
-        if (typeof payload.limit === 'number') body.limit = payload.limit;
-        const dateLeaves = [];
-        if (typeof payload.created_at_from === 'string' && payload.created_at_from.length > 0) {
-            dateLeaves.push({ field: 'created_at', op: '$gte', value: payload.created_at_from });
-        }
-        if (typeof payload.created_at_to === 'string' && payload.created_at_to.length > 0) {
-            dateLeaves.push({ field: 'created_at', op: '$lte', value: payload.created_at_to });
-        }
-        if (dateLeaves.length === 1) body.filters = dateLeaves[0];
-        else if (dateLeaves.length > 1) body.filters = { $and: dateLeaves };
-        return await httpRequest({
-            method: 'POST',
-            url: '/crm/api/v1/entities/query',
-            body,
-        });
-    },
 });
 
 export const entitySearchOp = createAsyncOp({
     name: 'crm/entity_search',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/entities/query_requested',
     restMirror: { method: 'POST', path: '/crm/api/v1/entities/query' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.q !== 'string' || payload.q.length === 0) {
-            throw new Error('entitySearchOp: payload.q required');
-        }
-        const body = { query: payload.q };
-        if (typeof payload.search_mode === 'string') body.search_mode = payload.search_mode;
-        if (typeof payload.namespace === 'string') body.namespace = payload.namespace;
-        if (typeof payload.entity_type === 'string') body.entity_type = payload.entity_type;
-        if (typeof payload.limit === 'number') body.limit = payload.limit;
-        return await httpRequest({
-            method: 'POST',
-            url: '/crm/api/v1/entities/query',
-            body,
-        });
-    },
 });
 
 export const entityAggregateOp = createAsyncOp({
     name: 'crm/entity_aggregate',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/entities/aggregate_requested',
     restMirror: { method: 'GET', path: '/crm/api/v1/entities/aggregate' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('entityAggregateOp: payload required');
-        }
-        const query = {};
-        if (typeof payload.namespace === 'string' && payload.namespace.length > 0) {
-            query.namespace = payload.namespace;
-        }
-        return await httpRequest({
-            method: 'GET',
-            url: '/crm/api/v1/entities/aggregate',
-            query,
-        });
-    },
 });
 
 function _normalizeAttributes(raw) {
@@ -448,7 +368,7 @@ export const entityCreateForm = createForm({
 export const entityEditForm = createForm({
     name: 'crm/entity_edit_form',
     schema: {
-        id: {
+        entity_id: {
             required: true,
             errorKey: 'entity_modal.err_id_required',
         },
@@ -470,7 +390,7 @@ export const entityEditForm = createForm({
         tags: {},
     },
     initial: {
-        id: '',
+        entity_id: '',
         entity_type: '',
         entity_subtype: '',
         name: '',
@@ -486,7 +406,8 @@ export const entityEditForm = createForm({
             throw new Error('entityEditForm.buildPayload: entity_type required');
         }
         const subRaw = typeof draft.entity_subtype === 'string' ? draft.entity_subtype.trim() : '';
-        const body = {
+        return {
+            entity_id: draft.entity_id,
             name: typeof draft.name === 'string' ? draft.name.trim() : '',
             description: _trimmedOrNull(draft.description),
             status: typeof draft.status === 'string' && draft.status.length > 0 ? draft.status : null,
@@ -494,10 +415,6 @@ export const entityEditForm = createForm({
             tags: _normalizeTags(draft.tags),
             entity_type: et,
             entity_subtype: subRaw.length > 0 ? subRaw : null,
-        };
-        return {
-            id: draft.id,
-            body,
         };
     },
 });

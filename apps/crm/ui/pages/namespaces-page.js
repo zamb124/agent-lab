@@ -209,7 +209,7 @@ export class CRMNamespacesPage extends PlatformPage {
     _connectedIntegrationBadges(ns) {
         const raw = ns.integration_badges;
         if (!Array.isArray(raw)) {
-            return [];
+            throw new Error('CRMNamespacesPage: integration_badges required');
         }
         return raw.filter(
             (b) =>

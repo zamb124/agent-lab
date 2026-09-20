@@ -537,7 +537,7 @@ export class CRMNamespaceDetailPage extends PlatformPage {
             this._allowedTypeIds = next;
             this._namespaceUpdateOp.run({
                 name: this.itemId,
-                body: { allowed_type_ids: next },
+                allowed_type_ids: next,
             });
         });
         this.useEvent(this._entityTypes.resource.events.CREATE_FAILED, () => {
@@ -655,12 +655,10 @@ export class CRMNamespaceDetailPage extends PlatformPage {
         this._savingMeta = true;
         this._namespaceUpdateOp.run({
             name: this.itemId,
-            body: {
-                description: this._description.trim().length > 0 ? this._description.trim() : null,
-                crm_settings: {
-                    default_note_voice: normalizeDefaultNoteVoiceMode(this._defaultNoteVoiceMode),
-                    show_note_voice_ui: this._showNoteVoiceUi === true,
-                },
+            description: this._description.trim().length > 0 ? this._description.trim() : null,
+            crm_settings: {
+                default_note_voice: normalizeDefaultNoteVoiceMode(this._defaultNoteVoiceMode),
+                show_note_voice_ui: this._showNoteVoiceUi === true,
             },
         });
     }
@@ -669,7 +667,7 @@ export class CRMNamespaceDetailPage extends PlatformPage {
         this._sidebarMenuBusy = true;
         this._namespaceUpdateOp.run({
             name: this.itemId,
-            body: { crm_settings: { sidebar_navigation: null } },
+            crm_settings: { sidebar_navigation: null },
         });
     }
 
@@ -694,7 +692,7 @@ export class CRMNamespaceDetailPage extends PlatformPage {
         this._sidebarMenuBusy = true;
         this._namespaceUpdateOp.run({
             name: this.itemId,
-            body: { crm_settings: { sidebar_navigation: payload } },
+            crm_settings: { sidebar_navigation: payload },
         });
     }
 
@@ -723,13 +721,11 @@ export class CRMNamespaceDetailPage extends PlatformPage {
         this._suggestsSaveBusy = true;
         this._namespaceUpdateOp.run({
             name: this.itemId,
-            body: {
-                crm_settings: {
-                    suggests: buildSuggestsSettingsPayload({
-                        enabled: this._suggestsEnabled,
-                        cron: this._suggestsCron,
-                    }),
-                },
+            crm_settings: {
+                suggests: buildSuggestsSettingsPayload({
+                    enabled: this._suggestsEnabled,
+                    cron: this._suggestsCron,
+                }),
             },
         });
     }
@@ -744,7 +740,7 @@ export class CRMNamespaceDetailPage extends PlatformPage {
         this._savingAllowed = true;
         this._namespaceUpdateOp.run({
             name: this.itemId,
-            body: { allowed_type_ids: next },
+            allowed_type_ids: next,
         });
     }
 
@@ -878,7 +874,7 @@ export class CRMNamespaceDetailPage extends PlatformPage {
             this._entityTypeUpdateOp.run({
                 type_id: this._editingTypeId,
                 namespace: this.itemId,
-                body,
+                ...body,
             });
             return;
         }

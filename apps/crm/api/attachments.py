@@ -1,64 +1,67 @@
-"""
-API для работы с вложениями (attachments).
+"""REST-зеркало вложений: те же `op_*`, что и Centrifugo RPC `platform.event`.
 
 Байты файла — только через chunked Files API. Сюда приходит уже существующий file_id.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Response
 
 from apps.crm.dependencies import ContainerDep
-from core.models import StrictBaseModel
+from apps.crm.models.api import (
+    AttachmentAttachRequest,
+    AttachmentAttachResponse,
+    EntityAttachment,
+)
+from apps.crm.realtime.operations import (
+    CrmAttachmentsAttachPayload,
+    CrmAttachmentsRemovePayload,
+    CrmEntityIdPayload,
+    op_attachments_attach,
+    op_attachments_list,
+    op_attachments_remove,
+)
+from core.context import require_context
+from core.pagination import ListResponse
 
 router = APIRouter(tags=["Attachments"])
 
 
-class AttachExistingFileRequest(StrictBaseModel):
-    file_id: str
-
-
-@router.post("/entities/{entity_id}/attachments")
+@router.post("/entities/{entity_id}/attachments", response_model=AttachmentAttachResponse)
 async def attach_file(
     entity_id: str,
-    body: AttachExistingFileRequest,
+    body: AttachmentAttachRequest,
     container: ContainerDep,
-):
-    """Привязать уже загруженный файл к entity."""
-    if body.file_id.strip() == "":
-        raise HTTPException(status_code=422, detail="file_id is required")
-
-    try:
-        result = await container.attachment_service.add_attachment(
-            entity_id=entity_id,
-            file_id=body.file_id,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    return result
+) -> AttachmentAttachResponse:
+    return await op_attachments_attach(
+        CrmAttachmentsAttachPayload(entity_id=entity_id, file_id=body.file_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
-@router.get("/entities/{entity_id}/attachments")
+@router.get(
+    "/entities/{entity_id}/attachments",
+    response_model=ListResponse[EntityAttachment],
+)
 async def list_attachments(
     entity_id: str,
     container: ContainerDep,
-):
-    """Получить список вложений entity"""
-    attachments = await container.attachment_service.get_attachments(entity_id=entity_id)
-    return attachments
+) -> ListResponse[EntityAttachment]:
+    return await op_attachments_list(
+        CrmEntityIdPayload(entity_id=entity_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
-@router.delete("/entities/{entity_id}/attachments/{attachment_id}")
+@router.delete("/entities/{entity_id}/attachments/{attachment_id}", status_code=204)
 async def delete_attachment(
     entity_id: str,
     attachment_id: str,
     container: ContainerDep,
-):
-    """Удалить вложение"""
-    success = await container.attachment_service.remove_attachment(
-        entity_id=entity_id, document_id=attachment_id
+) -> Response:
+    await op_attachments_remove(
+        CrmAttachmentsRemovePayload(entity_id=entity_id, attachment_id=attachment_id),
+        user=require_context().user,
+        container=container,
     )
-
-    if not success:
-        raise HTTPException(status_code=404, detail="Attachment not found")
-
-    return {"status": "deleted"}
+    return Response(status_code=204)

@@ -3,9 +3,9 @@
  *
  * Backend (`/crm/api/v1/namespaces`):
  *   GET    /                    → OffsetPage[NamespaceResponse]
- *   POST   /                    → NamespaceResponse              (create)
- *   PUT    /{name}              → NamespaceResponse              (update via PUT)
- *   GET    /{name}/editability  → NamespaceEditabilityResponse   (отдельный op)
+ *   POST   /                    → NamespaceResponse
+ *   PUT    /{name}              → NamespaceResponse
+ *   GET    /{name}/editability  → NamespaceEditabilityResponse
  *
  * `update` не входит в operations: createResourceCollection шлёт PATCH, а CRM
  * принимает PUT — поэтому редактирование собирается отдельным
@@ -19,7 +19,6 @@ import {
     createAsyncOp,
     createForm,
 } from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
 
 const NAMESPACE_NAME_PATTERN = /^[a-z][a-z0-9_]*$/;
 
@@ -28,6 +27,8 @@ export const namespacesResource = createResourceCollection({
     baseUrl: '/crm/api/v1/namespaces',
     idField: 'name',
     operations: ['list', 'create'],
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
     listQuery: () => ({ limit: 200, offset: 0 }),
     toastKeys: {
         create: 'crm:toast.namespace.created',
@@ -39,32 +40,19 @@ export const namespaceUpdateOp = createAsyncOp({
     name: 'crm/namespace_update',
     successToastKey: 'crm:toast.namespace.updated',
     errorToastKey: 'crm:toast.namespace.update_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/namespaces/update_requested',
     restMirror: { method: 'PUT', path: '/crm/api/v1/namespaces/:namespace_name' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.name !== 'string' || !payload.body) {
-            throw new Error('namespaceUpdateOp: { name, body } required');
-        }
-        return await httpRequest({
-            method: 'PUT',
-            url: `/crm/api/v1/namespaces/${encodeURIComponent(payload.name)}`,
-            body: payload.body,
-        });
-    },
 });
 
 export const namespaceEditabilityOp = createAsyncOp({
     name: 'crm/namespace_editability',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/namespaces/editability_requested',
     restMirror: { method: 'GET', path: '/crm/api/v1/namespaces/:namespace_name/editability' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.name !== 'string' || payload.name.length === 0) {
-            throw new Error('namespaceEditabilityOp: payload.name required');
-        }
-        return await httpRequest({
-            method: 'GET',
-            url: `/crm/api/v1/namespaces/${encodeURIComponent(payload.name)}/editability`,
-        });
-    },
 });
 
 export const namespaceCreateForm = createForm({
@@ -117,9 +105,7 @@ export const namespaceEditForm = createForm({
             : '';
         return {
             name: draft.name,
-            body: {
-                description: trimmed_description.length === 0 ? null : trimmed_description,
-            },
+            description: trimmed_description.length === 0 ? null : trimmed_description,
         };
     },
 });

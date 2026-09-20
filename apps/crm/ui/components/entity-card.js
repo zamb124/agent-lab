@@ -1103,7 +1103,7 @@ export class CRMEntityCard extends PlatformElement {
         this._attachmentDeleteOp = this.useOp('crm/attachment_delete');
         this._entitySearchOp = this.useOp('crm/entity_search');
 
-        this._grantsOp = this.useOp('crm/entity_grants_list');
+        this._grantsOp = this.useOp('crm/grants_list');
         this._relatedOp = this.useOp('crm/related_entities');
 
         this._namespaceSel = this.select((s) => {
@@ -1144,7 +1144,7 @@ export class CRMEntityCard extends PlatformElement {
 
         if (this.panelMode === MODE_EDIT) {
             this._editForm.openForm({
-                id: this._effectiveEntityId(),
+                entity_id: this._effectiveEntityId(),
                 entity_type: '',
                 entity_subtype: '',
                 name: '',
@@ -1224,7 +1224,7 @@ export class CRMEntityCard extends PlatformElement {
         this._entityData = card.entity;
         this._applyRelatedAttachmentsFromBundle(card);
         this._editForm.openForm({
-            id: this._effectiveEntityId(),
+            entity_id: this._effectiveEntityId(),
             entity_type: typeof this._entityData.entity_type === 'string' ? this._entityData.entity_type : '',
             entity_subtype: typeof this._entityData.entity_subtype === 'string' ? this._entityData.entity_subtype : '',
             name: typeof this._entityData.name === 'string' ? this._entityData.name : '',
@@ -1504,7 +1504,7 @@ export class CRMEntityCard extends PlatformElement {
         this._relatedById = relatedMap;
         this._attachmentsData = Array.isArray(card.attachments) ? card.attachments : [];
         this._editForm.openForm({
-            id: this._effectiveEntityId(),
+            entity_id: this._effectiveEntityId(),
             entity_type: typeof this._entityData.entity_type === 'string' ? this._entityData.entity_type : '',
             entity_subtype: typeof this._entityData.entity_subtype === 'string' ? this._entityData.entity_subtype : '',
             name: typeof this._entityData.name === 'string' ? this._entityData.name : '',
@@ -1532,10 +1532,10 @@ export class CRMEntityCard extends PlatformElement {
     _onAttachmentsLoaded(event) {
         this._loadingAttachments = false;
         const result = event && event.payload && event.payload.result;
-        if (!Array.isArray(result)) {
-            throw new Error('CRMEntityCard._onAttachmentsLoaded: result must be array');
+        if (!result || !Array.isArray(result.items)) {
+            throw new Error('CRMEntityCard._onAttachmentsLoaded: result.items must be array');
         }
-        this._attachmentsData = result;
+        this._attachmentsData = result.items;
     }
 
     _onSearchResults(event) {
@@ -2366,7 +2366,7 @@ export class CRMEntityCard extends PlatformElement {
             this._searchTimer = null;
             const nsEntity = this._entityData;
             const namespace = nsEntity ? nsEntity.namespace : null;
-            const payload = { q: value.trim(), limit: 20 };
+            const payload = { query: value.trim(), limit: 20 };
             if (typeof namespace === 'string' && namespace.length > 0) payload.namespace = namespace;
             this._entitySearchOp.run(payload);
         }, 250);
@@ -2470,8 +2470,12 @@ export class CRMEntityCard extends PlatformElement {
     }
 
     _uploadAttachment(file, entityId) {
-        if (!(file instanceof File)) return;
-        if (typeof entityId !== 'string' || entityId.length === 0) return;
+        if (!(file instanceof File)) {
+            throw new Error('CRMEntityCard._uploadAttachment: file required');
+        }
+        if (typeof entityId !== 'string' || entityId.length === 0) {
+            throw new Error('CRMEntityCard._uploadAttachment: entityId required');
+        }
         const entity = this.entity;
         if (!entity || typeof entity.entity_type !== 'string' || entity.entity_type.length === 0) {
             throw new Error('entity-card: entity.entity_type required for attachment upload');
@@ -2487,7 +2491,12 @@ export class CRMEntityCard extends PlatformElement {
 
     _onRemoveAttachment(att) {
         const id = this._effectiveEntityId();
-        if (!att || typeof att.document_id !== 'string') return;
+        if (typeof id !== 'string' || id.length === 0) {
+            throw new Error('CRMEntityCard._onRemoveAttachment: entity_id required');
+        }
+        if (!att || typeof att.document_id !== 'string' || att.document_id.length === 0) {
+            throw new Error('CRMEntityCard._onRemoveAttachment: document_id required');
+        }
         this._attachmentDeleteOp.run({ entity_id: id, attachment_id: att.document_id });
     }
 
@@ -2757,7 +2766,7 @@ export class CRMEntityCard extends PlatformElement {
     _onToggleGrants(entityId) {
         this._grantsExpanded = !this._grantsExpanded;
         if (this._grantsExpanded) {
-            this._grantsOp.run({ entity_id: entityId });
+            this._grantsOp.run({ resource_type: 'entity', resource_id: entityId });
         }
     }
 

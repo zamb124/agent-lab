@@ -7,16 +7,12 @@ API для работы с entities.
 import csv
 import io
 import json as json_lib
-from typing import Annotated, cast
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 from starlette.responses import Response
 
-from apps.crm.api.tasks import active_task_conflict
-from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
-from apps.crm.db.models import CRMEntity
-from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.dependencies import ContainerDep
 from apps.crm.models.api import (
     AIAnalysisDraftPatchRequest,
@@ -26,7 +22,6 @@ from apps.crm.models.api import (
     BulkCreateResponse,
     BulkDeleteRequest,
     BulkDeleteResponse,
-    BulkErrorItem,
     BulkUpdateRequest,
     BulkUpdateResponse,
     DailySummaryRequest,
@@ -42,64 +37,57 @@ from apps.crm.models.api import (
     PeriodSummaryRequest,
     SearchMentionsRequest,
 )
-from apps.crm.services.crm_note_broadcast import broadcast_crm_note_event
-from apps.crm.services.crm_work_item_service import CrmWorkItemService
+from apps.crm.realtime.operations import (
+    CrmEmptyPayload,
+    CrmEntitiesAggregatePayload,
+    CrmEntitiesTimelineBoundsPayload,
+    CrmEntityIdPayload,
+    CrmEntityRelationshipsResponse,
+    CrmEntityUpdatePayload,
+    CrmExclusiveRelatedResponse,
+    CrmNoteAnalysisDraftSavePayload,
+    CrmNoteIdPayload,
+    op_entities_aggregate,
+    op_entities_bulk_create,
+    op_entities_bulk_delete,
+    op_entities_bulk_update,
+    op_entities_card,
+    op_entities_cards_bulk,
+    op_entities_create,
+    op_entities_daily_summary,
+    op_entities_exclusive_related,
+    op_entities_item,
+    op_entities_mentions_search,
+    op_entities_merge,
+    op_entities_period_summary,
+    op_entities_person_self,
+    op_entities_query,
+    op_entities_relationships,
+    op_entities_remove,
+    op_entities_timeline_bounds,
+    op_entities_update,
+    op_notes_analysis_draft_discard,
+    op_notes_analysis_draft_repair,
+    op_notes_analysis_draft_save,
+    op_notes_analysis_error_dismiss,
+    op_notes_markdown_format,
+)
 from apps.crm.services.entity_response_enrichment import build_entity_responses_with_semantic_index
-from apps.crm.services.entity_service import DraftVersionConflictError, SchemaValidationError
-from apps.crm.services.task_service import ActiveTaskExistsError
-from core.authz.models import AuthzObject
-from core.context import get_context, resolve_namespace_or_raise
-from core.i18n.service import t
-from core.pagination import CursorPage
+from core.context import require_context, resolve_namespace_or_raise
+from core.pagination import CursorPage, ListResponse
 from core.types import JsonObject
-from core.websocket.publisher import Notification, NotificationType, notify_user
 
 router = APIRouter(prefix="/entities", tags=["Entities"])
-
-type MentionSearchItem = dict[str, str | float | None]
-type MentionSearchResponse = dict[str, list[MentionSearchItem]]
-
-
-def _auth_user_company_or_401() -> tuple[str, str]:
-    ctx = get_context()
-    if ctx is None or ctx.active_company is None:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    return ctx.user.user_id, ctx.active_company.company_id
-
-
-async def _single_entity_response(
-    *,
-    repo: EntityRepository,
-    entity: CRMEntity,
-    crm_work_item_service: CrmWorkItemService | None = None,
-) -> EntityResponse:
-    items = await build_entity_responses_with_semantic_index(
-        repo,
-        [entity],
-        crm_work_item_service=crm_work_item_service,
-    )
-    return items[0]
 
 
 @router.get("/person-entity/self", response_model=EntityResponse)
 async def get_person_entity_for_current_user(
     container: ContainerDep,
-):
-    """Сущность contact, соответствующая текущему пользователю (для голоса «Я»)."""
-    ctx = get_context()
-    if not ctx or not ctx.user or not ctx.active_company:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    person_id = await container.user_person_service.get_or_create_person_entity_id(
-        ctx.user.user_id,
-        ctx.active_company.company_id,
-    )
-    entity = await container.entity_repository.get(person_id)
-    if not entity:
-        raise HTTPException(status_code=404, detail="Person entity not found")
-    return await _single_entity_response(
-        repo=container.entity_repository,
-        entity=entity,
-        crm_work_item_service=container.crm_work_item_service,
+) -> EntityResponse:
+    return await op_entities_person_self(
+        CrmEmptyPayload(),
+        user=require_context().user,
+        container=container,
     )
 
 
@@ -107,33 +95,9 @@ async def get_person_entity_for_current_user(
 async def create_entity(
     data: EntityCreate,
     container: ContainerDep,
-):
-    """Создать новую entity"""
-    try:
-        entity = await container.entity_service.create_entity(
-            entity_type=data.entity_type,
-            name=data.name,
-            description=data.description,
-            entity_subtype=data.entity_subtype,
-            namespace=data.namespace,
-            attributes=data.attributes,
-            tags=data.tags,
-            attachment_ids=data.attachment_ids,
-            user_id=data.user_id,
-            note_date=data.note_date,
-            voice_entity_id=data.voice_entity_id,
-            context_entity_id=data.context_entity_id,
-            voice_entity_in_payload="voice_entity_id" in data.model_fields_set,
-            context_entity_in_payload="context_entity_id" in data.model_fields_set,
-        )
-    except SchemaValidationError as exc:
-        raise HTTPException(status_code=422, detail=exc.field_errors)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    return await _single_entity_response(
-        repo=container.entity_repository,
-        entity=entity,
-        crm_work_item_service=container.crm_work_item_service,
+) -> EntityResponse:
+    return await op_entities_create(
+        data, user=require_context().user, container=container
     )
 
 
@@ -141,118 +105,39 @@ async def create_entity(
 async def bulk_create_entities(
     body: BulkCreateRequest,
     container: ContainerDep,
-):
-    """Batch создание сущностей (до 200)."""
-    if len(body.items) > 200:
-        raise HTTPException(status_code=422, detail="Maximum 200 items per batch")
-
-    created_entities: list[CRMEntity] = []
-    errors: list[BulkErrorItem] = []
-    for idx, item in enumerate(body.items):
-        try:
-            entity = await container.entity_service.create_entity(
-                entity_type=item.entity_type,
-                name=item.name,
-                description=item.description,
-                entity_subtype=item.entity_subtype,
-                namespace=item.namespace,
-                attributes=item.attributes,
-                tags=item.tags,
-                user_id=item.user_id,
-                note_date=item.note_date,
-            )
-            created_entities.append(entity)
-        except (ValueError, SchemaValidationError) as exc:
-            errors.append(BulkErrorItem(index=idx, error=str(exc)))
-    created = await build_entity_responses_with_semantic_index(
-        container.entity_repository,
-        created_entities,
-        crm_work_item_service=container.crm_work_item_service,
+) -> BulkCreateResponse:
+    return await op_entities_bulk_create(
+        body, user=require_context().user, container=container
     )
-    return BulkCreateResponse(created=created, errors=errors)
 
 
 @router.put("/bulk", response_model=BulkUpdateResponse)
 async def bulk_update_entities(
     body: BulkUpdateRequest,
     container: ContainerDep,
-):
-    """Batch обновление сущностей (до 200)."""
-    if len(body.items) > 200:
-        raise HTTPException(status_code=422, detail="Maximum 200 items per batch")
-
-    updated_entities: list[CRMEntity] = []
-    errors: list[BulkErrorItem] = []
-    for idx, item in enumerate(body.items):
-        try:
-            entity = await container.entity_service.update_entity(item.entity_id, item.updates)
-            updated_entities.append(entity)
-        except ValueError as exc:
-            errors.append(BulkErrorItem(index=idx, entity_id=item.entity_id, error=str(exc)))
-    updated = await build_entity_responses_with_semantic_index(
-        container.entity_repository,
-        updated_entities,
-        crm_work_item_service=container.crm_work_item_service,
+) -> BulkUpdateResponse:
+    return await op_entities_bulk_update(
+        body, user=require_context().user, container=container
     )
-    return BulkUpdateResponse(updated=updated, errors=errors)
 
 
 @router.post("/bulk-delete", response_model=BulkDeleteResponse)
 async def bulk_delete_entities(
     body: BulkDeleteRequest,
     container: ContainerDep,
-):
-    """Batch удаление сущностей (до 200)."""
-    if len(body.entity_ids) > 200:
-        raise HTTPException(status_code=422, detail="Maximum 200 items per batch")
-
-    deleted: list[str] = []
-    errors: list[BulkErrorItem] = []
-    for idx, entity_id in enumerate(body.entity_ids):
-        try:
-            success = await container.entity_service.delete_entity(entity_id)
-            if success:
-                deleted.append(entity_id)
-            else:
-                errors.append(
-                    BulkErrorItem(index=idx, entity_id=entity_id, error="Entity not found")
-                )
-        except ValueError as exc:
-            errors.append(BulkErrorItem(index=idx, entity_id=entity_id, error=str(exc)))
-    return BulkDeleteResponse(deleted=deleted, errors=errors)
+) -> BulkDeleteResponse:
+    return await op_entities_bulk_delete(
+        body, user=require_context().user, container=container
+    )
 
 
 @router.post("/merge", response_model=EntityMergeResponse)
 async def merge_entities(
     body: EntityMergeRequest,
     container: ContainerDep,
-):
-    """Слияние двух сущностей: survivor сохраняет id, source удаляется, связи переносятся."""
-    survivor = await container.entity_service.get_entity(body.survivor_entity_id.strip())
-    source = await container.entity_service.get_entity(body.source_entity_id.strip())
-    if survivor is None:
-        raise HTTPException(status_code=404, detail="Survivor entity not found")
-    if source is None:
-        raise HTTPException(status_code=404, detail="Source entity not found")
-
-    user_id, company_id = _auth_user_company_or_401()
-    await container.authz_service.require_can_edit(AuthzObject.crm_entity(survivor.entity_id), user_id=user_id)
-    await container.authz_service.require_can_edit(AuthzObject.crm_entity(source.entity_id), user_id=user_id)
-
-    try:
-        merged, merged_from_id = await container.entity_service.merge_entities(body)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    filtered = await container.crm_entity_access_service.filter_fields(merged, user_id, company_id)
-
-    status_by_id = await container.entity_repository.batch_semantic_text_index_status([merged])
-    merge_entity_resp = EntityResponse.model_validate(filtered).model_copy(
-        update={"semantic_text_index_status": status_by_id.get(merged.entity_id)},
-    )
-    return EntityMergeResponse(
-        entity=merge_entity_resp,
-        merged_from_entity_id=merged_from_id,
+) -> EntityMergeResponse:
+    return await op_entities_merge(
+        body, user=require_context().user, container=container
     )
 
 
@@ -260,116 +145,12 @@ async def merge_entities(
 async def aggregate_entities(
     container: ContainerDep,
     namespace: Annotated[str | None, Query()] = None,
-):
-    """Фасетная агрегация: количество по типам, статусам, месяцам создания."""
-    facets = await container.entity_service.aggregate_facets(namespace=namespace)
-    return facets
-
-
-async def _execute_entity_query(
-    *,
-    container: ContainerDep,
-    body: EntitySearchQueryRequest,
-) -> CursorPage[EntityResponse]:
-    filters_dict = (
-        body.filters.model_dump(by_alias=True, exclude_none=True)
-        if body.filters is not None
-        else None
+) -> JsonObject:
+    return await op_entities_aggregate(
+        CrmEntitiesAggregatePayload(namespace=namespace),
+        user=require_context().user,
+        container=container,
     )
-    namespace_name = resolve_namespace_or_raise(body.namespace)
-    filter_field_types = await container.entity_service.resolve_filter_field_types(
-        namespace=namespace_name,
-        entity_type=body.entity_type,
-        entity_subtype=body.entity_subtype,
-        filters=filters_dict,
-    )
-
-    if body.query is None or body.query.strip() == "":
-        entities, next_cursor, has_more = await container.entity_service.list_entities(
-            entity_type=body.entity_type,
-            entity_subtype=body.entity_subtype,
-            namespace=body.namespace,
-            filters=filters_dict,
-            filter_field_types=filter_field_types,
-            limit=body.limit,
-            cursor=body.cursor,
-        )
-        items = await build_entity_responses_with_semantic_index(
-            container.entity_repository,
-            entities,
-            crm_work_item_service=container.crm_work_item_service,
-        )
-        return CursorPage[EntityResponse](
-            items=items,
-            next_cursor=next_cursor,
-            has_more=has_more,
-        )
-
-    if body.cursor is not None:
-        raise HTTPException(status_code=422, detail="cursor is not supported for search query mode")
-
-    query = body.query.strip()
-    if body.search_mode == "hybrid":
-        results = await container.entity_service.hybrid_search(
-            query=query,
-            entity_type=body.entity_type,
-            entity_subtype=body.entity_subtype,
-            namespace=body.namespace,
-            filters=filters_dict,
-            filter_field_types=filter_field_types,
-            limit=body.limit,
-        )
-        entities_only = [row[0] for row in results]
-        items = await build_entity_responses_with_semantic_index(
-            container.entity_repository,
-            entities_only,
-            crm_work_item_service=container.crm_work_item_service,
-        )
-        for resp, (_, score, match_type) in zip(items, results):
-            resp.score = score
-            resp.match_type = match_type
-        return CursorPage[EntityResponse](items=items, next_cursor=None, has_more=False)
-
-    if body.search_mode == "text":
-        results = await container.entity_service.text_search(
-            query=query,
-            entity_type=body.entity_type,
-            entity_subtype=body.entity_subtype,
-            namespace=body.namespace,
-            filters=filters_dict,
-            filter_field_types=filter_field_types,
-            limit=body.limit,
-        )
-        entities_only = [row[0] for row in results]
-        items = await build_entity_responses_with_semantic_index(
-            container.entity_repository,
-            entities_only,
-            crm_work_item_service=container.crm_work_item_service,
-        )
-        for resp, (_, score) in zip(items, results):
-            resp.score = score
-            resp.match_type = "text"
-        return CursorPage[EntityResponse](items=items, next_cursor=None, has_more=False)
-
-    results = await container.entity_service.search_entities(
-        query=query,
-        entity_type=body.entity_type,
-        entity_subtype=body.entity_subtype,
-        namespace=body.namespace,
-        filters=filters_dict,
-        filter_field_types=filter_field_types,
-        limit=body.limit,
-    )
-    entities_only = [row[0] for row in results]
-    items = await build_entity_responses_with_semantic_index(
-        container.entity_repository,
-        entities_only,
-        crm_work_item_service=container.crm_work_item_service,
-    )
-    for resp, (_, score) in zip(items, results):
-        resp.score = score
-        resp.match_type = "semantic"
-    return CursorPage[EntityResponse](items=items, next_cursor=None, has_more=False)
 
 
 _EXPORT_PAGE_SIZE = 500
@@ -484,24 +265,14 @@ async def export_entities(
     )
 
 
-@router.get("/search", response_model=CursorPage[EntityResponse])
-async def search_entities(
-    container: ContainerDep,
-):
-    _ = container
-    raise HTTPException(status_code=410, detail="Use POST /crm/api/v1/entities/query")
-
-
 @router.post("/query", response_model=CursorPage[EntityResponse])
 async def query_entities(
     body: EntitySearchQueryRequest,
     container: ContainerDep,
-):
-    """Единый POST endpoint для листинга и поиска сущностей по DSL-фильтрам."""
-    try:
-        return await _execute_entity_query(container=container, body=body)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+) -> CursorPage[EntityResponse]:
+    return await op_entities_query(
+        body, user=require_context().user, container=container
+    )
 
 
 @router.get("/timeline/bounds", response_model=EntityTimelineBoundsResponse)
@@ -510,14 +281,16 @@ async def get_entities_timeline_bounds(
     entity_type: Annotated[str | None, Query()] = None,
     entity_subtype: Annotated[str | None, Query()] = None,
     namespace: Annotated[str | None, Query(description="Фильтр по namespace")] = None,
-):
-    """Получить границы timeline по created_at."""
-    bounds = await container.entity_service.get_timeline_bounds(
-        entity_type=entity_type,
-        entity_subtype=entity_subtype,
-        namespace=namespace,
+) -> EntityTimelineBoundsResponse:
+    return await op_entities_timeline_bounds(
+        CrmEntitiesTimelineBoundsPayload(
+            entity_type=entity_type,
+            entity_subtype=entity_subtype,
+            namespace=namespace,
+        ),
+        user=require_context().user,
+        container=container,
     )
-    return EntityTimelineBoundsResponse.model_validate(bounds)
 
 
 @router.patch("/notes/{note_id}/analysis-draft", response_model=AIAnalysisDraftStored)
@@ -525,18 +298,14 @@ async def patch_note_analysis_draft(
     note_id: str,
     body: AIAnalysisDraftPatchRequest,
     container: ContainerDep,
-):
-    note = await container.entity_service.get_entity(note_id)
-    if not note:
-        raise HTTPException(status_code=404, detail="Entity not found")
-    user_id, _ = _auth_user_company_or_401()
-    await container.authz_service.require_can_edit(AuthzObject.crm_entity(note.entity_id), user_id=user_id)
-    try:
-        return await container.entity_service.patch_analysis_draft(note_id, body)
-    except DraftVersionConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+) -> AIAnalysisDraftStored:
+    return await op_notes_analysis_draft_save(
+        CrmNoteAnalysisDraftSavePayload.model_validate(
+            {"note_id": note_id, **body.model_dump()}
+        ),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.delete("/notes/{note_id}/analysis-draft", status_code=204)
@@ -544,18 +313,11 @@ async def delete_note_analysis_draft(
     note_id: str,
     container: ContainerDep,
 ) -> Response:
-    """Удалить черновик AI-анализа и связанные поля ошибки из заметки."""
-    note = await container.entity_service.get_entity(note_id)
-    if not note:
-        raise HTTPException(status_code=404, detail="Entity not found")
-    user_id, _ = _auth_user_company_or_401()
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    await container.authz_service.require_can_edit(AuthzObject.crm_entity(note.entity_id), user_id=user_id)
-    try:
-        await container.entity_service.discard_note_analysis_draft(note_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await op_notes_analysis_draft_discard(
+        CrmNoteIdPayload(note_id=note_id),
+        user=require_context().user,
+        container=container,
+    )
     return Response(status_code=204)
 
 
@@ -564,15 +326,11 @@ async def delete_note_analysis_error(
     note_id: str,
     container: ContainerDep,
 ) -> Response:
-    """Сбросить последнее сообщение об ошибке применения черновика (черновик не удаляется)."""
-    note = await container.entity_service.get_entity(note_id)
-    if not note:
-        raise HTTPException(status_code=404, detail="Entity not found")
-    user_id, _ = _auth_user_company_or_401()
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    await container.authz_service.require_can_edit(AuthzObject.crm_entity(note.entity_id), user_id=user_id)
-    await container.entity_service.clear_note_analysis_error(note_id)
+    await op_notes_analysis_error_dismiss(
+        CrmNoteIdPayload(note_id=note_id),
+        user=require_context().user,
+        container=container,
+    )
     return Response(status_code=204)
 
 
@@ -585,57 +343,10 @@ async def queue_note_analysis_draft_repair(
     note_id: str,
     container: ContainerDep,
 ) -> NoteAnalysisDraftRepairQueuedResponse:
-    """Поставить в очередь AI-починку черновика (ветка CRM flow draft_repair, TaskIQ)."""
-    note = await container.entity_service.get_entity(note_id)
-    if not note:
-        raise HTTPException(status_code=404, detail="Entity not found")
-    user_id, company_id = _auth_user_company_or_401()
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    await container.authz_service.require_can_edit(AuthzObject.crm_entity(note.entity_id), user_id=user_id)
-    raw_attrs = note.attributes or {}
-    if not isinstance(raw_attrs.get("ai_analysis_draft"), dict):
-        raise HTTPException(status_code=422, detail="У заметки нет черновика ai_analysis_draft")
-    summary_raw = raw_attrs.get("ai_analysis_last_error")
-    summary_ok = isinstance(summary_raw, str) and summary_raw.strip() != ""
-    failures_raw = raw_attrs.get("ai_analysis_apply_failures")
-    failures_ok = isinstance(failures_raw, list) and len(cast(list[object], failures_raw)) > 0
-    if not summary_ok and not failures_ok:
-        raise HTTPException(
-            status_code=422,
-            detail="Нет сохранённой ошибки применения черновика",
-        )
-
-    ctx = get_context()
-    if ctx is None or not ctx.auth_token:
-        raise HTTPException(status_code=401, detail="Authorization required")
-
-    namespace = resolve_namespace_or_raise(note.namespace)
-
-    note_date_iso = note.note_date.isoformat() if note.note_date is not None else None
-    await broadcast_crm_note_event(
-        company_id=company_id,
-        namespace=namespace,
-        note_id=note_id,
-        note_date_iso=note_date_iso,
-        action="updated",
-        note=note,
-                authz=container.authz_service,
-        skip_notification_center=True,
-        draft_repair={"phase": "started"},
-    )
-
-    try:
-        row = await container.task_service.start_note_analysis_draft_repair(note_id=note_id)
-    except ActiveTaskExistsError as exc:
-        raise active_task_conflict(exc) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-    return NoteAnalysisDraftRepairQueuedResponse(
-        note_id=note_id,
-        task_id=row.task_id,
-        queued=True,
+    return await op_notes_analysis_draft_repair(
+        CrmNoteIdPayload(note_id=note_id),
+        user=require_context().user,
+        container=container,
     )
 
 
@@ -648,50 +359,23 @@ async def request_note_markdown_format(
     note_id: str,
     container: ContainerDep,
 ) -> NoteMarkdownFormatQueuedResponse:
-    """Поставить в очередь преобразование текста заметки в Markdown (TaskIQ + LitServe)."""
-    note = await container.entity_service.get_entity(note_id)
-    if not note:
-        raise HTTPException(status_code=404, detail="Entity not found")
-    user_id, _ = _auth_user_company_or_401()
-    await container.authz_service.require_can_edit(AuthzObject.crm_entity(note.entity_id), user_id=user_id)
-
-    try:
-        row = await container.task_service.start_note_markdown_format(
-            note_id=note_id,
-        )
-    except ActiveTaskExistsError as exc:
-        raise active_task_conflict(exc) from exc
-    except ValueError as exc:
-        detail = str(exc)
-        if detail == "Заметка не найдена":
-            raise HTTPException(status_code=404, detail=detail) from exc
-        raise HTTPException(status_code=400, detail=detail) from exc
-
-    return NoteMarkdownFormatQueuedResponse(note_id=note_id, task_id=row.task_id)
+    return await op_notes_markdown_format(
+        CrmNoteIdPayload(note_id=note_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.get("/{entity_id}")
 async def get_entity(
     entity_id: str,
     container: ContainerDep,
-):
-    """Получить entity по ID с проверкой доступа"""
-    entity = await container.entity_service.get_entity(entity_id)
-    if not entity:
-        raise HTTPException(status_code=404, detail="Entity not found")
-
-    user_id, company_id = _auth_user_company_or_401()
-
-    await container.authz_service.require_can_view(AuthzObject.crm_entity(entity.entity_id), user_id=user_id)
-
-    filtered = await container.crm_entity_access_service.filter_fields(entity, user_id, company_id)
-    if isinstance(filtered, CRMEntity):
-        return await _single_entity_response(
-            repo=container.entity_repository,
-            entity=filtered,
-            crm_work_item_service=container.crm_work_item_service,
-        )
-    return filtered
+) -> EntityResponse | JsonObject:
+    return await op_entities_item(
+        CrmEntityIdPayload(entity_id=entity_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.put("/{entity_id}", response_model=EntityResponse)
@@ -699,67 +383,27 @@ async def update_entity(
     entity_id: str,
     data: EntityUpdate,
     container: ContainerDep,
-):
-    """Обновить entity с проверкой прав"""
-    entity = await container.entity_service.get_entity(entity_id)
-    if not entity:
-        raise HTTPException(status_code=404, detail="Entity not found")
-
-    user_id, _ = _auth_user_company_or_401()
-
-    await container.authz_service.require_can_edit(AuthzObject.crm_entity(entity.entity_id), user_id=user_id)
-
-    updates = data.model_dump(exclude_none=True)
-    updates.pop("voice_entity_id", None)
-    updates.pop("context_entity_id", None)
-    if "entity_subtype" in data.model_fields_set:
-        updates["entity_subtype"] = data.entity_subtype
-    try:
-        updated = await container.entity_service.update_entity(
-            entity_id,
-            updates,
-            voice_entity_id=data.voice_entity_id,
-            voice_entity_in_payload="voice_entity_id" in data.model_fields_set,
-            context_entity_id=data.context_entity_id,
-            context_entity_in_payload="context_entity_id" in data.model_fields_set,
-        )
-    except SchemaValidationError as exc:
-        raise HTTPException(status_code=422, detail=exc.field_errors)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    return await _single_entity_response(
-        repo=container.entity_repository,
-        entity=updated,
-        crm_work_item_service=container.crm_work_item_service,
+) -> EntityResponse:
+    return await op_entities_update(
+        CrmEntityUpdatePayload.model_validate(
+            {"entity_id": entity_id, **data.model_dump(exclude_unset=True)}
+        ),
+        user=require_context().user,
+        container=container,
     )
 
 
-@router.delete("/{entity_id}")
+@router.delete("/{entity_id}", status_code=204)
 async def delete_entity(
     entity_id: str,
     container: ContainerDep,
-):
-    """Каскадное удаление entity"""
-    entity = await container.entity_service.get_entity(entity_id)
-    if not entity:
-        raise HTTPException(status_code=404, detail="Entity not found")
-
-    user_id, _ = _auth_user_company_or_401()
-
-    await container.authz_service.require_can_edit(AuthzObject.crm_entity(entity.entity_id), user_id=user_id)
-
-    success = await container.entity_service.delete_entity(entity_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Entity not found")
-    return {"success": True}
-
-
-@router.get("", response_model=CursorPage[EntityResponse])
-async def list_entities(
-    container: ContainerDep,
-):
-    _ = container
-    raise HTTPException(status_code=410, detail="Use POST /crm/api/v1/entities/query")
+) -> Response:
+    await op_entities_remove(
+        CrmEntityIdPayload(entity_id=entity_id),
+        user=require_context().user,
+        container=container,
+    )
+    return Response(status_code=204)
 
 
 @router.post("/daily-summary")
@@ -767,13 +411,9 @@ async def get_daily_summary(
     request: DailySummaryRequest,
     container: ContainerDep,
 ):
-    """Получить AI саммари заметок за день"""
-    summary = await container.entity_service.get_daily_summary_cached(
-        date_str=request.date,
-        namespace=request.namespace,
-        force_rebuild=request.force_rebuild,
+    return await op_entities_daily_summary(
+        request, user=require_context().user, container=container
     )
-    return summary
 
 
 @router.post("/period-summary")
@@ -781,173 +421,64 @@ async def get_period_summary(
     request: PeriodSummaryRequest,
     container: ContainerDep,
 ):
-    """Сводка заметок за диапазон дат (merge дневных сводок)."""
-    summary: JsonObject = await container.entity_service.get_period_summary_cached(
-        date_from=request.date_from,
-        date_to=request.date_to,
-        namespace=request.namespace,
-        force_rebuild=request.force_rebuild,
+    return await op_entities_period_summary(
+        request, user=require_context().user, container=container
     )
-    ctx = get_context()
-    if summary.get("period_truncated") is True and ctx and ctx.user:
-        max_d_raw = summary.get("period_summary_max_days")
-        req_d_raw = summary.get("requested_period_days")
-        if not isinstance(max_d_raw, int) or not isinstance(req_d_raw, int):
-            raise HTTPException(
-                status_code=500, detail="Invalid period summary truncation metadata"
-            )
-        max_d = max_d_raw
-        req_d = req_d_raw
-        await notify_user(
-            user_id=ctx.user.user_id,
-            notification=Notification(
-                type=NotificationType.SYSTEM,
-                title=t("crm.notifications.period_summary_range_clamped_title"),
-                title_i18n_key="crm:notifications.period_summary_range_clamped_title",
-                message=t(
-                    "crm.notifications.period_summary_range_clamped_message",
-                    max_days=max_d,
-                    requested_days=req_d,
-                ),
-                message_i18n_key="crm:notifications.period_summary_range_clamped_message",
-                message_i18n_vars={
-                    "max_days": max_d,
-                    "requested_days": req_d,
-                },
-                service="crm",
-                data={
-                    "event": "crm/period_summary/range_clamped",
-                    "requested_date_from": summary["requested_date_from"],
-                    "requested_date_to": summary["requested_date_to"],
-                    "effective_date_from": summary["date_from"],
-                    "effective_date_to": summary["date_to"],
-                    "period_summary_max_days": max_d,
-                    "requested_period_days": req_d,
-                    "max_days": max_d,
-                    "requested_days": req_d,
-                },
-            ),
-        )
-    return summary
 
 
 @router.post("/cards/bulk")
 async def get_entity_cards_bulk(
     body: BulkCardsRequest,
     container: ContainerDep,
-) -> JsonObject:
-    """Batch-загрузка карточек для списка entity_id за один запрос."""
-    cards = cast(object, await container.entity_service.get_bulk_entity_cards(body.entity_ids))
-    if not isinstance(cards, dict):
-        raise HTTPException(status_code=500, detail="Invalid cards payload")
-    return cast(JsonObject, cards)
+) -> dict[str, JsonObject]:
+    return await op_entities_cards_bulk(
+        body, user=require_context().user, container=container
+    )
 
 
 @router.get("/{entity_id}/card")
 async def get_entity_card(
     entity_id: str,
     container: ContainerDep,
-):
-    """
-    Получить полную карточку entity с контекстом:
-    - Данные entity
-    - Все relationships
-    - Связанные entities
-    - Attachments
-    """
-    try:
-        entity = await container.entity_service.get_entity(entity_id)
-        if not entity:
-            raise HTTPException(status_code=404, detail="Entity not found")
-        ctx = get_context()
-        user_id = ctx.user.user_id if ctx and ctx.user else None
-        await container.authz_service.require_can_view(AuthzObject.crm_entity(entity.entity_id), user_id=user_id)
-        card = await container.entity_service.get_entity_card(entity_id)
-        return card
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+) -> JsonObject:
+    return await op_entities_card(
+        CrmEntityIdPayload(entity_id=entity_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
-@router.post("/search/mentions", response_model=dict)
+@router.post("/search/mentions", response_model=ListResponse[EntityResponse])
 async def search_mentions(
     request: SearchMentionsRequest,
     container: ContainerDep,
-) -> MentionSearchResponse:
-    """Real-time поиск упоминаний entities в тексте для подсветки"""
-    text = request.text
-    if not text or len(text) < 3:
-        empty: list[MentionSearchItem] = []
-        return {"entities": empty}
-
-    entities = await container.entity_service.search_mentions(
-        text, namespace=request.namespace, limit=20
+) -> ListResponse[EntityResponse]:
+    return await op_entities_mentions_search(
+        request,
+        user=require_context().user,
+        container=container,
     )
-    return {
-        "entities": [
-            {
-                "entity_id": e.entity_id,
-                "entity_type": e.entity_type,
-                "name": e.name,
-                "description": e.description,
-                "relevance": e.relevance,
-            }
-            for e in entities
-        ]
-    }
 
 
-@router.get("/{entity_id}/relationships")
+@router.get("/{entity_id}/relationships", response_model=CrmEntityRelationshipsResponse)
 async def get_entity_relationships(
     entity_id: str,
     container: ContainerDep,
-):
-    """Получить все relationships для entity"""
-    repo = container.relationship_repository
-
-    entity = await container.entity_service.get_entity(entity_id)
-    if not entity:
-        raise HTTPException(status_code=404, detail="Entity not found")
-    user_id, _ = _auth_user_company_or_401()
-    await container.authz_service.require_can_view(AuthzObject.crm_entity(entity.entity_id), user_id=user_id)
-
-    relationships = await repo.get_by_entity(entity_id)
-    return {
-        "relationships": [
-            {
-                "relationship_id": r.relationship_id,
-                "source_entity_id": r.source_entity_id,
-                "target_entity_id": r.target_entity_id,
-                "relationship_type": r.relationship_type,
-                "namespace": r.namespace,
-                "weight": r.weight,
-                "confidence": r.confidence,
-                "attributes": r.attributes or {},
-                "created_at": r.created_at.isoformat() if r.created_at else None,
-                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
-                "company_id": r.company_id,
-            }
-            for r in relationships
-        ]
-    }
+) -> CrmEntityRelationshipsResponse:
+    return await op_entities_relationships(
+        CrmEntityIdPayload(entity_id=entity_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
-@router.get("/{entity_id}/exclusive-related")
+@router.get("/{entity_id}/exclusive-related", response_model=CrmExclusiveRelatedResponse)
 async def get_exclusive_related_entities(
     entity_id: str,
     container: ContainerDep,
-):
-    """Получить список сущностей, которые будут удалены каскадно при удалении заметки"""
-    entity = await container.entity_service.get_entity(entity_id)
-    if not entity:
-        raise HTTPException(status_code=404, detail="Entity not found")
-
-    if entity.entity_type != NOTE_ROOT_ENTITY_TYPE_ID:
-        raise HTTPException(status_code=400, detail="Only notes have exclusive related entities")
-
-    user_id, _ = _auth_user_company_or_401()
-    await container.authz_service.require_can_edit(AuthzObject.crm_entity(entity.entity_id), user_id=user_id)
-
-    exclusive_entities = await container.entity_service.get_exclusive_related_entities_for_note(
-        entity_id
+) -> CrmExclusiveRelatedResponse:
+    return await op_entities_exclusive_related(
+        CrmEntityIdPayload(entity_id=entity_id),
+        user=require_context().user,
+        container=container,
     )
-    return {"entities": exclusive_entities}

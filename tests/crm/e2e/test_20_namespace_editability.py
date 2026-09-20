@@ -166,7 +166,7 @@ class TestNamespaceEditabilityEmpty:
         assert resp.status_code == 200
 
         types_resp = await crm_client.get(
-            f"/crm/api/v1/entity-types/by-namespace/{namespace_name}",
+            f"/crm/api/v1/entity-types?namespace={namespace_name}",
             headers=auth_headers_system,
         )
         assert types_resp.status_code == 200
@@ -263,7 +263,7 @@ class TestNamespaceEditabilityWithEntities:
             json={"allowed_type_ids": [type_unused]},
             headers=auth_headers_system,
         )
-        assert resp.status_code == 422
+        assert resp.status_code == 400
         assert type_used in _detail_text(resp)
 
     @pytest.mark.asyncio
@@ -294,7 +294,7 @@ class TestNamespaceEditabilityWithEntities:
         assert resp.status_code == 200
 
         types_resp = await crm_client.get(
-            f"/crm/api/v1/entity-types/by-namespace/{namespace_name}",
+            f"/crm/api/v1/entity-types?namespace={namespace_name}",
             headers=auth_headers_system,
         )
         type_ids = _type_id_set(types_resp)
@@ -335,7 +335,7 @@ class TestNamespaceEditabilityWithEntities:
         assert resp.status_code == 200
 
         types_resp = await crm_client.get(
-            f"/crm/api/v1/entity-types/by-namespace/{namespace_name}",
+            f"/crm/api/v1/entity-types?namespace={namespace_name}",
             headers=auth_headers_system,
         )
         type_ids = _type_id_set(types_resp)
@@ -399,7 +399,7 @@ class TestNamespaceEditabilityWithEntities:
             json={"allowed_type_ids": [type_c]},
             headers=auth_headers_system,
         )
-        assert resp.status_code == 422
+        assert resp.status_code == 400
 
     @pytest.mark.asyncio
     async def test_add_and_remove_simultaneously(
@@ -436,7 +436,7 @@ class TestNamespaceEditabilityWithEntities:
         assert resp.status_code == 200
 
         types_resp = await crm_client.get(
-            f"/crm/api/v1/entity-types/by-namespace/{namespace_name}",
+            f"/crm/api/v1/entity-types?namespace={namespace_name}",
             headers=auth_headers_system,
         )
         type_ids = _type_id_set(types_resp)
@@ -615,7 +615,7 @@ class TestNamespaceEditabilityEdgeCases:
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
-        """422 при передаче несуществующих type_id"""
+        """400 при передаче несуществующих type_id"""
         type_a = f"alpha_{unique_id}"
         namespace_name, _ = await _create_namespace_with_types(
             crm_client, auth_headers_system, unique_id, [type_a],
@@ -626,7 +626,7 @@ class TestNamespaceEditabilityEdgeCases:
             json={"allowed_type_ids": [type_a, "nonexistent_type_xyz"]},
             headers=auth_headers_system,
         )
-        assert resp.status_code == 422
+        assert resp.status_code == 400
         assert "nonexistent_type_xyz" in _detail_text(resp)
 
     @pytest.mark.asyncio
@@ -769,7 +769,7 @@ class TestNamespaceEditabilityEdgeCases:
         )
 
         types_resp = await crm_client.get(
-            f"/crm/api/v1/entity-types/by-namespace/{namespace_name}",
+            f"/crm/api/v1/entity-types?namespace={namespace_name}",
             headers=auth_headers_system,
         )
         type_ids = _type_id_set(types_resp)

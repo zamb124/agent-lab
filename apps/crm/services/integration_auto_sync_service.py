@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import cast
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from croniter import CroniterBadCronError, croniter
 
@@ -30,7 +30,7 @@ def validate_cron_for_timezone(cron: str, timezone_name: str) -> None:
         raise ValueError("timezone не может быть пустым")
     try:
         zi = ZoneInfo(tz_name)
-    except Exception as exc:
+    except ZoneInfoNotFoundError as exc:
         raise ValueError(f"Неизвестная timezone: {timezone_name}") from exc
     base = datetime.now(zi)
     try:
@@ -108,7 +108,6 @@ class IntegrationAutoSyncService:
         raw_block = integ.get(pid)
         block: dict[str, object] = dict(raw_block) if raw_block is not None else {}
 
-        tz = (auto_sync_timezone or "UTC").strip()
         if not auto_sync_enabled:
             current_schedule_task_id = block.get("auto_sync_schedule_task_id")
             if isinstance(current_schedule_task_id, str) and current_schedule_task_id.strip():
@@ -123,7 +122,10 @@ class IntegrationAutoSyncService:
         cron_raw = auto_sync_cron if isinstance(auto_sync_cron, str) else ""
         if not cron_raw.strip():
             raise ValueError("При включённом автосинке поле cron обязательно")
+        if auto_sync_timezone is None or not auto_sync_timezone.strip():
+            raise ValueError("При включённом автосинке timezone обязателен")
         cron = cron_raw.strip()
+        tz = auto_sync_timezone.strip()
         validate_cron_for_timezone(cron, tz)
 
         oauth_actor = block.get("auto_sync_oauth_user_id")
@@ -147,9 +149,7 @@ class IntegrationAutoSyncService:
         stored_schedule_task_id = block.get("auto_sync_schedule_task_id")
 
         stored_cron_s = stored_cron.strip() if isinstance(stored_cron, str) else ""
-        stored_tz_s = (
-            stored_tz.strip() if isinstance(stored_tz, str) and stored_tz.strip() else "UTC"
-        )
+        stored_tz_s = stored_tz.strip() if isinstance(stored_tz, str) else ""
 
         schedule_outdated = (
             not isinstance(stored_schedule_task_id, str)

@@ -29,13 +29,6 @@ def _document_id(response: Response) -> str:
     return object_str(_http_json(response).get("document_id"), field="document_id")
 
 
-def _delete_success(response: Response) -> bool:
-    success = _http_json(response).get("success")
-    if not isinstance(success, bool):
-        raise AssertionError("success must be a bool")
-    return success
-
-
 @pytest.mark.timeout(30)
 class TestSagaRollback:
     """Saga pattern для транзакционности"""
@@ -68,7 +61,7 @@ class TestSagaRollback:
         _ = _document_id(upload_resp)
 
         delete_resp = await crm_client.delete(f"/crm/api/v1/entities/{entity_id}", headers=auth_headers_system)
-        assert delete_resp.status_code == 200
+        assert delete_resp.status_code == 204
 
         get_entity_resp = await crm_client.get(f"/crm/api/v1/entities/{entity_id}", headers=auth_headers_system)
         assert get_entity_resp.status_code == 404
@@ -101,7 +94,7 @@ class TestSagaRollback:
         relationship_id = _relationship_id(rel_resp)
 
         delete_resp = await crm_client.delete(f"/crm/api/v1/entities/{entity1_id}", headers=auth_headers_system)
-        assert delete_resp.status_code == 200
+        assert delete_resp.status_code == 204
 
         rel_get_resp = await crm_client.get(f"/crm/api/v1/relationships/{relationship_id}", headers=auth_headers_system)
         assert rel_get_resp.status_code == 404
@@ -145,8 +138,7 @@ class TestSagaRollback:
         }, headers=auth_headers_system)
 
         delete_resp = await crm_client.delete(f"/crm/api/v1/entities/{entity_id}", headers=auth_headers_system)
-        assert delete_resp.status_code == 200
-        assert _delete_success(delete_resp) is True
+        assert delete_resp.status_code == 204
 
     @pytest.mark.asyncio
     async def test_delete_note_removes_only_exclusive_related_entities(
@@ -244,8 +236,7 @@ class TestSagaRollback:
             f"/crm/api/v1/entities/{note_id}",
             headers=auth_headers_system,
         )
-        assert delete_note_resp.status_code == 200
-        assert _delete_success(delete_note_resp) is True
+        assert delete_note_resp.status_code == 204
 
         note_get_resp = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=auth_headers_system)
         assert note_get_resp.status_code == 404

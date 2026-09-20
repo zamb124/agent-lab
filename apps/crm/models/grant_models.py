@@ -2,21 +2,11 @@
 
 from typing import ClassVar, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 GrantRole = Literal["viewer", "editor", "admin", "owner"]
 GrantSubjectKind = Literal["user", "public", "company"]
 GrantResourceType = Literal["entity", "namespace"]
-
-
-class GrantToUserRequest(BaseModel):
-    user_id: str
-    role: GrantRole = Field(default="viewer")
-
-
-class GrantToCompanyRequest(BaseModel):
-    company_id: str
-    role: GrantRole = Field(default="viewer")
 
 
 class AccessGrantResponse(BaseModel):

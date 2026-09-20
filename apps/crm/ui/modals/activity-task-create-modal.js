@@ -29,20 +29,20 @@ export class CRMActivityTaskCreateModal extends PlatformFormModal {
         super();
         this.size = 'sm';
         this.headerSavePrimary = true;
-        this.namespace = 'default';
+        this.namespace = '';
         this._form = this.useForm(FORM_NAME);
         this._createOp = this.useOp(CREATE_OP);
     }
 
     connectedCallback() {
         super.connectedCallback();
-        const ns = typeof this.namespace === 'string' && this.namespace.length > 0
-            ? this.namespace
-            : 'default';
+        if (typeof this.namespace !== 'string' || this.namespace.length === 0) {
+            throw new Error('CRMActivityTaskCreateModal: namespace required');
+        }
         this._form.openForm({
             title: '',
             description: '',
-            namespace: ns,
+            namespace: this.namespace,
             priority: 'normal',
             due_date: '',
         });
@@ -68,9 +68,10 @@ export class CRMActivityTaskCreateModal extends PlatformFormModal {
         if (!title) {
             return;
         }
-        this._form.setField('namespace', typeof this.namespace === 'string' && this.namespace.length > 0
-            ? this.namespace
-            : 'default');
+        if (typeof this.namespace !== 'string' || this.namespace.length === 0) {
+            throw new Error('CRMActivityTaskCreateModal._performSave: namespace required');
+        }
+        this._form.setField('namespace', this.namespace);
         this._form.submit();
     }
 
@@ -126,7 +127,17 @@ export class CRMActivityTaskCreateModal extends PlatformFormModal {
                     mode="edit"
                     .label=${this.t('tasks_page.field_due')}
                     .value=${draft.due_date}
-                    @change=${(e) => this._form.setField('due_date', e.detail.value || '')}
+                    @change=${(e) => {
+                        const due = e.detail.value;
+                        if (due === null || due === undefined || due === '') {
+                            this._form.setField('due_date', '');
+                            return;
+                        }
+                        if (typeof due !== 'string') {
+                            throw new Error('CRMActivityTaskCreateModal: due_date must be string');
+                        }
+                        this._form.setField('due_date', due);
+                    }}
                 ></platform-field>
             </form>
         `;

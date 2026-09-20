@@ -13,6 +13,8 @@ export const relationshipTypesResource = createResourceCollection({
     baseUrl: '/crm/api/v1/relationships/types/',
     idField: 'type_id',
     operations: ['list', 'create'],
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
     listQuery: () => ({ limit: 200, offset: 0 }),
     toastKeys: {
         create: 'crm:toast.relationship_type.created',

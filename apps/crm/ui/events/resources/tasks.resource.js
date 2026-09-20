@@ -24,7 +24,6 @@ import {
     createAsyncOp,
     CoreEvents,
 } from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
 
 const CRM_TASK_UPDATED = 'crm/task/updated';
 
@@ -49,7 +48,7 @@ function _httpErrorDetailText(err) {
 }
 
 /**
- * 409 active_task_exists — задача уже идёт;
+ * 409 / `conflict` — задача уже идёт;
  * строковый detail — текст с бэка; иначе generic fail.
  * @param {object} ctx
  * @param {object} err
@@ -58,8 +57,8 @@ function _httpErrorDetailText(err) {
  * @param {string} failedKey
  */
 function _toastOnActiveTaskConflict(ctx, err, event, alreadyRunningKey, failedKey) {
-    const code = err && err.body && err.body.detail && err.body.detail.code;
-    if (err && err.status === 409 && code === 'active_task_exists') {
+    const conflict = (err && err.status === 409) || (err && err.code === 'conflict');
+    if (conflict) {
         ctx.dispatch(
             CoreEvents.UI_TOAST_SHOW,
             { type: 'warning', i18n_key: alreadyRunningKey },
@@ -102,7 +101,7 @@ function _mergeTaskIntoCollectionState(state, task, idField) {
 }
 
 /**
- * HTTP TaskResponse → тот же merge, что и WS `crm/task/updated`.
+ * TaskResponse → тот же merge, что и WS `crm/task/updated`.
  * @param {object} ctx
  * @param {object} result
  * @param {object} event
@@ -121,16 +120,10 @@ function _dispatchLocalTaskUpdated(ctx, result, event) {
 export const taskGetOp = createAsyncOp({
     name: 'crm/task_get',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/tasks/item_requested',
     restMirror: { method: 'GET', path: '/crm/api/v1/tasks/:task_id' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.task_id !== 'string') {
-            throw new Error('taskGetOp: payload.task_id required');
-        }
-        return await httpRequest({
-            method: 'GET',
-            url: `/crm/api/v1/tasks/${encodeURIComponent(payload.task_id)}`,
-        });
-    },
 });
 
 export const tasksResource = createResourceCollection({
@@ -138,13 +131,25 @@ export const tasksResource = createResourceCollection({
     baseUrl: '/crm/api/v1/tasks',
     idField: 'task_id',
     operations: ['list', 'get'],
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
     listQuery: (payload) => {
         if (!payload || typeof payload !== 'object') {
             throw new Error('tasksResource.listQuery: payload required (object)');
         }
-        const limit = typeof payload.limit === 'number' ? payload.limit : 50;
-        const offset = typeof payload.offset === 'number' ? payload.offset : 0;
-        const query = { limit, offset };
+        const query = {};
+        if ('limit' in payload) {
+            if (typeof payload.limit !== 'number') {
+                throw new Error('tasksResource.listQuery: payload.limit must be number');
+            }
+            query.limit = payload.limit;
+        }
+        if ('offset' in payload) {
+            if (typeof payload.offset !== 'number') {
+                throw new Error('tasksResource.listQuery: payload.offset must be number');
+            }
+            query.offset = payload.offset;
+        }
         if (typeof payload.namespace === 'string' && payload.namespace.length > 0) {
             query.namespace = payload.namespace;
         }
@@ -162,11 +167,11 @@ export const tasksResource = createResourceCollection({
         }
         const payload = event.payload;
         if (!payload || typeof payload !== 'object') {
-            return state;
+            throw new Error('crm/tasks extraReducer: push payload required');
         }
         const task = payload.task;
         if (!task || typeof task !== 'object' || typeof task.task_id !== 'string') {
-            return state;
+            throw new Error('crm/tasks extraReducer: payload.task with task_id required');
         }
         return _mergeTaskIntoCollectionState(state, task, 'task_id');
     },
@@ -175,32 +180,19 @@ export const tasksResource = createResourceCollection({
 export const taskCreatedEntitiesOp = createAsyncOp({
     name: 'crm/task_created_entities',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/tasks/created_entities_requested',
     restMirror: { method: 'GET', path: '/crm/api/v1/tasks/:task_id/created-entities' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.task_id !== 'string') {
-            throw new Error('taskCreatedEntitiesOp: payload.task_id required');
-        }
-        return await httpRequest({
-            method: 'GET',
-            url: `/crm/api/v1/tasks/${encodeURIComponent(payload.task_id)}/created-entities`,
-        });
-    },
 });
 
 export const taskKnowledgeImportStartOp = createAsyncOp({
     name: 'crm/task_knowledge_import_start',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/tasks/knowledge_import_start_requested',
     restMirror: { method: 'POST', path: '/crm/api/v1/tasks/knowledge-import' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('taskKnowledgeImportStartOp: payload required');
-        }
-        return await httpRequest({
-            method: 'POST',
-            url: '/crm/api/v1/tasks/knowledge-import',
-            body: payload,
-        });
-    },
     onSuccess: (ctx, _result, event) => {
         ctx.dispatch(
             CoreEvents.UI_TOAST_SHOW,
@@ -222,17 +214,10 @@ export const taskKnowledgeImportStartOp = createAsyncOp({
 export const taskDailySummaryStartOp = createAsyncOp({
     name: 'crm/task_daily_summary_start',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/tasks/daily_summary_start_requested',
     restMirror: { method: 'POST', path: '/crm/api/v1/tasks/daily-summary' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('taskDailySummaryStartOp: payload required');
-        }
-        return await httpRequest({
-            method: 'POST',
-            url: '/crm/api/v1/tasks/daily-summary',
-            body: payload,
-        });
-    },
     onSuccess: (ctx, _result, event) => {
         ctx.dispatch(
             CoreEvents.UI_TOAST_SHOW,
@@ -254,17 +239,10 @@ export const taskDailySummaryStartOp = createAsyncOp({
 export const taskPeriodSummaryStartOp = createAsyncOp({
     name: 'crm/task_period_summary_start',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/tasks/period_summary_start_requested',
     restMirror: { method: 'POST', path: '/crm/api/v1/tasks/period-summary' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('taskPeriodSummaryStartOp: payload required');
-        }
-        return await httpRequest({
-            method: 'POST',
-            url: '/crm/api/v1/tasks/period-summary',
-            body: payload,
-        });
-    },
     onSuccess: (ctx, _result, event) => {
         ctx.dispatch(
             CoreEvents.UI_TOAST_SHOW,
@@ -287,16 +265,10 @@ export const taskReviewCompleteOp = createAsyncOp({
     name: 'crm/task_review_complete',
     successToastKey: 'crm:toast.task.review_completed',
     errorToastKey: 'crm:toast.task.review_complete_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/tasks/review_complete_requested',
     restMirror: { method: 'POST', path: '/crm/api/v1/tasks/:task_id/review-complete' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.task_id !== 'string') {
-            throw new Error('taskReviewCompleteOp: payload.task_id required');
-        }
-        return await httpRequest({
-            method: 'POST',
-            url: `/crm/api/v1/tasks/${encodeURIComponent(payload.task_id)}/review-complete`,
-        });
-    },
     onSuccess: _dispatchLocalTaskUpdated,
 });
 
@@ -304,16 +276,10 @@ export const taskCancelOp = createAsyncOp({
     name: 'crm/task_cancel',
     successToastKey: 'crm:toast.task.cancelled',
     errorToastKey: 'crm:toast.task.cancel_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/tasks/cancel_requested',
     restMirror: { method: 'POST', path: '/crm/api/v1/tasks/:task_id/cancel' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.task_id !== 'string') {
-            throw new Error('taskCancelOp: payload.task_id required');
-        }
-        return await httpRequest({
-            method: 'POST',
-            url: `/crm/api/v1/tasks/${encodeURIComponent(payload.task_id)}/cancel`,
-        });
-    },
     onSuccess: _dispatchLocalTaskUpdated,
 });
 
@@ -321,32 +287,20 @@ export const taskRollbackOp = createAsyncOp({
     name: 'crm/task_rollback',
     successToastKey: 'crm:toast.task.rolled_back',
     errorToastKey: 'crm:toast.task.rollback_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/tasks/rollback_requested',
     restMirror: { method: 'POST', path: '/crm/api/v1/tasks/:task_id/rollback' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.task_id !== 'string') {
-            throw new Error('taskRollbackOp: payload.task_id required');
-        }
-        return await httpRequest({
-            method: 'POST',
-            url: `/crm/api/v1/tasks/${encodeURIComponent(payload.task_id)}/rollback`,
-        });
-    },
     onSuccess: _dispatchLocalTaskUpdated,
 });
 
 export const taskRetryOp = createAsyncOp({
     name: 'crm/task_retry',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/tasks/retry_requested',
     restMirror: { method: 'POST', path: '/crm/api/v1/tasks/:task_id/retry' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.task_id !== 'string') {
-            throw new Error('taskRetryOp: payload.task_id required');
-        }
-        return await httpRequest({
-            method: 'POST',
-            url: `/crm/api/v1/tasks/${encodeURIComponent(payload.task_id)}/retry`,
-        });
-    },
     onSuccess: (ctx, result, event) => {
         _dispatchLocalTaskUpdated(ctx, result, event);
         ctx.dispatch(

@@ -9,10 +9,15 @@
  *   PATCH /crm/api/v1/entities/notes/{note_id}/analysis-draft → AIAnalysisDraftStored
  *   DELETE /crm/api/v1/entities/notes/{note_id}/analysis-draft → сброс черновика
  *   DELETE /crm/api/v1/entities/notes/{note_id}/analysis-error → сброс только ошибки apply
- *   POST  /crm/api/v1/entities/notes/{note_id}/analysis-draft-repair → 202 TaskIQ (AI-починка черновика)
- *   POST  /crm/api/v1/tasks/note-analyze                       → TaskResponse (start_note_analyze)
- *   GET   /crm/api/v1/entities/search?q=&entity_type=note&search_mode= → CursorPage[Entity]
+ *   POST  /crm/api/v1/entities/notes/{note_id}/analysis-draft-repair → 202 TaskIQ
+ *   POST  /crm/api/v1/tasks/note-analyze                       → TaskResponse
+ *   POST  /crm/api/v1/entities/query                           → CursorPage[Entity]
  *   POST  /crm/api/v1/entities/cards/bulk                      → { [entity_id]: card }
+ *
+ * `crm/notes_list` остаётся HTTP: createCursorList шлёт UI-filters,
+ * а команда `crm/entities/query_requested` принимает EntitySearchQueryRequest.
+ * `noteSearchOp` / `noteLatestRangeOp` — те же имена фабрик (causation_id в daily-notes),
+ * commandType = `crm/entities/query_requested`, payload = EntitySearchQueryRequest.
  */
 
 import {
@@ -20,31 +25,10 @@ import {
     createAsyncOp,
     CoreEvents,
 } from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
 
 /**
- * Строка `detail` из HTTP-ошибки платформы (не объект `{code, message}`).
- * @param {object} err
- * @returns {string | null}
- */
-function _httpErrorDetailText(err) {
-    if (!err || typeof err !== 'object') {
-        return null;
-    }
-    const body = err.body;
-    if (!body || typeof body !== 'object') {
-        return null;
-    }
-    const detail = body.detail;
-    if (typeof detail === 'string' && detail.length > 0) {
-        return detail;
-    }
-    return null;
-}
-
-/**
- * 409 active_task_exists — задача уже идёт;
- * строковый detail — текст с бэка; иначе generic fail.
+ * 409 / conflict — задача уже идёт;
+ * строковый detail или message — текст с бэка; иначе generic fail.
  * @param {object} ctx
  * @param {object} err
  * @param {object} event
@@ -52,8 +36,8 @@ function _httpErrorDetailText(err) {
  * @param {string} failedKey
  */
 function _toastOnActiveTaskConflict(ctx, err, event, alreadyRunningKey, failedKey) {
-    const code = err && err.body && err.body.detail && err.body.detail.code;
-    if (err && err.status === 409 && code === 'active_task_exists') {
+    const conflict = (err && err.status === 409) || (err && err.code === 'conflict');
+    if (conflict) {
         ctx.dispatch(
             CoreEvents.UI_TOAST_SHOW,
             { type: 'warning', i18n_key: alreadyRunningKey },
@@ -61,7 +45,11 @@ function _toastOnActiveTaskConflict(ctx, err, event, alreadyRunningKey, failedKe
         );
         return;
     }
-    const detailText = _httpErrorDetailText(err);
+    const body = err && err.body;
+    const detail = body && typeof body === 'object' ? body.detail : null;
+    const detailText = typeof detail === 'string' && detail.length > 0
+        ? detail
+        : (typeof err.message === 'string' && err.message.length > 0 ? err.message : null);
     if (detailText !== null) {
         ctx.dispatch(
             CoreEvents.UI_TOAST_SHOW,
@@ -201,95 +189,55 @@ export const notesListResource = createCursorList({
 export const noteLatestRangeOp = createAsyncOp({
     name: 'crm/note_latest_range',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/entities/query_requested',
     restMirror: { method: 'POST', path: '/crm/api/v1/entities/query' },
-    request: async ({ payload }) => {
-        const body = {
-            entity_type: 'note',
-            limit: 50,
-        };
-        if (payload && typeof payload.namespace === 'string' && payload.namespace.length > 0) {
-            body.namespace = payload.namespace;
-        }
-        if (payload && typeof payload.entity_subtype === 'string' && payload.entity_subtype.length > 0) {
-            body.entity_subtype = payload.entity_subtype;
-        }
-        return await httpRequest({
-            method: 'POST',
-            url: '/crm/api/v1/entities/query',
-            body,
-        });
-    },
 });
 
-/** PATCH body: expected_version, remove_*, patch_entities, patch_relationships?, add_entities?, add_relationships?. */
+/** PATCH body: note_id + expected_version, remove_*, patch_entities, patch_relationships?, add_entities?, add_relationships?. */
 export const noteAnalysisDraftSaveOp = createAsyncOp({
     name: 'crm/note_analysis_draft_save',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/notes/analysis_draft_save_requested',
     restMirror: { method: 'PATCH', path: '/crm/api/v1/entities/notes/:note_id/analysis-draft' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.note_id !== 'string' || !payload.draft) {
-            throw new Error('noteAnalysisDraftSaveOp: { note_id, draft } required');
-        }
-        return await httpRequest({
-            method: 'PATCH',
-            url: `/crm/api/v1/entities/notes/${encodeURIComponent(payload.note_id)}/analysis-draft`,
-            body: payload.draft,
-        });
-    },
 });
 
 export const noteAnalysisDraftDiscardOp = createAsyncOp({
     name: 'crm/note_analysis_draft_discard',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/notes/analysis_draft_discard_requested',
     restMirror: {
         method: 'DELETE',
         path: '/crm/api/v1/entities/notes/:note_id/analysis-draft',
-    },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.note_id !== 'string') {
-            throw new Error('noteAnalysisDraftDiscardOp: note_id required');
-        }
-        return await httpRequest({
-            method: 'DELETE',
-            url: `/crm/api/v1/entities/notes/${encodeURIComponent(payload.note_id)}/analysis-draft`,
-        });
     },
 });
 
 export const noteAnalysisErrorDismissOp = createAsyncOp({
     name: 'crm/note_analysis_error_dismiss',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/notes/analysis_error_dismiss_requested',
     restMirror: {
         method: 'DELETE',
         path: '/crm/api/v1/entities/notes/:note_id/analysis-error',
-    },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.note_id !== 'string') {
-            throw new Error('noteAnalysisErrorDismissOp: note_id required');
-        }
-        return await httpRequest({
-            method: 'DELETE',
-            url: `/crm/api/v1/entities/notes/${encodeURIComponent(payload.note_id)}/analysis-error`,
-        });
     },
 });
 
 export const noteAnalysisDraftRepairOp = createAsyncOp({
     name: 'crm/note_analysis_draft_repair',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/notes/analysis_draft_repair_requested',
     restMirror: {
         method: 'POST',
         path: '/crm/api/v1/entities/notes/:note_id/analysis-draft-repair',
-    },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.note_id !== 'string') {
-            throw new Error('noteAnalysisDraftRepairOp: note_id required');
-        }
-        return await httpRequest({
-            method: 'POST',
-            url: `/crm/api/v1/entities/notes/${encodeURIComponent(payload.note_id)}/analysis-draft-repair`,
-            body: {},
-        });
     },
     onSuccess: (ctx, _result, event) => {
         ctx.dispatch(
@@ -312,72 +260,34 @@ export const noteAnalysisDraftRepairOp = createAsyncOp({
 export const noteSearchOp = createAsyncOp({
     name: 'crm/note_search',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/entities/query_requested',
     restMirror: { method: 'POST', path: '/crm/api/v1/entities/query' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.q !== 'string' || payload.q.length === 0) {
-            throw new Error('noteSearchOp: payload.q (non-empty string) required');
-        }
-        const search_mode = typeof payload.search_mode === 'string' && payload.search_mode.length > 0
-            ? payload.search_mode
-            : 'hybrid';
-        const limit = typeof payload.limit === 'number' && payload.limit > 0 ? payload.limit : 50;
-        const body = {
-            query: payload.q,
-            entity_type: 'note',
-            search_mode,
-            limit,
-        };
-        if (typeof payload.namespace === 'string' && payload.namespace.length > 0) {
-            body.namespace = payload.namespace;
-        }
-        return await httpRequest({
-            method: 'POST',
-            url: '/crm/api/v1/entities/query',
-            body,
-        });
-    },
 });
 
 export const entityCardsBulkOp = createAsyncOp({
     name: 'crm/entity_cards_bulk',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/entities/cards_bulk_requested',
     restMirror: { method: 'POST', path: '/crm/api/v1/entities/cards/bulk' },
-    request: async ({ payload }) => {
-        if (!payload || !Array.isArray(payload.entity_ids) || payload.entity_ids.length === 0) {
-            throw new Error('entityCardsBulkOp: payload.entity_ids (non-empty array) required');
-        }
-        return await httpRequest({
-            method: 'POST',
-            url: '/crm/api/v1/entities/cards/bulk',
-            body: { entity_ids: payload.entity_ids },
-        });
-    },
 });
 
 export const noteAnalyzeStartOp = createAsyncOp({
     name: 'crm/note_analyze_start',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/notes/analyze_requested',
     restMirror: { method: 'POST', path: '/crm/api/v1/tasks/note-analyze' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.note_id !== 'string') {
-            throw new Error('noteAnalyzeStartOp: payload.note_id required');
-        }
-        const body = { note_id: payload.note_id };
-        if (typeof payload.mode === 'string' && payload.mode.length > 0) {
-            body.mode = payload.mode;
-        }
-        return await httpRequest({
-            method: 'POST',
-            url: '/crm/api/v1/tasks/note-analyze',
-            body,
-        });
-    },
     onSuccess: (ctx, result, event) => {
         if (result && typeof result === 'object' && typeof result.task_id === 'string') {
             ctx.dispatch(
                 'crm/task/updated',
                 { task: result },
-                { causation_id: event.id, source: 'http' },
+                { causation_id: event.id },
             );
         }
         ctx.dispatch(
@@ -400,16 +310,10 @@ export const noteAnalyzeStartOp = createAsyncOp({
 export const noteMarkdownFormatOp = createAsyncOp({
     name: 'crm/note_markdown_format',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/notes/markdown_format_requested',
     restMirror: { method: 'POST', path: '/crm/api/v1/entities/notes/:note_id/format-markdown' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.note_id !== 'string' || payload.note_id.length === 0) {
-            throw new Error('noteMarkdownFormatOp: payload.note_id required');
-        }
-        return await httpRequest({
-            method: 'POST',
-            url: `/crm/api/v1/entities/notes/${encodeURIComponent(payload.note_id)}/format-markdown`,
-        });
-    },
     onSuccess: (ctx, _result, event) => {
         ctx.dispatch(
             CoreEvents.UI_TOAST_SHOW,

@@ -194,11 +194,17 @@ class AttachmentService:
             document_id,
         )
 
+        status = index_response.get("status")
+        if not isinstance(status, str) or status.strip() == "":
+            raise ValueError("RAG index_file response.status required")
+        task_id = index_response.get("task_id")
+        if task_id is not None and not isinstance(task_id, str):
+            raise ValueError("RAG index_file response.task_id must be string")
         return {
             "document_id": document_id,
             "filename": filename,
-            "status": index_response.get("status", "pending"),
-            "task_id": index_response.get("task_id"),
+            "status": status,
+            "task_id": task_id,
             "markdown_format_queued": markdown_format_queued,
         }
 
@@ -216,20 +222,20 @@ class AttachmentService:
         self,
         entity_id: str,
         document_id: str,
-    ) -> bool:
-        """Удаляет attachment entity"""
+    ) -> None:
         context = get_context()
         if context is None:
             raise ValueError("Нет контекста запроса")
-        namespace_name = context.active_namespace
 
         entity = await self._entity_repo.get(entity_id)
 
-        if not entity or document_id not in entity.attachment_ids:
-            logger.warning(f"Attachment not found: {document_id} for {entity_id}")
-            return False
+        if entity is None or document_id not in entity.attachment_ids:
+            raise LookupError(f"Attachment not found: {document_id} for {entity_id}")
 
-        _ = await self._rag.delete_namespace_document(namespace_name, document_id)
+        namespace = entity.namespace.strip()
+        if namespace == "":
+            raise ValueError(f"Entity {entity_id} has empty namespace")
+        _ = await self._rag.delete_namespace_document(namespace, document_id)
 
         entity.attachment_ids.remove(document_id)
         entity.updated_at = datetime.now(UTC)
@@ -247,7 +253,6 @@ class AttachmentService:
             )
 
         logger.info(f"Attachment removed: {document_id} from {entity_id}")
-        return True
 
     async def get_attachments(
         self,
@@ -354,17 +359,8 @@ class AttachmentService:
         deleted_count = 0
 
         for doc_id in list(entity.attachment_ids):
-            try:
-                success = await self.remove_attachment(entity_id, doc_id)
-                if success:
-                    deleted_count += 1
-            except (ServiceClientError, ValueError) as e:
-                logger.error(
-                    "Failed to delete attachment",
-                    entity_id=entity_id,
-                    document_id=doc_id,
-                    error=str(e),
-                )
+            await self.remove_attachment(entity_id, doc_id)
+            deleted_count += 1
 
         logger.info(f"Deleted {deleted_count} attachments for {entity_id}")
         return deleted_count

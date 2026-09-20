@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from typing import override
 
 from sqlalchemy import func, select, update
@@ -6,14 +5,6 @@ from sqlalchemy import func, select, update
 from apps.crm.db.base import BaseCRMRepository
 from apps.crm.db.models import CRMSuggest
 from core.context import get_context
-
-
-@dataclass(frozen=True)
-class CRMSuggestPage:
-    items: list[CRMSuggest]
-    total: int
-    limit: int
-    offset: int
 
 
 class SuggestRepository(BaseCRMRepository[CRMSuggest]):
@@ -59,7 +50,7 @@ class SuggestRepository(BaseCRMRepository[CRMSuggest]):
         status: str | None = "pending",
         limit: int = 50,
         offset: int = 0,
-    ) -> CRMSuggestPage:
+    ) -> tuple[list[CRMSuggest], int]:
         company_id = self._get_company_id()
         async with self._db.session() as session:
             stmt = select(CRMSuggest).where(
@@ -70,13 +61,14 @@ class SuggestRepository(BaseCRMRepository[CRMSuggest]):
                 stmt = stmt.where(CRMSuggest.status == status)
 
             count_stmt = select(func.count()).select_from(stmt.subquery())
-            total = await session.scalar(count_stmt) or 0
+            total = await session.scalar(count_stmt)
+            if total is None:
+                raise RuntimeError("CRMSuggest count is required")
 
             stmt = stmt.order_by(CRMSuggest.created_at.desc()).limit(limit).offset(offset)
             result = await session.execute(stmt)
             items = list(result.scalars().all())
-
-            return CRMSuggestPage(items=items, total=total, limit=limit, offset=offset)
+            return items, total
 
     @override
     async def create(self, entity: CRMSuggest) -> CRMSuggest:

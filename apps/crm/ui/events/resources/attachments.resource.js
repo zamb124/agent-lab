@@ -1,8 +1,8 @@
 /**
  * Вложения — файлы, прикреплённые к сущностям CRM.
  *
- * Байты: uploadPlatformFile (chunked Files API).
- * Привязка: POST /crm/api/v1/entities/{entity_id}/attachments { file_id }.
+ * Байты: uploadPlatformFile (chunked Files API) — HTTP.
+ * Привязка / список / удаление — `crm/attachments/*_requested`.
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
@@ -13,16 +13,10 @@ import { buildCrmEntityFileCreateSpecJson } from '@platform/lib/utils/file-creat
 export const attachmentsListOp = createAsyncOp({
     name: 'crm/attachments_list',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/attachments/list_requested',
     restMirror: { method: 'GET', path: '/crm/api/v1/entities/:entity_id/attachments' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.entity_id !== 'string') {
-            throw new Error('attachmentsListOp: payload.entity_id required');
-        }
-        return await httpRequest({
-            method: 'GET',
-            url: `/crm/api/v1/entities/${encodeURIComponent(payload.entity_id)}/attachments`,
-        });
-    },
 });
 
 export const attachmentUploadOp = createAsyncOp({
@@ -60,15 +54,8 @@ export const attachmentDeleteOp = createAsyncOp({
     name: 'crm/attachment_delete',
     successToastKey: 'crm:toast.attachment.removed',
     errorToastKey: 'crm:toast.attachment.remove_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/attachments/remove_requested',
     restMirror: { method: 'DELETE', path: '/crm/api/v1/entities/:entity_id/attachments/:attachment_id' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.entity_id !== 'string' || typeof payload.attachment_id !== 'string') {
-            throw new Error('attachmentDeleteOp: { entity_id, attachment_id } required');
-        }
-        await httpRequest({
-            method: 'DELETE',
-            url: `/crm/api/v1/entities/${encodeURIComponent(payload.entity_id)}/attachments/${encodeURIComponent(payload.attachment_id)}`,
-        });
-        return { entity_id: payload.entity_id, attachment_id: payload.attachment_id };
-    },
 });

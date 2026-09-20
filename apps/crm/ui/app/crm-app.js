@@ -70,7 +70,6 @@ import {
 import {
     relationshipsResource,
     relationshipsListResource,
-    relationshipShortestPathOp,
 } from '../events/resources/relationships.resource.js';
 import {
     tasksResource,
@@ -86,6 +85,7 @@ import {
 } from '../events/resources/tasks.resource.js';
 import {
     activityTaskCreateOp,
+    activityTasksListOp,
     activityTaskCreateForm,
 } from '../events/resources/activity-tasks.resource.js';
 import {
@@ -94,10 +94,9 @@ import {
     suggestDismissOp,
 } from '../events/resources/suggests.resource.js';
 import {
-    entityGrantsListOp,
-    entityGrantCreateOp,
-    namespaceGrantsListOp,
-    namespaceGrantCreateOp,
+    grantsListOp,
+    grantCreateOp,
+    grantItemOp,
     grantRevokeOp,
 } from '../events/resources/grants.resource.js';
 import { accessRequestsResource, accessRequestUpdateOp } from '../events/resources/access-requests.resource.js';
@@ -107,6 +106,7 @@ import {
     influenceGraphOp,
     relatedEntitiesOp,
     entityRelationshipsOp,
+    exclusiveRelatedOp,
     shortestPathOp,
     timelineBoundsOp,
     personEntitySelfOp,
@@ -299,9 +299,9 @@ export class CRMApp extends PlatformApp {
         periodSummaryOp,
         relationshipsResource,
         relationshipsListResource,
-        relationshipShortestPathOp,
         tasksResource,
         activityTaskCreateOp,
+        activityTasksListOp,
         activityTaskCreateForm,
         taskGetOp,
         taskCreatedEntitiesOp,
@@ -315,10 +315,9 @@ export class CRMApp extends PlatformApp {
         suggestsListOp,
         suggestResolveOp,
         suggestDismissOp,
-        entityGrantsListOp,
-        entityGrantCreateOp,
-        namespaceGrantsListOp,
-        namespaceGrantCreateOp,
+        grantsListOp,
+        grantCreateOp,
+        grantItemOp,
         grantRevokeOp,
         accessRequestsResource,
         accessRequestUpdateOp,
@@ -327,6 +326,7 @@ export class CRMApp extends PlatformApp {
         influenceGraphOp,
         relatedEntitiesOp,
         entityRelationshipsOp,
+        exclusiveRelatedOp,
         shortestPathOp,
         timelineBoundsOp,
         personEntitySelfOp,

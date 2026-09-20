@@ -282,8 +282,13 @@ async def create_public_grant(
 ) -> None:
     """Сделать entity публичной"""
     response = await client.post(
-        f"/crm/api/v1/entities/{entity_id}/grants/public",
-        headers=headers
+        "/crm/api/v1/grants",
+        json={
+            "resource_type": "entity",
+            "resource_id": entity_id,
+            "subject": "public",
+        },
+        headers=headers,
     )
     assert response.status_code == 200, f"Failed to create public grant: {response.text}"
 
@@ -535,7 +540,7 @@ class TestFiltering:
 
         # Фильтр по "manages" и "mentors"
         response = await crm_client.get(
-            f"/crm/api/v1/entities/{a_id}/influence-graph?relationship_types=manages,mentors",
+            f"/crm/api/v1/entities/{a_id}/influence-graph?relationship_types=manages&relationship_types=mentors",
             headers=auth_headers_system
         )
         assert response.status_code == 200
@@ -636,7 +641,7 @@ class TestShortestPath:
         _ = await create_relationship(crm_client, b_id, c_id, "mentions", auth_headers_system, weight=1.0)
 
         response = await crm_client.get(
-            f"/crm/api/v1/relationships/path/?from={a_id}&to={c_id}",
+            f"/crm/api/v1/relationships/path/?source_entity_id={a_id}&target_entity_id={c_id}",
             headers=auth_headers_system
         )
         assert response.status_code == 200
@@ -661,7 +666,7 @@ class TestShortestPath:
         _ = await create_relationship(crm_client, b_id, c_id, "mentions", auth_headers_system, weight=1.0)
 
         response = await crm_client.get(
-            f"/crm/api/v1/relationships/path/?from={a_id}&to={c_id}",
+            f"/crm/api/v1/relationships/path/?source_entity_id={a_id}&target_entity_id={c_id}",
             headers=auth_headers_system
         )
         assert response.status_code == 200
@@ -685,7 +690,7 @@ class TestShortestPath:
         _ = await create_relationship(crm_client, c_id, d_id, "mentions", auth_headers_system)
 
         response = await crm_client.get(
-            f"/crm/api/v1/relationships/path/?from={a_id}&to={d_id}",
+            f"/crm/api/v1/relationships/path/?source_entity_id={a_id}&target_entity_id={d_id}",
             headers=auth_headers_system
         )
         assert response.status_code == 200
@@ -714,7 +719,7 @@ class TestShortestPath:
 
         # От A до C - должен найти
         response = await crm_client.get(
-            f"/crm/api/v1/relationships/path/?from={a_id}&to={c_id}",
+            f"/crm/api/v1/relationships/path/?source_entity_id={a_id}&target_entity_id={c_id}",
             headers=auth_headers_system
         )
         assert response.status_code == 200
@@ -722,7 +727,7 @@ class TestShortestPath:
 
         # От C до A - не должен найти (направленные связи)
         response = await crm_client.get(
-            f"/crm/api/v1/relationships/path/?from={c_id}&to={a_id}",
+            f"/crm/api/v1/relationships/path/?source_entity_id={c_id}&target_entity_id={a_id}",
             headers=auth_headers_system
         )
         assert response.status_code == 200
@@ -746,7 +751,7 @@ class TestShortestPath:
 
         # От A до C - должен найти
         response = await crm_client.get(
-            f"/crm/api/v1/relationships/path/?from={a_id}&to={c_id}",
+            f"/crm/api/v1/relationships/path/?source_entity_id={a_id}&target_entity_id={c_id}",
             headers=auth_headers_system
         )
         assert response.status_code == 200
@@ -754,7 +759,7 @@ class TestShortestPath:
 
         # От C до A - ТОЖЕ должен найти (симметричные связи)
         response = await crm_client.get(
-            f"/crm/api/v1/relationships/path/?from={c_id}&to={a_id}",
+            f"/crm/api/v1/relationships/path/?source_entity_id={c_id}&target_entity_id={a_id}",
             headers=auth_headers_system
         )
         assert response.status_code == 200
@@ -774,7 +779,7 @@ class TestShortestPath:
 
         # Путь от A до E с max_depth=3 (требуется 4 шага)
         response = await crm_client.get(
-            f"/crm/api/v1/relationships/path/?from={entities[0]}&to={entities[4]}&max_depth=3",
+            f"/crm/api/v1/relationships/path/?source_entity_id={entities[0]}&target_entity_id={entities[4]}&max_depth=3",
             headers=auth_headers_system
         )
         assert response.status_code == 200
@@ -1000,20 +1005,26 @@ class TestCrossCompanyAccess:
 
         # Даем system user доступ к A и C (но НЕ к B)
         response = await crm_client.post(
-            f"/crm/api/v1/entities/{a_id}/grants/user",
+            "/crm/api/v1/grants",
             json={
+                "resource_type": "entity",
+                "resource_id": a_id,
+                "subject": "user",
                 "user_id": system_user_id,
-                "role": "viewer"
+                "role": "viewer",
             },
             headers=auth_headers_company2
         )
         assert response.status_code == 200, f"Failed to grant A: {response.text}"
 
         response = await crm_client.post(
-            f"/crm/api/v1/entities/{c_id}/grants/user",
+            "/crm/api/v1/grants",
             json={
+                "resource_type": "entity",
+                "resource_id": c_id,
+                "subject": "user",
                 "user_id": system_user_id,
-                "role": "viewer"
+                "role": "viewer",
             },
             headers=auth_headers_company2
         )
@@ -1051,10 +1062,13 @@ class TestCrossCompanyAccess:
 
         # Даем namespace grant
         response = await crm_client.post(
-            "/crm/api/v1/namespaces/default/grants/company",
+            "/crm/api/v1/grants",
             json={
+                "resource_type": "namespace",
+                "resource_id": "default",
+                "subject": "company",
                 "company_id": "system",
-                "role": "viewer"
+                "role": "viewer",
             },
             headers=auth_headers_company2
         )
@@ -1091,7 +1105,7 @@ class TestCrossCompanyAccess:
 
         # System user ищет путь
         response = await crm_client.get(
-            f"/crm/api/v1/relationships/path/?from={a_id}&to={c_id}",
+            f"/crm/api/v1/relationships/path/?source_entity_id={a_id}&target_entity_id={c_id}",
             headers=auth_headers_system
         )
         assert response.status_code == 200
@@ -1251,7 +1265,7 @@ class TestComplexScenarios:
 
         # Находим путь от Project1 до Project3
         response = await crm_client.get(
-            f"/crm/api/v1/relationships/path/?from={project1_id}&to={project3_id}",
+            f"/crm/api/v1/relationships/path/?source_entity_id={project1_id}&target_entity_id={project3_id}",
             headers=auth_headers_system
         )
         assert response.status_code == 200
@@ -1334,7 +1348,7 @@ class TestEdgeCases:
         entity_id = await create_entity(crm_client, "contact", f"Self {unique_id}", auth_headers_system)
 
         response = await crm_client.get(
-            f"/crm/api/v1/relationships/path/?from={entity_id}&to={entity_id}",
+            f"/crm/api/v1/relationships/path/?source_entity_id={entity_id}&target_entity_id={entity_id}",
             headers=auth_headers_system
         )
         assert response.status_code == 200

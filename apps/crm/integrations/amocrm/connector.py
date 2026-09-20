@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from typing import cast as type_cast
 from urllib.parse import quote
 
 from apps.crm.integrations.amocrm.service import AmoCRMIntegrationService, AmoProgressFn
@@ -13,6 +12,7 @@ from apps.crm.integrations.amocrm.type_extensions import (
     AMO_OPTIONAL_FIELDS_BY_TYPE_ID,
     amo_canonical_type_ids,
 )
+from apps.crm.models.api import IntegrationManifestItem
 from core.integrations.guided_integration_error import (
     GuidedIntegrationError,
     GuidedIntegrationLink,
@@ -20,7 +20,6 @@ from core.integrations.guided_integration_error import (
 )
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.models.identity_models import NamespaceCRMSettings
-from core.types import JsonObject, require_json_object
 
 if TYPE_CHECKING:
     from apps.crm.db.repositories.entity_repository import EntityRepository
@@ -103,13 +102,6 @@ class AmoCRMConnector:
             oauth_ui_locale=oauth_ui_locale,
             brand_host=brand_host,
         )
-
-    @staticmethod
-    def _as_json_object(value: object) -> JsonObject | None:
-        try:
-            return require_json_object(value, "amocrm json object")
-        except ValueError:
-            return None
 
     async def sync_entities(
         self,
@@ -254,40 +246,51 @@ class AmoCRMConnector:
         company_id: str,
         user_id: str,
         crm_settings: NamespaceCRMSettings | None,
-    ) -> JsonObject:
+    ) -> IntegrationManifestItem:
         display: str | None = None
+        auto_sync_enabled: bool | None = None
+        auto_sync_cron: str | None = None
+        auto_sync_timezone: str | None = None
+        auto_sync_schedule_task_id: str | None = None
+        auto_note_ai_analyze: bool | None = None
         if crm_settings is not None:
-            block = self._as_json_object(type_cast(object, crm_settings.integrations.get("amocrm")))
+            block = crm_settings.integrations.get("amocrm")
             if block is not None:
                 raw = block.get("subdomain")
                 if isinstance(raw, str) and raw.strip():
                     display = raw.strip()
+                if "auto_sync_enabled" in block:
+                    enabled = block["auto_sync_enabled"]
+                    if not isinstance(enabled, bool):
+                        raise ValueError("amocrm auto_sync_enabled must be bool")
+                    auto_sync_enabled = enabled
+                ac = block.get("auto_sync_cron")
+                if isinstance(ac, str) and ac.strip():
+                    auto_sync_cron = ac.strip()
+                atz = block.get("auto_sync_timezone")
+                if isinstance(atz, str) and atz.strip():
+                    auto_sync_timezone = atz.strip()
+                sid = block.get("auto_sync_schedule_task_id")
+                if isinstance(sid, str) and sid.strip():
+                    auto_sync_schedule_task_id = sid.strip()
+                if "auto_note_ai_analyze" in block:
+                    note_ai = block["auto_note_ai_analyze"]
+                    if not isinstance(note_ai, bool):
+                        raise ValueError("amocrm auto_note_ai_analyze must be bool")
+                    auto_note_ai_analyze = note_ai
         cred = await self._oauth_service.get_valid_token(
             company_id=company_id,
             user_id=user_id,
             provider=IntegrationProvider.AMOCRM,
             service=f"amocrm:{namespace_name}",
         )
-        connected = cred is not None
-        out: JsonObject = {
-            "provider_id": self.provider_id,
-            "connected": connected,
-            "display": display,
-        }
-        if crm_settings is not None:
-            block = self._as_json_object(type_cast(object, crm_settings.integrations.get("amocrm")))
-            if block is not None:
-                if "auto_sync_enabled" in block:
-                    out["auto_sync_enabled"] = bool(block.get("auto_sync_enabled"))
-                ac = block.get("auto_sync_cron")
-                if isinstance(ac, str) and ac.strip():
-                    out["auto_sync_cron"] = ac.strip()
-                atz = block.get("auto_sync_timezone")
-                if isinstance(atz, str) and atz.strip():
-                    out["auto_sync_timezone"] = atz.strip()
-                sid = block.get("auto_sync_schedule_task_id")
-                if isinstance(sid, str) and sid.strip():
-                    out["auto_sync_schedule_task_id"] = sid.strip()
-                if "auto_note_ai_analyze" in block:
-                    out["auto_note_ai_analyze"] = bool(block.get("auto_note_ai_analyze"))
-        return out
+        return IntegrationManifestItem(
+            provider_id=self.provider_id,
+            connected=cred is not None,
+            display=display,
+            auto_sync_enabled=auto_sync_enabled,
+            auto_sync_cron=auto_sync_cron,
+            auto_sync_timezone=auto_sync_timezone,
+            auto_sync_schedule_task_id=auto_sync_schedule_task_id,
+            auto_note_ai_analyze=auto_note_ai_analyze,
+        )

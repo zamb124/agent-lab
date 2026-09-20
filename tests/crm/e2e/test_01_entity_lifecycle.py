@@ -34,13 +34,6 @@ def _string_list(value: object) -> list[str]:
     return strings
 
 
-def _delete_success(response: Response) -> bool:
-    success = _http_json(response).get("success")
-    if not isinstance(success, bool):
-        raise AssertionError("success must be a bool")
-    return success
-
-
 class TestEntityLifecycle:
     """Полный жизненный цикл entity"""
 
@@ -162,8 +155,7 @@ class TestEntityLifecycle:
         entity_id = _entity_id(create_resp)
 
         delete_resp = await crm_client.delete(f"/crm/api/v1/entities/{entity_id}", headers=auth_headers_system)
-        assert delete_resp.status_code == 200
-        assert _delete_success(delete_resp) is True
+        assert delete_resp.status_code == 204
 
         get_resp = await crm_client.get(f"/crm/api/v1/entities/{entity_id}", headers=auth_headers_system)
         assert get_resp.status_code == 404
@@ -405,4 +397,4 @@ class TestEntityLifecycle:
             "name": "Иван Кандидат",
             "namespace": namespace_name,
         }, headers=auth_headers_system)
-        assert create_entity_resp.status_code == 422
+        assert create_entity_resp.status_code == 404

@@ -2,20 +2,19 @@
  * Entity Types — типы сущностей CRM (одна строка = company_id + namespace + type_id).
  *
  * GET    /                                → OffsetPage (опционально ?namespace=)
- * GET    /by-namespace/{namespace}        → OffsetPage
  * GET    /{type_id}?namespace=            → EntityTypeResponse
  * POST   /                                → EntityTypeResponse (body.namespace)
  * PUT    /{type_id}?namespace=             → EntityTypeResponse
- * PUT    /{type_id}/public-fields?namespace=
+ * PUT    /{type_id}/public-fields         → body CrmEntityTypePublicFieldsPayload
  *
  * Идентификатор строки в коллекции: crm_entity_type_row_id = `${namespace}\\0${type_id}`.
+ * GET item в operations нет: фабрика слала бы composite id, бэкенд принимает type_id + namespace.
  */
 
 import {
     createResourceCollection,
     createAsyncOp,
 } from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
 
 const ROW_SEP = '\u0000';
 
@@ -34,28 +33,13 @@ function rowIdFromRaw(raw) {
     return `${ns}${ROW_SEP}${tid}`;
 }
 
-function parseRowId(rowId) {
-    if (typeof rowId !== 'string' || !rowId.length) {
-        throw new Error('crm/entity_types: row id string required');
-    }
-    const i = rowId.indexOf(ROW_SEP);
-    if (i <= 0 || i === rowId.length - 1) {
-        throw new Error('crm/entity_types: invalid row id');
-    }
-    return {
-        namespace: rowId.slice(0, i),
-        type_id: rowId.slice(i + ROW_SEP.length),
-    };
-}
-
 export const entityTypesResource = createResourceCollection({
     name: 'crm/entity_types',
     baseUrl: '/crm/api/v1/entity-types',
     idField: 'crm_entity_type_row_id',
-    operations: ['list', 'get', 'create'],
-    restMirror: {
-        get: { method: 'GET', path: '/crm/api/v1/entity-types/:type_id' },
-    },
+    operations: ['list', 'create'],
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
     listFetchAllPages: true,
     listQuery: (payload) => {
         if (!payload || typeof payload !== 'object') {
@@ -68,10 +52,6 @@ export const entityTypesResource = createResourceCollection({
             query.namespace = payload.namespace;
         }
         return query;
-    },
-    buildItemUrl: (rowId) => {
-        const { namespace, type_id: typeId } = parseRowId(rowId);
-        return `/crm/api/v1/entity-types/${encodeURIComponent(typeId)}?namespace=${encodeURIComponent(namespace)}`;
     },
     mapItem: (raw) => {
         if (!raw || typeof raw !== 'object') {
@@ -105,42 +85,18 @@ export const entityTypeUpdateOp = createAsyncOp({
     name: 'crm/entity_type_update',
     successToastKey: 'crm:toast.entity_type.updated',
     errorToastKey: 'crm:toast.entity_type.update_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/entity_types/update_requested',
     restMirror: { method: 'PUT', path: '/crm/api/v1/entity-types/:type_id' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.type_id !== 'string' || !payload.body) {
-            throw new Error('entityTypeUpdateOp: { type_id, namespace, body } required');
-        }
-        if (typeof payload.namespace !== 'string' || !payload.namespace.length) {
-            throw new Error('entityTypeUpdateOp: namespace required');
-        }
-        const { type_id: typeId, namespace, body } = payload;
-        return await httpRequest({
-            method: 'PUT',
-            url: `/crm/api/v1/entity-types/${encodeURIComponent(typeId)}?namespace=${encodeURIComponent(namespace)}`,
-            body,
-        });
-    },
 });
 
 export const entityTypePublicFieldsOp = createAsyncOp({
     name: 'crm/entity_type_public_fields',
     successToastKey: 'crm:toast.entity_type.public_fields_updated',
     errorToastKey: 'crm:toast.entity_type.public_fields_update_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/entity_types/public_fields_requested',
     restMirror: { method: 'PUT', path: '/crm/api/v1/entity-types/:type_id/public-fields' },
-    request: async ({ payload }) => {
-        if (
-            !payload
-            || typeof payload.type_id !== 'string'
-            || typeof payload.namespace !== 'string'
-            || !payload.namespace.length
-            || !Array.isArray(payload.fields)
-        ) {
-            throw new Error('entityTypePublicFieldsOp: { type_id, namespace, fields } required');
-        }
-        return await httpRequest({
-            method: 'PUT',
-            url: `/crm/api/v1/entity-types/${encodeURIComponent(payload.type_id)}/public-fields?namespace=${encodeURIComponent(payload.namespace)}`,
-            body: { public_fields: payload.fields },
-        });
-    },
 });

@@ -1014,8 +1014,8 @@ class CrmClient:
             raise ValueError("from_entity_id and to_entity_id are required")
         ns = self._resolve_namespace(args.namespace)
         query = {
-            "from": src,
-            "to": dst,
+            "source_entity_id": src,
+            "target_entity_id": dst,
             "max_depth": str(args.max_depth),
             "namespace": ns,
         }

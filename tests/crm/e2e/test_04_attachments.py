@@ -41,10 +41,11 @@ def _attachment_ids(entity: dict[str, object]) -> list[str]:
 
 
 def _attachment_list(response: Response) -> list[dict[str, object]]:
-    payload = cast(object, response.json())
-    if not isinstance(payload, list):
-        raise AssertionError("expected JSON array of attachments")
-    return object_list(cast(list[object], payload))
+    payload = json_object(cast(object, response.json()))
+    items = payload.get("items")
+    if not isinstance(items, list):
+        raise AssertionError("expected ListResponse.items array of attachments")
+    return object_list(cast(list[object], items))
 
 
 class TestAttachments:
@@ -207,7 +208,7 @@ class TestAttachments:
             f"/crm/api/v1/entities/{entity_id}/attachments/{document_id}",
             headers=auth_headers_system,
         )
-        assert delete_resp.status_code == 200
+        assert delete_resp.status_code == 204
 
         get_resp = await crm_client.get(f"/crm/api/v1/entities/{entity_id}", headers=auth_headers_system)
         entity = _http_json(get_resp)

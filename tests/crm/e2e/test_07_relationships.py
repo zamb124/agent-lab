@@ -241,7 +241,7 @@ class TestRelationships:
             f"/crm/api/v1/relationships/{relationship_id}",
             headers=auth_headers_system,
         )
-        assert delete_resp.status_code == 200
+        assert delete_resp.status_code == 204
 
         get_resp = await crm_client.get(
             f"/crm/api/v1/relationships/{relationship_id}",

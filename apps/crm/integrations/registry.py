@@ -8,9 +8,9 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from apps.crm.integrations.protocol import NamespaceIntegrationConnector
+from apps.crm.models.api import IntegrationManifestItem
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.models.identity_models import NamespaceCRMSettings
-from core.types import JsonObject
 
 _CRM_UI_ROOT = Path(__file__).resolve().parents[1] / "ui"
 
@@ -45,7 +45,7 @@ class IntegrationRegistry:
     async def dispatch_credential_saved(self, credential: IntegrationCredential) -> None:
         connector = self._by_provider.get(credential.provider)
         if connector is None:
-            return
+            raise KeyError(f"Нет коннектора для provider {credential.provider}")
         await connector.on_credential_saved(credential)
 
     async def build_manifest(
@@ -55,8 +55,8 @@ class IntegrationRegistry:
         company_id: str,
         user_id: str,
         crm_settings: NamespaceCRMSettings | None,
-    ) -> list[JsonObject]:
-        items: list[JsonObject] = []
+    ) -> list[IntegrationManifestItem]:
+        items: list[IntegrationManifestItem] = []
         for connector in self._by_id.values():
             row = await connector.manifest_item(
                 namespace_name=namespace_name,

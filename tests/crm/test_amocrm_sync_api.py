@@ -13,7 +13,7 @@ from apps.crm.db.models import CRMTask
 from core.context import clear_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
-from tests.crm.e2e._json_helpers import json_object, object_dict, object_str
+from tests.crm.e2e._json_helpers import json_object, object_str
 
 pytestmark = pytest.mark.timeout(30, func_only=True)
 
@@ -114,7 +114,7 @@ async def test_amocrm_sync_active_conflict(
     )
     assert resp.status_code == 409, resp.text
     conflict_body = _http_json(resp)
-    detail = object_dict(conflict_body["detail"], field="detail")
-    assert detail["code"] == "active_task_exists"
-    assert detail["task_type"] == "namespace_integration_job"
-    assert detail.get("dedup") == {"provider_id": "amocrm", "job": "entities"}
+    assert conflict_body["error_code"] == "conflict"
+    detail = conflict_body["detail"]
+    assert isinstance(detail, str)
+    assert "уже выполняется" in detail

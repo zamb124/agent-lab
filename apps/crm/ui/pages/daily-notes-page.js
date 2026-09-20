@@ -939,7 +939,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
     _isPeriod() { return this._dailyNotesUi.value.range.from !== this._dailyNotesUi.value.range.to; }
 
     _bootstrapLatestNotesRange() {
-        const payload = {};
+        const payload = { entity_type: 'note', limit: 50 };
         const ns = this._currentNamespace();
         if (typeof ns === 'string' && ns.length > 0) payload.namespace = ns;
         const sub = this._noteSubtypeFromLocationSearch();
@@ -1024,8 +1024,11 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         const force_rebuild = options && options.force_rebuild === true;
         const ns = this._currentNamespace();
         const payload = this._isPeriod()
-            ? { date_from: this._dailyNotesUi.value.range.from, date_to: this._dailyNotesUi.value.range.to, namespace: ns, force_rebuild }
-            : { date: this._dailyNotesUi.value.range.from, namespace: ns, force_rebuild };
+            ? { date_from: this._dailyNotesUi.value.range.from, date_to: this._dailyNotesUi.value.range.to, force_rebuild }
+            : { date: this._dailyNotesUi.value.range.from, force_rebuild };
+        if (typeof ns === 'string' && ns.length > 0) {
+            payload.namespace = ns;
+        }
         if (this._isPeriod()) {
             this._periodSummary.run(payload);
         } else {
@@ -1078,7 +1081,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         if (q.length === 0) return;
         this._searchLoading = true;
         const ns = this._currentNamespace();
-        const payload = { q, search_mode: this._searchMode, limit: 50 };
+        const payload = { query: q, entity_type: 'note', search_mode: this._searchMode, limit: 50 };
         if (typeof ns === 'string' && ns.length > 0) payload.namespace = ns;
         this._search.run(payload);
     }

@@ -412,7 +412,7 @@ async def test_delete_task_removes_paired_work_item(
     wi_svc = crm_container.work_item_service
     assert await wi_svc.find_by_crm_entity("system", entity_id) is not None
     delete = await crm_client.delete(f"/crm/api/v1/entities/{entity_id}", headers=auth_headers_system)
-    assert delete.status_code in (200, 204)
+    assert delete.status_code == 204
     assert await wi_svc.find_by_crm_entity("system", entity_id) is None
 
 

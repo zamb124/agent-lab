@@ -3,7 +3,7 @@ Networkle Tasks: строгие интеграционные сценарии н
 
 Source of truth work-полей — WorkItem(kind=crm_activity).
 CRM-узел entity_type=task — граф/AI. Создание пары — POST /crm/api/v1/activity-tasks.
-Мутации work — /worktracker/api/v1/work-items (как platform/work_item_* в UI).
+Мутации work — /worktracker/api/v1/work-items (как worktracker/work_item_* в UI).
 
 Без моков и monkeypatch: реальный Postgres (CRM + worktracker), Redis, ASGI crm_client
 и worktracker_client, реальный DI-контейнер.

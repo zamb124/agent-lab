@@ -9,6 +9,7 @@ from apps.crm.db.models import AccessRequest, CRMEntity, Relationship
 from apps.crm.db.repositories.access_request_repository import AccessRequestRepository
 from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.db.repositories.relationship_repository import RelationshipRepository
+from apps.crm.errors import CrmConflictError, CrmNotFoundError
 from apps.crm.services.crm_entity_access_service import CrmEntityAccessService
 from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
@@ -99,7 +100,7 @@ class AccessRequestService:
         # Получаем entity
         entity = await self._entity_repo.get(entity_id)
         if not entity:
-            raise ValueError("Entity not found")
+            raise CrmNotFoundError("Entity not found")
 
         # Создаем запрос
         access_request = AccessRequest(
@@ -141,17 +142,16 @@ class AccessRequestService:
 
         access_request = await self._access_request_repo.get(access_request_id)
         if not access_request:
-            raise ValueError("Request not found")
+            raise CrmNotFoundError("Request not found")
 
         await self._require_can_share_entity(access_request.resource_id, owner_user_id)
 
         if access_request.status != "pending":
-            raise ValueError(f"Request already {access_request.status}")
+            raise CrmConflictError(f"Request already {access_request.status}")
 
-        # Получаем оригинал
         original = await self._entity_repo.get(access_request.resource_id)
         if not original:
-            raise ValueError("Original entity not found")
+            raise CrmNotFoundError("Original entity not found")
 
         # Копируем entity
         if access_request.include_dependencies:
@@ -360,7 +360,7 @@ class AccessRequestService:
 
         access_request = await self._access_request_repo.get(access_request_id)
         if not access_request:
-            raise ValueError("Request not found")
+            raise CrmNotFoundError("Request not found")
 
         await self._require_can_share_entity(access_request.resource_id, owner_user_id)
 
@@ -372,7 +372,9 @@ class AccessRequestService:
 
         # Уведомление запросившему об отклонении
         entity = await self._entity_repo.get(access_request.resource_id)
-        entity_name = entity.name if entity else "неизвестная сущность"
+        if entity is None:
+            raise CrmNotFoundError("Original entity not found")
+        entity_name = entity.name
 
         await notify_user(
             user_id=access_request.requester_id,

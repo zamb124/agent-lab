@@ -7,7 +7,12 @@ from typing import Literal
 
 from apps.crm.authz.tuples import crm_grant_tuple
 from apps.crm.db.repositories.entity_repository import EntityRepository
-from apps.crm.models.grant_models import AccessGrantResponse, GrantRole, GrantSubjectKind
+from apps.crm.models.grant_models import (
+    AccessGrantResponse,
+    GrantResourceType,
+    GrantRole,
+    GrantSubjectKind,
+)
 from core.authz.errors import AuthzDenied
 from core.authz.ids import parse_namespace_key
 from core.authz.models import AuthzObject, AuthzSubject, AuthzTuple
@@ -311,27 +316,23 @@ class AccessGrantService:
             resource_company_id=company_id,
         )
 
-    async def revoke_grant(self, grant_id: str, user_id: str) -> bool:
+    async def revoke_grant(self, grant_id: str, user_id: str) -> None:
         obj, relation, subject = decode_grant_id(grant_id)
         if obj.object_type is AuthzObjectType.CRM_ENTITY:
             await self._require_entity_share(obj.object_key, user_id)
-            resource_company_id = None
         elif obj.object_type is AuthzObjectType.CRM_NAMESPACE:
             company_id, namespace = parse_namespace_key(obj.object_key)
             await self._require_namespace_share(company_id, namespace, user_id)
-            resource_company_id = company_id
         else:
             raise ValueError("unsupported grant object")
-        _ = resource_company_id
         await self._authz.delete(
             [AuthzTuple(subject=subject, relation=relation, obj=obj)]
         )
         logger.info("Grant %s revoked by %s", grant_id, user_id)
-        return True
 
     async def list_grants(
         self,
-        resource_type: str,
+        resource_type: GrantResourceType,
         resource_id: str,
         resource_company_id: str | None = None,
     ) -> list[AccessGrantResponse]:
@@ -343,13 +344,11 @@ class AccessGrantService:
                 if entity is None:
                     raise ValueError("Entity not found")
                 company_id = entity.company_id
-        elif resource_type == "namespace":
+        else:
             if not resource_company_id:
                 raise ValueError("resource_company_id is required for namespace grants")
             obj = AuthzObject.crm_namespace(resource_company_id, resource_id)
             company_id = resource_company_id
-        else:
-            raise ValueError(f"unsupported resource_type: {resource_type}")
 
         tuples = await self._authz.list_tuples(obj)
         items: list[AccessGrantResponse] = []
@@ -370,17 +369,6 @@ class AccessGrantService:
             seen.add(response.grant_id)
             items.append(response)
         return items
-
-    async def count_grants(
-        self,
-        resource_type: str,
-        resource_id: str,
-        resource_company_id: str | None = None,
-    ) -> int:
-        grants = await self.list_grants(
-            resource_type, resource_id, resource_company_id
-        )
-        return len(grants)
 
     async def get_grant(self, grant_id: str) -> AccessGrantResponse:
         obj, relation, subject = decode_grant_id(grant_id)

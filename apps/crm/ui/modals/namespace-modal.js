@@ -34,8 +34,8 @@ const TEMPLATES_NAME = 'crm/templates';
 const NAMESPACES_NAME = 'crm/namespaces';
 const EDITABILITY_OP = 'crm/namespace_editability';
 const UPDATE_OP = 'crm/namespace_update';
-const GRANTS_LIST_OP = 'crm/namespace_grants_list';
-const GRANT_CREATE_OP = 'crm/namespace_grant_create';
+const GRANTS_LIST_OP = 'crm/grants_list';
+const GRANT_CREATE_OP = 'crm/grant_create';
 const GRANT_REVOKE_OP = 'crm/grant_revoke';
 const TEAM_SEARCH_FACETS = 'crm/team_search';
 
@@ -598,7 +598,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
     }
 
     _reloadGrants() {
-        this._grantsListOp.run({ namespace: this.name });
+        this._grantsListOp.run({ resource_type: 'namespace', resource_id: this.name });
     }
 
     _resetGrantForm() {
@@ -677,19 +677,21 @@ export class CRMNamespaceModal extends PlatformFormModal {
         this._grantSubmitError = '';
 
         if (this._grantSubject === SUBJECT_USER) {
-            const body = { user_id: this._grantSelectedUser.user_id, role: this._grantRole };
             this._grantCreateOp.run({
-                namespace: this.name,
+                resource_type: 'namespace',
+                resource_id: this.name,
                 subject: SUBJECT_USER,
-                body,
+                user_id: this._grantSelectedUser.user_id,
+                role: this._grantRole,
             });
             return;
         }
-        const body = { company_id: this._grantCompanyId.trim(), role: this._grantRole };
         this._grantCreateOp.run({
-            namespace: this.name,
+            resource_type: 'namespace',
+            resource_id: this.name,
             subject: SUBJECT_COMPANY,
-            body,
+            company_id: this._grantCompanyId.trim(),
+            role: this._grantRole,
         });
     }
 
@@ -905,7 +907,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
 
     _connectedIntegrationBadges(item) {
         if (!item || !Array.isArray(item.integration_badges)) {
-            return [];
+            throw new Error('CRMNamespaceModal: integration_badges required');
         }
         return item.integration_badges.filter(
             (b) =>

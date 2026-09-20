@@ -44,7 +44,7 @@ def _string_list(value: object) -> list[str]:
 
 
 def _mention_entities(response: Response) -> list[dict[str, object]]:
-    return object_list(_http_json(response).get("entities"))
+    return object_list(_http_json(response).get("items"))
 
 
 class TestFilteringSearch:
@@ -247,7 +247,7 @@ class TestFilteringSearch:
             },
             headers=auth_headers_system,
         )
-        assert response.status_code == 422
+        assert response.status_code == 400
 
     @pytest.mark.asyncio
     async def test_query_nested_logical_filters_with_date_and_datetime(
@@ -357,7 +357,7 @@ class TestFilteringSearch:
             },
             headers=auth_headers_system,
         )
-        assert response.status_code == 422
+        assert response.status_code == 400
 
     @pytest.mark.asyncio
     async def test_query_rejects_invalid_value_type_for_in(
@@ -387,7 +387,7 @@ class TestFilteringSearch:
             },
             headers=auth_headers_system,
         )
-        assert response.status_code == 422
+        assert response.status_code == 400
 
     @pytest.mark.asyncio
     async def test_legacy_query_endpoints_disabled(
@@ -401,8 +401,8 @@ class TestFilteringSearch:
             params={"query": "x"},
             headers=auth_headers_system,
         )
-        assert list_resp.status_code == 410
-        assert search_resp.status_code == 410
+        assert list_resp.status_code == 405
+        assert search_resp.status_code == 404
 
 
 class TestSearchContract:

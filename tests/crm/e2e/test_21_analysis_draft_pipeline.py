@@ -524,7 +524,7 @@ class TestAnalysisDraftPipeline:
             json={
                 "entity_type": "note",
                 "name": note_name,
-                "description": "Повторный apply без черновика должен вернуть 422",
+                "description": "Повторный apply без черновика должен вернуть 400",
                 "namespace": "default",
             },
             headers=auth_headers_system,
@@ -560,7 +560,7 @@ class TestAnalysisDraftPipeline:
         assert first.status_code == 200, first.text
 
         second = await _apply_note(crm_client, auth_headers_system, note_id)
-        assert second.status_code == 422, second.text
+        assert second.status_code == 400, second.text
 
 
 class TestAnalysisDraftApplyPartialFailureCompensation:

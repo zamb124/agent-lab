@@ -114,7 +114,7 @@ export class CRMTasksPage extends CRMNamespacePage {
 
     connectedCallback() {
         super.connectedCallback();
-        this._workItems = this.useResource('platform/work_items', { autoload: false });
+        this._workItems = this.useResource('worktracker/work_items', { autoload: false });
         this._createOp = this.useOp('crm/activity_task_create');
         this.useEvent(this._createOp.op.events.SUCCEEDED, () => this._reload());
         this._reload();
@@ -157,9 +157,10 @@ export class CRMTasksPage extends CRMNamespacePage {
 
     _openCreate() {
         const namespace = this._crmNamespaceSel.value;
-        this.openModal('crm.activity_task_create', {
-            namespace: typeof namespace === 'string' && namespace.length > 0 ? namespace : 'default',
-        });
+        if (typeof namespace !== 'string' || namespace.length === 0) {
+            throw new Error('CRMTasksPage._openCreate: namespace required');
+        }
+        this.openModal('crm.activity_task_create', { namespace });
     }
 
     _onOpen(detail) {

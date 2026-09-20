@@ -274,7 +274,7 @@ class TestCompanyInit:
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
-        """Создание связи с несуществующим типом возвращает 422"""
+        """Создание связи с несуществующим типом возвращает 400"""
         entity1_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
             "name": f"Note {unique_id}",
@@ -292,5 +292,5 @@ class TestCompanyInit:
             "target_entity_id": entity2_id,
             "relationship_type": f"nonexistent_type_{unique_id}",
         }, headers=auth_headers_system)
-        assert resp.status_code == 422
+        assert resp.status_code == 400
         assert "Unknown relationship_type" in _detail_text(resp)

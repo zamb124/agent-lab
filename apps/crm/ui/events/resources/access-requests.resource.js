@@ -4,23 +4,24 @@
  * Backend (`/crm/api/v1/access-requests`):
  *   GET  /                 → OffsetPage[AccessRequestResponse]
  *   GET  /{access_request_id}     → AccessRequestResponse
- *   POST /                 → AccessRequestResponse  (create)
- *   PUT  /{access_request_id}     → AccessRequestResponse  (approve/reject через PUT)
+ *   POST /                 → AccessRequestResponse
+ *   PUT  /{access_request_id}     → AccessRequestResponse
  *
- * `update` отдельным `accessRequestUpdateOp` (PUT).
+ * Update payload = { access_request_id, status }.
  */
 
 import {
     createResourceCollection,
     createAsyncOp,
 } from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
 
 export const accessRequestsResource = createResourceCollection({
     name: 'crm/access_requests',
     baseUrl: '/crm/api/v1/access-requests',
     idField: 'access_request_id',
     operations: ['list', 'get', 'create'],
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
     listQuery: (payload) => {
         const query = { limit: 100, offset: 0 };
         if (payload && typeof payload === 'object') {
@@ -41,15 +42,8 @@ export const accessRequestUpdateOp = createAsyncOp({
     name: 'crm/access_request_update',
     successToastKey: 'crm:toast.access_request.updated',
     errorToastKey: 'crm:toast.access_request.update_failed',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'crm/access_requests/update_requested',
     restMirror: { method: 'PUT', path: '/crm/api/v1/access-requests/:access_request_id' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.access_request_id !== 'string' || !payload.body) {
-            throw new Error('accessRequestUpdateOp: { access_request_id, body } required');
-        }
-        return await httpRequest({
-            method: 'PUT',
-            url: `/crm/api/v1/access-requests/${encodeURIComponent(payload.access_request_id)}`,
-            body: payload.body,
-        });
-    },
 });

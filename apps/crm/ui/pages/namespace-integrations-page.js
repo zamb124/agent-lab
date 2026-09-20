@@ -211,53 +211,51 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
         super.connectedCallback();
         this.useEvent('crm/namespace_integration_entities_sync/failed', (ev) => {
             const payload = ev && ev.payload;
-            if (!payload || typeof payload !== 'object') return;
-            const body = payload.body;
-            const detail = body && body.detail;
-            if (
-                detail &&
-                typeof detail === 'object' &&
-                detail.code === 'active_task_exists'
-            ) {
+            if (!payload || typeof payload !== 'object') {
+                throw new Error('CRMNamespaceIntegrationsPage: sync failed payload required');
+            }
+            if (payload.code === 'conflict') {
                 this.toast('integrations_page.amocrm_sync_active_conflict', { type: 'warning' });
                 return;
             }
-            const msg = typeof payload.message === 'string' ? payload.message : '';
+            if (typeof payload.message !== 'string') {
+                throw new Error('CRMNamespaceIntegrationsPage: sync failed message required');
+            }
             this.toast('integrations_page.amocrm_sync_task_failed', {
                 type: 'error',
-                vars: { message: msg },
+                vars: { message: payload.message },
             });
         });
         this.useEvent('crm/namespace_integration_custom_fields_sync/failed', (ev) => {
             const payload = ev && ev.payload;
-            if (!payload || typeof payload !== 'object') return;
-            const body = payload.body;
-            const detail = body && body.detail;
-            if (
-                detail &&
-                typeof detail === 'object' &&
-                detail.code === 'active_task_exists'
-            ) {
+            if (!payload || typeof payload !== 'object') {
+                throw new Error('CRMNamespaceIntegrationsPage: fields sync failed payload required');
+            }
+            if (payload.code === 'conflict') {
                 this.toast('integrations_page.amocrm_fields_active_conflict', { type: 'warning' });
                 return;
             }
-            const msg = typeof payload.message === 'string' ? payload.message : '';
+            if (typeof payload.message !== 'string') {
+                throw new Error('CRMNamespaceIntegrationsPage: fields sync failed message required');
+            }
             this.toast('integrations_page.amocrm_fields_task_failed', {
                 type: 'error',
-                vars: { message: msg },
+                vars: { message: payload.message },
             });
         });
         this.useEvent(this._listOp.op.events.SUCCEEDED, (event) => {
             this._manifestLoading = false;
             const payload = event && event.payload && event.payload.result;
-            const items = payload && Array.isArray(payload.items) ? payload.items : [];
-            this._manifestItems = items;
-            const amo = items.find((row) => row && row.provider_id === PROVIDER_AMOCRM);
+            if (!payload || !Array.isArray(payload.items)) {
+                throw new Error('CRMNamespaceIntegrationsPage: integrations items required');
+            }
+            this._manifestItems = payload.items;
+            const amo = payload.items.find((row) => row && row.provider_id === PROVIDER_AMOCRM);
             this._applyAutoSyncFieldsFromManifestRow(amo !== undefined ? amo : null);
         });
         this.useEvent(this._listOp.op.events.FAILED, () => {
             this._manifestLoading = false;
-            this._manifestItems = [];
+            throw new Error('CRMNamespaceIntegrationsPage: integrations list failed');
         });
         this.useEvent(this._integrationAutoNoteAiOp.op.events.FAILED, () => {
             this._listOp.run({ namespace_name: this.itemId });
@@ -313,7 +311,10 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
     }
 
     _amoManifestRow() {
-        const items = Array.isArray(this._manifestItems) ? this._manifestItems : [];
+        const items = this._manifestItems;
+        if (!Array.isArray(items)) {
+            throw new Error('CRMNamespaceIntegrationsPage: _manifestItems must be array');
+        }
         const found = items.find((row) => row && row.provider_id === PROVIDER_AMOCRM);
         return found !== undefined ? found : null;
     }
@@ -345,18 +346,31 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
         const sub = typeof this._subdomainDraft === 'string' ? this._subdomainDraft.trim() : '';
         if (sub.length === 0) {
             this.toast('namespace_detail_page.amocrm_subdomain_required', { type: 'error' });
-            return;
+            throw new Error('CRMNamespaceIntegrationsPage: subdomain required');
+        }
+        if (
+            typeof globalThis === 'undefined'
+            || globalThis.location === undefined
+            || typeof globalThis.location.origin !== 'string'
+            || globalThis.location.origin.length === 0
+            || typeof globalThis.location.host !== 'string'
+            || globalThis.location.host.length === 0
+        ) {
+            throw new Error('CRMNamespaceIntegrationsPage: location.origin/host required');
         }
         const returnPath = `/crm/namespaces/${encodeURIComponent(this.itemId)}/integrations`;
-        const url = await this._integrationAuthOp.run({
+        const result = await this._integrationAuthOp.run({
             namespace_name: this.itemId,
             provider_id: PROVIDER_AMOCRM,
             subdomain: sub,
             return_path: returnPath,
+            return_origin: globalThis.location.origin,
+            brand_host: globalThis.location.host,
         });
-        if (typeof url === 'string' && url.length > 0) {
-            window.location.assign(url);
+        if (!result || typeof result.authorize_url !== 'string' || result.authorize_url.length === 0) {
+            throw new Error('CRMNamespaceIntegrationsPage: authorize_url required');
         }
+        window.location.assign(result.authorize_url);
     }
 
     async _waitCrmTaskOutcome(taskId) {
@@ -444,14 +458,17 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
         const tzRaw = typeof this._autoSyncTimezone === 'string' ? this._autoSyncTimezone.trim() : '';
         if (this._autoSyncEnabled && cronRaw.length === 0) {
             this.toast('integrations_page.auto_sync_cron_required', { type: 'error' });
-            return;
+            throw new Error('CRMNamespaceIntegrationsPage: auto_sync_cron required');
+        }
+        if (this._autoSyncEnabled && tzRaw.length === 0) {
+            throw new Error('CRMNamespaceIntegrationsPage: auto_sync_timezone required');
         }
         await this._integrationAutoSyncOp.run({
             namespace_name: this.itemId,
             provider_id: PROVIDER_AMOCRM,
             auto_sync_enabled: this._autoSyncEnabled,
             auto_sync_cron: this._autoSyncEnabled ? cronRaw : null,
-            auto_sync_timezone: tzRaw.length > 0 ? tzRaw : 'UTC',
+            auto_sync_timezone: tzRaw.length > 0 ? tzRaw : null,
         });
         this._namespaces.get(this.itemId);
         this._listOp.run({ namespace_name: this.itemId });

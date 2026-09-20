@@ -38,8 +38,11 @@ def _query_items(response: Response) -> list[dict[str, object]]:
     return object_list(_http_json(response).get("items"))
 
 
-def _validation_errors(response: Response) -> list[dict[str, object]]:
-    return object_list(_http_json(response).get("detail"))
+def _error_detail(response: Response) -> str:
+    detail = _http_json(response).get("detail")
+    if not isinstance(detail, str):
+        raise AssertionError("detail must be a string")
+    return detail
 
 
 def _attributes(entity: dict[str, object]) -> dict[str, object]:
@@ -158,7 +161,7 @@ class TestSchemaValidation:
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
-        """422 при отсутствии обязательного поля."""
+        """400 при отсутствии обязательного поля."""
         type_id = await self._create_type_with_required_fields(
             crm_client, unique_id, auth_headers_system
         )
@@ -171,10 +174,8 @@ class TestSchemaValidation:
             },
             headers=auth_headers_system,
         )
-        assert resp.status_code == 422
-        detail = _validation_errors(resp)
-        fields = {object_str(entry.get("field"), field="field") for entry in detail}
-        assert "email" in fields
+        assert resp.status_code == 400
+        assert "email" in _error_detail(resp)
 
     @pytest.mark.asyncio
     async def test_create_entity_wrong_field_type(
@@ -183,7 +184,7 @@ class TestSchemaValidation:
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
-        """422 при несоответствии типа поля."""
+        """400 при несоответствии типа поля."""
         type_id = await self._create_type_with_required_fields(
             crm_client, unique_id, auth_headers_system
         )
@@ -196,16 +197,10 @@ class TestSchemaValidation:
             },
             headers=auth_headers_system,
         )
-        assert resp.status_code == 422
-        detail = _validation_errors(resp)
-        age_errors = [
-            entry
-            for entry in detail
-            if object_str(entry.get("field"), field="field") == "age"
-        ]
-        assert len(age_errors) == 1
-        error_message = object_str(age_errors[0].get("error"), field="error")
-        assert "integer" in error_message
+        assert resp.status_code == 400
+        detail = _error_detail(resp)
+        assert "age" in detail
+        assert "integer" in detail
 
     @pytest.mark.asyncio
     async def test_create_entity_valid_required_fields(
@@ -311,14 +306,8 @@ class TestSchemaValidation:
             json={"attributes": {"email": 12345, "age": 20}},
             headers=auth_headers_system,
         )
-        assert update_resp.status_code == 422
-        detail = _validation_errors(update_resp)
-        email_errors = [
-            entry
-            for entry in detail
-            if object_str(entry.get("field"), field="field") == "email"
-        ]
-        assert len(email_errors) == 1
+        assert update_resp.status_code == 400
+        assert "email" in _error_detail(update_resp)
 
 
 class TestBulkOperations:
@@ -382,7 +371,7 @@ class TestBulkOperations:
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
-        """422 при превышении лимита 200 элементов."""
+        """400 при превышении лимита 200 элементов."""
         _ = unique_id
         items = [
             {"entity_type": "note", "name": f"Item {i}"}
@@ -393,7 +382,7 @@ class TestBulkOperations:
             json={"items": items},
             headers=auth_headers_system,
         )
-        assert resp.status_code == 422
+        assert resp.status_code == 400
 
     @pytest.mark.asyncio
     async def test_bulk_update(
@@ -890,7 +879,7 @@ class TestRelationshipIntegrity:
             f"/crm/api/v1/entities/{src_id}",
             headers=auth_headers_system,
         )
-        assert delete_resp.status_code == 200
+        assert delete_resp.status_code == 204
 
         get_rel_resp = await crm_client.get(
             f"/crm/api/v1/relationships/{rel_id}",

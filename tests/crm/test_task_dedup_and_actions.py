@@ -167,9 +167,9 @@ class TestNoteAnalyzeDedup:
             headers=auth_headers_system,
         )
         assert resp.status_code == 409, resp.text
-        detail = resp.json()["detail"]
-        assert detail["code"] == "active_task_exists"
-        assert detail["task_type"] == "note_analyze"
+        body = resp.json()
+        assert body["error_code"] == "conflict"
+        assert "уже выполняется" in body["detail"]
 
     @pytest.mark.asyncio
     async def test_pending_task_blocks_new_analyze(
@@ -208,9 +208,9 @@ class TestNoteAnalyzeDedup:
             headers=auth_headers_system,
         )
         assert resp.status_code == 409, resp.text
-        detail = resp.json()["detail"]
-        assert detail["code"] == "active_task_exists"
-        assert detail["task_type"] == "note_analyze"
+        body = resp.json()
+        assert body["error_code"] == "conflict"
+        assert "уже выполняется" in body["detail"]
 
     @pytest.mark.asyncio
     async def test_completed_task_allows_new_analyze(
@@ -320,9 +320,9 @@ class TestKnowledgeImportDedup:
             headers=auth_headers_system,
         )
         assert resp.status_code == 409, resp.text
-        detail = resp.json()["detail"]
-        assert detail["code"] == "active_task_exists"
-        assert detail["task_type"] == "knowledge_import"
+        body = resp.json()
+        assert body["error_code"] == "conflict"
+        assert "уже выполняется" in body["detail"]
 
 
 class TestEntityCardAttachments:
@@ -428,9 +428,9 @@ class TestDailySummaryDedup:
             headers=auth_headers_system,
         )
         assert resp.status_code == 409, resp.text
-        detail = resp.json()["detail"]
-        assert detail["code"] == "active_task_exists"
-        assert detail["task_type"] == "daily_summary"
+        body = resp.json()
+        assert body["error_code"] == "conflict"
+        assert "уже выполняется" in body["detail"]
 
     @pytest.mark.asyncio
     async def test_running_daily_summary_different_date_does_not_block(

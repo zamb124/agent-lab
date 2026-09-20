@@ -365,7 +365,7 @@ class TestEntityTypes:
         assert object_str(namespace.get("name"), field="name") == f"sales_{unique_id}"
 
         namespace_types_response = await crm_client.get(
-            f"/crm/api/v1/entity-types/by-namespace/sales_{unique_id}",
+            f"/crm/api/v1/entity-types?namespace=sales_{unique_id}",
             headers=auth_headers_system,
         )
         assert namespace_types_response.status_code == 200
@@ -402,7 +402,7 @@ class TestEntityTypes:
         }, headers=auth_headers_system)
         assert create_namespace_resp.status_code == 201
 
-        types_response = await crm_client.get(f"/crm/api/v1/entity-types/by-namespace/{namespace_name}", headers=auth_headers_system)
+        types_response = await crm_client.get(f"/crm/api/v1/entity-types?namespace={namespace_name}", headers=auth_headers_system)
         assert types_response.status_code == 200
         types = _entity_type_items(types_response)
         assert isinstance(types, list)
@@ -541,7 +541,7 @@ class TestEntityTypes:
         assert object_str(_http_json(update_namespace_resp).get("description"), field="description") == "Updated ops namespace"
 
         types_by_namespace_resp = await crm_client.get(
-            f"/crm/api/v1/entity-types/by-namespace/{namespace_name}",
+            f"/crm/api/v1/entity-types?namespace={namespace_name}",
             headers=auth_headers_system,
         )
         assert types_by_namespace_resp.status_code == 200
@@ -613,7 +613,7 @@ class TestEntityTypes:
             json={"allowed_type_ids": [type_deal]},
             headers=auth_headers_system,
         )
-        assert remove_locked_resp.status_code == 422
+        assert remove_locked_resp.status_code == 400
 
         remove_unused_resp = await crm_client.put(
             f"/crm/api/v1/namespaces/{namespace_name}",

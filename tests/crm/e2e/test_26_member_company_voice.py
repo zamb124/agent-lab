@@ -199,7 +199,7 @@ class TestVoiceTargetAPI:
             },
             headers=auth_headers_system,
         )
-        assert note_resp.status_code == 422
+        assert note_resp.status_code == 400
 
     @pytest.mark.asyncio
     async def test_custom_voice_target_type_accepted(

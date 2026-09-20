@@ -1,26 +1,61 @@
-"""
-API для управления грантами (общие операции, OpenFGA).
-"""
+"""Гранты: тонкая REST-обвязка тех же `op_*`."""
 
-from fastapi import APIRouter, HTTPException
+from typing import Annotated
+
+from fastapi import APIRouter, Query, Response
 
 from apps.crm.dependencies import ContainerDep
 from apps.crm.models.grant_models import AccessGrantResponse
-from core.context import get_context
+from apps.crm.realtime.operations import (
+    CrmGrantCreatePayload,
+    CrmGrantIdPayload,
+    CrmGrantsListPayload,
+    op_grants_create,
+    op_grants_item,
+    op_grants_list,
+    op_grants_remove,
+)
+from core.context import require_context
+from core.pagination import OffsetPage
 
-router = APIRouter(prefix="/grants", tags=["Grants Management"])
+router = APIRouter(prefix="/grants", tags=["Grants"])
 
 
-@router.delete("/{grant_id}")
+@router.get("", response_model=OffsetPage[AccessGrantResponse])
+async def list_grants(
+    payload: Annotated[CrmGrantsListPayload, Query()],
+    container: ContainerDep,
+) -> OffsetPage[AccessGrantResponse]:
+    return await op_grants_list(
+        payload,
+        user=require_context().user,
+        container=container,
+    )
+
+
+@router.post("", response_model=AccessGrantResponse)
+async def create_grant(
+    payload: CrmGrantCreatePayload,
+    container: ContainerDep,
+) -> AccessGrantResponse:
+    return await op_grants_create(
+        payload,
+        user=require_context().user,
+        container=container,
+    )
+
+
+@router.delete("/{grant_id}", status_code=204)
 async def revoke_grant(
     grant_id: str,
     container: ContainerDep,
-) -> dict[str, bool]:
-    ctx = get_context()
-    if not ctx or not ctx.user:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    success = await container.access_grant_service.revoke_grant(grant_id, ctx.user.user_id)
-    return {"success": success}
+) -> Response:
+    await op_grants_remove(
+        CrmGrantIdPayload(grant_id=grant_id),
+        user=require_context().user,
+        container=container,
+    )
+    return Response(status_code=204)
 
 
 @router.get("/{grant_id}", response_model=AccessGrantResponse)
@@ -28,7 +63,8 @@ async def get_grant(
     grant_id: str,
     container: ContainerDep,
 ) -> AccessGrantResponse:
-    try:
-        return await container.access_grant_service.get_grant(grant_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return await op_grants_item(
+        CrmGrantIdPayload(grant_id=grant_id),
+        user=require_context().user,
+        container=container,
+    )

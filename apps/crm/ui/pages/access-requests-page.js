@@ -311,14 +311,14 @@ export class CRMAccessRequestsPage extends PlatformPage {
     _onApprove(accessRequestId) {
         this._updateOp.run({
             access_request_id: accessRequestId,
-            body: { status: STATUS_APPROVED },
+            status: STATUS_APPROVED,
         });
     }
 
     _onReject(accessRequestId) {
         this._updateOp.run({
             access_request_id: accessRequestId,
-            body: { status: STATUS_REJECTED },
+            status: STATUS_REJECTED,
         });
     }
 

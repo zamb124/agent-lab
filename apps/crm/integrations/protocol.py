@@ -7,10 +7,10 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Protocol, runtime_checkable
 
+from apps.crm.models.api import IntegrationManifestItem
 from core.integrations.guided_integration_error import OAuthErrorLocale
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.models.identity_models import NamespaceCRMSettings
-from core.types import JsonObject
 
 IntegrationProgressFn = Callable[[str, int], Awaitable[None]]
 
@@ -27,11 +27,11 @@ class NamespaceIntegrationConnector(Protocol):
         ...
 
     def entities_sync_runs_in_worker(self) -> bool:
-        """True — POST .../sync ставит TaskIQ-задачу; False — синхронный ответ HTTP."""
+        """True — sync ставит TaskIQ-задачу; False — ответ команды со статистикой."""
         ...
 
     def custom_fields_sync_runs_in_worker(self) -> bool:
-        """True — POST .../custom_fields/sync ставит задачу; False — синхронный HTTP."""
+        """True — custom_fields sync ставит TaskIQ-задачу; False — ответ со статистикой."""
         ...
 
     async def build_authorize_url(
@@ -87,6 +87,6 @@ class NamespaceIntegrationConnector(Protocol):
         company_id: str,
         user_id: str,
         crm_settings: NamespaceCRMSettings | None,
-    ) -> JsonObject:
-        """Строка для GET .../integrations (список карточек в UI)."""
+    ) -> IntegrationManifestItem:
+        """Строка манифеста для list интеграций namespace."""
         ...

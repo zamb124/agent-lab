@@ -1,67 +1,41 @@
 """
 API единого журнала задач CRM (crm_tasks).
 
-Объединяет запуск/просмотр импорта знаний и анализа заметок.
+REST-зеркало: тот же `op_*`, что и Centrifugo RPC `platform.event`.
 """
 
-import asyncio
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 
-from apps.crm.db.models import CRMTask
 from apps.crm.dependencies import ContainerDep
 from apps.crm.models.api import (
-    NoteProcessingConfig,
     StartDailySummaryRequest,
     StartKnowledgeImportRequest,
     StartNoteAnalyzeRequest,
     StartPeriodSummaryRequest,
-    StructuredKnowledgeImportRequest,
     TaskCreatedEntitiesResponse,
     TaskResponse,
 )
-from apps.crm.services.task_service import ActiveTaskExistsError
-from core.authz.models import AuthzObject
-from core.context import get_context, resolve_namespace_or_raise
+from apps.crm.realtime.operations import (
+    CrmTaskIdPayload,
+    CrmTasksListPayload,
+    op_notes_analyze,
+    op_tasks_cancel,
+    op_tasks_created_entities,
+    op_tasks_daily_summary_start,
+    op_tasks_item,
+    op_tasks_knowledge_import_start,
+    op_tasks_list,
+    op_tasks_period_summary_start,
+    op_tasks_retry,
+    op_tasks_review_complete,
+    op_tasks_rollback,
+)
+from core.context import require_context
 from core.pagination import OffsetPage
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
-
-
-def _actor_user_and_company() -> tuple[str, str]:
-    ctx = get_context()
-    user_id = ctx.user.user_id if ctx and ctx.user else None
-    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
-    if not user_id or not company_id:
-        raise HTTPException(
-            status_code=500, detail="Контекст пользователя или компании отсутствует"
-        )
-    return user_id, company_id
-
-
-def _to_response(row: CRMTask) -> TaskResponse:
-    return TaskResponse.model_validate(row)
-
-
-def to_task_response(row: CRMTask) -> TaskResponse:
-    return _to_response(row)
-
-
-def _active_task_conflict(exc: ActiveTaskExistsError) -> HTTPException:
-    detail: dict[str, object] = {
-        "code": "active_task_exists",
-        "message": str(exc),
-        "task_type": exc.task_type,
-        "task_id": exc.existing_task_id,
-    }
-    if exc.dedup:
-        detail["dedup"] = exc.dedup
-    return HTTPException(status_code=409, detail=detail)
-
-
-def active_task_conflict(exc: ActiveTaskExistsError) -> HTTPException:
-    return _active_task_conflict(exc)
 
 
 @router.post("/knowledge-import", status_code=202, response_model=TaskResponse)
@@ -69,27 +43,9 @@ async def start_knowledge_import(
     body: StartKnowledgeImportRequest,
     container: ContainerDep,
 ) -> TaskResponse:
-    """Запустить импорт знаний. Возвращает 202 с task_id для отслеживания прогресса."""
-    user_id, company_id = _actor_user_and_company()
-    await container.authz_service.require_can_edit(
-        AuthzObject.crm_namespace(company_id, body.namespace.strip()),
-        user_id=user_id,
+    return await op_tasks_knowledge_import_start(
+        body, user=require_context().user, container=container
     )
-    try:
-        row = await container.task_service.start_knowledge_import(
-            namespace=body.namespace,
-            mode=body.mode,
-            source_file_ids=body.source_file_ids,
-            source_text=body.source_text,
-            extract_entity_types=body.extract_entity_types,
-            split_by_headings=body.split_by_headings,
-            chunk_max_chars=body.chunk_max_chars,
-        )
-    except ActiveTaskExistsError as exc:
-        raise _active_task_conflict(exc) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return _to_response(row)
 
 
 @router.post("/note-analyze", status_code=202, response_model=TaskResponse)
@@ -97,40 +53,9 @@ async def start_note_analyze(
     body: StartNoteAnalyzeRequest,
     container: ContainerDep,
 ) -> TaskResponse:
-    """Запустить анализ заметки. Возвращает 202 с task_id для отслеживания прогресса через WebSocket."""
-    note = await container.entity_service.get_entity(body.note_id)
-    if not note:
-        raise HTTPException(status_code=404, detail="Заметка не найдена")
-
-    user_id, company_id = _actor_user_and_company()
-    _ = company_id
-    await container.authz_service.require_can_edit(
-        AuthzObject.crm_entity(note.entity_id), user_id=user_id
+    return await op_notes_analyze(
+        body, user=require_context().user, container=container
     )
-
-    config = NoteProcessingConfig(
-        include_attachments=body.include_attachments,
-        attachment_chars_limit_per_file=body.attachment_chars_limit_per_file,
-        check_duplicates=body.check_duplicates,
-        extract_entity_types=body.extract_entity_types,
-        extract_relationship_types=body.extract_relationship_types,
-        mentioned_entity_ids=body.mentioned_entity_ids,
-    )
-    ns = resolve_namespace_or_raise(note.namespace)
-
-    try:
-        row = await container.task_service.start_note_analyze(
-            note_id=body.note_id,
-            note_name=note.name or "",
-            namespace=ns,
-            mode=body.mode,
-            config=config,
-        )
-    except ActiveTaskExistsError as exc:
-        raise _active_task_conflict(exc) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return _to_response(row)
 
 
 @router.get("", response_model=OffsetPage[TaskResponse])
@@ -148,31 +73,26 @@ async def list_tasks(
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[TaskResponse]:
-    rows, total = await asyncio.gather(
-        container.task_service.list_tasks(
-            namespace, task_type=task_type, note_id=note_id, limit=limit, offset=offset
+    return await op_tasks_list(
+        CrmTasksListPayload(
+            namespace=namespace,
+            task_type=task_type,
+            note_id=note_id,
+            limit=limit,
+            offset=offset,
         ),
-        container.task_service.count_tasks(namespace, task_type=task_type, note_id=note_id),
-    )
-    return OffsetPage[TaskResponse](
-        items=[_to_response(r) for r in rows], total=total, limit=limit, offset=offset
+        user=require_context().user,
+        container=container,
     )
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
 async def get_task(task_id: str, container: ContainerDep) -> TaskResponse:
-    user_id, company_id = _actor_user_and_company()
-    row = await container.task_service.get_task(task_id)
-    if row is None:
-        await container.authz_service.require_can_view(
-            AuthzObject.company(company_id), user_id=user_id
-        )
-        raise HTTPException(status_code=404, detail="Задача не найдена")
-    await container.authz_service.require_can_view(
-        AuthzObject.crm_namespace(company_id, row.namespace),
-        user_id=user_id,
+    return await op_tasks_item(
+        CrmTaskIdPayload(task_id=task_id),
+        user=require_context().user,
+        container=container,
     )
-    return _to_response(row)
 
 
 @router.get("/{task_id}/created-entities", response_model=TaskCreatedEntitiesResponse)
@@ -180,41 +100,38 @@ async def get_task_created_entities(
     task_id: str,
     container: ContainerDep,
 ) -> TaskCreatedEntitiesResponse:
-    try:
-        return await container.task_service.get_task_created_entities(task_id)
-    except LookupError:
-        raise HTTPException(status_code=404, detail="Задача не найдена") from None
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return await op_tasks_created_entities(
+        CrmTaskIdPayload(task_id=task_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post("/{task_id}/review-complete", response_model=TaskResponse)
 async def complete_task_review(task_id: str, container: ContainerDep) -> TaskResponse:
-    try:
-        row = await container.task_service.complete_task_review(task_id)
-    except LookupError:
-        raise HTTPException(status_code=404, detail="Задача не найдена") from None
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return _to_response(row)
+    return await op_tasks_review_complete(
+        CrmTaskIdPayload(task_id=task_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post("/{task_id}/cancel", response_model=TaskResponse)
 async def cancel_task(task_id: str, container: ContainerDep) -> TaskResponse:
-    try:
-        row = await container.task_service.request_cancel(task_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return _to_response(row)
+    return await op_tasks_cancel(
+        CrmTaskIdPayload(task_id=task_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post("/{task_id}/rollback", response_model=TaskResponse)
 async def rollback_task(task_id: str, container: ContainerDep) -> TaskResponse:
-    try:
-        row = await container.task_service.rollback_task(task_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return _to_response(row)
+    return await op_tasks_rollback(
+        CrmTaskIdPayload(task_id=task_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post("/daily-summary", status_code=202, response_model=TaskResponse)
@@ -222,18 +139,9 @@ async def start_daily_summary(
     body: StartDailySummaryRequest,
     container: ContainerDep,
 ) -> TaskResponse:
-    """Запустить пересчёт дневной сводки. Возвращает 202 с task_id."""
-    try:
-        row = await container.task_service.start_daily_summary(
-            namespace=body.namespace,
-            date_str=body.date_str,
-            reason=body.reason,
-        )
-    except ActiveTaskExistsError as exc:
-        raise _active_task_conflict(exc) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return _to_response(row)
+    return await op_tasks_daily_summary_start(
+        body, user=require_context().user, container=container
+    )
 
 
 @router.post("/period-summary", status_code=202, response_model=TaskResponse)
@@ -241,42 +149,15 @@ async def start_period_summary(
     body: StartPeriodSummaryRequest,
     container: ContainerDep,
 ) -> TaskResponse:
-    """Запустить пересчёт сводки за период. Возвращает 202 с task_id."""
-    try:
-        row = await container.task_service.start_period_summary(
-            namespace=body.namespace,
-            date_from=body.date_from,
-            date_to=body.date_to,
-            reason=body.reason,
-        )
-    except ActiveTaskExistsError as exc:
-        raise _active_task_conflict(exc) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return _to_response(row)
+    return await op_tasks_period_summary_start(
+        body, user=require_context().user, container=container
+    )
 
 
 @router.post("/{task_id}/retry", status_code=202, response_model=TaskResponse)
 async def retry_task(task_id: str, container: ContainerDep) -> TaskResponse:
-    """Перезапустить failed/cancelled задачу с теми же параметрами."""
-    try:
-        row = await container.task_service.retry_task(task_id)
-    except LookupError:
-        raise HTTPException(status_code=404, detail="Задача не найдена") from None
-    except ActiveTaskExistsError as exc:
-        raise _active_task_conflict(exc) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return _to_response(row)
-
-
-@router.post("/structured/bulk")
-async def structured_knowledge_import_not_implemented(
-    _body: StructuredKnowledgeImportRequest,
-    container: ContainerDep,
-) -> None:
-    _ = container
-    raise HTTPException(
-        status_code=501,
-        detail="Структурированный импорт (bulk без LLM) в этой версии не реализован.",
+    return await op_tasks_retry(
+        CrmTaskIdPayload(task_id=task_id),
+        user=require_context().user,
+        container=container,
     )

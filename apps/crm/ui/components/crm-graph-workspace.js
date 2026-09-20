@@ -746,11 +746,17 @@ export class CRMGraphWorkspace extends PlatformElement {
         const namespace = this._currentNamespace();
         const timelineParams = this._getTimelineQueryParams();
         const nq = crmNamespaceForOptionalQuery(namespace);
-        this._entitiesLookupOp.run({
-            namespace: nq,
-            limit: 120,
-            ...timelineParams,
-        });
+        const dateLeaves = [];
+        if (typeof timelineParams.created_at_from === 'string') {
+            dateLeaves.push({ field: 'created_at', op: '$gte', value: timelineParams.created_at_from });
+        }
+        if (typeof timelineParams.created_at_to === 'string') {
+            dateLeaves.push({ field: 'created_at', op: '$lte', value: timelineParams.created_at_to });
+        }
+        const lookup = { namespace: nq, limit: 120 };
+        if (dateLeaves.length === 1) lookup.filters = dateLeaves[0];
+        else if (dateLeaves.length > 1) lookup.filters = { $and: dateLeaves };
+        this._entitiesLookupOp.run(lookup);
     }
 
     async _onEntitiesLookupLoaded(response) {
@@ -903,11 +909,8 @@ export class CRMGraphWorkspace extends PlatformElement {
         });
         this._relatedNodeIds = new Set(nodeMap.keys());
         this._relatedNodesPending = Array.from(nodeMap.values());
-        const namespace = this._currentNamespace();
-        const nq = crmNamespaceForOptionalQuery(namespace);
         this._entityRelOp.run({
-            entityId: this._selectedRootId,
-            params: { namespace: nq },
+            entity_id: this._selectedRootId,
         });
     }
 
@@ -1038,7 +1041,7 @@ export class CRMGraphWorkspace extends PlatformElement {
         };
         if (namespace !== null) payload.namespace = namespace;
         if (this._relationshipTypeFilter.trim().length > 0) {
-            payload.relationship_types = this._relationshipTypeFilter.trim();
+            payload.relationship_types = [this._relationshipTypeFilter.trim()];
         }
         this._overviewOp.run(payload);
     }
@@ -1109,7 +1112,7 @@ export class CRMGraphWorkspace extends PlatformElement {
         };
         if (namespace !== null) payload.namespace = namespace;
         if (this._relationshipTypeFilter.trim().length > 0) {
-            payload.relationship_types = this._relationshipTypeFilter.trim();
+            payload.relationship_types = [this._relationshipTypeFilter.trim()];
         }
         this._overviewOp.run(payload);
     }
@@ -1117,27 +1120,29 @@ export class CRMGraphWorkspace extends PlatformElement {
     _buildInfluenceGraph() {
         this._loading = true;
         const namespace = this._currentNamespace();
-        const params = {
+        const payload = {
+            entity_id: this._selectedRootId,
             max_depth: this._maxDepth,
             ...this._getTimelineQueryParams(),
         };
-        if (namespace !== null) params.namespace = namespace;
+        if (namespace !== null) payload.namespace = namespace;
         if (this._relationshipTypeFilter.trim().length > 0) {
-            params.relationship_types = this._relationshipTypeFilter.trim();
+            payload.relationship_types = [this._relationshipTypeFilter.trim()];
         }
-        this._influenceOp.run({ entityId: this._selectedRootId, params });
+        this._influenceOp.run(payload);
     }
 
     _buildRelatedGraph() {
         this._loading = true;
-        const params = {
+        const payload = {
+            entity_id: this._selectedRootId,
             direction: this._relatedDirection,
             ...this._getTimelineQueryParams(),
         };
         if (this._relationshipTypeFilter.trim().length > 0) {
-            params.relationship_type = this._relationshipTypeFilter.trim();
+            payload.relationship_type = this._relationshipTypeFilter.trim();
         }
-        this._relatedOp.run({ entityId: this._selectedRootId, params });
+        this._relatedOp.run(payload);
     }
 
     _buildPathGraph() {
@@ -1153,8 +1158,8 @@ export class CRMGraphWorkspace extends PlatformElement {
         this._loading = true;
         const namespace = this._currentNamespace();
         const payload = {
-            source_id: this._pathSourceId,
-            target_id: this._pathTargetId,
+            source_entity_id: this._pathSourceId,
+            target_entity_id: this._pathTargetId,
             max_depth: this._pathMaxDepth,
             ...this._getTimelineQueryParams(),
         };
@@ -1166,7 +1171,7 @@ export class CRMGraphWorkspace extends PlatformElement {
         this._loading = true;
         const namespace = this._currentNamespace();
         const payload = {
-            q: this._entitySearchQuery.trim(),
+            query: this._entitySearchQuery.trim(),
             search_mode: this._searchMode,
             limit: 50,
         };

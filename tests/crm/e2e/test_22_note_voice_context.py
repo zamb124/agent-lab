@@ -212,7 +212,7 @@ class TestNoteVoiceAndContext:
             },
             headers=auth_headers_system,
         )
-        assert note_resp.status_code == 422
+        assert note_resp.status_code == 400
 
     @pytest.mark.asyncio
     async def test_context_must_be_anchor_type(
@@ -243,7 +243,7 @@ class TestNoteVoiceAndContext:
             },
             headers=auth_headers_system,
         )
-        assert note_resp.status_code == 422
+        assert note_resp.status_code == 400
 
     @pytest.mark.asyncio
     async def test_note_minimal_create_succeeds(

@@ -1,6 +1,6 @@
 """Сервис для CRUD шаблонов namespace и их применения."""
 
-from typing import ClassVar, TypedDict
+from typing import ClassVar
 
 from sqlalchemy.exc import IntegrityError
 
@@ -14,6 +14,7 @@ from apps.crm.db.models import EntityType, NamespaceTemplateType
 from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
 from apps.crm.db.repositories.namespace_template_repository import NamespaceTemplateRepository
+from apps.crm.models.api import NamespaceEditabilityResponse
 from apps.crm.services.company_init_service import CompanyInitService
 from apps.crm.system_templates import (
     NAMESPACE_TEMPLATE_CORE_NOTE_TASK,
@@ -22,20 +23,6 @@ from apps.crm.system_templates import (
 from core.context import get_context
 from core.models.identity_models import Namespace, NamespaceCRMSettings
 from core.namespace import NamespaceService
-
-
-class NamespaceEditability(TypedDict):
-    namespace: str
-    has_entities: bool
-    entity_count: int
-    used_type_ids: list[str]
-    current_allowed_type_ids: list[str]
-    can_update_allowed_types: bool
-    can_add_types: bool
-    locked_type_ids: list[str]
-    removable_type_ids: list[str]
-    all_namespaces_type_ids: list[str]
-    lock_reason: str | None
 
 
 class NamespaceTemplateService:
@@ -310,7 +297,7 @@ class NamespaceTemplateService:
 
         return namespace
 
-    async def get_namespace_editability(self, namespace_name: str) -> NamespaceEditability:
+    async def get_namespace_editability(self, namespace_name: str) -> NamespaceEditabilityResponse:
         types_here = await self._entity_type_repo.list_catalog_by_namespace(namespace_name)
         current_allowed_type_ids = sorted({t.type_id for t in types_here})
 
@@ -337,19 +324,19 @@ class NamespaceTemplateService:
 
         has_entities = entity_count > 0
 
-        return {
-            "namespace": namespace_name,
-            "has_entities": has_entities,
-            "entity_count": entity_count,
-            "used_type_ids": sorted(used_type_ids_set),
-            "current_allowed_type_ids": current_allowed_type_ids,
-            "can_update_allowed_types": not has_entities,
-            "can_add_types": True,
-            "locked_type_ids": locked_type_ids,
-            "removable_type_ids": removable_type_ids,
-            "all_namespaces_type_ids": addable_type_ids,
-            "lock_reason": None,
-        }
+        return NamespaceEditabilityResponse(
+            namespace=namespace_name,
+            has_entities=has_entities,
+            entity_count=entity_count,
+            used_type_ids=sorted(used_type_ids_set),
+            current_allowed_type_ids=current_allowed_type_ids,
+            can_update_allowed_types=not has_entities,
+            can_add_types=True,
+            locked_type_ids=locked_type_ids,
+            removable_type_ids=removable_type_ids,
+            all_namespaces_type_ids=addable_type_ids,
+            lock_reason=None,
+        )
 
     async def update_existing_namespace(
         self,
@@ -366,7 +353,7 @@ class NamespaceTemplateService:
 
         if allowed_type_ids is not None:
             editability = await self.get_namespace_editability(namespace_name)
-            locked_type_ids = set(editability["locked_type_ids"])
+            locked_type_ids = set(editability.locked_type_ids)
             requested_set = await self.expanded_allowed_type_ids_for_namespace_update(
                 allowed_type_ids
             )
@@ -376,7 +363,7 @@ class NamespaceTemplateService:
                     f"Нельзя убрать типы с существующими сущностями: {', '.join(sorted(missing_locked))}"
                 )
 
-            current_allowed_type_ids = set(editability["current_allowed_type_ids"])
+            current_allowed_type_ids = set(editability.current_allowed_type_ids)
             if requested_set != current_allowed_type_ids:
                 for type_id in sorted(requested_set - current_allowed_type_ids):
                     await self._clone_type_into_namespace_if_missing(

@@ -18,8 +18,8 @@
  *        в локальные _pendingRemoveEntityIds / _pendingRemoveRelIds; локально
  *        добавленные строки до сохранения убираются из _pendingAddEntities /
  *        _pendingAddRelationships.
- *      - «Сохранить изменения» — `noteAnalysisDraftSaveOp.run({ note_id, draft })`,
- *        где draft.expected_version берётся из текущего draft; patch_entities —
+ *      - «Сохранить изменения» — `noteAnalysisDraftSaveOp.run({ note_id, ...body })`,
+ *        где body.expected_version берётся из текущего draft; patch_entities —
  *        правки атрибутов, entity_type и entity_subtype; add_entities /
  *        add_relationships — новые строки черновика до первого сохранения.
  *      - Ошибка применения черновика — `ai_analysis_last_error` +
@@ -1885,7 +1885,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
             }
             this._draftSaveOp.run({
                 note_id: this.noteId,
-                draft: body,
+                ...body,
             });
             return;
         }
@@ -1908,7 +1908,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
         }
         this._draftSaveOp.run({
             note_id: this.noteId,
-            draft: body,
+            ...body,
         });
     }
 
