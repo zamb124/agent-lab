@@ -1,8 +1,10 @@
+---
+description: "Authorization: OpenFGA — единственный PDP через core/authz AuthzService; relations, dual-write, tuple-helpers, backfill, per-service модели"
+alwaysApply: false
+---
 # Authorization — OpenFGA sole source of truth
 
-## Zero Translation (канон)
-
-См. **`main.mdc`**. Один AuthzService, один словарь relations, без mapper-слоёв между сервисами.
+Один `AuthzService`, один словарь relations, без mapper-слоёв между сервисами.
 
 ## Absolute uniformity (Phase 12 DoD)
 
@@ -279,7 +281,7 @@ await authz.write([crm_entity_owner_tuple(entity_id, owner_user_id)])
 ### Wiki
 
 - Checks: HTTP → `AuthzService` + `AuthzObject.wiki_page`. Domain error-map — `WikiService.require_viewable_page` (`AuthzDenied` → `WikiAccessDeniedError`). `WikiAccessService` — `sync_page_*` + members/`build_access` (без Check-методов)
-- `require_scope` — `require_can_view(AuthzObject.platform_namespace(company_id, namespace))` (как RAG); корзина остаётся namespace-gate, не per-page
+- `_scope` — `require_namespace` + `require_can_view(AuthzObject.platform_namespace(company_id, namespace))` (как RAG); корзина остаётся namespace-gate, не per-page
 - `WikiPageResponse.can_edit` / `can_admin` — всегда из `AuthzService.can_edit` / `can_admin` (включая mutating POST/PUT/PATCH)
 - Type: `wiki_page` (`owner`, `parent` TTU, `company` tenancy, `viewer`/`editor`, `company_viewer`, `can_*`; **no `user:*`**)
 - `company` — tenancy, всегда при create; **не** выдаёт view
@@ -288,7 +290,7 @@ await authz.write([crm_entity_owner_tuple(entity_id, owner_user_id)])
 - Dual-write create: SQL insert → FGA write; при `AuthzUnavailable` — hard-delete страницы
 - `PATCH /pages/{id}/access/company-visible` — единственная мутация видимости; members допустимы только при `company_visible=false`, включение обратно чистит их (`replace_members`/`clear_members`)
 - Member listing — `AuthzService.list_tuples(obj, relation=viewer|editor)` (прямые tuples), **не** `list_users` (тот раскрывает `owner or viewer from parent` через computed userset и подмешивает владельца/предков в список участников)
-- Удаление страницы зачищает все FGA-tuples (`sync_pages_deleted`); списки `deleted`/trash не фильтруются по FGA per-item (доступа там ни у кого не осталось) — гейт `require_scope` = `require_can_view(platform_namespace)`, как RAG
+- Удаление страницы зачищает все FGA-tuples (`sync_pages_deleted`); списки `deleted`/trash не фильтруются по FGA per-item (доступа там ни у кого не осталось) — гейт `_scope` = `require_namespace` + `require_can_view(platform_namespace)`, как RAG
 - Public links: token AuthN (`link_*`), не FGA; `link_permission` ∈ `{viewer, editor}`
 - Tuple helpers / backfill: `apps/wiki/authz/`; `uv run python -m apps.wiki.authz.backfill`
 

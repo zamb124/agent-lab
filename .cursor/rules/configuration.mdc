@@ -4,11 +4,6 @@ alwaysApply: false
 ---
 # Конфигурация
 
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
-
 ## Приоритет
 
 1. **ENV** (высший)
@@ -61,7 +56,6 @@ LEGAL__COMPANY_NAME_RU=...
 | **`media_transcriber`** | Единый ffmpeg-pipeline чанкования/таймаутов (Sync batch STT и файловый слой). |
 | **`calls`** | LiveKit/TURN. `calls.speech_to_chat` (`SpeechToChatConfig`). Finalize записи: `finalize_recording_egress_poll_interval_seconds`, `finalize_recording_egress_wait_timeout_seconds`. |
 | **`transcribe_audio_redis_lock_ttl_seconds`** | TTL Redis lock авто-STT в sync worker. |
-| **`ws_presence_heartbeat_interval_seconds`** / **`_ttl_seconds`** / **`sync_taskiq_wait_result_timeout_seconds`** | Sync WS presence и `task.wait_result` из HTTP/WS. Валидатор: TTL ≥ 2×heartbeat + 1с. |
 | **`llm`** | `provider`, `default_model`, `openrouter`/`bothub`/`yandex`/…. Опционально `llm.models` — только переопределение `temperature`/`max_tokens` по id; **каталог цен в JSON не храним**. |
 | **`llm_context`** | Platform-default профили/бюджеты контекстного слоя (`core.llm_context.models.LLMContextConfig`). Company default хранится не здесь, а в `CompanyAIProviders.llm_context`. |
 | **`openfga`** | Единый PDP. Поля: `enabled`, `api_url`, `store_id`, `authorization_model_id`, `api_token`, `timeout_ms`, `default_consistency` (`MINIMIZE_LATENCY` \| `HIGHER_CONSISTENCY`). ENV: `OPENFGA__*`. Один store на платформу; `enabled=true` без `store_id`/`authorization_model_id` → `AuthzConfigError` на старте. Нет `enabled_object_types` / `OPENFGA__ENABLED_OBJECT_TYPES`. Local/test pin — `reports/openfga-dev.env` / `openfga-test.env` через `scripts/openfga_env_bootstrap.py`. Канон → **`authorization.mdc`**. |

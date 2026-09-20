@@ -4,11 +4,6 @@ alwaysApply: false
 ---
 # MCP (Model Context Protocol)
 
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
-
 Протокол подключения внешних инструментов к `llm_node` через JSON-RPC 2.0.
 
 ## Принципы
@@ -142,6 +137,7 @@ Catalog хранит `auth_template`; provisioner копирует в `headers`.
 
 ## UI: поиск и навигация
 
+- Factories: `flows/mcp_servers` (CRUD, `transport: 'ws'`), `flows/mcp_servers_list` (offset search Installed), `flows/mcp_server_sync` / `test` / `reset_catalog_defaults`, `flows/mcp_branding_load` / `slug_suggest` / `upsert` / `remove`, `flows/mcp_catalog_store_load` / `install` / `uninstall`.
 - **`flows-mcp-servers-modal`:** Installed / Catalog; debounced search в каталоге; empty Installed → CTA «Открыть каталог».
 - **`flows-library-picker-modal` (MCP tab):** без поиска — группировка по серверам; **с поиском** — flat grid tools (subtitle = server); empty → CTA «MCP серверы».
 
@@ -149,7 +145,7 @@ Catalog хранит `auth_template`; provisioner копирует в `headers`.
 
 Единая реализация — `apps/flows/src/services/mcp_sync.py::sync_mcp_server_tools(container=..., server_config=...)`.
 
-- UI и интеграции: `POST /flows/api/v1/mcp/servers/{server_id}/sync` зовёт её же.
+- UI и интеграции: `POST /flows/api/v1/mcp/servers/{server_id}/sync` и WS `flows/mcp_servers/sync_requested` зовут её же.
 - Инициализация компании (TaskIQ): sync активных серверов после provision/install.
 
 Пишет `ToolReference` в `tool_repository`, обновляет `cached_tools` и `last_sync_at`, удаляет тулы, которых больше нет в `tools/list`. Переменные для резолва `@var:` в headers загружаются только если они там есть.
@@ -252,14 +248,14 @@ async def test_mcp_tool(local_mcp_http_url):
 
 **Browser:** `tests/frontend_core/browser/flows/flows-mcp-servers-modal.spec.js`, `flows-library-picker-tabs.spec.js` (flat search, empty CTA).
 
-**E2E scenario:** `tests/ui/e2e/test_flows_mcp_scenarios.py` → `docs/scenarios/flows/general/mcp-workflow/`.
+**E2E scenario:** `tests/ui/e2e/test_flows_setup.py` (`doc_slug="manage-mcp-servers"`) → `docs/scenarios/flows/setup/manage-mcp-servers/`.
 
 ## Platform branding (icons)
 
 Глобальные иконки MCP по slug (`server_id`) — не per-company. Хранятся в `MCPServerBrandingRepository` (`is_global=True`); `icon_url` вычисляется из публичного `FileRecord` (`icon_file_id`).
 
-- **Read:** `GET /flows/api/v1/mcp/branding` (любая компания); `MCPServerResponse.icon_url` на list/get серверов.
-- **Write:** `PUT/DELETE /flows/api/v1/mcp/branding/{server_id}` — только `company_id=system`; файл обязан быть `is_public=true`, MIME: png/webp/svg/jpeg.
+- **Read:** `GET /flows/api/v1/mcp/branding` и WS `flows/mcp_branding/list_requested` (любая компания); `MCPServerConfig.icon_url` на list/get серверов.
+- **Write:** `PUT/DELETE /flows/api/v1/mcp/branding/{server_id}` и WS upsert/remove — только `company_id=system`; файл обязан быть `is_public=true`, MIME: png/webp/svg/jpeg. DELETE отдаёт `{status:"deleted", server_id}`.
 - **UI:** модалка `flows-mcp-servers-modal` → «Иконки платформы» (system only); picker и список серверов показывают `icon_url` или static `/static/core/assets/mcp_logos/{browser,search}.svg`.
 
 ### Seed bundle
@@ -300,7 +296,7 @@ Git-бандл: `apps/flows/mcp_branding/` (`manifest.yaml`, `icons/`, `SOURCES.
 - `apps/idle_worker/tasks/mcp_catalog_tasks.py` — TaskIQ crawl/provision/resync.
 - `apps/flows/mcp_catalog_allowlist.yaml` — curated `platform_approved` / auth overrides.
 - `tests/flows/integration/test_mcp_catalog_provisioner.py`, `test_mcp_company_init.py`.
-- `tests/ui/e2e/test_flows_mcp_scenarios.py` — документационный сценарий.
+- `tests/ui/e2e/test_flows_setup.py` — документационный сценарий `manage-mcp-servers`.
 
 Спецификация: https://modelcontextprotocol.io
 

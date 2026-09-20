@@ -4,11 +4,6 @@ alwaysApply: false
 ---
 # Единый реестр типов файлов
 
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
-
 ## Источник правды
 
 `core/files/types.py`:
@@ -62,7 +57,7 @@ render() { return html`<input type="file" accept=${this._accept.value}>`; }
 Runtime-логика, не являющаяся whitelist допустимых типов:
 
 - OnlyOffice dtype-маппинг (`apps/office/services/document_type.py`).
-- iOS audio transcode (`core/files/media/audio_transcode.py`).
+- iOS audio transcode (`core/files/audio_transcode.py`).
 - ffmpeg MIME-маппинг (`core/files/media/chunked_stt.py`).
 
 ## Добавление нового типа

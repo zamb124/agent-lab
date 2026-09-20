@@ -1,12 +1,8 @@
 ---
 description: "Voice gateway (apps/voice, порт 8015) и единый канон провайдеров речи STT/TTS/VAD: voice_resolver, SpeechOverride, company_voice_providers (только stt/tts), real-time pipeline, batch-транскрипция, биллинг"
+alwaysApply: false
 ---
 # Voice Gateway и Speech Providers
-
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
 
 Сервис `apps/voice` (порт **8015**) — акустический шлюз: real-time голос для AI-агентов и batch-транскрипция. Доменно нейтрален: только сигналы и аудио, без бизнес-логики клиентов.
 
@@ -152,7 +148,7 @@ Pydantic `extra="forbid"`, **request-scope** (создаётся в HTTP-хен�
 
 `GET .../voice-providers` возвращает только `secrets_meta` (флаги `*_set`), сырые секреты не отдаёт. `PUT` принимает merge-patch (опускание ключа = «не менять»).
 
-**Каталог для UI** (`VoiceProvidersCatalogDTO`, `GET /frontend/api/voice-providers/catalog`, `GET /flows/api/v1/voice-providers/catalog`): помимо провайдеров и моделей отдаёт allowlists языков (`speech_language_ids`), частот (`tts_sample_rate_ids`, `litserve_silero_tts_sample_rate_ids`, `vad_sample_rate_ids`), VAD-провайдеров (`vad_provider_ids`), голосов TTS по провайдеру (`tts_litserve_voice_hints[].voice_ids` из `SILERO_V5_RU_SPEAKERS_BY_BUNDLE`, плюс `cloud_ru_tts_voice_ids` / `yandex_tts_voice_ids` / `sber_tts_voice_ids`). Источник констант — `core/clients/speech_provider_catalog.py`; модели и `synthesis_locale` LitServe — из `provider_litserve.infra` при сборке DTO (`core/models/voice_providers_catalog.py`).
+**Каталог для UI** (`VoiceProvidersCatalogDTO`, `op_voice_providers_catalog`): `GET /frontend/api/voice-providers/catalog` и `GET /flows/api/v1/voice-providers/catalog` — тонкий REST одного `op_*`. Flows UI — `flows/voice_providers_catalog_load` (`transport: 'ws'`). Console — `frontend/voice_providers_catalog_load` (HTTP: frontend без command-router). Помимо провайдеров и моделей отдаёт allowlists языков (`speech_language_ids`), частот (`tts_sample_rate_ids`, `litserve_silero_tts_sample_rate_ids`, `vad_sample_rate_ids`), VAD-провайдеров (`vad_provider_ids`), голосов TTS по провайдеру (`tts_litserve_voice_hints[].voice_ids` из `SILERO_V5_RU_SPEAKERS_BY_BUNDLE`, плюс `cloud_ru_tts_voice_ids` / `yandex_tts_voice_ids` / `sber_tts_voice_ids`). Источник констант — `core/clients/speech_provider_catalog.py`; модели и `synthesis_locale` LitServe — из `provider_litserve.infra` при сборке DTO (`core/models/voice_providers_catalog.py`).
 
 ## Базовые клиенты
 
@@ -244,7 +240,7 @@ REST: `apps/frontend/api/company_voice_providers.py`:
 
 | Метод | Путь | Доступ |
 |---|---|---|
-| `GET` | `/frontend/api/voice-providers/catalog` | любой авторизованный |
+| `GET` | `/frontend/api/voice-providers/catalog` | любой авторизованный; тот же `op_voice_providers_catalog`, что `/flows/api/v1/voice-providers/catalog` |
 | `GET` | `/frontend/api/companies/{company_id}/voice-providers` | FGA `company#can_view` |
 | `PUT` | `/frontend/api/companies/{company_id}/voice-providers/{kind}` | FGA `require_company_admin`; `kind` только `stt` или `tts` |
 | `DELETE` | `/frontend/api/companies/{company_id}/voice-providers/{kind}` | FGA `require_company_admin`; то же |

@@ -8,10 +8,6 @@ alwaysApply: false
 
 # Доменные имена (единый канон)
 
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
 Второй термин или вторая модель для того же смысла запрещены: правится glossary, затем контракты по всей цепочке — не mapper между старым и новым именем.
 
 ## Flow
@@ -19,8 +15,6 @@ alwaysApply: false
 **Flow** — исполняемый граф и конфигурация на платформе (узлы, рёбра, **branches** — варианты графа внутри одного `flow_id`, переменные). В коде и API: `flow_id`, `FlowConfig`, `flow_repository`, префиксы ключей `flow:` в KV-хранилище service БД сервиса flows (`platform_agents`).
 
 Тип ноды с LLM + tools в JSON конфиге: **`llm_node`** (класс `LlmNode`, раннер `apps/flows/src/runtime/runners/llm_runner.py`). Устаревшее имя **`react_node`** в конфигах не используется.
-
-В схеме визуализации (`FlowFactory.get_flow_schema`) у llm-ноды вложенные flow, подключённые как tools, перечисляются в поле **`subflows`** (рекурсивно: `tools`, `subflows`), не `subagents`.
 
 Ресурсы уровня flow в `ResourceResolver.resolve_for_node(flow_resources=...)`, не `agent_*`.
 

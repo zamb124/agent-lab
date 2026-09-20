@@ -4,11 +4,6 @@ alwaysApply: false
 ---
 # Code Execution Sandbox
 
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
-
 Пользовательский код **никогда** не исполняется внутри процесса `flows`.
 
 ## Архитектура

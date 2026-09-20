@@ -4,11 +4,6 @@ alwaysApply: false
 ---
 # Логирование
 
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
-
 Все процессы (HTTP, TaskIQ, scheduler, фоновые задачи, WebSocket) пишут в **stdout** через единый `structlog`-pipeline поверх stdlib `logging`. Один контракт записи, один способ получения логгера, один способ привязки контекста. Никаких файловых хендлеров, `print(...)`, эмодзи в сообщениях, голых `try/except` ради «лишь бы залогировать».
 
 См. также: `tracing.mdc` (`trace_id`/`span_id`), `architecture.mdc` (REST-зеркало), `taskiq.mdc`.
@@ -23,13 +18,13 @@ alwaysApply: false
 |---|---|---|
 | HTTP с `X-Request-Id` от клиента | `AccessLogMiddleware` | как пришло |
 | HTTP без `X-Request-Id` | `AccessLogMiddleware` | `uuid4().hex` |
-| WS connect | `core/websocket/router.py` | `ws-conn:<uuid>` |
-| WS команда | `core/websocket/router.py` | `ws-cmd:<uuid>` |
+| User WS connect | Centrifugo (не Python) | SESSION JWT `auth_token` |
+| User WS команда | `core/realtime/command_http.py` | `event.meta.request_id` inbound / HTTP scope владельца |
 | TaskIQ из request scope | `LoggingMiddleware.pre_send` (из лог-контекста) | как у HTTP/WS |
 | TaskIQ из system scope | `LoggingMiddleware.pre_send` + WARN `task.kiq_request_id_missing` | `kiq-orphan:<uuid>` |
 | Scheduler dispatch | `apps/scheduler/dispatch.py` | `sched:<uuid>` |
 | Background через `run_with_log_context` | наследует/генерирует по `background_kind` | как у источника или `<kind>:<uuid>` |
-| UI event delivery | `core/websocket/manager.py::deliver_platform_event` | из `event.meta.request_id` или `ui-deliver:<uuid>` |
+| UI event delivery | bus `realtime` → Centrifugo | из `event.meta.request_id` |
 
 ### Прокидывание между сервисами
 
@@ -39,7 +34,7 @@ alwaysApply: false
 | Dev inter-service proxy | `X-Request-Id` | `core/middleware/dev_inter_service_proxy.py` | `AccessLogMiddleware` |
 | TaskIQ `kiq()` | `message.labels["request_id"]` | `LoggingMiddleware.pre_send` | `LoggingMiddleware.pre_execute` |
 | Scheduler → worker | `task.labels["request_id"]` | `apps/scheduler/dispatch.py` | `LoggingMiddleware.pre_execute` |
-| Platform event stream | `meta.request_id` | `core/events/publisher.py` | `core/websocket/manager.py::deliver_platform_event` |
+| Platform event stream | `meta.request_id` | `core/events/publisher.py` | bus `realtime` persist / Centrifugo publication |
 
 ### Контракт `enforce_required_fields`
 
@@ -79,8 +74,6 @@ async with SystemLogScope(lifecycle_phase="startup"):
 - `core/middleware/auth/middleware.py` — расширение HTTP scope полями user/company
 - `core/tasks/logging_middleware.py` — TaskIQ request scope
 - `core/utils/background.py` — background scope
-- `core/websocket/router.py` — WS connect/command
-- `core/websocket/manager.py` — UI event delivery
 - `apps/scheduler/dispatch.py` — scheduler tick (через labels, не через прямой `enter`)
 
 `clear_log_context()` запрещён вне `core/logging/**`. Для очистки — `exit_request_scope(token)`.
@@ -172,10 +165,11 @@ HTTP access — `AccessLogMiddleware` пишет одну строку `event="h
 
 `apps/scheduler/dispatch.py` — для каждой запланированной задачи: `request_id="sched:<uuid>"`, `trace_id="sched:<uuid>"`, `service_name="scheduler"` (или из `task.labels`), `triggered_by="scheduler"`.
 
-### WebSocket (`core/websocket/router.py::notifications_endpoint`)
+### User WS (Centrifugo + bus `realtime`)
 
-- Connect: `enter_request_scope(request_id="ws-conn:<uuid>", trace_id="ws:<uuid>", service_name=..., user_id=..., company_id=...)`.
-- Команда: вложенный `enter_request_scope` с `request_id="ws-cmd:<uuid>"` и `ws.command`, `ws.request_id` (из фрейма).
+Сокет пользователя — Centrifugo. Python не держит user WS.
+Команда `_requested`: CF RPC → `apps/realtime` inbound → `POST /{owner}/api/internal/realtime/command`
+(`core/realtime/command_http.py`) в HTTP request-скоупе владельца.
 
 ### Background
 
@@ -183,7 +177,7 @@ HTTP access — `AccessLogMiddleware` пишет одну строку `event="h
 
 ### Шина `platform:events` (request_id в meta)
 
-`core/events/publisher.py::publish_event_*` автоматически проставляет `meta.trace_id` и `meta.request_id` из лог-контекста (можно явно через kwargs). Подписчик `core/websocket/manager.py::deliver_platform_event` делает `enter_request_scope` с этими полями (или генерирует `ui-deliver:<uuid>`).
+`core/events/publisher.py::publish_event_*` автоматически проставляет `meta.trace_id` и `meta.request_id` из лог-контекста (можно явно через kwargs). Bus `realtime` пишет лог и публикует в Centrifugo.
 
 ### Inter-service HTTP
 

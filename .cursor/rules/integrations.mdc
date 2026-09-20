@@ -4,40 +4,11 @@ alwaysApply: false
 ---
 # Интеграции
 
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
-
-См. также: `taskiq.mdc` (TaskIQ), `streaming.mdc` (Stream-First, Emitter/Subscriber), `database.mdc` (репозиторий vs ServiceClient).
-
-## Stream-First (LLM)
-
-LLM **всегда** через `.stream()`, события через Redis Pub/Sub. Подробности — `streaming.mdc`.
-
-```python
-from apps.flows.src.streaming import Emitter, EventSubscriber
-
-emitter = Emitter(redis_client, state)
-await emitter.emit_text("Hello")
-await emitter.emit_tool_call("calculator", {"x": 1}, "call_123")
-await emitter.emit_complete("Done")
-await emitter.emit_interrupt(state.interrupt)
-
-subscriber = EventSubscriber(redis_client)
-async for event in subscriber.subscribe(task_id):
-    yield event   # SSE/WebSocket
-```
-
-A2A — **Protocol 1.0 hard cut** (см. **`a2a.mdc`**). Типы только из `a2a-sdk` 1.x (protobuf): `TaskStatusUpdateEvent` / `TaskArtifactUpdateEvent` / `Part` / `Message`. Wire enums: `TASK_STATE_*`, `ROLE_*`. Свои A2A-модели и 0.3 aliases запрещены.
-
-**A2A вложения (`Part`):** Platform UI → только `Part.url` после Files upload (`uploadPlatformFile` / `resolvePlatformFileRefs`); уже есть `FileRef` — без re-upload. `Part.raw` → S3 + `FileRecord` (`original_name`/`content_type` из `filename`/`mediaType`) для external клиентов. `Part.url` — platform download reuse по `file_id`, иначе SSRF-safe HTTP fetch → persist. В `state.files` — `file_id` и same-origin `url` (`/{segment}/api/v1/files/download/{file_id}`; segment сервиса-создателя или текущего SPA). Нужен `active_company`. При takeover в `dialog_log` — только `file_id`.
+Зона: клиенты (`ServiceClient`, `get_httpx_client`, dev-proxy), внешние flows по A2A, `external_api` нода, OAuth-интеграции. LLM streaming — **`streaming.mdc`**; A2A wire и вложения `Part` — **`a2a.mdc`**; выбор «репозиторий vs ServiceClient» — **`architecture.mdc`** § «Межсервисный доступ к данным».
 
 ## HTTP клиенты
 
 ### Межсервисный доступ
-
-**Данные:** при доступной БД домена — **репозиторий**, не отдельный HTTP-клиент к peer (см. `database.mdc` → «Межсервисный доступ к данным»).
 
 **HTTP к API другого сервиса** — **только** `ServiceClient`. Прямой `httpx.AsyncClient` между сервисами запрещён.
 
@@ -67,14 +38,15 @@ response = await client.post("crm", "/crm/api/v1/entities/", json=data)
 ### Внешние API — `get_httpx_client`
 
 ```python
-from core.http import get_httpx_client
+from core.http import ProxyStrategy, get_httpx_client, request_public_oauth
 
-async with get_httpx_client(timeout=30.0, use_proxy_from_config=False) as client:
-    response = await client.get(url)            # OAuth провайдеры — БЕЗ прокси
+async with get_httpx_client(timeout=30.0, strategy=ProxyStrategy.SMART) as client:
+    response = await client.get(url)            # внешний API: прямой канал, при блокировке — egress
 
-async with get_httpx_client(timeout=30.0, use_proxy_from_config=True) as client:
-    response = await client.get(url)            # внутренние API — с прокси
+response = await request_public_oauth("POST", token_url, data=payload)  # обмен code / userinfo / refresh
 ```
+
+`strategy` (`ProxyStrategy`: `DIRECT_FIRST` default, `PROXY_FIRST`, `DIRECT_ONLY`, `PROXY_ONLY`, `SMART`) — единственный способ управлять прокси; аргумент `proxy=` → `ValueError`. Детали стратегий и `settings.proxy` — **`configuration.mdc`** § «Прокси и исходящие OAuth».
 
 **Запрещено:** `httpx.AsyncClient()` напрямую.
 
@@ -132,12 +104,13 @@ external_flow = await container.flow_discovery.register_agent(
 
 | Файл | Назначение |
 |---|---|
-| `core/integrations/models.py` | `IntegrationProvider`, `IntegrationCredential`, `OAuthProviderConfig` |
+| `core/integrations/models.py` | `IntegrationProvider`, `IntegrationCredential`, `OAuthProviderConfig`, payload/delete для command-router |
 | `core/integrations/repository.py` | `IntegrationCredentialRepository` — CRUD для `integration_credentials` (shared БД) |
 | `core/integrations/constants.py` | `COMPANY_INTEGRATION_USER_ID`, `TOKEN_TYPE_SERVICE_ACCOUNT` |
 | `core/integrations/company_credentials.py` | Company-owned SA credentials (Google Workspace и аналоги) |
 | `core/integrations/oauth_service.py` | `OAuthService.build_auth_url`, `complete_oauth`, `refresh_token`, `get_valid_token` |
-| `core/api/integrations.py` | OAuth callback `GET /{server.name}/api/v1/integrations/oauth/callback` (flows: `/flows/api/v1/...`). Дефолтный `redirect_uri` в `OAuthService.build_auth_url` совпадает с этим путём; после успеха — редирект на `post_auth_redirect_origin` + `return_path` (если в state был допустимый `return_origin` при старте, см. `core.utils.domain.is_allowed_integration_return_origin`), иначе — `platform_public_base_url` + `return_path` |
+| `core/integrations/operations.py` | `op_integrations_*` credentials list/remove и Google Workspace company get/put/delete — REST и WS RPC зовут одну функцию |
+| `core/api/integrations.py` | Тонкий REST тех же `op_*`; OAuth callback `GET /{server.name}/api/v1/integrations/oauth/callback` и authorize остаются HTTP (браузерный redirect). Дефолтный `redirect_uri` в `OAuthService.build_auth_url` совпадает с callback; после успеха — редирект на `post_auth_redirect_origin` + `return_path` (если в state был допустимый `return_origin` при старте, см. `core.utils.domain.is_allowed_integration_return_origin`), иначе — `platform_public_base_url` + `return_path` |
 | `core/integrations/guided_integration_error.py` | `GuidedIntegrationError` / `GuidedIntegrationLink` — структурированная ошибка OAuth post-save (CRM и др.), текст RU/EN |
 | `core/api/integration_oauth_error_html.py` | HTML страницы ошибки callback (SSR); локаль: state `oauth_ui_locale`, затем cookie/`Accept-Language` (`resolve_oauth_integration_locale`) |
 
@@ -159,7 +132,7 @@ external_flow = await container.flow_discovery.register_agent(
 
 Константа: `COMPANY_INTEGRATION_USER_ID` в `core/integrations/constants.py`.
 
-API company Google Workspace SA: `GET/PUT/DELETE .../integrations/credentials/google/workspace/company` (admin). System: `POST .../integrations/google/workspace/system/reconcile`.
+API company Google Workspace SA: `op_integrations_workspace_company_*` + тонкий `GET/PUT/DELETE .../integrations/credentials/google/workspace/company` (admin). System: `POST .../integrations/google/workspace/system/reconcile` остаётся HTTP.
 
 Google Docs/Sheets: один Connect — `service=workspace` (scopes documents+spreadsheets+drive.file). Prior `docs`/`sheets` credentials — только чтение существующих записей. Client: `GoogleWorkspaceClient().resolve_auth(state)` в `apps/flows/src/clients/google_workspace_client.py`.
 
@@ -194,7 +167,6 @@ Proactive user Connect (без interrupt): `GET .../credentials/google/workspace
 ## КРИТИЧНЫЕ ПРАВИЛА
 
 1. Между сервисами для данных — репозиторий при доступной БД; для HTTP — только `ServiceClient`. Прямой `httpx.AsyncClient` между сервисами запрещён.
-2. Внешние API — `get_httpx_client`. OAuth-провайдеры — `use_proxy_from_config=False`.
-3. LLM — только через `.stream()`, события — Redis Pub/Sub (`streaming.mdc`).
-4. A2A — только Protocol 1.0 (`a2a.mdc`); типы из `a2a-sdk` 1.x; свои не создавать; 0.3 wire запрещён.
-5. OAuth внешних сервисов — через `core/integrations/OAuthService`, не дублировать в сервисах.
+2. Внешние API — `get_httpx_client` с явным `strategy=`. OAuth-провайдеры — `request_public_oauth`.
+3. Внешние агенты — только A2A Protocol 1.0 (`a2a.mdc`), `RemoteFlowNode` по direct URL.
+4. OAuth внешних сервисов — через `core/integrations/OAuthService`, не дублировать в сервисах.

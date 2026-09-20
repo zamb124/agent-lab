@@ -13,13 +13,9 @@ globs:
   - "core/frontend/static/lib/components/platform-mermaid-host.js"
   - "core/frontend/static/lib/components/platform-file-viewer-modal.js"
   - "core/frontend/static/assets/icons/files_icons/**"
+alwaysApply: false
 ---
 # Документы (`apps/office`, URL `/documents`)
-
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
 
 ## Контракт сервиса
 
@@ -31,6 +27,14 @@ globs:
 - **Lara context:** `file_id` + `catalog_id` + `document_type` из route/selection; без второго id. Секреты OnlyOffice и публичные URL — `OfficeIntegrationConfig` (`services.office.office` / ENV `OFFICE__*`).
 - **`OfficeContainer.file_repository`:** `FileRepository(storage=shared_storage)` напрямую, не `HTTPRepositoryProxy` на core, иначе анонимный `GET /documents/api/v1/office-download` без сессии не прочитает метаданные файла из БД.
 - **Auth routes:** префикс `/documents/*` в `route_config`. Эндпоинты `/documents/api/v1/office-download`, `/documents/api/v1/onlyoffice/callback`, `/documents/api/v1/public/*`, `/documents/api/v1/viewer-stream|viewer-frame|viewer-save` — **`anonymous`** (JWT в query / Bearer от Document Server). Остальной `/documents/api/v1/*` — session.
+
+## WS / REST / command
+
+Команды с сессией — `OFFICE_OPERATIONS` / `op_*` (`apps/office/realtime/`): REST (`apps/office/api/commands.py`, публичный префикс `/documents/api/v1`) и Centrifugo RPC `platform.event` зовут одну функцию. Hop шины — `POST /office/api/internal/realtime/command` (`service_name`, не `documents`). `office` в `COMMAND_WS_SERVICES`. UI-фабрики `transport: 'ws'`, payload = Pydantic snake_case. Namespace на WS — `PlatformEvent.meta.namespace` → `Context.active_namespace` → `require_namespace`. Кросс-сервисное дерево каталога — `@platform/lib/events/resources/office-catalog-items.resource.js` (`office/catalog_items` → `op_catalogs_items`). Browse для `platform.file_picker` — `@platform/lib/events/resources/office-documents-browse.resource.js` (`office/catalogs_list` / `office/documents_list` / `office/documents_search`). HTTP BFF-клонов во flows/wiki нет.
+
+HTTP-only (allowlist): `office/document_upload` (chunked Files), `office/document_editor_config` (DocsAPI JWT/URL), `office/public_*` (анонимный preview), OnlyOffice callback/download, file/document sync, viewer-stream, data_tables. Live WS=REST identity — `tests/realtime/test_office_commands.py` (все `OFFICE_OPERATIONS`).
+
+Доменные ошибки границы — сразу `WsCommandError` (`require_company` / `require_namespace`). Not-found и conflict — сразу `WsCommandError`. HTTP-исключения в `op_*` запрещены. Списки — `ListResponse[T]` / `OffsetPage[T]`, без близнецов `*ListResponse`.
 
 ## Unified access (OpenFGA + public link AuthN)
 

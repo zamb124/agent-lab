@@ -4,11 +4,6 @@ alwaysApply: false
 ---
 # Flows — краткий справочник
 
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
-
 ## Durable execution invariant
 
 Flows исполняются как durable workflow runtime: `workflow_events` — источник истины, `ExecutionState` — projection, Redis — cache. Любая новая логика resume/retry/time-travel/fork строится через `durable_execution.mdc` и append-only ledger.
@@ -17,30 +12,15 @@ Flows исполняются как durable workflow runtime: `workflow_events` 
 
 ## NodeType
 
-| Тип | Описание |
-|-----|----------|
-| llm_node | LLM + tools |
-| code | Isolated Python / JS / TS / Go / C# через code-runner |
-| flow | Вызов ветки (flow_id + branch_id) |
-| remote_flow | A2A вызов внешнего агента по URL |
-| code_agent | Агент из дерева исходников (Documents) + контейнер на ферме guest_runtime |
-| external_api | HTTP запрос |
-| mcp | MCP tool |
-| channel | Отправка сообщений (Telegram, Webhook, Email) |
-| hitl_node | Пауза до исполнителя очереди (`HitlWorkItemService` → WorkItem `operator_handoff`) |
-| resource | Pass-through: `ResourceNode` не меняет `ExecutionState`; `node.resources` участвует в merge через `resource_resolver`, как у прочих нод |
+Таблица типов нод (`llm_node`, `code`, `flow`, `remote_flow`, `code_agent`, `external_api`, `mcp`, `datasource`, `channel`, `hitl_node`, `reflection`, `resource`) и их конфиг — **`flows.mdc`** § «NodeType». Здесь — только runtime-семантика.
 
-**HITL = WorkItem (operator_handoff).** Термин **`handoff_mode`** здесь — режим HITL (`single_reply`/`takeover`), **не** agent handoff между flows (→ **`handoff.mdc`**). Очереди/задачи оператора живут в ядре задач `WorkItem` (сервис **worktracker**, БД `platform_worktracker`, → **`worktracker.mdc`**); таблиц `operator_*` и API `/flows/api/v1/operator/*` больше нет. Тул **`hitl_operator_task`** и нода **`hitl_node`** бросают **`FlowInterrupt`** с **`OperatorTaskInterrupt`** (поле `work_item_id`) и через **`HitlWorkItemService`** (`apps/flows/src/services/hitl_work_item_service.py`, `build_hitl_handoff_command`/`HitlInterruptSnapshot` из `apps/flows/src/models/hitl_schemas.py`) создают `WorkItem(kind=operator_handoff, blocking=True)` с хуком `completed` (path=`platform:events`, binding для resume), очередь = `QueueAssignment(work_queue_slug)`. Диалог HITL — durable `ExecutionState.messages` через **`HitlConversationService`** (`/flows/api/v1/hitl/{work_item_id}/conversation*`, push `flows/hitl_conversation/turn_appended`). `WorkItemComment` / блок «Активность» — внутренние заметки, не канал к покупателю. `InterruptManager.apply_interrupt` сохраняет `correlation_id`.
+## HITL в runtime
 
-**Завершение и resume.** Оператор завершает задачу в worktracker (`POST /worktracker/api/v1/work-items/{id}/complete`); worktracker публикует `worktracker/work_item/completed` на шину → consumer group `flows` (`PlatformEventConsumerService` → `HitlWorkItemService.resume_from_completion` → `process_flow_task(is_resume=True, content=resolution)`). Resume идемпотентен: `hitl_node` при повторном входе находит завершённый WorkItem по `correlation_id` (`find_by_completion_correlation`, `WorkItemState.DONE`) и идёт по исходящим рёбрам. Тяжёлый `context_data`/`interrupt_snapshot` живут в `hook.binding`. HTTP wake/resume для HITL запрещён.
-
-**Flow-сотрудник / fire-and-forget.** Назначение на employee = `UsersAssignment(user_ids=[flow_employee_{flow_id}])`; worktracker публикует `worktracker/work_item/assigned` на шину `platform:events` → consumer group `flows` (`PlatformEventConsumerService` → `EmployeeInboxService`). HITL resume — по `worktracker/work_item/completed` (binding в `WorkItem.hooks`, без HTTP). Tools `work_item_create/complete/list` (`apps/flows/tools/work_item_tools.py`).
-
-**Takeover / single_reply realtime.** После `OperatorTaskInterrupt` worker выходит; исходный `SendStreamingMessage` обрывается. User и operator во время просмотра чата подписаны на **live `SubscribeToTask`** (snapshot Task + Redis `stream:{a2a_task_id}` до final). Ask (takeover): REST POST conversation/messages (+ `file_ids`) → durable append + `Emitter` (`operator_reply` / `operator_files`). User mid-dialog: A2A `SendStreamingMessage` без resume → append + `Emitter` (`user_message`). Close / single_reply Send: complete → `append_closing_operator_reply` (durable + Emitter) → `resume_from_completion` → `process_flow_task(is_resume=True, content=resolution.text)`. UI: `operator_reply` + `completed` с тем же текстом дедупятся в один пузырь. Company push `turn_appended` / `work_item/completed` — для канбана, не для пузырей чата. `WorkItemComment` / «Активность» — внутренние заметки.
-
-**`HandoffMode`** (StrEnum, `core/state/interrupt.py`): `single_reply` — один ответ оператора через composer Send = complete с `resolution_text`/`resolution_files` (тот же closing append); `takeover` — mid-dialog ask без complete. Режим — `handoff_mode` в `HitlOperatorTaskArgs` или конфиге ноды, хранится в `hook.binding.handoff_mode`/`interrupt_snapshot`.
+Тул **`hitl_operator_task`** и нода **`hitl_node`** бросают **`FlowInterrupt`** с **`OperatorTaskInterrupt`** (`work_item_id`) и через **`HitlWorkItemService`** (`apps/flows/src/services/hitl_work_item_service.py`; `build_hitl_handoff_command` / `HitlInterruptSnapshot` из `apps/flows/src/models/hitl_schemas.py`) создают `WorkItem(kind=operator_handoff, blocking=True)` с хуком `completed`. `InterruptManager.apply_interrupt` сохраняет `correlation_id`; на resume `hitl_node` находит завершённый WorkItem по `correlation_id` (`find_by_completion_correlation`, `WorkItemState.DONE`) и идёт по исходящим рёбрам — resume идемпотентен, HTTP wake запрещён. **`HandoffMode`** (`core/state/interrupt.py`): `single_reply` / `takeover`; термин `handoff_mode` здесь — режим HITL, не agent handoff (→ **`handoff.mdc`**). После `OperatorTaskInterrupt` worker выходит, исходный `SendStreamingMessage` обрывается; продолжение — `SubscribeToTask` (→ **`streaming.mdc`**).
 
 **`hitl_node` и `input_mapping`:** резолвятся в `inputs` до конфига; приоритет у маппинга. Параметры: **`assignee_queue`** (slug очереди), **`task_title`**, **`user_facing_message`**/`question`, **`handoff_mode`**. Fallback в конфиге `NodeConfig`: **`work_queue_slug`**, **`handoff_task_title`**, **`handoff_user_message`**, **`handoff_mode`**.
+
+Полный канон HITL (WorkItem, очереди, resume по `worktracker/work_item/completed`, takeover/single_reply UX, диалог `HitlConversationService`, test matrix) — **`worktracker.mdc`**; flow-сотрудник и inbox — **`flow_employee.mdc`**.
 
 ## Любая нода = Tool
 
@@ -84,20 +64,7 @@ Merge:
 
 `args` в графе — входы ноды (`input_mapping` / рёбра). Playground `POST /flows/api/v1/code/execute` принимает поле `args` (defaults `parameters_schema`); без него entrypoint получает `{}`.
 
-## Маппинги
-
-input_mapping - откуда берём данные:
-
-    input_mapping: {
-        "query": "@state:user_query",   # из state.user_query
-        "limit": "@const:10",           # константа
-    }
-
-output_mapping - куда пишем результат:
-
-    output_mapping: {
-        "result": "calculation_result"  # result → state.calculation_result
-    }
+Маппинги (`input_mapping` `@state:` / `@const:`, `output_mapping`, `MappingResolver`, `@var` strict-контракт) — **`flows.mdc`** § «Маппинги» / «`@var` strict-контракт».
 
 ## Ветки как tools (type: flow)
 
@@ -143,41 +110,9 @@ output_mapping - куда пишем результат:
 - Если у завершившейся ноды есть **исходящие рёбра к нодам** (`to` не `null`) и **ни одно** не активно, причём **все** эти рёбра **с** условием — `FlowPrematureCompletionError` (`no_conditional_match`, в `payload` есть `stuck_at`). Нужны явные ветки, покрывающие сценарии (второе условие, отдельная default-нода, перенос ветвления в code-ноде).
 - В смешанном случае (часть рёбер без `condition` к `to` не `null`, но нет ни одного активного перехода) — `FlowPrematureCompletionError` (`no_active_outgoing_edge`).
 
-## Triggers (точки входа)
+## Точки входа и каналы
 
-Триггеры запускают flow из внешних источников:
-
-| Тип | Описание |
-|-----|----------|
-| telegram | Webhook от Telegram бота |
-| webhook | HTTP POST запрос |
-| cron | Расписание (TaskIQ) |
-
-    "triggers": {
-      "tg": {
-        "type": "telegram",
-        "branch_id": "default",
-        "config": {"bot_token": "@var:bot_token"},
-        "output_mapping": {"content": "message.text"},
-        "output_actions": [...]
-      }
-    }
-
-У триггера задаётся **`branch_id`**: какой сценарий стартует; резолв `@var` в `config` идёт для той же пары `flow_id` + `branch_id`, что и рантайм (см. **`flows.mdc`**, `FlowFactory.get_resolved_variables_map`).
-
-## ChannelNode (отправка сообщений)
-
-    {
-      "type": "channel",
-      "channel": "telegram",  // telegram, webhook
-      "action": "send_message",
-      "channel_config": {"bot_token": "..."},
-      "input_mapping": {"recipient": "@state:chat_id", "text": "@state:response"}
-    }
-
-Как tool в LlmNode:
-
-    {"tool_id": "notify", "type": "channel", "channel": "webhook", ...}
+Триггеры (`telegram` / `webhook` / `cron` / `email` / `platform_event`) и `ChannelNode` (Telegram / Webhook / Email / SMS) — конфиг и runtime handlers в **`flows.mdc`** § «Triggers». Триггер запускает выбранный `branch_id`; `@var` в `config` резолвится для той же пары `flow_id` + `branch_id`, что и рантайм. `ChannelNode` как tool в `llm_node` — `{"tool_id": "notify", "type": "channel", "channel": "webhook", ...}`.
 
 ## FlowInterrupt - Механизм Прерывания
 

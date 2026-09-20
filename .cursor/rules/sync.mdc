@@ -3,15 +3,11 @@ description: "Sync: инженерный чат, каналы, треды, со�
 globs:
   - "apps/sync/**"
   - "apps/sync_worker/**"
+alwaysApply: false
 ---
 # Sync Service
 
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
-
-Инженерный чат с Git-интеграцией. Порт **8005**. Префикс REST: `/sync/api/v1/`. WebSocket: `/sync/api/ws/notifications`. Sync — **эталон 100% WS+REST симметрии** платформы (см. `architecture.mdc`).
+Инженерный чат с Git-интеграцией. Порт **8005**. Префикс REST: `/sync/api/v1/`. User WS: Centrifugo `/realtime`. Sync — **эталон 100% WS+REST симметрии** платформы (см. `architecture.mdc`).
 
 ## Архитектура
 
@@ -19,7 +15,7 @@ globs:
 - **Изоляция:** `company_id` во всех таблицах, из `get_context()` автоматически.
 - **Auth:** платформенный `AuthMiddleware` + `get_context()`; cookie-based.
 - **Конфиг:** `core.config.get_settings()`; HTTP-сервис грузит `services.sync` через `set_settings(SyncSettings(**load_merged_config(service_name="sync")))` в `main.py`; `sync_worker` грузит `services.sync_worker` через `apps.sync_worker.worker`. Отдельного `get_sync_settings()` нет.
-- **Деплой:** в production-образе обязателен `uv pip install ... --group sync` (`websockets`). Иначе `No supported WebSocket library`.
+- **Деплой:** HTTP Granian; user WS — Centrifugo `/realtime`, не in-process FastAPI WS.
 - **TaskIQ broker:** один в `apps/sync/realtime/broker.py` — для heavy-задач (transcribe_*, finalize_recording).
 
 ## Command-First (SYNC_OPERATIONS — эталон)
@@ -27,17 +23,20 @@ globs:
 ```
 REST POST /sync/api/v1/...                   ──┐
                               ├──> op_<entity>_<verb> (apps/sync/realtime/operations.py)
-                              │     ├──> helpers (handlers.py) → repo + publish_realtime_events
+                              │     ├──> helpers (handlers.py) → repo + publish_event
                               │     └──> для transcribe_* — kiq в TaskIQ (queue: sync)
-WebSocket /sync/api/ws/notifications           ──┘  (single command_router → тот же op_*)
+Centrifugo RPC platform.event → bus realtime ──┘  (command_router → тот же op_*)
 ```
 
 - **Все операции (read + mutating)** — `async def op_<entity>_<verb>(payload, *, user, container) -> Result | None` в `apps/sync/realtime/operations.py`. Один handler — оба транспорта.
 - **Транспорт:** `apps/sync/realtime/command_router.SYNC_OPERATIONS = {canonical_type → Operation(payload_model, fn)}`. `_make_ws_handler(op)` валидирует payload Pydantic'ом и зовёт `op.fn`. `WsCommandError` → WS `*_failed`-фрейм.
-- **REST-обвязка** — каждый route в `apps/sync/api/**` собирает Pydantic и зовёт ту же `op.fn`. `WsCommandError` маппится в `HTTPException` через `@app.exception_handler` в `apps/sync/main.py`.
+- **REST-обвязка** — каждый route в `apps/sync/api/**` собирает тот же Pydantic payload, что WS, и возвращает тот же тип, что `op_*`. Path id обязан совпасть с полем payload (`WsCommandError("ws_invalid_payload")`). Запрещены twin-модели `_FooBody`, unwrap `.items`, ручная сборка `OffsetPage`/`ListResponse`/`{"status"}`/`{"message_id"}`.
+- **Списки:** `OffsetPage[T]` / `ListResponse[T]` из `core/pagination.py`. Двунаправленная лента сообщений — локальный `PaginationResponse[T]` (`apps/sync/models/common.py`, исключение: `next_cursor` + `prev_cursor`).
+- **Запись звонка:** ORM `SyncCallRecording` → домен `CallRecordingRead` один раз в `call_recording_read` (`meeting_repository.py`).
+- `WsCommandError` → HTTP через `WS_COMMAND_ERROR_HTTP_STATUS` (`core/websocket/operation.py`) и envelope middleware в `create_service_app`. Отдельный `@app.exception_handler` в `apps/sync/main.py` не используется.
 - **TaskIQ** — **только** для heavy-транскрипции (`messages.transcribe_audio/video/call` → `enqueue(SYNC_TRANSCRIBE_AUDIO_MESSAGE | SYNC_TRANSCRIBE_VIDEO_MESSAGE | SYNC_AGGREGATE_CALL_TRANSCRIPT, ...)`). Все остальные mutating-команды — in-process в `op_*`.
-- **События домена** — `publish_realtime_events([...])` внутри `op_*`. Форвард — `core.events.publish_event_*` → `platform:events` → `core.websocket.manager` доставляет в подключённые сокеты по `recipient_user_ids`.
-- **company_id** — `resolve_company_id(user)` из `operations.py`. Контекст пуст — `WsCommandError("ws_no_company", ...)`.
+- **События домена** — `publish_event_*` внутри `op_*`. Bus `realtime` пишет лог, XADD `platform:events` и publish в Centrifugo.
+- **company_id** — `require_company()` из `core.request_scope`. Контекст пуст — `WsCommandError("forbidden", ...)`.
 
 ### Запрещено (zero-fallback canon)
 
@@ -51,7 +50,7 @@ WebSocket /sync/api/ws/notifications           ──┘  (single command_router
 
 1. Pydantic Payload/Result в `operations.py`.
 2. `async def op_<entity>_<verb>` в `operations.py`. Бизнес — внутри функции или в `handlers.py`.
-3. Push-события (если есть) → `events.py` + `publish_realtime_events([...])`.
+3. Push-события (если есть) → `events.py` + `publish_event_*`.
 4. Регистрация в `SYNC_OPERATIONS` под канон `sync/<entity>/<verb>_requested`.
 5. REST route → `apps/sync/api/<entity>.py` (тонкая обвязка `Pydantic → op_* → response_model`).
 6. WS — автоматически.
@@ -137,10 +136,10 @@ Namespace-операции (`list`/`sync_settings update`) — REST-only чер�
 
 ## Уведомления и presence
 
-- После `messages.send` (только корневая лента, без `thread_id`) для каждого участника кроме отправителя, **если его нет в `mentioned_user_ids`** — TaskIQ `deliver_channel_message_notification` (`apps/sync/realtime/notification_tasks.py`): есть presence `sync:ws:presence:{user_id}` — выход без `notify_user`; иначе проверка `notifications_muted`; иначе `notify_user(NotificationType.SYNC_NEW_MESSAGE, action_url=/sync/c/...)`.
+- После `messages.send` (только корневая лента, без `thread_id`) для каждого участника кроме отправителя, **если его нет в `mentioned_user_ids`** — TaskIQ `deliver_channel_message_notification` (`apps/sync/realtime/notification_tasks.py`): онлайн в Centrifugo (`core.realtime.presence.is_user_connected`) — выход без `notify_user`; иначе проверка `notifications_muted`; иначе `notify_user(NotificationType.SYNC_NEW_MESSAGE, action_url=/sync/c/...)`.
 - Упоминания: `MessageCreate.mentioned_user_ids` (опц.); сервер валидирует участников канала, пишет в первый `text/plain` поле `mentions` в JSON контента. Для каждого упомянутого (кроме отправителя) — `deliver_sync_mention_notification` (`NotificationType.MENTION`, high), **без** пропуска по sync presence; учитывается `notifications_muted`. В тредах обычное канальное уведомление не шлётся; упоминания в треде доставляются через `deliver_sync_mention_notification`.
 - Flow-сотрудник в чате (полный канон → **`flow_employee.mdc`**): employee-user (`flow_employee_{flow_id}`) — обычный участник канала (виден в `company_members`-автокомплите, меншенится штатно; human-only фильтра на add-member нет). После `messages.send` sync публикует `sync/message/created` на шину `platform:events` с `channel_type` + `mentioned_user_ids` + `recipient_user_ids` в payload; consumer group `flows` будит employee по правилу «DM или @mention» через `EmployeeInboxService` (никаких прямых HTTP Sync→flows). Обычный mention/channel toast employee-uid **не** шлётся (`_enqueue_channel_message_notifications` их пропускает). Group-member без @mention flow **не** будит (by design). Ответ в канал — не auto-post LLM: builtin tools `sync_send_message`/`sync_list_messages` под SESSION JWT сотрудника. Sync `CompanyMemberRead` пока без `is_flow_employee` (badge — в team API).
-- Presence в `apps/sync/realtime/presence_hooks.py` через `notification_manager.register_{connect,disconnect}_hook`. TTL — `ws_presence_ttl_seconds`. Снимается при закрытии последнего сокета. `sync:last_seen:{user_id}` — ISO при последнем disconnect.
+- Presence: онлайн — Centrifugo `presence_stats` через bus `realtime`; `sync:last_seen:{user_id}` — ISO, когда batch видит пользователя онлайн.
 - UI: `platform-notification-manager` в `apps/sync/ui/index.html`; мьют — модалка `sync.channel_notifications` (`useOp('sync/channel_notifications_update')`). Deep link: `/sync/c/:channelId` через `createRouterEffect` (`SYNC_ROUTES`).
 
 ### Календарные уведомления
@@ -171,7 +170,7 @@ Namespace-операции (`list`/`sync_settings update`) — REST-only чер�
 - Массовая расшифровка по сессии: `POST /channels/{channel_id}/calls/{call_id}/transcribe` (`messages.transcribe_call`, 202).
 - Флаг канала `transcribe_voice_messages`: при `messages.send` с `file/audio` IDLE — та же задача, что у ручного transcribe. Сегмент `source_speech_to_chat` ставит ту же задачу даже без флага канала. Статусы: `idle|processing|done|failed`. `TextPlainContent.origin`: `typed` (композер) или `speech` (STT).
 - `MessageContentModel`: для `type=file/video` после Union `data` приводится к `VideoAttachmentContent` (`model_validator` в `apps/sync/models/messages.py`); иначе из Union часто выбирается `FileAttachmentContent` и ломается `messages.transcribe_video`.
-- Запись в `message-composer.js`: порядок типов `MediaRecorder` — сначала `audio/mp4` (Safari), затем webm/opus. Chromium часто отдаёт WebM/Opus, который iOS не декодирует: `FileProcessor.persist_uploaded_file → process_file_from_bytes` перекодирует `audio/{webm,ogg}` в AAC M4A (`audio/mp4`, `*.m4a`) через ffmpeg (`core/files/audio_transcode.py`). Воспроизведение — `<platform-audio-message-player>`. `GET .../files/download/{file_id}` отдаёт `Accept-Ranges: bytes`, `Content-Length`, `206 Partial Content` на `Range` (`core/files/streaming.py`, `http_range.py`) — иначе Safari часто не стримит.
+- Запись в `message-composer.js`: порядок типов `MediaRecorder` — сначала `audio/mp4` (Safari), затем webm/opus. Chromium часто отдаёт WebM/Opus, который iOS не декодирует: `FilesService.create` (`core/files/storage.py`) перекодирует `audio/{webm,ogg}` в AAC M4A (`audio/mp4`, `*.m4a`) через ffmpeg (`core/files/audio_transcode.py`). Воспроизведение — `<platform-audio-message-player>`. `GET .../files/download/{file_id}` отдаёт `Accept-Ranges: bytes`, `Content-Length`, `206 Partial Content` на `Range` (`core/files/streaming.py`, `http_range.py`) — иначе Safari часто не стримит.
 
 ### Лента и каналы
 
@@ -193,12 +192,12 @@ Namespace-операции (`list`/`sync_settings update`) — REST-only чер�
 
 ## Участники компании
 
-- `GET /company/members` — `CompanyMemberRead` для активной компании из `company.members` + `UserRepository` (текущий исключён); поля `is_online`, `last_seen_at` (Redis presence + last_seen). UI — фабрика `sync/company_members` (`autoload: true`); push `sync/presence/changed` (фильтр по `company_id` на backend) обновляет `presenceByUserId` в slice `state.syncPresence` (`createSlice('sync/presence')`). DM-канал: `sync-direct-member-row.js` → `sync/channels.actions.create({type:'direct', member_ids:[peer.user_id]})` или существующий из `byId`.
+- `GET /company/members` — `CompanyMemberRead` для активной компании из `company.members` + `UserRepository` (текущий исключён); `is_online` — Centrifugo `presence_stats` через bus; `last_seen_at` — Redis `sync:last_seen:{user_id}` (пишется, когда batch видит пользователя онлайн). UI — фабрика `sync/company_members` (`autoload: true`); индикаторы online/last_seen читают поля item'а, не отдельный push. Slice `sync/presence` — только `typingByChannel`. DM-канал: `sync-direct-member-row.js` → `sync/channels.actions.create({type:'direct', member_ids:[peer.user_id]})` или существующий из `byId`.
 - `GET /company/members/{user_id}/shared-channels` — пересечение settings-rows ∩ FGA `can_view` обоих участников. `user_id` совпадает с текущим — все каналы пользователя как `GET /channels`. Ответ — `ChannelRead`. UI карточки профиля — core-модалка `platform.user_info`; фабрика `sync/shared_channels` (REST-only).
 
 ## Файлы
 
-`POST /api/v1/files/` — multipart в S3 (`build_s3_key_from_context`, `S3ClientFactory`) + `sync_files` через `FileRepository.create`. WS-команда `sync/files/upload_completed_requested` возвращает каноничные метаданные после REST-upload. Ответ `POST /files/` — `core.files.models.FileResponse` (плоский JSON: `file_id`, `url`, `original_name`, …). Превью/аватары используют `url` (same-origin к `GET .../files/download/{file_id}`); вложения в сообщениях — ещё `file_id` в блоках контента.
+Байты — только платформенный chunked Files API `/sync/api/v1/files/uploads*` (`uploadPlatformFile` / `platform/file_create`, `FileSourceKind.SYNC_MESSAGE` / `SYNC_CALL_RECORDING` / `SYNC_SPEECH_SEGMENT` / `SYNC_CHANNEL_ASSET`; Documents bind автоматически, → **`files.mdc`**). После complete клиент зовёт `sync/files/upload_completed_requested` (REST `POST /sync/api/v1/files/upload-completed`, `op_files_upload_completed`) и получает каноничный `FileResponse` (`file_id`, `url`, `original_name`, …). Превью/аватары используют `url` (same-origin к `GET .../files/download/{file_id}`); вложения в сообщениях — `file_id` в блоках контента. Таблица `sync_files` — только исторические FK, новые строки не создаются.
 
 ## UI
 

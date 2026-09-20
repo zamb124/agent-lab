@@ -10,16 +10,13 @@ globs:
 ---
 # RAG (Retrieval-Augmented Generation)
 
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
-
 **Продуктовый статус:** отдельный Lara Tier-1 `rag-platform` и branch `rag` удалены; company knowledge в Lara идёт через `documents-platform` → `knowledge-rag`. Полный decommission сервиса `apps/rag` (API/UI/helm → Documents) — **отдельный эпик**; до него этот rule и `/rag/api/v1/` остаются каноном backend knowledge.
 
 Сервис документов и семантического поиска с провайдерами `pgvector` (PostgreSQL+pgvector) и `agentset` (внешний SaaS). Изоляция через namespaces, асинхронная индексация через TaskIQ, оригиналы файлов в S3/MinIO. Парсинг — канонический `FileReader.read(source, ReadFileArgs) → FileExtract` (hybrid PDF OCR / vision / STT); отдельного парсера в `core/rag` нет. Embeddings — OpenAI-compatible API; дефолт в Pydantic и продуктовом `conf.json` — **`provider_litserve`** с **Qwen3-Embedding-0.6B** и размерностью из `rag.embedding.api`; альтернатива — **`openrouter`** (`rag.embedding.base_url` или ключ из `llm`).
 
-Префикс REST: **`/rag/api/v1/`**. Структура: `apps/rag/{api,ui}` + `core/rag/{base_provider,factory,models,namespace_manager,repository,providers,services,post_retrieval_rerank,rag_http_namespace_search,constants}`.
+Префикс REST: **`/rag/api/v1/`**. Структура: `apps/rag/{api,ui,realtime}` + `core/rag/{base_provider,factory,models,namespace_manager,repository,providers,services,post_retrieval_rerank,rag_http_namespace_search,constants}`.
+
+Команды с сессией — `RAG_OPERATIONS` / `op_*` (`apps/rag/realtime/`): REST и Centrifugo RPC `platform.event` зовут одну функцию. Загрузка байтов (`rag/document_upload`) остаётся HTTP: chunked Files API в WS RPC не укладывается. `namespace_id` в payload — `Namespace.name`; `PlatformEvent.meta.namespace` для RAG не задаёт каталог.
 
 ## Authorization
 
@@ -28,12 +25,12 @@ Namespace CRUD — `require_company_admin` / `require_can_view(company)`. Docume
 ## Контракт
 
 - `core/rag/base_provider.py::BaseRAGProvider` — namespaces (`create/delete/list/get`), documents (`add/delete/list/get`), `search(query, namespace?, top_k, filters, **kwargs)`. Реализации: `core/rag/providers/{pgvector,agentset}_provider.py`.
-- **Пост-retrieval реранк (только pgvector):** `core/rag/post_retrieval_rerank.py` — `apply_rerank_after_retrieve`, `apply_rerank_after_retrieve_grouped`, `RerankerHTTPClient`. Вызывается после `search` на HTTP-слое RAG, в CRM семантическом поиске сущностей. Дубли логики реранка в `apps/*` запрещены. CI: `scripts/check_rag_post_retrieval_rerank_single.py` (`make check-rag-post-retrieval-rerank`, входит в `check-events-canon`).
+- **Пост-retrieval реранк (только pgvector):** `core/rag/post_retrieval_rerank.py` — `apply_rerank_after_retrieve`, `apply_rerank_after_retrieve_grouped`, `RerankerHTTPClient`. Вызывается после `search` в `op_search_namespace` / `op_search_global` и в CRM семантическом поиске сущностей. Дубли логики реранка в `apps/*` запрещены. CI: `scripts/check_rag_post_retrieval_rerank_single.py` (`make check-rag-post-retrieval-rerank`, входит в `check-events-canon`).
 - **RerankScoreCache обязателен у каждого вызывающего реранк:** Redis-кэш скорингов по `(model, query_hash, chunk_id)` из `core/rag/post_retrieval_rerank.py::RerankScoreCache`. Контейнеры rag (`rerank_score_cache`) и crm передают его в `apply_rerank_after_retrieve*` через `score_cache=`. Новый вызывающий без кэша — нарушение единообразия. Freshness-сигнал переносится на rerank-скор через `provenance.freshness_multiplier`.
 - LLM context layer использует RAG через `core/rag/llm_context_source.py::RAGLLMContextSource` и память через `core/rag/llm_context_memory_store.py::RAGLLMContextMemoryStore`. Это адаптеры поверх существующего RAGRepository/search/rerank, не второй RAG-пайплайн.
 - **LLM context retrieval policy → RAGSearchOptions:** `core/llm_context/models.py::LLMContextRetrievalPolicy` хранит `mode`, `top_k`, `rerank`, `min_score`, `rrf_k`, `per_channel_top_k`, `rerank_max_candidates`, `freshness_weight`, `freshness_half_life_days`. Маппинг в RAG — единый bridge `core/llm_context/retrieval_rag_bridge.py::rag_search_options_override_from_retrieval`; используется в `core/rag/llm_context_source.py` и `core/llm_context/memory.py`. Итоговые опции — через `resolve_platform_search_options` с call-level overrides от bridge.
 - In-process идентификатор провайдера на контейнере (репозиторий, CRM rerank-guard): **`core/rag/constants.py::RAG_IN_PROCESS_PROVIDER_ID`** (должен совпадать с `BaseContainer.rag_repository` / pgvector).
-- **Единый контракт retrieval-опций:** источник — `core/rag/models.py::RAGSearchOptions` (`channels`, `rrf_k`, `per_channel_top_k`, `rerank`, `rerank_max_candidates`, `retrieval`, `freshness_weight`, `freshness_half_life_days`). Каждое поле обязано проходить сквозь ВСЕ слои одинаково: `SEARCH_REQUEST_OPTION_KEYS`/body builder/merge (`rag_http_namespace_search.py`), оба REST-эндпоинта (`SearchRequest`, `GlobalSearchRequest`), `RagClient.search`/`global_search`, `RAGRepository.search_namespace` (bind + call merge), flows tool `rag_search`. **Platform defaults** — `resolve_platform_search_options` (`core/rag/search_options_resolver.py`) из `rag.document_indexing.search_defaults` + call-level overrides; обязателен в RAG API, CRM in-process search, Office catalog search, LLM context/memory sources. Gate: `tests/core/rag/test_search_options_contract.py`, `tests/core/rag/test_search_options_resolver.py`. Добавил поле в `RAGSearchOptions` — обязан протянуть по всем слоям в том же изменении. Поле `retrieval` зарезервировано; реализация опций — только в `core/rag`.
+- **Единый контракт retrieval-опций:** источник — `core/rag/models.py::RAGSearchOptions` (`channels`, `rrf_k`, `per_channel_top_k`, `rerank`, `rerank_max_candidates`, `retrieval`, `freshness_weight`, `freshness_half_life_days`). Каждое поле обязано проходить сквозь ВСЕ слои одинаково: `SEARCH_REQUEST_OPTION_KEYS`/body builder/merge (`rag_http_namespace_search.py`), `RAGNamespaceSearchRequest` / `RAGGlobalSearchRequest` + `op_search_*`, `RagClient.search`/`global_search`, `RAGRepository.search_namespace` (bind + call merge), flows tool `rag_search`. **Platform defaults** — `resolve_platform_search_options` (`core/rag/search_options_resolver.py`) из `rag.document_indexing.search_defaults` + call-level overrides; обязателен в RAG API, CRM in-process search, Office catalog search, LLM context/memory sources. Gate: `tests/core/rag/test_search_options_contract.py`, `tests/core/rag/test_search_options_resolver.py`. Добавил поле в `RAGSearchOptions` — обязан протянуть по всем слоям в том же изменении. Поле `retrieval` зарезервировано; реализация опций — только в `core/rag`.
 - **Freshness decay — в обоих путях pgvector:** `_freshness_score_and_provenance` применяется и в `_hybrid_search_rrf`, и в semantic-only `search()` (расширенный пул `limit*3` до среза). Возраст: `metadata.date_modified` → `date_published` → `created_at`; `freshness_relevance=evergreen` растягивает half-life в `FRESHNESS_EVERGREEN_HALF_LIFE_FACTOR` раз. Provenance: `freshness_multiplier`, `freshness_age_days`, `freshness_age_source`. `agentset` не поддерживает freshness/lexical и падает явным `ValueError` (без тихого игнорирования).
 - **Query instruction (asymmetric embeddings):** `rag.embedding.api.query_instruction` → `RagEmbeddingRuntime.query_instruction` → `PgVectorProvider._query_embedding_text` (`Instruct: …\nQuery: …`). Единственный путь конструирования провайдера — `get_rag_provider` (bundle cache учитывает `query_instruction`); документы индексируются без префикса.
 - Модели: `RAGDocument`, `RAGSearchResult`, `RAGNamespace` (Pydantic) + `VectorDocument`, `DocumentProcessingStatus` (SQLAlchemy в БД процесса RAG, `database.rag_url`).
@@ -44,7 +41,7 @@ Namespace CRUD — `require_company_admin` / `require_can_view(company)`. Docume
 2. **Загрузка байтов** — только Files chunked API (`/{svc}/api/v1/files/uploads*`); индексация — `POST .../documents/index-file` JSON `{ file_id, metadata? }`. Multipart FormData upload в RAG **запрещён**.
 3. **NamespaceManager для scope** (`core/rag/namespace_manager.py::NamespaceManager.resolve_namespace(scope, context_id?, session_id?) -> str`); `scope ∈ {"flow","company","session"}`. Хардкод `f"flow:{...}"` запрещён.
 4. **Async-индексация** — mutating-операции в воркере через TaskIQ (`process_document_upload`, `index_rag_document_s3_task`, `delete_document_task` в `apps/rag_worker/tasks/indexing_tasks.py` и связанные задачи). Синхронный `parse_document` в API — запрещён. В индекс только категории из `core/rag/indexable.py::RAG_INDEXABLE_FILE_CATEGORIES`; `signature`/archive/unknown — skip (не `failed`).
-5. **Доступ к namespace** — `require_registered_rag_namespace`: сначала FGA `require_can_view(AuthzObject.platform_namespace(company_id, namespace_id))` (нет tuples → **403**, existence leak запрещён), затем `namespace_repository.get` (после успешного Check SQL missing → **404**). Для `POST /rag/api/v1/search` — тот же Check на каждый `namespace_ids[i]`.
+5. **Доступ к namespace** — `apps/rag/namespace_access.py::require_registered_rag_namespace`: сначала FGA `require_can_view(AuthzObject.platform_namespace(company_id, namespace_id))` (нет tuples → **403**, existence leak запрещён), затем `namespace_repository.get` (после успешного Check SQL missing → **404**). Для `POST /rag/api/v1/search` — тот же Check на каждый `namespace_ids[i]`.
 6. **Межсервисный клиент** — только `core/clients/rag_client.py::RagClient` (поверх `ServiceClient`): `create_namespace`, `ingest_text`, `index_file`, `delete_namespace_document`, `get_document_processing_status`, `get_documents_processing_statuses` (`POST /rag/api/v1/documents/statuses`), `search`, `global_search`. Не плодить `ServiceClient("rag", path=...)` в peer-сервисах в обход `RagClient`.
 7. **Flows resource `type: rag`** — bind к platform Namespace (`RagResourceBindParams`), не отдельный пайплайн; DX/runtime — `flows.mdc` § Resources.
 
@@ -119,23 +116,23 @@ Peer-сервис (Office и т.п.), у которого `FileRecord` уже в
 
 ## UI
 
-Канон — `frontend.mdc` + `ui_factories.mdc` + `ui_components.mdc`. Сервис включён в `FACTORY_CANON_SERVICES`. Все доменное состояние — фабрики `apps/rag/ui/events/resources/*.resource.js`; в pages/modals/components — только helpers (`useOp`/`useResource`/`useForm`/`openModal`/`navigate`/`toast`). Прямые импорты resource-объектов / `new XController` / `dispatch(CoreEvents.UI_*|ROUTER_*|AUTH_*|...)` — запрещены (CI).
+Канон — `frontend.mdc` + `ui_factories.mdc` + `ui_components.mdc`. Сервис включён в `FACTORY_CANON_SERVICES`. Owner-фабрики — `@platform/lib/events/resources/rag-*.resource.js` (тот же объект регистрируют `RagApp` и flows editor). В pages/modals/components — только helpers (`useOp`/`useResource`/`useForm`/`openModal`/`navigate`/`toast`). Прямые импорты resource-объектов / `new XController` / `dispatch(CoreEvents.UI_*|ROUTER_*|AUTH_*|...)` — запрещены (CI).
 
 ### Реестр фабрик (`RagApp.static factories`)
 
 | Имя | Тип | Эндпоинт |
 |---|---|---|
-| `rag/providers` | `createAsyncOp` | `GET /rag/api/v1/providers` |
-| `rag/provider_switch` | `createAsyncOp` | `POST /rag/api/v1/providers/switch` |
-| `rag/namespaces` | `createResourceCollection` (list/create/remove, idField=`name`) | `/rag/api/v1/namespaces` |
+| `rag/providers` | `createAsyncOp` WS | `GET /rag/api/v1/providers` |
+| `rag/namespaces` | `createResourceCollection` WS (list/create/remove, idField=`name`) | `/rag/api/v1/namespaces` |
 | `rag/namespace_create_form` | `createForm` | submit → `rag/namespaces` CREATE_REQUESTED |
-| `rag/documents` | `createAsyncOp` | `GET /rag/api/v1/namespaces/:namespace_id/documents` |
-| `rag/document_upload` | `createAsyncOp` (chunked Files + index-file) | `uploadPlatformFile` → `POST /rag/api/v1/namespaces/:namespace_id/documents/index-file` |
-| `rag/document_remove` | `createAsyncOp` | `DELETE /rag/api/v1/namespaces/:namespace_id/documents/:document_id` |
-| `rag/document_ingest_text` | `createAsyncOp` | `POST /rag/api/v1/namespaces/:namespace_id/ingest-text` |
-| `rag/document_status` | `createAsyncOp` + push `rag/document/status_updated` (`extraReducer`) | `GET /rag/api/v1/documents/:document_id/status` (снимок); poll удалён |
-| `rag/search` | `createAsyncOp` | `POST /rag/api/v1/namespaces/:namespace_id/search` |
-| `rag/search_defaults` | `createAsyncOp` | `GET /rag/api/v1/search-defaults` |
+| `rag/documents` | `createAsyncOp` WS | `GET /rag/api/v1/namespaces/:namespace_id/documents` |
+| `rag/document_upload` | `createAsyncOp` HTTP (chunked Files + index-file) | `uploadPlatformFile` → `POST /rag/api/v1/namespaces/:namespace_id/documents/index-file` |
+| `rag/document_remove` | `createAsyncOp` WS | `DELETE /rag/api/v1/namespaces/:namespace_id/documents/:document_id` |
+| `rag/document_status` | `createAsyncOp` WS + push `rag/document/status_updated` (`extraReducer`) | `GET /rag/api/v1/documents/:document_id/status` (снимок); poll удалён |
+| `rag/search` | `createAsyncOp` WS | `POST /rag/api/v1/namespaces/:namespace_id/search` |
+| `rag/search_defaults` | `createAsyncOp` WS | `GET /rag/api/v1/search-defaults` |
+
+`rag/documents/ingest_text_requested` остаётся в `RAG_OPERATIONS` и REST `POST .../ingest-text` для `RagClient`. UI-фабрики нет: страницы индексируют файлы через `rag/document_upload`.
 
 `rag/document_upload.onSuccess` стартует `rag/document_status.REQUESTED` (снимок).
 Дальше статус приходит push'ем `rag/document/status_updated` в `extraReducer`.
@@ -168,4 +165,4 @@ Office explorer слушает тот же push в `office/documents` (`rag_inde
 
 ## Тестирование
 
-`tests/rag/{test_documents_api,test_namespaces_api,test_providers_api,test_search_api}.py`. Реальная инфраструктура (PostgreSQL+pgvector, MinIO), `unique_id` для тестовых id. Фикстуры — `tests/conftest.py`. Подробности — `tests/rag/README.md`, `testing.mdc`.
+`tests/rag/{test_documents_api,test_namespaces_api,test_providers_api,test_search_api}.py`. Live WS=REST identity — `tests/realtime/test_rag_commands.py` (Centrifugo `:19000` + Granian rag `:9002` + bus `:9025`). Реальная инфраструктура (PostgreSQL+pgvector, MinIO), `unique_id` для тестовых id. Фикстуры — `tests/conftest.py`. Подробности — `tests/rag/README.md`, `testing.mdc`.

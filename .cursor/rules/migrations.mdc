@@ -14,11 +14,6 @@ alwaysApply: false
 ---
 # Миграции БД
 
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
-
 ## Архитектура
 
 Каждый сервис — **своя** PostgreSQL-БД и **своё** Alembic-дерево.
@@ -106,13 +101,13 @@ uv run python -m scripts.db_migrate current --service rag
 
 `core.db.migrations.run_migrations_async()` обходит реестр и применяет `upgrade head` к каждой БД. Перед вызовом — `bootstrap_migration_registry()`.
 
-В проде миграции — Helm-hook Job `migrations` (`post-install`/`post-upgrade`) из `deploy/helm/agent-lab/templates/20-migrations-job.yaml`:
+В проде миграции — initContainer `db-migrate` каждого app/worker пода (`agentlab.dbReadyAndMigrateInitContainers` в `deploy/helm/agent-lab/templates/_helpers.tpl`):
 
 ```yaml
 command: ["python", "-m", "scripts.db_migrate", "upgrade"]
 ```
 
-InitContainer `wait-postgres` (`pg_isready`), затем основной контейнер. `helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded` — каждый `helm upgrade` создаёт свежий Job.
+InitContainer `wait-postgres` (`pg_isready`), затем `db-migrate`. Alembic держит DDL-блокировку на `alembic_version` — параллельный старт подов не гоняется: один мигрирует, остальные видят head.
 
 ## Ключевые файлы
 

@@ -4,11 +4,6 @@ alwaysApply: false
 ---
 # Трейсинг
 
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
-
 ## Зачем
 
 - **Дерево OTEL:** общий `trace_id`, родитель–ребёнок через `parent_span_id` — иерархия выполнения (flow → ноды → LLM/tools) и любые вложенные операции.
@@ -154,7 +149,7 @@ OTel SDK → OTLP → Alloy → **Tempo** (retention 7 дней). Alloy → **Lo
 
 **OTLP endpoint** — ENV `OTEL_EXPORTER_OTLP_ENDPOINT` в docker-compose → `core/tracing/provider.py` автодетектит. Сервисы не модифицируются.
 
-**Flows Traces API (Tempo-only)** — `apps/flows/src/api/v1/traces.py` через `TempoClient` (`core/clients/tempo_client.py`):
+**Flows Traces API (Tempo-only)** — `op_flows_traces_*` (`apps/flows/realtime/observability_operations.py`), тонкий REST `apps/flows/src/api/v1/traces.py` через `TempoClient` (`core/clients/tempo_client.py`). Tempo down → `unavailable` → HTTP 503:
 
 - `GET /flows/api/v1/traces/session/{session_id}` → Tempo search по `platform.session.agent` → fetch каждого trace.
 - `GET /flows/api/v1/traces/task/{task_id}` → Tempo search по `platform.task_id`.
@@ -172,7 +167,7 @@ OTel SDK → OTLP → Alloy → **Tempo** (retention 7 дней). Alloy → **Lo
 
 Атрибуты spans: `platform.handoff.parent_session_id`, `child_session_id`, `target_flow_id`, `depth`, `phase`, `trace_id`. TaskIQ kickoff/resume передаёт `TraceContext` fork/continue (не `None`). UI: handoff card → trace viewer; spans с `platform.handoff.phase` — badge в trace viewer.
 
-**Flows Logs API (Loki whitelist)** — `apps/flows/src/api/v1/observability_logs.py` через `LokiClient` (`core/clients/loki_client.py`):
+**Flows Logs API (Loki whitelist)** — `op_flows_logs_*` (`apps/flows/realtime/observability_operations.py`), тонкий REST `apps/flows/src/api/v1/observability_logs.py` через `LokiClient` (`core/clients/loki_client.py`). Loki не настроен или query падает → `unavailable` → HTTP 503:
 
 - `GET /flows/api/v1/observability/logs/by-trace/{trace_id}` — whitelist LogQL по `trace_id`.
 - `GET /flows/api/v1/observability/logs/by-session/{session_id}` — whitelist LogQL по полю JSON `session_agent` (сессия агента `flow_id:context_id`, `LOG_SESSION_AGENT` в `core/logging/attributes.py`), не по `session_id` (это JWT).

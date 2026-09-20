@@ -4,11 +4,6 @@ alwaysApply: false
 ---
 # Инфраструктура
 
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
-
 Платформа разворачивается единым **Helm-чартом** в **MicroK8s** на одной ноде. Один источник правды — `deploy/helm/agent-lab/`. Никаких Docker Compose в проде, никаких ручных `ufw`-правил.
 
 ## Кластер
@@ -39,11 +34,11 @@ templates/
   02-configmap-app-conf.yaml
   10-postgres/                  # StatefulSet + Service + ConfigMap init
   11-redis/                     # StatefulSet + Service
-  20-migrations-job.yaml        # helm hook post-install/post-upgrade
-  30-apps/                      # 11 application Deployments + Services через range
-  40-workers/                   # 6 worker Deployments через range
+  30-apps/                      # application Deployments + Services через range; initContainer db-migrate
+  40-workers/                   # worker Deployments через range; тот же db-migrate initContainer
   50-gpu/litserve.yaml          # nodeSelector: accelerator=nvidia-gpu
   60-external/                  # livekit, livekit-egress, coturn DaemonSet, onlyoffice
+  61-centrifugo/                # Centrifugo v6 + redis-realtime (noeviction)
   70-observability/             # loki, tempo, grafana, alloy DaemonSet
   80-ingress/                   # cluster-issuer + 4 Ingress
 files/                          # ConfigMap источники (loki, tempo, alloy, dashboards)

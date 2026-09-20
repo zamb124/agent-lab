@@ -1,13 +1,8 @@
 ---
-description: "Datasource: живая БД как NodeType.DATASOURCE, HTTP на flows, OpenFGA type datasource"
+description: "Datasource: живая БД как NodeType.DATASOURCE, HTTP+WS на flows, OpenFGA type datasource"
 alwaysApply: false
 ---
 # Datasource (живые базы как шаг графа)
-
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
 
 ## Инвариант
 
@@ -26,7 +21,7 @@ alwaysApply: false
 - Host только из `DatasourceConnection`. Deny-list: blocked hosts + точное `(host, port, database)` из URL полей `DatabaseConfig` (кроме redis) + k8s `postgres.platform.svc`.
 - Sole PDP = OpenFGA type `datasource` (скелет как `flow`: company/platform/owner/viewer/editor, `admin from platform` на can_view/edit).
 - Tag tools: `datasources` (не путать с `tables` = sqlite-файл, публичный id `file_id`).
-- HTTP на **flows** (`/flows/api/v1/datasources`). Отдельный сервис `apps/datasource` не заводится.
+- HTTP+WS на **flows** (`/flows/api/v1/datasources`, `FLOWS_OPERATIONS` / `op_flows_datasources_*`). Отдельный сервис `apps/datasource` не заводится.
 - Backfill tuples: `uv run python -m core.datasources.authz.backfill` (в `make openfga-backfill` и cluster script).
 - `core/` не импортирует `apps/`. MCP/flow executors — в `apps/flows/src/services/datasources/`, инжект в `DatasourceService` из `FlowContainer`.
 - Sandbox: capability `db.*` через gateway → `DatasourceClient` → flows. TCP/драйверы в sandbox запрещены.
@@ -45,7 +40,8 @@ alwaysApply: false
 | `core/datasources/repository.py` | connections + connectors |
 | `core/datasources/service.py` | Authz + protocol dispatch; `test` = INTROSPECT `as_test=True` |
 | `core/datasources/authz/` | tuple helpers + backfill |
-| `apps/flows/src/api/v1/datasources.py` | HTTP CRUD + protocol |
+| `apps/flows/src/api/v1/datasources.py` | REST-зеркало CRUD + protocol (`op_flows_datasources_*`) |
+| `apps/flows/realtime/datasource_operations.py` | один `op_*` на verb для REST и Centrifugo RPC |
 | `core/clients/datasource_client.py` | `ServiceClient` → service `"flows"` |
 | `apps/flows/src/runtime/nodes.py` `DatasourceNode` | Durable activity; пустой `datasource_id` → `ValueError` |
 | `apps/flows/tools/datasource_tools.py` | `db_schema` / `db_query` / `db_execute`, tag `datasources` |

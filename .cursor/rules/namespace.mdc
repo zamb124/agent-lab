@@ -4,11 +4,6 @@ alwaysApply: false
 ---
 # Platform Namespace
 
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
-
 Единый реестр пространств компании в shared DB (`Namespace` / `NamespaceService`). Не путать с RAG `namespace_id` (часто совпадает со `name`, но это ось B), IMAP `NAMESPACE`, i18n JSON ns, K8s.
 
 ## Kind
@@ -64,10 +59,8 @@ Personal ≠ CRM `member` entity (entity живёт в `default` company_workspa
 - `NamespaceService.list()` без `kinds` — product list для admin/console (`company_workspace` + `personal`, без `technical`)
 - admin console может явно фильтровать `kind=personal`
 
-## Sync
+## Потребители
 
-`channel.namespace` — только `company_workspace` slug. Реальный ACL каналов = OpenFGA (`SyncChannelAccessService`). `sync_settings` — тонкие STT defaults на workspace. UI Sync **без** namespace switcher: список = membership settings-rows ∩ FGA `can_view`; create → `default`; STT modal на `default`. Shared platform selection (`setPlatformNamespaceSelection`) — CRM/Office.
-
-## Связанные rules
-
-`main.mdc` (glossary), `crm.mdc`, `sync.mdc`, `office.mdc`, `rag.mdc`, `mail.mdc`, `database.mdc`.
+- **Sync:** `channel.namespace` — slug `company_workspace`; ACL каналов — OpenFGA, не namespace; Sync пишет только `Namespace.sync_settings`; UI без namespace switcher (→ **`sync.mdc`** § «Namespace»).
+- **CRM / Office / Wiki:** namespace — граница данных; выбор в UI — `setPlatformNamespaceSelection` (CRM/Office) или заголовок `X-Platform-Namespace` / `PlatformEvent.meta.namespace` (Office, Wiki) (→ **`crm.mdc`**, **`office.mdc`**, **`wiki.mdc`**).
+- **RAG / Mail:** `namespace_id = Namespace.name`; личная почта и private RAG — personal ns владельца (→ **`rag.mdc`**, **`mail.mdc`**).

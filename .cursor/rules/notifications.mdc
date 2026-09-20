@@ -4,16 +4,11 @@ alwaysApply: false
 ---
 # Нотификации
 
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
-
 ## Поток
 
-`Service/Worker/Task → notify_user(...) → шина platform:events → WS /<svc>/api/ws/notifications → <platform-notification-manager> → toast + badge`
+`Service/Worker/Task → notify_user(...) → bus realtime (тот же PlatformEvent) → Centrifugo `/realtime` → <platform-notification-manager> → toast + badge`
 
-`notify_user` оборачивает уведомление в `PlatformEvent` (`type: notify/<service>/<kind>_received`) и публикует через `publish_event` (`core/events/publisher.py`) в `platform:events`. WS-менеджер (`core/websocket/manager.py`) форвардит сериализованный `PlatformEvent` (`{id, type, payload, meta}` без `delivery`) в сокет адресата. `GET /<svc>/api/ws/stats` — cluster-wide `total_connections` через Redis SET `platform:ws:conns:{service}:{pid}` (granian workers не делят in-memory sockets).
+`notify_user` собирает payload `notify/<service>/<kind>_received` и публикует через `publish_event` (`core/events/publisher.py`) → `submit_platform_event` в bus. Offline Web Push — bus после Centrifugo `presence_stats`, не in-memory сокеты HTTP-подов.
 
 **Задачи WorkItem (ядро):** назначение исполнителю → `NotificationType.WORK_ITEM_ASSIGNED`, обновление → `WORK_ITEM_UPDATED`; `action_url` ведёт в worktracker. Реалтайм доски — push `worktracker/work_item/created|updated|moved|completed` через `platform:events`; канбан-страница обновляет slice по этим событиям (по образцу прежнего `flows_operator_tasks_updated`). Детали → **`worktracker.mdc`**.
 
@@ -44,7 +39,7 @@ await notify_user(
 
 ## Офлайн: Web Push и APNs
 
-Если у пользователя нет активного WS к `/<svc>/api/ws/notifications`, `notify_user` дополнительно вызывает `deliver_offline_push` (`core/push/delivery.py`):
+Если у пользователя нет активного соединения Centrifugo, bus вызывает `deliver_offline_push` (`core/push/delivery.py`):
 
 - `https://`-`endpoint` + `transport: web_vapid` (`SubscribeRequest` в `core/push/schemas.py`) → **VAPID** (`WebPushService`).
 - `endpoint` `apns:<hex>` (нативный iOS через Capacitor) → **APNs** (`ApnsPushService`), если `resolve_apns_credentials` (`core/push/apns_credentials.py`) собрал полный набор: обязателен `push.apns_bundle_id`, остальное — `push.apns_*` или `auth.providers.apple` (тот же `.p8` Sign in with Apple, при включённой APNs у ключа в Apple Developer).

@@ -4,11 +4,6 @@ alwaysApply: false
 ---
 # S3 и MinIO
 
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
-
 ## Окружения и провайдеры
 
 | Окружение | Провайдер | Endpoint | Default bucket |
@@ -17,7 +12,7 @@ alwaysApply: false
 | Test | MinIO (docker-compose-test) | `http://minio-test:9000` (внутри контейнера) / `localhost:19002` (хост) | `test-bucket` |
 | Prod | Selectel S3 | `https://s3.ru-3.storage.selcloud.ru` | `shvedzilla` |
 
-Compose-конфиги MinIO — `docker-compose-{dev,test}.yaml` и `scripts/zed_search/docker/docker-compose.yml`. Образ — `pgsty/silo:RELEASE.2026-09-03T13-18-01Z` (drop-in: те же `MINIO_*`, S3 API, `/minio/health/live`). MinIO community с осени 2025 source-only; Docker Hub `minio/minio` не отдаёт pull, `quay.io/minio/minio:latest` застыл на `2025-09-07`. Подробности — `docs/minio-setup.md`, `infrastructure.mdc`.
+Compose-конфиги MinIO — `docker-compose-{dev,test}.yaml` и `scripts/zed_search/docker/docker-compose.yml`. Образ — `pgsty/silo:RELEASE.2026-09-03T13-18-01Z` (drop-in: те же `MINIO_*`, S3 API, `/minio/health/live`). MinIO community с осени 2025 source-only; Docker Hub `minio/minio` не отдаёт pull, `quay.io/minio/minio:latest` застыл на `2025-09-07`. Подробности — **`infrastructure.mdc`**.
 
 ## Конфигурация
 
@@ -69,51 +64,19 @@ async with S3ClientFactory.create_client_for_bucket('test-bucket') as client:
 
 API: `upload_bytes(data, key, content_type, metadata)`, `upload_file(file_path, key)`, `download_bytes(key)`, `download_file(key, file_path)`, `object_exists(key)`, `get_object_metadata(key)`, `list_objects(prefix)`, `copy_object(source, dest)`, `delete_object(key)`, `generate_presigned_url(key, expiration)`, `close()`.
 
-## Единый файловый роутер (платформенный канон)
+## Единый файловый роутер
 
-### Запрет прямых S3 URL
+API **никогда** не возвращает клиенту прямой S3/MinIO URL (`http://127.0.0.1:19001/...`) — у конечного пользователя другой хост/порт, не same-origin. Правило: байты → `FileRecord` → same-origin URL `/{segment}/api/v1/files/download/{file_id}`. `S3Client` из прикладного кода не отдаёт URL наружу: `s3_client.get_public_url()` в API-хендлерах и `file_record.direct_s3_url` в ответах запрещены. Маршруты Files API (chunked `/uploads*`, `register-s3`, `bind`, `download`, метаданные), `FileCreateSpec`, `is_public`, Documents bind, retention — **`files.mdc`**.
 
-API **никогда** не возвращает клиенту прямой S3/MinIO URL (`http://127.0.0.1:19001/...`) — у конечного пользователя другой хост/порт, не same-origin. Правило: загрузка → `FileRecord` → same-origin URL через download-роутер.
+## Прямая работа с S3 вне Files API
 
-### Архитектура
+Допустима только там, где S3 — внутренний storage-слой, а не пользовательский файл:
 
-`core/files/api.py::build_files_router`. Mount на каждом сервисе с `include_platform_routers`: `/{service}/api/v1/files/*` (office → `/documents/api/v1/files/*`). Клиентский upload — **только** chunked `/uploads*`. In-process — `container.files_service` (`FilesService` + `FileCreateSpec`). Cross-pod HTTP — `core/clients/files_client.py::FilesClient` (segment целевого процесса, не frontend-канон). Download на любом mount — shared `FileRepository` + S3.
+- **RAG-конвейер** (`apps/rag/`, `core/rag/`) читает байты уже созданного `FileRecord` по `s3_key` и хранит производные артефакты; пользовательские байты в RAG всё равно заходят через chunked Files API + `index-file` (`files.mdc`, `rag.mdc`).
+- **CRM summary artifacts** (`DailySummaryArtifactService`, `apps/crm/services/daily_summary_artifact_service.py`) — JSON-снимки сводок в default bucket: `crm/daily_summary/v1/{company_id}/{ns_or_all}/{YYYY-MM-DD}.json`, `crm/period_summary/v1/{company_id}/{ns_or_all}/{date_from}_{date_to}.json`. Запись только через этот сервис.
+- **LiveKit egress** пишет запись напрямую в S3 (`sync-recordings/...`), затем регистрируется как `FileRecord` (`calls.mdc`, `sync.mdc`).
 
-| Метод | Путь | Описание |
-|---|---|---|
-| `POST` | `/{svc}/api/v1/files/uploads` | Init chunked session |
-| `PUT` | `/{svc}/api/v1/files/uploads/{upload_id}/parts/{n}` | Raw body одной части (≤ chunk_size) |
-| `POST` | `/{svc}/api/v1/files/uploads/{upload_id}/complete` | Complete → `FileResponse` |
-| `DELETE` | `/{svc}/api/v1/files/uploads/{upload_id}` | Abort |
-| `POST` | `/{svc}/api/v1/files/register-s3` | Регистрация уже загруженного S3-объекта |
-| `POST` | `/{svc}/api/v1/files/{file_id}/bind` | Docs bind (`DocsPlacement`) |
-| `GET` | `/{svc}/api/v1/files/download/{file_id}` | Стриминг (с `Accept-Ranges: bytes`, `Content-Length`, `206 Partial Content` на `Range`); `svc` = segment любого сервиса с mount |
-| `GET` | `/{svc}/api/v1/files/{file_id}` | Метаданные |
-
-FormData/`UploadFile` single-shot на Files API **запрещён**. S3 выключен — init upload возвращает `503`. Download публичных файлов — `auth_required=False` в `route_config.py`; приватные проверяет хендлер.
-
-### Логика доступа
-
-- `is_public=True` — без проверки авторизации (аватары, публичные вложения).
-- `is_public=False` — хендлер сверяет `FileRecord.company_id` с `context.active_company.company_id`; несовпадение → 403.
-
-### Поля `FileRecord`
-
-`FileRecord.download_url: str | None` — same-origin URL при загрузке (`/{creating-service-segment}/api/v1/files/download/{file_id}`). `FileRecord.url` — тот же путь; другой сервис может скачать тот же `file_id` через свой `/{segment}/api/v1/files/download/{file_id}`.
-
-### Запрещённые паттерны
-
-- `FileProcessor`, `build_file_api_router`, FormData single-shot upload, `upload_namespace_document`.
-- `file_record.direct_s3_url` — прямые S3 URL запрещены в ответах.
-- `s3_client.get_public_url()` в API-хендлерах (разрешён только в RAG internals).
-- Сервис-специфичные upload endpoints и factory `*/file_upload` — только `platform/file_create`.
-
-## Что НЕ нарушение
-
-- **RAG-конвейер** (`apps/rag/`, `core/rag/`) — асинхронная очередь, chunking, embedding, `vector_documents`. RAG работает со своим S3 напрямую — намеренная архитектура, не через generic file router.
-- **CRM-вложения** (`apps/crm/api/attachments.py`) — идут в RAG (чтобы стать поисковыми документами), не через generic file router.
-- **CRM summary artifacts** (`DailySummaryArtifactService`, `apps/crm/services/daily_summary_artifact_service.py`) — JSON-снимки сводок в default bucket: `crm/daily_summary/v1/{company_id}/{ns_or_all}/{YYYY-MM-DD}.json`, `crm/period_summary/v1/{company_id}/{ns_or_all}/{date_from}_{date_to}.json`. Запись только через этот сервис; произвольные S3-клиенты в `apps/crm` для этих путей не дублировать.
-- **`SyncFile.storage_url`** — nullable. Новые загрузки идут только через `FileRecord` (shared DB); `SyncFile`-строки больше не создаются. Таблица сохранена для исторических FK.
+Всё остальное (CRM attachments, Sync вложения, Office, Wiki, Mail, flows) — только `FilesService` / chunked Files API. `SyncFile.storage_url` — nullable; `SyncFile`-строки больше не создаются, таблица сохранена для исторических FK.
 
 ## Тестирование
 

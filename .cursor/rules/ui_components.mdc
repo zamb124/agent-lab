@@ -4,11 +4,6 @@ alwaysApply: false
 ---
 # UI Components — core UI Kit
 
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
-
 Все компоненты UI Kit живут в `core/frontend/static/lib/components/**` и наследуют `PlatformElement`. Это **единственная зона**, где допустимы прямые `dispatch(CoreEvents.UI_*|ROUTER_*|AUTH_*|...)` и `new CustomEvent(...)` для slot-композиции — здесь эти helpers и реализуются.
 
 См. также: `frontend.mdc` (запреты в apps), `ui_factories.mdc` (контракт фабрик и событий).
@@ -43,12 +38,7 @@ alwaysApply: false
 
 ## Запреты (CI `scripts/check_ui_canon.sh`)
 
-- `extends LitElement` напрямую — только `PlatformElement` / `PlatformPage` / `PlatformModal*`.
-- `import` любого `*.service.js` или `services/` — таких файлов нет.
-- `import { ServiceRegistry }` / `BaseStore` / `BaseService` / `AppEvents` — модулей нет.
-- `fetch(`, `axios` в компонентах — HTTP только в `request` функции фабрики.
-- Прямое присваивание полю state — никогда. State — только через `select.value`.
-- `||`/`??` фолбеки на чтение state: `selectController.value` всегда возвращает то, что положил reducer (`initialSlice` core slices).
+Общий список (база классов, `services/`/`BaseStore`, `fetch`, `setState`, `||`-фолбеки) — **`frontend.mdc`** § «CI-проверяемые запреты»; он действует и на `core/frontend/static/lib/components/**`. Для core-компонентов дополнительно: state читается только через `select.value` — `selectController.value` всегда возвращает то, что положил reducer (`initialSlice` core slices), `||`/`??` на чтение запрещены.
 
 ## Стили и токены
 
@@ -98,19 +88,7 @@ CSS variables из `core/frontend/static/assets/css/tokens.css`: `--space-*`, `-
 - Событие: `@change` → `detail.value: string` (локальный DOM, через `this.emit('change', …)`).
 - В `apps/**` не дублировать локальные `.header-search` / pill-override для modal search — только layout-контейнеры flex (`.search-wrap`, title row).
 
-### Сырые `<input>` / `<textarea>` / `<select>` вне `<platform-field>`
-
-Детект: `scripts/check_field_canon.sh` (`make check-field-canon`). Whitelist `input type` и `data-canon` — как в `frontend.mdc` / `data-types.mdc`. Классы `form-input` / `field-pill-input` на сыром DOM не освобождают от проверки.
-
-### Spec-widgets через `data-canon`
-
-Сырые `<input>` / `<textarea>` для composer / mention / inline-edit / search-as-you-type / combobox: `data-canon="composer|mention|inline-edit|search-as-you-type|combobox"`. Для `<select>` в режиме combobox — `data-canon="combobox"`.
-
-### Запрещено
-
-- Локальный `css\`...\`` блок в `apps/**` с правилами `.form-input` / `.form-textarea` / `.form-select` / `.form-group` / `.form-label` / `.field-pill*` (детектор `scripts/check_ui_canon.sh` п.17).
-- Нарушение `make check-field-canon`: сырые теги без whitelist / без `data-canon` где требуется.
-- Атрибут `flat` (на `<tag-input>` и любом подкомпоненте) — удалён.
+Сырые `<input>`/`<textarea>`/`<select>` (whitelist `type` / `data-canon`), запрет локальных `.form-*`/`.field-pill*` CSS в `apps/**`, атрибут `flat`, CI `make check-field-canon` — **`data-types.mdc`**.
 
 ## emit vs dispatch
 
@@ -260,7 +238,7 @@ registerBottomSheetKind(CrmWorkspacePickerSheet.bottomSheetKind, 'crm-workspace-
 <platform-user-chip user-id="user_..." size="sm|md" ?interactive=${false} ?show-work-count=${false}></platform-user-chip>
 ```
 
-`show-work-count` — только для chip текущего пользователя в shell/nav; badge справа, клик → `/worktracker/inbox`. Источник: `state.platformWorkItemCounts.total_open_count`.
+`show-work-count` — только для chip текущего пользователя в shell/nav; badge справа, клик → `/worktracker/inbox`. Источник: `state.worktrackerWorkItemCounts.total_open_count`.
 
 - `user-id` (обязателен, non-empty string) — отсутствие = `throw`.
 - `size` — `'sm'` (default, аватар 24×24, имя) или `'md'` (32×32, имя + email).
@@ -288,7 +266,7 @@ registerBottomSheetKind(CrmWorkspacePickerSheet.bottomSheetKind, 'crm-workspace-
 ### Запреты user-chip / user_info
 
 - ad-hoc `*-user-row`/`*-user-avatar`/`*-user-cell` в `apps/<svc>/ui/components/` для отображения чужого пользователя — заменить на `<platform-user-chip>`.
-- использование `apps/sync/ui/modals/user-info-modal.js` из других сервисов — он sync-only.
+- свой user-info модал в сервисе — канон только `platform.user_info` / `<platform-user-info-modal>`.
 - `dispatch(TEAM_EVENTS.MEMBERS_LOAD_REQUESTED)` напрямую из pages/modals — chip/модалка триггерят загрузку при mount.
 - регистрация альтернативных модалок с `modalKind === 'platform.user_info'`, отдельной модалки «редактирование своего профиля» или «редактирование участника команды».
 - открытие `platform.user_info` без `userId`-prop'а.
@@ -313,11 +291,11 @@ Cross-service WorkItem (CRM Tasks workspace, Flows HITL badge, notifications, wo
 <platform-work-item-detail layout="panel|page" work-item-id="wi_..." .item=${workItemOptional}></platform-work-item-detail>
 ```
 
-Канбан `<platform-work-item-board>`: колонки по `WorkItem.state` (`open` / `in_progress` / `blocked` / `done`); HTML5 DnD карточки → `platform/work_item_move` с `{ work_item_id, state }`; событие `work-item-changed` после успешного drop. Не путать с worktracker board DnD по `board_column_id`.
+Канбан `<platform-work-item-board>`: колонки по `WorkItem.state` (`open` / `in_progress` / `blocked` / `done`); HTML5 DnD карточки → `worktracker/work_item_move` с `{ work_item_id, state }`; событие `work-item-changed` после успешного drop. Не путать с worktracker board DnD по `board_column_id`.
 
-`<platform-work-item-detail>` — тот же visual/UX, что worktracker quick view (`work-item-detail-panel`): title + markdown description + attachments + dense inspector (state/priority/due/assignee). Мутации через `platform/work_item_*` (без HITL activity/claim). «Открыть полностью» → canonical `/worktracker/tasks/{id}`.
+`<platform-work-item-detail>` — тот же visual/UX, что worktracker quick view (`work-item-detail-panel`): title + markdown description + attachments + dense inspector (state/priority/due/assignee). Мутации через `worktracker/work_item_*` (без HITL activity/claim). «Открыть полностью» → canonical `/worktracker/tasks/{id}`.
 
-Данные badge/detail: prop `.item` (zero HTTP, только shape WorkItem) или lazy GET через `platform/work_item_get`. **Запрещено** передавать CRM entity как `.item` badge. List/update/move/assign — `platform/work_items`, `platform/work_item_move`, `platform/work_item_assign`. Счётчик — `platform/work_item_counts` (`state.platformWorkItemCounts`), badge на `<platform-user-chip show-work-count>`.
+Данные badge/detail: prop `.item` (zero HTTP, только shape WorkItem) или lazy GET через `worktracker/work_item_get`. **Запрещено** передавать CRM entity как `.item` badge. List/update/move/assign — `worktracker/work_items`, `worktracker/work_item_move`, `worktracker/work_item_assign`. Счётчик — `worktracker/work_item_counts` (`state.worktrackerWorkItemCounts`), badge на `<platform-user-chip show-work-count>`.
 
 Deep link: `core/frontend/static/lib/utils/work-item-deeplink.js::buildWorkItemUrl(work_item_id, { from? })` → `/worktracker/tasks/{work_item_id}`.
 

@@ -5,10 +5,6 @@ alwaysApply: false
 
 # A2A Protocol 1.0 (hard cut)
 
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
 Wire-boundary mapping внешней A2A-спеки (ProtoJSON / TaskStatus.state) допустим только на границе codec. Внутри платформы — единые доменные типы; внутренние twin-модели и glue вокруг устаревших platform-контрактов запрещены.
 
 Платформа реализует **только** [A2A Protocol 1.0.0](https://a2a-protocol.org/v1.0.0/specification/). Binding: **JSON-RPC 2.0 + SSE**. gRPC / HTTP+JSON REST — вне scope.
@@ -49,8 +45,6 @@ Capabilities согласованы с кодом: `streaming=true`, `pushNotifi
 Платформенные extensions: `branches` (зеркало `skills`), `variables` — не заменяют и не удаляют `skills`.
 
 Flow UI не является A2A extension и не объявляется в AgentCard: интерфейс идёт обычными артефактами `state` (`application/json` snapshot + `application/json-patch+json`) и `ui` (`application/vnd.platform.ui+json`), а действие пользователя — одним `data` Part `application/vnd.platform.ui-action+json` в стандартном `Message`. Никакой negotiation, `A2A-Extensions` и отдельного envelope/endpoint. Полный контракт → **`flow_ui.mdc`**, спецификация → `docs/api/flows/flow-ui-protocol.md`.
-
-`RegistryFlowCard` (`apps/flows/src/api/registry.py`, поле `protocolVersion`) — **не** A2A Agent Card: это platform registry discovery, отдельный контракт от `GET /{flow_id}/.well-known/agent-card.json`.
 
 ## SendMessage blocking
 

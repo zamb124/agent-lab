@@ -8,6 +8,7 @@ globs:
   - "apps/flows/src/services/code_agent_source_service.py"
   - "apps/flows/ui/components/nodes/flows-code-agent-editor.js"
   - "apps/flows/ui/events/resources/code-agent.resource.js"
+alwaysApply: false
 ---
 # Code agent и ферма guest_runtime
 
@@ -55,7 +56,7 @@ S3 **не** файловая система: ключи `files/{file_id}_…`. M
 - `url` на `code_agent` → `raise` (это `remote_flow`)
 - На save/drop `invoke_argv`/`catalog_id` не обязательны. Runtime: нет `catalog_id` или пустой `invoke_argv` → `raise`, не угадывать `main.py`
 
-Drop ноды: REST ensure-source → пустой каталог `Flows/{flow}/code_agent/{node_id}` → UI пишет `catalog_id`. **Граф до save не патчится.** Status/import-git/import-archive читают каталог по тому же placement path; ноды в сохранённом `FlowConfig` может не быть (drop только в редакторе). Import-git/archive отвечают **каталогом** (`_source_status`), без hop на ферму. GET status после этого мержит digest/build с фермы. Ферма не запущена (`ServiceClientError` без HTTP status) → Import проходит; rebuild/GET overlay/logs/drop → `GuestRuntimeUnavailableError` → HTTP **503**, не сырой 500. `_patch_node` без ноды в графе → `LookupError`, не тихий skip. Provenance `git_url`/`source_sha` в граф — только если нода уже сохранена, иначе UI `_emitPatch`. Farm status по `(flow_id, node_id)` без записи в графе.
+Drop ноды: `op_flows_code_agent_ensure_source` (`flows/code_agent/ensure_source_requested`) → пустой каталог `Flows/{flow}/code_agent/{node_id}` → UI пишет `catalog_id`. **Граф до save не патчится.** Status/import-git/import-archive читают каталог по тому же placement path; ноды в сохранённом `FlowConfig` может не быть (drop только в редакторе). Import-git/archive отвечают **каталогом** (`_source_status`), без hop на ферму. GET status после этого мержит digest/build с фермы. Ферма не запущена (`ServiceClientError` без HTTP status) → Import проходит; rebuild/GET overlay/logs/drop → `GuestRuntimeUnavailableError` → `WsCommandError("unavailable")` → HTTP **503**, не сырой 500. REST и WS зовут один `op_*` (`apps/flows/realtime/code_agent_operations.py`). Дерево инспектора — фабрика `office/catalog_items` (`op_catalogs_items`), не HTTP BFF во flows. `_patch_node` без ноды в графе → `LookupError`, не тихий skip. Provenance `git_url`/`source_sha` в граф — только если нода уже сохранена, иначе UI `_emitPatch`. Farm status по `(flow_id, node_id)` без записи в графе.
 
 Rebuild `POST .../code-agent/rebuild` принимает **тело инспектора** (`CodeAgentRebuildRequest`: `language`, `invoke_kind`, `invoke_argv`, listen/egress/git provenance). Каталог файлов — placement path (`_ensure_catalog`), не `FlowConfig`. Пустой `invoke_argv` → `400`, не угадывать `main.py`. Ноды в сохранённом графе для rebuild не требуется.
 

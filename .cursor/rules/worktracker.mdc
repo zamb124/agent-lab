@@ -1,14 +1,8 @@
 ---
 description: WorkItem — платформенное ядро задач (apps/worktracker, core/worktracker). Единая модель работы для людей, очередей операторов и агентов; HITL как частный случай задачи; fire-and-forget; канбан-доски; привязка возобновления flow
-globs:
 alwaysApply: false
 ---
 # WorkItem — платформенное ядро задач
-
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
 
 `WorkItem` — единственная каноническая единица работы платформы. Сводит в одно ядро HITL/operator-задачи flows и work-семантику задач CRM. Сервис **worktracker** (порт 8021, БД `platform_worktracker`), домен — `core/worktracker/`.
 
@@ -28,10 +22,10 @@ alwaysApply: false
 | Слой | Где | Знает про |
 |---|---|---|
 | Домен (нейтральный) | `core/worktracker/` | модели, репозиторий, `WorkItemService` (стейт-машина, валидация, publish на `platform:events`). **Не** знает про flows/crm, **не** делает кросс-сервисных HTTP |
-| Сервис | `apps/worktracker/` | API (REST + push) + UI |
+| Сервис | `apps/worktracker/` | API (REST + WS RPC) + UI |
 | Потребители | `apps/flows`, `apps/crm` | пишут WorkItem через `core/worktracker` репозиторий+сервис (БД доступна) |
 
-`core/ → apps/` запрещён: ядро нейтрально. HITL resume — consumer group `flows` на `worktracker/work_item/completed` (binding в `WorkItem.hooks`, path=`platform:events`). HITL-диалог — `/flows/api/v1/hitl/{work_item_id}/conversation*` (`HitlConversationService`). Wake-up flow-сотрудника — `worktracker/work_item/assigned` (→ `events.mdc`, `flow_employee.mdc`). HTTP hook dispatcher для resume удалён; единственный side-effect complete — publish на шину.
+`core/ → apps/` запрещён: ядро нейтрально. HITL resume — consumer group `flows` на `worktracker/work_item/completed` (binding в `WorkItem.hooks`, path=`platform:events`). HITL-диалог — `op_flows_hitl_conversation_*` + тонкий `/flows/api/v1/hitl/{work_item_id}/conversation*` (`HitlConversationService`). Wake-up flow-сотрудника — `worktracker/work_item/assigned` (→ `events.mdc`, `flow_employee.mdc`). HTTP hook dispatcher для resume удалён; единственный side-effect complete — publish на шину.
 
 ## Каноническая модель (`core/worktracker/models.py`)
 
@@ -80,16 +74,20 @@ alwaysApply: false
 
 Голый `id`, `task_id`, `operator_task_id` для этих сущностей запрещены. Поле коллекции — только `items` (`core/pagination.py`).
 
-## Транспорт (REST + push)
+## Транспорт (REST + WS RPC + push)
 
-REST API (`apps/worktracker/api/**`):
+Команды — каталог `WORKTRACKER_OPERATIONS` (`apps/worktracker/realtime/command_router.py`). Один `op_*` на verb: REST в `apps/worktracker/api/**` и Centrifugo RPC `platform.event` зовут одну функцию. Списки comments/members — `{items: [...]}`.
+
+REST:
 
 - `POST /worktracker/api/v1/work-items` (create), `PATCH .../{id}` (update)
 - `POST .../{id}/assign` (reassign), `.../{id}/move`, `.../{id}/claim`, `.../{id}/comments`, `.../{id}/complete`, `.../{id}/cancel`
-- `/worktracker/api/v1/work-queues` — CRUD очередей + участники (user), `PATCH`/`members` — `can_admin` (owner)
+- `/worktracker/api/v1/work-queues` — CRUD очередей + участники (user), `PATCH`/`members` — `can_admin` (owner). HITL editor во flows берёт `worktracker/work_queues` из `core/frontend/.../work-queues.resource.js`, отдельного flows BFF нет.
 - `/worktracker/api/v1/boards` — list/get/create + `PATCH` (колонки)
 
-Push (зеркал не имеют): `worktracker/work_item/created|updated|moved|completed|comment_created` через `publish_event_*` → шина `platform:events`. Транспорт — HTTP + push (как CRM tasks / office namespaces), без WS command-router.
+WS: команда `worktracker/<entity>/<verb>_requested` → тот же `op_*` (механика Centrifugo RPC / bus / terminal endpoint — **`architecture.mdc`** § «WebSocket request-reply»). UI-фабрики `transport: 'ws'` + `restMirror` + `wsTimeoutMs`.
+
+Push (зеркал не имеют): `worktracker/work_item/created|updated|moved|completed|comment_created` через `publish_event_*` на шину `platform:events`.
 
 Доменное событие без UI-доставки: `worktracker/work_item/assigned` (`publish_work_item_assigned`, payload `{work_item, assigned_by_user_id}`, `delivery=None`) публикуется на create/reassign — его читает consumer group `flows` (wake-up flow-сотрудника + пользовательские триггеры `platform_event`). Все типы зарегистрированы в каталоге событий (`core/worktracker/events.py`, → `events.mdc`).
 
@@ -109,7 +107,7 @@ Sole PDP — `AuthzService`. `WorkItemService` Check — `authz.require_can_admi
    - **Доступ:** claim/complete требуют FGA `can_view` на `work_queue` задачи. Демо-очередь `example_hitl` при `ensure_example_hitl_queue` пишет owner/admin компании как FGA members (иначе composer `readonly`, hint «Нет доступа к очереди», Complete скрыт).
    - **`can_send` / `can_complete`:** оба true, когда оператор авторизован и задача не terminal (**оба** режима). Composer — рабочий инструмент.
    - **`single_reply`:** Submit в `operator_handoff` = `FlowUIHitlTransport.send()` → `POST .../complete` + closing reply durable-append + ordinary A2A Artifact в `stream:{a2a_task_id}`. Лейбл Submit — «Ответить и завершить». Отдельной Complete в HITL-секции нет. Header/kebab Complete без текста запрещён (UI скрывает; `WorkItemService.complete` при DONE без text/files — `ValueError`).
-   - **`takeover`:** Submit = ask REST `/flows/api/v1/hitl/{work_item_id}/conversation/messages` (+ `file_ids`), без resume. Live — `SubscribeToTask` (`runA2aTaskLiveTail`). Close — отдельная кнопка «Завершить задачу» **только при `can_complete`**. Complete без текста допустим. Header/inspector/kebab Complete без `can_complete` скрыты.
+   - **`takeover`:** Submit = ask `op_flows_hitl_conversation_send` / REST `/flows/api/v1/hitl/{work_item_id}/conversation/messages` (+ `file_ids`), без resume. Live — `SubscribeToTask` (`runA2aTaskLiveTail`). Close — отдельная кнопка «Завершить задачу» **только при `can_complete`**. Complete без текста допустим. Header/inspector/kebab Complete без `can_complete` скрыты.
    - Submit в `operator_handoff` **никогда** не идёт в A2A `SendStreamingMessage`.
    - Хост `.wt-hitl-chat` обязан иметь **specified height** (не только `min-height`): conversation shell (`page-shell--conversation`) — `height: 100%` и не растёт по контенту. В `layout=panel` высоту даёт flex-колонка панели; в `layout=page` (полноэкранная задача) — явная высота на `.wt-hitl-chat`. Иначе `platform-flow-ui` схлопывается в 0px и клипается `overflow:hidden`.
    - Если в документе нет message composer + Submit — `<platform-flow-ui>` рисует host-composer **только** для `operator_handoff` (тот же `send()`).
@@ -128,7 +126,7 @@ Sole PDP — `AuthzService`. `WorkItemService` Check — `authz.require_can_admi
 
 | Слой | Что закрывает | Файлы |
 |---|---|---|
-| HTTP/сервис | POST conversation, complete, files, FGA 403, A2A U3, resume по шине | `tests/flows/api/test_hitl_conversation_http.py`, `tests/flows/channels/test_hitl_takeover_user_submit.py`, `tests/flows/integration/test_hitl_resume_platform_events.py` |
+| HTTP/сервис | POST conversation, complete, files, FGA 403, A2A U3, resume по шине | `tests/flows/api/test_hitl_conversation_http.py`, `tests/flows/api/test_hitl_conversation_commands.py`, `tests/flows/channels/test_hitl_takeover_user_submit.py`, `tests/flows/integration/test_hitl_resume_platform_events.py` |
 | llm_node + тул | `hitl_operator_task` в `single_reply`/`takeover`: calculator→HITL→resume, A2A append, operator ask, A2A SendMessage park; `tool_call_id` на interrupt | `tests/flows/integration/test_hitl_llm_node_tool.py` |
 | Playwright E2E | SPA / embed / Test Run / page / panel / CRM CTA / host-composer | `tests/ui/e2e/test_worktracker_hitl_chat.py`, `tests/ui/e2e/test_hitl_user_surfaces.py`, `tests/ui/e2e/test_hitl_operator_matrix.py`, `tests/ui/e2e/test_hitl_custom_ui.py`, `tests/ui/e2e/test_worktracker_operators.py` |
 | Чистые unit | policy, labels, `operatorHandoffFromTask`, `document-composer` | `tests/worktracker/unit/test_models.py`, `tests/frontend_core/unit/flow-ui/` |
@@ -147,7 +145,7 @@ Spy/fake-fetch не считаются покрытием HITL.
 
 ## Уведомления
 
-Назначение исполнителю (`UsersAssignment`) → `NotificationType.WORK_ITEM_ASSIGNED`; изменение title/description → `WORK_ITEM_UPDATED`; комментарий → `WORK_ITEM_COMMENT` (assignees, кроме автора и flow-employee); `action_url` ведёт в worktracker (`/worktracker/tasks/{work_item_id}`). Доски слушают push `worktracker/work_item/*` и обновляют slice.
+Назначение исполнителю (`UsersAssignment`) → `NotificationType.WORK_ITEM_ASSIGNED`; изменение title/description → `WORK_ITEM_UPDATED`; комментарий → `WORK_ITEM_COMMENT` (assignees, кроме автора и flow-employee). `Notification.message` — непустой: явный `message`, иначе `description`, иначе `title`. `action_url` ведёт в worktracker (`/worktracker/tasks/{work_item_id}`). Доски слушают push `worktracker/work_item/*` и обновляют slice.
 
 ## UI surfaces & shared styles
 
@@ -186,9 +184,9 @@ Cross-service отображение и workspace задач — **только*
 
 Локальные task cards / list rows / kanban в `apps/**` (кроме thin host в `apps/worktracker` поверх тех же platform-компонентов и HITL-only editor) запрещены. Parent передаёт `.item` при list/read, чтобы избежать N+1. Badge: только `work-item-id` (+ optional `.item` как WorkItem), **запрещено** передавать CRM entity как `.item`.
 
-Мутации/list cross-service — фабрики `platform/work_item_*` / `platform/work_items` → `/worktracker/api/v1/...`.
+Мутации/list cross-service — фабрики `worktracker/work_item_*` / `worktracker/work_items` → `/worktracker/api/v1/...` (WS + REST-зеркало).
 
-Платформенные фабрики: `platform/work_item_get`, `platform/work_item_counts` — регистрируются автоматически в `PlatformApp` (все сервисы).
+Платформенные фабрики: `worktracker/work_item_get`, `worktracker/work_item_counts`, `worktracker/work_items` — регистрируются автоматически в `PlatformApp` (все сервисы).
 
 ## Гейты
 

@@ -4,10 +4,6 @@ alwaysApply: false
 ---
 # Frontend — общий канон
 
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
 Не плодить parallel DTO/state shapes рядом с каноническим resource/API контрактом. Fail-closed `_normalize*Payload` в factories — валидация границы (throw), не translation между дублями моделей.
 
 Весь UI — на событиях через единый `EventBus`. Доменное состояние — в фабриках (`createAsyncOp`/`createResourceCollection`/`createCursorList`/`createFacets`/`createForm`/`createSlice`). Pages, modals и components получают доступ к фабрикам **только** через helpers базы по строковому имени. Никаких сервисов, store, features, Zustand, BaseStore, ad-hoc HTTP-клиентов и фолбеков. Lookup по типу ноды (Play / test-run) — не фабрика: см. `ui_factories.mdc`.
@@ -36,15 +32,7 @@ Code editor code_node (`flows-code-editor`) — vendored CodeMirror (`codemirror
 
 ## Поток
 
-```
-[click | HTTP | WS | timer | router]
-  -> EventBus.dispatch(event)
-       -> EventLog (append-only)
-       -> Reducers (slice фабрик, pure)        -> State -> Selectors -> Lit re-render
-       -> Effects (фабрик: HTTP/WS/storage)    -> dispatch новых событий
-```
-
-State `frozen`. Изменения — только reducer фабрики. Источник правды — event log + reducer.
+State `frozen`; изменения — только reducer фабрики; источник правды — event log + reducer. Диаграмма потока `dispatch → reducer → state → Lit` / `effect → события`, шесть фабрик и транспорт — **`ui_factories.mdc`**; контракт события и шина `platform:events` — **`events.mdc`**.
 
 ## Базовые классы (единственно допустимые)
 
@@ -86,9 +74,7 @@ State `frozen`. Изменения — только reducer фабрики. Ис
 
 ## Имена событий
 
-`<scope>/<entity>/<verb>` — lowercase, snake_case, ≥3 сегмента.
-
-WS-команды (фрейм клиент → сервер) обязаны заканчиваться на `_requested` — иначе `core.websocket.command_router` отказывает в регистрации handler. Если имя фабрики не совпадает с каноничным backend-именем — опция `commandType: '<scope>/<entity>/<verb>_requested'` в `createAsyncOp` (см. `ui_factories.mdc`).
+`<scope>/<entity>/<verb>` — lowercase, snake_case, ≥3 сегмента (контракт — **`events.mdc`**; WS-команды `_requested` и `commandType` — **`ui_factories.mdc`**).
 
 Core scope (`@platform/lib/events/contract.js`): `auth`, `theme`, `i18n`, `router`, `network`, `ui`, `notify`, `pwa`, `storage`, `http`, `ws`. Дополнительно `@platform/lib/events/index.js`: `CoreAuthEvents`, `ICON_EVENTS`, `FILES_EVENTS`, `COMPANIES_EVENTS`, `TEAM_EVENTS`, `CALENDAR_EVENTS`, `NOTIFICATIONS_EVENTS`, `FILE_TYPES_EVENTS`, `PWA_EVENTS`, `I18N_NAMESPACE_SET_REQUESTED`.
 
@@ -191,14 +177,7 @@ export class FooApp extends PlatformApp {
 
 ### Bottom sheets
 
-Каждый sheet:
-1. Наследует `PlatformBottomSheet` (`@platform/lib/components/layout/platform-bottom-sheet.js`).
-2. Имеет `static bottomSheetKind = '<scope>.<entity>'` (формат `^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`).
-3. Регистрируется через `registerBottomSheetKind(kind, tagName)` (по аналогии с modal-registry).
-4. Открывается из любого `PlatformElement` через `this.openBottomSheet('<kind>', props?)`; закрытие — `this.closeBottomSheet()` или `this._requestClose()` изнутри.
-5. Контент рендерится в `renderBody()`; заголовок — через `this.heading = this.t('<...>')` в `connectedCallback`.
-
-Прямое `document.createElement('*-sheet')` / `appendChild` / `this.open = true` — запрещено. Рендерит только `<platform-bottom-sheet-stack>`, единственный экземпляр которого встроен в `PlatformApp.render()`.
+Sheet наследует `PlatformBottomSheet`, имеет `static bottomSheetKind = '<scope>.<entity>'`, регистрируется `registerBottomSheetKind`, открывается `this.openBottomSheet(kind, props?)`; рендерит только `<platform-bottom-sheet-stack>` из `PlatformApp.render()`. Регистрация, опции (`snap`/`dismissible`/`heading`), `platform.service_switcher`, `<platform-bottom-nav>`, `<platform-top-bar>` — **`ui_components.mdc`**.
 
 ### Запреты mobile shell
 
@@ -254,61 +233,11 @@ export class FooApp extends PlatformApp {
 
 ## Modal canon
 
-Все модалки наследуют `PlatformModal`/`PlatformFormModal`, имеют `static modalKind = '<scope>.<entity>'`, регистрируются через `registerModalKind` (см. `ui_components.mdc`).
-
-```js
-import { PlatformModal } from '@platform/lib/components/glass-modal.js';
-import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
-
-export class FrontendCreateApiKeyModal extends PlatformModal {
-    static modalKind = 'frontend.api_key_create';
-}
-customElements.define('frontend-create-api-key-modal', FrontendCreateApiKeyModal);
-registerModalKind(FrontendCreateApiKeyModal.modalKind, 'frontend-create-api-key-modal');
-```
-
-Открытие/закрытие — `this.openModal(SomeModal)` / `this.closeModal()`. Прямое `document.createElement('*-modal')` / `document.body.appendChild` / `this.open = true` запрещены — рендер делает `<platform-modal-stack>`.
+Все модалки наследуют `PlatformModal`/`PlatformFormModal`, имеют `static modalKind = '<scope>.<entity>'`, регистрируются через `registerModalKind`; открытие/закрытие — `this.openModal(kind, props)` / `this.closeModal()`; рендер — только `<platform-modal-stack>`. Регистрация, стек, z-index, `closeAfterSave`, запреты — **`ui_components.mdc`** § «Modal canon».
 
 ## Field canon (поля форм)
 
-Любое поле формы — `<platform-field>`. Никаких параллельных канонов, никаких локальных оверрайдов. Полный контракт типов и подкомпонентов — `data-types.mdc`.
-
-### Whitelist core-виджетов с собственным UI
-
-| Компонент | Назначение |
-|---|---|
-| `<platform-date-picker>` | popup-календарь date / datetime (внутри `platform-field-date`) |
-| `<platform-switch>` | toggle boolean (внутри `platform-field-boolean`) |
-| `<platform-cron-field>` | cron-builder |
-| `<platform-timezone-picker>` | combobox таймзон |
-| `<platform-icon-picker>` | picker иконок |
-| `<platform-palette-color-picker>` | swatches цветов |
-| `<tag-input>` | multi-tag input (внутри `platform-field-array`) |
-| `<platform-help-hint>` | info bubble |
-
-### Сырые `<input>` / `<textarea>` / `<select>` вне `<platform-field>`
-
-Правило детекта — `scripts/check_field_canon.sh` (`make check-field-canon`), не смешивать с `check_ui_canon.sh`.
-
-| Тег | Допуск |
-|---|---|
-| `<input>` | whitelist `type="file"|"hidden"|"range"|"color"|"checkbox"|"radio"|"search"` или `data-canon=...` |
-| `<textarea>` | только с `data-canon=...` |
-| `<select>` | только `data-canon="combobox"` |
-
-Классы `form-input` / `field-pill-input` на сыром DOM **не** освобождают от этого правила.
-
-### Spec-widgets через `data-canon`
-
-Composer / mention / inline-edit / search-as-you-type / combobox: `data-canon="composer|mention|inline-edit|search-as-you-type|combobox"` на нужном элементе (`<textarea>` может нести `data-canon`; для `<select>` в режиме combobox — атрибут обязателен). Значение — строго из набора канона (`data-types.mdc`).
-
-### Запрещено
-
-- `<glass-input>` / `<glass-textarea>` — компоненты удалены в PHASE 1.5; импортировать запрещено.
-- Локальный `css\`...\`` блок в `apps/**` с правилами `.form-input` / `.form-textarea` / `.form-select` / `.form-group` / `.form-label` / `.field-pill*` (стили только в `core/frontend/static/lib/styles/shared/field-pill.styles.js`; кастомизация — токены `--field-pill-*` в `core/frontend/static/assets/css/tokens.css`).
-- Атрибут `flat` (на `<tag-input>` и любых подкомпонентах) — удалён, pill — единственный режим.
-
-**CI:** `make check-field-canon` (`scripts/check_field_canon.sh` — сырые теги); `scripts/check_ui_canon.sh` п.17 (локальные `.form-*`/`.field-pill*` CSS), п.18 (импорт `glass-input`/`glass-textarea`). П.16 в `check_ui_canon` — комментарий, что детект вынесен в field-canon.
+Любое поле формы — `<platform-field>`; сырые `<input>`/`<textarea>`/`<select>` в `apps/<svc>/ui/{pages,modals,components}/**` — только whitelist `type` (`file|hidden|range|color|checkbox|radio|search`) или `data-canon="composer|mention|inline-edit|search-as-you-type|combobox"`; классы `form-input` / `field-pill-input` на сырой разметке не освобождают. Локальные `.form-*` / `.field-pill*` CSS в `apps/**` и импорт удалённых `glass-input`/`glass-textarea` запрещены. CI: `make check-field-canon` (`scripts/check_field_canon.sh`), `scripts/check_ui_canon.sh` п.17/18. Полный контракт типов, API, whitelist core-виджетов и запреты — **`data-types.mdc`**.
 
 ## Utility canon (форматтеры / escape / hash / validators)
 
@@ -324,6 +253,7 @@ Composer / mention / inline-edit / search-as-you-type / combobox: `data-canon="c
 | `@platform/lib/utils/format-platform-date.js` | `formatPlatformDate(input, locale, options?)`, `formatPlatformDateTime(input, locale)`, `formatPlatformTime(input, locale)` |
 | `@platform/lib/utils/escape-html.js` | `escapeHtml(value)` |
 | `@platform/lib/utils/markdown.js` | `markdownToHtml(markdown)` — единственный markdown → HTML рендерер (vendored `marked` ESM `assets/js/marked/`, сборка `npm run build:marked`); сырой HTML экранируется, ссылки/картинки только `http(s)`/`mailto`, результат идёт в `unsafeHTML` без отдельного sanitizer |
+| `@platform/lib/events/effects/ws.effect.js` | user WS — vendored `centrifuge-js` (`assets/js/centrifuge/`, сборка `npm run build:centrifuge`); кадр = `PlatformEvent`; `getToken` = cookie `auth_token` |
 | `@platform/lib/utils/hash-string.js` | `hashString31(seed)`, `hueFromString(seed)`, `initialsFromName(name)`, `indexFromSeed(seed, modulo)` |
 | `@platform/lib/utils/validators.js` | `EMAIL_RE`, `isValidEmail(value)`, `digitsOnly(value)`, `isValidPhone(value)`, `PHONE_DIGITS_MIN` |
 | `@platform/lib/utils/storage-keys.js` | `platformStorageKey(scope, key)` — единый префикс `platform:<scope>:<key>` |
@@ -367,14 +297,7 @@ CI: `scripts/check_ui_canon.sh` п.19 — детекторы `'ru-RU'`, `EMAIL_R
 
 ## Backend → UI
 
-«Кнопка из бэка» = бэк публикует событие в `platform:events` через `core/events/publisher.py`:
-
-```python
-from core.events import publish_event_to_user
-await publish_event_to_user(user_id=..., type="crm/note/updated", payload={"note_id": note_id}, correlation_id=trace_id)
-```
-
-WS-эффект форвардит фрейм, фронт диспатчит как обычное событие. Компонент: `this.useEvent('crm/note/updated', handler)`.
+«Кнопка из бэка» = `PlatformEvent` с `delivery` на шине → Centrifugo → кадр диспатчится в bus как обычное событие. Доменная коллекция реагирует **только** в `extraReducer` / `extraEffect` своей фабрики (**`ui_factories.mdc`** § «Push-события в фабрике»); page-level `useEvent(push) → reload` запрещён. `useEvent` в компоненте — для UI-реакций без состояния (открыть модалку, toast). Публикация — **`events.mdc`** § «Backend → UI».
 
 ### Flow UI действия
 
@@ -424,10 +347,7 @@ Canvas редактора — тот же `<platform-flow-ui editing selected-bl
 
 ## Тесты
 
-- Reducers — чистые `(state, event) => state`, unit без mocks.
-- Effects — фейковый `ctx = { dispatch, getState }`; реальный `httpRequest` с моком `fetch`.
-- Между тестами: `clearFactoryRegistry()`, `_resetResourceRegistryForTests()`, `resetPlatformBusForTests()`.
-- E2E — Playwright: backend dispatch → UI обновляется; click → reducer → render. См. `testing.mdc`.
+Reducers/effects/контроллеры фабрик и сброс реестров между тестами — **`ui_factories.mdc`** § «Тестирование». Компонентные тесты Lit (WTR), E2E Playwright и UIKDS — **`testing.mdc`** § «E2E UI», **`ui_components.mdc`** § «UI Kit Documentation System».
 
 ## DevTools
 

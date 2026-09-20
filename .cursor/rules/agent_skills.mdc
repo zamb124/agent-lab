@@ -8,11 +8,6 @@ alwaysApply: false
 ---
 # Agent Skills
 
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
-
 ## Сущность
 
 **Agent Skill** — DB-first catalog entry с progressive disclosure для `llm_node`.
@@ -55,7 +50,7 @@ alwaysApply: false
 ## UI (flows)
 
 - Route `agent_skills` (`/flows/skills`) — Skill Library master-detail page.
-- Factories: `flows/agent_skills` (CRUD list/get/create/remove), `flows/agent_skill_update` (PUT), `flows/agent_skill_import` (preview/persist), `flows/agent_skills_ensure_seed` (idempotent platform seed for existing companies).
+- Factories: `flows/agent_skills` (CRUD list/get/create/update/remove, `transport: 'ws'`), `flows/agent_skill_import` (preview/persist), `flows/agent_skills_ensure_seed` (idempotent platform seed for existing companies).
 - Modals: `flows.agent_skill_create`, `flows.agent_skill_edit` (shared editor), `flows.agent_skill_import`, `flows.agent_skill_picker`, tool view/edit via `flows.embedded_tool_config`.
 - llm_node editor: секция **Skills** только в режиме Tools (`structured_output=false`); в Structured скрыта (attach в конфиге сохраняется). Magic tools never appear in tools chips.
 - Skill chip click → `flows.agent_skill_edit` (тот же `<flows-agent-skill-editor>`, что Skill Library). X на чипе — detach.
@@ -91,7 +86,6 @@ alwaysApply: false
 - `sync-platform` children: `sync-messaging` (list/send/edit/delete/react/mark message read), `sync-channels` (list/create/update/members/mark read/mute), `sync-threads` (list/get/create + list thread messages), `team-directory`. Methodology — `references/sync-employee-methodology.md`. Calls/Git/presence — UI-only boundary.
 - `networkle` children: `crm-entities` (entity CRUD/merge/types/summaries/activity-tasks), `crm-notes` (list + create/analyze/apply/discard), `crm-graph` (relationships list/delete/types/related/path), `crm-ops` (suggests + knowledge-import status), `work-items`, `document-workspace`, `team-directory`. Methodology — `references/networkle-lara-crm-methodology.md`. AmoCRM/grants/type-admin/graph chrome — UI-only boundary.
 - Service children переиспользуют shared leaves через `depends_on` либо направляют к отдельному Tier-1 root; копировать один tool pack между service skills запрещено.
-
 
 ## Запреты
 

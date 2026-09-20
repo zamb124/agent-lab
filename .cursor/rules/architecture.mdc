@@ -1,17 +1,10 @@
 ---
+description: "Архитектура сервиса: REST-зеркало команд и WS request-reply через Centrifugo, каталог op_*, DI ContainerDep, composition root, межсервисный доступ, Database-First, durable execution, Flow UI layers, breadcrumbs"
 alwaysApply: true
 ---
 # Архитектурные принципы платформы
 
-## Zero Translation / Deep Contract Refactoring
-
-Канон — **`main.mdc`** (принципы Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring; запреты 11–14).
-
-- Одна доменная сущность — одна модель на всех слоях (API payload, service, repository, events, UI state). Не плодить `*DTO` / `*Internal` / twin-модели ради «изоляции слоя».
-- Запрещены helper-модули и функции, которые существуют только чтобы скопировать/переименовать поля между двумя почти одинаковыми моделями.
-- Несовпадение типов/полей между слоями — сигнал менять контракты end-to-end, не писать adapter/mapper/compat.
-- Минимизация blast radius заплатами вокруг устаревшего интерфейса запрещена: обновляй callers, тесты и payload'ы.
-- Конвертация — только на внешней границе (wire спеки, SDK, сырой JSON→typed boundary, ORM→domain в repository). Внутри платформы (`service`↔`api`↔`ui`↔`events`) — общий нативный тип.
+Принципы Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring и единственное исключение для внешней границы — **`main.mdc`** (§ «Абсолютные принципы», запреты 11–14). Здесь — как эти принципы реализованы в структуре сервисов, DI, транспорте команд и межсервисном доступе.
 
 ## Authorization (sole PDP)
 
@@ -22,18 +15,20 @@ alwaysApply: true
 | Тип события | REST-зеркало | WS-доступность | Источник правды |
 |---|---|---|---|
 | **Команда** `<svc>/<entity>/<verb>_requested` | **Обязательно** HTTP в `apps/<svc>/api/**` (тот же method+path+payload+response, что WS reply) | Опционально (`transport: 'ws'` фабрики) | Один handler в `apps/<svc>/services/` |
-| **Success/Failure** `<...>_succeeded`/`_failed` | Body HTTP-ответа = payload event'а | Reply-фрейм с тем же `request_id` | — |
-| **Push** `<svc>/<entity>/<verb>` (без `_requested`) | **Запрещено** (REST не делает push) | Только `publish_event_*` → `platform:events` → `/<svc>/api/ws/notifications` | `core/events/publisher.py` |
+| **Success/Failure** `<...>_succeeded`/`_failed` | Body HTTP-ответа = payload event'а | Publication `PlatformEvent` с `meta.causation_id` | — |
+| **Push** `<svc>/<entity>/<verb>` (без `_requested`) | **Запрещено** (REST не делает push) | Только `publish_event_*` → bus `realtime` → Centrifugo `/realtime` | `core/events/publisher.py` |
 
 Зачем REST-зеркало: SDK/CLI/интеграции без WS, гостевые/pre-WS-connect сценарии (call-join, lead form, embed), API-тесты без WS, отладка `curl`'ом.
 
-### Эталон: Sync (100% WS+REST симметрия)
+### Каталог операций (одинаково во всех сервисах)
 
-- Реестр операций — `apps/sync/realtime/command_router.py::SYNC_OPERATIONS` (`{canonical_type → Operation(payload_model, fn)}`). Один handler — оба транспорта.
-- Бизнес-функции — `apps/sync/realtime/operations.py` (`async def op_<entity>_<verb>(payload, *, user, container) -> Result`).
-- WS-обвязка — `_make_ws_handler(op)` валидирует payload Pydantic'ом, зовёт `op.fn`. `WsCommandError` → `*_failed`-фрейм.
-- REST-обвязка — каждый route в `apps/sync/api/**` собирает Pydantic payload и зовёт ту же `op.fn`. `WsCommandError` маппится в `HTTPException` через `@app.exception_handler` в `apps/sync/main.py`.
-- TaskIQ оставлен **только** для `messages.transcribe_{audio,video,call}` (heavy STT). Остальные mutating-команды — in-process.
+- `apps/<svc>/realtime/operations.py` — `async def op_<entity>_<verb>(payload, *, user, container) -> Result | None`; один `op_*` на verb, вся бизнес-логика внутри или в `services/`.
+- `apps/<svc>/realtime/command_router.py` — `<SVC>_OPERATIONS: {canonical_type → Operation(payload_model, fn)}` (`core/websocket/operation.py`); регистрация на старте `register_service_operations(catalog, get_container)`.
+- REST-обвязка в `apps/<svc>/api/**` собирает тот же Pydantic payload и зовёт тот же `op_*`; path-id обязан совпасть с полем payload. Twin-модели `_FooBody`, ручная сборка `OffsetPage`/`{"status"}` запрещены.
+- Ошибки в `op_*` — только `WsCommandError` (WS → `*_failed`, REST → HTTP по `WS_COMMAND_ERROR_HTTP_STATUS`); `HTTPException` внутри `op_*` запрещён.
+- TaskIQ — только heavy jobs (STT, индексация, импорт), не транспорт команды.
+
+Эталон 100% симметрии и порядок добавления новой команды — **`sync.mdc`** § «Command-First».
 
 ### Контракт `restMirror` фабрики
 
@@ -46,12 +41,29 @@ CI `scripts/check_command_rest_mirror.py` (`make check-events-canon`):
 1. Каждая factory operation имеет `restMirror` (явный или auto).
 2. FastAPI route существует.
 3. Имя push-события ≠ имени команды.
+4. Сервис из `COMMAND_WS_SERVICES` (`sync`, `worktracker`, `wiki`, `rag`, `office`, `crm`, `flows`) — factory `transport: 'ws'`, кроме `COMMAND_WS_HTTP_ALLOWLIST` (гость/pre-WS: `sync/call_join_*`; `sync/namespaces*` ещё HTTP; `wiki/public_*`; `rag/document_upload`, `office/document_upload`, `crm/attachment_upload` — chunked Files; `office/document_editor_config` и `office/public_*` — OnlyOffice/анонимный viewer; CRM cursor-list `crm/entities_list`/`crm/notes_list`/`crm/relationships_list` — UI-filters; flows: `flows/google_workspace_authorize` (OAuth redirect), `flows/data_table_snapshot` (office GET), `flows/editor` (ui-only), `flows/api_console_run` (A2A), `flows/code_lsp_session` (LSP bootstrap)).
 
 ### WebSocket request-reply
 
-Один сокет `/<svc>/api/ws/notifications` (`core.websocket.router`) несёт push (из `platform:events`) и RPC request-reply. Сервис регистрирует handlers через `register_ws_command_handler(command_type, handler)` (`core.websocket.command_router`). Reply-тип механически: `*_requested` → `*_succeeded`/`*_failed`.
+Один user-сокет — Centrifugo `wss://{host}/realtime/connection/websocket`.
+Кадр = `PlatformEvent`. Команда `_requested` идёт RPC `platform.event` →
+`POST /realtime/api/v1/internal/centrifugo/inbound` → `RealtimeBusService.ingest`
+(persist `platform_event_log` идемпотентно по `event_id` → XADD `platform:events` →
+Centrifugo publish) → владелец по первому сегменту `type`
+(`core/realtime/command_owners.py::_OWNER_BY_SCOPE`) →
+`POST /{owner}/api/internal/realtime/command` (`core/realtime/command_http.py`,
+смонтирован `create_service_app` на каждом сервисе) → `dispatch_ws_command` → тот же `op_*`.
+Исход — publication `*_succeeded`/`*_failed` с `meta.causation_id = event_id`.
+Команда без исхода за `realtime.command_deadline_seconds` — bus-sweeper
+(`sweep_expired_commands`) публикует синтетический `*_failed` `deadline_exceeded`.
+Timeout сокета ≠ `*_failed`. SESSION JWT (`cookie auth_token`) = connection JWT
+(`iss=platform.session`, `channels`, `meta.company_id`). Connect-proxy и
+`connection_token` запрещены.
 
-Frontend `core/.../events/effects/ws.effect.js` шлёт `{request_id, type, payload}`, ждёт reply. `wsTimeoutMs` обязателен у фабрики. **No-fallback:** WS оборвался / timeout — `*_failed` с `error_code: 'ws_disconnected'|'ws_timeout'`. Никакого retry через HTTP.
+Frontend `core/.../events/effects/ws.effect.js` — `centrifuge-js`. `wsTimeoutMs`
+обязателен у фабрики. **No-fallback:** обрыв/timeout RPC — клиент читает
+`GET /realtime/api/v1/events/{event_id}/terminal`. Никакого retry через HTTP
+как скрытый второй транспорт команды.
 
 ### Code node LSP session
 
@@ -68,7 +80,9 @@ LSP JSON-RPC — долгая сессия language server, не команда 
 
 К JSON-ошибкам HTTP (`status >= 400`, `application/json`) добавляются `request_id`/`trace_id`/`service` — корреляция с `X-Request-Id`/`X-Trace-Id`. Если `request.state.company.company_id == "system"` и в `LoggingConfig` заданы `grafana_public_url`+`grafana_loki_datasource_uid` — добавляется `observability.logs_explore_url` (Grafana Explore + whitelist LogQL, `core.clients.loki_client`). Реализация — `PlatformHttpErrorEnvelopeMiddleware` (`core/middleware/platform_error_envelope.py`), последний middleware до CORS в `create_service_app`.
 
-WS `*_failed`: те же поля мерджатся в `payload` рядом с `error_code`/`error_detail` (`core/websocket/router.py`). Frontend HTTP-ошибка — `core/frontend/static/lib/events/http.js::HttpError` (`request_id`, `trace_id`, `service`, `observability`).
+WS `*_failed`: те же поля мерджатся в `payload` рядом с `error_code`/`error_detail` (`core/realtime/command_http.py`). Frontend HTTP-ошибка — `core/frontend/static/lib/events/http.js::HttpError` (`request_id`, `trace_id`, `service`, `observability`).
+
+`WsCommandError.code` → HTTP (`core/websocket/operation.py::WS_COMMAND_ERROR_HTTP_STATUS`): `ws_invalid_payload` 400, `not_found` 404, `forbidden` 403, `conflict` 409, `unavailable` 503 (ферма/peer down, не сырой 500), `upstream` 502, `internal` 500. Новый code без записи в этот словарь — `raise` в `ws_command_error_status`.
 
 Детали — **`logging.mdc`**.
 

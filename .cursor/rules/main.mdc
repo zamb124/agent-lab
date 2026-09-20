@@ -1,8 +1,47 @@
 ---
-description: "Главные правила Платформы — стиль, паттерны, запреты"
+description: "Кодекс Платформы: миссия SaaS и архитектурная концепция, абсолютные принципы и запреты, naming contract, стандарт сервиса, единая модель команд, навигация по rules"
 alwaysApply: true
 ---
 # Платформа — Кодекс
+
+Платформу поддерживает один разработчик. Выживание кодовой базы зависит от минимализма: любое усложнение — фатально. Этот файл — конституция: зачем система существует, как она устроена и какие правила незыблемы. Всё остальное в `.cursor/rules/` — уточнения к нему и не может ему противоречить.
+
+## Что мы строим
+
+**Платформа — SaaS для автоматизации средних компаний.** Компания покупает подписку → создаётся `Company` (tenant, `company_id`, свой subdomain) → сотрудники получают всё семейство сервисов сразу: агентов (Flows), CRM-пространства (NetWorkle), чат и звонки (Sync), документы (Documents), базу знаний (Wiki), задачи (Worktracker), почту, голос, семантический поиск. Один аккаунт, одна компания, одна сессия — везде.
+
+- **Агенты строит сама компания.** Во Flows разработчик агентов компании собирает любого агента из графа нод, пишет код прямо в UI (isolated code-runner), подключает skills, tools, MCP, живые БД, документы. Набора нод, tools и capabilities **достаточно**: новая продуктовая потребность закрывается flow/skill/capability, а не новым сервисом или «платформой внутри платформы».
+- **AI-first.** Любая операция платформы доступна и человеку (UI), и агенту (builtin tool / capability / Platform MCP / A2A) через один и тот же `op_*` и один и тот же контракт. Lara (`flow_id=lara`) — единый ассистент во всех SPA и в LinnexAgent.
+- **Каждый чих оставляет след в деньгах.** Всё, за что платит платформа (LLM, embeddings, STT/TTS, LiveKit, guest runtime), обязано пройти через billing span `pending_settlement` → фоновый settlement → `UsageRecord` → баланс компании; компания в конце месяца платит ровно за использованное. Обычное выполнение кода и внутренние операции не биллятся, но трассируются (`trace_id`, `request_id`, `company_id` в каждом span и логе). Нет span — нет денег — баг.
+- **Мульти-бренд.** Одна кодовая база обслуживает несколько apex-доменов (`linnex.io`, `humanitec.ru`); бренд резолвится по `Host`, не хардкодится.
+
+## Как мы строим
+
+1. **Один разработчик → один паттерн.** Сервисы неразличимы по устройству: одинаковый layout, DI, транспорт команд, ошибки, логи, тесты, UI-канон. Переходя из `apps/crm` в `apps/wiki`, разработчик ничего не изучает заново. Особенность сервиса — только в его бизнес-логике.
+2. **Одна сущность — один владелец.** Каждый класс сущностей живёт ровно в одном сервисе; остальные его подключают, а не заводят своё:
+
+| Сущность | Владелец | Как подключаться из другого сервиса |
+|---|---|---|
+| Файлы и документы | Files API (`core/files`) + Documents (`apps/office`) | `FilesService` / chunked Files API → `file_id`; каждый durable файл автоматически виден в Документах компании (`DocsPlacement`) |
+| Задачи любого рода (HITL, CRM-задача, поручение агенту) | `WorkItem` (`core/worktracker` + `apps/worktracker`) | `WorkItemService` / фабрики `worktracker/*`; своих таблиц задач нет |
+| Общение людей и агентов внутри компании | Sync (`apps/sync`) | `SyncClient` / builtins `sync_*`; DM/@mention будят flow-сотрудника через шину |
+| Агенты, автоматизации, интерфейсы агентов | Flows (`apps/flows`) | A2A 1.0, триггер `platform_event`, `<platform-flow-ui>` |
+| Бизнес-сущности и граф связей | CRM/NetWorkle (`apps/crm`) | `CrmClient` / `crm_*` |
+| Знания компании (страницы) | Wiki (`apps/wiki`) | `WikiClient` / `wiki_*` |
+| Семантический индекс | RAG (`apps/rag`, `core/rag`) | `RagClient`, `index-file` по `file_id`; свой векторный пайплайн запрещён |
+| Речь (STT/TTS/VAD) | Voice (`apps/voice`, `core/clients/voice_resolver`) | `voice_resolver`; прямые провайдеры запрещены |
+| Права | OpenFGA через `core/authz.AuthzService` | `require_can_*`; второй PDP запрещён |
+| Идентичность агента | `User` `flow_employee_{flow_id}` | одна ось `user_id`; отдельной сущности Agent нет |
+| Пространства работы | `Namespace` (`core/namespace`) | `NamespaceService`; своих «workspace» нет |
+| Секреты и переменные компании | Secrets (`apps/secrets`) | `VariablesService` / `@var:` |
+| Расписания | Scheduler (`apps/scheduler`) | `core/clients/scheduler_client.py` |
+| События | шина `platform:events` (`core/events`) + bus `realtime` | `publish_event*`; вторая шина запрещена |
+| Деньги | billing spans (`core/tracing` + `core/billing`) | `traced_operation(billing_*)`; прямой `record_usage` запрещён |
+
+3. **Один хребет взаимодействия.** UI подключён к Centrifugo одним сокетом. Клик пользователя = команда `<svc>/<entity>/<verb>_requested` → Centrifugo RPC → bus `realtime` → сервис-владелец → один `op_*` → `*_succeeded` / `*_failed`. Тот же `op_*` доступен по REST (зеркало для SDK/CLI/интеграций/тестов). Изменение состояния мира = push `PlatformEvent` на шине, который читают и UI, и durable-потребители (flows-триггеры). Ответного события у команды может и не быть — это норма, не ошибка. Детали → § «Единая модель команд и событий».
+4. **`core/` — общая библиотека платформы.** Одинаковый или похожий код в двух сервисах — архитектурный баг: он переезжает в `core/` в том же изменении. В `apps/<svc>/` живёт только уникальная бизнес-логика этого сервиса.
+5. **Tenant everywhere.** `company_id` берётся из контекста (`get_context()`), репозитории изолируют данные сами, OpenFGA — единственный ответ на «можно ли». Кросс-компанийный доступ — только явный грант.
+6. **Zero-Guess, Zero-Fallback.** Нет значения — `raise`. Инфраструктура недоступна — сервис падает. Догадки, дефолты вне Pydantic и тихие обходы запрещены.
 
 ## Язык
 
@@ -35,34 +74,50 @@ alwaysApply: true
 | Python (минимум перед завершением backend-задачи) | `uv run basedpyright --level warning --warnings apps core` |
 | Один файл | `make lint <path>` или `make lint FILE=<path>` |
 
-`make lint` = python (`ruff`, `basedpyright`, architecture gates, `analyze_imports.py`) + `make lint-ts`.
-
-`make lint-ts` = `check-events-canon`, `check-field-canon`, `check-logging`.
+`make lint` = `_lint-py` (`ruff`, `basedpyright --level warning --warnings apps core`, `analyze_imports.py`, architecture gates ниже) + `make lint-ts` (`check-events-canon`, `check_ui_kit_docs.py`, `check-field-canon`, `check-logging`).
 
 Точечный `make lint <path>`: `.py` → ruff + basedpyright на файл; `.js` → `make lint-ts`.
 
-**CI gate:** `make test` → `test-static` → `basedpyright --level warning --warnings apps core` — **warnings = fail** (не только errors). Точечный lint на один файл не заменяет полный basedpyright на `apps core`, если менялись файлы вне точечного пути.
+**CI gate:** `make test` → `test-static` → `basedpyright --level warning --warnings apps core` — **warnings = fail** (не только errors). Точечный lint на один файл не заменяет полный basedpyright на `apps core`, если менялись файлы вне точечного пути. `make test` на старте гоняет python-часть линтеров; перед PR нужен полный `make lint`. После архитектурного рефакторинга — дополнительно целевой или полный `make test`.
 
-`make test` на старте гоняет python-часть линтеров; перед PR нужен полный `make lint`.
+### Карта архитектурных гейтов
 
-После архитектурного рефакторинга — дополнительно целевой или полный `make test`.
+Каждый канон платформы закреплён скриптом. Новый канон без гейта — не канон.
+
+| Гейт | Что держит | Канон |
+|---|---|---|
+| `scripts/check_strict_agent_architecture.py`, `audit_wider_repo_strictness.py` | запрет `getattr(..., default)`, широких типов, фолбеков | этот файл |
+| `analyze_imports.py` | `Total local imports: 0` в `core/` + `apps/` | этот файл |
+| `check_command_rest_mirror.py`, `check_realtime_canon.py`, `check_platform_events_canon.py` | REST-зеркало каждой команды, `COMMAND_WS_SERVICES`, каталог событий, bus | `architecture.mdc`, `events.mdc` |
+| `check_ui_canon.sh`, `check_ui_factories.py`, `check_core_frontend_canon.py`, `check_field_canon.sh`, `check_ui_kit_docs.py`, `check_platform_typography.py` | zero-import, фабрики, `<platform-field>`, UI Kit docs, шрифты | `frontend.mdc`, `ui_factories.mdc`, `ui_components.mdc`, `data-types.mdc` |
+| `check_i18n.sh`, `check_i18n_keys.py`, `check_platform_brand_hardcode.py` | пары ru/en, ключи ↔ код, отсутствие хардкода бренда | `frontend.mdc`, § Multi-brand |
+| `check_logging_canon.sh` | `get_logger`, `request_id`, запрет `print`/`create_task`/`.kiq` | `logging.mdc` |
+| `check_authz_canon.py`, `check_authz_dual_write.py`, `check_authz_backfill_completeness.py`, `check_authz_model.py` | sole PDP OpenFGA, dual-write, backfill, model drift | `authorization.mdc` |
+| `check_files_canon.py`, `check_files_ui_canon.sh`, `check_office_file_id_canon.py`, `check_file_reader_canon.py` | Documents bind каждого файла, chunked upload, `file_id`, `FileReader.read` | `files.mdc`, `office.mdc`, `file_reader.mdc` |
+| `check_taskiq_canon.py`, `check_redis_ttl_canon.py` | `declare_task`/`enqueue`, TTL на каждый Redis-ключ | `taskiq.mdc`, `database.mdc` |
+| `check_tool_tags.py`, `check_tool_contracts.py` | теги и thin-wrapper контракт builtin tools | `tools.mdc` |
+| `check_company_ai_canon.py`, `check_voice_resolver_usage.py`, `check_speakable_parity.py`, `check_tts_pipeline_single_apply.py` | `core.ai` как единственный AI-layer, `voice_resolver`, pronunciation pipeline | `ai_models.mdc`, `voice.mdc` |
+| `check_rag_post_retrieval_rerank_single.py`, `check_corpus_manifest_complete.py` | один реранк, полный corpus FileReader | `rag.mdc`, `file_reader.mdc` |
+| `check_flow_ui_hard_cut.py`, `check_a2a_fixtures` | грамматика Flow UI без legacy, pin A2A 1.0 | `flow_ui.mdc`, `a2a.mdc` |
+| `check_mcp_branding_bundle.py`, `check_variables_legacy.sh`, `check_no_uvicorn.sh`, `check_agent_*` | seed MCP, legacy `variables`, Granian only, LinnexAgent | `mcp.mdc`, `configuration.mdc`, `humanitec_agent.mdc` |
 
 ## Стек
 
-**Python 3.14t (free-threaded, PEP 779, ABI cp314t)** с `PYTHON_GIL=0`, FastAPI, **Granian** (Rust ASGI, не uvicorn — CI-gate `make check-no-uvicorn`), PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, нативный EventBus + фабрики (`createAsyncOp`/`createResourceCollection`/`createCursorList`/`createFacets`/`createForm`).
+**Python 3.14t (free-threaded, PEP 779, ABI cp314t)** с `PYTHON_GIL=0`, FastAPI, **Granian** (Rust ASGI, не uvicorn — CI-gate `make check-no-uvicorn`), PostgreSQL (pgvector), Redis, TaskIQ, UV, OpenFGA, Centrifugo, Lit 3, нативный EventBus + фабрики (`createAsyncOp`/`createResourceCollection`/`createCursorList`/`createFacets`/`createForm`/`createSlice`).
 
 ## Сервисы
 
 | Сервис | Порт | Описание |
 |---|---|---|
-| flows | 8001 | Графы, skills, A2A |
-| secrets | 8022 | Версионируемые переменные и секреты компании |
-| frontend | 8002 | Управление платформой, UI |
-| crm | 8003 | Entities, graph, access control |
-| rag | 8004 | Документы, семантический поиск |
-| sync | 8005 | Инженерный чат с Git-интеграцией |
-| office | 8008 | OnlyOffice, путь `/documents` (`apps/office`) |
-| browser | 8009 | Browser Runtime: Playwright + CDP (`apps/browser`) |
+| flows | 8001 | Графы агентов, skills, tools, A2A, Flow UI, триггеры |
+| frontend | 8002 | Консоль компании, auth, team, billing, лендинг, control plane LinnexAgent |
+| crm | 8003 | NetWorkle: entities, graph, namespaces, access control |
+| rag | 8004 | Семантический индекс: namespaces, документы, pgvector |
+| sync | 8005 | Чат компании: каналы, треды, звонки (LiveKit), Git-интеграция |
+| scheduler | 8006 | Scheduler control-plane API + TaskIQ scheduler |
+| office | 8008 | Документы: OnlyOffice BFF, каталоги, viewer, DataTable; путь `/documents` |
+| browser | 8009 | Browser Runtime: Playwright + CDP |
+| search | 8010 | Platform Index Search: registry индексов, crawl, runet |
 | provider_litserve | 8014 | LitServe: эмбеддинги, реранк, локальные STT/TTS/VAD |
 | voice | 8015 | Voice gateway: real-time STT/TTS/VAD; WS `/voice/api/ws/session/{id}` |
 | capability_gateway | 8016 | Trusted gateway platform capabilities и manifest/docs sandbox API |
@@ -70,20 +125,26 @@ alwaysApply: true
 | code_runner_node | 8018 | Isolated JavaScript/TypeScript user-code runner |
 | code_runner_go | 8019 | Isolated Go user-code runner |
 | code_runner_csharp | 8020 | Isolated C# user-code runner |
-| worktracker | 8021 | Платформенное ядро задач WorkItem (канбан, очереди, HITL, агентские задачи) |
-| wiki | 8023 | База знаний: дерево страниц внутри namespace, блочный редактор (`apps/wiki`) |
-| guest_runtime | 8024 | Ферма `code_agent`: сборка образа и lease контейнера (`apps/guest_runtime`) |
-| scheduler | 8006 | Scheduler control-plane API + TaskIQ scheduler |
-| flows_worker, crm_worker, crm_summary_worker, rag_worker, sync_worker, idle_worker | — | TaskIQ воркеры |
+| worktracker | 8021 | Ядро задач WorkItem: канбан, очереди, HITL, задачи агентов |
+| secrets | 8022 | Версионируемые переменные и секреты компании |
+| wiki | 8023 | База знаний: дерево страниц внутри namespace, блочный редактор |
+| guest_runtime | 8024 | Ферма `code_agent`: сборка образа и lease контейнера |
+| realtime | 8025 | Bus `PlatformEvent`: единственный HTTP-peer Centrifugo, durable-лог |
+| flows_worker, crm_worker, crm_summary_worker, rag_worker, sync_worker, search_worker, idle_worker | — | TaskIQ воркеры (`taskiq.mdc`) |
+
+Отдельные сервисы «на всякий случай» не заводятся: новая функция — это нода/skill/capability во Flows или расширение владельца сущности из таблицы выше.
 
 ## Абсолютные принципы
 
-- **Новое = правка рулов.** Новый паттерн/сервис/конвенция — сразу `.cursor/rules/`. Без обновления — не считается завершённым. Один источник правды.
+- **Минимализм.** Новый код, слой, тип, путь или инструмент — только если без него задача не решается. Одна задача на всю платформу — один путь и один инструмент. Второй способ «на всякий случай» запрещён.
+- **Новое = правка рулов.** Новый паттерн/сервис/конвенция — сразу `.cursor/rules/`. Без обновления — не считается завершённым. Один источник правды: каждое правило живёт ровно в одном `.mdc`, остальные ссылаются.
 - **Ноль костылей.** *Чиним систему — не обходим её.* Костыль (обходной путь, спецфлаг, дублирование, маскировка дыры) запрещён под предлогом «быстрее сейчас» / «потом отрефакторим».
-- **Zero Translation Layers & End-to-End Type Safety.** Данные текут сквозь систему на строгих нативных доменных типах без промежуточных mappers, translators, adapters и лишней (de)сериализации. Одна концептуальная сущность — одна shared-модель (Single Source of Truth), а не набор почти одинаковых DTO с перекладыванием полей.
+- **Zero Translation Layers & End-to-End Type Safety.** Данные текут сквозь систему на строгих нативных доменных типах без промежуточных mappers, translators, adapters, proxy и лишней (de)сериализации. Одна концептуальная сущность — одна shared-модель (Single Source of Truth). Если слой может принять ту же Pydantic-модель, что и предыдущий — он обязан: отдельный DTO «для изоляции» запрещён. Метод, который только вызывает другой метод, — мёртвая прослойка, её нет.
 - **Deep Contract Refactoring.** При смене логики или рефакторинге **обязательно** меняй upstream/downstream контракты (сигнатуры, input/output атрибуты, интерфейсы, Pydantic/TypedDict модели, API/WS payload). Минимизация blast radius **не оправдание**: glue, wrappers и localized patches вокруг устаревших интерфейсов запрещены — breaking changes протягивай по call stack до конца.
 - **Zero-Guess.** *Better to crash than to guess.* Нет значения — `raise`. Не подставлять, не угадывать. Дефолты — только в Pydantic-моделях. Инфраструктура (БД/Redis) недоступна — сервис падает. Сбои на старте — фатальные.
-- **CleanFirst.** Мёртвый код удаляется немедленно. Не делать «на будущее». Минимум обёрток/альясов.
+- **Core-first.** Перед новым модулем/классом/хелпером — поиск аналога в `core/`, затем в существующем коде сервиса. Есть смысл тот же — слить и переиспользовать, не клонировать «похожий» тип. В `apps/<svc>` живёт только уникальная бизнес-логика этого сервиса; общее уходит в `core/`.
+- **Изоляция домена.** Инфраструктура (SQL, драйверы БД, HTTP-клиенты, брокеры) не протекает в доменную логику. Доступ к данным — через repository; внешние вызовы — через `core/clients`; `services/` работает с доменными моделями.
+- **CleanFirst.** Код пишется только под текущую задачу. Заделы, резервные поля, неиспользуемые ветки и закомментированные куски запрещены. Неиспользуемые импорты, функции, классы, переменные удаляются сразу, без запроса разрешения (контроль — Ruff). Наткнулся на легаси или дубль, пока пишешь новое — устрани в том же изменении, не подстраивайся под него.
 - **Стиль документации (`as is`).** Комментарии, cursor rules, docstrings, `description` схем, подписи UI — только как устроено сейчас. История — в коммитах/PR/CHANGELOG, не inline. Поведение изменилось — переписать целиком, не дописывать «обновлено…».
 
 ## АБСОЛЮТНЫЕ ЗАПРЕТЫ
@@ -95,20 +156,22 @@ alwaysApply: true
 5. **Никаких мета-комментариев.** «Отрефакторил», «обновил логику» запрещено. Комментарий объясняет ПОЧЕМУ, а не ЧТО.
 6. **Никаких бессмысленных имён.** `new_`, `old_`, `temp_`, `data`, `result` без контекста — нельзя.
 7. **Никаких неявных фолбеков в значениях.** `x = value or "default"`, `getattr(obj, "field", fallback)` — запрещены. Нет — `raise`. Любой новый `getattr(..., default)` в `apps/`/`core/`/`scripts/` — FAIL `scripts/audit_wider_repo_strictness.py` (часть `make lint`), без allowlist.
-   ```python
-   # ЗАПРЕЩЕНО
-   x = value or "default"
-   # ПРАВИЛЬНО
-   if not value:
-       raise ValueError("value is required")
-   ```
-8. **Никаких голых и широких типов.** Публичные API аннотируются конкретными доменными типами. `Any`, `object`, голые `dict`/`list`, `dict[str, Any]`, `list[Any]`, `Callable[..., Any]` запрещены в платформенном коде. Доменные модели — Pydantic/`TypedDict` по смыслу, не сырые словари.
-9. **Никакого дублирования функционала.** Перед реализацией — проверь что нет уже похожего. Дубль запрещён.
+ ```python
+ # ЗАПРЕЩЕНО
+ x = value or "default"
+ # ПРАВИЛЬНО
+ if not value:
+ raise ValueError("value is required")
+ ```
+8. **Никаких голых и широких типов.** 100% статическая типизация. Публичные API аннотируются конкретными доменными типами. `Any`, `object`, `Unknown`, голые `dict`/`list`, `dict[str, Any]`, `list[Any]`, `Callable[..., Any]` запрещены. Неизвестные типы недопустимы: `cast`, `# type: ignore` и «потом дотипизирую» не лечат потерю типа. Данные с внешней границы и между сервисами входят только через Pydantic (или существующий typed boundary). Доменные модели — Pydantic/`TypedDict` по смыслу, не сырые словари.
+9. **Никакого дублирования функционала.** Перед реализацией — `core/`, затем код сервиса. Есть аналог — использовать или расширить его. Классы/модели совпали по смыслу — слить в одну сущность end-to-end, не клонировать. Дубль запрещён.
 10. **Isolated code execution.** Пользовательский code_node / inline tool / code-condition исполняется только через `RemoteCodeRunner` → `code-runner-*`. Доступ к платформе — только через `capability-gateway`; in-process `eval`/`exec`/`PythonNamespaceBuilder` запрещены. Детали → **`eval.mdc`**.
-11. **No translation / mapping / adapter layers (Zero Translation Layers).** Запрещены промежуточные helpers вида `*_to_*`, `*_from_*`, `convert_*`, `map_*`, `adapt_*`, `normalize_*`, `to_dict`/`from_dict`, которые только перекладывают поля между почти одинаковыми моделями или чинят type mismatch. Не мост между типами — общий нативный тип.
-12. **No glue / compatibility wrappers (Deep Contract Refactoring).** Запрещены wrapper-функции, shim, «временный» compat-слой, localized patch «чтобы не трогать callers». Устаревший контракт удаляй и обновляй consumers; не оборачивай его.
-13. **Eradicate Model Duplication.** Одна бизнес-сущность — одна каноническая модель. `Foo` / `FooDTO` / `FooInternal` / `FooData` / `FooResponse` с ~теми же атрибутами запрещены. Отдельные Input/Internal/Output модели — только если форма **реально** другая (не 90%+ одних и тех же полей).
+11. **No translation / mapping / adapter layers (Zero Translation Layers).** Запрещены промежуточные helpers вида `*_to_*`, `*_from_*`, `convert_*`, `map_*`, `adapt_*`, `normalize_*`, `to_dict`/`from_dict`, а также proxy/интерфейсы, которые только перекладывают поля между почти одинаковыми моделями или чинят type mismatch. Не мост между типами — общий нативный тип. Данные идут самым коротким путём.
+12. **No glue / compatibility wrappers (Deep Contract Refactoring).** Запрещены wrapper-функции, shim, «временный» compat-слой, localized patch «чтобы не трогать callers», методы которые только делегируют в другой метод. Устаревший контракт удаляй и обновляй consumers; не оборачивай его.
+13. **Eradicate Model Duplication.** Одна бизнес-сущность — одна каноническая модель на всех слоях. `Foo` / `FooDTO` / `FooInternal` / `FooData` / `FooResponse` с ~теми же атрибутами запрещены. Отдельные Input/Internal/Output модели — только если форма **реально** другая (не 90%+ одних и тех же полей). Следующий слой принимает ту же Pydantic-модель, если форма совпадает.
 14. **Propagate breaking changes end-to-end.** При рефакторинге обязан пройти call stack, API/WS/UI/tests и обновить контракты. Нельзя оставить старые входящие/исходящие атрибуты и добавить слой преобразования вокруг них.
+15. **Никакого второго сервиса-владельца.** Своя таблица задач, свой upload файлов, свой чат, свой векторный индекс, свой ACL, своя шина событий, свой планировщик, свой учёт денег — запрещены. Подключай владельца из таблицы § «Как мы строим».
+16. **Никакого копипаста между сервисами.** Одинаковый модуль в двух `apps/<svc>/` (boundary errors, `request_scope`, регистрация command-router, SPA-mount) — баг: выносится в `core/` в том же изменении.
 
 ### Zero Translation — единственное разрешённое исключение
 
@@ -124,10 +187,10 @@ alwaysApply: true
 
 ## Типизация и import-gate
 
-- `basedpyright core apps` должен иметь `errorCount == 0`, а затронутый код — `0` новых warning. Новые `reportAny`/`reportUnknown*`/`reportMissingParameterType` не принимаются как «потом».
-- `Any`, `object`, `Unknown`, голые коллекции и широкие callable-типы не являются решением. Если они появляются — сначала найти источник потери типа: БД, HTTP, SDK, JSON parser, контейнер, registry, event bus, runtime state. Лечить нужно источник и протянуть строгий контракт по всей цепочке (**Deep Contract Refactoring**, не local patch / `cast` / mapper).
+- 100% статическая типизация. Gate: `basedpyright --level warning --warnings apps core` — `errorCount == 0` и **0 warning** (CI: warning = fail). Затронутый код — `0` новых warning. Новые `reportAny`/`reportUnknown*`/`reportMissingParameterType` не принимаются как «потом».
+- `Any`, `object`, `Unknown`, голые коллекции и широкие callable-типы запрещены, в том числе как «временная» аннотация. Если они появляются — сначала найти источник потери типа: БД, HTTP, SDK, JSON parser, контейнер, registry, event bus, runtime state. Лечить нужно источник и протянуть строгий контракт по всей цепочке (**Deep Contract Refactoring**, не local patch / `cast` / mapper).
 - Публичные функции, методы сервисов, репозитории, API payload/response, factories, контейнеры, registries, event handlers и runtime-узлы — с явными доменными типами. Тип не должен теряться между слоями.
-- Граница внешнего мира всегда заканчивается typed boundary: Pydantic-модель, `dataclass`, `TypedDict`, `Protocol` или платформенный JSON-тип. Нельзя возвращать из boundary `Any`/`object` и «дотипизировать потом» в бизнес-логике.
+- Граница внешнего мира и граница между сервисами всегда заканчивается typed boundary: Pydantic-модель (предпочтительно), `dataclass`, `TypedDict`, `Protocol` или платформенный JSON-тип. Сырой `dict` дальше границы не идёт. Нельзя возвращать из boundary `Any`/`object` и «дотипизировать потом» в бизнес-логике.
 - Платформенные JSON-типы живут только в `core.types`: `JsonValue`, `JsonObject`, `JsonArray`, `JsonScalar`, `require_json_*`. Новый код импортирует их из `core.types`; `core.capabilities.JsonObject/JsonValue` — только compatibility re-export для существующего capability API.
 - `JsonObject`/`JsonValue` — только для действительно произвольного JSON. Если известны поля, смысл или инварианты — нужна существующая доменная Pydantic-модель/`TypedDict`; если её нет, создать одну каноническую модель на уровне владельца данных и переиспользовать её.
 - `dict[str, JsonValue]` не заменяет модель там, где есть бизнес-сущность. `dict[str, JsonValue]` допустим для словаря однотипных JSON-значений без фиксированных ключей; `JsonObject` — для JSON object без известной схемы; Pydantic-модель — для известной схемы.
@@ -137,7 +200,7 @@ alwaysApply: true
 
 ## Глобальный naming contract
 
-`main.mdc` — главный словарь имён платформы. Новая доменная сущность, атрибут, id-поле, event payload или DB/API-поле не добавляются без проверки этого раздела. Если нужен новый термин — сначала правится glossary, затем код.
+`main.mdc` — главный словарь имён платформы. Новая доменная сущность, атрибут, id-поле, event payload или DB/API-поле не добавляются без проверки этого раздела. Если нужен новый термин — сначала правится glossary, затем код. Расширения глоссария для flows и исключения — **`domain_naming.mdc`**.
 
 ### Единый смысл, разный casing
 
@@ -210,6 +273,7 @@ alwaysApply: true
 | Authz | `AuthzService`, `AuthzObject`, `AuthzSubject`, `AuthzRelation`, `AuthzTuple` | Sole PDP — OpenFGA через `core/authz`; domain `*AccessService` = orchestration only. Roster/JWT — не Check. Tenant groups — `group:{company}/{name}`; `group:admin` глобальный. `company` tuple = tenancy; company-visible = write `company#member` viewer. UI admin = `GET /auth/me` → `can_admin` (FGA). Wire ACL permission ∈ `{viewer, editor}`. Канон → **`authorization.mdc`**. |
 | Voice provider | `provider`, `model`, `voice`, `language`, `sample_rate` | `kind ∈ stt/tts/vad`; `company_voice_providers.kind` не заменять на `type`. |
 | Browser runtime | `session_id`, `page_id`, `lease_id` | Browser/CDP термины не смешивать с auth/flow session без префикса. |
+| Команда / операция | `op_<entity>_<verb>`, `Operation`, `<svc>/<entity>/<verb>_requested` | Один `op_*` на verb в `apps/<svc>/realtime/operations.py`; каталог `<SVC>_OPERATIONS` в `command_router.py`. Не `handler_*`, не `execute_command`, не `CommandEnvelope`. |
 
 ### Запрещённые разночтения
 
@@ -248,30 +312,67 @@ from core.config import BaseSettings
 ```
 
 Куда класть код:
-- Переиспользуемое между сервисами → `core/`.
-- Клиенты интеграций (HTTP/GitLab/S3) → `core/clients/`.
-- Специфичное для одного сервиса → `apps/<service>/`.
+- Перед новым модулем/классом/хелпером — поиск аналога в `core/`. Есть — использовать или расширить, не писать второй.
+- Переиспользуемое между сервисами, клиенты интеграций (HTTP/GitLab/S3), общие модели и утилиты → `core/` (`core/clients/` для клиентов).
+- В `apps/<service>/` — только уникальная бизнес-логика этого сервиса. Похожий класс в сервисе «чтобы не трогать core» запрещён: слить в `core/` и обновить callers.
 - Сомневаешься → `core/`.
 
-## Структура сервиса
+`core/` уже содержит: `app` (фабрика сервиса и lifespan), `container`, `config`, `context`, `db` (Storage/BaseRepository/модели shared), `events` + `realtime` + `websocket` (шина, Centrifugo, каталог команд), `authz`, `auth`/`identity`, `files`/`documents`/`data_tables`, `ai`/`llm_context`/`clients/llm`, `rag`, `worktracker`, `namespace`, `mail`/`calendar`, `tracing`/`logging`/`billing`/`payments`, `tasks`/`scheduler`, `flow_ui`/`a2a`/`state`/`variables`, `capabilities`, `frontend` (Lit UI Kit + EventBus), `i18n`, `pagination`, `types`, `errors`, `clients/*` (typed клиенты ко всем сервисам). Новая «общая» вещь сначала ищется здесь.
+
+## Стандарт сервиса
+
+Каждый HTTP-сервис устроен одинаково. Отклонение — только через правку этого раздела.
 
 ```
 apps/<svc>/
-├── config.py            # <Svc>Settings(BaseSettings)
-├── container.py         # <Svc>Container(BaseContainer) + @lazy
-├── dependencies.py      # ContainerDep
-├── main.py              # FastAPI app
-├── api/                 # роутеры
-├── services/            # бизнес-логика
-└── db/                  # репозитории
+├── config.py           # <Svc>Settings(BaseSettings); services.<svc> в conf.json — только отличия
+├── container.py        # <Svc>Container(BaseContainer) + @lazy; get_<svc>_container() — singleton процесса
+├── dependencies.py     # ContainerDep = Annotated[<Svc>Container, Depends(get_container)]
+├── main.py             # app = create_service_app(service_name, settings_class, get_container, routers, on_startup, services_spa_index, …)
+├── events.py           # register_platform_event для типов сервиса; импортируется в main.py (side-effect)
+├── api/                # тонкие REST-роутеры: Pydantic payload → тот же op_* → response_model
+├── realtime/           # command_router.py (<SVC>_OPERATIONS + register_service_operations), operations.py (op_<entity>_<verb>)
+├── services/           # бизнес-логика на доменных моделях
+├── models/             # Pydantic-контракты сервиса (одна модель на сущность)
+├── db/                 # SQLAlchemy models.py + repositories/ (BaseRepository); своя БД platform_<svc> + migrations/<svc>/
+├── authz/              # tuple-helpers + backfill для типов OpenFGA сервиса
+└── ui/                 # Lit SPA: index.js, app/<svc>-app.js, events/resources/, pages/, modals/, components/, styles/
+apps/<svc>_worker/      # broker.py (create_broker) + worker.py (wire_worker + build_worker) + tasks/ (declare_task + @platform_task)
 ```
 
-Доступ из HTTP-хендлера — только `ContainerDep`, имя параметра — `container`. Детали → **`architecture.mdc`**, **`database.mdc`**.
+- Всё общее сервисы получают из `create_service_app` (`core/app/factory.py`): middleware (proxy headers, auth, access log, deployment headers, dev inter-service proxy HTTP+WS, JSON error envelope, CORS), platform routers (files, auth, calendar, mail, integrations, team, companies, push, brand, `internal/realtime/command`, i18n, file-types, PWA), health, tracing/logging lifespan, event catalog store, `static_mounts`, страница `/{segment}/services` по `services_spa_index`. Свой lifespan в `main.py` запрещён — только `on_startup`/`on_shutdown`. Ручные `app.mount("/static/core", …)` / `/{svc}/ui/static` и копипаст SPA-fallback `serve_<svc>_ui` в каждом `main.py` — migration debt: одна опция фабрики (`static_mounts` + SPA index), не новые копии.
+- Доступ из HTTP-хендлера — только `ContainerDep`, имя параметра — `container`. Детали DI → **`architecture.mdc`**, БД → **`database.mdc`**.
+- Границы запроса — только примитивы `core/context` (`require_context`, `require_active_company`, `resolve_namespace_or_raise`), `core/request_scope.require_company()` / `require_namespace()`, и Check через `AuthzService`; ошибки границы в `op_*` — `WsCommandError` с кодом из `WS_COMMAND_ERROR_HTTP_STATUS` (`core/websocket/operation.py`), `HTTPException` внутри `op_*` запрещён. `require_company` / `require_namespace` живут в `core/request_scope.py`. Wiki дополнительно Check `platform_namespace` viewer в `_scope`. Остаток: `apps/wiki/request_scope.py` (`load_viewable_page` / `wiki_page_response`) и доменные `NotFound`/`Conflict` в `apps/{crm,flows,rag}/errors.py` — при касании сводятся в `core/`, новые копии не создаются.
+- `dependencies.py` — один и тот же 14-строчный шаблон во всех сервисах; сервисная логика в него не добавляется (исключение as is — `apps/crm/dependencies.py` с first-request company init, долг). Кандидат на generic в `core/container`.
+- `flows` исторически держит код в `apps/flows/src/**` (api/v1, runtime, services, db, models) — единственное допустимое отклонение layout; новые сервисы его не повторяют. Домены без своего HTTP-процесса (`apps/agent` — роутеры монтируются во `flows`/`frontend`; `apps/platform_tasks` — только `wiring.py`) новых сервисов не создают.
+- Сервисы без UI и без команд (`secrets`, `scheduler`, `realtime`, `browser`, `capability_gateway`, `code_runner_*`, `guest_runtime`, `provider_litserve`) содержат подмножество той же схемы; новых папок не вводят (as is: `apps/browser` держит домен в `engine/` / `adapters/` вместо `services/` — не повторять). Домен, чьи модели/репозитории живут в `core/` (`worktracker`, `rag`), в `apps/<svc>/` держит только `api/`, `realtime/`, `ui/`.
+- Регистрация типов событий — корневой `apps/<svc>/events.py` (wiki, office, rag; flows — `src/events.py`). Отклонения as is: `apps/sync/realtime/events.py`, `apps/crm/services/crm_*_events.py` — при касании переносятся в корень, новые размещения не вводятся.
+
+## Единая модель команд и событий
+
+Один и тот же `op_*` обслуживает все входы. Никакой другой формы «действия» на платформе нет.
+
+| Тип | Имя | Транспорт | Источник правды |
+|---|---|---|---|
+| **Команда** | `<svc>/<entity>/<verb>_requested` | Centrifugo RPC `platform.event` → bus `realtime` → `POST /{owner}/api/internal/realtime/command` → `op_*`; **и** REST-зеркало `apps/<svc>/api/**` (тот же payload/response) | `apps/<svc>/realtime/operations.py::op_<entity>_<verb>` |
+| **Исход команды** | `<…>_succeeded` / `<…>_failed` (`payload.error_code`, `error_detail`) | publication `PlatformEvent` с `meta.causation_id = event_id`; REST — HTTP 2xx / 4xx-5xx с тем же телом | `WsCommandError.code` → HTTP (`WS_COMMAND_ERROR_HTTP_STATUS`) |
+| **Push** | `<svc>/<entity>/<verb>` (без `_requested`) | только `publish_event_*` → шина `platform:events` (durable) → Centrifugo (UI) и consumer groups (flows-триггеры, inbox) | `core/events/publisher.py`; тип зарегистрирован в каталоге |
+| **Долгая сессия** | A2A SSE (`SendStreamingMessage`), voice WS, LSP WS | не команда: собственный протокол поверх HTTP/WS | `a2a.mdc`, `voice.mdc`, `eval.mdc` |
+| **Тяжёлая работа** | `declare_task` + `enqueue` | TaskIQ очередь воркера сервиса | `taskiq.mdc` |
+
+- Владелец команды — первый сегмент `type` (`core/realtime/command_owners.py`). Каталог `<SVC>_OPERATIONS` регистрируется на старте `register_service_operations(catalog, get_container)`.
+- Ответное событие может отсутствовать: команда, у которой нет доменного следствия для других клиентов, не публикует push. Push — факт об изменении мира, не «ответ».
+- Фронтенд знает команды только через фабрики (`transport: 'ws'` + обязательный `restMirror`); fallback WS→HTTP в коде запрещён; timeout сокета ≠ `*_failed` — клиент читает `GET /realtime/api/v1/events/{event_id}/terminal`.
+- Сервисы в `COMMAND_WS_SERVICES` (`sync`, `worktracker`, `wiki`, `rag`, `office`, `crm`, `flows`) обязаны быть на `transport: 'ws'`, исключения — только `COMMAND_WS_HTTP_ALLOWLIST` (гость/pre-WS, chunked upload, OnlyOffice/аноним, OAuth redirect, A2A console, LSP bootstrap, ui-only editor, DataTable snapshot).
+- Ручная публикация в Redis, вторая шина, HTTP «сервис → flows» для запуска flow, TaskIQ как транспорт команды — запрещены.
+
+Механика (JWT сессии = connection JWT, `meta.causation_id`, JSON ошибок, LSP-исключение) — **`architecture.mdc`**; шина, каталог, consumer groups — **`events.mdc`**; фабрики и `restMirror` — **`ui_factories.mdc`**; эталон 100% симметрии — **`sync.mdc`**.
 
 ## Межсервисный доступ к данным
 
 - **Репозиторий приоритетнее.** Если у процесса есть доступ к БД peer-домена (`database.mdc`, `configuration.mdc`) — данные через репозиторий (`core/`, `apps/<service>/db/`, DI `@lazy`).
 - **`ServiceClient`** — только когда контракт намеренно REST или БД недоступна. Прямой `httpx.AsyncClient` между сервисами **запрещён** (`integrations.mdc`).
+- Из tools/capabilities — только typed `XxxClient` из `core/clients/` (`tools.mdc`).
 
 ```python
 from core.clients import ServiceClient
@@ -329,6 +430,8 @@ response = await client.get("flows", "/flows/api/v1/flows/")
 
 Hot path (`search-worker`, `idle_worker`): `load_system_admin_membership` — read-only `company_repository.get("system")` + `find_all_by_email_ci`. Нет компании/юзера/admin в roster → `raise`. Нет `list(10000)`, нет `set_mapping`, нет FGA.
 
+Новая компания: `company_init_new_company` (idle) → `op_flows_company_init` → `init_company_resources` (bundles, MCP defaults, demo HITL-очередь, CRM seed, personal namespaces) — **`taskiq.mdc`**, **`mcp.mdc`**, **`crm.mdc`**.
+
 ## Конфигурация
 
 Каскад: ENV (высший) → `conf.json`/`conf.local.json` → defaults. Чтение — только через Pydantic Settings. БД: `DATABASE__SHARED_URL`, `DATABASE__FLOWS_URL`, `DATABASE__CRM_URL`, `DATABASE__SYNC_URL`, `DATABASE__RAG_URL`, `DATABASE__REDIS_URL`. Устаревшее `DATABASE__URL` — алиас `shared_url`. Детали → **`configuration.mdc`**, **`database.mdc`**.
@@ -351,7 +454,7 @@ UV: `uv add <pkg>`, `uv sync`, `uv run python <file>`, `uv run pytest`. Доку
 
 ## Пагинация API
 
-Только `CursorPage[T]` и `OffsetPage[T]` из **`core/pagination.py`**. Любая другая модель — запрещена.
+Только `CursorPage[T]` и `OffsetPage[T]` (и `ListResponse[T]` для списков без пагинации) из **`core/pagination.py`**. Любая другая модель — запрещена.
 
 | Тип | Поля | Когда |
 |---|---|---|
@@ -366,76 +469,117 @@ Cursor — `base64url(json({"ts": "<created_at.isoformat()>", "id": "<entity_id>
 
 ## Перекрёстные инварианты
 
-- **Stream-First (LLM):** в flows LLM через `.stream()`, события через Redis Pub/Sub → **`streaming.mdc`**.
-- **REST-зеркало команд:** каждая factory operation имеет HTTP-зеркало (тот же method+path+payload+response). Push-события зеркал не имеют. CI: `scripts/check_command_rest_mirror.py` → **`architecture.mdc`**, **`ui_factories.mdc`**.
-- **Тесты:** единственный мок — `MockLLM`; реальные Postgres/Redis/MinIO/TaskIQ; тестовые id — через фикстуру `unique_id`; внутренние компоненты не мокаются → **`testing.mdc`**.
+Краткие формулировки; канон каждого — в указанном файле.
+
+- **Stream-First (LLM):** в flows LLM через `.stream()`, события через Redis Pub/Sub; конец A2A-задачи — только `emit_complete`/`emit_interrupt`/`emit_error` → **`streaming.mdc`**.
+- **Durable execution:** `workflow_events` — источник истины, `ExecutionState` — projection, Redis — cache → **`durable_execution.mdc`**, **`execution_state.mdc`**, **`session.mdc`**.
+- **A2A 1.0 hard cut:** единственный протокол агентов (JSON-RPC + SSE), типы из `a2a-sdk`, Flow UI — обычные артефакты `state`/`ui` → **`a2a.mdc`**, **`flow_ui.mdc`**.
+- **Файлы:** байты только chunked Files API / `FilesService.create` с `FileCreateSpec`; каждый durable файл получает Documents bind или exempt, иначе `raise`; прямые S3 URL наружу запрещены → **`files.mdc`**, **`s3_minio.mdc`**, **`file_types.mdc`**, **`file_reader.mdc`**.
+- **Задачи:** любая задача любого сервиса — `WorkItem`; HITL = `WorkItem(kind=operator_handoff)`, resume только по `worktracker/work_item/completed` → **`worktracker.mdc`**.
+- **Тесты:** единственный мок — `MockLLM`; реальные Postgres/Redis/MinIO/TaskIQ/OpenFGA; тестовые id — через фикстуру `unique_id`; внутренние компоненты не мокаются; `xdist_group` и lock'и запрещены → **`testing.mdc`**, **`testing_invariants.mdc`**.
 - **Миграции:** у каждой сервисной БД своё дерево Alembic; один физический URL во все `DATABASE__*_URL` — нельзя → **`migrations.mdc`**.
-- **Терминология:** **flow** (`flow_id`), **`llm_node`** (не `react_node`), **`user_id`** → **`domain_naming.mdc`**.
-- **События платформы:** единая шина Redis Stream `platform:events` (`core/events`): один `publish_event*` из любого процесса, UI-доставка — tail-consumer WS-форвардера, durable-потребители — consumer groups (первая — `flows`: триггеры `platform_event` + employee inbox). Вторая шина / Pub/Sub для событий запрещены → **`events.mdc`**.
-- **Уведомления:** только `notify_user` из `core.websocket.publisher`; персистентного хранилища нет → **`notifications.mdc`**.
-- **Scheduler:** control-plane в `apps/scheduler`; вызов из других сервисов — только `core/clients/scheduler_client.py`, не прямой `httpx`; изоляция по `company_id` → **`taskiq.mdc`**.
-- **Трейсинг:** OTEL `trace_id`+`parent_span_id`, БД `platform_tracing`, корневой span сущности через `resource_root_span` → **`tracing.mdc`**.
-- **Логирование (МЕГА-правило `request_id`):** каждая запись в request scope обязана содержать `request_id`+`trace_id`+`service.name`. Скоуп переключают только платформенные точки входа (`enter_request_scope`/`RequestLogScope`/`SystemLogScope`); в `apps/**` запрещено. `print`, файловые хендлеры, эмодзи в `logger.*` — нельзя. Логгер только `core.logging.get_logger(__name__)`. CI: **`make check-logging`** → **`logging.mdc`**.
-- **Тарификация:** прайс в `conf.json`/`billing:resource_base_prices_json`, `UsageRecord`, фоновое списание по spans с `pending_settlement` → **`billing.mdc`**.
-- **Voice / Speech providers:** real-time голос — только `apps/voice`; STT/TTS/VAD-клиенты — только через `core.clients.voice_resolver`; `MediaTranscriber` из HTTP вне `sync` запрещён (через `ServiceClient("voice", ...)`) → **`voice.mdc`**.
-- **TTS Pronunciation pipeline:** подмена слов перед синтезом — только через `PronunciationAwareTTSClient` (собирается в `voice_resolver.get_tts_client`). Cascade: platform (`platform_pronunciation_rules`) → company (`company_pronunciation_rules`) → per-call (`SpeechOverride.pronunciation_rules`). Прямой вызов `TtsTextPipeline` в `apps/**` — fail CI (`make check-tts-pipeline`). Детали → **`voice.mdc`** (секция "Pronunciation Pipeline").
-- **`user_id` в UI:** только `<platform-user-chip>` + модалка `platform.user_info`; источник — `state.team.members`+`state.auth.user`. Сырая `user_id` в UI запрещена → **`ui_components.mdc`**.
-- **Utility canon:** все «общие» утилиты (`formatFileSize`, `formatDurationSeconds`/`Ms`, `formatPlatformNumber`/`CurrencyRub`, `formatPlatformDate`/`DateTime`/`Time`, `escapeHtml`, `hashString31`/`hueFromString`/`indexFromSeed`/`initialsFromName`, `markdownToHtml`, `md5HexUtf8`, `sanitizeToolName`, `EMAIL_RE`/`isValidEmail`/`digitsOnly`/`isValidPhone`, `platformStorageKey`, `uploadPlatformFile`) живут в `core/frontend/static/lib/utils/`. Upload байтов — только chunked (`platform-file-upload.js` / `platform/file_create`). Локальные копии в `apps/<svc>/ui/**` запрещены. Локаль форматтеров — из `state.i18n.locale`, хардкод `'ru-RU'` / `'en-US'` запрещён. CI: `scripts/check_ui_canon.sh` п.19 → **`frontend.mdc`**.
-- **Mobile shell 2026 (Radical Reachability):** единый мобильный шелл на `≤767px` — `<platform-bottom-nav>` (Liquid Glass капсула первичной навигации) + `<platform-bottom-sheet-stack>` (вторичная сложность) + опционально `<platform-top-bar>` (sticky-header). Без гамбургер-меню, без мобильных левых drawer-ов. `<platform-sidebar>` принудительно скрыт на мобиле. Каждый `PlatformApp`-наследник декларативно описывает `static bottomNavItems`, `static bottomNavHideOnRoutes`, при необходимости `static topBarEnabled`. Route обязан иметь `titleKey: 'routes.<key>'`; i18n bundle сервиса — парные ключи `routes.*` и `bottom_nav.*` в ru+en. Новые «mobile-app-header» компоненты и локальные `position: fixed; bottom: 0` навигации в `apps/**` — запрещены. Платформенный sheet `kind: 'platform.service_switcher'` — единый узел профиля/сервисов/настроек/уведомлений/logout. Детали → **`frontend.mdc`**, **`ui_components.mdc`**, **`ui_factories.mdc`**.
-- **Pill canon полей (на ВСЕЙ платформе):** любое поле формы — **`<platform-field>`** (имя/email/url/password/query/description в любом сервисе, типизированные атрибуты CRM). `<glass-input>`/`<glass-textarea>` удалены. Сырые `<input>`/`<textarea>`/`<select>` в `apps/<svc>/ui/{pages,modals,components}/**` запрещены, кроме whitelist по `type` (`file|hidden|range|color|checkbox|radio|search`) и `data-canon` (`composer|mention|inline-edit|search-as-you-type|combobox`). Классы `form-input`/`field-pill-input` на сырой разметке в приложениях не освобождают от этого правила. Стили — только в **`field-pill.styles.js`**, токены **`--field-pill-*`** в **`tokens.css`**. Локальные `.form-*` / `.field-pill*` overrides в `apps/**` запрещены. Атрибут `flat` удалён. CI: **`make check-field-canon`** (`scripts/check_field_canon.sh`); `scripts/check_ui_canon.sh` п.17/18 (`*.mdc`: **`data-types.mdc`**, **`frontend.mdc`**, **`ui_components.mdc`**).
-- **LinnexAgent / Platform MCP:** control plane и tunnel WS — `frontend` (`/frontend/api/agent/*`); исполнение flow как MCP tools — `flows` (`/flows/api/v1/agent/platform-mcp`, router из `apps/agent/platform_mcp.py`). Внешний MCP host может вызывать Platform MCP без desktop. На brand `humanitec.ru` продукт — HumanitecAgent. Правки pairing/tunnel/audit → **`humanitec_agent.mdc`**; внешние MCP servers в llm_node → **`mcp.mdc`**.
+- **События платформы:** единая шина Redis Stream `platform:events` (`core/events`): один `publish_event*` из любого процесса, UI-доставка — bus `realtime` → Centrifugo, durable-потребители — consumer groups (первая — `flows`). Вторая шина / Pub/Sub для событий запрещены → **`events.mdc`**.
+- **Уведомления:** только `notify_user` из `core.websocket.publisher`; персистентного хранилища нет; офлайн — Web Push/APNs из bus → **`notifications.mdc`**.
+- **Scheduler:** control-plane в `apps/scheduler`; вызов из других сервисов — только `core/clients/scheduler_client.py`; изоляция по `company_id`; recurring в сервисах — через scheduler API, не `while True` → **`taskiq.mdc`**.
+- **TaskIQ:** только `declare_task` + `@platform_task` + `enqueue`; один брокер на очередь; FIFO per `session_id` → **`taskiq.mdc`**.
+- **Трейсинг:** OTEL `trace_id`+`parent_span_id`, БД `platform_tracing`, корневой span сущности через `resource_root_span`; обязательные `platform.tenant.company_id` + `platform.user.id` → **`tracing.mdc`**.
+- **Логирование (МЕГА-правило `request_id`):** каждая запись в request scope обязана содержать `request_id`+`trace_id`+`service.name`. Скоуп переключают только платформенные точки входа (`enter_request_scope`/`RequestLogScope`/`SystemLogScope`); в `apps/**` запрещено. `print`, файловые хендлеры, эмодзи в `logger.*`, голый `asyncio.create_task` — нельзя. Логгер только `core.logging.get_logger(__name__)`. CI: **`make check-logging`** → **`logging.mdc`**.
+- **Тарификация:** usage только через span settlement (`traced_operation(billing_*)` + `span_billing_settlement_tick`), pre-flight `require_balance_for_billable_operation`, прайс в `conf.json`/`billing:resource_base_prices_json`, USD→RUB по курсу ЦБ → **`billing.mdc`**.
+- **Authorization:** sole PDP — OpenFGA через `AuthzService`; Check до existence (403, не 404); dual-write fail-closed; roster/JWT — не Check → **`authorization.mdc`**.
+- **Конфигурация и секреты:** только Pydantic Settings; секреты — ENV/Helm, не `conf.json`; `os.getenv` в `apps/`/`core/` запрещён → **`configuration.mdc`**.
+- **Voice / Speech providers:** real-time голос — только `apps/voice`; STT/TTS/VAD-клиенты — только через `core.clients.voice_resolver`; pronunciation — только `PronunciationAwareTTSClient` (cascade platform → company → per-call), прямой `TtsTextPipeline` в `apps/**` — fail CI → **`voice.mdc`**.
+- **AI models:** выбор/исполнение любой модели — `core.ai` (`resolve_ai_model` + `core.ai.runtime`); `humanitec_llm` — virtual free pool → **`ai_models.mdc`**.
+- **Code execution:** пользовательский код — только `code-runner-*` + `capability-gateway`; `code_agent` — ферма `guest_runtime` → **`eval.mdc`**, **`guest_runtime.mdc`**.
+- **Tools:** builtin — thin `@tool` над typed `XxxClient`; один tag на тул; `parameters_schema` — единственный контракт аргументов → **`tools.mdc`**, **`mcp.mdc`**.
+- **`user_id` в UI:** только `<platform-user-chip>` + модалка `platform.user_info`; сырая `user_id` в UI запрещена → **`ui_components.mdc`**.
+- **Utility canon (UI):** общие утилиты (`format*`, `escapeHtml`, `markdownToHtml`, `platformStorageKey`, `uploadPlatformFile`, валидаторы, хэши) — только `core/frontend/static/lib/utils/`; локаль форматтеров из `state.i18n.locale`, хардкод `'ru-RU'`/`'en-US'` запрещён; CI `scripts/check_ui_canon.sh` п.19 → **`frontend.mdc`**.
+- **Mobile shell 2026:** на `≤767px` — `<platform-bottom-nav>` + `<platform-bottom-sheet-stack>` (+ опционально `<platform-top-bar>`), декларативно через `static bottomNavItems` у `PlatformApp`; гамбургер-меню, `*-mobile-app-header`, локальные `position: fixed; bottom: 0` навигации запрещены; route обязан иметь `titleKey: 'routes.<key>'` → **`frontend.mdc`**, **`ui_components.mdc`**.
+- **Pill canon полей:** любое поле формы — `<platform-field>`; сырые `<input>`/`<textarea>`/`<select>` — только whitelist `type`/`data-canon`; стили только `field-pill.styles.js` + токены `--field-pill-*`; CI **`make check-field-canon`** → **`data-types.mdc`**.
+- **Breadcrumbs:** `<platform-breadcrumbs>` на всех неглавных страницах (кроме `sync`), источник — `state.router` → **`architecture.mdc`**.
+- **LinnexAgent / Platform MCP:** control plane и tunnel WS — `frontend` (`/frontend/api/agent/*`); исполнение flow как MCP tools — `flows` (`/flows/api/v1/agent/platform-mcp`); OpenAI proxy `/flows/api/v1/agent/llm/v1` — thin adapter над `LLMClient`; на brand `humanitec.ru` продукт — HumanitecAgent → **`humanitec_agent.mdc`**.
+- **Поиск по коду (для агента):** rule → граф (codebase-memory-mcp) → семантика (claude-context) → grep → read → **`claude-context.mdc`**, `AGENTS.md`.
 
 ## Навигация
 
+Каждый файл ниже уточняет этот Кодекс и не противоречит ему. Правило живёт ровно в одном файле; остальные ссылаются.
+
+### Фундамент
+
 | Тема | Файл |
 |---|---|
-| Архитектурные принципы, REST-зеркало, DI ContainerDep, межсервисный доступ | `architecture.mdc` |
+| Архитектурные принципы, REST-зеркало, WS request-reply, DI ContainerDep, межсервисный доступ, JSON ошибок, breadcrumbs | `architecture.mdc` |
+| Единая шина событий платформы (core/events, platform:events, каталог, consumer groups, Centrifugo) | `events.mdc` |
 | Authorization (OpenFGA / AuthzService sole PDP) | `authorization.mdc` |
-| БД, репозитории, модели, pgvector | `database.mdc` |
-| Конфигурация, ENV, conf.json | `configuration.mdc` |
+| БД, репозитории, модели, Storage, Redis TTL | `database.mdc` |
 | Миграции Alembic | `migrations.mdc` |
-| Сессии | `session.mdc` |
-| Инвайты | `invites.mdc` |
-| Flows: сервис, ноды, триггеры, ресурсы | `flows.mdc` |
-| Flow UI: единый A2A-интерфейс, document/layout/editor/runtime/share | `flow_ui.mdc` |
-| Flow как сотрудник (identity, inbox, Sync, WorkItem) | `flow_employee.mdc` |
-| Runtime flows: ноды, tools, branches, FlowInterrupt | `flows_logic.mdc` |
-| Agent handoff / handback между flows | `handoff.mdc` |
-| ExecutionState | `execution_state.mdc` |
-| CRM | `crm.mdc` |
-| RAG | `rag.mdc` |
-| Sync (чат, каналы, Git) | `sync.mdc` |
-| Почта (company connection, mailbox bindings, ISPmanager) | `mail.mdc` |
-| Datasource (живые БД как NodeType.DATASOURCE) | `datasources.mdc` |
-| Platform Namespace (kind, personal ensure, RAG id) | `namespace.mdc` |
-| WorkItem (ядро задач, канбан, HITL, очереди) | `worktracker.mdc` |
-| Agent Skills (llm_node procedure packs) | `agent_skills.mdc` |
-| AgentPlan (execution checklist) | `agent_plan.mdc` |
-| WebRTC звонки (LiveKit) | `calls.mdc` |
-| Office (OnlyOffice) | `office.mdc` |
-| Wiki (база знаний, страницы, блочный редактор) | `wiki.mdc` |
-| Code agent / ферма guest_runtime | `guest_runtime.mdc` |
-| Voice gateway + Speech providers | `voice.mdc` |
-| Frontend: Lit 3, helpers, i18n, design system | `frontend.mdc` |
-| Единая шина событий платформы (core/events, platform:events, каталог, consumer groups) | `events.mdc` |
-| UI Factories + Events (createAsyncOp/Resource/CursorList/Facets/Form, bus, push) | `ui_factories.mdc` |
-| UI Components (core UI Kit, модалки, sidebar, breadcrumbs, platform-field) | `ui_components.mdc` |
-| Типы данных атрибутов | `data-types.mdc` |
-| Типы файлов: реестр, MIME, accept | `file_types.mdc` |
-| Tools для flows | `tools.mdc` |
-| Eval sandbox, namespace, безопасность тулов | `eval.mdc` |
-| MCP серверы (внешние → flows) | `mcp.mdc` |
-| LinnexAgent, Platform MCP, tunnel, pairing | `humanitec_agent.mdc` |
-| TaskIQ: воркеры, задачи, scheduler | `taskiq.mdc` |
-| Streaming, Redis Pub/Sub, Emitter | `streaming.mdc` |
-| Интеграции: A2A, OAuth, HTTP | `integrations.mdc` |
-| A2A Protocol 1.0 (hard cut) | `a2a.mdc` |
-| S3 / MinIO | `s3_minio.mdc` |
-| Уведомления | `notifications.mdc` |
-| Трейсинг, spans, platform_tracing | `tracing.mdc` |
+| Конфигурация, ENV, conf.json, прокси | `configuration.mdc` |
 | Логирование (`request_id` E2E) | `logging.mdc` |
-| Тарификация, usage, прайс | `billing.mdc` |
-| Тестирование, фикстуры | `testing.mdc` |
-| Стиль тестов: инварианты | `testing_invariants.mdc` |
-| Доменные имена | `domain_naming.mdc` |
+| Трейсинг, spans, platform_tracing, Tempo/Loki | `tracing.mdc` |
+| Тарификация, usage, прайс, Т-Банк | `billing.mdc` |
+| TaskIQ: воркеры, задачи, scheduler | `taskiq.mdc` |
+| Интеграции: ServiceClient, get_httpx_client, external_api, OAuth | `integrations.mdc` |
+| Уведомления | `notifications.mdc` |
+| Доменные имена flows (расширение glossary) | `domain_naming.mdc` |
+| Platform Namespace (kind, personal ensure, RAG id) | `namespace.mdc` |
+| Сессии auth / инвайты | `session.mdc` (flows-сессии), `invites.mdc` |
 | Инфраструктура: MicroK8s, ingress, observability, GPU | `infrastructure.mdc` |
+| Тестирование, фикстуры, стек | `testing.mdc` |
+| Стиль тестов: инварианты | `testing_invariants.mdc` |
+| Поиск по коду для агента (два MCP-движка) | `claude-context.mdc` |
+
+### Файлы, документы, данные
+
+| Тема | Файл |
+|---|---|
+| Files API: FilesService, FileCreateSpec, chunked upload, Documents bind | `files.mdc` |
+| S3 / MinIO: клиент, конфиг, запрет прямых URL | `s3_minio.mdc` |
+| Типы файлов: реестр, MIME, accept | `file_types.mdc` |
+| FileReader: `read(source, ReadFileArgs) → FileExtract` | `file_reader.mdc` |
+| Documents (OnlyOffice BFF, viewer, DataTable, catalog RAG) | `office.mdc` |
+| RAG: провайдеры, namespaces, pgvector, TTL, reembed | `rag.mdc` |
+| Platform Index Search (crawl, ranking, runet) | `search.mdc` |
+| Wiki (база знаний, страницы, блочный редактор) | `wiki.mdc` |
+| Datasource (живые БД как NodeType.DATASOURCE) | `datasources.mdc` |
+
+### Flows и агенты
+
+| Тема | Файл |
+|---|---|
+| Flows: сервис, ноды, триггеры, ресурсы, bundles, UI редактора | `flows.mdc` |
+| Runtime flows: durable execution, ноды, ветки, FlowInterrupt | `flows_logic.mdc` |
+| Durable execution ledger, reducer, time travel | `durable_execution.mdc` |
+| ExecutionState | `execution_state.mdc` |
+| Сессии flows: session_id, resume | `session.mdc` |
+| Streaming: Emitter/Subscriber, A2A StreamResponse | `streaming.mdc` |
+| A2A Protocol 1.0 (hard cut) | `a2a.mdc` |
+| Flow UI: FlowUIDocument, editor, embed/share/HITL runtime | `flow_ui.mdc` |
+| Flow как сотрудник (identity, inbox, Sync, WorkItem) | `flow_employee.mdc` |
+| Agent handoff / handback между flows | `handoff.mdc` |
+| Agent Skills (llm_node procedure packs, Lara catalog) | `agent_skills.mdc` |
+| AgentPlan (execution checklist) | `agent_plan.mdc` |
+| Tools для flows (builtin, CodeTool, tag groups) | `tools.mdc` |
+| MCP серверы (внешние → flows, Store) | `mcp.mdc` |
+| Code Execution Sandbox (code-runner, capability gateway) | `eval.mdc` |
+| Code agent / ферма guest_runtime | `guest_runtime.mdc` |
+| AI models: core.ai catalog, resolver, runtime, free pool | `ai_models.mdc` |
+| LinnexAgent, Platform MCP, tunnel, LLM proxy | `humanitec_agent.mdc` |
+
+### Люди и коммуникации
+
+| Тема | Файл |
+|---|---|
+| CRM / NetWorkle | `crm.mdc` |
+| WorkItem (ядро задач, канбан, HITL, очереди) | `worktracker.mdc` |
+| Sync (чат, каналы, Git) — эталон WS+REST | `sync.mdc` |
+| WebRTC звонки (LiveKit) | `calls.mdc` |
+| Почта (company connection, mailbox bindings, ISPmanager, календарь) | `mail.mdc` |
+| Voice gateway + Speech providers | `voice.mdc` |
+
+### Frontend
+
+| Тема | Файл |
+|---|---|
+| Frontend: Lit 3, базовые классы, helpers, структура ui, i18n, mobile shell, design system | `frontend.mdc` |
+| UI Factories + Events (createAsyncOp/Resource/CursorList/Facets/Form/Slice, transport, restMirror) | `ui_factories.mdc` |
+| UI Components (core UI Kit, модалки, sheets, user-chip, work-item, breadcrumbs, sidebar) | `ui_components.mdc` |
+| `<platform-field>`: типы данных атрибутов | `data-types.mdc` |

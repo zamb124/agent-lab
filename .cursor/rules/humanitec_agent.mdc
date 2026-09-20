@@ -4,11 +4,6 @@ alwaysApply: false
 ---
 # LinnexAgent и Platform MCP (LaraOnly)
 
-## Zero Translation (канон)
-
-См. **`main.mdc`**: Zero Translation Layers, End-to-End Type Safety, Deep Contract Refactoring.
-Запрещены промежуточные mappers/adapters/glue/compat-слои и дубли моделей. При рефакторинге меняй контракты end-to-end, не минимизируй blast radius заплатами.
-
 LinnexAgent — desktop-клиент (Goose fork). **Канон продукта: LaraOnly** — единственное platform-окно = flow `lara` на branch `linnex_agent`; локальный ПК — через tunnel device tools внутри Lara. На legacy brand `humanitec.ru` продукт называется **HumanitecAgent**. **Код домена** — `apps/agent/`.
 
 ## Два HTTP-surface
@@ -19,8 +14,8 @@ LinnexAgent — desktop-клиент (Goose fork). **Канон продукта
 | **Tunnel WS** | `frontend` | `WS /frontend/api/agent/tunnel?token=` | desktop → platform; ping/pong, policy, `mcp_request`/`mcp_response` |
 | **Platform MCP** | `flows` (:8001) | `/flows/api/v1/agent/platform-mcp` | Streamable HTTP MCP (union + `device/mcp`) |
 | **Platform MCP (toolkit)** | `flows` | `/flows/api/v1/agent/platform-mcp/{toolkit_id}` | scoped MCP; desktop использует **`/platform-mcp/lara`** |
-| **Toolkits catalog** | `flows` | `GET /flows/api/v1/agent/toolkits` | для **device JWT** — только toolkit `lara` |
-| **Toolkits manage** | `flows` | `/flows/api/v1/agent/toolkits/manage` | CRUD групп (session JWT; admin) |
+| **Toolkits catalog** | `flows` | `GET /flows/api/v1/agent/toolkits` | HTTP: device JWT + Host → `mcp_url`; для **device JWT** — только toolkit `lara` |
+| **Toolkits manage** | `flows` | `/flows/api/v1/agent/toolkits/manage` | `op_flows_agent_toolkits_*` + тонкий REST (session JWT); ответ — `AgentToolkit` |
 | **A2A** | `flows` | `/flows/api/v1/a2a/*` | исполнение flow |
 | **OpenAI LLM proxy** | `flows` | `/flows/api/v1/agent/llm/v1` | OpenAI-compatible: models, chat/completions, images/generations, OnlyOffice `/proxy` |
 
@@ -67,7 +62,7 @@ LinnexAgent — desktop-клиент (Goose fork). **Канон продукта
 
 ## AgentToolkit
 
-Database-first (`apps/flows/src/models/agent_toolkit.py`). Bootstrap: `registry.yaml` → `agent_toolkits`. Системные: `lara` (desktop default on), `humanitec_core` (legacy, default off), `networkle`, `docs`, `files`, `browser`.
+Database-first (`apps/flows/src/models/agent_toolkit.py`). Bootstrap: `registry.yaml` → `agent_toolkits`. Системные: `lara` (desktop default on), `humanitec_core` (legacy, default off), `networkle`, `docs`, `files`, `browser`. Manage CRUD — `op_flows_agent_toolkits_*`; console-список — owner-фабрика `@platform` `flows/agent_toolkits` (`op_flows_agent_toolkits_list`). Catalog GET строит `AgentToolkitCatalogItem` (`mcp_url` с Host) и остаётся HTTP.
 
 ## Pairing и device JWT
 
