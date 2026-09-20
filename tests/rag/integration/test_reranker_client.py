@@ -5,13 +5,13 @@
 ответ upstream подменяется через ``Depends``.
 """
 
-from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport
 
+import core.tracing.attributes as trace_attributes
 from core.ai.rerank_client import AIRerankerClientError
 from core.ai.runtime import rerank_scores
 from core.context import clear_context, set_context
@@ -19,6 +19,10 @@ from core.models.billing_models import UsageType
 from core.models.context_models import Context, Language
 from core.models.identity_models import Company, User
 from core.rag.models import RAGSearchResult
+from core.tracing import setup_tracing
+from core.tracing.config import TracingConfig
+from core.tracing.provider import set_tracing_enabled
+from core.tracing.tracer import set_span_repository, set_tracing_service_name
 
 from .rerank_v1_rerank_stub import create_v1_rerank_stub_app, get_rerank_upstream
 
@@ -85,7 +89,6 @@ async def test_rerank_reorders_by_scores_gateway(monkeypatch: pytest.MonkeyPatch
     app = create_v1_rerank_stub_app()
     app.dependency_overrides[get_rerank_upstream] = lambda: _MockUpstream()
     _install_gateway_client(monkeypatch, app)
-    monkeypatch.setattr("core.ai.rerank_client.get_billing_service", lambda: AsyncMock())
 
     results = [
         RAGSearchResult(
@@ -137,15 +140,12 @@ async def test_rerank_reorders_by_scores(monkeypatch: pytest.MonkeyPatch) -> Non
     app.dependency_overrides[get_rerank_upstream] = lambda: _MockUpstream()
     _install_gateway_client(monkeypatch, app)
 
-    billing = AsyncMock()
-    monkeypatch.setattr("core.ai.rerank_client.get_billing_service", lambda: billing)
     scores = await rerank_scores(
         endpoint_url=GATEWAY_V1_RERANK,
         query="q",
         passages=[item.content for item in _sample_results()],
         timeout_seconds=5.0,
     )
-    billing.record_usage.assert_awaited_once()
     out = sorted(zip(scores, _sample_results()), key=lambda item: item[0], reverse=True)
     assert {
         "len": len(out),
@@ -204,8 +204,21 @@ async def test_rerank_scores_length_mismatch(monkeypatch: pytest.MonkeyPatch) ->
 
 
 @pytest.mark.asyncio
-async def test_rerank_billing_usage_type_and_resource(monkeypatch: pytest.MonkeyPatch) -> None:
-    """При контексте user/company запись в BillingService с RERANK_REQUEST."""
+async def test_rerank_billing_span_pending_settlement(
+    monkeypatch: pytest.MonkeyPatch, container, unique_id: str
+) -> None:
+    """При контексте user/company реранк пишет span rerank.{model} с pending_settlement."""
+    setup_tracing(
+        TracingConfig(
+            enabled=True,
+            postgres_enabled=True,
+            tempo_enabled=False,
+            service_name="platform-test",
+        )
+    )
+    set_tracing_service_name("platform-test")
+    set_span_repository(container.span_repository)
+    set_tracing_enabled(True)
 
     class _MockUpstream:
         async def post_predict(self, body: bytes, content_type: str) -> httpx.Response:
@@ -215,9 +228,8 @@ async def test_rerank_billing_usage_type_and_resource(monkeypatch: pytest.Monkey
     app.dependency_overrides[get_rerank_upstream] = lambda: _MockUpstream()
     _install_gateway_client(monkeypatch, app)
 
-    billing = AsyncMock()
-    monkeypatch.setattr("core.ai.rerank_client.get_billing_service", lambda: billing)
-    user = User(user_id="u-rerank-bill", name="U", companies={"c1": ["admin"]}, active_company_id="c1")
+    user_id = f"u-rerank-bill-{unique_id}"
+    user = User(user_id=user_id, name="U", companies={"c1": ["admin"]}, active_company_id="c1")
     company = Company(company_id="c1", name="C")
     set_context(
         Context(
@@ -234,24 +246,17 @@ async def test_rerank_billing_usage_type_and_resource(monkeypatch: pytest.Monkey
             query="query text",
             passages=[item.content for item in _sample_results()],
             timeout_seconds=5.0,
-            cost_per_1m_tokens=1.0,
-            platform_markup=1.0,
             billing_resource_id="bge-test",
         )
     finally:
         clear_context()
 
-    billing.record_usage.assert_awaited_once()
-    kwargs = billing.record_usage.await_args.kwargs
-    assert {
-        **{k: kwargs[k] for k in ("usage_type", "resource_name", "user", "company")},
-        "quantity_positive": kwargs["quantity"] > 0,
-        "cost_nonneg": kwargs["cost"] >= 0.0,
-    } == {
-        "usage_type": UsageType.RERANK_REQUEST,
-        "resource_name": "rerank:bge-test",
-        "user": user,
-        "company": company,
-        "quantity_positive": True,
-        "cost_nonneg": True,
-    }
+    spans = await container.span_repository.get_spans_by_user(user_id)
+    rerank_spans = [span for span in spans if span.operation_name == "rerank.bge-test"]
+    assert len(rerank_spans) == 1, [span.operation_name for span in spans]
+    attributes = rerank_spans[0].attributes
+    assert attributes[trace_attributes.ATTR_BILLING_PENDING_SETTLEMENT] is True
+    assert attributes[trace_attributes.ATTR_BILLING_RESOURCE_NAME] == "rerank:bge-test"
+    assert attributes[trace_attributes.ATTR_BILLING_USAGE_TYPE] == UsageType.RERANK_REQUEST.value
+    quantity = attributes[trace_attributes.ATTR_BILLING_QUANTITY]
+    assert isinstance(quantity, int) and quantity > 0

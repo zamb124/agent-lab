@@ -69,7 +69,7 @@ Pre-flight **не заменяет settlement**: джоба пишет usage б�
 
 ## Покрытые операции
 
-Полный перечень `operation_name` для spans с `pending_settlement` — docstring `core/billing/default_settlement_rules.py`. Дефолтные правила матчат по префиксу (`first_win`).
+Полный перечень `operation_name` для spans с `pending_settlement` — docstring `core/billing/default_settlement_rules.py`. Дефолтные правила матчат по префиксу (`first_win`). `SettlementRule.resource_name_from_span=True` берёт `resource_name` из атрибута `platform.billing.resource_name` span (категория обязана совпадать с категорией правила) — так per-provider цены `stt`/`tts`/`rerank` живут в одном правиле категории.
 
 | `operation_name` | Файл | `usage_type` | `billing_resource_name` | `quantity` |
 |---|---|---|---|---|
@@ -79,6 +79,8 @@ Pre-flight **не заменяет settlement**: джоба пишет usage б�
 | `flows.llm_resource.*` | `apps/flows/src/runtime/llm_resource_config.py` | `llm_request` | `llm:{model}` или `llm:byok` при BYOK в ресурсе | из attr |
 | `core.files.reader.image` | `core/files/reader/service.py` | `llm_request` | `llm:{model}` | 1 |
 | `rag.embed.batch` | `core.ai.runtime` / `core.ai.embedding_client` | `embedding_request` | `embedding:{model}` | token_count |
+| `rerank.{model}` | `core/ai/rerank_client.py` | `rerank_request` | `rerank:{model}` или `rerank:byok` (`resource_name_from_span`) | tiktoken-токены |
+| `stt.{provider}` / `tts.{provider}` | `core/billing/speech_usage.py` | `tool_call` | `stt:{provider}` / `tts:{provider}` или `*:byok` (`resource_name_from_span`) | секунды аудио (ceil) / символы |
 | `livekit.room.session_usage` | `core/calls/livekit_usage_spans.py` (завершение SFU-сессии) | `tool_call` | `livekit:room_minute` | поминутно (`platform.billing.quantity`, ceil минут) |
 | `livekit.egress.composite_usage` | то же (стоп записи встречи) | `tool_call` | `livekit:egress_composite_minute` | то же |
 | `guest_runtime.start` | `core/guest_runtime/billing.py` (старт lease) | `agent_execution` | `guest:start` | 1 |
@@ -106,7 +108,7 @@ Skip READY digest / тот же inprocess digest (сборка не запуск
    - `billing_resource_name` — `category:resource`.
    - `billing_quantity` — количество единиц.
    - `billing_pending_settlement=True` — обязательно, чтобы джоба подхватила span.
-2. **Не вызывать `record_usage`** напрямую.
+2. **Не вызывать `record_usage`** напрямую (CI `scripts/check_billing_span_canon.py`: `record_usage` только в `core/billing/service.py`; каждый `traced_operation(..., billing_pending_settlement=True)` с литеральным `operation_name` обязан матчить правило `default_settlement_rules`, иначе деньги теряются молча).
 3. В прайсе должна быть цена `resource_name`.
 4. Множитель категории — в `DEFAULT_TARIFF_PRICES` (`core/models/billing_models.py`).
 

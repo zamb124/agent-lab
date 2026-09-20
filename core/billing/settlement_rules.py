@@ -78,6 +78,13 @@ class SettlementRule(BaseModel):
     priority: int = 100
     exclusive_group: str | None = None
     resource_name: str = Field(min_length=3)
+    resource_name_from_span: bool = Field(
+        default=False,
+        description=(
+            "Брать resource_name из атрибута span platform.billing.resource_name "
+            "(категория обязана совпадать с категорией правила): per-provider цены stt/tts/rerank"
+        ),
+    )
     usage_type: UsageType
     quantity_from: str = Field(default="const:1")
     match: SettlementRuleMatch = Field(default_factory=SettlementRuleMatch)
@@ -88,6 +95,17 @@ class SettlementRule(BaseModel):
         if ":" not in v:
             raise ValueError(f"resource_name ожидается как category:resource, получено {v!r}")
         return v
+
+    def resolve_resource_name(self, span: BillingSettlementSpan) -> str:
+        if not self.resource_name_from_span:
+            return self.resource_name
+        span_resource = span.required_billing_resource_name()
+        rule_category = self.resource_name.split(":", 1)[0]
+        if span_resource.split(":", 1)[0] != rule_category:
+            raise ValueError(
+                f"span {span.span_id}: resource_name {span_resource!r} вне категории правила {self.rule_id!r} ({rule_category})"
+            )
+        return span_resource
 
 
 class SettlementRulesDocument(BaseModel):

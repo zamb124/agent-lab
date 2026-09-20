@@ -15,8 +15,9 @@ from apps.flows.src.services.flow_speech_resolve import (
     load_flow_speech_layers_from_context_metadata,
     merge_explicit_over_flow_speech_layer,
 )
-from apps.voice.services.voice_usage import record_stt_usage, record_tts_usage
 from core.ai.runtime import synthesize_speech_audio, transcribe_audio_bytes
+from core.billing.service import COST_ORIGIN_PLATFORM
+from core.billing.speech_usage import record_stt_usage_span, record_tts_usage_span
 from core.clients.files_client import FilesClient
 from core.clients.google_workspace_auth import GoogleAuthMaterial
 from core.clients.speech_override import SpeechOverride, SpeechProviderName, SpeechResponseFormat
@@ -150,12 +151,13 @@ async def transcribe_audio(
             file_id=file_id.strip(),
         )
     else:
-        _ = await record_stt_usage(
+        await record_stt_usage_span(
             user=ctx.user,
             company=ctx.active_company,
             provider=result.provider,
             audio_seconds=audio_seconds,
-            metadata={"endpoint": "flows.transcribe_audio", "file_id": file_id},
+            cost_origin=COST_ORIGIN_PLATFORM,
+            extra_attributes={"endpoint": "flows.transcribe_audio", "file_id": file_id},
         )
 
     return result.text
@@ -212,12 +214,13 @@ async def synthesize_speech(
         content_type=result.mime_type,
     )
 
-    _ = await record_tts_usage(
+    await record_tts_usage_span(
         user=ctx.user,
         company=ctx.active_company,
         provider=result.provider,
         char_count=len(text),
-        metadata={"endpoint": "flows.synthesize_speech", "file_id": record.file_id},
+        cost_origin=COST_ORIGIN_PLATFORM,
+        extra_attributes={"endpoint": "flows.synthesize_speech", "file_id": record.file_id},
     )
 
     return record.file_id

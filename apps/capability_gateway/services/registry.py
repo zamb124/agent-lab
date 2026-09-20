@@ -63,9 +63,10 @@ from apps.capability_gateway.services.worktracker_capabilities import (
     invoke_worktracker_client,
     worktracker_capability_definitions,
 )
-from apps.voice.services.voice_usage import record_stt_usage, record_tts_usage
 from core.a2a import message_to_json_dict, struct_from_mapping
 from core.ai.runtime import synthesize_speech_audio, transcribe_audio_bytes
+from core.billing.service import COST_ORIGIN_PLATFORM
+from core.billing.speech_usage import record_stt_usage_span, record_tts_usage_span
 from core.capabilities import (
     CAPABILITY_LANGUAGES,
     CapabilityCallRequest,
@@ -2283,12 +2284,13 @@ class CapabilityRegistry:
             except ValueError:
                 audio_seconds = 0.0
             if audio_seconds > 0:
-                _ = await record_stt_usage(
+                await record_stt_usage_span(
                     user=context.user,
                     company=company,
                     provider=result.provider,
                     audio_seconds=audio_seconds,
-                    metadata={
+                    cost_origin=COST_ORIGIN_PLATFORM,
+                    extra_attributes={
                         "endpoint": "capability_gateway.voice.transcribe_audio",
                         "file_id": file_id,
                     },
@@ -2335,12 +2337,13 @@ class CapabilityRegistry:
                 original_name=original_name,
                 content_type=result.mime_type,
             )
-            _ = await record_tts_usage(
+            await record_tts_usage_span(
                 user=context.user,
                 company=company,
                 provider=result.provider,
                 char_count=len(text),
-                metadata={
+                cost_origin=COST_ORIGIN_PLATFORM,
+                extra_attributes={
                     "endpoint": "capability_gateway.voice.synthesize_speech",
                     "file_id": record.file_id,
                 },

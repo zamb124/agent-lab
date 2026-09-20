@@ -15,9 +15,10 @@ from fastapi import APIRouter, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
 from apps.voice.dependencies import ContainerDep
-from apps.voice.services.voice_usage import record_stt_usage
 from core.ai.runtime import transcribe_audio_bytes
 from core.authz.models import AuthzObject
+from core.billing.service import COST_ORIGIN_PLATFORM
+from core.billing.speech_usage import record_stt_usage_span
 from core.clients.speech_override import SpeechOverride, SpeechProviderName
 from core.context import get_context, require_context
 from core.files.audio_probe import probe_audio_duration_seconds_from_upload
@@ -141,12 +142,13 @@ async def transcribe_audio(
             size_bytes=len(audio_bytes),
         )
     else:
-        _ = await record_stt_usage(
+        await record_stt_usage_span(
             user=ctx.user,
             company=company,
             provider=result.provider,
             audio_seconds=audio_seconds,
-            metadata={
+            cost_origin=COST_ORIGIN_PLATFORM,
+            extra_attributes={
                 "endpoint": "voice.transcribe",
                 "size_bytes": len(audio_bytes),
             },

@@ -1,6 +1,4 @@
 [
-  "apps/capability_gateway/services/registry.py -> apps.voice.services.voice_usage",
-  "apps/flows/src/services/platform_facades.py -> apps.voice.services.voice_usage",
   "apps/frontend/api/search_providers.py -> apps.search.config",
   "apps/frontend/container.py -> apps.search.services.crawl.report_service",
   "apps/idle_worker/container.py -> apps.flows.src.container",

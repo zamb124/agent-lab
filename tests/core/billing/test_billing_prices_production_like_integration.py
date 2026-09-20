@@ -52,6 +52,7 @@ def _settlement_span(
 PRODUCTION_LIKE_BASE: dict[str, dict[str, float]] = {
     "llm": {"*": 0.0001},
     "embedding": {"*": 0.00005},
+    "rerank": {"*": 0.0000055, "byok": 0.0},
     "billing": {"rub": 1.0},
     "voice": {"session_minute": 0.01, "*": 0.0},
     "livekit": {

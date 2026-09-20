@@ -18,7 +18,7 @@ from email import policy
 from email.parser import BytesParser
 from io import BytesIO
 from pathlib import Path
-from typing import ClassVar, Protocol, TypedDict, TypeIs, cast
+from typing import ClassVar, Literal, Protocol, TypedDict, TypeIs, cast
 
 import ebooklib
 import extract_msg
@@ -737,7 +737,7 @@ async def run_vision_on_image_bytes(
     prompt: str,
     vision_model: str | None = None,
     compression: CompressionMode = CompressionMode.NEVER,
-    trace_name: str = "core.files.reader.vision",
+    trace_name: Literal["core.files.reader.vision", "core.files.reader.page_vision"] = "core.files.reader.vision",
 ) -> str:
     """Запускает vision LLM на переданных байтах изображения, возвращает извлечённый текст."""
     payload, payload_mime = prepare_visual_payload(

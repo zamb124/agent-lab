@@ -363,8 +363,6 @@ async def rerank_scores(
     query: str,
     passages: list[str],
     timeout_seconds: float = 60.0,
-    cost_per_1m_tokens: float = 5.0,
-    platform_markup: float = 1.1,
     billing_resource_id: str = "rerank",
     cost_origin: AICostOrigin = "platform",
     model: str | None = None,
@@ -374,8 +372,6 @@ async def rerank_scores(
     """Execute rerank through the canonical AI runtime facade."""
     client = AIRerankerHTTPClient(
         timeout_seconds=timeout_seconds,
-        cost_per_1m_tokens=cost_per_1m_tokens,
-        platform_markup=platform_markup,
         billing_resource_id=billing_resource_id,
         cost_origin=cost_origin,
         model=model,

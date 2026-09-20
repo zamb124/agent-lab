@@ -1,21 +1,18 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
 from typing import cast as type_cast
 
 import httpx
 import tiktoken
 
+import core.tracing.attributes as trace_attributes
 from core.ai.models import AICostOrigin
-from core.billing import get_billing_service
 from core.context import get_context
 from core.http import ProxyStrategy, get_httpx_client
 from core.logging import get_logger
 from core.models.billing_models import UsageType
+from core.tracing.operation_span import traced_operation
 from core.types import JsonValue, require_json_object, require_json_value
-
-if TYPE_CHECKING:
-    from core.billing.service import BillingService
 
 logger = get_logger(__name__)
 
@@ -42,20 +39,14 @@ class AIRerankerHTTPClient:
         self,
         *,
         timeout_seconds: float = 60.0,
-        cost_per_1m_tokens: float = 5.0,
-        platform_markup: float = 1.1,
         billing_resource_id: str = "rerank",
-        billing_service: "BillingService | None" = None,
         cost_origin: AICostOrigin = "platform",
         model: str | None = None,
         api_key: str | None = None,
         extra_request_headers: dict[str, str] | None = None,
     ) -> None:
         self._timeout_seconds: float = timeout_seconds
-        self.cost_per_1m_tokens: float = cost_per_1m_tokens
-        self.platform_markup: float = platform_markup
         self.billing_resource_id: str = billing_resource_id
-        self.billing_service: BillingService | None = billing_service
         self.cost_origin: AICostOrigin = cost_origin
         self.model: str | None = model.strip() if model is not None and model.strip() else None
         self.api_key: str | None = api_key
@@ -68,49 +59,32 @@ class AIRerankerHTTPClient:
             total += len(self._tokenizer.encode(text))
         return total
 
-    def calculate_cost(self, token_count: int) -> float:
-        base_cost = (token_count / 1_000_000) * self.cost_per_1m_tokens
-        return base_cost * self.platform_markup
-
-    def _get_billing_service(self) -> "BillingService":
-        if self.billing_service:
-            return self.billing_service
-        return get_billing_service()
-
-    async def _record_usage(self, token_count: int, cost: float) -> None:
+    async def _record_usage_span(self, token_count: int) -> None:
+        """Billing span `rerank.{model}`: quantity — токены; цена — `billing.resource_base_prices.rerank`."""
         context = get_context()
-        if not context or not context.user or not context.active_company:
-            logger.debug("Rerank: no user/active_company context, billing is skipped")
+        if context is None or context.active_company is None:
+            logger.debug("Rerank: no active_company context, billing span skipped")
             return
-
-        billing = self.billing_service or self._get_billing_service()
         resource = self.billing_resource_id.strip() or "rerank"
         is_company = self.cost_origin == "company"
-        effective_cost = 0.0 if is_company else cost
         resource_name = "rerank:byok" if is_company else f"rerank:{resource}"
-        logger.info(
-            "Rerank billing: tokens=%s cost=%.4f RUB resource=%s cost_origin=%s",
-            token_count,
-            effective_cost,
-            resource_name,
-            self.cost_origin,
-        )
-        _ = await billing.record_usage(
-            user=context.user,
-            company=context.active_company,
-            resource_name=resource_name,
-            cost=effective_cost,
-            usage_type=UsageType.RERANK_REQUEST,
-            quantity=token_count,
-            metadata={
-                "model": resource,
-                "tokens": token_count,
-                "cost_per_1m_tokens": self.cost_per_1m_tokens,
-                "platform_markup": self.platform_markup,
-                "cost_origin": self.cost_origin,
+        async with traced_operation(
+            f"rerank.{resource}",
+            event_type="rag.rerank",
+            operation_category="rag",
+            billing_usage_type=UsageType.RERANK_REQUEST.value,
+            billing_resource_name=resource_name,
+            billing_quantity=token_count,
+            billing_pending_settlement=True,
+            billing_cost_origin=self.cost_origin,
+            extra_attributes={
+                trace_attributes.ATTR_TENANT_COMPANY_ID: context.active_company.company_id,
+                trace_attributes.ATTR_USER_ID: context.user.user_id,
+                "platform.rerank.model": resource,
+                "platform.rerank.tokens": token_count,
             },
-            cost_origin=self.cost_origin,
-        )
+        ):
+            pass
 
     async def rerank_scores(
         self,
@@ -208,8 +182,7 @@ class AIRerankerHTTPClient:
                 },
             )
 
-        cost = self.calculate_cost(token_count)
-        await self._record_usage(token_count, cost)
+        await self._record_usage_span(token_count)
         return scores
 
 

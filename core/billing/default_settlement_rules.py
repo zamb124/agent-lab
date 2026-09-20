@@ -7,6 +7,7 @@
 - llm.{model} — core/tracing/tracer.py (record_llm_response на CLIENT span)
 - flows.llm_resource.complete | .chat | .chat_with_tools — apps/flows/src/resources/wrappers/llm_resource.py
 - flows.llm.invoke_task — apps/flows/src/tasks/llm_tasks.py
+- flows.evaluation_lab.llm | .llm_tool — apps/flows/src/evaluation/lab_service.py (quantity — токены, resource_name per-model из атрибута span)
 - rag.embed.batch — core/rag/services/embedding_client.py
 - core.files.reader.image — core/files/reader/service.py
 - livekit.room.session_usage | livekit.egress.composite_usage | livekit.egress.segmented_usage
@@ -15,6 +16,8 @@
   — core/calls/livekit_client.py observability без pending_settlement (списание только через *usage выше)
 - sync.calls.* | sync.stt.* (без pending_settlement) — apps/sync/realtime/tasks.py, только трейсинг
 - flows.external_api.call | flows.mcp.call_tool | flows.channel.execute_action — без pending_settlement, только трейсинг
+- stt.{provider} | tts.{provider} | rerank.{model} — core/billing/speech_usage.py и core/ai/rerank_client.py
+  (quantity — секунды аудио / символы / токены, resource_name per-provider из атрибута span)
 - search.provider.* — Search MCP provider calls; BYOK/company credentials create
   zero-cost usage via platform.billing.cost_origin=company, system/public main search is not marked pending
 
@@ -77,6 +80,21 @@ def default_settlement_rules_document() -> SettlementRulesDocument:
                 usage_type=UsageType.LLM_REQUEST,
                 quantity_from=f"attr:{trace_attr.ATTR_BILLING_QUANTITY}",
                 match=SettlementRuleMatch(operation_name_prefix="flows.llm."),
+            ),
+            SettlementRule(
+                rule_id="flows_evaluation_lab_llm",
+                priority=17,
+                resource_name="llm:*",
+                resource_name_from_span=True,
+                usage_type=UsageType.LLM_REQUEST,
+                quantity_from=f"attr:{trace_attr.ATTR_BILLING_QUANTITY}",
+                match=SettlementRuleMatch(
+                    operation_name_prefix="flows.evaluation_lab.",
+                    attribute_keys_present=[
+                        trace_attr.ATTR_BILLING_QUANTITY,
+                        trace_attr.ATTR_BILLING_RESOURCE_NAME,
+                    ],
+                ),
             ),
             SettlementRule(
                 rule_id="rag_embed_tokens",
@@ -166,6 +184,51 @@ def default_settlement_rules_document() -> SettlementRulesDocument:
                 usage_type=UsageType.TOOL_CALL,
                 quantity_from="const:1",
                 match=SettlementRuleMatch(operation_name_equals="search.provider.tavily"),
+            ),
+            SettlementRule(
+                rule_id="stt_audio_seconds",
+                priority=32,
+                resource_name="stt:*",
+                resource_name_from_span=True,
+                usage_type=UsageType.TOOL_CALL,
+                quantity_from=f"attr:{trace_attr.ATTR_BILLING_QUANTITY}",
+                match=SettlementRuleMatch(
+                    operation_name_prefix="stt.",
+                    attribute_keys_present=[
+                        trace_attr.ATTR_BILLING_QUANTITY,
+                        trace_attr.ATTR_BILLING_RESOURCE_NAME,
+                    ],
+                ),
+            ),
+            SettlementRule(
+                rule_id="tts_characters",
+                priority=33,
+                resource_name="tts:*",
+                resource_name_from_span=True,
+                usage_type=UsageType.TOOL_CALL,
+                quantity_from=f"attr:{trace_attr.ATTR_BILLING_QUANTITY}",
+                match=SettlementRuleMatch(
+                    operation_name_prefix="tts.",
+                    attribute_keys_present=[
+                        trace_attr.ATTR_BILLING_QUANTITY,
+                        trace_attr.ATTR_BILLING_RESOURCE_NAME,
+                    ],
+                ),
+            ),
+            SettlementRule(
+                rule_id="rerank_tokens",
+                priority=34,
+                resource_name="rerank:*",
+                resource_name_from_span=True,
+                usage_type=UsageType.RERANK_REQUEST,
+                quantity_from=f"attr:{trace_attr.ATTR_BILLING_QUANTITY}",
+                match=SettlementRuleMatch(
+                    operation_name_prefix="rerank.",
+                    attribute_keys_present=[
+                        trace_attr.ATTR_BILLING_QUANTITY,
+                        trace_attr.ATTR_BILLING_RESOURCE_NAME,
+                    ],
+                ),
             ),
             SettlementRule(
                 rule_id="guest_runtime_start",

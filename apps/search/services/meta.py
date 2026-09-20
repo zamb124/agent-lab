@@ -207,8 +207,6 @@ class MetaSearchService:
                 query=query,
                 passages=passages,
                 timeout_seconds=PUBLIC_SEARCH_WALL_TIME_SECONDS,
-                cost_per_1m_tokens=rr.cost_per_1m_tokens,
-                platform_markup=rr.platform_markup,
                 billing_resource_id=resolution.billing_resource_id or resolution.model or rr.billing_model_id,
                 cost_origin="platform",
                 model=resolution.model,

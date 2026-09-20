@@ -24,7 +24,7 @@ def _span(operation_name: str, attrs: JsonObject | None = None) -> BillingSettle
 def test_default_document_first_win_single_rule_per_family() -> None:
     doc = default_settlement_rules_document()
     assert doc.application_mode.value == "first_win"
-    assert len(doc.rules) == 14
+    assert len(doc.rules) == 21
 
 
 def test_matches_llm_tracer_with_total_tokens() -> None:

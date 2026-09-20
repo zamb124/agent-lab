@@ -298,8 +298,6 @@ async def _rerank_pool_scores(
             query=query,
             passages=passages,
             timeout_seconds=rr.timeout_seconds,
-            cost_per_1m_tokens=rr.cost_per_1m_tokens,
-            platform_markup=rr.platform_markup,
             billing_resource_id=resolution.billing_resource_id or resolution.model or rr.billing_model_id,
             cost_origin=_runtime_cost_origin(resolution.cost_origin),
             model=resolution.model,

@@ -88,6 +88,7 @@ alwaysApply: true
 |---|---|---|
 | `scripts/check_strict_agent_architecture.py`, `audit_wider_repo_strictness.py` | запрет `getattr(..., default)`, широких типов, фолбеков | этот файл |
 | `analyze_imports.py` | `Total local imports: 0` в `core/` + `apps/` | этот файл |
+| `check_billing_span_canon.py` | `record_usage` только в settlement; каждый span с `pending_settlement` покрыт правилом `default_settlement_rules` | `billing.mdc` |
 | `check_command_owner_catalogs.py`, `check_rest_handlers_call_ops.py` | owner ⇔ каталог `<SVC>_OPERATIONS`; REST-хендлеры COMMAND_WS-сервисов зовут `op_*` (ratchet `rest_handlers_without_op_baseline.json`) | `architecture.mdc` |
 | `check_cross_service_imports.py` | `apps/<a>` не импортирует `apps/<b>` (кроме `*_worker → владелец`, `task_names`, репозиториев/моделей владельца и библиотечных доменов `apps/agent`, `apps/platform_tasks`); долг — ratchet-baseline `scripts/cross_service_imports_baseline.json` | `architecture.mdc` |
 | `check_command_rest_mirror.py`, `check_realtime_canon.py`, `check_platform_events_canon.py` | REST-зеркало каждой команды, `COMMAND_WS_SERVICES`, каталог событий, bus | `architecture.mdc`, `events.mdc` |

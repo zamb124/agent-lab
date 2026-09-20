@@ -27,9 +27,10 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from apps.voice.dependencies import ContainerDep
-from apps.voice.services.voice_usage import record_tts_usage
 from core.ai.runtime import create_voice_tts_streamer
 from core.authz.models import AuthzObject
+from core.billing.service import COST_ORIGIN_PLATFORM
+from core.billing.speech_usage import record_tts_usage_span
 from core.clients.speech_override import (
     SpeechOverride,
     SpeechProviderName,
@@ -266,12 +267,13 @@ async def _record_usage_after_stream(
         company = ctx.active_company
         if company is None:
             raise RuntimeError("voice.synthesize usage requires active company in context")
-        _ = await record_tts_usage(
+        await record_tts_usage_span(
             user=user,
             company=company,
             provider=tts_streamer.provider,
             char_count=len(text),
-            metadata={
+            cost_origin=COST_ORIGIN_PLATFORM,
+            extra_attributes={
                 "endpoint": "voice.synthesize",
                 "total_audio_bytes": total_bytes,
             },

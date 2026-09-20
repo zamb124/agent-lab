@@ -988,9 +988,7 @@ class RerankerRuntimeConfig(BaseModel):
     enabled: bool = True
     provider: str = "provider_litserve"
     api: RerankerApiRuntimeConfig | None = Field(default_factory=RerankerApiRuntimeConfig)
-    # Биллинг (как у embedding в pgvector): оценка по tiktoken, запись через BillingService
-    cost_per_1m_tokens: float = 5.0
-    platform_markup: float = 1.1
+    # Биллинг: span rerank.{model} с quantity в токенах (tiktoken), цена из billing.resource_base_prices.rerank
     billing_model_id: str = "rerank"
 
     @field_validator("provider")
@@ -2503,6 +2501,8 @@ def default_billing_resource_base_prices() -> dict[str, dict[str, float]]:
 
     - llm: модели (трейсы llm.*, flows.llm_resource.*, flows.llm.*). "*" — типично руб/токен.
     - embedding: RAG эмбеддинги (rag.embed.*).
+    - rerank: реранк RAG за токен (spans rerank.{model}, resource из атрибута span; byok — 0).
+    - stt / tts: секунды аудио / символы синтеза per-provider (spans stt.{provider}, tts.{provider}).
     - billing:rub — единица = 1 ₽; quantity из platform.billing.settlement_quantity_rub (OpenRouter USD×usd_to_rub_rate).
     - livekit: поминутное списание — room_minute, egress_composite_minute, egress_segmented_minute
       (см. core/calls/livekit_usage_spans.py); "*" — прочие livekit:*.
@@ -2514,6 +2514,7 @@ def default_billing_resource_base_prices() -> dict[str, dict[str, float]]:
     return {
         "llm": {"*": 0.0001},
         "embedding": {"*": 0.00005},
+        "rerank": {"*": 0.0000055, "byok": 0.0},
         "billing": {"rub": 1.0},
         "voice": {"session_minute": 0.01, "*": 0.0},
         "search": {

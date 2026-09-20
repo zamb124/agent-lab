@@ -76,7 +76,7 @@ Whitelist имён артефактов для озвучивания — `apps/
 ```
 api/        health, session (WS), transcribe (HTTP)
 providers/  streaming_adapters.py — единственная разрешённая обёртка batch-клиентов в стрим
-services/   voice_session, voice_barge_in, voice_chunker, voice_usage, llm_bridge
+services/   voice_session, voice_barge_in, voice_chunker, llm_bridge
 workers/    audio_receiver, stt_worker, tts_worker, audio_sender
 config.py, container.py, dependencies.py, main.py
 ```
@@ -206,7 +206,7 @@ Capabilities `voice.transcribe_audio` / `voice.synthesize_speech` для isolate
 - `tts:<provider>` — за 1 символ (`char_count`).
 - `vad:<provider>` — обычно `0.0`.
 
-`apps/voice/services/voice_usage.py`: `record_stt_usage(user, company, provider, audio_seconds, metadata=None)`, `record_tts_usage(user, company, provider, char_count, metadata=None)` — `UsageType.TOOL_CALL`. Real-time длительность сессии — spans `platform_tracing` (`category=voice`, `resource_name="session_minute"`).
+`core/billing/speech_usage.py`: `record_stt_usage_span(user, company, provider, audio_seconds, cost_origin, extra_attributes=None)` / `record_tts_usage_span(..., char_count, cost_origin, ...)` — billing spans `stt.{provider}` / `tts.{provider}` с `pending_settlement` (`UsageType.TOOL_CALL`, `resource_name` per-provider из атрибута span, правила `stt_audio_seconds` / `tts_characters`); прямой `record_usage` запрещён. Вызовы: `apps/voice/api/transcribe.py`, `synthesize.py`, `apps/flows/src/services/platform_facades.py`, `apps/capability_gateway/services/registry.py`. Real-time длительность сессии — spans `platform_tracing` (`category=voice`, `resource_name="session_minute"`).
 
 ## `<platform-flow-ui>`: голос в браузере
 

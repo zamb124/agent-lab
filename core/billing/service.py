@@ -517,7 +517,7 @@ class BillingService:
 
         usage_type = rule.usage_type
         quantity = quantity_from_span(rule.quantity_from, span)
-        resource_name = rule.resource_name
+        resource_name = rule.resolve_resource_name(span)
 
         if quantity == 0:
             skip_usage_id = f"skipped:zero_quantity:{span_id}:{rule.rule_id}"
