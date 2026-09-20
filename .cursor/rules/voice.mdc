@@ -138,7 +138,7 @@ Pydantic `extra="forbid"`, **request-scope** (создаётся в HTTP-хен�
 
 Колонки: `company_id`, `kind` (`stt` | `tts`; значение `vad` в legacy-строках игнорируется резолвером и API), `provider`, `model`, плюс `voice`/`language`/`sample_rate`/`threshold`/`response_format` как в `SpeechOverride`, `secrets: JSONB?` (per-company, merge через `model_copy` поверх backend-конфига).
 
-**Ключи `secrets`** (allowlist из `apps/frontend/api/voice_providers_catalog_helpers.py:allowed_secret_keys`):
+**Ключи `secrets`** (allowlist из `apps/voice/api/voice_providers_catalog_helpers.py:allowed_secret_keys`):
 
 | provider | ключи |
 |---|---|
@@ -148,7 +148,7 @@ Pydantic `extra="forbid"`, **request-scope** (создаётся в HTTP-хен�
 
 `GET .../voice-providers` возвращает только `secrets_meta` (флаги `*_set`), сырые секреты не отдаёт. `PUT` принимает merge-patch (опускание ключа = «не менять»).
 
-**Каталог для UI** (`VoiceProvidersCatalogDTO`, `op_voice_providers_catalog`): `GET /frontend/api/voice-providers/catalog` и `GET /flows/api/v1/voice-providers/catalog` — тонкий REST одного `op_*`. Flows UI — `flows/voice_providers_catalog_load` (`transport: 'ws'`). Console — `frontend/voice_providers_catalog_load` (HTTP: frontend без command-router). Помимо провайдеров и моделей отдаёт allowlists языков (`speech_language_ids`), частот (`tts_sample_rate_ids`, `litserve_silero_tts_sample_rate_ids`, `vad_sample_rate_ids`), VAD-провайдеров (`vad_provider_ids`), голосов TTS по провайдеру (`tts_litserve_voice_hints[].voice_ids` из `SILERO_V5_RU_SPEAKERS_BY_BUNDLE`, плюс `cloud_ru_tts_voice_ids` / `yandex_tts_voice_ids` / `sber_tts_voice_ids`). Источник констант — `core/clients/speech_provider_catalog.py`; модели и `synthesis_locale` LitServe — из `provider_litserve.infra` при сборке DTO (`core/models/voice_providers_catalog.py`).
+**Каталог для UI** (`VoiceProvidersCatalogDTO`, `op_voice_providers_catalog`): `GET /voice/api/v1/voice-providers/catalog` и `GET /flows/api/v1/voice-providers/catalog` — тонкий REST одного `op_*`. Flows UI — `flows/voice_providers_catalog_load` (`transport: 'ws'`). Console — `voice/voice_providers_catalog_load` (HTTP: voice без command-router). Помимо провайдеров и моделей отдаёт allowlists языков (`speech_language_ids`), частот (`tts_sample_rate_ids`, `litserve_silero_tts_sample_rate_ids`, `vad_sample_rate_ids`), VAD-провайдеров (`vad_provider_ids`), голосов TTS по провайдеру (`tts_litserve_voice_hints[].voice_ids` из `SILERO_V5_RU_SPEAKERS_BY_BUNDLE`, плюс `cloud_ru_tts_voice_ids` / `yandex_tts_voice_ids` / `sber_tts_voice_ids`). Источник констант — `core/clients/speech_provider_catalog.py`; модели и `synthesis_locale` LitServe — из `provider_litserve.infra` при сборке DTO (`core/models/voice_providers_catalog.py`).
 
 ## Базовые клиенты
 
@@ -236,14 +236,14 @@ Sole PDP — `AuthzService`. Session/gateway ACL: `company#can_view` для чт
 
 ## REST/UI per-company override
 
-REST: `apps/frontend/api/company_voice_providers.py`:
+REST: `apps/voice/api/company_voice_providers.py`:
 
 | Метод | Путь | Доступ |
 |---|---|---|
-| `GET` | `/frontend/api/voice-providers/catalog` | любой авторизованный; тот же `op_voice_providers_catalog`, что `/flows/api/v1/voice-providers/catalog` |
-| `GET` | `/frontend/api/companies/{company_id}/voice-providers` | FGA `company#can_view` |
-| `PUT` | `/frontend/api/companies/{company_id}/voice-providers/{kind}` | FGA `require_company_admin`; `kind` только `stt` или `tts` |
-| `DELETE` | `/frontend/api/companies/{company_id}/voice-providers/{kind}` | FGA `require_company_admin`; то же |
+| `GET` | `/voice/api/v1/voice-providers/catalog` | любой авторизованный; тот же `op_voice_providers_catalog`, что `/flows/api/v1/voice-providers/catalog` |
+| `GET` | `/voice/api/v1/companies/{company_id}/voice-providers` | FGA `company#can_view` |
+| `PUT` | `/voice/api/v1/companies/{company_id}/voice-providers/{kind}` | FGA `require_company_admin`; `kind` только `stt` или `tts` |
+| `DELETE` | `/voice/api/v1/companies/{company_id}/voice-providers/{kind}` | FGA `require_company_admin`; то же |
 
 После `PUT`/`DELETE` сервер **обязан** вызвать `invalidate_company_overrides_cache(company_id)` — иначе in-process кэш других подов держит старое до TTL.
 
@@ -282,7 +282,7 @@ GigaAM short-form принимает дорожку **≤25 с** (`length > 25 *
 3. `core/clients/voice_resolver.py` — ветка в `_build_*_client`.
 4. `conf.json` → `platform.billing.resource_base_prices.{stt,tts,vad}.<x>`.
 5. Helm: `_helpers.tpl` (secretKeyRef), `01-platform-secrets.yaml` (stringData), `values.yaml.platformSecrets`, `helm_platform_secrets_json.sh`, `.github/workflows/deploy.yml`, `deploy/github-actions-secrets-checklist.md`.
-6. UI: каталог моделей — `apps/frontend/api/voice_providers_catalog.py`; страница `company-voice-providers-page.js`.
+6. UI: каталог моделей — `apps/voice/api/voice_providers_catalog.py`; ресурсы `core/frontend/static/lib/events/resources/voice-*.resource.js`; страница `company-voice-providers-page.js`.
 7. Тесты: `tests/clients/test_<x>_speech.py` (httpx_mock без monkeypatch), session-scoped fixture для тяжёлых моделей, `pytest.mark.timeout(15)`.
 
 ## Тестирование
@@ -353,21 +353,21 @@ platform_pronunciation_rules (БД, system/superadmin)
 
 | Метод | Путь |
 |---|---|
-| `GET` | `/frontend/api/companies/{company_id}/pronunciation-rules` |
-| `POST` | `/frontend/api/companies/{company_id}/pronunciation-rules` |
-| `PUT` | `/frontend/api/companies/{company_id}/pronunciation-rules/{rule_id}` |
-| `DELETE` | `/frontend/api/companies/{company_id}/pronunciation-rules/{rule_id}` |
-| `POST` | `/frontend/api/companies/{company_id}/pronunciation-rules/test` (dry-run) |
+| `GET` | `/voice/api/v1/companies/{company_id}/pronunciation-rules` |
+| `POST` | `/voice/api/v1/companies/{company_id}/pronunciation-rules` |
+| `PUT` | `/voice/api/v1/companies/{company_id}/pronunciation-rules/{rule_id}` |
+| `DELETE` | `/voice/api/v1/companies/{company_id}/pronunciation-rules/{rule_id}` |
+| `POST` | `/voice/api/v1/companies/{company_id}/pronunciation-rules/test` (dry-run) |
 
 ### REST (platform, superadmin)
 
 | Метод | Путь |
 |---|---|
-| `GET/POST/PUT/DELETE` | `/frontend/api/platform/pronunciation-rules[/{rule_id}]` |
+| `GET/POST/PUT/DELETE` | `/voice/api/v1/platform/pronunciation-rules[/{rule_id}]` |
 
 ### CI
 
-`make check-tts-pipeline` (`scripts/check_tts_pipeline_single_apply.py`) — запрещает прямой импорт `TtsTextPipeline` / `get_tts_text_pipeline` в `apps/**` кроме `apps/frontend/api/company_pronunciation_rules.py` (dry-run).
+`make check-tts-pipeline` (`scripts/check_tts_pipeline_single_apply.py`) — запрещает прямой импорт `TtsTextPipeline` / `get_tts_text_pipeline` в `apps/**` кроме `apps/voice/api/company_pronunciation_rules.py` (dry-run).
 
 ### Bootstrap seed
 

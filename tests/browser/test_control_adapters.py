@@ -5,12 +5,12 @@ from __future__ import annotations
 import pytest
 
 from apps.browser.adapters.stub_control_adapters import AgentBrowserAdapter, BrowserUseAdapter
-from core.clients.browser.control_types import BrowserCapabilityError
 from apps.browser.engine.types import (
     BrowserAcquireRequest,
     BrowserRuntimeSettingsView,
     ContextSignature,
 )
+from core.clients.browser.control_types import BrowserCapabilityError
 from tests.browser._runtime import build_test_facade
 
 

@@ -13,12 +13,12 @@ from httpx import AsyncClient
 
 @pytest.mark.asyncio
 async def test_company_voice_providers_put_litserve_null_model_accepted(
-    frontend_client: AsyncClient,
+    voice_client: AsyncClient,
     auth_headers_system,
 ):
     """`model=null` для litserve должен сохраняться (deployment-default)."""
-    response = await frontend_client.put(
-        "/frontend/api/companies/system/voice-providers/stt",
+    response = await voice_client.put(
+        "/voice/api/v1/companies/system/voice-providers/stt",
         headers=auth_headers_system,
         json={
             "provider": "litserve",
@@ -36,8 +36,8 @@ async def test_company_voice_providers_put_litserve_null_model_accepted(
     assert body["provider"] == "litserve"
     assert body["model"] is None
 
-    list_resp = await frontend_client.get(
-        "/frontend/api/companies/system/voice-providers",
+    list_resp = await voice_client.get(
+        "/voice/api/v1/companies/system/voice-providers",
         headers=auth_headers_system,
     )
     assert list_resp.status_code == 200
@@ -50,11 +50,11 @@ async def test_company_voice_providers_put_litserve_null_model_accepted(
 
 @pytest.mark.asyncio
 async def test_company_voice_providers_put_litserve_unknown_model_rejected_linnex(
-    frontend_client: AsyncClient,
+    voice_client: AsyncClient,
     auth_headers_system,
 ) -> None:
-    response = await frontend_client.put(
-        "/frontend/api/companies/system/voice-providers/stt",
+    response = await voice_client.put(
+        "/voice/api/v1/companies/system/voice-providers/stt",
         headers={**auth_headers_system, "Host": "linnex.io"},
         json={
             "provider": "litserve",
@@ -74,12 +74,12 @@ async def test_company_voice_providers_put_litserve_unknown_model_rejected_linne
 
 @pytest.mark.asyncio
 async def test_company_voice_providers_put_litserve_unknown_model_rejected(
-    frontend_client: AsyncClient,
+    voice_client: AsyncClient,
     auth_headers_system,
 ):
     """litserve с моделью, которой нет в каталоге, → 400."""
-    response = await frontend_client.put(
-        "/frontend/api/companies/system/voice-providers/stt",
+    response = await voice_client.put(
+        "/voice/api/v1/companies/system/voice-providers/stt",
         headers=auth_headers_system,
         json={
             "provider": "litserve",
@@ -100,12 +100,12 @@ async def test_company_voice_providers_put_litserve_unknown_model_rejected(
 
 @pytest.mark.asyncio
 async def test_company_voice_providers_delete_clears_override(
-    frontend_client: AsyncClient,
+    voice_client: AsyncClient,
     auth_headers_system,
 ):
     """DELETE снимает override и в списке не остаётся записи для kind."""
-    await frontend_client.put(
-        "/frontend/api/companies/system/voice-providers/tts",
+    await voice_client.put(
+        "/voice/api/v1/companies/system/voice-providers/tts",
         headers=auth_headers_system,
         json={
             "provider": "litserve",
@@ -118,14 +118,14 @@ async def test_company_voice_providers_delete_clears_override(
         },
     )
 
-    delete_resp = await frontend_client.delete(
-        "/frontend/api/companies/system/voice-providers/tts",
+    delete_resp = await voice_client.delete(
+        "/voice/api/v1/companies/system/voice-providers/tts",
         headers=auth_headers_system,
     )
     assert delete_resp.status_code == 200, delete_resp.text
 
-    list_resp = await frontend_client.get(
-        "/frontend/api/companies/system/voice-providers",
+    list_resp = await voice_client.get(
+        "/voice/api/v1/companies/system/voice-providers",
         headers=auth_headers_system,
     )
     assert list_resp.status_code == 200
@@ -136,12 +136,12 @@ async def test_company_voice_providers_delete_clears_override(
 
 @pytest.mark.asyncio
 async def test_company_voice_providers_put_vad_rejected(
-    frontend_client: AsyncClient,
+    voice_client: AsyncClient,
     auth_headers_system,
 ) -> None:
     """PUT для kind=vad — 410, per-company VAD отключён."""
-    response = await frontend_client.put(
-        "/frontend/api/companies/system/voice-providers/vad",
+    response = await voice_client.put(
+        "/voice/api/v1/companies/system/voice-providers/vad",
         headers=auth_headers_system,
         json={
             "provider": "litserve",
@@ -159,11 +159,11 @@ async def test_company_voice_providers_put_vad_rejected(
 
 @pytest.mark.asyncio
 async def test_company_voice_providers_delete_vad_rejected(
-    frontend_client: AsyncClient,
+    voice_client: AsyncClient,
     auth_headers_system,
 ) -> None:
-    response = await frontend_client.delete(
-        "/frontend/api/companies/system/voice-providers/vad",
+    response = await voice_client.delete(
+        "/voice/api/v1/companies/system/voice-providers/vad",
         headers=auth_headers_system,
     )
     assert response.status_code == 410

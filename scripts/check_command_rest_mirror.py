@@ -625,6 +625,13 @@ def main() -> int:
     factories_total = 0
     routes_total = 0
 
+    routes_by_service: dict[str, set[tuple[str, str]]] = {}
+
+    def _routes_of(service_name: str) -> set[tuple[str, str]]:
+        if service_name not in routes_by_service:
+            routes_by_service[service_name] = _collect_fastapi_routes(APPS / service_name)
+        return routes_by_service[service_name]
+
     for svc_dir in services:
         svc = svc_dir.name
         if args.app and svc != args.app:
@@ -636,8 +643,7 @@ def main() -> int:
         # но всё ещё собираем roughCount.
         is_canon = svc in FACTORY_CANON_SERVICES
 
-        routes = _collect_fastapi_routes(svc_dir)
-        routes_total += len(routes)
+        routes_total += len(_routes_of(svc))
         _collect_publish_event_types(svc_dir)
 
         factory_files = list(sorted(ui_resources.rglob("*.js"))) if ui_resources.exists() else []
@@ -678,6 +684,11 @@ def main() -> int:
                 transport = rec["transport"]
                 rest_entries = _extract_rest_entries(rec["restMirrorBlock"])
                 owner = (name or "").split("/", 1)[0]
+                # Фабрика в UI одного сервиса может звать REST владельца
+                # (например, страница scheduler во frontend): REST-зеркало
+                # ищем у владельца из имени фабрики.
+                route_owner = owner if (APPS / owner).is_dir() else svc
+                routes = _routes_of(route_owner)
                 if (
                     owner in COMMAND_WS_SERVICES
                     and kind in {"createAsyncOp", "createResourceCollection", "createCursorList"}
@@ -704,7 +715,7 @@ def main() -> int:
                     for op, (method, path_pattern) in expected.items():
                         if not _route_exists(routes, method, path_pattern):
                             errors.append(
-                                f"{prefix}.{op}: REST-зеркало {method} {path_pattern} не найдено в apps/{svc}/api/**"
+                                f"{prefix}.{op}: REST-зеркало {method} {path_pattern} не найдено в apps/{route_owner}/api/**"
                             )
                 elif kind == "createCursorList":
                     if rest_entries.get("_single"):
@@ -716,7 +727,7 @@ def main() -> int:
                         continue
                     if not _route_exists(routes, method, path_pattern):
                         errors.append(
-                            f"{prefix}: REST-зеркало {method} {path_pattern} не найдено в apps/{svc}/api/**"
+                            f"{prefix}: REST-зеркало {method} {path_pattern} не найдено в apps/{route_owner}/api/**"
                         )
                 elif kind == "createAsyncOp":
                     if not rest_entries:
@@ -742,7 +753,7 @@ def main() -> int:
                         continue
                     if not _route_exists(routes, method, path_pattern):
                         errors.append(
-                            f"{prefix}: REST-зеркало {method} {path_pattern} не найдено в apps/{svc}/api/**"
+                            f"{prefix}: REST-зеркало {method} {path_pattern} не найдено в apps/{route_owner}/api/**"
                         )
 
         # Push <-> REST конфликт. Имена push: `<svc>/<entity>/<verb>`.

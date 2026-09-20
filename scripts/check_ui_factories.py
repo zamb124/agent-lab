@@ -42,17 +42,12 @@ ROOT = Path(__file__).resolve().parent.parent
 APPS = ROOT / "apps"
 I18N = ROOT / "core" / "i18n" / "translations"
 CORE_FACTORY_RESOURCES = ROOT / "core" / "frontend" / "static" / "lib" / "events" / "resources"
-CORE_FACTORY_FILE_SERVICE = {
-    "rag-namespaces.resource.js": "rag",
-    "rag-documents.resource.js": "rag",
-    "rag-document-status.resource.js": "rag",
-    "rag-search.resource.js": "rag",
-    "rag-providers.resource.js": "rag",
-    "office-catalog-items.resource.js": "office",
-    "office-documents-browse.resource.js": "office",
-    "flows-agent-toolkits.resource.js": "flows",
-    "flows-flows-list.resource.js": "flows",
-}
+# Фабрики платформенного ядра (файлы, устройства LinnexAgent) — владелец 'platform'.
+CORE_PLATFORM_OWNER = "platform"
+
+# Общие ресурсы владельцев доменов: файл `core/frontend/static/lib/events/resources/*.resource.js`
+# может содержать фабрики одного или нескольких владельцев; владелец каждой фабрики — префикс
+# `name` ('<svc>/...'), и он обязан быть существующим сервисом `apps/<svc>`.
 
 FACTORY_KINDS = (
     "createAsyncOp",
@@ -326,11 +321,8 @@ def main() -> int:
             if any(kind + "(" in text for kind in FACTORY_KINDS):
                 targets.append(path)
 
-    for factory_name, mapped_svc in CORE_FACTORY_FILE_SERVICE.items():
-        if args.app and args.app != mapped_svc:
-            continue
-        core_path = CORE_FACTORY_RESOURCES / factory_name
-        if core_path.exists():
+    if CORE_FACTORY_RESOURCES.exists():
+        for core_path in sorted(CORE_FACTORY_RESOURCES.glob("*.resource.js")):
             targets.append(core_path)
 
     i18n_index = _load_i18n_index()
@@ -346,18 +338,28 @@ def main() -> int:
 
     for path in targets:
         rel = path.relative_to(ROOT)
-        if path.is_relative_to(CORE_FACTORY_RESOURCES):
-            mapped_svc = CORE_FACTORY_FILE_SERVICE.get(path.name)
-            if mapped_svc is None:
-                errors.append(f"{rel}: core factory without service mapping")
-                continue
-            svc_name = mapped_svc
-        else:
-            svc_name = path.relative_to(APPS).parts[0]
+        is_core_resource = path.is_relative_to(CORE_FACTORY_RESOURCES)
+        file_svc_name = "" if is_core_resource else path.relative_to(APPS).parts[0]
         for rec in _parse_factories(path):
             factories_total += 1
+            svc_name = file_svc_name
+            if is_core_resource:
+                owner_part = (rec["name"] or "").partition("/")[0]
+                if owner_part != CORE_PLATFORM_OWNER and not (APPS / owner_part).is_dir():
+                    errors.append(
+                        f"{rel}:{rec['line']} {rec['kind']}: владелец '{owner_part}' из name "
+                        f"'{rec['name']}' не является сервисом apps/<svc>"
+                    )
+                    continue
+                svc_name = owner_part
+            if args.app and args.app != svc_name:
+                continue
             rec["path"] = rel
-            factories_by_svc[svc_name].append(rec)
+            if not is_core_resource:
+                # Регистрацию в `static factories` проверяем только для локальных
+                # фабрик сервиса: общие ресурсы core регистрирует PlatformApp или
+                # каждый потребитель явно.
+                factories_by_svc[svc_name].append(rec)
             kind = rec["kind"]
             name = rec["name"]
             line = rec["line"]

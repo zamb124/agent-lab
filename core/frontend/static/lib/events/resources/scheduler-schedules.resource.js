@@ -1,6 +1,6 @@
 /**
  * Ресурсы scheduler — расписания платформенного scheduler (cron / interval / one-time)
- * через прокси `/frontend/api/scheduler/*`.
+ * напрямую через REST владельца `/scheduler/api/v1/schedules/*`.
  *
  * Состав:
  *   - schedulerTasksResource: createResourceCollection (list, create) — основная коллекция
@@ -17,15 +17,15 @@
 import {
     createResourceCollection,
     createAsyncOp,
-} from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
-import { CoreEvents } from '@platform/lib/events/contract.js';
+} from '../index.js';
+import { httpRequest } from '../http.js';
+import { CoreEvents } from '../contract.js';
 
-const BASE = '/frontend/api/scheduler/schedules';
+const BASE = '/scheduler/api/v1/schedules';
 
 export const schedulerTasksResource = createResourceCollection({
-    name: 'frontend/scheduler_tasks',
-    baseUrl: '/frontend/api/scheduler/schedules',
+    name: 'scheduler/schedule_tasks',
+    baseUrl: '/scheduler/api/v1/schedules',
     idField: 'schedule_task_id',
     operations: ['list', 'create'],
     toastKeys: {
@@ -45,9 +45,9 @@ function _reloadList(ctx) {
 }
 
 export const schedulerPauseOp = createAsyncOp({
-    name: 'frontend/scheduler_pause',
+    name: 'scheduler/schedule_pause',
     silent: true,
-    restMirror: { method: 'POST', path: '/frontend/api/scheduler/schedules/:schedule_task_id/pause' },
+    restMirror: { method: 'POST', path: '/scheduler/api/v1/schedules/:schedule_task_id/pause' },
     request: async ({ payload }) => {
         const scheduleTaskId = payload && payload.schedule_task_id;
         if (!scheduleTaskId) throw new Error('schedulerPauseOp: schedule_task_id required');
@@ -60,9 +60,9 @@ export const schedulerPauseOp = createAsyncOp({
 });
 
 export const schedulerResumeOp = createAsyncOp({
-    name: 'frontend/scheduler_resume',
+    name: 'scheduler/schedule_resume',
     silent: true,
-    restMirror: { method: 'POST', path: '/frontend/api/scheduler/schedules/:schedule_task_id/resume' },
+    restMirror: { method: 'POST', path: '/scheduler/api/v1/schedules/:schedule_task_id/resume' },
     request: async ({ payload }) => {
         const scheduleTaskId = payload && payload.schedule_task_id;
         if (!scheduleTaskId) throw new Error('schedulerResumeOp: schedule_task_id required');
@@ -75,9 +75,9 @@ export const schedulerResumeOp = createAsyncOp({
 });
 
 export const schedulerCancelOp = createAsyncOp({
-    name: 'frontend/scheduler_cancel',
+    name: 'scheduler/schedule_cancel',
     silent: true,
-    restMirror: { method: 'POST', path: '/frontend/api/scheduler/schedules/:schedule_task_id/cancel' },
+    restMirror: { method: 'POST', path: '/scheduler/api/v1/schedules/:schedule_task_id/cancel' },
     request: async ({ payload }) => {
         const scheduleTaskId = payload && payload.schedule_task_id;
         if (!scheduleTaskId) throw new Error('schedulerCancelOp: schedule_task_id required');
@@ -90,9 +90,9 @@ export const schedulerCancelOp = createAsyncOp({
 });
 
 export const schedulerRunNowOp = createAsyncOp({
-    name: 'frontend/scheduler_run_now',
+    name: 'scheduler/schedule_run_now',
     silent: true,
-    restMirror: { method: 'POST', path: '/frontend/api/scheduler/schedules/:schedule_task_id/run-now' },
+    restMirror: { method: 'POST', path: '/scheduler/api/v1/schedules/:schedule_task_id/run-now' },
     request: async ({ payload }) => {
         const scheduleTaskId = payload && payload.schedule_task_id;
         if (!scheduleTaskId) throw new Error('schedulerRunNowOp: schedule_task_id required');
@@ -112,9 +112,9 @@ export const schedulerRunNowOp = createAsyncOp({
 });
 
 export const schedulerRedisOp = createAsyncOp({
-    name: 'frontend/scheduler_redis',
+    name: 'scheduler/schedule_redis',
     silent: true,
-    restMirror: { method: 'GET', path: '/frontend/api/scheduler/schedules/:schedule_task_id/redis' },
+    restMirror: { method: 'GET', path: '/scheduler/api/v1/schedules/:schedule_task_id/redis' },
     request: async ({ payload }) => {
         const scheduleTaskId = payload && payload.schedule_task_id;
         if (!scheduleTaskId) throw new Error('schedulerRedisOp: schedule_task_id required');

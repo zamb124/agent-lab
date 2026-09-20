@@ -28,12 +28,6 @@ from apps.frontend.api.auth import router as auth_router
 from apps.frontend.api.authz_explorer import router as authz_explorer_router
 from apps.frontend.api.billing import router as billing_router
 from apps.frontend.api.companies import router as companies_router
-from apps.frontend.api.company_pronunciation_rules import (
-    router as company_pronunciation_rules_router,
-)
-from apps.frontend.api.company_voice_providers import (
-    router as company_voice_providers_router,
-)
 from apps.frontend.api.crawl_report import router as crawl_report_router
 from apps.frontend.api.design_system import router as design_system_router
 from apps.frontend.api.embed_configs import router as embed_configs_router
@@ -45,21 +39,16 @@ from apps.frontend.api.platform_billing import router as platform_billing_router
 from apps.frontend.api.platform_llm_model_scores import (
     router as platform_llm_model_scores_router,
 )
-from apps.frontend.api.platform_pronunciation_rules import (
-    router as platform_pronunciation_rules_router,
-)
 from apps.frontend.api.platform_tracing import router as platform_tracing_router
 from apps.frontend.api.public_docs_assistant import router as public_docs_assistant_router
 from apps.frontend.api.public_embed_page import router as public_embed_page_router
 from apps.frontend.api.public_landing_agents import router as public_landing_agents_router
 from apps.frontend.api.public_search import router as public_search_router
 from apps.frontend.api.public_site import router as public_site_router
-from apps.frontend.api.scheduler import router as scheduler_router
 from apps.frontend.api.search_providers import router as search_providers_router
 from apps.frontend.api.services import router as services_router
 from apps.frontend.api.settings import router as settings_router
 from apps.frontend.api.team import router as team_router
-from apps.frontend.api.voice_providers_catalog import router as voice_providers_catalog_router
 from apps.frontend.config import (
     FrontendSettings,
     get_frontend_settings,
@@ -335,10 +324,6 @@ app = create_service_app(
         agent_settings_router,
         agent_tunnel_router,
         companies_router,
-        company_voice_providers_router,
-        company_pronunciation_rules_router,
-        platform_pronunciation_rules_router,
-        voice_providers_catalog_router,
         embed_configs_router,
         public_embed_page_router,
         public_landing_agents_router,
@@ -356,7 +341,6 @@ app = create_service_app(
         ai_providers_router,
         search_providers_router,
         services_router,
-        scheduler_router,
         leads_router,
         lead_requests_router,
         platform_tracing_router,

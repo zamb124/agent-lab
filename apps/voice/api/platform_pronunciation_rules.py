@@ -16,9 +16,10 @@ from typing import ClassVar, Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.frontend.dependencies import ContainerDep, require_frontend_context
+from apps.voice.dependencies import ContainerDep
 from core.ai.runtime import invalidate_voice_platform_pronunciation_cache
 from core.clients.tts_pronunciation.models import PronunciationRuleKind
+from core.context import require_context
 from core.db.models.platform import PlatformPronunciationRule
 from core.logging import get_logger
 from core.models.identity_models import User
@@ -26,7 +27,7 @@ from core.models.identity_models import User
 logger = get_logger(__name__)
 
 router = APIRouter(
-    prefix="/api/platform/pronunciation-rules",
+    prefix="/api/v1/platform/pronunciation-rules",
     tags=["frontend", "platform", "pronunciation"],
 )
 
@@ -92,7 +93,7 @@ class PlatformPronunciationRulesListResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 async def _require_superadmin(container: ContainerDep) -> User:
-    context = require_frontend_context()
+    context = require_context()
     user = context.user
     company = context.active_company
     if company is None or company.company_id != "system":

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from tests.core.files.corpus.models import CORPUS_DIR, CorpusFile
 from core.files.reader.models import FileReadKind
+from tests.core.files.corpus.models import CorpusFile
 
 CORPUS: tuple[CorpusFile, ...] = (
     CorpusFile("2023-half-year-analyses-by-segment.xlsx", FileReadKind.SPREADSHEET),

@@ -79,7 +79,7 @@ export class FrontendCreateSchedulerTaskModal extends PlatformFormModal {
         this._timezone = 'UTC';
         this._payloadJson = '{}';
         this.size = 'lg';
-        this._tasks = this.useResource('frontend/scheduler_tasks');
+        this._tasks = this.useResource('scheduler/schedule_tasks');
     }
 
     willUpdate(changed) {

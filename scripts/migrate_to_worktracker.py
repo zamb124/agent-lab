@@ -27,13 +27,13 @@ from datetime import date, datetime, time, timezone
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from core.worktracker.access_service import WorkQueueAccessService
 from core.authz.factory import build_authz_service
 from core.config import get_settings
 from core.files.file_attachments import minimal_file_refs_from_file_ids
 from core.logging import get_logger
 from core.types import JsonObject
 from core.utils.time import utcnow
+from core.worktracker.access_service import WorkQueueAccessService
 from core.worktracker.db import WorktrackerDatabase
 from core.worktracker.models import (
     CrmEntityLink,

@@ -8,13 +8,13 @@ import uuid
 
 import pytest
 
-from core.clients.browser.control_types import BrowserCapabilityError
 from apps.browser.engine.types import (
     BrowserAcquireRequest,
     BrowserFetchRequest,
     BrowserRuntimeSettingsView,
     ContextSignature,
 )
+from core.clients.browser.control_types import BrowserCapabilityError
 from tests.browser._runtime import build_test_facade
 from tests.browser.cdp_local import ensure_cdp_url
 

@@ -216,8 +216,8 @@ def _render_generated(entries: tuple[GeneratedCorpusFile, ...], reader_paths: li
         "",
         "from __future__ import annotations",
         "",
-        "from tests.core.files.corpus.models import CORPUS_DIR, CorpusFile",
         "from core.files.reader.models import FileReadKind",
+        "from tests.core.files.corpus.models import CorpusFile",
         "",
         "CORPUS: tuple[CorpusFile, ...] = (",
     ]

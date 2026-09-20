@@ -2,10 +2,10 @@
  * Per-company override провайдеров речи (`company_voice_providers`).
  *
  * Бэкенд:
- *   GET    /frontend/api/companies/{company_id}/voice-providers        → { company_id, items[] }
- *   PUT    /frontend/api/companies/{company_id}/voice-providers/{kind} → item
- *   DELETE /frontend/api/companies/{company_id}/voice-providers/{kind} → { deleted }
- *   GET    /frontend/api/voice-providers/catalog                       → VoiceProvidersCatalogDTO
+ *   GET    /voice/api/v1/companies/{company_id}/voice-providers        → { company_id, items[] }
+ *   PUT    /voice/api/v1/companies/{company_id}/voice-providers/{kind} → item
+ *   DELETE /voice/api/v1/companies/{company_id}/voice-providers/{kind} → { deleted }
+ *   GET    /voice/api/v1/voice-providers/catalog                       → VoiceProvidersCatalogDTO
  *
  * Slice (`frontend/companyVoiceProviders`):
  *   { byKind: { stt|tts: item | null }, loading, error, savingKind, removingKind }
@@ -14,8 +14,8 @@
  * показываются как «не задано (используется deployment-default)».
  */
 
-import { createAsyncOp } from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
+import { createAsyncOp } from '../index.js';
+import { httpRequest } from '../http.js';
 
 export { companyVoiceProvidersCatalogLoadOp } from '@platform/lib/events/resources/voice-providers-catalog.resource.js';
 
@@ -76,11 +76,11 @@ function _normalizeItem(raw) {
 }
 
 export const companyVoiceProvidersLoadOp = createAsyncOp({
-    name: 'frontend/company_voice_providers_load',
+    name: 'voice/company_voice_providers_load',
     silent: true,
     restMirror: {
         method: 'GET',
-        path: '/frontend/api/companies/:company_id/voice-providers',
+        path: '/voice/api/v1/companies/:company_id/voice-providers',
     },
     request: async ({ payload }) => {
         if (!payload || typeof payload.company_id !== 'string' || payload.company_id.length === 0) {
@@ -88,7 +88,7 @@ export const companyVoiceProvidersLoadOp = createAsyncOp({
         }
         const response = await httpRequest({
             method: 'GET',
-            url: `/frontend/api/companies/${encodeURIComponent(payload.company_id)}/voice-providers`,
+            url: `/voice/api/v1/companies/${encodeURIComponent(payload.company_id)}/voice-providers`,
         });
         if (!Array.isArray(response.items)) {
             throw new Error('company_voice_providers_load: response.items required');
@@ -121,12 +121,12 @@ export const companyVoiceProvidersLoadOp = createAsyncOp({
 });
 
 export const companyVoiceProvidersUpsertOp = createAsyncOp({
-    name: 'frontend/company_voice_providers_upsert',
+    name: 'voice/company_voice_providers_upsert',
     successToastKey: 'frontend:company_voice_providers_page.toast_saved',
     errorToastKey: 'frontend:company_voice_providers_page.err_save_failed',
     restMirror: {
         method: 'PUT',
-        path: '/frontend/api/companies/:company_id/voice-providers/:kind',
+        path: '/voice/api/v1/companies/:company_id/voice-providers/:kind',
     },
     request: async ({ payload }) => {
         if (!payload || typeof payload.company_id !== 'string' || payload.company_id.length === 0) {
@@ -153,7 +153,7 @@ export const companyVoiceProvidersUpsertOp = createAsyncOp({
         }
         const response = await httpRequest({
             method: 'PUT',
-            url: `/frontend/api/companies/${encodeURIComponent(payload.company_id)}/voice-providers/${encodeURIComponent(payload.kind)}`,
+            url: `/voice/api/v1/companies/${encodeURIComponent(payload.company_id)}/voice-providers/${encodeURIComponent(payload.kind)}`,
             body,
         });
         return _normalizeItem(response);
@@ -161,12 +161,12 @@ export const companyVoiceProvidersUpsertOp = createAsyncOp({
 });
 
 export const companyVoiceProvidersRemoveOp = createAsyncOp({
-    name: 'frontend/company_voice_providers_remove',
+    name: 'voice/company_voice_providers_remove',
     successToastKey: 'frontend:company_voice_providers_page.toast_removed',
     errorToastKey: 'frontend:company_voice_providers_page.err_remove_failed',
     restMirror: {
         method: 'DELETE',
-        path: '/frontend/api/companies/:company_id/voice-providers/:kind',
+        path: '/voice/api/v1/companies/:company_id/voice-providers/:kind',
     },
     request: async ({ payload }) => {
         if (!payload || typeof payload.company_id !== 'string' || payload.company_id.length === 0) {
@@ -177,7 +177,7 @@ export const companyVoiceProvidersRemoveOp = createAsyncOp({
         }
         const response = await httpRequest({
             method: 'DELETE',
-            url: `/frontend/api/companies/${encodeURIComponent(payload.company_id)}/voice-providers/${encodeURIComponent(payload.kind)}`,
+            url: `/voice/api/v1/companies/${encodeURIComponent(payload.company_id)}/voice-providers/${encodeURIComponent(payload.kind)}`,
         });
         return { kind: payload.kind, deleted: !!response.deleted };
     },

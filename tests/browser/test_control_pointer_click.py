@@ -7,8 +7,8 @@ import pytest
 from fastapi import HTTPException
 
 from apps.browser.api import control
-from core.clients.browser.control_types import ControlPointerClickBody, ControlPointerTextBody
 from core.authz.models import AuthzObject
+from core.clients.browser.control_types import ControlPointerClickBody, ControlPointerTextBody
 
 
 @pytest.fixture(scope="session", autouse=True)

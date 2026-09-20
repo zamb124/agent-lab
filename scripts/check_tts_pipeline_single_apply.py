@@ -19,7 +19,7 @@ _ALLOWED_FILES = frozenset([
     "core/clients/tts_pronunciation/pipeline.py",
     "core/clients/tts_pronunciation/__init__.py",
     # dry-run REST эндпоинт: единственное легальное использование pipeline вне PronunciationAwareTTSClient
-    "apps/frontend/api/company_pronunciation_rules.py",
+    "apps/voice/api/company_pronunciation_rules.py",
 ])
 
 _FORBIDDEN_PATTERNS = [

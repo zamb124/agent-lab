@@ -77,6 +77,7 @@ _SERVICE_PREFIXES: tuple[str, ...] = (
     "secrets",
     "wiki",
     "realtime",
+    "scheduler",
 )
 
 # Где публичный первый сегмент пути не совпадает с ключом get_service_url / SERVER__*_SERVICE_URL.

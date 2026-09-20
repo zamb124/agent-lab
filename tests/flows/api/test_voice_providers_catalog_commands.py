@@ -9,7 +9,7 @@ import pytest
 from httpx import AsyncClient
 
 from apps.flows.src.container import FlowContainer, get_container
-from apps.frontend.container import FrontendContainer, get_frontend_container
+from apps.voice.container import VoiceContainer, get_voice_container
 from core.context import reset_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import User
@@ -59,14 +59,14 @@ async def test_flows_voice_providers_catalog_rest_match_op(
     assert http.json() == op_result.model_dump(mode="json")
 
 
-async def test_frontend_voice_providers_catalog_rest_match_op(
-    frontend_client: AsyncClient,
+async def test_voice_providers_catalog_rest_match_op(
+    voice_client: AsyncClient,
     system_user_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
-    container: FrontendContainer = get_frontend_container()
-    http = await frontend_client.get(
-        "/frontend/api/voice-providers/catalog",
+    container: VoiceContainer = get_voice_container()
+    http = await voice_client.get(
+        "/voice/api/v1/voice-providers/catalog",
         headers=auth_headers_system,
     )
     assert http.status_code == 200, http.text

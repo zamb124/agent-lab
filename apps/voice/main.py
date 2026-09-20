@@ -2,10 +2,16 @@
 
 from fastapi import FastAPI
 
+from apps.voice.api.company_pronunciation_rules import router as company_pronunciation_rules_router
+from apps.voice.api.company_voice_providers import router as company_voice_providers_router
 from apps.voice.api.health import health_router
+from apps.voice.api.platform_pronunciation_rules import (
+    router as platform_pronunciation_rules_router,
+)
 from apps.voice.api.session import router as voice_session_router
 from apps.voice.api.synthesize import synthesize_router
 from apps.voice.api.transcribe import transcribe_router
+from apps.voice.api.voice_providers_catalog import router as voice_providers_catalog_router
 from apps.voice.config import VoiceServiceSettings, get_voice_settings
 from apps.voice.container import VoiceContainer, get_voice_container
 from core.app import create_service_app
@@ -40,6 +46,10 @@ app = create_service_app(
         voice_session_router,
         transcribe_router,
         synthesize_router,
+        company_voice_providers_router,
+        company_pronunciation_rules_router,
+        platform_pronunciation_rules_router,
+        voice_providers_catalog_router,
     ],
     on_startup=on_startup,
     cors_origins=["*"],

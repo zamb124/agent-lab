@@ -48,7 +48,7 @@ describe('voice-providers-catalog resource', () => {
     it('restMirror, transport и commandType', () => {
         expect(companyVoiceProvidersCatalogLoadOp.restMirror).toEqual({
             method: 'GET',
-            path: '/frontend/api/voice-providers/catalog',
+            path: '/voice/api/v1/voice-providers/catalog',
         });
         expect(companyVoiceProvidersCatalogLoadOp.transport).toBe('http');
         expect(flowsVoiceProvidersCatalogLoadOp.restMirror).toEqual({
@@ -59,7 +59,7 @@ describe('voice-providers-catalog resource', () => {
         expect(flowsVoiceProvidersCatalogLoadOp.commandType).toBe(
             'flows/voice_providers/catalog_requested',
         );
-        expect(companyVoiceProvidersCatalogLoadOp.name).toBe('frontend/voice_providers_catalog_load');
+        expect(companyVoiceProvidersCatalogLoadOp.name).toBe('voice/voice_providers_catalog_load');
         expect(flowsVoiceProvidersCatalogLoadOp.name).toBe('flows/voice_providers_catalog_load');
     });
 
@@ -67,7 +67,7 @@ describe('voice-providers-catalog resource', () => {
         const catalog = minimalCatalogPayload();
         fetchMock.respondJson(
             'GET',
-            '/frontend/api/voice-providers/catalog',
+            '/voice/api/v1/voice-providers/catalog',
             catalog,
         );
         const dispatched = [];
@@ -83,6 +83,6 @@ describe('voice-providers-catalog resource', () => {
         const ok = dispatched.find((d) => d.type === companyVoiceProvidersCatalogLoadOp.events.SUCCEEDED);
         expect(ok).toBeTruthy();
         expect(ok.payload.result).toEqual(catalog);
-        expect(fetchMock.calls[0].url).toBe('/frontend/api/voice-providers/catalog');
+        expect(fetchMock.calls[0].url).toBe('/voice/api/v1/voice-providers/catalog');
     });
 });

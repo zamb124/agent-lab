@@ -1,7 +1,7 @@
 /**
  * Каталог провайдеров речи.
  * Flows editor: WS `flows/voice_providers/catalog_requested`.
- * Console: HTTP GET /frontend/api/voice-providers/catalog (frontend без command-router).
+ * Console: HTTP GET /voice/api/v1/voice-providers/catalog (frontend без command-router).
  * Оба REST зовут один `op_voice_providers_catalog`.
  */
 
@@ -9,16 +9,16 @@ import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
 
 export const companyVoiceProvidersCatalogLoadOp = createAsyncOp({
-    name: 'frontend/voice_providers_catalog_load',
+    name: 'voice/voice_providers_catalog_load',
     silent: true,
     transport: 'http',
     restMirror: {
         method: 'GET',
-        path: '/frontend/api/voice-providers/catalog',
+        path: '/voice/api/v1/voice-providers/catalog',
     },
     request: async () => httpRequest({
         method: 'GET',
-        url: '/frontend/api/voice-providers/catalog',
+        url: '/voice/api/v1/voice-providers/catalog',
     }),
 });
 

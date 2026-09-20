@@ -113,12 +113,12 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
 
     constructor() {
         super();
-        this._tasks = this.useResource('frontend/scheduler_tasks');
-        this._pause = this.useOp('frontend/scheduler_pause');
-        this._resume = this.useOp('frontend/scheduler_resume');
-        this._cancelOp = this.useOp('frontend/scheduler_cancel');
-        this._runNowOp = this.useOp('frontend/scheduler_run_now');
-        this._redis = this.useOp('frontend/scheduler_redis');
+        this._tasks = this.useResource('scheduler/schedule_tasks');
+        this._pause = this.useOp('scheduler/schedule_pause');
+        this._resume = this.useOp('scheduler/schedule_resume');
+        this._cancelOp = this.useOp('scheduler/schedule_cancel');
+        this._runNowOp = this.useOp('scheduler/schedule_run_now');
+        this._redis = this.useOp('scheduler/schedule_redis');
         this._loaded = false;
         this._filterStatus = '';
         this._filterService = '';

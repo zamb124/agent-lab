@@ -2,18 +2,18 @@
  * Per-company правила произношения TTS.
  *
  * Бэкенд:
- *   GET    /frontend/api/companies/{company_id}/pronunciation-rules       → { company_id, items[] }
- *   POST   /frontend/api/companies/{company_id}/pronunciation-rules       → item (201)
- *   PUT    /frontend/api/companies/{company_id}/pronunciation-rules/{id}  → item
- *   DELETE /frontend/api/companies/{company_id}/pronunciation-rules/{id}  → { deleted }
- *   POST   /frontend/api/companies/{company_id}/pronunciation-rules/test  → { original, transformed, changed }
+ *   GET    /voice/api/v1/companies/{company_id}/pronunciation-rules       → { company_id, items[] }
+ *   POST   /voice/api/v1/companies/{company_id}/pronunciation-rules       → item (201)
+ *   PUT    /voice/api/v1/companies/{company_id}/pronunciation-rules/{id}  → item
+ *   DELETE /voice/api/v1/companies/{company_id}/pronunciation-rules/{id}  → { deleted }
+ *   POST   /voice/api/v1/companies/{company_id}/pronunciation-rules/test  → { original, transformed, changed }
  *
  * Slice (`frontend/companyPronunciationRules`):
  *   { items: [], loading, error, saving, removing }
  */
 
-import { createAsyncOp } from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
+import { createAsyncOp } from '../index.js';
+import { httpRequest } from '../http.js';
 
 const VALID_KINDS = ['alias', 'regex', 'stress'];
 
@@ -43,11 +43,11 @@ function _normalizeRule(raw) {
 }
 
 export const companyPronunciationRulesLoadOp = createAsyncOp({
-    name: 'frontend/company_pronunciation_rules_load',
+    name: 'voice/company_pronunciation_rules_load',
     silent: true,
     restMirror: {
         method: 'GET',
-        path: '/frontend/api/companies/:company_id/pronunciation-rules',
+        path: '/voice/api/v1/companies/:company_id/pronunciation-rules',
     },
     request: async ({ payload }) => {
         if (!payload || typeof payload.company_id !== 'string' || payload.company_id.length === 0) {
@@ -55,7 +55,7 @@ export const companyPronunciationRulesLoadOp = createAsyncOp({
         }
         const response = await httpRequest({
             method: 'GET',
-            url: `/frontend/api/companies/${encodeURIComponent(payload.company_id)}/pronunciation-rules`,
+            url: `/voice/api/v1/companies/${encodeURIComponent(payload.company_id)}/pronunciation-rules`,
         });
         if (!Array.isArray(response.items)) {
             throw new Error('company_pronunciation_rules_load: response.items required');
@@ -81,12 +81,12 @@ export const companyPronunciationRulesLoadOp = createAsyncOp({
 });
 
 export const companyPronunciationRuleCreateOp = createAsyncOp({
-    name: 'frontend/company_pronunciation_rule_create',
+    name: 'voice/company_pronunciation_rule_create',
     successToastKey: 'frontend:pronunciation_rules_page.toast_created',
     errorToastKey: 'frontend:pronunciation_rules_page.err_create_failed',
     restMirror: {
         method: 'POST',
-        path: '/frontend/api/companies/:company_id/pronunciation-rules',
+        path: '/voice/api/v1/companies/:company_id/pronunciation-rules',
     },
     request: async ({ payload }) => {
         if (!payload || typeof payload.company_id !== 'string' || payload.company_id.length === 0) {
@@ -94,7 +94,7 @@ export const companyPronunciationRuleCreateOp = createAsyncOp({
         }
         const response = await httpRequest({
             method: 'POST',
-            url: `/frontend/api/companies/${encodeURIComponent(payload.company_id)}/pronunciation-rules`,
+            url: `/voice/api/v1/companies/${encodeURIComponent(payload.company_id)}/pronunciation-rules`,
             body: {
                 kind: payload.kind,
                 pattern: payload.pattern,
@@ -113,12 +113,12 @@ export const companyPronunciationRuleCreateOp = createAsyncOp({
 });
 
 export const companyPronunciationRuleUpdateOp = createAsyncOp({
-    name: 'frontend/company_pronunciation_rule_update',
+    name: 'voice/company_pronunciation_rule_update',
     successToastKey: 'frontend:pronunciation_rules_page.toast_updated',
     errorToastKey: 'frontend:pronunciation_rules_page.err_update_failed',
     restMirror: {
         method: 'PUT',
-        path: '/frontend/api/companies/:company_id/pronunciation-rules/:rule_id',
+        path: '/voice/api/v1/companies/:company_id/pronunciation-rules/:rule_id',
     },
     request: async ({ payload }) => {
         if (!payload || typeof payload.company_id !== 'string' || payload.company_id.length === 0) {
@@ -140,7 +140,7 @@ export const companyPronunciationRuleUpdateOp = createAsyncOp({
         if (payload.note !== undefined) body.note = typeof payload.note === 'string' && payload.note.length > 0 ? payload.note : null;
         const response = await httpRequest({
             method: 'PUT',
-            url: `/frontend/api/companies/${encodeURIComponent(payload.company_id)}/pronunciation-rules/${encodeURIComponent(payload.rule_id)}`,
+            url: `/voice/api/v1/companies/${encodeURIComponent(payload.company_id)}/pronunciation-rules/${encodeURIComponent(payload.rule_id)}`,
             body,
         });
         return _normalizeRule(response);
@@ -148,12 +148,12 @@ export const companyPronunciationRuleUpdateOp = createAsyncOp({
 });
 
 export const companyPronunciationRuleDeleteOp = createAsyncOp({
-    name: 'frontend/company_pronunciation_rule_delete',
+    name: 'voice/company_pronunciation_rule_delete',
     successToastKey: 'frontend:pronunciation_rules_page.toast_deleted',
     errorToastKey: 'frontend:pronunciation_rules_page.err_delete_failed',
     restMirror: {
         method: 'DELETE',
-        path: '/frontend/api/companies/:company_id/pronunciation-rules/:rule_id',
+        path: '/voice/api/v1/companies/:company_id/pronunciation-rules/:rule_id',
     },
     request: async ({ payload }) => {
         if (!payload || typeof payload.company_id !== 'string' || payload.company_id.length === 0) {
@@ -164,18 +164,18 @@ export const companyPronunciationRuleDeleteOp = createAsyncOp({
         }
         const response = await httpRequest({
             method: 'DELETE',
-            url: `/frontend/api/companies/${encodeURIComponent(payload.company_id)}/pronunciation-rules/${encodeURIComponent(payload.rule_id)}`,
+            url: `/voice/api/v1/companies/${encodeURIComponent(payload.company_id)}/pronunciation-rules/${encodeURIComponent(payload.rule_id)}`,
         });
         return { rule_id: payload.rule_id, deleted: !!response.deleted };
     },
 });
 
 export const companyPronunciationRuleTestOp = createAsyncOp({
-    name: 'frontend/company_pronunciation_rule_test',
+    name: 'voice/company_pronunciation_rule_test',
     silent: true,
     restMirror: {
         method: 'POST',
-        path: '/frontend/api/companies/:company_id/pronunciation-rules/test',
+        path: '/voice/api/v1/companies/:company_id/pronunciation-rules/test',
     },
     request: async ({ payload }) => {
         if (!payload || typeof payload.company_id !== 'string' || payload.company_id.length === 0) {
@@ -183,7 +183,7 @@ export const companyPronunciationRuleTestOp = createAsyncOp({
         }
         const response = await httpRequest({
             method: 'POST',
-            url: `/frontend/api/companies/${encodeURIComponent(payload.company_id)}/pronunciation-rules/test`,
+            url: `/voice/api/v1/companies/${encodeURIComponent(payload.company_id)}/pronunciation-rules/test`,
             body: {
                 text: payload.text,
                 provider: typeof payload.provider === 'string' && payload.provider.length > 0 ? payload.provider : 'litserve',

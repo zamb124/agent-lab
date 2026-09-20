@@ -26,14 +26,14 @@ import {
     companyVoiceProvidersLoadOp,
     companyVoiceProvidersUpsertOp,
     companyVoiceProvidersRemoveOp,
-} from '../events/resources/company-voice-providers.resource.js';
+} from '@platform/lib/events/resources/voice-company-providers.resource.js';
 import {
     companyPronunciationRulesLoadOp,
     companyPronunciationRuleCreateOp,
     companyPronunciationRuleUpdateOp,
     companyPronunciationRuleDeleteOp,
     companyPronunciationRuleTestOp,
-} from '../events/resources/company-pronunciation-rules.resource.js';
+} from '@platform/lib/events/resources/voice-company-pronunciation-rules.resource.js';
 import { teamMembersResource, inviteGenerateOp } from '../events/resources/team.resource.js';
 import {
     authzExplorerByUserOp,
@@ -63,7 +63,7 @@ import {
     schedulerCancelOp,
     schedulerRunNowOp,
     schedulerRedisOp,
-} from '../events/resources/scheduler.resource.js';
+} from '@platform/lib/events/resources/scheduler-schedules.resource.js';
 import {
     billingSubscriptionLoadOp,
     billingUsageLoadOp,

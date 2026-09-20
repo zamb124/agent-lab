@@ -349,16 +349,16 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
     constructor() {
         super();
         // ── Voice providers ops ──────────────────────────────────────
-        this._catalog = this.useOp('frontend/voice_providers_catalog_load');
-        this._load    = this.useOp('frontend/company_voice_providers_load');
-        this._upsert  = this.useOp('frontend/company_voice_providers_upsert');
-        this._remove  = this.useOp('frontend/company_voice_providers_remove');
+        this._catalog = this.useOp('voice/voice_providers_catalog_load');
+        this._load    = this.useOp('voice/company_voice_providers_load');
+        this._upsert  = this.useOp('voice/company_voice_providers_upsert');
+        this._remove  = this.useOp('voice/company_voice_providers_remove');
         // ── Pronunciation ops ─────────────────────────────────────────
-        this._rulesLoad   = this.useOp('frontend/company_pronunciation_rules_load');
-        this._rulesCreate = this.useOp('frontend/company_pronunciation_rule_create');
-        this._rulesUpdate = this.useOp('frontend/company_pronunciation_rule_update');
-        this._rulesDelete = this.useOp('frontend/company_pronunciation_rule_delete');
-        this._rulesTest   = this.useOp('frontend/company_pronunciation_rule_test');
+        this._rulesLoad   = this.useOp('voice/company_pronunciation_rules_load');
+        this._rulesCreate = this.useOp('voice/company_pronunciation_rule_create');
+        this._rulesUpdate = this.useOp('voice/company_pronunciation_rule_update');
+        this._rulesDelete = this.useOp('voice/company_pronunciation_rule_delete');
+        this._rulesTest   = this.useOp('voice/company_pronunciation_rule_test');
         // ── Auth ──────────────────────────────────────────────────────
         this._auth = this.select(s => s.auth);
         // ── Реактивное состояние ──────────────────────────────────────
