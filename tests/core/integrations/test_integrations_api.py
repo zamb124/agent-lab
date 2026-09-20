@@ -22,6 +22,7 @@ from core.integrations.repository import IntegrationCredentialRepository
 @pytest.fixture()
 def credential_repository(app) -> IntegrationCredentialRepository:
     from core.config import get_settings
+
     settings = get_settings()
     shared_url = settings.database.shared_url
     if shared_url is None:
@@ -157,6 +158,7 @@ class TestDeleteCredential:
             headers=auth_headers_system,
         )
         assert resp.status_code == 404
+        assert resp.json()["error_code"] == "not_found"
 
     @pytest.mark.asyncio
     async def test_delete_invalid_provider(
@@ -168,7 +170,8 @@ class TestDeleteCredential:
             "/flows/api/v1/integrations/credentials/invalid_provider/docs",
             headers=auth_headers_system,
         )
-        assert resp.status_code == 422
+        assert resp.status_code == 400
+        assert resp.json()["error_code"] == "ws_invalid_payload"
 
 
 class TestOAuthCallback:
@@ -193,7 +196,9 @@ class TestOAuthCallback:
             params={"code": "some-code", "state": "nonexistent-state"},
         )
         assert resp.status_code == 400
-        assert "expired" in resp.json()["detail"].lower() or "invalid" in resp.json()["detail"].lower()
+        assert (
+            "expired" in resp.json()["detail"].lower() or "invalid" in resp.json()["detail"].lower()
+        )
 
 
 class TestOAuthCallbackGuidedIntegrationError:
@@ -262,7 +267,9 @@ class TestOAuthCallbackGuidedIntegrationError:
 
     @pytest.mark.asyncio
     async def test_returns_html_russian_when_language_cookie_ru(
-        self, flows_client, flows_app,
+        self,
+        flows_client,
+        flows_app,
     ) -> None:
         exc = GuidedIntegrationError(
             code="test_oauth_guided_cookie_ru",
@@ -295,7 +302,9 @@ class TestOAuthCallbackGuidedIntegrationError:
 
     @pytest.mark.asyncio
     async def test_returns_html_russian_when_oauth_state_ui_locale_overrides_accept_en(
-        self, flows_client, flows_app,
+        self,
+        flows_client,
+        flows_app,
     ) -> None:
         exc = GuidedIntegrationError(
             code="test_oauth_state_locale_ru",
@@ -326,7 +335,9 @@ class TestOAuthCallbackGuidedIntegrationError:
 
     @pytest.mark.asyncio
     async def test_returns_html_for_browser_accept_without_sec_fetch_dest(
-        self, flows_client, flows_app,
+        self,
+        flows_client,
+        flows_app,
     ) -> None:
         exc = GuidedIntegrationError(
             code="test_oauth_guided_html_accept",
@@ -358,7 +369,9 @@ class TestOAuthCallbackGuidedIntegrationError:
 
     @pytest.mark.asyncio
     async def test_returns_json_when_explicit_application_json_accept(
-        self, flows_client, flows_app,
+        self,
+        flows_client,
+        flows_app,
     ) -> None:
         exc = GuidedIntegrationError(
             code="test_oauth_guided_json_accept",
@@ -390,7 +403,9 @@ class TestOAuthCallbackGuidedIntegrationError:
 
     @pytest.mark.asyncio
     async def test_value_error_returns_html_when_document_navigation(
-        self, flows_client, flows_app,
+        self,
+        flows_client,
+        flows_app,
     ) -> None:
         oauth = flows_app.state.container.oauth_service
         with patch.object(

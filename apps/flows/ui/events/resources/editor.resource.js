@@ -16,7 +16,6 @@
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
 import { applyAutoLayoutToBranchData, canvasNeedsAutoLayout } from '../../_helpers/flow-graph-auto-layout.js';
 import {
     applyEditorLayoutToState,
@@ -1328,30 +1327,17 @@ export const editorResource = createAsyncOp({
  * Массовое удаление нод и связанных рёбер.
  *
  * REST-зеркало: POST /flows/api/v1/flows/{flow_id}/nodes/bulk_delete
- * Транспорт http; success триггерит reducer для очистки multiSelection и
+ * Транспорт ws; success триггерит reducer для очистки multiSelection и
  * перезагружает flow через `flows/flows`.
  */
 export const editorBulkDeleteOp = createAsyncOp({
     name: 'flows/editor_bulk_delete',
-    transport: 'http',
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
     successToastKey: 'flows:canvas.toast.bulk_delete_success',
     errorToastKey: 'flows:canvas.toast.bulk_delete_error',
+    commandType: 'flows/flows/nodes_bulk_delete_requested',
     restMirror: { method: 'POST', path: '/flows/api/v1/flows/{flow_id}/nodes/bulk_delete' },
-    request: async ({ payload }) => {
-        const flowId = payload.flow_id;
-        const nodeIds = payload.node_ids;
-        if (typeof flowId !== 'string' || flowId.length === 0) {
-            throw new Error('flow_id is required');
-        }
-        if (!Array.isArray(nodeIds) || nodeIds.length === 0) {
-            throw new Error('node_ids is required');
-        }
-        return await httpRequest({
-            method: 'POST',
-            url: `/flows/api/v1/flows/${encodeURIComponent(flowId)}/nodes/bulk_delete`,
-            body: { node_ids: nodeIds },
-        });
-    },
 });
 
 /**
@@ -1359,22 +1345,9 @@ export const editorBulkDeleteOp = createAsyncOp({
  */
 export const stickyNoteUpsertOp = createAsyncOp({
     name: 'flows/sticky_note_upsert',
-    transport: 'http',
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
     silent: true,
+    commandType: 'flows/flows/metadata_update_requested',
     restMirror: { method: 'PATCH', path: '/flows/api/v1/flows/{flow_id}/metadata' },
-    request: async ({ payload }) => {
-        const flowId = payload.flow_id;
-        const stickyNotes = payload.sticky_notes;
-        if (typeof flowId !== 'string' || flowId.length === 0) {
-            throw new Error('flow_id is required');
-        }
-        if (!Array.isArray(stickyNotes)) {
-            throw new Error('sticky_notes is required');
-        }
-        return await httpRequest({
-            method: 'PATCH',
-            url: `/flows/api/v1/flows/${encodeURIComponent(flowId)}/metadata`,
-            body: { sticky_notes: stickyNotes },
-        });
-    },
 });

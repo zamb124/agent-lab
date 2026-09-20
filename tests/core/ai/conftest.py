@@ -17,12 +17,6 @@ def setup_database_before_tests():
 
 
 @pytest.fixture(scope="session", autouse=True)
-def platform_notification_manager_redis(setup_database_before_tests):
-    _ = setup_database_before_tests
-    yield
-
-
-@pytest.fixture(scope="session", autouse=True)
 def ensure_minio_bucket():
     yield
 

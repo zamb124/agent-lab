@@ -4,11 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from apps.flows.src.models.agent_skill import AgentSkill
+from apps.flows.src.models.agent_skill import AgentSkill, AgentSkillUpdatePayload
 from apps.flows.src.services.agent_skill_service import (
-    AgentSkillCreateInput,
     AgentSkillService,
-    AgentSkillUpdateInput,
     parse_skill_md,
 )
 from core.files.create_spec import FileCreateSpec
@@ -108,7 +106,8 @@ async def seed_platform_assistant_skills(
             existing_references=existing.references if existing is not None else [],
         )
 
-        update_payload = AgentSkillUpdateInput(
+        update_payload = AgentSkillUpdatePayload(
+            agent_skill_id=parsed.agent_skill_id,
             name=parsed.name,
             description=parsed.description,
             body_markdown=parsed.body_markdown,
@@ -118,26 +117,20 @@ async def seed_platform_assistant_skills(
             assets=[],
         )
         if existing is None:
-            try:
-                _ = await agent_skill_service.create(
-                    AgentSkillCreateInput(
-                        agent_skill_id=parsed.agent_skill_id,
-                        name=parsed.name,
-                        description=parsed.description,
-                        body_markdown=parsed.body_markdown,
-                        tool_refs=parsed.tool_refs,
-                        depends_on=parsed.depends_on,
-                        references=references,
-                        assets=[],
-                    )
+            _ = await agent_skill_service.create(
+                AgentSkill(
+                    agent_skill_id=parsed.agent_skill_id,
+                    name=parsed.name,
+                    description=parsed.description,
+                    body_markdown=parsed.body_markdown,
+                    tool_refs=parsed.tool_refs,
+                    depends_on=parsed.depends_on,
+                    references=references,
+                    assets=[],
                 )
-            except ValueError as exc:
-                # Параллельный company_init (test enqueue + idle) может создать skill между get и create.
-                if f"AgentSkill already exists: {parsed.agent_skill_id}" not in str(exc):
-                    raise
-                _ = await agent_skill_service.update(parsed.agent_skill_id, update_payload)
+            )
         else:
-            _ = await agent_skill_service.update(parsed.agent_skill_id, update_payload)
+            _ = await agent_skill_service.update(update_payload)
         seeded += 1
 
     logger.info(

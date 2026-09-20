@@ -113,15 +113,14 @@ class FlowUIShareService:
                 expires_at,
                 host=public_host,
             )
-        except Exception:
-            # Never leave a usable orphan grant when public-link minting fails.
+        except Exception as exc:
             await self._flow_access.sync_share_revoked(grant.grant_id)
             _ = await self._repository.revoke(
                 grant_id=grant.grant_id,
                 company_id=company_id,
                 created_by_user_id=user_id,
             )
-            raise
+            raise exc
         return FlowUIShareCreateResponse(grant=grant, share_url=share_url)
 
     async def list_for_owner(

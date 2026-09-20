@@ -717,12 +717,10 @@ export class FlowsEvaluationPage extends PlatformPage {
             return;
         }
         const result = await this._suiteCreate.run({
-            body: {
-                flow_id: this.flowId,
-                name: this.t('evaluation.defaults.suite_name'),
-                description: '',
-                tags: [],
-            },
+            flow_id: this.flowId,
+            name: this.t('evaluation.defaults.suite_name'),
+            description: '',
+            tags: [],
         });
         await this._suitesList.run({ flow_id: this.flowId });
         const suiteId = stringValue(result, 'suite_id');
@@ -749,7 +747,7 @@ export class FlowsEvaluationPage extends PlatformPage {
         if (!body) {
             throw new Error('FlowsEvaluationPage._createCase: body required');
         }
-        const created = await this._caseCreate.run({ suite_id: suiteId, body });
+        const created = await this._caseCreate.run({ suite_id: suiteId, ...body });
         await this._loadSuite(suiteId);
         const caseId = stringValue(created, 'case_id');
         if (caseId.length > 0) {
@@ -770,7 +768,7 @@ export class FlowsEvaluationPage extends PlatformPage {
             throw new Error('FlowsEvaluationPage._createCaseFromTemplate: template_id required');
         }
         const body = this._buildTemplateCaseBody(templateId);
-        const created = await this._caseCreate.run({ suite_id: suiteId, body });
+        const created = await this._caseCreate.run({ suite_id: suiteId, ...body });
         await this._loadSuite(suiteId);
         const caseId = stringValue(created, 'case_id');
         if (caseId.length > 0) {
@@ -985,7 +983,7 @@ export class FlowsEvaluationPage extends PlatformPage {
         if (suiteId.length === 0 || caseId.length === 0 || !body) {
             throw new Error('FlowsEvaluationPage._updateCase: suite_id, case_id and body required');
         }
-        await this._caseUpdate.run({ suite_id: suiteId, case_id: caseId, body });
+        await this._caseUpdate.run({ suite_id: suiteId, case_id: caseId, ...body });
         await this._loadSuite(suiteId);
         this._ui.selectCase({ case_id: caseId });
     }
@@ -1006,16 +1004,14 @@ export class FlowsEvaluationPage extends PlatformPage {
             scope = { type: 'cases', case_ids: [ui.selectedCaseId] };
         }
         const result = await this._runCreate.run({
-            body: {
-                suite_id: suiteId,
-                branch_id: this._branchId(),
-                trigger: 'manual',
-                scope,
-                trials: ui.trials,
-                max_concurrency: ui.maxConcurrency,
-                gate_policy_id: null,
-                idempotency_key: null,
-            },
+            suite_id: suiteId,
+            branch_id: this._branchId(),
+            trigger: 'manual',
+            scope,
+            trials: ui.trials,
+            max_concurrency: ui.maxConcurrency,
+            gate_policy_id: null,
+            idempotency_key: null,
         });
         const run = objectValue(result, 'run');
         const runId = stringValue(run, 'run_id');
@@ -1075,7 +1071,7 @@ export class FlowsEvaluationPage extends PlatformPage {
         await this._baselineSet.run({
             suite_id: suiteId,
             branch_id: this._branchId(),
-            body: { run_id: runId },
+            run_id: runId,
         });
         await this._baselinesList.run({ suite_id: suiteId });
     }
@@ -1096,17 +1092,15 @@ export class FlowsEvaluationPage extends PlatformPage {
             return;
         }
         await this._pairwiseCreate.run({
-            body: {
-                mode,
-                left_case_run_id: stringValue(left, 'case_run_id'),
-                right_case_run_id: stringValue(right, 'case_run_id'),
-                preferred: mode === 'human' ? preference : null,
-                rubric_version_id: null,
-                scores: {},
-                feedback: '',
-                judge_node_id: null,
-                judge_node: null,
-            },
+            mode,
+            left_case_run_id: stringValue(left, 'case_run_id'),
+            right_case_run_id: stringValue(right, 'case_run_id'),
+            preferred: mode === 'human' ? preference : null,
+            rubric_version_id: null,
+            scores: {},
+            feedback: '',
+            judge_node_id: null,
+            judge_node: null,
         });
     }
 

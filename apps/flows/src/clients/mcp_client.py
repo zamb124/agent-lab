@@ -234,11 +234,14 @@ class MCPClient:
                 timeout=self.timeout,
                 strategy=ProxyStrategy.DIRECT_ONLY,
             ) as client:
-                response = await client.post(
-                    self.config.url,
-                    json=payload,
-                    headers=headers,
-                )
+                try:
+                    response = await client.post(
+                        self.config.url,
+                        json=payload,
+                        headers=headers,
+                    )
+                except httpx.RequestError as exc:
+                    raise MCPClientError(f"MCP connection error: {exc}") from exc
                 response_headers = response.headers
                 text = await self._read_response_text(response)
                 content_type = cast(str, response.headers.get("content-type", ""))

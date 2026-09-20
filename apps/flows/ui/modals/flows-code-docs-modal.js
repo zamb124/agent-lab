@@ -12,8 +12,6 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-modal-search-field.js';
 import '../components/common/flows-code-language-segment.js';
-import { asObject } from '../_helpers/flows-resolvers.js';
-import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 import { markdownToHtml } from '@platform/lib/utils/markdown.js';
 import {
     flowCodeLanguageLabel,
@@ -62,13 +60,10 @@ function buildTocFromMarkdown(md) {
  * @returns {string}
  */
 function getDocsMarkdown(result) {
-    if (typeof result === 'string') {
-        return result;
+    if (!result || typeof result !== 'object' || typeof result.markdown !== 'string') {
+        throw new Error('flows.code_docs: markdown required');
     }
-    if (result && typeof result === 'object' && typeof result.markdown === 'string') {
-        return result.markdown;
-    }
-    return formatJsonPretty(asObject(result));
+    return result.markdown;
 }
 
 export class FlowsCodeDocsModal extends PlatformModal {

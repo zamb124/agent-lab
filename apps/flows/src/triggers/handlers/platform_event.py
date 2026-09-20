@@ -22,13 +22,18 @@ from apps.flows.src.models import (
     TriggerStatus,
     TriggerType,
 )
+from apps.flows.src.services.execution_identity import resolve_execution_context
 from apps.flows.src.triggers.executor import TriggerExecutor
 from apps.flows.src.triggers.handlers.base import (
     BaseTriggerHandler,
     TriggerRegistrationError,
     TriggerValidationError,
 )
-from core.context import Context, User, clear_context, get_context, set_context
+from core.authz.ids import is_openfga_user_subject_id
+from core.authz.models import AuthzObject
+from core.authz.types import AuthzRelation, AuthzSubjectKind
+from core.context import User, clear_context, get_context, set_context
+from core.context.job_context import build_job_context
 from core.events import (
     PlatformEvent,
     catalog_entry_for_event_type,
@@ -117,6 +122,51 @@ def platform_event_matches_filters(
 def platform_event_trigger_run_id(event_id: str, trigger_id: str) -> str:
     """Детерминированный id run'а для дедупликации at-least-once доставки."""
     return str(uuid.uuid5(_TRIGGER_RUN_NAMESPACE, f"{event_id}:{trigger_id}"))
+
+
+async def _event_actor_user(
+    container: FlowRuntimeContainer,
+    actor_user_id: str,
+) -> User:
+    """Актор из meta: только существующий platform user с FGA-безопасным id."""
+    if not is_openfga_user_subject_id(actor_user_id):
+        raise ValueError(
+            f"platform event actor_user_id must not contain ':': {actor_user_id!r}"
+        )
+    actor = await container.user_repository.get(actor_user_id)
+    if actor is None:
+        raise ValueError(
+            f"platform event actor_user_id={actor_user_id!r} is not a platform user"
+        )
+    return actor
+
+
+async def _flow_owner_user(
+    container: FlowRuntimeContainer,
+    *,
+    company_id: str,
+    flow_id: str,
+) -> User:
+    """Владелец flow из OpenFGA — identity исполнения, когда у события нет актора."""
+    subjects = await container.authz_service.list_users(
+        AuthzObject.flow(flow_id, company_id=company_id),
+        AuthzRelation.OWNER,
+    )
+    owner_ids = sorted(
+        subject.value
+        for subject in subjects
+        if subject.kind is AuthzSubjectKind.USER and subject.value
+    )
+    if not owner_ids:
+        raise ValueError(
+            f"platform event trigger dispatch: flow {flow_id} has no owner"
+        )
+    owner = await container.user_repository.get(owner_ids[0])
+    if owner is None:
+        raise ValueError(
+            f"platform event trigger dispatch: flow owner {owner_ids[0]} not found"
+        )
+    return owner
 
 
 class PlatformEventTriggerHandler(BaseTriggerHandler):
@@ -269,17 +319,17 @@ async def dispatch_platform_event_triggers(
         return 0
 
     actor_user_id = event.meta.actor_user_id
-    trigger_user: User | None = None
+    event_actor: User | None = None
     if actor_user_id is not None:
-        trigger_user = await container.user_repository.get(actor_user_id)
-    if trigger_user is None:
-        effective_user_id = actor_user_id if actor_user_id is not None else "trigger:platform_event"
-        trigger_user = User(
-            user_id=effective_user_id,
-            name=f"Event:{event.type}",
-            companies={event.company_id: ["member"]},
-            active_company_id=event.company_id,
-        )
+        try:
+            event_actor = await _event_actor_user(container, actor_user_id)
+        except ValueError as exc:
+            logger.error(
+                "platform event trigger dispatch: invalid actor company_id=%s error=%s",
+                event.company_id,
+                exc,
+            )
+            return 0
 
     event_payload: JsonObject = {
         "event_id": event.event_id,
@@ -292,14 +342,6 @@ async def dispatch_platform_event_triggers(
 
     fired = 0
     previous_context = get_context()
-    context = Context(
-        user=trigger_user,
-        active_company=company,
-        user_companies=[company],
-        channel="trigger:platform_event",
-        trace_id=event.meta.trace_id,
-    )
-    _ = set_context(context)
     try:
         for member in members:
             parsed = parse_platform_event_trigger_index_member(member)
@@ -349,13 +391,35 @@ async def dispatch_platform_event_triggers(
                 # (A2A terminal event identity would collide).
                 fired += 1
                 continue
-            executor = TriggerExecutor()
             try:
-                _ = await executor.execute(
+                initiator = event_actor
+                if initiator is None:
+                    initiator = await _flow_owner_user(
+                        container,
+                        company_id=company_id,
+                        flow_id=flow_id,
+                    )
+                event_trace_id = event.meta.trace_id
+                initiator_context = build_job_context(
+                    company=company,
+                    user=initiator,
+                    host="",
+                    trace_id="" if event_trace_id is None else event_trace_id,
+                    session_id=session_id,
+                    channel="trigger:platform_event",
+                )
+                initiator_context.flow_id = flow_id
+                execution = await resolve_execution_context(
+                    container,
+                    flow_config=flow_config,
+                    initiator_context=initiator_context,
+                )
+                _ = set_context(execution.context)
+                _ = await TriggerExecutor().execute(
                     flow_id=flow_id,
                     trigger=trigger,
                     payload=event_payload,
-                    user_id=trigger_user.user_id,
+                    user_id=execution.context.user.user_id,
                     metadata={
                         "platform_event_id": event.event_id,
                         "platform_event_type": event.type,

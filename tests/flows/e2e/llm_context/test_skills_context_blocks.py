@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from apps.flows.src.container import FlowContainer
-from apps.flows.src.services.agent_skill_service import AgentSkillCreateInput
+from apps.flows.src.models.agent_skill import AgentSkill
 from tests.fixtures.auth import service_client_asgi_auth_context
 from tests.flows.e2e.llm_context.harness import (
     call_text,
@@ -53,7 +53,7 @@ async def test_skills_index_respects_context_profile(
     agent_skill_id = f"ctx-skill-{profile}-{unique_id}"
     with service_client_asgi_auth_context(auth_headers_system):
         await container.agent_skill_service.create(
-            AgentSkillCreateInput(
+            AgentSkill(
                 agent_skill_id=agent_skill_id,
                 name="context-skill",
                 description=f"skill-description-{profile}-{unique_id}",

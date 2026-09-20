@@ -967,3 +967,18 @@ class GraphNodeConfig(StrictBaseModel):
         if self.llm_context is not None or self.llm_context_resource_key is not None:
             raise ValueError("resource node: llm_context is not allowed")
         return self
+
+
+class NodeListPayload(StrictBaseModel):
+    limit: int = Field(default=200, ge=1, le=1000)
+    offset: int = Field(default=0, ge=0)
+
+
+class NodeIdPayload(StrictBaseModel):
+    node_id: str = Field(min_length=1)
+
+
+class NodeDeletedResponse(StrictBaseModel):
+    status: Literal["deleted"]
+    node_id: str
+

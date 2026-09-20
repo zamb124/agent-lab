@@ -102,6 +102,7 @@ class TestTracesTempoApiByTrace:
                 headers=auth_headers_system,
             )
             assert resp.status_code == 503
+            assert resp.json()["error_code"] == "unavailable"
         finally:
             _restore_mock_tempo(container, prev)
 
@@ -157,6 +158,7 @@ class TestTracesTempoApiBySession:
                 headers=auth_headers_system,
             )
             assert resp.status_code == 503
+            assert resp.json()["error_code"] == "unavailable"
         finally:
             _restore_mock_tempo(container, prev)
 

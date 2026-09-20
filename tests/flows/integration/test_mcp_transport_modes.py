@@ -132,7 +132,7 @@ async def test_mcp_sse_sync_api_end_to_end(client, mcp_modes_stub, unique_id: st
     sync_body = sync_response.json()
     assert sync_body["success"] is True
     assert sync_body["tools_count"] == 1
-    assert sync_body["tools"][0]["name"] == "stub_resolve_library"
+    assert sync_body["tools"][0]["tool_name"] == "stub_resolve_library"
 
     test_response = await client.post(f"/flows/api/v1/mcp/servers/{server_id}/test")
     assert test_response.status_code == 200
@@ -167,7 +167,7 @@ async def test_mcp_multi_tool_discovery_and_sync(client, mcp_modes_stub, unique_
     )
     sync_response = await client.post(f"/flows/api/v1/mcp/servers/{server_id}/sync")
     assert sync_response.status_code == 200
-    names = sorted(tool["name"] for tool in sync_response.json()["tools"])
+    names = sorted(tool["tool_name"] for tool in sync_response.json()["tools"])
     assert names == ["alpha_tool", "beta-tool"]
 
     tools_response = await client.get("/flows/api/v1/tools/all?picker_category=mcp")

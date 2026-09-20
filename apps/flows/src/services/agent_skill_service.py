@@ -13,13 +13,12 @@ from apps.flows.src.db.tool_repository import ToolRepository
 from apps.flows.src.models.agent_skill import (
     AgentSkill,
     AgentSkillIndexEntry,
+    AgentSkillUpdatePayload,
 )
 from apps.flows.src.models.enums import CodeMode
 from apps.flows.src.models.tool_reference import ToolReference
 from apps.flows.tools.builtin_specs import builtin_tool_ids
-from core.files.file_ref import FileRef
 from core.logging import get_logger
-from core.models import StrictBaseModel
 from core.types import JsonObject, JsonValue, require_json_object
 
 logger = get_logger(__name__)
@@ -34,27 +33,6 @@ _EMPTY_OBJECT_SCHEMA: JsonObject = {
     "properties": {},
     "additionalProperties": False,
 }
-
-
-class AgentSkillCreateInput(StrictBaseModel):
-    agent_skill_id: str
-    name: str
-    description: str
-    body_markdown: str
-    tool_refs: list[ToolReference] = []
-    depends_on: list[str] = []
-    references: list[FileRef] = []
-    assets: list[FileRef] = []
-
-
-class AgentSkillUpdateInput(StrictBaseModel):
-    name: str
-    description: str
-    body_markdown: str
-    tool_refs: list[ToolReference] = []
-    depends_on: list[str] = []
-    references: list[FileRef] = []
-    assets: list[FileRef] = []
 
 
 class AgentSkillService:
@@ -80,21 +58,20 @@ class AgentSkillService:
             raise LookupError(f"AgentSkill not found: {agent_skill_id}")
         return skill
 
-    async def create(self, payload: AgentSkillCreateInput) -> AgentSkill:
+    async def create(self, payload: AgentSkill) -> AgentSkill:
         existing = await self._repository.get(payload.agent_skill_id)
         if existing is not None:
             raise ValueError(f"AgentSkill already exists: {payload.agent_skill_id}")
         await self._validate_tool_refs(payload.tool_refs)
         await self._validate_depends_on_exist(payload.depends_on)
-        skill = AgentSkill.model_validate(payload.model_dump(mode="python"))
-        saved_ok = await self._repository.set(skill)
+        saved_ok = await self._repository.set(payload)
         if not saved_ok:
-            raise RuntimeError(f"Failed to persist AgentSkill: {skill.agent_skill_id}")
-        logger.info("agent_skill.created agent_skill_id=%s", skill.agent_skill_id)
-        return skill
+            raise RuntimeError(f"Failed to persist AgentSkill: {payload.agent_skill_id}")
+        logger.info("agent_skill.created agent_skill_id=%s", payload.agent_skill_id)
+        return payload
 
-    async def update(self, agent_skill_id: str, payload: AgentSkillUpdateInput) -> AgentSkill:
-        existing = await self.get(agent_skill_id)
+    async def update(self, payload: AgentSkillUpdatePayload) -> AgentSkill:
+        existing = await self.get(payload.agent_skill_id)
         await self._validate_tool_refs(payload.tool_refs)
         await self._validate_depends_on_exist(payload.depends_on)
         skill = existing.model_copy(
@@ -258,8 +235,6 @@ def _parse_allowed_tools(raw: JsonValue | None) -> list[ToolReference]:
 
 
 __all__ = [
-    "AgentSkillCreateInput",
     "AgentSkillService",
-    "AgentSkillUpdateInput",
     "parse_skill_md",
 ]

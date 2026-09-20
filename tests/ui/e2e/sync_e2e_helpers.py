@@ -403,7 +403,11 @@ async def sync_api_react_to_message(
     async with _sync_client(origin, auth_token) as client:
         r = await client.post(
             f"/sync/api/v1/channels/{channel_id}/messages/{message_id}/react",
-            json={"emoji": emoji},
+            json={
+                "channel_id": channel_id,
+                "message_id": message_id,
+                "emoji": emoji,
+            },
         )
         r.raise_for_status()
 

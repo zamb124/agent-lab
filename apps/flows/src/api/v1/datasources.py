@@ -1,23 +1,39 @@
-"""HTTP: company datasource connections and protocol (introspect/query/execute)."""
-
-from __future__ import annotations
+"""REST-зеркало datasource connections: path/query → тот же `op_*`, что и WS."""
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 
+from apps.flows.realtime.datasource_operations import (
+    op_flows_datasources_connectors_list,
+    op_flows_datasources_connectors_upsert,
+    op_flows_datasources_create,
+    op_flows_datasources_execute,
+    op_flows_datasources_introspect,
+    op_flows_datasources_item,
+    op_flows_datasources_list,
+    op_flows_datasources_query,
+    op_flows_datasources_remove,
+    op_flows_datasources_test,
+    op_flows_datasources_update,
+)
+from apps.flows.realtime.operations import FlowsEmptyPayload
 from apps.flows.src.dependencies import ContainerDep
+from core.context import require_context
 from core.datasources.models import (
     DatasourceConnection,
     DatasourceConnectionCreate,
     DatasourceConnectionPatch,
+    DatasourceConnectionPatchPayload,
     DatasourceConnectorSpec,
     DatasourceConnectorUpsert,
-    DatasourceExecuteRequest,
     DatasourceExecuteResult,
-    DatasourceQueryRequest,
+    DatasourceListPayload,
     DatasourceQueryResult,
+    DatasourceSchemaArgs,
     DatasourceSchemaSnapshot,
+    DatasourceSqlCallArgs,
+    DatasourceSqlRequest,
     DatasourceTestResult,
 )
 from core.pagination import ListResponse, OffsetPage
@@ -25,19 +41,15 @@ from core.pagination import ListResponse, OffsetPage
 router = APIRouter(tags=["datasources"])
 
 
-def _http_400(exc: ValueError) -> HTTPException:
-    return HTTPException(status_code=400, detail=str(exc))
-
-
 @router.get("/datasources/connectors", response_model=ListResponse[DatasourceConnectorSpec])
 async def list_datasource_connectors(
     container: ContainerDep,
 ) -> ListResponse[DatasourceConnectorSpec]:
-    try:
-        items = await container.datasource_service.list_connectors()
-    except ValueError as exc:
-        raise _http_400(exc) from exc
-    return ListResponse[DatasourceConnectorSpec](items=items)
+    return await op_flows_datasources_connectors_list(
+        FlowsEmptyPayload(),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.put("/datasources/connectors", response_model=DatasourceConnectorSpec)
@@ -45,10 +57,11 @@ async def upsert_datasource_connector(
     body: DatasourceConnectorUpsert,
     container: ContainerDep,
 ) -> DatasourceConnectorSpec:
-    try:
-        return await container.datasource_service.upsert_connector(body)
-    except ValueError as exc:
-        raise _http_400(exc) from exc
+    return await op_flows_datasources_connectors_upsert(
+        body,
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.get("/datasources", response_model=OffsetPage[DatasourceConnection])
@@ -57,39 +70,29 @@ async def list_datasources(
     limit: Annotated[int, Query(ge=1, le=200)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[DatasourceConnection]:
-    try:
-        items = await container.datasource_service.list_connections()
-    except ValueError as exc:
-        raise _http_400(exc) from exc
-    total = len(items)
-    return OffsetPage[DatasourceConnection](
-        items=items[offset : offset + limit],
-        total=total,
-        limit=limit,
-        offset=offset,
+    return await op_flows_datasources_list(
+        DatasourceListPayload(limit=limit, offset=offset),
+        user=require_context().user,
+        container=container,
     )
 
 
 @router.post("/datasources", response_model=DatasourceConnection)
 async def create_datasource(
-    body: DatasourceConnectionCreate,
-    container: ContainerDep,
+    body: DatasourceConnectionCreate, container: ContainerDep
 ) -> DatasourceConnection:
-    try:
-        return await container.datasource_service.create_connection(body)
-    except ValueError as exc:
-        raise _http_400(exc) from exc
+    return await op_flows_datasources_create(
+        body, user=require_context().user, container=container
+    )
 
 
 @router.get("/datasources/{datasource_id}", response_model=DatasourceConnection)
-async def get_datasource(
-    datasource_id: str,
-    container: ContainerDep,
-) -> DatasourceConnection:
-    try:
-        return await container.datasource_service.get_connection(datasource_id)
-    except ValueError as exc:
-        raise _http_400(exc) from exc
+async def get_datasource(datasource_id: str, container: ContainerDep) -> DatasourceConnection:
+    return await op_flows_datasources_item(
+        DatasourceSchemaArgs(datasource_id=datasource_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.patch("/datasources/{datasource_id}", response_model=DatasourceConnection)
@@ -98,29 +101,31 @@ async def patch_datasource(
     body: DatasourceConnectionPatch,
     container: ContainerDep,
 ) -> DatasourceConnection:
-    try:
-        return await container.datasource_service.patch_connection(datasource_id, body)
-    except ValueError as exc:
-        raise _http_400(exc) from exc
+    return await op_flows_datasources_update(
+        DatasourceConnectionPatchPayload.model_validate(
+            {"datasource_id": datasource_id, **body.model_dump(exclude_unset=True)}
+        ),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.delete("/datasources/{datasource_id}")
 async def delete_datasource(datasource_id: str, container: ContainerDep) -> None:
-    try:
-        await container.datasource_service.delete_connection(datasource_id)
-    except ValueError as exc:
-        raise _http_400(exc) from exc
+    return await op_flows_datasources_remove(
+        DatasourceSchemaArgs(datasource_id=datasource_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post("/datasources/{datasource_id}/test", response_model=DatasourceTestResult)
-async def test_datasource(
-    datasource_id: str,
-    container: ContainerDep,
-) -> DatasourceTestResult:
-    try:
-        return await container.datasource_service.test(datasource_id)
-    except ValueError as exc:
-        raise _http_400(exc) from exc
+async def test_datasource(datasource_id: str, container: ContainerDep) -> DatasourceTestResult:
+    return await op_flows_datasources_test(
+        DatasourceSchemaArgs(datasource_id=datasource_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post(
@@ -128,27 +133,28 @@ async def test_datasource(
     response_model=DatasourceSchemaSnapshot,
 )
 async def introspect_datasource(
-    datasource_id: str,
-    container: ContainerDep,
+    datasource_id: str, container: ContainerDep
 ) -> DatasourceSchemaSnapshot:
-    try:
-        return await container.datasource_service.introspect(datasource_id)
-    except ValueError as exc:
-        raise _http_400(exc) from exc
+    return await op_flows_datasources_introspect(
+        DatasourceSchemaArgs(datasource_id=datasource_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post("/datasources/{datasource_id}/query", response_model=DatasourceQueryResult)
 async def query_datasource(
     datasource_id: str,
-    body: DatasourceQueryRequest,
+    body: DatasourceSqlRequest,
     container: ContainerDep,
 ) -> DatasourceQueryResult:
-    try:
-        return await container.datasource_service.query(
-            datasource_id, body.sql, body.params
-        )
-    except ValueError as exc:
-        raise _http_400(exc) from exc
+    return await op_flows_datasources_query(
+        DatasourceSqlCallArgs.model_validate(
+            {"datasource_id": datasource_id, **body.model_dump()}
+        ),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post(
@@ -157,12 +163,13 @@ async def query_datasource(
 )
 async def execute_datasource(
     datasource_id: str,
-    body: DatasourceExecuteRequest,
+    body: DatasourceSqlRequest,
     container: ContainerDep,
 ) -> DatasourceExecuteResult:
-    try:
-        return await container.datasource_service.execute(
-            datasource_id, body.sql, body.params
-        )
-    except ValueError as exc:
-        raise _http_400(exc) from exc
+    return await op_flows_datasources_execute(
+        DatasourceSqlCallArgs.model_validate(
+            {"datasource_id": datasource_id, **body.model_dump()}
+        ),
+        user=require_context().user,
+        container=container,
+    )

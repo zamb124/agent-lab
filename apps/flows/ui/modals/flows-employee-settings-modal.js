@@ -531,7 +531,7 @@ export class FlowsEmployeeSettingsModal extends PlatformFormModal {
         }
         const employee = this._buildEmployeePayload();
         const body = { ...item, employee };
-        await this._update.run({ flow_id: this.flowId, body });
+        await this._update.run({ ...body, flow_id: this.flowId });
 
         const editorState = this._editor.state;
         if (

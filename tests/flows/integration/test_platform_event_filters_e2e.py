@@ -26,6 +26,7 @@ from core.events import (
     PLATFORM_EVENT_CATALOG_KEY,
     PlatformEvent,
     PlatformEventCatalogEntry,
+    PlatformEventMeta,
     publish_domain_event,
     register_platform_event,
     store_registered_platform_events,
@@ -34,6 +35,7 @@ from core.events.redis_client import events_redis_client
 from core.types import require_json_object
 from core.worktracker import events as _worktracker_events
 from core.worktracker.events import WORK_ITEM_COMMENT_CREATED
+from tests.flows.conftest import persist_owned_flow
 
 _ = (_crm_entity_events, _worktracker_events)
 
@@ -237,7 +239,7 @@ async def test_create_platform_event_trigger_rejects_bad_filters_with_400(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(container, agent)
 
     cases: list[tuple[str, dict[str, object]]] = [
         (
@@ -308,7 +310,7 @@ async def test_create_platform_event_trigger_accepts_catalog_filters(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(container, agent)
 
     response = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -365,7 +367,7 @@ async def test_dispatch_eq_ne_contains_and_and_filters(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(container, agent)
 
     create_match = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -466,7 +468,7 @@ async def test_dispatch_enum_filter_on_comment_role(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(container, agent)
 
     created = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -547,7 +549,7 @@ async def test_publish_domain_event_then_dispatch_uses_same_payload_contract(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(container, agent)
 
     created = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -613,7 +615,7 @@ async def test_update_platform_event_trigger_rejects_bad_filters_with_400(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(container, agent)
 
     created = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -673,7 +675,7 @@ async def test_update_platform_event_trigger_accepts_valid_filter_change(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(container, agent)
 
     created = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -745,7 +747,7 @@ async def test_create_rejects_filters_when_catalog_has_empty_filter_fields(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(container, agent)
 
     response = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -789,7 +791,7 @@ async def test_create_accepts_boolean_integer_number_filters_and_dispatch(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(container, agent)
 
     created = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -859,7 +861,7 @@ async def test_create_uses_in_process_catalog_when_redis_entry_missing(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(container, agent)
 
     created = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -898,7 +900,7 @@ async def test_create_rejects_unknown_event_type_not_in_catalog(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(container, agent)
 
     response = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -920,7 +922,7 @@ async def test_create_rejects_unknown_event_type_not_in_catalog(
 
 @pytest.mark.asyncio
 async def test_dispatch_persists_completed_state(
-    app, client, container, unique_id: str, mock_llm_with_queue
+    app, client, container, unique_id: str, mock_llm_with_queue, system_user_id: str
 ) -> None:
     """platform_event_trigger_run_id → session_id → completed + mapping."""
     _ = app
@@ -935,7 +937,7 @@ async def test_dispatch_persists_completed_state(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(container, agent)
 
     created = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -967,8 +969,9 @@ async def test_dispatch_persists_completed_state(
             "name": f"Person {unique_id}",
             "status": "active",
             "tags": [],
-            "actor_user_id": f"user_{unique_id}",
+            "actor_user_id": system_user_id,
         },
+        meta=PlatformEventMeta(actor_user_id=system_user_id),
     )
     fired = await dispatch_platform_event_triggers(container=container, event=event)
     assert fired == 1
@@ -991,7 +994,7 @@ async def test_dispatch_persists_completed_state(
 
 @pytest.mark.asyncio
 async def test_dispatch_idempotent_same_run_id(
-    app, client, container, unique_id: str, mock_llm_with_queue
+    app, client, container, unique_id: str, mock_llm_with_queue, system_user_id: str
 ) -> None:
     """Два dispatch одного event → один session_id (deterministic run_id)."""
     _ = app
@@ -1006,7 +1009,7 @@ async def test_dispatch_idempotent_same_run_id(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(container, agent)
 
     created = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -1035,8 +1038,9 @@ async def test_dispatch_idempotent_same_run_id(
             "name": "Task",
             "status": "active",
             "tags": [],
-            "actor_user_id": f"user_{unique_id}",
+            "actor_user_id": system_user_id,
         },
+        meta=PlatformEventMeta(actor_user_id=system_user_id),
     )
     assert await dispatch_platform_event_triggers(container=container, event=event) == 1
     run_id = platform_event_trigger_run_id(event.event_id, trigger_id)
@@ -1060,7 +1064,7 @@ async def test_dispatch_idempotent_same_run_id(
 
 @pytest.mark.asyncio
 async def test_handle_event_fires_triggers(
-    app, client, container, unique_id: str, mock_llm_with_queue
+    app, client, container, unique_id: str, mock_llm_with_queue, system_user_id: str
 ) -> None:
     """PlatformEventConsumerService.handle_event → completed (без XREADGROUP)."""
     _ = app
@@ -1075,7 +1079,7 @@ async def test_handle_event_fires_triggers(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(container, agent)
 
     created = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -1104,8 +1108,9 @@ async def test_handle_event_fires_triggers(
             "name": f"Org {unique_id}",
             "status": "active",
             "tags": [],
-            "actor_user_id": f"user_{unique_id}",
+            "actor_user_id": system_user_id,
         },
+        meta=PlatformEventMeta(actor_user_id=system_user_id),
     )
     consumer = PlatformEventConsumerService(
         container=container,
@@ -1144,7 +1149,7 @@ async def test_filter_mismatch_no_state(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(container, agent)
 
     created = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",

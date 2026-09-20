@@ -9,6 +9,7 @@ from fastapi import FastAPI
 
 from apps.flows.src.container_contracts import FlowRuntimeContainer, as_flow_runtime_container
 from apps.flows.src.durable_execution import RunStartedPayload, WorkflowEventType
+from apps.flows.src.models.agent_skill import AgentSkill, AgentSkillUpdatePayload
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig
 from apps.flows.src.models.tool_reference import ToolReference
@@ -18,10 +19,6 @@ from apps.flows.src.runtime.agent_skill_runtime import (
 )
 from apps.flows.src.runtime.nodes import LlmNode
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
-from apps.flows.src.services.agent_skill_service import (
-    AgentSkillCreateInput,
-    AgentSkillUpdateInput,
-)
 from apps.flows.src.streaming import InMemoryEmitter
 from apps.flows.tools.agent_skill_tools import load_agent_skill, read_agent_skill_reference
 from core.files.create_spec import FileCreateSpec
@@ -89,7 +86,7 @@ async def test_llm_runner_load_skill_unlocks_and_runs_calculator(
     async with company_scope(company_id, unique_id):
         container = _runtime_container(app)
         await container.agent_skill_service.create(
-            AgentSkillCreateInput(
+            AgentSkill(
                 agent_skill_id=skill_id,
                 name=skill_id,
                 description="Unlock calculator for math tasks",
@@ -193,7 +190,7 @@ async def test_llm_runner_rebuilds_tools_schema_after_skill_load(
     async with company_scope(company_id, unique_id):
         container = _runtime_container(app)
         await container.agent_skill_service.create(
-            AgentSkillCreateInput(
+            AgentSkill(
                 agent_skill_id=skill_id,
                 name=skill_id,
                 description="Unlock calculator for schema rebuild doctrine",
@@ -283,9 +280,10 @@ async def test_no_agent_skills_does_not_inject_meta_tools(
 
 @pytest.mark.asyncio
 async def test_load_agent_skill_without_host_raises(unique_id: str) -> None:
-    state = make_skill_state(flow_id=f"flow_{unique_id}", unique_id=unique_id)
-    with pytest.raises(RuntimeError, match="AgentSkillRuntimeHost is not active"):
-        await load_agent_skill.run({"agent_skill_id": "document-workspace"}, state)
+    async with company_scope(f"company_no_host_{unique_id}", unique_id):
+        state = make_skill_state(flow_id=f"flow_{unique_id}", unique_id=unique_id)
+        with pytest.raises(RuntimeError, match="AgentSkillRuntimeHost is not active"):
+            await load_agent_skill.run({"agent_skill_id": "document-workspace"}, state)
 
 
 @pytest.mark.asyncio
@@ -301,7 +299,7 @@ async def test_depends_on_merge_unlocks_child_tool(
     async with company_scope(company_id, unique_id):
         container = _runtime_container(app)
         await container.agent_skill_service.create(
-            AgentSkillCreateInput(
+            AgentSkill(
                 agent_skill_id=child_id,
                 name=child_id,
                 description="Child skill with calculator",
@@ -316,7 +314,7 @@ async def test_depends_on_merge_unlocks_child_tool(
             )
         )
         await container.agent_skill_service.create(
-            AgentSkillCreateInput(
+            AgentSkill(
                 agent_skill_id=parent_id,
                 name=parent_id,
                 description="Parent skill",
@@ -383,7 +381,7 @@ async def test_live_catalog_update_seen_on_next_load(
     skill_id = f"live-skill-{unique_id}"
     async with company_scope(company_id, unique_id):
         await container.agent_skill_service.create(
-            AgentSkillCreateInput(
+            AgentSkill(
                 agent_skill_id=skill_id,
                 name=skill_id,
                 description="Old description for live skill",
@@ -410,8 +408,8 @@ async def test_live_catalog_update_seen_on_next_load(
             assert any("Old body" in b.content for b in host.context_blocks)
 
         await container.agent_skill_service.update(
-            skill_id,
-            AgentSkillUpdateInput(
+            AgentSkillUpdatePayload(
+                agent_skill_id=skill_id,
                 name=skill_id,
                 description="New description for live skill",
                 body_markdown="## New body after update",
@@ -446,7 +444,7 @@ async def test_company_isolation_skills(container, unique_id: str) -> None:
     company_b = f"company_b_{unique_id}"
     async with company_scope(company_a, unique_id):
         await container.agent_skill_service.create(
-            AgentSkillCreateInput(
+            AgentSkill(
                 agent_skill_id=skill_id,
                 name=skill_id,
                 description="Skill only in company A",
@@ -479,7 +477,7 @@ async def test_read_reference_requires_loaded_skill(container, unique_id: str) -
             content_type="text/markdown",
         )
         await container.agent_skill_service.create(
-            AgentSkillCreateInput(
+            AgentSkill(
                 agent_skill_id=skill_id,
                 name=skill_id,
                 description="Skill with reference",

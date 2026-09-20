@@ -1,12 +1,11 @@
-"""Flows HTTP: create DataTable files in flow_asset / flow_session scope."""
+"""REST-зеркало DataTable create: body → тот же `op_*`, что и WS."""
 
-from __future__ import annotations
+from fastapi import APIRouter
 
-from fastapi import APIRouter, HTTPException
-
+from apps.flows.realtime.data_table_operations import op_flows_data_tables_create
 from apps.flows.src.dependencies import ContainerDep
+from core.context import require_context
 from core.data_tables.models import DataTableCreateRequest
-from core.data_tables.service import DataTableNotFoundError
 from core.files.models import FileRecord
 
 router = APIRouter(tags=["data-tables"])
@@ -17,18 +16,8 @@ async def create_flow_data_table(
     body: DataTableCreateRequest,
     container: ContainerDep,
 ) -> FileRecord:
-    if body.scope not in {"flow_asset", "flow_session"}:
-        raise HTTPException(
-            status_code=400,
-            detail="scope must be flow_asset or flow_session",
-        )
-    try:
-        return await container.data_table_service.create(
-            original_name=body.original_name,
-            scope=body.scope,
-            flow_id=body.flow_id,
-            session_id=body.session_id,
-            tables=body.tables,
-        )
-    except (DataTableNotFoundError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return await op_flows_data_tables_create(
+        body,
+        user=require_context().user,
+        container=container,
+    )

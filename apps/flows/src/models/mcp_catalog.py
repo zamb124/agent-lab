@@ -14,6 +14,10 @@ __all__ = [
     "MCPAuthPolicy",
     "MCPCatalogEntry",
     "MCPCatalogHostClass",
+    "MCPCatalogIdPayload",
+    "MCPCatalogListPayload",
+    "MCPCatalogStoreItem",
+    "MCPCatalogUninstalledResponse",
     "MCPCatalogVerifyStatus",
     "compute_catalog_snapshot_hash",
 ]
@@ -96,6 +100,45 @@ class MCPCatalogEntry(BaseModel):
             is_deprecated=self.is_deprecated,
             verify_status=self.verify_status,
         )
+
+
+class MCPCatalogListPayload(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    search: str = ""
+    limit: int = Field(default=50, ge=1, le=200)
+    offset: int = Field(default=0, ge=0)
+    tier: str = "store"
+
+
+class MCPCatalogIdPayload(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    catalog_id: str = Field(..., min_length=1)
+
+
+class MCPCatalogStoreItem(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    catalog_id: str
+    registry_name: str
+    title: str
+    description: str | None
+    upstream_url: str
+    transport_type: str
+    auth_policy: str
+    verify_status: str
+    tool_count_snapshot: int
+    installed: bool
+    platform_curated: bool
+    icon_url: str | None = None
+
+
+class MCPCatalogUninstalledResponse(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    status: Literal["uninstalled"]
+    catalog_id: str
 
 
 class MCPCatalogAllowlistItemPayload(BaseModel):

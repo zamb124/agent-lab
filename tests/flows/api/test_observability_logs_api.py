@@ -133,7 +133,9 @@ class TestLogsByTraceApi:
                 headers=auth_headers_system,
             )
             assert resp.status_code == 503
-            assert "Loki недоступен" in resp.json()["detail"]
+            body = resp.json()
+            assert body["error_code"] == "unavailable"
+            assert "Loki недоступен" in body["error_detail"]
         finally:
             _restore_loki_client_cache(container, had_key, previous)
 

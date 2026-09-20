@@ -33,7 +33,7 @@ from core.clients.google_workspace_scopes import (
     scopes_for_google_service,
 )
 from core.config import get_settings
-from core.context import get_context
+from core.context import get_context, require_context
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.integrations.company_credentials import (
     CompanyIntegrationConfigError,
@@ -44,7 +44,20 @@ from core.integrations.company_credentials import (
     GoogleWorkspaceSystemReconcileResult,
 )
 from core.integrations.guided_integration_error import GuidedIntegrationError
-from core.integrations.models import CredentialInfo, IntegrationProvider
+from core.integrations.models import (
+    CredentialInfo,
+    IntegrationCredentialRefPayload,
+    IntegrationDeletedResponse,
+    IntegrationEmptyPayload,
+    IntegrationProvider,
+)
+from core.integrations.operations import (
+    op_integrations_credentials_list,
+    op_integrations_credentials_remove,
+    op_integrations_workspace_company_delete,
+    op_integrations_workspace_company_get,
+    op_integrations_workspace_company_put,
+)
 from core.logging import get_logger
 from core.pagination import ListResponse
 from core.types import JsonObject
@@ -107,7 +120,9 @@ class FlowResumeContext(BaseModel):
     context_data: JsonObject
     trace_context: JsonObject | None = None
 
-    @field_validator("flow_id", "session_id", "task_id", "context_id", "branch_id", "channel", "user_id")
+    @field_validator(
+        "flow_id", "session_id", "task_id", "context_id", "branch_id", "channel", "user_id"
+    )
     @classmethod
     def _non_empty_string(cls, value: str) -> str:
         if not value.strip():
@@ -124,52 +139,24 @@ class FlowResumeContext(BaseModel):
 
 @router.get("/credentials", response_model=ListResponse[CredentialInfo])
 async def list_credentials(request: Request) -> ListResponse[CredentialInfo]:
-    """Список подключённых интеграций текущего пользователя (без токенов)."""
-    ctx = get_context()
-    if not ctx or not ctx.user or not ctx.active_company:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
-    repository = _integration_container(request).integration_credential_repository
-    credentials = await repository.list_by_user(
-        company_id=ctx.active_company.company_id,
-        user_id=ctx.user.user_id,
+    return await op_integrations_credentials_list(
+        IntegrationEmptyPayload(),
+        user=require_context().user,
+        container=_integration_container(request),
     )
-    return ListResponse[CredentialInfo](items=[
-        CredentialInfo(
-            provider=c.provider,
-            service=c.service,
-            created_at=c.created_at,
-        )
-        for c in credentials
-    ])
 
 
-@router.delete("/credentials/{provider}/{service}")
+@router.delete("/credentials/{provider}/{service}", response_model=IntegrationDeletedResponse)
 async def delete_credential(
     request: Request,
     provider: str,
     service: str,
-) -> dict[str, bool]:
-    """Отключить интеграцию (удалить credential пользователя)."""
-    ctx = get_context()
-    if not ctx or not ctx.user or not ctx.active_company:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
-    try:
-        provider_enum = IntegrationProvider(provider)
-    except ValueError:
-        raise HTTPException(status_code=422, detail=f"Unknown provider: {provider}")
-
-    repository = _integration_container(request).integration_credential_repository
-    deleted = await repository.delete_by_user_provider_service(
-        company_id=ctx.active_company.company_id,
-        user_id=ctx.user.user_id,
-        provider=provider_enum,
-        service=service,
+) -> IntegrationDeletedResponse:
+    return await op_integrations_credentials_remove(
+        IntegrationCredentialRefPayload(provider=provider, service=service),
+        user=require_context().user,
+        container=_integration_container(request),
     )
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Credential not found")
-    return {"deleted": True}
 
 
 def _raise_http_for_company_integration_error(exc: Exception) -> NoReturn:
@@ -250,12 +237,11 @@ async def authorize_google_workspace(
 async def get_google_workspace_company_credential(
     request: Request,
 ) -> GoogleWorkspaceCompanyCredentialPublic:
-    """Публичный статус company Google Workspace SA (без секретов)."""
-    ctx = get_context()
-    if not ctx or not ctx.user or not ctx.active_company:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    service = _integration_container(request).company_integration_credential_service
-    return await service.get_google_workspace_company_public(ctx.active_company.company_id)
+    return await op_integrations_workspace_company_get(
+        IntegrationEmptyPayload(),
+        user=require_context().user,
+        container=_integration_container(request),
+    )
 
 
 @router.put(
@@ -266,38 +252,25 @@ async def put_google_workspace_company_credential(
     request: Request,
     payload: GoogleWorkspaceCompanyCredentialPut,
 ) -> GoogleWorkspaceCompanyCredentialPublic:
-    """Admin: upsert company-owned Google Workspace Service Account credential."""
-    ctx = get_context()
-    if not ctx or not ctx.user or not ctx.active_company:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    service = _integration_container(request).company_integration_credential_service
-    try:
-        return await service.upsert_google_workspace_service_account(
-            ctx.active_company.company_id,
-            payload,
-        )
-    except Exception as exc:
-        _raise_http_for_company_integration_error(exc)
+    return await op_integrations_workspace_company_put(
+        payload,
+        user=require_context().user,
+        container=_integration_container(request),
+    )
 
 
-@router.delete("/credentials/google/workspace/company")
+@router.delete(
+    "/credentials/google/workspace/company",
+    response_model=IntegrationDeletedResponse,
+)
 async def delete_google_workspace_company_credential(
     request: Request,
-) -> dict[str, bool]:
-    """Admin: удалить company Google Workspace SA credential."""
-    ctx = get_context()
-    if not ctx or not ctx.user or not ctx.active_company:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    service = _integration_container(request).company_integration_credential_service
-    try:
-        deleted = await service.delete_google_workspace_service_account(
-            ctx.active_company.company_id,
-        )
-    except Exception as exc:
-        _raise_http_for_company_integration_error(exc)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Company credential not found")
-    return {"deleted": True}
+) -> IntegrationDeletedResponse:
+    return await op_integrations_workspace_company_delete(
+        IntegrationEmptyPayload(),
+        user=require_context().user,
+        container=_integration_container(request),
+    )
 
 
 @router.post(
@@ -321,7 +294,11 @@ async def reconcile_google_workspace_system(
     service = container.company_integration_credential_service
     try:
         return await service.reconcile_system_google_workspace()
-    except Exception as exc:
+    except (
+        CompanyIntegrationPermissionError,
+        CompanyIntegrationReadOnlyError,
+        CompanyIntegrationConfigError,
+    ) as exc:
         _raise_http_for_company_integration_error(exc)
 
 
@@ -357,7 +334,12 @@ async def oauth_callback(
     oauth_locale = peeked_locale if peeked_locale is not None else fallback_locale
     corr = oauth_error_correlation_ids(request)
     try:
-        credential, return_path, flow_context, post_auth_redirect_origin = await oauth_service.complete_oauth(
+        (
+            credential,
+            return_path,
+            flow_context,
+            post_auth_redirect_origin,
+        ) = await oauth_service.complete_oauth(
             state_token=state,
             code=code,
             referer=referer,
@@ -444,7 +426,10 @@ async def _resume_flow(
     )
     logger.info(
         "OAuth auto-resume kicked: flow_id=%s session_id=%s provider=%s service=%s",
-        resume_context.flow_id, resume_context.session_id, provider, service,
+        resume_context.flow_id,
+        resume_context.session_id,
+        provider,
+        service,
     )
 
 

@@ -1,59 +1,36 @@
-"""HTTP: дерево исходников code_agent и rebuild на ферме."""
-
-from __future__ import annotations
+"""REST-зеркало code_agent: path/query → тот же `op_*`, что и WS."""
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 
+from apps.flows.realtime.code_agent_operations import (
+    op_flows_code_agent_copy_tree,
+    op_flows_code_agent_delete,
+    op_flows_code_agent_ensure_source,
+    op_flows_code_agent_import_archive,
+    op_flows_code_agent_import_git,
+    op_flows_code_agent_logs,
+    op_flows_code_agent_rebuild,
+    op_flows_code_agent_status,
+)
 from apps.flows.src.dependencies import ContainerDep
-from core.authz.models import AuthzObject
-from core.context import require_active_company, require_context
+from core.context import require_context
 from core.guest_runtime.models import (
     CodeAgentCopyTreeRequest,
+    CodeAgentDeletePayload,
     CodeAgentEnsureSourceResponse,
     CodeAgentImportArchiveRequest,
     CodeAgentImportGitRequest,
+    CodeAgentLogsPayload,
+    CodeAgentNodeRefPayload,
     CodeAgentNodeStatusResponse,
     CodeAgentRebuildRequest,
-    GuestBuildBusyError,
-    GuestLeaseCapError,
     GuestRebuildResponse,
     GuestRuntimeLogsResponse,
-    GuestRuntimeUnavailableError,
 )
 
 router = APIRouter(tags=["code-agent"])
-
-
-def _actor_user_id() -> str:
-    return require_context().user.user_id
-
-
-def _flow_obj(flow_id: str) -> AuthzObject:
-    return AuthzObject.flow(flow_id, company_id=require_active_company().company_id)
-
-
-async def _require_view_flow(container: ContainerDep, flow_id: str) -> None:
-    await container.authz_service.require_can_view(_flow_obj(flow_id), user_id=_actor_user_id())
-
-
-async def _require_edit_flow(container: ContainerDep, flow_id: str) -> None:
-    await container.authz_service.require_can_edit(_flow_obj(flow_id), user_id=_actor_user_id())
-
-
-def _http_from_source_error(exc: LookupError | ValueError) -> HTTPException:
-    if isinstance(exc, LookupError):
-        return HTTPException(status_code=404, detail=str(exc))
-    return HTTPException(status_code=400, detail=str(exc))
-
-
-def _http_from_farm_error(exc: GuestLeaseCapError | GuestBuildBusyError) -> HTTPException:
-    return HTTPException(status_code=409, detail=str(exc))
-
-
-def _http_from_farm_unavailable(exc: GuestRuntimeUnavailableError) -> HTTPException:
-    return HTTPException(status_code=503, detail=str(exc))
 
 
 @router.post(
@@ -66,13 +43,11 @@ async def ensure_code_agent_source(
     container: ContainerDep,
     branch_id: Annotated[str, Query()] = "default",
 ) -> CodeAgentEnsureSourceResponse:
-    await _require_edit_flow(container, flow_id)
-    try:
-        return await container.code_agent_source_service.ensure_source(
-            flow_id=flow_id, node_id=node_id, branch_id=branch_id
-        )
-    except (LookupError, ValueError) as exc:
-        raise _http_from_source_error(exc) from exc
+    return await op_flows_code_agent_ensure_source(
+        CodeAgentNodeRefPayload(flow_id=flow_id, node_id=node_id, branch_id=branch_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post(
@@ -86,17 +61,11 @@ async def import_code_agent_git(
     container: ContainerDep,
     branch_id: Annotated[str, Query()] = "default",
 ) -> CodeAgentNodeStatusResponse:
-    await _require_edit_flow(container, flow_id)
-    try:
-        return await container.code_agent_source_service.import_git(
-            flow_id=flow_id,
-            node_id=node_id,
-            branch_id=branch_id,
-            git_url=body.git_url,
-            source_sha=body.source_sha,
-        )
-    except (LookupError, ValueError) as exc:
-        raise _http_from_source_error(exc) from exc
+    return await op_flows_code_agent_import_git(
+        body.model_copy(update={"flow_id": flow_id, "node_id": node_id, "branch_id": branch_id}),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post(
@@ -110,16 +79,11 @@ async def import_code_agent_archive(
     container: ContainerDep,
     branch_id: Annotated[str, Query()] = "default",
 ) -> CodeAgentNodeStatusResponse:
-    await _require_edit_flow(container, flow_id)
-    try:
-        return await container.code_agent_source_service.import_archive(
-            flow_id=flow_id,
-            node_id=node_id,
-            branch_id=branch_id,
-            file_id=body.file_id,
-        )
-    except (LookupError, ValueError) as exc:
-        raise _http_from_source_error(exc) from exc
+    return await op_flows_code_agent_import_archive(
+        body.model_copy(update={"flow_id": flow_id, "node_id": node_id, "branch_id": branch_id}),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post(
@@ -133,16 +97,11 @@ async def copy_code_agent_tree(
     container: ContainerDep,
     branch_id: Annotated[str, Query()] = "default",
 ) -> CodeAgentEnsureSourceResponse:
-    await _require_edit_flow(container, flow_id)
-    try:
-        return await container.code_agent_source_service.copy_tree(
-            flow_id=flow_id,
-            node_id=node_id,
-            branch_id=branch_id,
-            from_catalog_id=body.from_catalog_id,
-        )
-    except (LookupError, ValueError) as exc:
-        raise _http_from_source_error(exc) from exc
+    return await op_flows_code_agent_copy_tree(
+        body.model_copy(update={"flow_id": flow_id, "node_id": node_id, "branch_id": branch_id}),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post(
@@ -156,17 +115,11 @@ async def rebuild_code_agent(
     container: ContainerDep,
     branch_id: Annotated[str, Query()] = "default",
 ) -> GuestRebuildResponse:
-    await _require_edit_flow(container, flow_id)
-    try:
-        return await container.code_agent_source_service.rebuild(
-            flow_id=flow_id, node_id=node_id, branch_id=branch_id, request=body
-        )
-    except GuestRuntimeUnavailableError as exc:
-        raise _http_from_farm_unavailable(exc) from exc
-    except (GuestLeaseCapError, GuestBuildBusyError) as exc:
-        raise _http_from_farm_error(exc) from exc
-    except (LookupError, ValueError) as exc:
-        raise _http_from_source_error(exc) from exc
+    return await op_flows_code_agent_rebuild(
+        body.model_copy(update={"flow_id": flow_id, "node_id": node_id, "branch_id": branch_id}),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.get(
@@ -179,15 +132,11 @@ async def code_agent_status(
     container: ContainerDep,
     branch_id: Annotated[str, Query()] = "default",
 ) -> CodeAgentNodeStatusResponse:
-    await _require_view_flow(container, flow_id)
-    try:
-        return await container.code_agent_source_service.status(
-            flow_id=flow_id, node_id=node_id, branch_id=branch_id
-        )
-    except GuestRuntimeUnavailableError as exc:
-        raise _http_from_farm_unavailable(exc) from exc
-    except (LookupError, ValueError) as exc:
-        raise _http_from_source_error(exc) from exc
+    return await op_flows_code_agent_status(
+        CodeAgentNodeRefPayload(flow_id=flow_id, node_id=node_id, branch_id=branch_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.get(
@@ -203,20 +152,18 @@ async def code_agent_logs(
     session_id: Annotated[str | None, Query()] = None,
     context_id: Annotated[str | None, Query()] = None,
 ) -> GuestRuntimeLogsResponse:
-    await _require_view_flow(container, flow_id)
-    _ = branch_id
-    try:
-        return await container.code_agent_source_service.logs(
+    return await op_flows_code_agent_logs(
+        CodeAgentLogsPayload(
             flow_id=flow_id,
             node_id=node_id,
+            branch_id=branch_id,
             task_id=task_id,
             session_id=session_id,
             context_id=context_id,
-        )
-    except GuestRuntimeUnavailableError as exc:
-        raise _http_from_farm_unavailable(exc) from exc
-    except (LookupError, ValueError) as exc:
-        raise _http_from_source_error(exc) from exc
+        ),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.delete("/{flow_id}/nodes/{node_id}/code-agent", status_code=204)
@@ -227,15 +174,13 @@ async def delete_code_agent_source(
     branch_id: Annotated[str, Query()] = "default",
     catalog_id: Annotated[str | None, Query()] = None,
 ) -> None:
-    await _require_edit_flow(container, flow_id)
-    try:
-        await container.code_agent_source_service.delete_source(
+    return await op_flows_code_agent_delete(
+        CodeAgentDeletePayload(
             flow_id=flow_id,
             node_id=node_id,
             branch_id=branch_id,
             catalog_id=catalog_id,
-        )
-    except GuestRuntimeUnavailableError as exc:
-        raise _http_from_farm_unavailable(exc) from exc
-    except (LookupError, ValueError) as exc:
-        raise _http_from_source_error(exc) from exc
+        ),
+        user=require_context().user,
+        container=container,
+    )

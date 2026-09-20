@@ -2,16 +2,45 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
-from contextvars import Token
+from collections.abc import AsyncIterator, Iterator
+from contextvars import ContextVar, Token
 
 import pytest
 
+from apps.flows.src.container import FlowContainer
 from apps.flows.src.models import BranchConfig, Edge, FlowConfig
 from core.context import get_context, reset_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import User
 from tests.fixtures.ai_provider_defaults import make_test_company
+
+_owned_flow_owner: ContextVar[str] = ContextVar("owned_flow_owner")
+
+
+@pytest.fixture(autouse=True)
+def bind_owned_flow_owner(system_user_id: str) -> Iterator[None]:
+    token = _owned_flow_owner.set(system_user_id)
+    try:
+        yield
+    finally:
+        _owned_flow_owner.reset(token)
+
+
+async def persist_owned_flow(
+    container: FlowContainer,
+    config: FlowConfig,
+    *,
+    company_id: str = "system",
+    owner_user_id: str | None = None,
+) -> None:
+    """repository.set + FGA tuples. По умолчанию — HTTP-пользователь `client` (system)."""
+    owner = owner_user_id if owner_user_id is not None else _owned_flow_owner.get()
+    _ = await container.flow_repository.set(config)
+    await container.flow_access_service.sync_flow_saved(
+        config,
+        company_id=company_id,
+        owner_user_id=owner,
+    )
 
 
 def _bind_flow_company_context(company_id: str) -> Token[Context | None]:

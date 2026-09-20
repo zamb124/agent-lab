@@ -11,11 +11,10 @@ from core.datasources.models import (
     DatasourceConnectionPatch,
     DatasourceConnectorSpec,
     DatasourceConnectorUpsert,
-    DatasourceExecuteRequest,
     DatasourceExecuteResult,
-    DatasourceQueryRequest,
     DatasourceQueryResult,
     DatasourceSchemaSnapshot,
+    DatasourceSqlRequest,
     DatasourceTestResult,
 )
 from core.pagination import OffsetPage
@@ -132,7 +131,7 @@ class DatasourceClient:
     async def query(
         self, datasource_id: str, sql: str, params: JsonObject
     ) -> DatasourceQueryResult:
-        request = DatasourceQueryRequest(sql=sql, params=params)
+        request = DatasourceSqlRequest(sql=sql, params=params)
         raw = await self._http.post(
             _SERVICE,
             f"{_API}/datasources/{quote(datasource_id, safe='')}/query",
@@ -147,7 +146,7 @@ class DatasourceClient:
     async def execute(
         self, datasource_id: str, sql: str, params: JsonObject
     ) -> DatasourceExecuteResult:
-        request = DatasourceExecuteRequest(sql=sql, params=params)
+        request = DatasourceSqlRequest(sql=sql, params=params)
         raw = await self._http.post(
             _SERVICE,
             f"{_API}/datasources/{quote(datasource_id, safe='')}/execute",

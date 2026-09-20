@@ -5,7 +5,7 @@
  * Ресурс: либо запись каталога useResource('flows/resources'), либо ключ в
  * branchData.resources (inline / ссылка на shared с ключа ветки r_…).
  *
- * Save каталога → useOp('flows/resource_update') с debounce 400ms.
+ * Save каталога → useResource('flows/resources').update с debounce 400ms.
  * Save ветки → merge в branchData.resources + updateBranchData + debounce 400ms.
  * Delete каталога → flows/resources.remove.
  * Delete ветки → удалить ключ из branchData.resources.
@@ -48,7 +48,6 @@ export class FlowsResourcePropertyPanel extends PlatformElement {
         this.flowId = '';
         this._editor = this.useOp('flows/editor');
         this._resources = this.useResource('flows/resources');
-        this._update = this.useOp('flows/resource_update');
         this._catalogPending = new Map();
         this._branchPending = new Map();
         this._timers = new Map();
@@ -188,7 +187,13 @@ export class FlowsResourcePropertyPanel extends PlatformElement {
             this._catalogPending.delete(resourceId);
             this._timers.delete(key);
             if (!payload) return;
-            void this._update.run({ resource_id: resourceId, body: payload });
+            this._resources.update(resourceId, {
+                name: payload.name,
+                description: payload.description,
+                config: payload.config,
+                tags: payload.tags,
+                permission: payload.permission,
+            });
         }, SAVE_DEBOUNCE_MS);
         this._timers.set(key, timer);
     }

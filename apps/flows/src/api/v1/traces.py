@@ -1,206 +1,93 @@
-"""
-Traces API — OTEL-трейсы flows.
-
-Эндпоинт GET /traces/search читает platform_tracing (SpanRepository, PostgreSQL), фильтры flow_id и task_id комбинируются.
-
-Прочие маршруты /session, /task, /trace — через Grafana Tempo HTTP API.
-Ответ совместим с platform-trace-viewer: { spans: [...] } где spans — дерево.
-"""
+"""REST-зеркало Tempo/platform_tracing: path/query → тот же `op_*`, что и WS."""
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 
+from apps.flows.realtime.observability_operations import (
+    op_flows_traces_by_session,
+    op_flows_traces_by_task,
+    op_flows_traces_by_trace,
+    op_flows_traces_handoff_chain,
+    op_flows_traces_search,
+)
 from apps.flows.src.dependencies import ContainerDep
-from core.clients.tempo_client import TempoClientError
-from core.logging import get_logger
-from core.tracing.span_tree import build_span_tree
-from core.types import JsonObject
-
-logger = get_logger(__name__)
+from apps.flows.src.models.observability_api import (
+    ObservabilityTraceQueryPayload,
+    ObservabilityTraceSearchPayload,
+    ObservabilityTraceSearchResponse,
+    ObservabilityTraceTreeResponse,
+)
+from core.context import require_context
 
 router = APIRouter(tags=["Traces"])
 
-_ATTR_SESSION_AGENT = "platform.session.agent"
-_ATTR_TASK_ID = "platform.task_id"
 
-
-@router.get("/search")
+@router.get("/search", response_model=ObservabilityTraceSearchResponse)
 async def search_traces(
     container: ContainerDep,
     flow_id: Annotated[str | None, Query()] = None,
     task_id: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 20,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> JsonObject:
-    """Поиск трейсов в platform_tracing по ``flow_id`` и/или ``task_id`` (атрибут platform.task_id)."""
-    traces, total = await container.span_repository.search_traces(
-        flow_id=flow_id,
-        task_id=task_id,
-        limit=limit,
-        offset=offset,
+) -> ObservabilityTraceSearchResponse:
+    return await op_flows_traces_search(
+        ObservabilityTraceSearchPayload(
+            flow_id=flow_id,
+            task_id=task_id,
+            limit=limit,
+            offset=offset,
+        ),
+        user=require_context().user,
+        container=container,
     )
-    return {"traces_count": total, "traces": [trace.to_json_object() for trace in traces]}
 
 
-@router.get("/session/{session_id}")
+@router.get("/session/{session_id}", response_model=ObservabilityTraceTreeResponse)
 async def get_traces_by_session(
     session_id: str,
     container: ContainerDep,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
-) -> JsonObject:
-    """
-    Возвращает дерево spans для сессии выполнения flow из Tempo.
-
-    session_id — строка вида «{flow_id}:{context_id}», как хранится
-    в атрибуте platform.session.agent у spans.
-    """
-    if not session_id:
-        raise HTTPException(status_code=422, detail="session_id обязателен")
-    try:
-        trace_ids = await container.tempo_client.search_trace_ids_by_attribute(
-            _ATTR_SESSION_AGENT, session_id, limit=limit
-        )
-    except TempoClientError as exc:
-        logger.warning(
-            "traces.session.tempo_search_failed",
-            session_id=session_id,
-            error=str(exc),
-        )
-        raise HTTPException(status_code=503, detail="Tempo недоступен") from exc
-
-    all_spans = await _collect_spans_for_trace_ids(container, trace_ids)
-    return {
-        "session_id": session_id,
-        "spans_count": len(all_spans),
-        "spans": build_span_tree(all_spans),
-    }
+) -> ObservabilityTraceTreeResponse:
+    return await op_flows_traces_by_session(
+        ObservabilityTraceQueryPayload(session_id=session_id, limit=limit),
+        user=require_context().user,
+        container=container,
+    )
 
 
-@router.get("/task/{task_id}")
+@router.get("/task/{task_id}", response_model=ObservabilityTraceTreeResponse)
 async def get_traces_by_task(
     task_id: str,
     container: ContainerDep,
     limit: Annotated[int, Query(ge=1, le=50)] = 10,
-) -> JsonObject:
-    """
-    Возвращает дерево spans для A2A task_id из Tempo.
-    """
-    if not task_id:
-        raise HTTPException(status_code=422, detail="task_id обязателен")
-    try:
-        trace_ids = await container.tempo_client.search_trace_ids_by_attribute(
-            _ATTR_TASK_ID, task_id, limit=limit
-        )
-    except TempoClientError as exc:
-        logger.warning(
-            "traces.task.tempo_search_failed",
-            task_id=task_id,
-            error=str(exc),
-        )
-        raise HTTPException(status_code=503, detail="Tempo недоступен") from exc
-
-    all_spans = await _collect_spans_for_trace_ids(container, trace_ids)
-    return {
-        "task_id": task_id,
-        "spans_count": len(all_spans),
-        "spans": build_span_tree(all_spans),
-    }
+) -> ObservabilityTraceTreeResponse:
+    return await op_flows_traces_by_task(
+        ObservabilityTraceQueryPayload(task_id=task_id, limit=limit),
+        user=require_context().user,
+        container=container,
+    )
 
 
-@router.get("/handoff-chain/{parent_session_id}")
+@router.get("/handoff-chain/{parent_session_id}", response_model=ObservabilityTraceTreeResponse)
 async def get_handoff_chain(
     parent_session_id: str,
     container: ContainerDep,
-) -> JsonObject:
-    """Trace tree для handoff-цепочки parent↔child по handoff_trace_id."""
-    if not parent_session_id:
-        raise HTTPException(status_code=422, detail="parent_session_id обязателен")
-    parent_state = await container.workflow_runtime.get_state(parent_session_id)
-    if parent_state is None:
-        raise HTTPException(status_code=404, detail="parent session not found")
-    trace_id = parent_state.handoff_trace_id
-    if trace_id is None:
-        raise HTTPException(status_code=404, detail="handoff_trace_id not set on parent session")
-    try:
-        tempo_spans = await container.tempo_client.get_trace(trace_id)
-    except TempoClientError as exc:
-        logger.warning(
-            "traces.handoff_chain.tempo_failed",
-            parent_session_id=parent_session_id,
-            trace_id=trace_id,
-            error=str(exc),
-        )
-        tempo_spans = []
-    db_spans = await container.span_repository.get_trace(trace_id)
-    all_spans: list[JsonObject] = []
-    seen: set[str] = set()
-    for span in tempo_spans:
-        sid = span.get("span_id", "")
-        if isinstance(sid, str) and sid and sid not in seen:
-            seen.add(sid)
-            all_spans.append(span)
-    for span_record in db_spans:
-        sid = span_record.span_id
-        if sid not in seen:
-            seen.add(sid)
-            all_spans.append(span_record.to_json_object())
-    return {
-        "parent_session_id": parent_session_id,
-        "trace_id": trace_id,
-        "handoff_depth": parent_state.handoff_depth,
-        "spans_count": len(all_spans),
-        "spans": build_span_tree(all_spans),
-    }
+) -> ObservabilityTraceTreeResponse:
+    return await op_flows_traces_handoff_chain(
+        ObservabilityTraceQueryPayload(parent_session_id=parent_session_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
-@router.get("/trace/{trace_id}")
+@router.get("/trace/{trace_id}", response_model=ObservabilityTraceTreeResponse)
 async def get_trace(
     trace_id: str,
     container: ContainerDep,
-) -> JsonObject:
-    """
-    Возвращает дерево spans для конкретного trace_id из Tempo.
-    """
-    if not trace_id:
-        raise HTTPException(status_code=422, detail="trace_id обязателен")
-    try:
-        spans = await container.tempo_client.get_trace(trace_id)
-    except TempoClientError as exc:
-        logger.warning(
-            "traces.trace.tempo_get_failed",
-            trace_id=trace_id,
-            error=str(exc),
-        )
-        raise HTTPException(status_code=503, detail="Tempo недоступен") from exc
-
-    return {
-        "trace_id": trace_id,
-        "spans_count": len(spans),
-        "spans": build_span_tree(spans),
-    }
-
-
-async def _collect_spans_for_trace_ids(
-    container: ContainerDep,
-    trace_ids: list[str],
-) -> list[JsonObject]:
-    """Загружает spans для каждого trace_id из Tempo и объединяет в один список."""
-    all_spans: list[JsonObject] = []
-    seen_span_ids: set[str] = set()
-    for tid in trace_ids:
-        try:
-            spans = await container.tempo_client.get_trace(tid)
-        except TempoClientError as exc:
-            logger.warning(
-                "traces.collect.tempo_get_failed",
-                trace_id=tid,
-                error=str(exc),
-            )
-            continue
-        for span in spans:
-            sid = span.get("span_id", "")
-            if isinstance(sid, str) and sid and sid not in seen_span_ids:
-                seen_span_ids.add(sid)
-                all_spans.append(span)
-    return all_spans
+) -> ObservabilityTraceTreeResponse:
+    return await op_flows_traces_by_trace(
+        ObservabilityTraceQueryPayload(trace_id=trace_id),
+        user=require_context().user,
+        container=container,
+    )

@@ -424,7 +424,7 @@ async def test_lara_documents_catalog_access_and_rag_status(
         if isinstance(item, dict)
     }
     assert system_user_id in member_ids
-    access = _tool_json(result2.tool_results["documents_get_access"])
+    _ = _tool_json(result2.tool_results["documents_get_access"])
 
     _ = mock_llm_with_queue(
         [

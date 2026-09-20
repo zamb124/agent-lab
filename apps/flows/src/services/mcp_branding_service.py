@@ -5,8 +5,6 @@ from __future__ import annotations
 import re
 from datetime import UTC, datetime
 
-from fastapi import HTTPException
-
 from apps.flows.src.db.mcp_catalog_repository import MCPCatalogRepository
 from apps.flows.src.db.mcp_server_branding_repository import MCPServerBrandingRepository
 from apps.flows.src.models.mcp_branding import MCPServerBranding, MCPServerBrandingResolved
@@ -29,7 +27,7 @@ _ALLOWED_ICON_CONTENT_TYPES = frozenset({
 
 
 class MCPServerBrandingService:
-    """CRUD branding MCP и resolve icon_url для MCPServerResponse."""
+    """CRUD branding MCP и resolve icon_url для MCPServerConfig."""
 
     def __init__(
         self,
@@ -46,31 +44,24 @@ class MCPServerBrandingService:
     def _require_system_company() -> None:
         ctx = get_context()
         if ctx is None or ctx.active_company is None:
-            raise HTTPException(status_code=403, detail="MCP branding is system company only")
+            raise PermissionError("MCP branding is system company only")
         if ctx.active_company.company_id != "system":
-            raise HTTPException(status_code=403, detail="MCP branding is system company only")
+            raise PermissionError("MCP branding is system company only")
 
     @staticmethod
     def _validate_server_id(server_id: str) -> str:
         stripped = server_id.strip()
         if not _SERVER_ID_PATTERN.match(stripped):
-            raise HTTPException(
-                status_code=400,
-                detail=f"server_id {stripped!r} is not a valid MCP slug",
-            )
+            raise ValueError(f"server_id {stripped!r} is not a valid MCP slug")
         return stripped
 
     async def _resolve_icon_url(self, icon_file_id: str) -> str:
         record = await self._files_service.get(icon_file_id)
         if not record.is_public:
-            raise HTTPException(
-                status_code=400,
-                detail=f"File {icon_file_id} must be public for MCP branding",
-            )
+            raise ValueError(f"File {icon_file_id} must be public for MCP branding")
         if record.content_type not in _ALLOWED_ICON_CONTENT_TYPES:
-            raise HTTPException(
-                status_code=400,
-                detail=f"File content_type {record.content_type!r} is not allowed for MCP icon",
+            raise ValueError(
+                f"File content_type {record.content_type!r} is not allowed for MCP icon"
             )
         return record.url
 
@@ -151,7 +142,7 @@ class MCPServerBrandingService:
         self._require_system_company()
         normalized_server_id = self._validate_server_id(server_id)
         if not icon_file_id.strip():
-            raise HTTPException(status_code=400, detail="icon_file_id is required")
+            raise ValueError("icon_file_id is required")
         icon_url = await self._resolve_icon_url(icon_file_id.strip())
         ctx = require_context()
         now = datetime.now(UTC)
@@ -175,5 +166,5 @@ class MCPServerBrandingService:
         normalized_server_id = self._validate_server_id(server_id)
         existing = await self._branding_repository.get(normalized_server_id)
         if existing is None:
-            raise HTTPException(status_code=404, detail=f"MCP branding {normalized_server_id} not found")
+            raise LookupError(f"MCP branding {normalized_server_id} not found")
         _ = await self._branding_repository.delete(normalized_server_id)

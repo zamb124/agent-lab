@@ -37,11 +37,7 @@ from apps.flows.src.container import FlowContainer
 from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.durable_execution.repository import WorkflowProjectionMismatchError
-from apps.flows.src.models import (
-    BranchCreateRequest,
-    BranchUpdateRequest,
-    FlowConfig,
-)
+from apps.flows.src.models import FlowConfig
 from apps.flows.src.services.embed_target_resolver import EmbedTarget, resolve_embed_target
 from core.a2a import (
     A2A_ERROR_CODE_NAMES,
@@ -63,7 +59,6 @@ from core.a2a import (
 from core.a2a.codec import stream_response_from_event, stream_response_to_json_dict
 from core.authz.models import AuthzObject
 from core.context import get_context, require_active_company, require_context
-from core.events import publish_event_to_user
 from core.flow_ui.interface import (
     FlowInterfaceCapabilities,
     FlowInterfaceIdentity,
@@ -98,12 +93,6 @@ def _actor_company_id() -> str:
 
 async def _require_view_flow(container: ContainerDep, flow_id: str) -> None:
     await container.authz_service.require_can_view(
-        AuthzObject.flow(flow_id, company_id=_actor_company_id()), user_id=_actor_user_id()
-    )
-
-
-async def _require_edit_flow(container: ContainerDep, flow_id: str) -> None:
-    await container.authz_service.require_can_edit(
         AuthzObject.flow(flow_id, company_id=_actor_company_id()), user_id=_actor_user_id()
     )
 
@@ -1216,153 +1205,3 @@ async def get_embed_interface(
         container=container,
         embed_target=embed_target,
     )
-
-
-@router.get("/{flow_id}/branches")
-async def list_branches(flow_id: str, container: ContainerDep) -> list[JsonObject]:
-    context = get_context()
-    channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
-    await _require_view_flow(container, flow_id)
-    config = await _get_flow_config(flow_id, container)
-    if not config:
-        raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
-    return await channel.list_branches()
-
-
-@router.get("/{flow_id}/branches/{branch_id}")
-async def get_branch(flow_id: str, branch_id: str, container: ContainerDep) -> JsonObject:
-    context = get_context()
-    channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
-    await _require_view_flow(container, flow_id)
-    config = await _get_flow_config(flow_id, container)
-    if not config:
-        raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
-
-    result = await channel.get_branch(branch_id)
-    if result is None:
-        raise HTTPException(status_code=404, detail=f"Branch '{branch_id}' not found")
-    return result
-
-
-@router.get("/{flow_id}/branches/{branch_id}/tools")
-async def get_branch_tools(flow_id: str, branch_id: str, container: ContainerDep) -> list[JsonObject]:
-    """Получить список tools для ветки с полной информацией."""
-    context = get_context()
-    channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
-    await _require_view_flow(container, flow_id)
-    config = await _get_flow_config(flow_id, container)
-    if not config:
-        raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
-
-    # 'base' — это базовый агент без конкретной ветки
-    if branch_id != "base":
-        branch = await channel.get_branch(branch_id)
-        if branch is None:
-            raise HTTPException(status_code=404, detail=f"Branch '{branch_id}' not found")
-
-    return await channel.get_branch_tools(branch_id)
-
-
-@router.get("/{flow_id}/schema")
-async def get_branch_schema(flow_id: str, container: ContainerDep) -> JsonObject:
-    """Получить JSON Schema для создания ветки в формате ISchema."""
-    _ = container
-    context = get_context()
-    channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
-    try:
-        await _require_view_flow(container, flow_id)
-        return await channel.get_branch_schema()
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-
-@router.post("/{flow_id}/branches")
-async def create_branch(
-    flow_id: str,
-    body: BranchCreateRequest,
-    container: ContainerDep,
-) -> JSONResponse:
-    """Создать новую ветку."""
-    context = get_context()
-    channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
-    await _require_edit_flow(container, flow_id)
-    config = await _get_flow_config(flow_id, container)
-    if not config:
-        raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
-
-    branch_id = body.branch_id
-
-    try:
-        result = await channel.create_branch(body)
-    except ValueError as e:
-        msg = str(e).lower()
-        if "already exists" in msg or "уже существует" in msg:
-            raise HTTPException(status_code=409, detail=str(e))
-        raise HTTPException(status_code=400, detail=str(e))
-
-    if context and context.user and context.user.user_id:
-        await publish_event_to_user(
-            user_id=context.user.user_id,
-            type="flows/branch/created",
-            payload={"flow_id": flow_id, "branch_id": branch_id},
-        )
-
-    return JSONResponse(result, status_code=201)
-
-
-@router.put("/{flow_id}/branches/{branch_id}")
-async def update_branch(
-    flow_id: str,
-    branch_id: str,
-    body: BranchUpdateRequest,
-    container: ContainerDep,
-) -> JsonObject:
-    """Обновить существующую ветку."""
-    context = get_context()
-    channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
-    await _require_edit_flow(container, flow_id)
-    config = await _get_flow_config(flow_id, container)
-    if not config:
-        raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
-
-    try:
-        result = await channel.update_branch(branch_id, body)
-    except ValueError as e:
-        msg = str(e)
-        if msg == f"Ветка '{branch_id}' не найдена":
-            raise HTTPException(status_code=404, detail=f"Branch '{branch_id}' not found. Use POST to create.")
-        raise HTTPException(status_code=400, detail=str(e))
-
-    if context and context.user and context.user.user_id:
-        await publish_event_to_user(
-            user_id=context.user.user_id,
-            type="flows/branch/updated",
-            payload={"flow_id": flow_id, "branch_id": branch_id},
-        )
-
-    return result
-
-
-@router.delete("/{flow_id}/branches/{branch_id}")
-async def delete_branch(flow_id: str, branch_id: str, container: ContainerDep) -> JsonObject:
-    """Удалить ветку."""
-    context = get_context()
-    channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
-    await _require_edit_flow(container, flow_id)
-    config = await _get_flow_config(flow_id, container)
-    if not config:
-        raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
-
-    try:
-        result = await channel.delete_branch(branch_id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-    if context and context.user and context.user.user_id:
-        await publish_event_to_user(
-            user_id=context.user.user_id,
-            type="flows/branch/deleted",
-            payload={"flow_id": flow_id, "branch_id": branch_id},
-        )
-
-    return result

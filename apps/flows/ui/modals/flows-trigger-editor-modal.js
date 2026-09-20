@@ -722,7 +722,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         if (tid.length > 0) {
             body.trigger_id = tid;
         }
-        const r = await this._verifyOp.run({ flow_id: this.flowId, body });
+        const r = await this._verifyOp.run({ flow_id: this.flowId, ...body });
         if (r === null) {
             const errMsg = this._verifyOp.error;
             this._verifyHintText = errMsg && errMsg.length > 0
@@ -2002,7 +2002,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         await this._testOp.run({
             flow_id: this.flowId,
             trigger_id: triggerId,
-            body,
+            payload: body,
         });
         const lr = this._testOp.lastResult;
         this._mappingTestResultText = lr === null || lr === undefined
@@ -2580,18 +2580,16 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             await this._updateOp.run({
                 flow_id: this.flowId,
                 trigger_id: this._triggerId.trim(),
-                body: {
-                    name: body.name,
-                    enabled: body.enabled,
-                    config: body.config,
-                    output_mapping: body.output_mapping,
-                    output_actions: body.output_actions,
-                    post_flow_output_enabled: body.post_flow_output_enabled,
-                    branch_id: body.branch_id,
-                },
+                name: body.name,
+                enabled: body.enabled,
+                config: body.config,
+                output_mapping: body.output_mapping,
+                output_actions: body.output_actions,
+                post_flow_output_enabled: body.post_flow_output_enabled,
+                branch_id: body.branch_id,
             });
         } else {
-            await this._createOp.run({ flow_id: this.flowId, body });
+            await this._createOp.run({ flow_id: this.flowId, ...body });
         }
         await this._listOp.run({ flow_id: this.flowId });
         this.closeAfterSave();

@@ -108,7 +108,7 @@ async def crm_entity_related(
     name="crm_shortest_path",
     description=(
         "Shortest weighted path between two entities "
-        "(GET /crm/api/v1/relationships/path/?from=&to=). Returns directed and undirected paths."
+        "(GET /crm/api/v1/relationships/path/?source_entity_id=&target_entity_id=). Returns directed and undirected paths."
     ),
     tags=_TAGS,
     parameters_model=CrmShortestPathArgs,

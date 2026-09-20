@@ -5,7 +5,6 @@
  */
 
 import { createResourceCollection, createAsyncOp } from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
 
 const FLOWS_API_V1 = '/flows/api/v1';
 
@@ -14,11 +13,13 @@ export const sessionsResource = createResourceCollection({
     baseUrl: '/flows/api/v1/sessions/',
     idField: 'session_id',
     buildItemUrl: (id) => `${FLOWS_API_V1}/sessions/${encodeURIComponent(id)}`,
+    operations: ['list', 'remove'],
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
     restMirror: {
         list: { method: 'GET', path: '/flows/api/v1/sessions/' },
-        remove: { method: 'DELETE', path: '/flows/api/v1/sessions/{session_id}' },
+        remove: { method: 'DELETE', path: '/flows/api/v1/sessions/:session_id' },
     },
-    operations: ['list', 'remove'],
     toastKeys: {
         remove: 'flows:toast.session_removed',
         remove_error: 'flows:toast.session_remove_error',
@@ -55,15 +56,8 @@ export const sessionsResource = createResourceCollection({
 export const sessionStateOp = createAsyncOp({
     name: 'flows/session_state',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/sessions/state_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/tasks/state' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.session_id !== 'string' || payload.session_id.length === 0) {
-            throw new Error('sessionStateOp: { session_id } required');
-        }
-        const params = new URLSearchParams({ session_id: payload.session_id });
-        return httpRequest({
-            method: 'GET',
-            url: `${FLOWS_API_V1}/tasks/state?${params.toString()}`,
-        });
-    },
 });

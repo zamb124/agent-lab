@@ -1,40 +1,25 @@
-"""
-REST: подтверждение Lara pending-actions из embed/UI без повторного tool-call через LLM.
-"""
+"""Подтверждение Lara pending-actions из embed без повторного tool-call через LLM."""
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import APIRouter
 
+from apps.flows.realtime.lara_operations import (
+    LaraPendingActionApplyPayload,
+    op_flows_lara_pending_actions_apply,
+)
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.services.lara_action_engine import LaraPendingAction
-from core.logging import get_logger
-
-logger = get_logger(__name__)
+from core.context import require_context
 
 router = APIRouter(prefix="/lara", tags=["Lara"])
 
 
-class LaraPendingActionsApplyBody(BaseModel):
-    pending_action_id: str = Field(..., min_length=1)
-    context_id: str = Field(..., min_length=1)
-    idempotency_key: str | None = Field(None, description="Опционально; по умолчанию из сохранённого действия")
-
-
 @router.post("/pending-actions/apply")
 async def lara_pending_actions_apply(
-    body: LaraPendingActionsApplyBody,
+    body: LaraPendingActionApplyPayload,
     container: ContainerDep,
 ) -> LaraPendingAction:
-    facade = container.lara_facade
-    try:
-        return await facade.apply_pending_action_from_http(
-            pending_action_id=body.pending_action_id,
-            context_id=body.context_id,
-            idempotency_key=body.idempotency_key,
-        )
-    except PermissionError as e:
-        logger.warning("lara_pending_apply denied: %s", e)
-        raise HTTPException(status_code=403, detail=str(e)) from e
-    except ValueError as e:
-        logger.info("lara_pending_apply rejected: %s", e)
-        raise HTTPException(status_code=422, detail=str(e)) from e
+    return await op_flows_lara_pending_actions_apply(
+        body,
+        user=require_context().user,
+        container=container,
+    )

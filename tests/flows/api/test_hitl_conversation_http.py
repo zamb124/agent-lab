@@ -71,6 +71,7 @@ async def test_single_reply_operator_ask_http_rejected(
         json={"text": "ask", "idempotency_key": f"k-{unique_id}"},
     )
     assert send.status_code == 400
+    assert send.json()["error_code"] == "ws_invalid_payload"
 
 
 async def test_operator_message_http_forbidden_for_queue_outsider(
@@ -93,6 +94,7 @@ async def test_operator_message_http_forbidden_for_queue_outsider(
         json={"text": "hi", "idempotency_key": f"k-{unique_id}"},
     )
     assert send.status_code == 403
+    assert send.json()["error_code"] == "forbidden"
 
 
 async def test_takeover_operator_message_http_with_file_ids(
@@ -241,6 +243,7 @@ async def test_terminal_hitl_rejects_send_and_second_complete(
         json={"text": "late", "idempotency_key": f"late-{unique_id}"},
     )
     assert send.status_code == 400
+    assert send.json()["error_code"] == "ws_invalid_payload"
 
     again = await worktracker_client.post(
         f"{WORK_ITEMS}/{parked.work_item_id}/complete",

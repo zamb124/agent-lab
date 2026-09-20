@@ -1,78 +1,28 @@
-"""
-API для управления ресурсами компаний.
-"""
+"""Публичный enqueue init ресурсов компании."""
 
+from fastapi import APIRouter
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-
+from apps.flows.realtime.company_operations import (
+    CompanyInitPayload,
+    CompanyInitScheduledResponse,
+    op_flows_company_init,
+)
+from apps.flows.realtime.operations import raise_invalid
 from apps.flows.src.dependencies import ContainerDep
-from apps.flows.src.tasks.task_names import TASK_INIT_COMPANY_RESOURCES
-from core.logging import get_logger
-from core.tasks import enqueue
-
-logger = get_logger(__name__)
+from core.context import require_context
 
 router = APIRouter(prefix="/company", tags=["company"])
 
 
-class InitCompanyRequest(BaseModel):
-    """Запрос инициализации компании"""
-    company_id: str
-    company_name: str = ""
-    subdomain: str = ""
-
-
-class InitCompanyResponse(BaseModel):
-    """Ответ инициализации компании"""
-    task_id: str
-    status: str
-    message: str
-
-
-async def schedule_company_init(request: InitCompanyRequest) -> InitCompanyResponse:
-    if request.company_id == "system":
-        raise HTTPException(
-            status_code=400,
-            detail="System namespace инициализируется автоматически при старте",
-        )
-
-    logger.info(f"Запрос инициализации компании: {request.company_id}")
-
-    try:
-        task = await enqueue(
-            TASK_INIT_COMPANY_RESOURCES,
-            company_id=request.company_id,
-            company_name=request.company_name,
-            subdomain=request.subdomain,
-            background_kind="company_init",
-        )
-
-        logger.info(f"Задача инициализации запущена: task_id={task.task_id}")
-
-        return InitCompanyResponse(
-            task_id=task.task_id,
-            status="scheduled",
-            message=f"Инициализация компании {request.company_id} запланирована",
-        )
-
-    except Exception as e:
-        logger.error(f"Ошибка запуска инициализации: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Не удалось запустить инициализацию: {str(e)}",
-        ) from e
-
-
-@router.post("/init", response_model=InitCompanyResponse)
-async def init_company(container: ContainerDep, request: InitCompanyRequest) -> InitCompanyResponse:
-    """
-    Инициализирует агенты и тулы для новой компании.
-
-    Запускает TaskIQ задачу которая загружает:
-    - Public агенты со всеми зависимостями (из кода)
-    - Public тулы (из кода)
-    """
-    _ = container
-    return await schedule_company_init(request)
-
+@router.post("/init")
+async def init_company(
+    body: CompanyInitPayload,
+    container: ContainerDep,
+) -> CompanyInitScheduledResponse:
+    if body.company_id == "system":
+        raise_invalid(ValueError("System namespace инициализируется через internal bootstrap"))
+    return await op_flows_company_init(
+        body,
+        user=require_context().user,
+        container=container,
+    )

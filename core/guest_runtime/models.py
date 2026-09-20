@@ -125,9 +125,7 @@ class GuestEnsureLeaseRequest(StrictBaseModel):
     durable_execution_branch_id: str | None = Field(default=None, min_length=1)
     durable_node_schedule_sequence: int | None = Field(default=None, ge=0)
     durable_superstep_sequence: int | None = Field(default=None, ge=0)
-    idle_ttl_seconds: int | None = Field(
-        default=None, ge=GUEST_IDLE_TTL_MIN, le=GUEST_IDLE_TTL_MAX
-    )
+    idle_ttl_seconds: int | None = Field(default=None, ge=GUEST_IDLE_TTL_MIN, le=GUEST_IDLE_TTL_MAX)
     guest_env: dict[str, str] = Field(default_factory=dict)
 
     @field_validator("guest_env")
@@ -204,20 +202,36 @@ class CodeAgentEnsureSourceResponse(StrictBaseModel):
     catalog_path: list[str]
 
 
-class CodeAgentImportGitRequest(StrictBaseModel):
+class CodeAgentNodeRefPayload(StrictBaseModel):
+    flow_id: str = ""
+    node_id: str = ""
+    branch_id: str = "default"
+
+
+class CodeAgentLogsPayload(CodeAgentNodeRefPayload):
+    task_id: str | None = None
+    session_id: str | None = None
+    context_id: str | None = None
+
+
+class CodeAgentDeletePayload(CodeAgentNodeRefPayload):
+    catalog_id: str | None = None
+
+
+class CodeAgentImportGitRequest(CodeAgentNodeRefPayload):
     git_url: str
     source_sha: str
 
 
-class CodeAgentImportArchiveRequest(StrictBaseModel):
+class CodeAgentImportArchiveRequest(CodeAgentNodeRefPayload):
     file_id: str = Field(..., min_length=1)
 
 
-class CodeAgentCopyTreeRequest(StrictBaseModel):
+class CodeAgentCopyTreeRequest(CodeAgentNodeRefPayload):
     from_catalog_id: str = Field(..., min_length=1)
 
 
-class CodeAgentRebuildRequest(StrictBaseModel):
+class CodeAgentRebuildRequest(CodeAgentNodeRefPayload):
     language: GuestLanguage
     invoke_kind: GuestInvokeKind
     invoke_argv: list[str]
@@ -225,6 +239,17 @@ class CodeAgentRebuildRequest(StrictBaseModel):
     egress_hosts: list[str] = Field(default_factory=list)
     git_url: str | None = None
     source_sha: str | None = None
+
+    @field_validator("git_url", "source_sha", mode="before")
+    @classmethod
+    def _blank_git_field(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("git_url/source_sha must be string or null")
+        if value == "":
+            return None
+        return value
 
 
 class CodeAgentNodeStatusResponse(StrictBaseModel):
@@ -239,9 +264,12 @@ class CodeAgentNodeStatusResponse(StrictBaseModel):
 
 __all__ = [
     "CodeAgentCopyTreeRequest",
+    "CodeAgentDeletePayload",
     "CodeAgentEnsureSourceResponse",
     "CodeAgentImportArchiveRequest",
     "CodeAgentImportGitRequest",
+    "CodeAgentLogsPayload",
+    "CodeAgentNodeRefPayload",
     "CodeAgentNodeStatusResponse",
     "CodeAgentRebuildRequest",
     "CodeAgentSourceFile",

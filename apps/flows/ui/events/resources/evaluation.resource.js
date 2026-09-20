@@ -1,15 +1,9 @@
 /**
  * Лаборатория Evaluation — фабрики UI-домена.
- *
- * Компоненты лаборатории Evaluation не ходят в HTTP напрямую. Все операции CRUD/command/read
- * операции идут через эти createAsyncOp-фабрики, а выбранные сущности держатся
- * в typed slice `flows/evaluation_ui`.
+ * REST: `apps/flows/src/api/v1/evaluation.py` — тот же `op_*`, что WS.
  */
 
 import { createAsyncOp, createSlice } from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
-
-const API_ROOT = '/flows/api/v1/evaluation';
 
 function requireRecord(value, label) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -49,47 +43,6 @@ function optionalNumberField(payload, field, label, defaultValue) {
         throw new Error(`${label}: ${field} must be a finite number`);
     }
     return Math.trunc(value);
-}
-
-function requireBody(payload, label) {
-    const body = payload.body;
-    if (!body || typeof body !== 'object' || Array.isArray(body)) {
-        throw new Error(`${label}: body object required`);
-    }
-    return body;
-}
-
-function encoded(value) {
-    return encodeURIComponent(value);
-}
-
-function buildQuery(path, entries) {
-    const params = new URLSearchParams();
-    for (const [key, value] of entries) {
-        if (value === null || value === undefined) {
-            continue;
-        }
-        if (typeof value === 'string') {
-            if (value.length > 0) {
-                params.set(key, value);
-            }
-            continue;
-        }
-        if (typeof value === 'number') {
-            if (!Number.isFinite(value)) {
-                throw new Error(`buildQuery: ${key} must be finite`);
-            }
-            params.set(key, String(Math.trunc(value)));
-            continue;
-        }
-        if (typeof value === 'boolean') {
-            params.set(key, value ? 'true' : 'false');
-            continue;
-        }
-        throw new Error(`buildQuery: unsupported value for ${key}`);
-    }
-    const query = params.toString();
-    return query.length > 0 ? `${path}?${query}` : path;
 }
 
 function listItems(result, label) {
@@ -266,183 +219,118 @@ export const evaluationUiSlice = createSlice({
 export const evaluationEvaluatorCatalogOp = createAsyncOp({
     name: 'flows/evaluation_evaluator_catalog',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/evaluator_catalog_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/evaluation/evaluator-catalog' },
-    request: async () => httpRequest({ method: 'GET', url: `${API_ROOT}/evaluator-catalog` }),
 });
 
 export const evaluationSuitesListOp = createAsyncOp({
     name: 'flows/evaluation_suites_list',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/suites_list_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/evaluation/suites' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationSuitesListOp');
-        const flowId = requireStringField(data, 'flow_id', 'evaluationSuitesListOp');
-        return httpRequest({
-            method: 'GET',
-            url: buildQuery(`${API_ROOT}/suites`, [['flow_id', flowId]]),
-        });
-    },
 });
 
 export const evaluationSuiteCreateOp = createAsyncOp({
     name: 'flows/evaluation_suite_create',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/suite_create_requested',
     restMirror: { method: 'POST', path: '/flows/api/v1/evaluation/suites' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationSuiteCreateOp');
-        return httpRequest({
-            method: 'POST',
-            url: `${API_ROOT}/suites`,
-            body: requireBody(data, 'evaluationSuiteCreateOp'),
-        });
-    },
 });
 
 export const evaluationSuiteUpdateOp = createAsyncOp({
     name: 'flows/evaluation_suite_update',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/suite_update_requested',
     restMirror: { method: 'PUT', path: '/flows/api/v1/evaluation/suites/{suite_id}' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationSuiteUpdateOp');
-        const suiteId = requireStringField(data, 'suite_id', 'evaluationSuiteUpdateOp');
-        return httpRequest({
-            method: 'PUT',
-            url: `${API_ROOT}/suites/${encoded(suiteId)}`,
-            body: requireBody(data, 'evaluationSuiteUpdateOp'),
-        });
-    },
 });
 
 export const evaluationSuiteArchiveOp = createAsyncOp({
     name: 'flows/evaluation_suite_archive',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/suite_archive_requested',
     restMirror: { method: 'POST', path: '/flows/api/v1/evaluation/suites/{suite_id}/archive' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationSuiteArchiveOp');
-        const suiteId = requireStringField(data, 'suite_id', 'evaluationSuiteArchiveOp');
-        return httpRequest({
-            method: 'POST',
-            url: `${API_ROOT}/suites/${encoded(suiteId)}/archive`,
-            body: {},
-        });
-    },
 });
 
 export const evaluationCasesListOp = createAsyncOp({
     name: 'flows/evaluation_cases_list',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/cases_list_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/evaluation/suites/{suite_id}/cases' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationCasesListOp');
-        const suiteId = requireStringField(data, 'suite_id', 'evaluationCasesListOp');
-        return httpRequest({ method: 'GET', url: `${API_ROOT}/suites/${encoded(suiteId)}/cases` });
-    },
 });
 
 export const evaluationCaseCreateOp = createAsyncOp({
     name: 'flows/evaluation_case_create',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/case_create_requested',
     restMirror: { method: 'POST', path: '/flows/api/v1/evaluation/suites/{suite_id}/cases' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationCaseCreateOp');
-        const suiteId = requireStringField(data, 'suite_id', 'evaluationCaseCreateOp');
-        return httpRequest({
-            method: 'POST',
-            url: `${API_ROOT}/suites/${encoded(suiteId)}/cases`,
-            body: requireBody(data, 'evaluationCaseCreateOp'),
-        });
-    },
 });
 
 export const evaluationCaseUpdateOp = createAsyncOp({
     name: 'flows/evaluation_case_update',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/case_update_requested',
     restMirror: { method: 'PUT', path: '/flows/api/v1/evaluation/suites/{suite_id}/cases/{case_id}' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationCaseUpdateOp');
-        const suiteId = requireStringField(data, 'suite_id', 'evaluationCaseUpdateOp');
-        const caseId = requireStringField(data, 'case_id', 'evaluationCaseUpdateOp');
-        return httpRequest({
-            method: 'PUT',
-            url: `${API_ROOT}/suites/${encoded(suiteId)}/cases/${encoded(caseId)}`,
-            body: requireBody(data, 'evaluationCaseUpdateOp'),
-        });
-    },
 });
 
 export const evaluationCaseDeleteOp = createAsyncOp({
     name: 'flows/evaluation_case_delete',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/case_delete_requested',
     restMirror: { method: 'DELETE', path: '/flows/api/v1/evaluation/suites/{suite_id}/cases/{case_id}' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationCaseDeleteOp');
-        const suiteId = requireStringField(data, 'suite_id', 'evaluationCaseDeleteOp');
-        const caseId = requireStringField(data, 'case_id', 'evaluationCaseDeleteOp');
-        return httpRequest({
-            method: 'DELETE',
-            url: `${API_ROOT}/suites/${encoded(suiteId)}/cases/${encoded(caseId)}`,
-        });
-    },
 });
 
 export const evaluationCaseImportOp = createAsyncOp({
     name: 'flows/evaluation_case_import',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 30_000,
+    commandType: 'flows/evaluation/case_import_requested',
     restMirror: { method: 'POST', path: '/flows/api/v1/evaluation/suites/{suite_id}/cases/import' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationCaseImportOp');
-        const suiteId = requireStringField(data, 'suite_id', 'evaluationCaseImportOp');
-        return httpRequest({
-            method: 'POST',
-            url: `${API_ROOT}/suites/${encoded(suiteId)}/cases/import`,
-            body: requireBody(data, 'evaluationCaseImportOp'),
-        });
-    },
 });
 
 export const evaluationCaseFromDialogOp = createAsyncOp({
     name: 'flows/evaluation_case_from_dialog',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/case_from_dialog_requested',
     restMirror: { method: 'POST', path: '/flows/api/v1/evaluation/suites/{suite_id}/cases/from-dialog' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationCaseFromDialogOp');
-        const suiteId = requireStringField(data, 'suite_id', 'evaluationCaseFromDialogOp');
-        return httpRequest({
-            method: 'POST',
-            url: `${API_ROOT}/suites/${encoded(suiteId)}/cases/from-dialog`,
-            body: requireBody(data, 'evaluationCaseFromDialogOp'),
-        });
-    },
 });
 
 export const evaluationCaseFromTraceOp = createAsyncOp({
     name: 'flows/evaluation_case_from_trace',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/case_from_trace_requested',
     restMirror: { method: 'POST', path: '/flows/api/v1/evaluation/suites/{suite_id}/cases/from-trace' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationCaseFromTraceOp');
-        const suiteId = requireStringField(data, 'suite_id', 'evaluationCaseFromTraceOp');
-        return httpRequest({
-            method: 'POST',
-            url: `${API_ROOT}/suites/${encoded(suiteId)}/cases/from-trace`,
-            body: requireBody(data, 'evaluationCaseFromTraceOp'),
-        });
-    },
 });
 
 export const evaluationRunsListOp = createAsyncOp({
     name: 'flows/evaluation_runs_list',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/runs_list_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/evaluation/suites/{suite_id}/runs' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationRunsListOp');
-        const suiteId = requireStringField(data, 'suite_id', 'evaluationRunsListOp');
-        const limit = optionalNumberField(data, 'limit', 'evaluationRunsListOp', 30);
-        return httpRequest({
-            method: 'GET',
-            url: buildQuery(`${API_ROOT}/suites/${encoded(suiteId)}/runs`, [['limit', limit]]),
-        });
-    },
     extraEffect: async (event, ctx, events) => {
         if (event.type !== 'flows/evaluation/event') {
             return false;
@@ -476,303 +364,199 @@ export const evaluationRunsListOp = createAsyncOp({
 export const evaluationRunCreateOp = createAsyncOp({
     name: 'flows/evaluation_run_create',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 30_000,
+    commandType: 'flows/evaluation/run_create_requested',
     restMirror: { method: 'POST', path: '/flows/api/v1/evaluation/runs' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationRunCreateOp');
-        return httpRequest({
-            method: 'POST',
-            url: `${API_ROOT}/runs`,
-            body: requireBody(data, 'evaluationRunCreateOp'),
-        });
-    },
 });
 
 export const evaluationRunGetOp = createAsyncOp({
     name: 'flows/evaluation_run_get',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/run_get_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/evaluation/runs/{run_id}' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationRunGetOp');
-        const runId = requireStringField(data, 'run_id', 'evaluationRunGetOp');
-        return httpRequest({ method: 'GET', url: `${API_ROOT}/runs/${encoded(runId)}` });
-    },
 });
 
 export const evaluationRunCancelOp = createAsyncOp({
     name: 'flows/evaluation_run_cancel',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/run_cancel_requested',
     restMirror: { method: 'POST', path: '/flows/api/v1/evaluation/runs/{run_id}/cancel' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationRunCancelOp');
-        const runId = requireStringField(data, 'run_id', 'evaluationRunCancelOp');
-        return httpRequest({ method: 'POST', url: `${API_ROOT}/runs/${encoded(runId)}/cancel`, body: {} });
-    },
 });
 
 export const evaluationRunCasesOp = createAsyncOp({
     name: 'flows/evaluation_run_cases',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/run_cases_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/evaluation/runs/{run_id}/cases' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationRunCasesOp');
-        const runId = requireStringField(data, 'run_id', 'evaluationRunCasesOp');
-        return httpRequest({ method: 'GET', url: `${API_ROOT}/runs/${encoded(runId)}/cases` });
-    },
 });
 
 export const evaluationRunEventsOp = createAsyncOp({
     name: 'flows/evaluation_run_events',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/run_events_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/evaluation/runs/{run_id}/events' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationRunEventsOp');
-        const runId = requireStringField(data, 'run_id', 'evaluationRunEventsOp');
-        return httpRequest({ method: 'GET', url: `${API_ROOT}/runs/${encoded(runId)}/events` });
-    },
 });
 
 export const evaluationRunEventsPageOp = createAsyncOp({
     name: 'flows/evaluation_run_events_page',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/run_events_page_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/evaluation/runs/{run_id}/events-page' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationRunEventsPageOp');
-        const runId = requireStringField(data, 'run_id', 'evaluationRunEventsPageOp');
-        const afterSequence = optionalNumberField(data, 'after_sequence', 'evaluationRunEventsPageOp', 0);
-        const limit = optionalNumberField(data, 'limit', 'evaluationRunEventsPageOp', 200);
-        return httpRequest({
-            method: 'GET',
-            url: buildQuery(`${API_ROOT}/runs/${encoded(runId)}/events-page`, [
-                ['after_sequence', afterSequence],
-                ['limit', limit],
-            ]),
-        });
-    },
 });
 
 export const evaluationMatrixGetOp = createAsyncOp({
     name: 'flows/evaluation_matrix_get',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/matrix_get_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/evaluation/suites/{suite_id}/matrix' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationMatrixGetOp');
-        const suiteId = requireStringField(data, 'suite_id', 'evaluationMatrixGetOp');
-        const branchId = optionalStringField(data, 'branch_id', 'evaluationMatrixGetOp');
-        const limit = optionalNumberField(data, 'limit', 'evaluationMatrixGetOp', 12);
-        return httpRequest({
-            method: 'GET',
-            url: buildQuery(`${API_ROOT}/suites/${encoded(suiteId)}/matrix`, [
-                ['branch_id', branchId],
-                ['limit', limit],
-            ]),
-        });
-    },
 });
 
 export const evaluationCompareRunsOp = createAsyncOp({
     name: 'flows/evaluation_compare_runs',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/compare_runs_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/evaluation/runs/compare' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationCompareRunsOp');
-        const leftRunId = requireStringField(data, 'left_run_id', 'evaluationCompareRunsOp');
-        const rightRunId = requireStringField(data, 'right_run_id', 'evaluationCompareRunsOp');
-        return httpRequest({
-            method: 'GET',
-            url: buildQuery(`${API_ROOT}/runs/compare`, [
-                ['left_run_id', leftRunId],
-                ['right_run_id', rightRunId],
-            ]),
-        });
-    },
 });
 
 export const evaluationCaseRunTraceOp = createAsyncOp({
     name: 'flows/evaluation_case_run_trace',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/case_run_trace_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/evaluation/case-runs/{case_run_id}/trace' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationCaseRunTraceOp');
-        const caseRunId = requireStringField(data, 'case_run_id', 'evaluationCaseRunTraceOp');
-        return httpRequest({ method: 'GET', url: `${API_ROOT}/case-runs/${encoded(caseRunId)}/trace` });
-    },
 });
 
 export const evaluationAnnotationsListOp = createAsyncOp({
     name: 'flows/evaluation_annotations_list',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/annotations_list_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/evaluation/runs/{run_id}/annotations' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationAnnotationsListOp');
-        const runId = requireStringField(data, 'run_id', 'evaluationAnnotationsListOp');
-        return httpRequest({ method: 'GET', url: `${API_ROOT}/runs/${encoded(runId)}/annotations` });
-    },
 });
 
 export const evaluationAnnotationCreateOp = createAsyncOp({
     name: 'flows/evaluation_annotation_create',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/annotation_create_requested',
     restMirror: { method: 'POST', path: '/flows/api/v1/evaluation/runs/{run_id}/annotations' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationAnnotationCreateOp');
-        const runId = requireStringField(data, 'run_id', 'evaluationAnnotationCreateOp');
-        return httpRequest({
-            method: 'POST',
-            url: `${API_ROOT}/runs/${encoded(runId)}/annotations`,
-            body: requireBody(data, 'evaluationAnnotationCreateOp'),
-        });
-    },
 });
 
 export const evaluationBaselinesListOp = createAsyncOp({
     name: 'flows/evaluation_baselines_list',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/baselines_list_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/evaluation/suites/{suite_id}/baselines' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationBaselinesListOp');
-        const suiteId = requireStringField(data, 'suite_id', 'evaluationBaselinesListOp');
-        return httpRequest({ method: 'GET', url: `${API_ROOT}/suites/${encoded(suiteId)}/baselines` });
-    },
 });
 
 export const evaluationBaselineSetOp = createAsyncOp({
     name: 'flows/evaluation_baseline_set',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/baseline_set_requested',
     restMirror: { method: 'PUT', path: '/flows/api/v1/evaluation/suites/{suite_id}/baselines/{branch_id}' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationBaselineSetOp');
-        const suiteId = requireStringField(data, 'suite_id', 'evaluationBaselineSetOp');
-        const branchId = requireStringField(data, 'branch_id', 'evaluationBaselineSetOp');
-        return httpRequest({
-            method: 'PUT',
-            url: `${API_ROOT}/suites/${encoded(suiteId)}/baselines/${encoded(branchId)}`,
-            body: requireBody(data, 'evaluationBaselineSetOp'),
-        });
-    },
 });
 
 export const evaluationGatePoliciesListOp = createAsyncOp({
     name: 'flows/evaluation_gate_policies_list',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/gate_policies_list_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/evaluation/suites/{suite_id}/gate-policies' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationGatePoliciesListOp');
-        const suiteId = requireStringField(data, 'suite_id', 'evaluationGatePoliciesListOp');
-        return httpRequest({ method: 'GET', url: `${API_ROOT}/suites/${encoded(suiteId)}/gate-policies` });
-    },
 });
 
 export const evaluationMonitorsListOp = createAsyncOp({
     name: 'flows/evaluation_monitors_list',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/monitors_list_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/evaluation/suites/{suite_id}/monitors' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationMonitorsListOp');
-        const suiteId = requireStringField(data, 'suite_id', 'evaluationMonitorsListOp');
-        return httpRequest({ method: 'GET', url: `${API_ROOT}/suites/${encoded(suiteId)}/monitors` });
-    },
 });
 
 export const evaluationMonitorObservationsOp = createAsyncOp({
     name: 'flows/evaluation_monitor_observations',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/monitor_observations_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/evaluation/monitors/{monitor_id}/observations' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationMonitorObservationsOp');
-        const monitorId = requireStringField(data, 'monitor_id', 'evaluationMonitorObservationsOp');
-        const limit = optionalNumberField(data, 'limit', 'evaluationMonitorObservationsOp', 30);
-        return httpRequest({
-            method: 'GET',
-            url: buildQuery(`${API_ROOT}/monitors/${encoded(monitorId)}/observations`, [['limit', limit]]),
-        });
-    },
 });
 
 export const evaluationPairwiseJudgmentCreateOp = createAsyncOp({
     name: 'flows/evaluation_pairwise_judgment_create',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 30_000,
+    commandType: 'flows/evaluation/pairwise_judgment_create_requested',
     restMirror: { method: 'POST', path: '/flows/api/v1/evaluation/pairwise-judgments' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationPairwiseJudgmentCreateOp');
-        return httpRequest({
-            method: 'POST',
-            url: `${API_ROOT}/pairwise-judgments`,
-            body: requireBody(data, 'evaluationPairwiseJudgmentCreateOp'),
-        });
-    },
 });
 
 export const evaluationMonitorObservationCaseCreateOp = createAsyncOp({
     name: 'flows/evaluation_monitor_observation_case_create',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/monitor_observation_case_create_requested',
     restMirror: { method: 'POST', path: '/flows/api/v1/evaluation/monitors/{monitor_id}/observations/{trace_id}/case' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationMonitorObservationCaseCreateOp');
-        const monitorId = requireStringField(data, 'monitor_id', 'evaluationMonitorObservationCaseCreateOp');
-        const traceId = requireStringField(data, 'trace_id', 'evaluationMonitorObservationCaseCreateOp');
-        return httpRequest({
-            method: 'POST',
-            url: `${API_ROOT}/monitors/${encoded(monitorId)}/observations/${encoded(traceId)}/case`,
-            body: requireBody(data, 'evaluationMonitorObservationCaseCreateOp'),
-        });
-    },
 });
 
 export const evaluationRubricsListOp = createAsyncOp({
     name: 'flows/evaluation_rubrics_list',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/rubrics_list_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/evaluation/rubrics' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationRubricsListOp');
-        const flowId = requireStringField(data, 'flow_id', 'evaluationRubricsListOp');
-        return httpRequest({
-            method: 'GET',
-            url: buildQuery(`${API_ROOT}/rubrics`, [['flow_id', flowId]]),
-        });
-    },
 });
 
 export const evaluationRubricCreateOp = createAsyncOp({
     name: 'flows/evaluation_rubric_create',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/rubric_create_requested',
     restMirror: { method: 'POST', path: '/flows/api/v1/evaluation/rubrics' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationRubricCreateOp');
-        return httpRequest({
-            method: 'POST',
-            url: `${API_ROOT}/rubrics`,
-            body: requireBody(data, 'evaluationRubricCreateOp'),
-        });
-    },
 });
 
 export const evaluationRubricVersionsListOp = createAsyncOp({
     name: 'flows/evaluation_rubric_versions_list',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/rubric_versions_list_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/evaluation/rubrics/{rubric_id}/versions' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationRubricVersionsListOp');
-        const rubricId = requireStringField(data, 'rubric_id', 'evaluationRubricVersionsListOp');
-        return httpRequest({
-            method: 'GET',
-            url: `${API_ROOT}/rubrics/${encoded(rubricId)}/versions`,
-        });
-    },
 });
 
 export const evaluationRubricVersionCreateOp = createAsyncOp({
     name: 'flows/evaluation_rubric_version_create',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/evaluation/rubric_version_create_requested',
     restMirror: { method: 'POST', path: '/flows/api/v1/evaluation/rubrics/{rubric_id}/versions' },
-    request: async ({ payload }) => {
-        const data = requireRecord(payload, 'evaluationRubricVersionCreateOp');
-        const rubricId = requireStringField(data, 'rubric_id', 'evaluationRubricVersionCreateOp');
-        return httpRequest({
-            method: 'POST',
-            url: `${API_ROOT}/rubrics/${encoded(rubricId)}/versions`,
-            body: requireBody(data, 'evaluationRubricVersionCreateOp'),
-        });
-    },
 });
 
 export function requireEvaluationItems(result, label) {

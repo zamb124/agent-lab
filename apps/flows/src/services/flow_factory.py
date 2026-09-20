@@ -3,8 +3,7 @@ FlowFactory - создание flow из БД.
 """
 
 import copy
-import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import overload
 
 from apps.flows.src.container_contracts import (
@@ -15,14 +14,7 @@ from apps.flows.src.container_contracts import (
 from apps.flows.src.db import FlowRepository
 from apps.flows.src.models import BranchConfig, FlowConfig, ResourceMapInput, ResourceReference
 from apps.flows.src.models.enums import MergeMode
-from apps.flows.src.models.flow_config import CodeEdgeCondition, Edge, SimpleEdgeCondition
-from apps.flows.src.models.registry_contracts import (
-    RegistryBranchSchema,
-    RegistryFlowSchema,
-    RegistrySchemaEdge,
-    RegistrySchemaNode,
-    RegistrySchemaSubflow,
-)
+from apps.flows.src.models.flow_config import Edge
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.utils.merge import deep_merge
 from apps.flows.src.variables import VariablesService
@@ -34,17 +26,6 @@ from core.types import JsonArray, JsonObject, JsonValue, require_json_object
 from core.variables import VarResolver
 
 logger = get_logger(__name__)
-
-
-def _registry_edge_condition_label(
-    condition: SimpleEdgeCondition | CodeEdgeCondition | None,
-) -> str | None:
-    if condition is None:
-        return None
-    if isinstance(condition, SimpleEdgeCondition):
-        value = json.dumps(condition.value, ensure_ascii=False, separators=(",", ":"))
-        return f"{condition.variable} {condition.operator} {value}"
-    return f"{condition.language} code condition"
 
 
 class FlowFactory:
@@ -72,33 +53,6 @@ class FlowFactory:
                 f"resources.{key}",
             )
         return out
-
-    @staticmethod
-    def _tools_from_node_config(
-        node_config: FlowNodeRuntimeConfig,
-        field_name: str,
-    ) -> list[str | JsonObject]:
-        tools: list[str | JsonObject] = []
-        raw_tools = node_config.get("tools", [])
-        if raw_tools == []:
-            return tools
-        if not isinstance(raw_tools, list):
-            raise ValueError(f"{field_name}.tools must be a list")
-        for index, raw_tool in enumerate(raw_tools):
-            if isinstance(raw_tool, str):
-                tools.append(raw_tool)
-            elif isinstance(raw_tool, dict):
-                tools.append(require_json_object(raw_tool, f"{field_name}.tools[{index}]"))
-            else:
-                raise ValueError(f"{field_name}.tools[{index}] must be a string or object")
-        return tools
-
-    @classmethod
-    def _tools_from_nodes(cls, config: FlowConfig) -> list[str | JsonObject]:
-        tools: list[str | JsonObject] = []
-        for node_id, node_config in (config.nodes or {}).items():
-            tools.extend(cls._tools_from_node_config(node_config, f"nodes.{node_id}"))
-        return tools
 
     async def get_flow_config_snapshot(
         self, flow_id: str, config_version: str | None = None
@@ -498,147 +452,3 @@ class FlowFactory:
                 tags=config.tags,
             )
         }
-
-    async def _get_flow_structure(
-        self,
-        tools_list: Sequence[str | JsonObject],
-        max_depth: int = 3,
-        visited: set[str] | None = None,
-    ) -> tuple[list[str], list[RegistrySchemaSubflow]]:
-        """
-        Рекурсивно получает структуру flow: tools и вложенные flow (как tools).
-
-        Аргументы:
-            tools_list: Список tools / вложенных flow
-            max_depth: Максимальная глубина рекурсии
-            visited: Множество уже посещённых flow_id (защита от циклов)
-
-        Возвращает:
-            (tools, subflows) — списки tool_id и вложенных flow с их структурой
-        """
-        if visited is None:
-            visited = set()
-
-        if max_depth <= 0:
-            return [], []
-
-        tools: list[str] = []
-        subflows: list[RegistrySchemaSubflow] = []
-
-        for t in tools_list:
-            raw_tool_id = t.get("tool_id") if isinstance(t, dict) else t
-            if not isinstance(raw_tool_id, str) or not raw_tool_id:
-                continue
-            tool_id = raw_tool_id
-
-            # Защита от циклов
-            if tool_id in visited:
-                continue
-
-            nested_flow_config = await self.flow_repository.get(tool_id)
-
-            if nested_flow_config:
-                visited.add(tool_id)
-
-                sub_tools_list = self._tools_from_nodes(nested_flow_config)
-                sub_tools, sub_subflows = await self._get_flow_structure(
-                    sub_tools_list, max_depth=max_depth - 1, visited=visited
-                )
-
-                subflows.append(
-                    RegistrySchemaSubflow(
-                        id=tool_id,
-                        name=nested_flow_config.name,
-                        tools=sub_tools[:10],
-                        subflows=sub_subflows[:10],
-                    )
-                )
-            else:
-                tools.append(tool_id)
-
-        return tools, subflows
-
-    async def get_flow_schema(self, flow_id: str) -> RegistryFlowSchema | None:
-        """
-        Возвращает схему flow для всех веток (для визуализации).
-
-        Аргументы:
-            flow_id: ID flow
-
-        Возвращает:
-            Dict с метаданными flow и схемами для каждой ветки
-        """
-        config = await self.flow_repository.get(flow_id)
-        if config is None:
-            return None
-
-        # Определяем список веток
-        if config.branches:
-            branch_ids = ["default"] + list(config.branches.keys())
-        else:
-            branch_ids = ["default"]
-
-        branches_schema: dict[str, RegistryBranchSchema] = {}
-        for branch_id in branch_ids:
-            effective = self.apply_branch(config, branch_id)
-
-            edges: list[RegistrySchemaEdge] = []
-            for e in effective["edges"]:
-                edges.append(
-                    RegistrySchemaEdge.model_validate(
-                        {
-                            "from_node": e.from_node,
-                            "to_node": e.to_node,
-                            "condition": _registry_edge_condition_label(e.condition),
-                        }
-                    )
-                )
-
-            # Упрощаем nodes для визуализации и добавляем tools / вложенные flow
-            nodes: dict[str, RegistrySchemaNode] = {}
-            for node_id, node_config in effective["nodes"].items():
-                raw_node_type = node_config.get("type", "unknown")
-                raw_node_flow_id = node_config.get("flow_id")
-                node_type = raw_node_type if isinstance(raw_node_type, str) else "unknown"
-                node_flow_id = raw_node_flow_id if isinstance(raw_node_flow_id, str) else None
-                node_name = node_id
-
-                tools_list = self._tools_from_node_config(node_config, f"nodes.{node_id}")
-
-                raw_nested_flow_id = node_config.get("flow_id")
-                if isinstance(raw_nested_flow_id, str) and raw_nested_flow_id:
-                    flow_config = await self.flow_repository.get(raw_nested_flow_id)
-                    if flow_config:
-                        node_name = flow_config.name
-                        tools_list = self._tools_from_nodes(flow_config)
-
-                tools, nested_flows = await self._get_flow_structure(tools_list, max_depth=3)
-                nodes[node_id] = RegistrySchemaNode(
-                    type=node_type,
-                    flow_id=node_flow_id,
-                    name=node_name,
-                    tools=tools,
-                    subflows=nested_flows,
-                )
-
-            branch_cfg = config.branches.get(branch_id) if config.branches else None
-            branch_name = branch_cfg.name if branch_cfg else config.name
-            branch_desc = branch_cfg.description if branch_cfg else (config.description or "")
-            entry = effective["entry"]
-            if entry is None:
-                raise ValueError(f"Flow '{flow_id}' branch '{branch_id}' has no entry node")
-
-            branches_schema[branch_id] = RegistryBranchSchema(
-                name=branch_name,
-                description=branch_desc,
-                entry=entry,
-                nodes=nodes,
-                edges=edges,
-            )
-
-        return RegistryFlowSchema(
-            flow_id=config.flow_id,
-            name=config.name,
-            description=config.description or "",
-            branches=branches_schema,
-        )

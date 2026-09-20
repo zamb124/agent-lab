@@ -20,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from apps.flows.src.api.v1.flow_ui import flow_ui_schema  # noqa: E402
+from core.flow_ui.schema import flow_ui_schema  # noqa: E402
 from core.flow_ui.templates import FlowUITemplate, flow_ui_templates  # noqa: E402
 from core.pagination import OffsetPage  # noqa: E402
 

@@ -371,7 +371,7 @@ async def test_update_values_via_llm_node(
         mock_llm_with_queue=mock_llm_with_queue,
     )
     assert result["response"] == "Готово."
-    payload = _tool_payloads_from_state(state)[0]
+    _ = _tool_payloads_from_state(state)[0]
     read_back = await sheets_client.get_values(book.spreadsheet_id, "Sheet1!A1:B1")
     assert read_back.values[0][0] == "from-agent"
 
@@ -400,7 +400,7 @@ async def test_batch_update_values_via_llm_node(
         mock_llm_with_queue=mock_llm_with_queue,
     )
     assert result["response"] == "Готово."
-    payload = _tool_payloads_from_state(state)[0]
+    _ = _tool_payloads_from_state(state)[0]
     read_back = await sheets_client.get_values(book.spreadsheet_id, "Sheet1!A1:B1")
     assert read_back.values[0] == ["a", "b"]
 
@@ -431,7 +431,7 @@ async def test_append_rows_via_llm_node(
         mock_llm_with_queue=mock_llm_with_queue,
     )
     assert result["response"] == "Готово."
-    payload = _tool_payloads_from_state(state)[0]
+    _ = _tool_payloads_from_state(state)[0]
     read_back = await sheets_client.get_values(book.spreadsheet_id, "Sheet1!A1:B3")
     assert any(unique_id in [str(cell) for cell in row] for row in read_back.values)
 
@@ -460,7 +460,7 @@ async def test_clear_values_via_llm_node(
         mock_llm_with_queue=mock_llm_with_queue,
     )
     assert result["response"] == "Готово."
-    payload = _tool_payloads_from_state(state)[0]
+    _ = _tool_payloads_from_state(state)[0]
     read_back = await sheets_client.get_values(book.spreadsheet_id, "Sheet1!A1")
     assert read_back.values == []
 
@@ -489,7 +489,7 @@ async def test_batch_clear_values_via_llm_node(
         mock_llm_with_queue=mock_llm_with_queue,
     )
     assert result["response"] == "Готово."
-    payload = _tool_payloads_from_state(state)[0]
+    _ = _tool_payloads_from_state(state)[0]
     read_back = await sheets_client.get_values(book.spreadsheet_id, "Sheet1!A1:B1")
     assert read_back.values == []
 

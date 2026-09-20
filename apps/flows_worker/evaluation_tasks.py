@@ -21,11 +21,7 @@ from apps.flows.src.tasks.task_names import (
     TASK_RUN_EVALUATION_MONITOR_CYCLE,
 )
 from core.context import Context, set_context
-from core.tasks import (
-    kicker_for_task_name_with_log_labels,
-    platform_task,
-    resolve_broker_for_task,
-)
+from core.tasks import enqueue, platform_task
 from core.tracing.context import set_current_trace_context
 from core.types import JsonObject, require_json_object
 
@@ -44,16 +40,14 @@ async def _enqueue_created_evaluation_run(
     )
     _ = await container.evaluation_lab_service.mark_run_job_enqueued(run_id)
     try:
-        kicker = kicker_for_task_name_with_log_labels(
-            TASK_EXECUTE_EVALUATION_RUN.name,
-            resolve_broker_for_task(TASK_EXECUTE_EVALUATION_RUN),
-            background_kind="evaluation",
-            extra_labels={"evaluation_run_id": run_id},
-        )
-        _ = await kicker.with_task_id(job.taskiq_task_id).kiq(
+        _ = await enqueue(
+            TASK_EXECUTE_EVALUATION_RUN,
             run_id,
             context_data=context_data,
             trace_context=trace_context,
+            background_kind="evaluation",
+            extra_labels={"evaluation_run_id": run_id},
+            taskiq_task_id=job.taskiq_task_id,
         )
     except Exception as enqueue_exc:
         _ = await container.evaluation_lab_service.mark_run_job_failed(
@@ -122,16 +116,14 @@ async def enqueue_pending_evaluation_runs(
     for job in jobs:
         _ = await container.evaluation_lab_service.mark_run_job_enqueued(job.run_id)
         try:
-            kicker = kicker_for_task_name_with_log_labels(
-                TASK_EXECUTE_EVALUATION_RUN.name,
-                resolve_broker_for_task(TASK_EXECUTE_EVALUATION_RUN),
-                background_kind="evaluation",
-                extra_labels={"evaluation_run_id": job.run_id},
-            )
-            _ = await kicker.with_task_id(job.taskiq_task_id).kiq(
+            _ = await enqueue(
+                TASK_EXECUTE_EVALUATION_RUN,
                 job.run_id,
                 context_data=job.context_data,
                 trace_context=job.trace_context,
+                background_kind="evaluation",
+                extra_labels={"evaluation_run_id": job.run_id},
+                taskiq_task_id=job.taskiq_task_id,
             )
             enqueued_run_ids.append(job.run_id)
         except Exception as enqueue_exc:

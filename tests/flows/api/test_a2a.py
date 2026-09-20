@@ -962,138 +962,11 @@ class TestA2APushNotificationConfig:
 
 
 class TestA2ABranches:
-    """Тесты branches endpoints."""
+    """CRUD веток — тот же `op_*`, что и WS. Чтение — GET flow."""
 
     @pytest.fixture
     async def flow_id(self, client):
         return "example_react"
-
-    @pytest.mark.asyncio
-    async def test_list_branches_valid_response(self, client, flow_id):
-        """GET /flows/{id}/branches возвращает список branches."""
-        resp = await client.get(f"/flows/api/v1/{flow_id}/branches")
-        assert resp.status_code == 200
-        branches = resp.json()
-        assert isinstance(branches, list)
-        assert len(branches) > 0, "Flow MUST have at least one branch"
-        for branch in branches:
-            assert "id" in branch, "Branch MUST have 'id'"
-            assert "name" in branch, "Branch MUST have 'name'"
-
-    @pytest.mark.asyncio
-    async def test_get_branch_valid_response(self, client, flow_id):
-        """GET /flows/{id}/branches/{branch_id} возвращает branch."""
-        list_resp = await client.get(f"/flows/api/v1/{flow_id}/branches")
-        branches = list_resp.json()
-        assert len(branches) > 0, "Flow MUST have at least one branch"
-        branch_id = branches[0]["id"]
-        resp = await client.get(f"/flows/api/v1/{flow_id}/branches/{branch_id}")
-        assert resp.status_code == 200
-        branch = resp.json()
-        assert "id" in branch, "Branch MUST have 'id'"
-        assert "name" in branch, "Branch MUST have 'name'"
-        assert branch["id"] == branch_id
-
-    @pytest.mark.asyncio
-    async def test_get_branch_tools_react_flow(self, client):
-        """GET /flows/{id}/branches/{branch_id}/tools для react flow возвращает tools."""
-        flow_id = "example_react"
-        branch_id = "concise"
-        resp = await client.get(f"/flows/api/v1/{flow_id}/branches/{branch_id}/tools")
-        assert resp.status_code == 200
-        tools = resp.json()
-        assert isinstance(tools, list), "Tools MUST be a list"
-        assert len(tools) > 0, "React flow MUST have tools"
-        for tool in tools:
-            assert "name" in tool, "Tool MUST have 'name'"
-            assert "type" in tool, "Tool MUST have 'type'"
-            assert "attributes" in tool, "Tool MUST have 'attributes'"
-            assert "description" in tool["attributes"], "Tool attributes MUST have 'description'"
-            assert tool["type"] == "function", "React flow tools MUST be 'function' type"
-
-    @pytest.mark.asyncio
-    async def test_get_branch_tools_graph_flow(self, client):
-        """GET /flows/{id}/branches/{branch_id}/tools для графового flow возвращает tools, nodes и edges."""
-        flow_id = "example_graph"
-        branch_id = "fast_track"
-        resp = await client.get(f"/flows/api/v1/{flow_id}/branches/{branch_id}/tools")
-        assert resp.status_code == 200
-        items = resp.json()
-        assert isinstance(items, list), "Tools MUST be a list"
-        assert len(items) > 0, "Graph flow MUST have items"
-        types = {item["type"] for item in items}
-        assert "node" in types, "Graph flow MUST have nodes"
-        assert "edge" in types, "Graph flow MUST have edges"
-        nodes = [item for item in items if item["type"] == "node"]
-        assert len(nodes) > 0, "Graph flow MUST have nodes"
-        for node in nodes:
-            assert "name" in node, "Node MUST have 'name'"
-            assert "attributes" in node, "Node MUST have 'attributes'"
-            assert "node_type" in node["attributes"], "Node attributes MUST have 'node_type'"
-            assert "node_name" in node["attributes"], "Node attributes MUST have 'node_name'"
-        edges = [item for item in items if item["type"] == "edge"]
-        assert len(edges) > 0, "Graph flow MUST have edges"
-        for edge in edges:
-            assert "name" in edge, "Edge MUST have 'name'"
-            assert "attributes" in edge, "Edge MUST have 'attributes'"
-            assert "from_node" in edge["attributes"], "Edge attributes MUST have 'from_node'"
-            assert "to_node" in edge["attributes"], "Edge attributes MUST have 'to_node'"
-            assert "->" in edge["name"], "Edge name MUST contain '->'"
-
-    @pytest.mark.asyncio
-    async def test_get_branch_tools_includes_all_llm_node_nodes(self, client):
-        """Проверяет, что tools собираются из всех llm_node нод."""
-        flow_id = "example_graph"
-        branch_id = "fast_track"
-        resp = await client.get(f"/flows/api/v1/{flow_id}/branches/{branch_id}/tools")
-        assert resp.status_code == 200
-        items = resp.json()
-        assert len(items) > 0, "MUST have items"
-        nodes = [item for item in items if item["type"] == "node"]
-        assert len(nodes) > 0, "MUST have nodes"
-        edges = [item for item in items if item["type"] == "edge"]
-        assert len(edges) > 0, "MUST have edges"
-
-    @pytest.mark.asyncio
-    async def test_get_branch_tools_forbidden_without_flow_view(self, client):
-        """GET /tools без FGA can_view (нет flow / нет tuples) — 403."""
-        resp = await client.get("/flows/api/v1/nonexistent_flow/branches/default/tools")
-        assert resp.status_code == 403
-
-    @pytest.mark.asyncio
-    async def test_get_branch_tools_404_for_nonexistent_branch(self, client):
-        """GET /flows/{id}/branches/{branch_id}/tools возвращает 404 для несуществующей ветки."""
-        flow_id = "example_react"
-        resp = await client.get(f"/flows/api/v1/{flow_id}/branches/nonexistent_branch/tools")
-        assert resp.status_code == 404
-
-    @pytest.mark.asyncio
-    async def test_get_branch_schema_valid_response(self, client):
-        """GET /flows/{id}/schema возвращает JSON Schema в формате ISchema."""
-        flow_id = "example_react"
-        resp = await client.get(f"/flows/api/v1/{flow_id}/schema")
-        assert resp.status_code == 200
-        schema = resp.json()
-        assert "type" in schema, "Schema MUST have 'type' field"
-        assert schema["type"] == "object", "Schema type MUST be 'object'"
-        assert "title" in schema, "Schema MUST have 'title' field"
-        assert isinstance(schema["title"], str), "Schema title MUST be string"
-        assert "$schema" in schema, "Schema MUST have '$schema' field"
-        assert isinstance(schema["$schema"], str), "Schema $schema MUST be string"
-        assert "properties" in schema, "Schema MUST have 'properties' field"
-        assert isinstance(schema["properties"], dict), "Schema properties MUST be dict"
-        assert "required" in schema, "Schema MUST have 'required' field"
-        assert isinstance(schema["required"], list), "Schema required MUST be list"
-        assert "additionalProperties" in schema, "Schema MUST have 'additionalProperties' field"
-        assert isinstance(schema["additionalProperties"], bool), (
-            "Schema additionalProperties MUST be boolean"
-        )
-
-    @pytest.mark.asyncio
-    async def test_get_branch_schema_forbidden_without_flow_view(self, client):
-        """GET /schema без FGA can_view (нет flow / нет tuples) — 403."""
-        resp = await client.get("/flows/api/v1/nonexistent_flow/schema")
-        assert resp.status_code == 403
 
     @pytest.mark.asyncio
     async def test_create_branch_valid(self, client, mutable_flow_id, unique_id):
@@ -1115,10 +988,9 @@ class TestA2ABranches:
         data = resp.json()
         assert data["status"] == "success"
         assert data["branch_id"] == branch_id
-        get_resp = await client.get(f"/flows/api/v1/{mutable_flow_id}/branches/{branch_id}")
+        get_resp = await client.get(f"/flows/api/v1/flows/{mutable_flow_id}")
         assert get_resp.status_code == 200
-        branch = get_resp.json()
-        assert branch["id"] == branch_id
+        branch = get_resp.json()["branches"][branch_id]
         assert branch["name"] == "Test Branch"
         await client.delete(f"/flows/api/v1/{mutable_flow_id}/branches/{branch_id}")
 
@@ -1183,9 +1055,9 @@ class TestA2ABranches:
         data = update_resp.json()
         assert data["status"] == "success"
         assert data["branch_id"] == branch_id
-        get_resp = await client.get(f"/flows/api/v1/{mutable_flow_id}/branches/{branch_id}")
+        get_resp = await client.get(f"/flows/api/v1/flows/{mutable_flow_id}")
         assert get_resp.status_code == 200
-        branch = get_resp.json()
+        branch = get_resp.json()["branches"][branch_id]
         assert branch["name"] == "Updated Name"
         assert branch["description"] == "Updated description"
         assert "updated" in branch["tags"]
@@ -1224,8 +1096,9 @@ class TestA2ABranches:
         data = delete_resp.json()
         assert data["status"] == "success"
         assert data["branch_id"] == branch_id
-        get_resp = await client.get(f"/flows/api/v1/{mutable_flow_id}/branches/{branch_id}")
-        assert get_resp.status_code == 404
+        get_resp = await client.get(f"/flows/api/v1/flows/{mutable_flow_id}")
+        assert get_resp.status_code == 200
+        assert branch_id not in get_resp.json()["branches"]
 
     @pytest.mark.asyncio
     async def test_delete_branch_404_for_nonexistent_branch(self, client, flow_id, unique_id):
@@ -1299,8 +1172,9 @@ class TestA2ABranches:
         assert resp.status_code == 201
         data = resp.json()
         assert data["status"] == "success"
-        get_resp = await client.get(f"/flows/api/v1/{mutable_flow_id}/branches/{branch_id}")
+        get_resp = await client.get(f"/flows/api/v1/flows/{mutable_flow_id}")
         assert get_resp.status_code == 200
+        assert branch_id in get_resp.json()["branches"]
         await client.delete(f"/flows/api/v1/{mutable_flow_id}/branches/{branch_id}")
 
 

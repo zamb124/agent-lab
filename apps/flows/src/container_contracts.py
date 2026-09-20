@@ -43,7 +43,6 @@ if TYPE_CHECKING:
         EvaluationTaskiqExecutionContext,
     )
     from apps.flows.src.models.flow_config import Edge
-    from apps.flows.src.models.registry_contracts import RegistryFlowSchema
     from apps.flows.src.runners.remote import RemoteCodeRunner
     from apps.flows.src.services.agent_skill_service import AgentSkillService
     from apps.flows.src.services.code_agent_source_service import CodeAgentSourceService
@@ -225,8 +224,6 @@ class FlowFactoryProtocol(Protocol):
     def apply_branch(self, config: FlowConfig, branch_id: str) -> EffectiveFlowConfig: ...
 
     async def get_branches(self, flow_id: str) -> dict[str, BranchConfig]: ...
-
-    async def get_flow_schema(self, flow_id: str) -> RegistryFlowSchema | None: ...
 
 
 class TriggerRegistryProtocol(Protocol):

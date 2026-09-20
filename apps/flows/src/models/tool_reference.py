@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import copy
+from enum import Enum
 from typing import ClassVar, Literal, Self, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -225,18 +226,6 @@ class ToolReference(BaseModel):
         _ = self.require_mcp_contract()
         return self
 
-    def to_registry_format(self) -> JsonObject:
-        """Преобразует в формат registry API."""
-        attrs: JsonObject = {
-            "description": self.description or "",
-            "parameters_schema": self.effective_parameters_schema(),
-        }
-        return {
-            "name": self.tool_id,
-            "type": "inline_code",
-            "attributes": attrs,
-        }
-
 
 class ToolListIndexItem(StrictBaseModel):
     """Проекция списка tools: id и поля фильтра picker без полного ToolReference / code."""
@@ -263,3 +252,82 @@ class ToolListIndexItem(StrictBaseModel):
         if value is None or value == "":
             return CodeMode.INLINE_CODE
         return value
+
+
+class PickerCategory(str, Enum):
+    ALL = "all"
+    CODE = "code"
+    FLOW = "flow"
+    MCP = "mcp"
+
+
+class ToolCreateRequest(StrictBaseModel):
+    tool_id: str
+    title: str | None = None
+    description: str | None = None
+    code: str | None = None
+    language: str = "python"
+    entrypoint: str | None = None
+    parameters_schema: JsonObject
+    tags: list[str] = Field(default_factory=list)
+    react_role: str | None = None
+    agent_toolkit_ids: list[str] = Field(default_factory=list)
+
+
+class ToolResponse(StrictBaseModel):
+    tool_id: str
+    title: str | None
+    description: str | None
+    code: str | None = None
+    language: str = "python"
+    entrypoint: str | None = None
+    parameters_schema: JsonObject | None = None
+    output_schema: JsonObject | None = None
+    effects: list[str] = Field(default_factory=list)
+    confirmation_floor: str | None = None
+    builtin: bool = False
+    tags: list[str] = Field(default_factory=list)
+    permission: str | list[str] | None = None
+    item_type: str = "tool"
+    react_role: str | None = None
+    code_mode: str | None = None
+    mcp_server_id: str | None = None
+    mcp_tool_name: str | None = None
+    mcp_schema_hash: str | None = None
+    mcp_schema_version: str | None = None
+    mcp_output_schema: JsonObject | None = None
+    agent_toolkit_ids: list[str] = Field(default_factory=list)
+
+
+class ToolDeletedResponse(StrictBaseModel):
+    status: Literal["deleted"]
+    tool_id: str
+
+
+class ToolTagGroupResponse(StrictBaseModel):
+    tag: str
+    description_ru: str
+    description_en: str
+    updated_at: str
+    content_hash: str
+
+
+class ToolsListPayload(StrictBaseModel):
+    limit: int = Field(default=500, ge=1, le=2000)
+    offset: int = Field(default=0, ge=0)
+
+
+class ToolsListAllPayload(StrictBaseModel):
+    limit: int = Field(default=20, ge=1, le=20)
+    offset: int = Field(default=0, ge=0)
+    picker_category: PickerCategory | None = None
+    q: str | None = None
+
+
+class ToolsToolIdPayload(StrictBaseModel):
+    tool_id: str = Field(min_length=1)
+
+
+class ToolsTagGroupsPayload(StrictBaseModel):
+    limit: int = Field(default=200, ge=1, le=200)
+    offset: int = Field(default=0, ge=0)

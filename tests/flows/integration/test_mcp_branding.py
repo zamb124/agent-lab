@@ -113,7 +113,8 @@ async def test_mcp_branding_upsert_list_servers_and_delete(client, unique_id: st
         assert matched[0]["icon_url"] == put_data["icon_url"]
 
     del_resp = await client.delete(f"/flows/api/v1/mcp/branding/{server_id}")
-    assert del_resp.status_code == 204, del_resp.text
+    assert del_resp.status_code == 200, del_resp.text
+    assert del_resp.json() == {"status": "deleted", "server_id": server_id}
 
     list_after = await client.get("/flows/api/v1/mcp/branding")
     assert list_after.status_code == 200
@@ -179,7 +180,8 @@ async def test_mcp_branding_list_pagination_offset(client, unique_id: str, app) 
 
     for server_id in (first_server_id, second_server_id):
         del_resp = await client.delete(f"/flows/api/v1/mcp/branding/{server_id}")
-        assert del_resp.status_code == 204, del_resp.text
+        assert del_resp.status_code == 200, del_resp.text
+        assert del_resp.json() == {"status": "deleted", "server_id": server_id}
 
 
 @pytest.mark.asyncio
@@ -268,4 +270,5 @@ async def test_mcp_servers_list_includes_branding_icon_via_alias(
     if created_manual:
         _ = await container.mcp_server_repository.delete(alias_server_id)
     del_resp = await client.delete(f"/flows/api/v1/mcp/branding/{canonical_server_id}")
-    assert del_resp.status_code == 204, del_resp.text
+    assert del_resp.status_code == 200, del_resp.text
+    assert del_resp.json() == {"status": "deleted", "server_id": canonical_server_id}

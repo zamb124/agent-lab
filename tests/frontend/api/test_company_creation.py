@@ -23,7 +23,7 @@ async def test_company_creation_with_agents_initialization(
     auth_token: str,
     container,
     unique_id: str,
-    taskiq_worker  # Запускаем worker
+    taskiq_worker,  # Запускаем worker
 ):
     """
     Полный интеграционный тест создания компании с инициализацией агентов.
@@ -49,11 +49,8 @@ async def test_company_creation_with_agents_initialization(
 
     response = await frontend_client.post(
         "/frontend/api/companies",
-        json={
-            "name": company_name,
-            "slug": company_slug
-        },
-        headers={"Authorization": f"Bearer {auth_token}"}
+        json={"name": company_name, "slug": company_slug},
+        headers={"Authorization": f"Bearer {auth_token}"},
     )
 
     assert response.status_code == 200, f"Failed to create company: {response.text}"
@@ -108,6 +105,7 @@ async def test_company_creation_with_agents_initialization(
     # Устанавливаем контекст новой компании для проверки
     # Получаем user_id из auth_token
     from core.utils.tokens import get_token_service
+
     token_service = get_token_service()
     token_data = token_service.validate_token(auth_token)
     user_id = token_data.user_id
@@ -117,11 +115,7 @@ async def test_company_creation_with_agents_initialization(
 
     test_context = Context(
         user=user,
-        active_company=Company(
-            company_id=company_id,
-            name=company_name,
-            subdomain=company_slug
-        ),
+        active_company=Company(company_id=company_id, name=company_name, subdomain=company_slug),
         session_id="test_session",
         channel="test",
     )
@@ -143,8 +137,7 @@ async def test_company_creation_with_agents_initialization(
             await asyncio.sleep(wait_interval)
 
         assert agents_loaded, (
-            f"Агенты не загрузились за {max_wait} секунд. "
-            f"TaskIQ worker выполняет задачу"
+            f"Агенты не загрузились за {max_wait} секунд. TaskIQ worker выполняет задачу"
         )
 
         # Проверка что загружены ТОЛЬКО public агенты
@@ -194,10 +187,7 @@ async def test_company_creation_with_agents_initialization(
         # Делаем запрос к agents API с контекстом компании
         api_response = await flows_client.get(
             "/flows/api/v1/flows/",
-            headers={
-                "Authorization": f"Bearer {company_token}",
-                "X-Company-Id": company_id
-            }
+            headers={"Authorization": f"Bearer {company_token}", "X-Company-Id": company_id},
         )
 
         assert api_response.status_code == 200, f"API failed: {api_response.text}"
@@ -205,7 +195,9 @@ async def test_company_creation_with_agents_initialization(
         api_agents = api_response.json()["items"]
         api_agent_ids = [agent["flow_id"] for agent in api_agents]
 
-        print(f"✅ API вернул {len(api_agents)} агентов: {api_agent_ids[:5]}...")  # Показываем первые 5
+        print(
+            f"✅ API вернул {len(api_agents)} агентов: {api_agent_ids[:5]}..."
+        )  # Показываем первые 5
 
         # Проверяем что API вернул агенты (должны быть public агенты)
         assert len(api_agent_ids) > 0, "API должен вернуть хотя бы одного агента"
@@ -228,12 +220,7 @@ async def test_company_creation_with_agents_initialization(
 
 
 @pytest.mark.asyncio
-async def test_company_init_endpoint_directly(
-    flows_client: AsyncClient,
-    container,
-    unique_id: str,
-    auth_token: str
-):
+async def test_company_init_endpoint_directly(flows_client: AsyncClient, auth_token: str):
     """
     Тест прямого вызова endpoint инициализации компании.
 
@@ -242,70 +229,39 @@ async def test_company_init_endpoint_directly(
     2. Возвращает task_id
     3. Нельзя инициализировать system через API
     """
-    from core.context import Context, clear_context, set_context
-    from core.models.identity_models import Company
     from core.utils.tokens import get_token_service
 
-    # Получаем реального пользователя из auth_token
-    token_service = get_token_service()
-    token_data = token_service.validate_token(auth_token)
-    user = await container.user_repository.get(token_data.user_id)
+    token_data = get_token_service().validate_token(auth_token)
 
-    # Создаем контекст system для теста
-    system_context = Context(
-        user=user,
-        active_company=Company(company_id="system", name="System", subdomain="system"),
-        session_id="test_session",
-        channel="test",
+    response = await flows_client.post(
+        "/flows/api/v1/company/init",
+        json={"company_id": "system", "company_name": "System"},
+        headers={"Authorization": f"Bearer {auth_token}"},
     )
-    set_context(system_context)
 
-    try:
-        # Тест 1: Попытка инициализировать system (должна быть ошибка)
-        response = await flows_client.post(
-            "/flows/api/v1/company/init",
-            json={
-                "company_id": "system",
-                "company_name": "System"
-            },
-            headers={"Authorization": f"Bearer {auth_token}"}
-        )
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "ws_invalid_payload"
+    assert "System namespace" in response.json()["error_detail"]
 
-        assert response.status_code == 400
-        assert "System namespace" in response.json()["detail"]
+    response = await flows_client.post(
+        "/flows/api/v1/company/init",
+        json={
+            "company_id": token_data.company_id,
+            "company_name": "Test Company",
+        },
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
 
-        print("✅ System namespace защищен от инициализации через API")
+    assert response.status_code == 200
 
-        # Тест 2: Инициализация обычной компании
-        test_company_id = f"test_company_{unique_id}"
-        test_company_name = f"Test Company {unique_id}"
-
-        response = await flows_client.post(
-            "/flows/api/v1/company/init",
-            json={
-                "company_id": test_company_id,
-                "company_name": test_company_name
-            },
-            headers={"Authorization": f"Bearer {auth_token}"}
-        )
-
-        assert response.status_code == 200
-
-        result = response.json()
-        assert "task_id" in result
-        assert result["status"] == "scheduled"
-
-        print(f"✅ Инициализация запущена: task_id={result['task_id']}")
-
-    finally:
-        clear_context()
+    result = response.json()
+    assert "task_id" in result
+    assert result["status"] == "scheduled"
 
 
 @pytest.mark.asyncio
 async def test_check_slug_availability(
-    frontend_client: AsyncClient,
-    auth_token: str,
-    unique_id: str
+    frontend_client: AsyncClient, auth_token: str, unique_id: str
 ):
     """
     Тест проверки доступности slug для компании.
@@ -316,7 +272,7 @@ async def test_check_slug_availability(
     response = await frontend_client.post(
         "/frontend/api/companies/check-slug",
         json={"slug": available_slug},
-        headers={"Authorization": f"Bearer {auth_token}"}
+        headers={"Authorization": f"Bearer {auth_token}"},
     )
 
     assert response.status_code == 200
@@ -329,11 +285,8 @@ async def test_check_slug_availability(
     # Создаем компанию с этим slug
     response = await frontend_client.post(
         "/frontend/api/companies",
-        json={
-            "name": f"Test Company {unique_id}",
-            "slug": available_slug
-        },
-        headers={"Authorization": f"Bearer {auth_token}"}
+        json={"name": f"Test Company {unique_id}", "slug": available_slug},
+        headers={"Authorization": f"Bearer {auth_token}"},
     )
 
     assert response.status_code == 200
@@ -343,7 +296,7 @@ async def test_check_slug_availability(
     response = await frontend_client.post(
         "/frontend/api/companies/check-slug",
         json={"slug": available_slug},
-        headers={"Authorization": f"Bearer {auth_token}"}
+        headers={"Authorization": f"Bearer {auth_token}"},
     )
 
     assert response.status_code == 200
@@ -372,11 +325,8 @@ async def test_company_creation_without_flows_service(
 
     response = await frontend_client.post(
         "/frontend/api/companies",
-        json={
-            "name": company_name,
-            "slug": company_slug
-        },
-        headers={"Authorization": f"Bearer {auth_token}"}
+        json={"name": company_name, "slug": company_slug},
+        headers={"Authorization": f"Bearer {auth_token}"},
     )
 
     # Компания должна создаться
@@ -402,7 +352,7 @@ async def test_company_agents_api_with_context(
     auth_token: str,
     container,
     unique_id: str,
-    taskiq_worker
+    taskiq_worker,
 ):
     """
     Тест что agents API корректно возвращает агенты с контекстом компании.
@@ -430,7 +380,7 @@ async def test_company_agents_api_with_context(
     response1 = await frontend_client.post(
         "/frontend/api/companies",
         json={"name": company1_name, "slug": company1_slug},
-        headers={"Authorization": f"Bearer {auth_token}"}
+        headers={"Authorization": f"Bearer {auth_token}"},
     )
     assert response1.status_code == 200
     company1_id = response1.json()["company_id"]
@@ -439,7 +389,7 @@ async def test_company_agents_api_with_context(
     response2 = await frontend_client.post(
         "/frontend/api/companies",
         json={"name": company2_name, "slug": company2_slug},
-        headers={"Authorization": f"Bearer {auth_token}"}
+        headers={"Authorization": f"Bearer {auth_token}"},
     )
     assert response2.status_code == 200
     company2_id = response2.json()["company_id"]
@@ -502,10 +452,7 @@ async def test_company_agents_api_with_context(
     # Проверка 1: Компания 1 видит своих агентов
     response1 = await flows_client.get(
         "/flows/api/v1/flows/",
-        headers={
-            "Authorization": f"Bearer {token1}",
-            "X-Company-Id": company1_id
-        }
+        headers={"Authorization": f"Bearer {token1}", "X-Company-Id": company1_id},
     )
 
     assert response1.status_code == 200
@@ -516,10 +463,7 @@ async def test_company_agents_api_with_context(
     # Проверка 2: Компания 2 видит своих агентов
     response2 = await flows_client.get(
         "/flows/api/v1/flows/",
-        headers={
-            "Authorization": f"Bearer {token2}",
-            "X-Company-Id": company2_id
-        }
+        headers={"Authorization": f"Bearer {token2}", "X-Company-Id": company2_id},
     )
 
     assert response2.status_code == 200
@@ -548,10 +492,7 @@ async def test_company_agents_api_with_context(
 
         response = await flows_client.get(
             f"/flows/api/v1/flows/{test_agent_id}",
-            headers={
-                "Authorization": f"Bearer {token1}",
-                "X-Company-Id": company1_id
-            }
+            headers={"Authorization": f"Bearer {token1}", "X-Company-Id": company1_id},
         )
 
         assert response.status_code == 200

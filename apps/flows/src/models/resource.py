@@ -7,7 +7,7 @@ Resource = переиспользуемый компонент доступны�
 
 from datetime import datetime
 from enum import Enum
-from typing import ClassVar, Self, TypeAlias, assert_never
+from typing import ClassVar, Literal, Self, TypeAlias, assert_never
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -172,6 +172,33 @@ class ResourceDefinition(StrictBaseModel):
         return parse_typed_resource_config(self.type, self.config)
 
 
+class ResourceListPayload(StrictBaseModel):
+    limit: int = Field(default=200, ge=1, le=1000)
+    offset: int = Field(default=0, ge=0)
+    type: ResourceType | None = None
+
+
+class ResourceIdPayload(StrictBaseModel):
+    resource_id: str = Field(min_length=1)
+
+
+class ResourceUpdateRequest(StrictBaseModel):
+    name: str | None = None
+    description: str | None = None
+    config: JsonObject | None = None
+    tags: list[str] | None = None
+    permission: list[str] | None = None
+
+
+class ResourceUpdatePayload(ResourceUpdateRequest):
+    resource_id: str = Field(min_length=1)
+
+
+class ResourceDeletedResponse(StrictBaseModel):
+    status: Literal["deleted"]
+    resource_id: str
+
+
 def parse_typed_resource_config(
     resource_type: ResourceType,
     config: JsonObject,
@@ -260,6 +287,11 @@ __all__ = [
     "ResourceConfigUnion",
     "parse_typed_resource_config",
     "ResourceDefinition",
+    "ResourceListPayload",
+    "ResourceIdPayload",
+    "ResourceUpdateRequest",
+    "ResourceUpdatePayload",
+    "ResourceDeletedResponse",
     "ResourceReference",
     "ResourceReferenceInput",
     "ResourceMapInput",

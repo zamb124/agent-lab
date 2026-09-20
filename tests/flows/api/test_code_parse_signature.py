@@ -1,4 +1,4 @@
-from apps.flows.src.api.v1.code import _parse_function_signature
+from apps.flows.realtime.code_operations import _parse_function_signature
 
 
 def test_parse_function_signature_preserves_none_default_for_optional_param():

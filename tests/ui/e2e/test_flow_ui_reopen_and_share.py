@@ -285,7 +285,7 @@ async def test_flow_ui_share_revoke_blocks_viewer_bootstrap(
         revoke_response = await page.request.delete(
             f"{flows_ui.origin}/flows/api/v1/flow-ui/shares/{share.grant_id}"
         )
-        assert revoke_response.status == 204, await revoke_response.text()
+        assert revoke_response.status == 200, await revoke_response.text()
 
         await viewer.reload(wait_until="domcontentloaded")
         await expect(viewer.get_by_text("Ссылка недоступна")).to_be_visible(timeout=60_000)
@@ -334,7 +334,7 @@ async def test_flow_ui_share_revoke_from_owner_ui_blocks_viewer(
             timeout=30_000,
         ) as revoke_info:
             await revoke_btn.evaluate("(el) => el.click()")
-        assert (await revoke_info.value).status == 204
+        assert (await revoke_info.value).status == 200
         await expect(share_menu.locator('.share-result input[aria-label="Link"]')).to_have_count(
             0, timeout=15_000
         )

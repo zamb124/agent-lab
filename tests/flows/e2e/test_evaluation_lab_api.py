@@ -12,13 +12,12 @@ from datetime import datetime, timezone
 from typing import Literal
 
 import pytest
-from fastapi import HTTPException
 from httpx import AsyncClient
 from taskiq import Context as TaskiqContext
 from taskiq.message import TaskiqMessage
 
 import core.tracing.attributes as trace_attr
-from apps.flows.src.api.v1.evaluation import _raise_evaluation_error
+from apps.flows.realtime.evaluation_operations import raise_evaluation
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.db.evaluation_lab_repository import EvaluationLabRowValue, _int_scalar
 from apps.flows.src.durable_execution import (
@@ -122,6 +121,7 @@ from core.pagination import ListResponse
 from core.state import ExecutionState
 from core.tracing.models import TraceSpanWrite
 from core.types import JsonObject
+from core.websocket import WsCommandError
 from tests.fixtures.ai_provider_defaults import make_test_company
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.real_taskiq]
@@ -1145,10 +1145,10 @@ class TestEvaluationLabAPI:
         assert monitor_observations.status_code == 404, monitor_observations.text
 
     async def test_api_error_mapping_covers_generic_validation_error(self) -> None:
-        with pytest.raises(HTTPException) as exc_info:
-            _raise_evaluation_error(ValueError("raw evaluation validation"))
+        with pytest.raises(WsCommandError) as exc_info:
+            raise_evaluation(ValueError("raw evaluation validation"))
 
-        assert exc_info.value.status_code == 400
+        assert exc_info.value.code == "ws_invalid_payload"
         assert exc_info.value.detail == "raw evaluation validation"
 
     async def test_repository_missing_paths_and_row_parsers(

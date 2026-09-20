@@ -17,18 +17,38 @@ from fastapi import APIRouter, HTTPException, Query
 from google.protobuf.json_format import MessageToDict
 from pydantic import Field
 
+from apps.flows.realtime.durable_operations import (
+    op_flows_durable_branches,
+    op_flows_durable_fork,
+    op_flows_durable_history,
+    op_flows_durable_manual_patch,
+    op_flows_durable_retry_from_failure,
+    op_flows_durable_rewind,
+    op_flows_durable_state_at,
+    op_flows_sessions_state,
+    op_flows_sessions_state_update,
+)
 from apps.flows.src.channels.types import FlowTaskResult
 from apps.flows.src.dependencies import ContainerDep
-from apps.flows.src.durable_execution.models import (
-    WorkflowBranchRecord,
-    WorkflowBranchResult,
-    WorkflowEventRecord,
+from apps.flows.src.durable_execution.models import WorkflowBranchResult
+from apps.flows.src.models.durable_api import (
+    DurableForkPayload,
+    DurableHistoryPayload,
+    DurableManualPatchPayload,
+    DurableRetryPayload,
+    DurableRewindPayload,
+    DurableSessionIdPayload,
+    DurableSessionStatePayload,
+    DurableSessionStateUpdatePayload,
+    DurableStateAtPayload,
+    WorkflowBranchesResponse,
+    WorkflowHistoryResponse,
 )
 from apps.flows.src.runtime.message_metadata import MESSAGE_SOURCE_TASK
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from core.a2a import platform_task_state_to_a2a, set_task_status_state, struct_from_mapping
 from core.authz.models import AuthzObject
-from core.context import get_context, require_active_company
+from core.context import get_context, require_active_company, require_context
 from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.state import ExecutionState
@@ -170,42 +190,6 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> Js
     return require_json_object(MessageToDict(a2a_task), "Task")
 
 
-class StateUpdateRequest(StrictBaseModel):
-    """Запрос ручного patch state для существующей durable workflow session."""
-
-    state: ExecutionState
-
-
-class TimeTravelRequest(StrictBaseModel):
-    sequence: int = Field(..., ge=0)
-    execution_branch_id: str | None = Field(default=None, min_length=1)
-
-
-class ForkStateRequest(TimeTravelRequest):
-    activate: bool = False
-
-
-class ManualStatePatchRequest(TimeTravelRequest):
-    state: ExecutionState
-    activate: bool = True
-
-
-class RetryFromFailureRequest(StrictBaseModel):
-    failed_sequence: int | None = Field(default=None, ge=1)
-    execution_branch_id: str | None = Field(default=None, min_length=1)
-
-
-class WorkflowBranchesResponse(StrictBaseModel):
-    branches: list[WorkflowBranchRecord]
-
-
-class WorkflowHistoryResponse(StrictBaseModel):
-    events: list[WorkflowEventRecord]
-    total: int
-    limit: int
-    offset: int
-
-
 @router.get("/state", response_model=ExecutionState)
 async def get_state(
     container: ContainerDep,
@@ -213,94 +197,36 @@ async def get_state(
     context_id: str | None = None,
     flow_id: str | None = None,
 ) -> ExecutionState:
-    """
-    Получает state по session_id или context_id+flow_id.
-
-    Аргументы:
-        session_id: ID сессии (альтернатива context_id+flow_id)
-        context_id: ID контекста A2A
-        flow_id: ID агента
-
-    Возвращает:
-        Снимок ExecutionState или, если записи нет, минимальный объект для UI чата:
-        ``{"messages": [], "task_id": None}``.
-    """
-
-    if session_id:
-        state = await container.workflow_runtime.get_state(session_id)
-    elif context_id and flow_id:
-        session_id = f"{flow_id}:{context_id}"
-        state = await container.workflow_runtime.get_state(session_id)
-    else:
-        raise HTTPException(
-            status_code=400,
-            detail="Need session_id or context_id+flow_id"
-        )
-
-    if state is None:
-        raise HTTPException(status_code=404, detail="State not found")
-
-    return state
+    return await op_flows_sessions_state(
+        DurableSessionStatePayload(
+            session_id=session_id,
+            context_id=context_id,
+            flow_id=flow_id,
+        ),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.put("/state", response_model=ExecutionState)
 async def update_state(
-    request: StateUpdateRequest,
+    request: DurableSessionStateUpdatePayload,
     container: ContainerDep,
     session_id: str | None = None,
     context_id: str | None = None,
     flow_id: str | None = None,
 ) -> ExecutionState:
-    """
-    Применяет manual patch к существующей durable workflow-сессии.
-
-    Аргументы:
-        request: Тело запроса с целевой projection state
-        session_id: ID сессии (альтернатива context_id+flow_id)
-        context_id: ID контекста A2A для вычисления session_id
-        flow_id: ID flow для вычисления session_id
-
-    Возвращает:
-        Обновленный state
-    """
-
-    if session_id:
-        pass
-    elif context_id and flow_id:
-        session_id = f"{flow_id}:{context_id}"
-    else:
-        raise HTTPException(
-            status_code=400,
-            detail="Need session_id or context_id+flow_id"
-        )
-
-    current = await container.workflow_runtime.get_state(session_id)
-    if current is None:
-        raise HTTPException(status_code=404, detail="Workflow session not found")
-
-    history, total = await container.workflow_runtime.get_state_history(
-        session_id,
-        limit=1,
-        offset=0,
+    return await op_flows_sessions_state_update(
+        request.model_copy(
+            update={
+                "session_id": session_id if session_id is not None else request.session_id,
+                "context_id": context_id if context_id is not None else request.context_id,
+                "flow_id": flow_id if flow_id is not None else request.flow_id,
+            }
+        ),
+        user=require_context().user,
+        container=container,
     )
-    if total > 1:
-        history, _ = await container.workflow_runtime.get_state_history(
-            session_id,
-            limit=1,
-            offset=total - 1,
-        )
-    head_sequence = history[-1].sequence if history else 0
-    _ = await container.workflow_runtime.patch_state_at_sequence(
-        session_id,
-        head_sequence,
-        request.state,
-    )
-    updated_state = await container.workflow_runtime.get_state(session_id)
-
-    if updated_state is None:
-        raise HTTPException(status_code=500, detail="Failed to save state")
-
-    return updated_state
 
 
 @router.get("/{session_id}/history", response_model=WorkflowHistoryResponse)
@@ -311,17 +237,15 @@ async def get_state_history(
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> WorkflowHistoryResponse:
-    events, total = await container.workflow_runtime.get_state_history(
-        session_id,
-        execution_branch_id=execution_branch_id,
-        limit=limit,
-        offset=offset,
-    )
-    return WorkflowHistoryResponse(
-        events=events,
-        total=total,
-        limit=limit,
-        offset=offset,
+    return await op_flows_durable_history(
+        DurableHistoryPayload(
+            session_id=session_id,
+            execution_branch_id=execution_branch_id,
+            limit=limit,
+            offset=offset,
+        ),
+        user=require_context().user,
+        container=container,
     )
 
 
@@ -330,62 +254,62 @@ async def list_execution_branches(
     session_id: str,
     container: ContainerDep,
 ) -> WorkflowBranchesResponse:
-    branches = await container.workflow_runtime.list_branches(session_id)
-    return WorkflowBranchesResponse(branches=branches)
+    return await op_flows_durable_branches(
+        DurableSessionIdPayload(session_id=session_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post("/{session_id}/fork", response_model=WorkflowBranchResult)
 async def fork_state(
     session_id: str,
-    request: ForkStateRequest,
+    request: DurableForkPayload,
     container: ContainerDep,
 ) -> WorkflowBranchResult:
-    return await container.workflow_runtime.fork_state_at_sequence(
-        session_id,
-        request.sequence,
-        execution_branch_id=request.execution_branch_id,
-        activate=request.activate,
+    return await op_flows_durable_fork(
+        request.model_copy(update={"session_id": session_id}),
+        user=require_context().user,
+        container=container,
     )
 
 
 @router.post("/{session_id}/rewind", response_model=WorkflowBranchResult)
 async def rewind_state(
     session_id: str,
-    request: TimeTravelRequest,
+    request: DurableRewindPayload,
     container: ContainerDep,
 ) -> WorkflowBranchResult:
-    return await container.workflow_runtime.rewind_to_sequence(
-        session_id,
-        request.sequence,
-        execution_branch_id=request.execution_branch_id,
+    return await op_flows_durable_rewind(
+        request.model_copy(update={"session_id": session_id}),
+        user=require_context().user,
+        container=container,
     )
 
 
 @router.post("/{session_id}/manual-patch", response_model=WorkflowBranchResult)
 async def manual_state_patch(
     session_id: str,
-    request: ManualStatePatchRequest,
+    request: DurableManualPatchPayload,
     container: ContainerDep,
 ) -> WorkflowBranchResult:
-    return await container.workflow_runtime.patch_state_at_sequence(
-        session_id,
-        request.sequence,
-        request.state,
-        execution_branch_id=request.execution_branch_id,
-        activate=request.activate,
+    return await op_flows_durable_manual_patch(
+        request.model_copy(update={"session_id": session_id}),
+        user=require_context().user,
+        container=container,
     )
 
 
 @router.post("/{session_id}/retry-from-failure", response_model=WorkflowBranchResult)
 async def retry_from_failure(
     session_id: str,
-    request: RetryFromFailureRequest,
+    request: DurableRetryPayload,
     container: ContainerDep,
 ) -> WorkflowBranchResult:
-    return await container.workflow_runtime.retry_from_failure(
-        session_id,
-        failed_sequence=request.failed_sequence,
-        execution_branch_id=request.execution_branch_id,
+    return await op_flows_durable_retry_from_failure(
+        request.model_copy(update={"session_id": session_id}),
+        user=require_context().user,
+        container=container,
     )
 
 
@@ -396,11 +320,12 @@ async def get_state_at_sequence(
     container: ContainerDep,
     execution_branch_id: str | None = None,
 ) -> ExecutionState:
-    state = await container.workflow_runtime.load_state_at_sequence(
-        session_id,
-        sequence,
-        execution_branch_id=execution_branch_id,
+    return await op_flows_durable_state_at(
+        DurableStateAtPayload(
+            session_id=session_id,
+            sequence=sequence,
+            execution_branch_id=execution_branch_id,
+        ),
+        user=require_context().user,
+        container=container,
     )
-    if state is None:
-        raise HTTPException(status_code=404, detail="State projection not found")
-    return state

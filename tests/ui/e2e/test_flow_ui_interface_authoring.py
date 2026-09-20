@@ -95,7 +95,7 @@ async def test_flow_ui_interface_editor_undo_redo_after_add(
     )
     try:
         await flows_open_interface_editor_workspace(page, flows_ui, flow_id)
-        editor = page.locator("flows-interface-editor").first
+        _ = page.locator("flows-interface-editor").first
         badges = flows_interface_canvas_block(page, "badge")
         await expect(badges).to_have_count(0)
 

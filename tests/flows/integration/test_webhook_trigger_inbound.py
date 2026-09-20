@@ -9,6 +9,7 @@ from apps.flows.src.models.channel_config import OutputAction
 from apps.flows.src.models.enums import ChannelType
 from apps.flows.src.triggers.input_mapper import InputMapper
 from core.types import require_json_object
+from tests.flows.conftest import persist_owned_flow
 
 
 async def _await_completed_state(container, session_id: str, *, timeout_sec: float = 20.0):
@@ -44,7 +45,7 @@ async def test_generic_webhook_requires_secret_header(app, client, container, un
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
         triggers={"gh": trigger},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(container, agent)
 
     r1 = await client.post(
         f"/flows/api/v1/triggers/webhook/{flow_id}/gh",
@@ -99,7 +100,7 @@ async def test_generic_webhook_custom_secret_header_and_query(
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
         triggers={"wh": trigger},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(container, agent)
 
     denied = await client.post(
         f"/flows/api/v1/triggers/webhook/{flow_id}/wh",
@@ -143,7 +144,7 @@ async def test_generic_webhook_allowed_ips_deny(app, client, container, unique_i
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
         triggers={"wh": trigger},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(container, agent)
 
     response = await client.post(
         f"/flows/api/v1/triggers/webhook/{flow_id}/wh",
@@ -167,7 +168,7 @@ async def test_generic_webhook_persists_secret_header_and_ips(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Test"}},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(container, agent)
 
     create = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -231,7 +232,7 @@ async def test_generic_webhook_e2e_envelope_and_mapping(
         },
         triggers={"warehouse": trigger},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(container, agent)
 
     response = await client.post(
         f"/flows/api/v1/triggers/webhook/{flow_id}/warehouse?ref=order-42",
@@ -251,9 +252,13 @@ async def test_generic_webhook_e2e_envelope_and_mapping(
     mapped = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers/warehouse/test",
         json={
-            "body": {"text": "stock-updated"},
-            "headers": {"X-Event": "inventory.changed"},
-            "query": {"ref": "order-42"},
+            "flow_id": flow_id,
+            "trigger_id": "warehouse",
+            "payload": {
+                "body": {"text": "stock-updated"},
+                "headers": {"X-Event": "inventory.changed"},
+                "query": {"ref": "order-42"},
+            },
         },
     )
     assert mapped.status_code == 200
@@ -317,7 +322,7 @@ async def test_generic_webhook_awaits_completed_state(
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
         triggers={"done": trigger},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(container, agent)
 
     response = await client.post(
         f"/flows/api/v1/triggers/webhook/{flow_id}/done?ref=abc",
@@ -372,7 +377,7 @@ async def test_generic_webhook_output_action_callback(
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
         triggers={"cb": trigger},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(container, agent)
     server.clear()
 
     response = await client.post(

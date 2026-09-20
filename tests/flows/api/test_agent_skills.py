@@ -8,17 +8,17 @@ from contextlib import asynccontextmanager
 import pytest
 
 from apps.flows.src.container import get_container
-from apps.flows.src.models.agent_skill import AgentSkill, parse_stored_agent_skill
+from apps.flows.src.models.agent_skill import (
+    AgentSkill,
+    AgentSkillUpdatePayload,
+    parse_stored_agent_skill,
+)
 from apps.flows.src.models.tool_reference import ToolReference
 from apps.flows.src.runtime.agent_skill_runtime import (
     AgentSkillRuntimeHost,
     agent_skill_runtime_host_scope,
 )
-from apps.flows.src.services.agent_skill_service import (
-    AgentSkillCreateInput,
-    AgentSkillUpdateInput,
-    parse_skill_md,
-)
+from apps.flows.src.services.agent_skill_service import parse_skill_md
 from apps.flows.src.services.platform_assistant_skills import PLATFORM_ASSISTANT_SEED_SKILL_IDS
 from apps.flows.tools.agent_skill_tools import load_agent_skill, read_agent_skill_reference
 from core.authz.company_sync import sync_company_member_roles
@@ -111,7 +111,7 @@ async def test_agent_skill_service_crud(container, unique_id: str) -> None:
     skill_id = f"skill-crud-{unique_id}"
     async with _company_scope(unique_id):
         created = await container.agent_skill_service.create(
-            AgentSkillCreateInput(
+            AgentSkill(
                 agent_skill_id=skill_id,
                 name=skill_id,
                 description="CRUD skill for tests",
@@ -189,7 +189,8 @@ async def test_agent_skills_api_crud(client, unique_id: str) -> None:
     assert skill_id in ids
 
     delete_resp = await client.delete(f"/flows/api/v1/agent-skills/{skill_id}")
-    assert delete_resp.status_code == 204
+    assert delete_resp.status_code == 200
+    assert delete_resp.json() == {"status": "deleted", "agent_skill_id": skill_id}
 
 
 @pytest.mark.asyncio
@@ -209,7 +210,8 @@ Body via import API
     assert resp.status_code == 201, resp.text
     assert resp.json()["agent_skill_id"] == skill_id
     delete_resp = await client.delete(f"/flows/api/v1/agent-skills/{skill_id}")
-    assert delete_resp.status_code == 204
+    assert delete_resp.status_code == 200
+    assert delete_resp.json() == {"status": "deleted", "agent_skill_id": skill_id}
 
 
 @pytest.mark.asyncio
@@ -242,7 +244,7 @@ async def test_load_agent_skill_tool_injects_body_and_tools(
     dep_id = f"skill-dep-{unique_id}"
     async with _company_scope(unique_id):
         await container.agent_skill_service.create(
-            AgentSkillCreateInput(
+            AgentSkill(
                 agent_skill_id=dep_id,
                 name=dep_id,
                 description="Dependency skill",
@@ -250,7 +252,7 @@ async def test_load_agent_skill_tool_injects_body_and_tools(
             )
         )
         await container.agent_skill_service.create(
-            AgentSkillCreateInput(
+            AgentSkill(
                 agent_skill_id=root_id,
                 name=root_id,
                 description="Root skill",
@@ -313,7 +315,7 @@ async def test_load_agent_skill_tool_injects_body_and_tools(
 
         foreign_id = f"skill-foreign-{unique_id}"
         await container.agent_skill_service.create(
-            AgentSkillCreateInput(
+            AgentSkill(
                 agent_skill_id=foreign_id,
                 name=foreign_id,
                 description="Not attached",
@@ -337,7 +339,7 @@ async def test_depends_on_arbitrary_depth_and_cycles(container, unique_id: str) 
     d_id = f"skill-d-{unique_id}"
     async with _company_scope(unique_id):
         await container.agent_skill_service.create(
-            AgentSkillCreateInput(
+            AgentSkill(
                 agent_skill_id=d_id,
                 name=d_id,
                 description="D",
@@ -345,7 +347,7 @@ async def test_depends_on_arbitrary_depth_and_cycles(container, unique_id: str) 
             )
         )
         await container.agent_skill_service.create(
-            AgentSkillCreateInput(
+            AgentSkill(
                 agent_skill_id=c_id,
                 name=c_id,
                 description="C",
@@ -354,7 +356,7 @@ async def test_depends_on_arbitrary_depth_and_cycles(container, unique_id: str) 
             )
         )
         await container.agent_skill_service.create(
-            AgentSkillCreateInput(
+            AgentSkill(
                 agent_skill_id=b_id,
                 name=b_id,
                 description="B",
@@ -363,7 +365,7 @@ async def test_depends_on_arbitrary_depth_and_cycles(container, unique_id: str) 
             )
         )
         await container.agent_skill_service.create(
-            AgentSkillCreateInput(
+            AgentSkill(
                 agent_skill_id=a_id,
                 name=a_id,
                 description="A",
@@ -372,8 +374,8 @@ async def test_depends_on_arbitrary_depth_and_cycles(container, unique_id: str) 
             )
         )
         await container.agent_skill_service.update(
-            b_id,
-            AgentSkillUpdateInput(
+            AgentSkillUpdatePayload(
+                agent_skill_id=b_id,
                 name=b_id,
                 description="B",
                 body_markdown="B body",
@@ -443,7 +445,7 @@ async def test_read_agent_skill_reference_returns_utf8(
             content_type="text/markdown",
         )
         await container.agent_skill_service.create(
-            AgentSkillCreateInput(
+            AgentSkill(
                 agent_skill_id=skill_id,
                 name=skill_id,
                 description="Skill with reference file",
@@ -496,7 +498,7 @@ async def test_agent_skills_company_isolation_http(
 
     async with company_scope(company_a, unique_id):
         await container.agent_skill_service.create(
-            AgentSkillCreateInput(
+            AgentSkill(
                 agent_skill_id=skill_id,
                 name=skill_id,
                 description="iso a",

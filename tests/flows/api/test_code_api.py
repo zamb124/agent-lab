@@ -67,13 +67,13 @@ class TestCodeDocumentation:
 
     @pytest.mark.asyncio
     async def test_get_documentation_markdown(self, client, app):
-        """GET /documentation отдаёт text/markdown."""
+        """GET /documentation отдаёт JSON {markdown, language}."""
         _ = app
         response = await client.get("/flows/api/v1/code/documentation")
         assert response.status_code == 200
-        ct = response.headers.get("content-type", "")
-        assert "text/markdown" in ct
-        text = response.text
+        body = response.json()
+        assert body["language"] == "python"
+        text = body["markdown"]
         assert text.strip().startswith("#")
         assert "Capability API" in text
         assert "Language: `python`" in text
@@ -86,7 +86,7 @@ class TestCodeDocumentation:
         assert "Input JSON Schema" in text
         r_node = await client.get("/flows/api/v1/code/documentation?perspective=node")
         assert r_node.status_code == 200
-        assert "Capability API" in r_node.text
+        assert "Capability API" in r_node.json()["markdown"]
 
 
 class TestCodeValidate:

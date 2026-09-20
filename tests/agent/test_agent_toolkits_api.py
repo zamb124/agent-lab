@@ -229,6 +229,7 @@ async def test_catalog_lazy_backfill_empty_company(
     from core.context import Context, clear_context, get_context, set_context
     from core.models.identity_models import Company
     from tests.agent._helpers import user_id_from_auth_token
+
     auth_token = auth_headers["Authorization"].removeprefix("Bearer ").strip()
     user_id = user_id_from_auth_token(auth_token)
     user = await frontend_container.user_repository.get(user_id)
@@ -303,6 +304,7 @@ async def test_manage_crud_lifecycle(
         },
     )
     assert duplicate.status_code == 409
+    assert duplicate.json()["error_code"] == "conflict"
 
     get_one = await flows_client.get(
         f"/flows/api/v1/agent/toolkits/manage/{toolkit_id}",
@@ -331,13 +333,14 @@ async def test_manage_crud_lifecycle(
         headers=auth_headers,
     )
     assert missing.status_code == 404
+    assert missing.json()["error_code"] == "not_found"
 
     delete = await flows_client.delete(
         f"/flows/api/v1/agent/toolkits/manage/{toolkit_id}",
         headers=auth_headers,
     )
     assert delete.status_code == 200
-    assert delete.json()["removed"] is True
+    assert delete.json() == {"status": "deleted", "toolkit_id": toolkit_id}
 
 
 @pytest.mark.asyncio
@@ -368,6 +371,7 @@ async def test_manage_delete_platform_toolkit_forbidden(
         headers=auth_headers,
     )
     assert response.status_code == 403
+    assert response.json()["error_code"] == "forbidden"
 
 
 @pytest.mark.asyncio
@@ -404,6 +408,7 @@ async def test_manage_company_isolation(
             headers=auth_headers_company2,
         )
         assert other_response.status_code == 404
+        assert other_response.json()["error_code"] == "not_found"
     finally:
         async with _repository_context_for_auth(auth_headers, frontend_container):
             await container.agent_toolkit_repository.delete(toolkit_id)

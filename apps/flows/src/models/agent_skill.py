@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
@@ -109,6 +109,44 @@ class AgentSkill(StrictBaseModel):
         )
 
 
+class AgentSkillListPayload(StrictBaseModel):
+    limit: int = Field(default=50, ge=1, le=200)
+    offset: int = Field(default=0, ge=0)
+
+
+class AgentSkillIdPayload(StrictBaseModel):
+    agent_skill_id: str = Field(min_length=1)
+
+
+class AgentSkillUpdateRequest(StrictBaseModel):
+    name: str
+    description: str
+    body_markdown: str
+    tool_refs: list[ToolReference] = []
+    depends_on: list[str] = []
+    references: list[FileRef] = []
+    assets: list[FileRef] = []
+
+
+class AgentSkillUpdatePayload(AgentSkillUpdateRequest):
+    agent_skill_id: str = Field(min_length=1)
+
+
+class AgentSkillImportRequest(StrictBaseModel):
+    markdown: str
+    agent_skill_id: str | None = None
+    persist: bool = True
+
+
+class AgentSkillEnsureSeedResponse(StrictBaseModel):
+    seeded: int
+
+
+class AgentSkillDeletedResponse(StrictBaseModel):
+    status: Literal["deleted"]
+    agent_skill_id: str
+
+
 def parse_stored_agent_skill(data: str) -> AgentSkill:
     """Deserialize AgentSkill from storage JSON; drop obsolete `activation` if present."""
     payload: JsonObject = parse_json_object(data, "agent_skill")
@@ -118,6 +156,13 @@ def parse_stored_agent_skill(data: str) -> AgentSkill:
 
 __all__ = [
     "AgentSkill",
+    "AgentSkillDeletedResponse",
+    "AgentSkillEnsureSeedResponse",
+    "AgentSkillIdPayload",
+    "AgentSkillImportRequest",
     "AgentSkillIndexEntry",
+    "AgentSkillListPayload",
+    "AgentSkillUpdatePayload",
+    "AgentSkillUpdateRequest",
     "parse_stored_agent_skill",
 ]

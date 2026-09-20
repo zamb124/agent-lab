@@ -18,18 +18,17 @@ import { flowsResource, flowUpdateOp, flowReloadFromBundleOp, flowVersionsListOp
          flowStoreBundlesOp, flowValidateOp, branchCreateOp, branchUpdateOp,
          branchRemoveOp, flowVoiceSessionQueryOp, flowPreviewShareOp } from '../events/resources/flows.resource.js';
 import { flowUiSchemaOp, flowUiTemplatesOp, flowUiAssistOp } from '../events/resources/flow-ui.resource.js';
-import { flowsVoiceCatalogLoadOp } from '../events/resources/voice-catalog.resource.js';
 import { toolsResource, toolsAllOp } from '../events/resources/tools.resource.js';
 import { toolTagGroupsOp } from '../events/resources/tool-tag-groups.resource.js';
-import { workQueuesResource } from '../events/resources/work-queues.resource.js';
+import { workQueuesResource } from '@platform/lib/events/resources/work-queues.resource.js';
+import { flowsVoiceProvidersCatalogLoadOp } from '@platform/lib/events/resources/voice-providers-catalog.resource.js';
 import {
     agentSkillsResource,
-    agentSkillUpdateOp,
     agentSkillImportOp,
     agentSkillsEnsureSeedOp,
 } from '../events/resources/agent-skills.resource.js';
-import { resourcesBundleResource, resourceUpdateOp } from '../events/resources/resources-bundle.resource.js';
-import { mcpServersResource, mcpServersListOp, mcpServerUpdateOp, mcpServerSyncOp, mcpServerTestOp, mcpServerResetCatalogDefaultsOp, mcpBrandingLoadOp, mcpBrandingSlugSuggestOp, mcpBrandingUpsertOp, mcpBrandingRemoveOp, mcpCatalogStoreLoadOp, mcpCatalogInstallOp, mcpCatalogUninstallOp } from '../events/resources/mcp.resource.js';
+import { resourcesBundleResource } from '../events/resources/resources-bundle.resource.js';
+import { mcpServersResource, mcpServersListOp, mcpServerSyncOp, mcpServerTestOp, mcpServerResetCatalogDefaultsOp, mcpBrandingLoadOp, mcpBrandingSlugSuggestOp, mcpBrandingUpsertOp, mcpBrandingRemoveOp, mcpCatalogStoreLoadOp, mcpCatalogInstallOp, mcpCatalogUninstallOp } from '../events/resources/mcp.resource.js';
 import {
     datasourcesResource,
     datasourceTestOp,
@@ -43,9 +42,9 @@ import { triggersListOp, triggerGetOp, triggerCreateOp, triggerUpdateOp,
 import { secretsVariablesResource } from '@platform/lib/events/resources/secrets-variables.resource.js';
 import { secretsVariablesResolveOp } from '@platform/lib/events/resources/secrets-variables-resolve.resource.js';
 import { secretsVariableVersionsLoadOp } from '@platform/lib/events/resources/secrets-variable-versions.resource.js';
-import { nodesCatalogResource, nodeCatalogUpdateOp } from '../events/resources/nodes-catalog.resource.js';
+import { nodesCatalogResource } from '../events/resources/nodes-catalog.resource.js';
 import { sessionsResource, sessionStateOp } from '../events/resources/sessions.resource.js';
-import { tracesBySessionOp, tracesByTaskOp, tracesByTraceOp } from '../events/resources/traces.resource.js';
+import { tracesBySessionOp, tracesByTaskOp, tracesByTraceOp, tracesByHandoffChainOp } from '../events/resources/traces.resource.js';
 import {
     durableHistoryOp,
     durableBranchesOp,
@@ -77,21 +76,15 @@ import { codeLspSessionOp, codeDocumentationOp, codeTemplatesOp,
 import { promptRenderOp } from '../events/resources/prompts.resource.js';
 import { dataflowInspectOp } from '../events/resources/dataflow.resource.js';
 import { llmContextResolveParentOp } from '../events/resources/llm-context.resource.js';
+import { namespacesResource } from '@platform/lib/events/resources/rag-namespaces.resource.js';
 import {
-    flowsRagNamespacesListOp,
-    flowsRagNamespacesCreateOp,
-    flowsRagSearchDefaultsOp,
-} from '../events/resources/rag-namespaces.resource.js';
-import {
-    flowsRagDocumentsOp,
-    flowsRagDocumentUploadOp,
-    flowsRagDocumentStatusOp,
-    flowsRagDocumentRemoveOp,
-} from '../events/resources/rag-documents.resource.js';
-import {
-    flowsRagSearchOp,
-    flowsRagNodeTestSlice,
-} from '../events/resources/rag-search.resource.js';
+    documentsResource,
+    documentUploadOp,
+    documentRemoveOp,
+} from '@platform/lib/events/resources/rag-documents.resource.js';
+import { documentStatusResource } from '@platform/lib/events/resources/rag-document-status.resource.js';
+import { searchOp, searchDefaultsOp } from '@platform/lib/events/resources/rag-search.resource.js';
+import { flowsRagNodeTestSlice } from '../events/resources/rag-node-test.resource.js';
 import { registerNodeTestRunHandler } from '../_helpers/node-test-run-registry.js';
 import { codeExecuteTestRunHandler } from '../_helpers/node-test-run-code-execute.js';
 import { ragSearchTestRunHandler } from '../_helpers/node-test-run-rag-search.js';
@@ -108,8 +101,8 @@ import {
     flowsCodeAgentStatusOp,
     flowsCodeAgentLogsOp,
     flowsCodeAgentDeleteOp,
-    flowsCatalogItemsOp,
 } from '../events/resources/code-agent.resource.js';
+import { catalogItemsOp } from '@platform/lib/events/resources/office-catalog-items.resource.js';
 import {
     integrationsListOp,
     integrationsRemoveOp,
@@ -119,11 +112,6 @@ import {
     googleWorkspaceCompanyDeleteOp,
 } from '../events/resources/integrations.resource.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
-import {
-    flowsCatalogsOp,
-    flowsDocumentsOp,
-    flowsDocumentsSearchOp,
-} from '../events/resources/documents-browse.resource.js';
 import { apiConsoleRunOp } from '../events/resources/api-console.resource.js';
 import { editorResource, editorBulkDeleteOp, stickyNoteUpsertOp } from '../events/resources/editor.resource.js';
 import { executionUiSlice } from '../events/resources/execution-ui.resource.js';
@@ -240,7 +228,7 @@ export class FlowsApp extends PlatformApp {
         branchCreateOp,
         branchUpdateOp,
         branchRemoveOp,
-        flowsVoiceCatalogLoadOp,
+        flowsVoiceProvidersCatalogLoadOp,
         flowVoiceSessionQueryOp,
         flowPreviewShareOp,
         flowUiSchemaOp,
@@ -251,14 +239,11 @@ export class FlowsApp extends PlatformApp {
         toolTagGroupsOp,
         workQueuesResource,
         agentSkillsResource,
-        agentSkillUpdateOp,
         agentSkillImportOp,
         agentSkillsEnsureSeedOp,
         resourcesBundleResource,
-        resourceUpdateOp,
         mcpServersResource,
         mcpServersListOp,
-        mcpServerUpdateOp,
         mcpServerSyncOp,
         mcpServerTestOp,
         mcpServerResetCatalogDefaultsOp,
@@ -287,12 +272,12 @@ export class FlowsApp extends PlatformApp {
         secretsVariablesResolveOp,
         secretsVariableVersionsLoadOp,
         nodesCatalogResource,
-        nodeCatalogUpdateOp,
         sessionsResource,
         sessionStateOp,
         tracesBySessionOp,
         tracesByTaskOp,
         tracesByTraceOp,
+        tracesByHandoffChainOp,
         durableHistoryOp,
         durableBranchesOp,
         durableStateAtOp,
@@ -323,14 +308,13 @@ export class FlowsApp extends PlatformApp {
         codeExecuteOp,
         dataflowInspectOp,
         llmContextResolveParentOp,
-        flowsRagNamespacesListOp,
-        flowsRagNamespacesCreateOp,
-        flowsRagSearchDefaultsOp,
-        flowsRagDocumentsOp,
-        flowsRagDocumentUploadOp,
-        flowsRagDocumentStatusOp,
-        flowsRagDocumentRemoveOp,
-        flowsRagSearchOp,
+        namespacesResource,
+        searchDefaultsOp,
+        documentsResource,
+        documentUploadOp,
+        documentStatusResource,
+        documentRemoveOp,
+        searchOp,
         flowsRagNodeTestSlice,
         flowsDataTableCreateOp,
         flowsDataTableSnapshotOp,
@@ -342,7 +326,7 @@ export class FlowsApp extends PlatformApp {
         flowsCodeAgentStatusOp,
         flowsCodeAgentLogsOp,
         flowsCodeAgentDeleteOp,
-        flowsCatalogItemsOp,
+        catalogItemsOp,
         promptRenderOp,
         integrationsListOp,
         integrationsRemoveOp,
@@ -351,9 +335,6 @@ export class FlowsApp extends PlatformApp {
         googleWorkspaceCompanyPutOp,
         googleWorkspaceCompanyDeleteOp,
         platformFileCreateOp,
-        flowsCatalogsOp,
-        flowsDocumentsOp,
-        flowsDocumentsSearchOp,
         apiConsoleRunOp,
         editorResource,
         editorBulkDeleteOp,

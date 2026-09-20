@@ -34,6 +34,7 @@ from core.utils.tokens import get_token_service
 from tests.core.mail.conftest import seed_mail_company_member
 from tests.core.mail.fakes import RecordingMailServerPort
 from tests.fixtures.ai_provider_defaults import company_with_test_ai_provider_defaults
+from tests.flows.conftest import persist_owned_flow
 
 
 async def _await_completed_state(container, session_id: str, *, timeout_sec: float = 20.0):
@@ -121,7 +122,7 @@ async def test_create_email_trigger_indexes_redis(
     """API create email trigger → SADD flows:email_triggers:{mailbox_binding_id}."""
     port = RecordingMailServerPort(supports_provision=False)
     mail_service = _mail_service_with_port(container, port)
-    company, _user, binding, token = await _seed_company_binding(
+    company, user, binding, token = await _seed_company_binding(
         container=container,
         mail_service=mail_service,
         unique_id=unique_id,
@@ -136,7 +137,12 @@ async def test_create_email_trigger_indexes_redis(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(
+        container,
+        agent,
+        company_id=company.company_id,
+        owner_user_id=user.user_id,
+    )
 
     transport = ASGITransport(app=app)
     async with AsyncClient(
@@ -181,7 +187,7 @@ async def test_dispatch_match_fires_completed_and_dedups(
     mock_llm_with_queue(["Email processed"])
     port = RecordingMailServerPort(supports_provision=False)
     mail_service = _mail_service_with_port(container, port)
-    company, _user, binding, token = await _seed_company_binding(
+    company, user, binding, token = await _seed_company_binding(
         container=container,
         mail_service=mail_service,
         unique_id=unique_id,
@@ -196,7 +202,12 @@ async def test_dispatch_match_fires_completed_and_dedups(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(
+        container,
+        agent,
+        company_id=company.company_id,
+        owner_user_id=user.user_id,
+    )
 
     transport = ASGITransport(app=app)
     async with AsyncClient(
@@ -268,7 +279,7 @@ async def test_dispatch_filter_mismatch_no_state(
     mock_llm_with_queue(["should not run"])
     port = RecordingMailServerPort(supports_provision=False)
     mail_service = _mail_service_with_port(container, port)
-    company, _user, binding, token = await _seed_company_binding(
+    company, user, binding, token = await _seed_company_binding(
         container=container,
         mail_service=mail_service,
         unique_id=unique_id,
@@ -283,7 +294,12 @@ async def test_dispatch_filter_mismatch_no_state(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(
+        container,
+        agent,
+        company_id=company.company_id,
+        owner_user_id=user.user_id,
+    )
 
     transport = ASGITransport(app=app)
     async with AsyncClient(
@@ -347,7 +363,7 @@ async def test_sync_binding_new_mail_dispatches(
     mock_llm_with_queue(["Synced mail ok"])
     port = RecordingMailServerPort(supports_provision=False)
     mail_service = _mail_service_with_port(container, port)
-    company, _user, binding, token = await _seed_company_binding(
+    company, user, binding, token = await _seed_company_binding(
         container=container,
         mail_service=mail_service,
         unique_id=unique_id,
@@ -362,7 +378,12 @@ async def test_sync_binding_new_mail_dispatches(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await container.flow_repository.set(agent)
+    await persist_owned_flow(
+        container,
+        agent,
+        company_id=company.company_id,
+        owner_user_id=user.user_id,
+    )
 
     transport = ASGITransport(app=app)
     async with AsyncClient(

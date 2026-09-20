@@ -179,4 +179,6 @@ async def test_flows_data_table_rejects_office_document_scope(
         },
     )
     assert rejected.status_code == 400, rejected.text
-    assert "flow_asset" in rejected.json()["detail"]
+    body = rejected.json()
+    assert body["error_code"] == "ws_invalid_payload"
+    assert "flow_asset" in body["detail"]

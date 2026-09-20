@@ -48,7 +48,7 @@ async def test_platform_search_mcp_sync_endpoint(search_service, client, contain
     body = sync_response.json()
     assert body["success"] is True
     assert body["tools_count"] == 4
-    tool_names = sorted(tool["name"] for tool in body["tools"])
+    tool_names = sorted(tool["tool_name"] for tool in body["tools"])
     assert tool_names == [
         "meta_web_search",
         "refine_serp",

@@ -230,11 +230,11 @@ async def test_picker_category_all_skips_agent_toolkit_lookup(
         raise AssertionError("picker endpoint must not resolve agent_toolkit_ids")
 
     monkeypatch.setattr(
-        "apps.flows.src.api.v1.tools._toolkit_ids_for_tool",
+        "apps.flows.realtime.tool_operations._toolkit_ids_for_tool",
         _fail_toolkit_lookup,
     )
     monkeypatch.setattr(
-        "apps.flows.src.api.v1.tools._toolkit_ids_for_flow",
+        "apps.flows.realtime.tool_operations._toolkit_ids_for_flow",
         _fail_toolkit_lookup,
     )
 

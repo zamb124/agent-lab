@@ -35,16 +35,20 @@ export async function fetchToolsAllPage(runOp, opts = {}) {
     }
     const result = await runOp(payload);
     if (result === null || !isPlainObject(result) || !Array.isArray(result.items)) {
-        throw new Error('fetchToolsAllPage: tools_all page failed');
+        throw new Error('fetchToolsAllPage: tools_all lastResult.items must be an array');
+    }
+    if (typeof result.total !== 'number') {
+        throw new Error('fetchToolsAllPage: tools_all lastResult.total must be a number');
     }
     /** @type {Record<string, unknown>[]} */
     const items = [];
     for (const item of result.items) {
-        if (isPlainObject(item)) {
-            items.push(item);
+        if (!isPlainObject(item)) {
+            throw new Error('fetchToolsAllPage: tools_all item must be an object');
         }
+        items.push(item);
     }
-    const total = typeof result.total === 'number' ? result.total : offset + items.length;
+    const total = result.total;
     const nextOffset = offset + items.length;
     return {
         items,

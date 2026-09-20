@@ -422,7 +422,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 this._testRunOps.set(handler.opName, this.useOp(handler.opName));
             }
         }
-        if (this._testRunOps.has('flows/rag_search')) {
+        if (this._testRunOps.has('rag/search')) {
             this._ragNodeTest = this.useSlice('flows/rag_node_test');
         }
         this._exceptionAbsorbAllowNamesOp = this.useOp('flows/exception_absorb_allow_names');
@@ -551,6 +551,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         el.viewModel = handler.formatViewModel({
             op,
             nodeId: this.nodeId,
+            nodeTest: this._ragNodeTest === null ? null : this._ragNodeTest.value,
             t: (key, vars) => this.t(key, vars),
         });
         el.busy = handler.busyOf(op);
@@ -846,18 +847,18 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         if (raw === null) {
             return null;
         }
-        if (!Array.isArray(raw)) {
-            throw new Error('flows-base-node-editor: exception-absorb-allow-names response must be an array');
+        if (typeof raw !== 'object' || !Array.isArray(raw.items)) {
+            throw new Error('flows-base-node-editor: exception-absorb-allow-names lastResult.items must be an array');
         }
-        if (raw.length === 0) {
+        if (raw.items.length === 0) {
             throw new Error('flows-base-node-editor: exception-absorb-allow-names must be non-empty');
         }
-        for (let i = 0; i < raw.length; i++) {
-            if (typeof raw[i] !== 'string') {
+        for (let i = 0; i < raw.items.length; i++) {
+            if (typeof raw.items[i] !== 'string') {
                 throw new Error('flows-base-node-editor: exception-absorb-allow-names item must be a string');
             }
         }
-        return raw;
+        return raw.items;
     }
 
     _renderExceptionAllowTypesControls(cfg) {

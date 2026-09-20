@@ -7,8 +7,8 @@
  *   - handoff_task_title — platform-variable-input (@state: / @var:)
  *   - handoff_user_message — markdown variable-syntax=at-ref (@state: / @var:)
  *
- * Очередь — slug WorkQueue. Список и create — фабрика `flows/work_queues`
- * (REST /flows/api/v1/work-queues → WorkItemService).
+ * Очередь — slug WorkQueue. Список и create — фабрика `worktracker/work_queues`
+ * (REST /worktracker/api/v1/work-queues, тот же `op_work_queues_*`).
  * Create на лету: пункт в dropdown combobox (`create` event).
  */
 
@@ -116,7 +116,7 @@ export class FlowsHitlNodeEditor extends PlatformElement {
         this._showCreate = false;
         this._createName = '';
         this._createSlug = '';
-        this._queues = this.useResource('flows/work_queues');
+        this._queues = this.useResource('worktracker/work_queues');
     }
 
     connectedCallback() {

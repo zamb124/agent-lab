@@ -132,7 +132,11 @@ export class FlowsTriggersModal extends PlatformModal {
             }
         }
         if (body !== null && typeof body === 'object' && !Array.isArray(body)) {
-            await this._testOp.run({ flow_id: this.flowId, trigger_id: t.trigger_id, body });
+            await this._testOp.run({
+                flow_id: this.flowId,
+                trigger_id: t.trigger_id,
+                payload: body,
+            });
             const lr = this._testOp.lastResult;
             this._testResultText = JSON.stringify(lr, null, 2);
             this._lastTestTriggerId = t.trigger_id;
@@ -160,7 +164,14 @@ export class FlowsTriggersModal extends PlatformModal {
     }
 
     _filteredItems() {
-        const items = Array.isArray(this._listOp.lastResult) ? this._listOp.lastResult : [];
+        const listed = this._listOp.lastResult;
+        if (listed === null || listed === undefined) {
+            return [];
+        }
+        if (typeof listed !== 'object' || !Array.isArray(listed.items)) {
+            throw new Error('flows-triggers-modal: triggers_list lastResult.items must be an array');
+        }
+        const items = listed.items;
         const query = this._query.trim().toLocaleLowerCase();
         if (query.length === 0) {
             return items;

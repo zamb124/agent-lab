@@ -6,7 +6,7 @@ MCP серверы подключаются по HTTP и предоставля�
 
 from datetime import datetime
 from enum import Enum
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -18,7 +18,14 @@ __all__ = [
     "MCPDiscoveredTool",
     "MCPInitializeResult",
     "MCPServerConfig",
+    "MCPServerDeletedResponse",
+    "MCPServerIdPayload",
+    "MCPServerListPayload",
     "MCPServerSource",
+    "MCPServerUpdatePayload",
+    "MCPServerUpdateRequest",
+    "MCPSyncResponse",
+    "MCPTestResponse",
     "MCPToolDefinition",
     "MCPTransportType",
 ]
@@ -52,7 +59,13 @@ class MCPServerConfig(BaseModel):
     """
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-    server_id: str = Field(..., description="Уникальный идентификатор сервера")
+    server_id: str = Field(
+        ...,
+        description="Уникальный идентификатор сервера",
+        pattern=r"^[a-zA-Z][a-zA-Z0-9_-]*$",
+        min_length=2,
+        max_length=64,
+    )
     name: str = Field(..., description="Отображаемое имя сервера")
     url: str = Field(..., description="URL MCP сервера (JSON-RPC endpoint)")
     transport_type: MCPTransportType = Field(
@@ -118,6 +131,10 @@ class MCPServerConfig(BaseModel):
     )
     override_locked_at: datetime | None = Field(default=None)
     override_locked_by_user_id: str | None = Field(default=None)
+    icon_url: str | None = Field(
+        default=None,
+        description="Вычисленный URL иконки; в Storage не хранится",
+    )
 
 
 class MCPCallResult(BaseModel):
@@ -150,3 +167,57 @@ class MCPCallResult(BaseModel):
                 if isinstance(text, str):
                     texts.append(text)
         return "\n".join(texts)
+
+
+class MCPServerListPayload(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    search: str = ""
+    limit: int = Field(default=200, ge=1, le=1000)
+    offset: int = Field(default=0, ge=0)
+
+
+class MCPServerIdPayload(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    server_id: str = Field(..., min_length=2, max_length=64)
+
+
+class MCPServerUpdateRequest(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    name: str | None = None
+    url: str | None = None
+    transport_type: MCPTransportType | None = None
+    headers: dict[str, str] | None = None
+    is_active: bool | None = None
+    description: str | None = None
+
+
+class MCPServerUpdatePayload(MCPServerUpdateRequest):
+    server_id: str = Field(..., min_length=2, max_length=64)
+
+
+class MCPServerDeletedResponse(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    status: Literal["deleted"]
+    server_id: str
+
+
+class MCPSyncResponse(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    success: bool
+    tools_count: int
+    tools: list[MCPDiscoveredTool]
+
+
+class MCPTestResponse(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    success: bool
+    message: str
+    tools_count: int
+    transport_type: MCPTransportType
+    url: str

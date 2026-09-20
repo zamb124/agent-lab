@@ -64,8 +64,9 @@ class CodeAgentSourceService:
     async def ensure_source(
         self, *, flow_id: str, node_id: str, branch_id: str
     ) -> CodeAgentEnsureSourceResponse:
-        _ = branch_id
-        return await self._ensure_catalog(flow_id=flow_id, node_id=node_id)
+        return await self._ensure_catalog(
+            flow_id=flow_id, node_id=node_id, branch_id=branch_id
+        )
 
     async def import_git(
         self,
@@ -213,7 +214,9 @@ class CodeAgentSourceService:
     async def _source_status(
         self, *, flow_id: str, node_id: str, branch_id: str
     ) -> CodeAgentNodeStatusResponse:
-        ensured = await self._ensure_catalog(flow_id=flow_id, node_id=node_id)
+        ensured = await self._ensure_catalog(
+            flow_id=flow_id, node_id=node_id, branch_id=branch_id
+        )
         node = await self._find_node(flow_id, node_id, branch_id)
         files = await self.list_files(catalog_id=ensured.catalog_id)
         return CodeAgentNodeStatusResponse(
@@ -234,7 +237,6 @@ class CodeAgentSourceService:
         branch_id: str,
         request: CodeAgentRebuildRequest,
     ) -> GuestRebuildResponse:
-        _ = branch_id
         ctx = require_context()
         company = require_active_company()
         if not request.invoke_argv:
@@ -242,7 +244,9 @@ class CodeAgentSourceService:
         for item in request.invoke_argv:
             if item.strip() == "":
                 raise ValueError("code_agent invoke_argv items must be non-empty")
-        ensured = await self._ensure_catalog(flow_id=flow_id, node_id=node_id)
+        ensured = await self._ensure_catalog(
+            flow_id=flow_id, node_id=node_id, branch_id=branch_id
+        )
         files = await self.list_files(catalog_id=ensured.catalog_id)
         return await self._farm.rebuild(
             GuestRebuildRequest(
@@ -393,7 +397,7 @@ class CodeAgentSourceService:
         await self._documents.delete_catalog(catalog_id)
 
     async def _ensure_catalog(
-        self, *, flow_id: str, node_id: str
+        self, *, flow_id: str, node_id: str, branch_id: str
     ) -> CodeAgentEnsureSourceResponse:
         _ = require_context()
         _ = require_active_company()
@@ -407,6 +411,17 @@ class CodeAgentSourceService:
             )
         )
         ensured = await self._documents.ensure_catalog_path(segments)
+        node = await self._find_node(flow_id, node_id, branch_id)
+        if node is None:
+            raise LookupError(f"code_agent node not found: {node_id}")
+        stored_catalog_id = _node_string(node, "catalog_id")
+        if stored_catalog_id != ensured.catalog_id:
+            await self._patch_node(
+                flow,
+                node_id=node_id,
+                branch_id=branch_id,
+                fields={"catalog_id": ensured.catalog_id},
+            )
         return CodeAgentEnsureSourceResponse(
             catalog_id=ensured.catalog_id,
             flow_id=flow_id,

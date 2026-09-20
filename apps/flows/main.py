@@ -31,13 +31,12 @@ from apps.agent.tunnel_bus import (  # noqa: E402
     start_tunnel_bus_listener,
 )
 from apps.flows.config import FlowSettings, get_settings  # noqa: E402
+from apps.flows.realtime.command_router import register_flows_ws_commands  # noqa: E402
 from apps.flows.src.api import (  # noqa: E402
     a2a_router,
-    registry_router,
     websocket_router,
 )
 from apps.flows.src.api.v1 import api_v1_router  # noqa: E402
-from apps.flows.src.api.v1.flow_ui import install_flow_ui_exception_handlers  # noqa: E402
 from apps.flows.src.container import FlowContainer, get_container  # noqa: E402
 from apps.flows.src.container_contracts import as_flow_runtime_container  # noqa: E402
 from apps.flows.src.middleware.embed_dynamic_cors import EmbedDynamicCorsMiddleware  # noqa: E402
@@ -95,6 +94,7 @@ _FLOWS_DEV_CORS_ORIGIN_REGEX = (
 
 async def on_startup(_app: FastAPI, container: FlowContainer, settings: FlowSettings) -> None:
     """Логика при старте сервиса flows."""
+    register_flows_ws_commands()
 
     async def _flow_resume_via_taskiq(
         *,
@@ -300,7 +300,6 @@ app = create_service_app(
     services_spa_index=Path(__file__).parent / "ui" / "index.html",
     routers=[
         api_v1_router,
-        registry_router,
         websocket_router,
         a2a_router,
         agent_platform_mcp_router,
@@ -328,7 +327,6 @@ app = create_service_app(
     version="2.0.0",
 )
 agent_llm_proxy.install_llm_proxy_exception_handlers(app)
-install_flow_ui_exception_handlers(app)
 
 if _flow_settings.dynamic_embed_cors_enabled:
     app.add_middleware(EmbedDynamicCorsMiddleware, container=get_container())

@@ -2,7 +2,7 @@
  * flows-mcp-servers-modal — управление MCP-серверами компании.
  *
  * Список в виде карточек; форма создания/редактирования: поля, HTTP-заголовки (key/value), пресеты.
- * useResource('flows/mcp_servers'); update — flows/mcp_server_update; sync/test — useOp.
+ * useResource('flows/mcp_servers'); sync/test — useOp.
  */
 
 import { html, css } from 'lit';
@@ -521,7 +521,6 @@ export class FlowsMcpServersModal extends PlatformModal {
         this._activeCompanySel = this.select((s) => s.auth.activeCompanyId);
         this._servers = this.useResource('flows/mcp_servers');
         this._serversListOp = this.useOp('flows/mcp_servers_list');
-        this._update = this.useOp('flows/mcp_server_update');
         this._syncOp = this.useOp('flows/mcp_server_sync');
         this._testOp = this.useOp('flows/mcp_server_test');
         this._resetCatalogOp = this.useOp('flows/mcp_server_reset_catalog_defaults');
@@ -1101,15 +1100,12 @@ export class FlowsMcpServersModal extends PlatformModal {
         this._saving = true;
         try {
             if (this._editing) {
-                await this._update.run({
-                    server_id: f.server_id,
-                    body: {
-                        name: f.name,
-                        url: f.url,
-                        transport_type: f.transport_type,
-                        description: f.description,
-                        headers,
-                    },
+                this._servers.update(f.server_id, {
+                    name: f.name,
+                    url: f.url,
+                    transport_type: f.transport_type,
+                    description: f.description,
+                    headers,
                 });
             } else {
                 await this._servers.create({
@@ -1200,7 +1196,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         if (!d || typeof d !== 'object' || !('value' in d) || typeof d.value !== 'boolean') {
             throw new Error('mcp: platform-switch must emit detail.value boolean');
         }
-        await this._update.run({ server_id: s.server_id, body: { is_active: d.value } });
+        this._servers.update(s.server_id, { is_active: d.value });
         await this._loadInstalled({ reset: true });
     }
 

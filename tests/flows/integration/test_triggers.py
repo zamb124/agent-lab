@@ -16,6 +16,8 @@ import pytest
 
 from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig, TriggerConfig, TriggerStatus, TriggerType
+from core.authz.company_sync import sync_company_member_roles
+from tests.flows.conftest import persist_owned_flow
 from tests.flows.durable_runtime_harness import run_flow, workflow_state
 
 
@@ -292,11 +294,11 @@ class TestTriggersAPI:
             entry="main",
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
         )
-        await container.flow_repository.set(agent)
+        await persist_owned_flow(container, agent)
         response = await client.get(f"/flows/api/v1/flows/{flow_id}/triggers")
         assert response.status_code == 200
         data = response.json()
-        assert data == []
+        assert data == {"items": []}
         await container.flow_repository.delete(flow_id)
 
     @pytest.mark.asyncio
@@ -309,7 +311,7 @@ class TestTriggersAPI:
             entry="main",
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
         )
-        await container.flow_repository.set(agent)
+        await persist_owned_flow(container, agent)
         response = await client.post(
             f"/flows/api/v1/flows/{flow_id}/triggers",
             json={
@@ -351,7 +353,7 @@ class TestTriggersAPI:
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
             triggers={"my_trigger": trigger},
         )
-        await container.flow_repository.set(agent)
+        await persist_owned_flow(container, agent)
         response = await client.get(f"/flows/api/v1/flows/{flow_id}/triggers/my_trigger")
         assert response.status_code == 200
         data = response.json()
@@ -377,7 +379,7 @@ class TestTriggersAPI:
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
             triggers={"update_me": trigger},
         )
-        await container.flow_repository.set(agent)
+        await persist_owned_flow(container, agent)
         response = await client.put(
             f"/flows/api/v1/flows/{flow_id}/triggers/update_me",
             json={"name": "Updated Name", "enabled": False},
@@ -403,7 +405,7 @@ class TestTriggersAPI:
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
             triggers={"delete_me": trigger},
         )
-        await container.flow_repository.set(agent)
+        await persist_owned_flow(container, agent)
         response = await client.delete(f"/flows/api/v1/flows/{flow_id}/triggers/delete_me")
         assert response.status_code == 200
         data = response.json()
@@ -430,10 +432,14 @@ class TestTriggersAPI:
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
             triggers={"test_mapping": trigger},
         )
-        await container.flow_repository.set(agent)
+        await persist_owned_flow(container, agent)
         response = await client.post(
             f"/flows/api/v1/flows/{flow_id}/triggers/test_mapping/test",
-            json={"message": {"text": "Hello from test", "chat": {"id": 12345}}},
+            json={
+                "flow_id": flow_id,
+                "trigger_id": "test_mapping",
+                "payload": {"message": {"text": "Hello from test", "chat": {"id": 12345}}},
+            },
         )
         assert response.status_code == 200
         data = response.json()
@@ -460,7 +466,7 @@ class TestTriggersAPI:
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
             triggers={"redact_t": trigger},
         )
-        await container.flow_repository.set(agent)
+        await persist_owned_flow(container, agent)
         response = await client.get(f"/flows/api/v1/flows/{flow_id}/triggers/redact_t")
         assert response.status_code == 200
         data = response.json()
@@ -490,7 +496,7 @@ class TestTriggersAPI:
             variables={"bot_tok": resolved_token},
             triggers={"tg_one": trigger},
         )
-        await container.flow_repository.set(agent)
+        await persist_owned_flow(container, agent)
         response = await client.post(
             f"/flows/api/v1/flows/{flow_id}/triggers/verify",
             json={
@@ -537,7 +543,7 @@ class TestTriggersAPI:
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
             triggers={"tg_reg": trigger},
         )
-        await container.flow_repository.set(agent)
+        await persist_owned_flow(container, agent)
         response = await client.post(
             f"/flows/api/v1/flows/{flow_id}/triggers/tg_reg/reregister"
         )
@@ -569,7 +575,7 @@ class TestTriggersAPI:
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
             triggers={"cron_t": trigger},
         )
-        await container.flow_repository.set(agent)
+        await persist_owned_flow(container, agent)
         response = await client.post(f"/flows/api/v1/flows/{flow_id}/triggers/cron_t/reregister")
         assert response.status_code == 409
         await container.flow_repository.delete(flow_id)
@@ -591,7 +597,7 @@ class TestTriggersAPI:
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
             triggers={"tg_off": trigger},
         )
-        await container.flow_repository.set(agent)
+        await persist_owned_flow(container, agent)
         response = await client.post(f"/flows/api/v1/flows/{flow_id}/triggers/tg_off/reregister")
         assert response.status_code == 400
         await container.flow_repository.delete(flow_id)
@@ -615,7 +621,7 @@ class TestTriggerExecutor:
             entry="main",
             nodes={"main": {"type": "llm_node", "prompt": "Echo: {{content}}"}},
         )
-        await container.flow_repository.set(agent)
+        await persist_owned_flow(container, agent)
         trigger = TriggerConfig(
             trigger_id="exec_trigger",
             name="Executor Trigger",
@@ -650,7 +656,7 @@ class TestTelegramWebhookEndpoint:
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
             triggers={"wrong_type": trigger},
         )
-        await container.flow_repository.set(agent)
+        await persist_owned_flow(container, agent)
         response = await client.post(
             f"/flows/api/v1/triggers/telegram/{flow_id}/wrong_type",
             json={"update_id": 123, "message": {"text": "test"}},
@@ -676,7 +682,7 @@ class TestTelegramWebhookEndpoint:
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
             triggers={"tg_secure": trigger},
         )
-        await container.flow_repository.set(agent)
+        await persist_owned_flow(container, agent)
         response = await client.post(
             f"/flows/api/v1/triggers/telegram/{flow_id}/tg_secure",
             json={
@@ -725,7 +731,7 @@ class TestTelegramWebhookEndpoint:
                 )
             },
         )
-        await container.flow_repository.set(agent)
+        await persist_owned_flow(container, agent)
         payload = {
             "update_id": 1,
             "callback_query": {
@@ -765,7 +771,7 @@ class TestTelegramWebhookEndpoint:
             entry="main",
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
         )
-        await container.flow_repository.set(agent)
+        await persist_owned_flow(container, agent)
         response = await client.post(
             f"/flows/api/v1/triggers/telegram/{flow_id}/nonexistent_trigger",
             json={"update_id": 123, "message": {"text": "test"}},
@@ -801,7 +807,7 @@ class TestTelegramTriggerHandler:
                 )
             },
         )
-        await container.flow_repository.set(agent)
+        await persist_owned_flow(container, agent)
         handler = TelegramTriggerHandler(base_url="http://test", container=container)
         payload_denied = {
             "update_id": 2,
@@ -834,7 +840,7 @@ class TestTelegramTriggerHandler:
                 )
             },
         )
-        await container.flow_repository.set(agent)
+        await persist_owned_flow(container, agent)
         handler = TelegramTriggerHandler(base_url="http://test", container=container)
         payload_wrong = {
             "update_id": 1,
@@ -959,7 +965,7 @@ class TestTelegramTriggerE2E:
                 )
             },
         )
-        await container.flow_repository.set(agent)
+        await persist_owned_flow(container, agent)
         telegram_update = {
             "update_id": 123456789,
             "message": {
@@ -1034,7 +1040,7 @@ class TestTelegramTriggerE2E:
                 )
             },
         )
-        await container.flow_repository.set(agent)
+        await persist_owned_flow(container, agent)
         telegram_update = {
             "update_id": 111,
             "message": {
@@ -1083,7 +1089,7 @@ class TestTelegramTriggerE2E:
                 )
             },
         )
-        await container.flow_repository.set(agent)
+        await persist_owned_flow(container, agent)
         response_allowed = await client.post(
             f"/flows/api/v1/triggers/telegram/{flow_id}/filtered",
             json={
@@ -1147,7 +1153,7 @@ class TestTelegramTriggerE2E:
                 )
             },
         )
-        await container.flow_repository.set(agent)
+        await persist_owned_flow(container, agent)
         response_start = await client.post(
             f"/flows/api/v1/triggers/telegram/{flow_id}/commands",
             json={
@@ -1218,7 +1224,7 @@ class TestTelegramTriggerE2E:
                 )
             },
         )
-        await container.flow_repository.set(agent)
+        await persist_owned_flow(container, agent)
         telegram_update = {
             "update_id": 999888,
             "message": {
@@ -1230,7 +1236,12 @@ class TestTelegramTriggerE2E:
             },
         }
         response = await client.post(
-            f"/flows/api/v1/flows/{flow_id}/triggers/full_mapping/test", json=telegram_update
+            f"/flows/api/v1/flows/{flow_id}/triggers/full_mapping/test",
+            json={
+                "flow_id": flow_id,
+                "trigger_id": "full_mapping",
+                "payload": telegram_update,
+            },
         )
         assert response.status_code == 200
         data = response.json()
@@ -1568,7 +1579,7 @@ class TestTriggerWithOutputActionsE2E:
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
             triggers={"tg_with_output": trigger},
         )
-        await container.flow_repository.set(agent)
+        await persist_owned_flow(container, agent)
         loaded = await container.flow_repository.get(flow_id)
         assert loaded is not None
         assert "tg_with_output" in loaded.triggers
@@ -1851,7 +1862,7 @@ class TestChannelNodeE2E:
             ],
             variables={},
         )
-        await container.flow_repository.set(flow_config)
+        await persist_owned_flow(container, flow_config)
         agent = await container.flow_factory.get_flow(flow_id)
         state = workflow_state(
             flow_id=flow_id,
@@ -1901,7 +1912,7 @@ class TestChannelNodeE2E:
                 {"from_node": "send_telegram", "to_node": None},
             ],
         )
-        await container.flow_repository.set(flow_config)
+        await persist_owned_flow(container, flow_config)
         agent = await container.flow_factory.get_flow(flow_id)
         state = workflow_state(
             flow_id=flow_id,
@@ -1968,7 +1979,7 @@ class TestTriggerOutputActionsE2E:
             },
             triggers={"webhook_trigger": trigger},
         )
-        await container.flow_repository.set(flow_config)
+        await persist_owned_flow(container, flow_config)
         from apps.flows.src.triggers.executor import TriggerExecutor
 
         executor = TriggerExecutor()
@@ -2023,7 +2034,7 @@ class TestTriggerOutputActionsE2E:
             nodes={"main": {"type": "llm_node", "prompt": "Answer briefly."}},
             triggers={"multi_trigger": trigger},
         )
-        await container.flow_repository.set(flow_config)
+        await persist_owned_flow(container, flow_config)
         from apps.flows.src.triggers.executor import TriggerExecutor
 
         executor = TriggerExecutor()
@@ -2066,7 +2077,7 @@ class TestTriggerOutputActionsE2E:
             nodes={"main": {"type": "llm_node", "prompt": "Answer."}},
             triggers={"cond_trigger": trigger},
         )
-        await container.flow_repository.set(flow_config)
+        await persist_owned_flow(container, flow_config)
         from apps.flows.src.triggers.executor import TriggerExecutor
 
         executor = TriggerExecutor()
@@ -2110,7 +2121,7 @@ class TestProcessTaskTriggerOutput:
             nodes={"main": {"type": "llm_node", "prompt": "Кратко ответь."}},
             triggers={trigger_id: trigger},
         )
-        await container.flow_repository.set(flow_config)
+        await persist_owned_flow(container, flow_config)
         payload = {
             "update_id": 1,
             "message": {
@@ -2181,7 +2192,7 @@ class TestProcessTaskTriggerOutput:
             nodes={"main": {"type": "llm_node", "prompt": "x"}},
             triggers={trigger_id: trigger},
         )
-        await container.flow_repository.set(flow_config)
+        await persist_owned_flow(container, flow_config)
         payload = {
             "message": {
                 "text": "a",
@@ -2262,7 +2273,7 @@ class TestFullTriggerFlowE2E:
             },
             triggers={trigger_id: trigger},
         )
-        await container.flow_repository.set(flow_config)
+        await persist_owned_flow(container, flow_config)
         telegram_payload = {
             "update_id": 123456789,
             "message": {
@@ -2323,7 +2334,7 @@ class TestFullTriggerFlowE2E:
                 {"from_node": "send_result", "to_node": None},
             ],
         )
-        await container.flow_repository.set(flow_config)
+        await persist_owned_flow(container, flow_config)
         agent = await container.flow_factory.get_flow(flow_id)
         state = workflow_state(
             flow_id=flow_id,
@@ -2409,12 +2420,18 @@ class TestReactAgentWithChannelToolE2E:
             },
             edges=[{"from_node": "main", "to_node": None}],
         )
-        await container.flow_repository.set(flow_config)
+        _ = await container.flow_repository.set(flow_config)
         agent = await container.flow_factory.get_flow(flow_id)
         state = workflow_state(
             flow_id=flow_id,
             unique_id=unique_id,
             content="Отправь уведомление на webhook",
+        )
+        await sync_company_member_roles(
+            container.authz_service,
+            company_id="system",
+            user_id=state.user_id,
+            roles=["owner", "admin"],
         )
         await run_flow(container=container, flow=agent, state=state)
         requests = server.get_requests("notify")
@@ -2484,12 +2501,18 @@ class TestReactAgentWithChannelToolE2E:
             },
             edges=[{"from_node": "main", "to_node": None}],
         )
-        await container.flow_repository.set(flow_config)
+        _ = await container.flow_repository.set(flow_config)
         agent = await container.flow_factory.get_flow(flow_id)
         state = workflow_state(
             flow_id=flow_id,
             unique_id=unique_id,
             content="Отправь сообщение в Telegram",
+        )
+        await sync_company_member_roles(
+            container.authz_service,
+            company_id="system",
+            user_id=state.user_id,
+            roles=["owner", "admin"],
         )
         await run_flow(container=container, flow=agent, state=state)
         requests = server.get_requests("telegram_send_message")
@@ -2584,7 +2607,7 @@ class TestFullWebhookToChannelE2E:
             edges=[{"from_node": "main", "to_node": None}],
             triggers={trigger_id: trigger},
         )
-        await container.flow_repository.set(flow_config)
+        await persist_owned_flow(container, flow_config)
         telegram_payload = {
             "update_id": 999888777,
             "message": {
@@ -2691,7 +2714,7 @@ class TestFullWebhookToChannelE2E:
             edges=[{"from_node": "main", "to_node": None}],
             triggers={trigger_id: trigger},
         )
-        await container.flow_repository.set(flow_config)
+        await persist_owned_flow(container, flow_config)
         telegram_payload = {
             "update_id": 123123123,
             "message": {

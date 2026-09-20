@@ -37,8 +37,7 @@ export function buildRagSearchPayload({ nodeId, query, nodeConfig, editorState, 
         throw new Error('buildRagSearchPayload: default_top_k >= 1 required');
     }
     const payload = {
-        nodeId,
-        namespaceId: namespace,
+        namespace_id: namespace,
         query: query.trim(),
         limit: Math.trunc(cfg.default_top_k),
         ...packSearchRequestOptions(isPlainObject(cfg.search_options) ? cfg.search_options : null),
@@ -51,18 +50,21 @@ export function buildRagSearchPayload({ nodeId, query, nodeConfig, editorState, 
 
 export const ragSearchTestRunHandler = {
     id: 'rag_search',
-    opName: 'flows/rag_search',
+    opName: 'rag/search',
     match: ({ nodeType, resourceType }) => nodeType === 'resource' && resourceType === 'rag',
     busyOf: (op) => op.busy === true,
-    formatViewModel: ({ op, nodeId, t }) => {
+    formatViewModel: ({ nodeTest, nodeId, t }) => {
         if (typeof nodeId !== 'string' || nodeId.length === 0) {
             throw new Error('ragSearchTestRunHandler: nodeId required');
         }
         if (typeof t !== 'function') {
             throw new Error('ragSearchTestRunHandler: t required');
         }
-        const errorByNodeId = op.state.errorByNodeId;
-        const resultByNodeId = op.state.resultByNodeId;
+        if (!isPlainObject(nodeTest)) {
+            throw new Error('ragSearchTestRunHandler: nodeTest slice required');
+        }
+        const errorByNodeId = nodeTest.errorByNodeId;
+        const resultByNodeId = nodeTest.resultByNodeId;
         if (!isPlainObject(errorByNodeId) || !isPlainObject(resultByNodeId)) {
             throw new Error('ragSearchTestRunHandler: resultByNodeId/errorByNodeId required');
         }
@@ -116,6 +118,10 @@ export const ragSearchTestRunHandler = {
             editorState: matchCtx.editorState,
             catalogItems: matchCtx.catalogItems,
         });
+        if (host._ragNodeTest === null || host._ragNodeTest === undefined || typeof host._ragNodeTest.bindSearch !== 'function') {
+            throw new Error('ragSearchTestRunHandler: bindSearch required');
+        }
+        host._ragNodeTest.bindSearch({ nodeId: host.nodeId });
         setTestRunRequestClientId(requestClientId);
         await op.run(payload);
     },

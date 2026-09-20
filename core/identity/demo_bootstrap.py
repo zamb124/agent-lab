@@ -7,7 +7,7 @@ import uuid
 from core.auth.utils import hash_password
 from core.authz.company_sync import sync_company_member_roles
 from core.authz.service import AuthzService
-from core.clients.service_client import ServiceClient, ServiceClientError
+from core.clients.service_client import ServiceClient
 from core.config import get_settings
 from core.context import clear_context, set_context
 from core.db.repositories.company_repository import CompanyRepository
@@ -165,23 +165,13 @@ async def ensure_demo_company_and_user(
         )
         if not isinstance(init_response, dict):
             raise ValueError("flows company/init response must be JSON object")
+        task_id = init_response.get("task_id")
+        if not isinstance(task_id, str) or task_id == "":
+            raise ValueError("flows company/init response.task_id required")
         logger.info(
             "Demo bootstrap: flows company/init для %s: task_id=%s",
             company_id,
-            init_response.get("task_id"),
-        )
-    except ServiceClientError as exc:
-        logger.error(
-            "Demo bootstrap: не удалось вызвать flows company/init для %s: %s",
-            company_id,
-            exc,
-        )
-    except Exception as exc:
-        logger.error(
-            "Demo bootstrap: не удалось вызвать flows company/init для %s: %s",
-            company_id,
-            exc,
-            exc_info=True,
+            task_id,
         )
     finally:
         clear_context()

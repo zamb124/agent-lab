@@ -1,24 +1,27 @@
-"""Internal endpoints flows для trusted service-to-service вызовов."""
+"""Trusted peer enqueue init ресурсов компании (signed internal headers)."""
 
 from __future__ import annotations
 
 from fastapi import APIRouter
 
-from apps.flows.src.api.v1.company import (
-    InitCompanyRequest,
-    InitCompanyResponse,
-    schedule_company_init,
+from apps.flows.realtime.company_operations import (
+    CompanyInitPayload,
+    CompanyInitScheduledResponse,
+    op_flows_company_init,
 )
 from apps.flows.src.dependencies import ContainerDep
+from core.context import require_context
 
 router = APIRouter(tags=["internal-company"])
 
 
-@router.post("/company/init", response_model=InitCompanyResponse)
+@router.post("/company/init")
 async def internal_init_company(
+    body: CompanyInitPayload,
     container: ContainerDep,
-    request: InitCompanyRequest,
-) -> InitCompanyResponse:
-    """Инициализация компании из idle_worker / trusted peers (signed internal headers)."""
-    _ = container
-    return await schedule_company_init(request)
+) -> CompanyInitScheduledResponse:
+    return await op_flows_company_init(
+        body,
+        user=require_context().user,
+        container=container,
+    )

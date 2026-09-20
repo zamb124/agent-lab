@@ -9,7 +9,7 @@ import { buildFlowPublishBody } from './flows-resolvers.js';
 /**
  * @param {{ state: object, setSaving: (payload: { saving: boolean }) => void, setDirty: (payload: { dirty: boolean }) => void }} editor
  *   контроллер slice ``flows/editor``
- * @param {{ run: (payload: { flow_id: string, body: object }) => Promise<unknown> }} updateOp контроллер ``flows/flow_update``
+ * @param {{ run: (payload: Record<string, unknown>) => Promise<unknown> }} updateOp контроллер ``flows/flow_update``
  * @param {string} flowId
  * @returns {Promise<boolean>} сохранение выполнено (``false`` — нечего сохранять или запрос отклонён)
  */
@@ -19,7 +19,7 @@ export async function saveEditorFlow(editor, updateOp, flowId) {
     const body = buildFlowPublishBody(state);
     if (!body) return false;
     editor.setSaving({ saving: true });
-    const result = await updateOp.run({ flow_id: flowId, body });
+    const result = await updateOp.run({ ...body, flow_id: flowId });
     editor.setSaving({ saving: false });
     if (result === null) return false;
     editor.setDirty({ dirty: false });

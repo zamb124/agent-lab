@@ -201,7 +201,7 @@ export class FlowsCodeAgentEditor extends PlatformElement {
         this._importArchiveOp = this.useOp('flows/code_agent_import_archive');
         this._rebuildOp = this.useOp('flows/code_agent_rebuild');
         this._statusOp = this.useOp('flows/code_agent_status');
-        this._catalogItemsOp = this.useOp('flows/catalog_items');
+        this._catalogItemsOp = this.useOp('office/catalog_items');
         this._fileUpload = this.useOp('platform/file_create');
         this._authSel = this.select((s) => s.auth.user);
     }
@@ -304,8 +304,14 @@ export class FlowsCodeAgentEditor extends PlatformElement {
         if (items === null || typeof items !== 'object') {
             throw new Error('flows-code-agent-editor: catalog items object required');
         }
-        const catalogs = Array.isArray(items.catalogs) ? items.catalogs : [];
-        const documents = Array.isArray(items.documents) ? items.documents : [];
+        if (!Array.isArray(items.catalogs)) {
+            throw new Error('flows-code-agent-editor: catalog items.catalogs array required');
+        }
+        if (!Array.isArray(items.documents)) {
+            throw new Error('flows-code-agent-editor: catalog items.documents array required');
+        }
+        const catalogs = items.catalogs;
+        const documents = items.documents;
         /** @type {CodeAgentTreeNode[]} */
         const nodes = [];
         for (const catalog of catalogs) {

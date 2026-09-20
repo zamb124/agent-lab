@@ -2,9 +2,12 @@
 
 from core.guest_runtime.models import (
     CodeAgentCopyTreeRequest,
+    CodeAgentDeletePayload,
     CodeAgentEnsureSourceResponse,
     CodeAgentImportArchiveRequest,
     CodeAgentImportGitRequest,
+    CodeAgentLogsPayload,
+    CodeAgentNodeRefPayload,
     CodeAgentNodeStatusResponse,
     CodeAgentRebuildRequest,
     CodeAgentSourceFile,
@@ -28,9 +31,12 @@ from core.guest_runtime.models import (
 
 __all__ = [
     "CodeAgentCopyTreeRequest",
+    "CodeAgentDeletePayload",
     "CodeAgentEnsureSourceResponse",
     "CodeAgentImportArchiveRequest",
     "CodeAgentImportGitRequest",
+    "CodeAgentLogsPayload",
+    "CodeAgentNodeRefPayload",
     "CodeAgentNodeStatusResponse",
     "CodeAgentRebuildRequest",
     "CodeAgentSourceFile",

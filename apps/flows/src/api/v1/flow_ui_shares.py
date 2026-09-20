@@ -5,26 +5,29 @@ from __future__ import annotations
 from typing import Annotated
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, HTTPException, Query, Request
 
+from apps.flows.realtime.flow_ui_share_operations import (
+    op_flows_flow_ui_shares_create,
+    op_flows_flow_ui_shares_list,
+    op_flows_flow_ui_shares_remove,
+)
 from apps.flows.src.dependencies import ContainerDep
 from core.context import require_context
 from core.middleware.auth.company_resolver import build_service_base_url
 from core.models.flow_ui_share import (
+    FlowUIShareCreatePayload,
     FlowUIShareCreateRequest,
     FlowUIShareCreateResponse,
+    FlowUIShareDeletedResponse,
     FlowUIShareExchangeResponse,
     FlowUIShareGrant,
+    FlowUIShareGrantIdPayload,
+    FlowUIShareListPayload,
 )
+from core.pagination import ListResponse
 
 router = APIRouter(prefix="/flow-ui/shares", tags=["flow-ui-shares"])
-
-
-def _scope() -> tuple[str, str]:
-    context = require_context()
-    if context.active_company is None:
-        raise HTTPException(status_code=400, detail="Active company is required")
-    return context.active_company.company_id, context.user.user_id
 
 
 def _exchange_origin(request: Request) -> str:
@@ -45,54 +48,39 @@ async def create_flow_ui_share(
     request: Request,
     container: ContainerDep,
 ) -> FlowUIShareCreateResponse:
-    company_id, user_id = _scope()
-    try:
-        return await container.flow_ui_share_service.create(
-            request=body,
-            company_id=company_id,
-            user_id=user_id,
-            public_host=request.headers.get("host", ""),
-        )
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    host = request.headers.get("host")
+    return await op_flows_flow_ui_shares_create(
+        FlowUIShareCreatePayload.model_validate(
+            {**body.model_dump(), "public_host": host if host is not None else ""}
+        ),
+        user=require_context().user,
+        container=container,
+    )
 
 
-@router.get("", response_model=list[FlowUIShareGrant])
+@router.get("", response_model=ListResponse[FlowUIShareGrant])
 async def list_flow_ui_shares(
     container: ContainerDep,
     flow_id: Annotated[str, Query(min_length=1)],
     context_id: Annotated[str, Query(min_length=1)],
-) -> list[FlowUIShareGrant]:
-    company_id, user_id = _scope()
-    try:
-        return await container.flow_ui_share_service.list_for_owner(
-            company_id=company_id,
-            user_id=user_id,
-            flow_id=flow_id,
-            context_id=context_id,
-        )
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+) -> ListResponse[FlowUIShareGrant]:
+    return await op_flows_flow_ui_shares_list(
+        FlowUIShareListPayload(flow_id=flow_id, context_id=context_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
-@router.delete("/{grant_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{grant_id}")
 async def revoke_flow_ui_share(
     grant_id: str,
     container: ContainerDep,
-) -> Response:
-    company_id, user_id = _scope()
-    revoked = await container.flow_ui_share_service.revoke(
-        grant_id=grant_id,
-        company_id=company_id,
-        user_id=user_id,
+) -> FlowUIShareDeletedResponse:
+    return await op_flows_flow_ui_shares_remove(
+        FlowUIShareGrantIdPayload(grant_id=grant_id),
+        user=require_context().user,
+        container=container,
     )
-    if not revoked:
-        raise HTTPException(status_code=404, detail="Flow UI share grant not found")
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/exchange/{grant_id}", response_model=FlowUIShareExchangeResponse)

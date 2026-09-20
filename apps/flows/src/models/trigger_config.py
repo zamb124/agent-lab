@@ -322,6 +322,124 @@ class PlatformEventTriggerConfig(StrictBaseModel):
         return assert_platform_event_type(value.strip())
 
 
+class TriggerCreateRequest(StrictBaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=False)
+
+    trigger_id: str = Field(..., description="ID триггера")
+    name: str = Field(..., description="Название")
+    type: TriggerType = Field(..., description="Тип триггера")
+    enabled: bool = Field(default=True, description="Активен")
+    config: JsonObject = Field(default_factory=dict, description="Конфигурация")
+    output_mapping: dict[str, str] = Field(
+        default_factory=dict,
+        description="Маппинг payload -> state (state.path -> payload.path)",
+    )
+    input_mapping: dict[str, str] = Field(
+        default_factory=dict,
+        description="DEPRECATED: используйте output_mapping",
+    )
+    output_actions: list[OutputAction] = Field(
+        default_factory=list,
+        description="Действия отправки ответа в канал после агента",
+    )
+    post_flow_output_enabled: bool | None = Field(
+        default=None,
+        description="Включить рассылку после flow; None — дефолт по типу триггера",
+    )
+    branch_id: str = Field(
+        default="default",
+        description="ID ветки из FlowConfig.branches; default — entry базового flow",
+    )
+
+
+class TriggerCreatePayload(TriggerCreateRequest):
+    flow_id: str = Field(min_length=1)
+
+
+class TriggerUpdateRequest(StrictBaseModel):
+    name: str | None = None
+    enabled: bool | None = None
+    config: JsonObject | None = None
+    output_mapping: dict[str, str] | None = None
+    input_mapping: dict[str, str] | None = None
+    output_actions: list[OutputAction] | None = None
+    post_flow_output_enabled: bool | None = None
+    branch_id: str | None = None
+
+
+class TriggerUpdatePayload(TriggerUpdateRequest):
+    flow_id: str = Field(min_length=1)
+    trigger_id: str = Field(min_length=1)
+
+
+class TriggerResponse(StrictBaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=False)
+
+    trigger_id: str
+    name: str
+    type: TriggerType
+    enabled: bool
+    config: JsonObject
+    output_mapping: dict[str, str]
+    input_mapping: dict[str, str]
+    output_actions: list[OutputAction]
+    post_flow_output_enabled: bool
+    branch_id: str
+    webhook_url: str | None = None
+    status: TriggerStatus
+    last_error: str | None = None
+
+
+class TriggerVerifyRequest(StrictBaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=False)
+
+    type: TriggerType = Field(..., description="Тип триггера")
+    config: JsonObject = Field(default_factory=dict, description="Конфиг как в trigger.config")
+    trigger_id: str | None = Field(
+        default=None,
+        description="Черновой ID триггера (для подсказки пути webhook)",
+    )
+    branch_id: str = Field(
+        default="default",
+        description="Ветка (branch_id) для резолва @var: (как при выполнении flow с этой веткой)",
+    )
+
+
+class TriggerVerifyPayload(TriggerVerifyRequest):
+    flow_id: str = Field(min_length=1)
+
+
+class TriggerVerifyResponse(StrictBaseModel):
+    ok: bool
+    metadata: JsonObject = Field(default_factory=dict)
+    error_code: str | None = None
+    error_message: str | None = None
+
+
+class TriggerFlowIdPayload(StrictBaseModel):
+    flow_id: str = Field(min_length=1)
+    trigger_id: str = Field(min_length=1)
+
+
+class TriggerDeletedResponse(StrictBaseModel):
+    status: Literal["deleted"]
+    trigger_id: str
+
+
+class TriggerTestRequest(StrictBaseModel):
+    flow_id: str = Field(min_length=1)
+    trigger_id: str = Field(min_length=1)
+    payload: JsonObject = Field(default_factory=dict)
+
+
+class TriggerTestResponse(StrictBaseModel):
+    status: Literal["ok"]
+    trigger_id: str
+    trigger_type: str
+    input_payload: JsonObject
+    mapped_data: JsonObject
+
+
 __all__ = [
     "TriggerConfig",
     "TelegramTriggerConfig",
@@ -333,4 +451,16 @@ __all__ = [
     "EmailTriggerConfig",
     "EventFilter",
     "PlatformEventTriggerConfig",
+    "TriggerCreateRequest",
+    "TriggerCreatePayload",
+    "TriggerUpdateRequest",
+    "TriggerUpdatePayload",
+    "TriggerResponse",
+    "TriggerVerifyRequest",
+    "TriggerVerifyPayload",
+    "TriggerVerifyResponse",
+    "TriggerFlowIdPayload",
+    "TriggerDeletedResponse",
+    "TriggerTestRequest",
+    "TriggerTestResponse",
 ]

@@ -1,5 +1,5 @@
 /**
- * DataTable create/snapshot for the flows resource editor.
+ * DataTable create — flows command. Snapshot схемы — office REST (нет office WS-команды).
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
@@ -7,20 +7,12 @@ import { httpRequest } from '@platform/lib/events/http.js';
 
 export const flowsDataTableCreateOp = createAsyncOp({
     name: 'flows/data_table_create',
-    transport: 'http',
+    transport: 'ws',
+    wsTimeoutMs: 30_000,
+    commandType: 'flows/data_tables/create_requested',
     restMirror: { method: 'POST', path: '/flows/api/v1/data-tables' },
     successToastKey: 'flows:data_table_resource_editor.toast_created',
     errorToastKey: 'flows:data_table_resource_editor.toast_create_failed',
-    request: async ({ payload }) => {
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('flowsDataTableCreateOp: payload required');
-        }
-        return httpRequest({
-            method: 'POST',
-            url: '/flows/api/v1/data-tables',
-            body: payload,
-        });
-    },
 });
 
 export const flowsDataTableSnapshotOp = createAsyncOp({

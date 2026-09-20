@@ -94,7 +94,9 @@ class LaraActionEngine:
         return f"assistant:pending_apply_lock:{company_id}:{pending_action_id}"
 
     @staticmethod
-    def _validate_owner(action: LaraPendingAction, company_id: str, user_id: str, context_id: str) -> None:
+    def _validate_owner(
+        action: LaraPendingAction, company_id: str, user_id: str, context_id: str
+    ) -> None:
         owner = action.owner
         if owner.company_id != company_id:
             raise PermissionError("Pending action company mismatch")
@@ -183,7 +185,9 @@ class LaraActionEngine:
     ) -> LaraPendingAction:
         for _ in range(_APPLY_CONTENTION_MAX_POLLS):
             await asyncio.sleep(_APPLY_CONTENTION_POLL_SEC)
-            action = await self.get_action(company_id=company_id, pending_action_id=pending_action_id)
+            action = await self.get_action(
+                company_id=company_id, pending_action_id=pending_action_id
+            )
             self._validate_owner(action, company_id, user_id, context_id)
             if action.status == "applied":
                 if idempotency_key and action.idempotency_key != idempotency_key:
@@ -214,7 +218,9 @@ class LaraActionEngine:
                 idempotency_key=idempotency_key,
             )
         try:
-            action = await self.get_action(company_id=company_id, pending_action_id=pending_action_id)
+            action = await self.get_action(
+                company_id=company_id, pending_action_id=pending_action_id
+            )
             self._validate_owner(action, company_id, user_id, context_id)
 
             if action.status == "applied":

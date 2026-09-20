@@ -32,9 +32,9 @@ def _document() -> JsonObject:
     }
 
 
-def _request(*, block_id: str | None = None, page_id: str = "main") -> JsonObject:
+def _request(*, flow_id: str, block_id: str | None = None, page_id: str = "main") -> JsonObject:
     body: JsonObject = {
-        "flow_id": "lead_form",
+        "flow_id": flow_id,
         "branch_id": "default",
         "instruction": "Добавь поле телефона",
         "document": _document(),
@@ -49,7 +49,7 @@ def _request(*, block_id: str | None = None, page_id: str = "main") -> JsonObjec
 async def test_assist_describe_page_returns_llm_page(
     flows_client: AsyncClient, embed_test_auth, mock_llm_with_queue
 ):
-    auth_headers, _, _, _ = embed_test_auth
+    auth_headers, flow_id, _, _ = embed_test_auth
     page: JsonObject = {
         "page_id": "main",
         "title": "Заявка",
@@ -67,7 +67,9 @@ async def test_assist_describe_page_returns_llm_page(
     }
     mock_llm_with_queue([{"type": "structured_output", "data": page}])
 
-    response = await flows_client.post(ASSIST_URL, headers=auth_headers, json=_request())
+    response = await flows_client.post(
+        ASSIST_URL, headers=auth_headers, json=_request(flow_id=flow_id)
+    )
 
     assert response.status_code == 200, response.text
     payload = response.json()
@@ -86,7 +88,7 @@ async def test_assist_describe_page_returns_llm_page(
 async def test_assist_rewrite_block_returns_replacement_blocks(
     flows_client: AsyncClient, embed_test_auth, mock_llm_with_queue
 ):
-    auth_headers, _, _, _ = embed_test_auth
+    auth_headers, flow_id, _, _ = embed_test_auth
     mock_llm_with_queue(
         [
             {
@@ -112,7 +114,7 @@ async def test_assist_rewrite_block_returns_replacement_blocks(
     )
 
     response = await flows_client.post(
-        ASSIST_URL, headers=auth_headers, json=_request(block_id="email")
+        ASSIST_URL, headers=auth_headers, json=_request(flow_id=flow_id, block_id="email")
     )
 
     assert response.status_code == 200, response.text
@@ -126,7 +128,7 @@ async def test_assist_rewrite_block_returns_replacement_blocks(
 async def test_assist_rejects_page_id_change_and_block_id_collision(
     flows_client: AsyncClient, embed_test_auth, mock_llm_with_queue
 ):
-    auth_headers, _, _, _ = embed_test_auth
+    auth_headers, flow_id, _, _ = embed_test_auth
     mock_llm_with_queue(
         [
             {"type": "structured_output", "data": {"page_id": "other", "title": "", "blocks": []}},
@@ -141,16 +143,18 @@ async def test_assist_rejects_page_id_change_and_block_id_collision(
         ]
     )
 
-    renamed = await flows_client.post(ASSIST_URL, headers=auth_headers, json=_request())
+    renamed = await flows_client.post(
+        ASSIST_URL, headers=auth_headers, json=_request(flow_id=flow_id)
+    )
     assert renamed.status_code == 502, renamed.text
-    assert renamed.json()["code"] == "flow_ui_assist_invalid_output"
+    assert renamed.json()["error_code"] == "upstream"
     assert "page_id changed to 'other'" in renamed.json()["detail"]
 
     collision = await flows_client.post(
-        ASSIST_URL, headers=auth_headers, json=_request(block_id="email")
+        ASSIST_URL, headers=auth_headers, json=_request(flow_id=flow_id, block_id="email")
     )
     assert collision.status_code == 502, collision.text
-    assert collision.json()["code"] == "flow_ui_assist_invalid_output"
+    assert collision.json()["error_code"] == "upstream"
     assert "block_id 'send' collides" in collision.json()["detail"]
 
 
@@ -158,16 +162,16 @@ async def test_assist_rejects_page_id_change_and_block_id_collision(
 async def test_assist_validates_page_and_block_against_document(
     flows_client: AsyncClient, embed_test_auth
 ):
-    auth_headers, _, _, _ = embed_test_auth
+    auth_headers, flow_id, _, _ = embed_test_auth
 
     unknown_page = await flows_client.post(
-        ASSIST_URL, headers=auth_headers, json=_request(page_id="missing")
+        ASSIST_URL, headers=auth_headers, json=_request(flow_id=flow_id, page_id="missing")
     )
     assert unknown_page.status_code == 422, unknown_page.text
     assert "is not in the document" in unknown_page.text
 
     unknown_block = await flows_client.post(
-        ASSIST_URL, headers=auth_headers, json=_request(block_id="ghost")
+        ASSIST_URL, headers=auth_headers, json=_request(flow_id=flow_id, block_id="ghost")
     )
     assert unknown_block.status_code == 422, unknown_block.text
     assert "is not on page" in unknown_block.text
@@ -175,5 +179,5 @@ async def test_assist_validates_page_and_block_against_document(
 
 @pytest.mark.asyncio
 async def test_assist_requires_authentication(flows_client: AsyncClient):
-    response = await flows_client.post(ASSIST_URL, json=_request())
+    response = await flows_client.post(ASSIST_URL, json=_request(flow_id="missing-live-flow"))
     assert response.status_code == 401, response.text

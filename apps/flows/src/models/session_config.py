@@ -38,3 +38,22 @@ class SessionConfig(StrictBaseModel):
     last_activity: datetime | None = Field(
         default=None, description="Время последней активности"
     )
+
+
+class SessionListPayload(StrictBaseModel):
+    user_id: str | None = None
+    flow_id: str | None = None
+    branch_id: str | None = None
+    date_from: datetime | None = None
+    date_to: datetime | None = None
+    limit: int = Field(default=50, ge=1, le=200)
+    offset: int = Field(default=0, ge=0)
+
+
+class SessionIdPayload(StrictBaseModel):
+    session_id: str = Field(min_length=1)
+
+
+class SessionDeletedResponse(StrictBaseModel):
+    success: bool
+    session_id: str

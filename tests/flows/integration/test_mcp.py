@@ -162,7 +162,7 @@ class TestMCPSyncAPI:
         assert len(tools[0]["schema_hash"]) == 64
         assert tools[0]["schema_version"] == MCP_PROTOCOL_VERSION
         assert "input_schema" not in tools[0]
-        tool_names = [t["name"] for t in tools]
+        tool_names = [t["tool_name"] for t in tools]
         print(f"Synced {len(tools)} tools: {tool_names}")
         tools_resp = await client.get("/flows/api/v1/tools/all?picker_category=mcp")
         assert tools_resp.status_code == 200
@@ -311,7 +311,7 @@ class TestMCPNodeInGraph:
         assert sync_resp.status_code == 200
         sync_data = sync_resp.json()
         assert sync_data["tools_count"] > 0
-        first_tool = sync_data["tools"][0]["name"]
+        first_tool = sync_data["tools"][0]["tool_name"]
         create_resp = await client.post(
             "/flows/api/v1/flows/",
             json={
@@ -408,7 +408,7 @@ class TestMCPToolInLlmNode:
         sync_resp = await client.post(f"/flows/api/v1/mcp/servers/{server_id}/sync")
         assert sync_resp.status_code == 200
         sync_data = sync_resp.json()
-        first_tool_name = sync_data["tools"][0]["name"]
+        first_tool_name = sync_data["tools"][0]["tool_name"]
         mcp_tool_id = f"mcp:{server_id}:{first_tool_name}"
         await mock_llm_redis(
             [

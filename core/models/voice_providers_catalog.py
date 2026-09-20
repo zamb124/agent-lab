@@ -23,7 +23,11 @@ from core.clients.speech_provider_catalog import (
     cloud_ru_stt_model_ids,
     cloud_ru_tts_model_ids,
 )
+from core.config import get_settings
 from core.config.models import SILERO_V5_RU_SPEAKERS_BY_BUNDLE
+from core.container.base import BaseContainer
+from core.models.base import StrictBaseModel
+from core.models.identity_models import User
 
 if TYPE_CHECKING:
     from core.config.models import (
@@ -45,6 +49,10 @@ class TtsLitserveVoiceHint(BaseModel):
     api_model_id: str
     default_voice: str | None = None
     voice_ids: list[str] = Field(default_factory=list)
+
+
+class VoiceProvidersCatalogPayload(StrictBaseModel):
+    pass
 
 
 class VoiceProvidersCatalogDTO(BaseModel):
@@ -72,7 +80,9 @@ class VoiceProvidersCatalogDTO(BaseModel):
     sber_tts_voice_ids: list[str] = Field(default_factory=list)
 
 
-def build_voice_providers_catalog_dto(pls_settings: "ProviderLitserveConfig") -> VoiceProvidersCatalogDTO:
+def build_voice_providers_catalog_dto(
+    pls_settings: "ProviderLitserveConfig",
+) -> VoiceProvidersCatalogDTO:
     """Собирает каталог: статические allowlist из speech_provider_catalog, Litserve из conf."""
 
     credential_field_groups: dict[str, list[list[str]]] = {
@@ -135,3 +145,13 @@ def build_voice_providers_catalog_dto(pls_settings: "ProviderLitserveConfig") ->
         yandex_tts_voice_ids=list(YANDEX_TTS_VOICE_IDS),
         sber_tts_voice_ids=list(SBER_TTS_VOICE_IDS),
     )
+
+
+async def op_voice_providers_catalog(
+    payload: VoiceProvidersCatalogPayload,
+    *,
+    user: User,
+    container: BaseContainer,
+) -> VoiceProvidersCatalogDTO:
+    _ = payload, user, container
+    return build_voice_providers_catalog_dto(get_settings().provider_litserve)

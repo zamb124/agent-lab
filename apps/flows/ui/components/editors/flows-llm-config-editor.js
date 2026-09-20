@@ -536,16 +536,20 @@ export class FlowsLlmConfigEditor extends PlatformElement {
 
     _modelsList() {
         const result = this._models.lastResult;
-        if (Array.isArray(result?.items)) return result.items;
-        if (Array.isArray(result)) return result;
-        return [];
+        if (result == null) return [];
+        if (!Array.isArray(result.items)) {
+            throw new Error('flows/models_list: result.items must be an array');
+        }
+        return result.items;
     }
 
     _providersList() {
         const result = this._providers.lastResult;
-        if (Array.isArray(result?.items)) return result.items;
-        if (Array.isArray(result)) return result;
-        return [];
+        if (result == null) return [];
+        if (!Array.isArray(result.items)) {
+            throw new Error('flows/providers_list: result.items must be an array');
+        }
+        return result.items;
     }
 
     _knownProviderSlugs() {

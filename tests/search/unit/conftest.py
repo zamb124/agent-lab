@@ -18,12 +18,6 @@ def setup_database_before_tests():
     yield
 
 
-@pytest.fixture(scope="session", autouse=True)
-def platform_notification_manager_redis(setup_database_before_tests):
-    _ = setup_database_before_tests
-    yield
-
-
 @pytest.fixture(autouse=True)
 def crawl_taxonomy_for_search_unit_tests(request: pytest.FixtureRequest) -> None:
     """Search taxonomy stub без параметра monkeypatch (см. tests/search/conftest.py)."""

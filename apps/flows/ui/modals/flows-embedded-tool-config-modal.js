@@ -337,7 +337,7 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
             nodeId,
             this._persistableFlowNodeConfig(),
         );
-        await this._flowUpdate.run({ flow_id: flowId, body });
+        await this._flowUpdate.run({ ...body, flow_id: flowId });
         await this._flows.fetchItem(flowId);
         if (typeof this.onSaved === 'function') {
             this.onSaved({ flow_id: flowId, node_id: nodeId });

@@ -53,6 +53,19 @@ class CredentialInfo(StrictBaseModel):
     created_at: datetime
 
 
+class IntegrationEmptyPayload(StrictBaseModel):
+    pass
+
+
+class IntegrationCredentialRefPayload(StrictBaseModel):
+    provider: str = ""
+    service: str = ""
+
+
+class IntegrationDeletedResponse(StrictBaseModel):
+    deleted: bool
+
+
 class OAuthProviderConfig(StrictBaseModel):
     """Конфигурация OAuth2-провайдера, читается из settings.auth.providers."""
 

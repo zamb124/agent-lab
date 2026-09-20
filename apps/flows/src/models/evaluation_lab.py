@@ -615,12 +615,14 @@ class EvaluationSuiteCreateRequest(StrictBaseModel):
 
 
 class EvaluationSuiteUpdateRequest(StrictBaseModel):
+    suite_id: str = ""
     name: str
     description: str = ""
     tags: list[str] = Field(default_factory=list)
 
 
 class EvaluationCaseCreateRequest(StrictBaseModel):
+    suite_id: str = ""
     name: str
     description: str = ""
     branch_ids: Literal["*"] | list[str]
@@ -635,10 +637,11 @@ class EvaluationCaseCreateRequest(StrictBaseModel):
 
 
 class EvaluationCaseUpdateRequest(EvaluationCaseCreateRequest):
-    pass
+    case_id: str = ""
 
 
 class EvaluationCaseImportRequest(StrictBaseModel):
+    suite_id: str = ""
     format: EvaluationCaseImportFormat
     content: str = Field(min_length=1)
 
@@ -648,6 +651,7 @@ class EvaluationCaseImportResult(StrictBaseModel):
 
 
 class EvaluationDialogCaseCreateRequest(StrictBaseModel):
+    suite_id: str = ""
     name: str
     description: str = ""
     branch_ids: Literal["*"] | list[str]
@@ -658,6 +662,7 @@ class EvaluationDialogCaseCreateRequest(StrictBaseModel):
 
 
 class EvaluationTraceCaseCreateRequest(StrictBaseModel):
+    suite_id: str = ""
     name: str
     description: str = ""
     trace_id: str = Field(min_length=1)
@@ -669,6 +674,8 @@ class EvaluationTraceCaseCreateRequest(StrictBaseModel):
 
 
 class EvaluationMonitorObservationCaseCreateRequest(StrictBaseModel):
+    monitor_id: str = ""
+    trace_id: str = ""
     name: str
     description: str = ""
     dialog: list[EvaluationDialogMessage] = Field(min_length=1)
@@ -683,6 +690,7 @@ class EvaluationMonitorObservationCurationResult(StrictBaseModel):
 
 
 class EvaluationCaseRunCaseCreateRequest(StrictBaseModel):
+    suite_id: str = ""
     name: str
     description: str = ""
     case_run_id: str
@@ -701,12 +709,14 @@ class EvaluationRubricCreateRequest(StrictBaseModel):
 
 
 class EvaluationRubricUpdateRequest(StrictBaseModel):
+    rubric_id: str = ""
     name: str
     description: str = ""
     tags: list[str] = Field(default_factory=list)
 
 
 class EvaluationRubricVersionCreateRequest(StrictBaseModel):
+    rubric_id: str = ""
     prompt: str = Field(min_length=1)
     pass_threshold: float = Field(ge=0.0, le=10.0)
 
@@ -723,6 +733,7 @@ class EvaluationRunCreateRequest(StrictBaseModel):
 
 
 class EvaluationGatePolicyRunRequest(StrictBaseModel):
+    gate_policy_id: str = ""
     trigger: EvaluationRunTrigger
     trials: int = Field(default=1, ge=1, le=20)
     max_concurrency: int = Field(default=1, ge=1, le=50)
@@ -730,10 +741,13 @@ class EvaluationGatePolicyRunRequest(StrictBaseModel):
 
 
 class EvaluationBaselineSetRequest(StrictBaseModel):
+    suite_id: str = ""
+    branch_id: str = ""
     run_id: str
 
 
 class EvaluationGatePolicyCreateRequest(StrictBaseModel):
+    suite_id: str = ""
     branch_id: str
     name: str
     min_pass_rate: float = Field(default=1.0, ge=0.0, le=1.0)
@@ -747,10 +761,11 @@ class EvaluationGatePolicyCreateRequest(StrictBaseModel):
 
 
 class EvaluationGatePolicyUpdateRequest(EvaluationGatePolicyCreateRequest):
-    pass
+    gate_policy_id: str = ""
 
 
 class EvaluationAnnotationCreateRequest(StrictBaseModel):
+    run_id: str = ""
     case_run_id: str | None = None
     case_id: str | None = None
     annotation_type: EvaluationAnnotationType
@@ -759,6 +774,7 @@ class EvaluationAnnotationCreateRequest(StrictBaseModel):
 
 
 class EvaluationAnnotationUpdateRequest(StrictBaseModel):
+    annotation_id: str = ""
     annotation_type: EvaluationAnnotationType
     comment: str = ""
     payload: JsonObject = Field(default_factory=dict)
@@ -776,6 +792,7 @@ class EvaluationMonitorCreateRequest(StrictBaseModel):
 
 
 class EvaluationMonitorUpdateRequest(StrictBaseModel):
+    monitor_id: str = ""
     branch_id: str
     name: str
     description: str = ""
@@ -787,6 +804,7 @@ class EvaluationMonitorUpdateRequest(StrictBaseModel):
 
 
 class EvaluationMonitorSampleRequest(StrictBaseModel):
+    monitor_id: str = ""
     limit: int = Field(default=100, ge=1, le=500)
 
 
@@ -796,6 +814,7 @@ class EvaluationMonitorSampleResult(StrictBaseModel):
 
 
 class EvaluationMonitorCycleRequest(StrictBaseModel):
+    monitor_id: str = ""
     limit: int = Field(default=100, ge=1, le=500)
     enqueue_gate_run: bool = True
     trials: int = Field(default=1, ge=1, le=20)
@@ -969,3 +988,86 @@ class EvaluationCaseRunTrace(StrictBaseModel):
     node_steps: list[EvaluationTraceNodeStep]
     tool_calls: list[EvaluationTraceToolCall]
     state_diffs: list[EvaluationTraceStateDiff]
+
+
+class EvaluationFlowIdPayload(StrictBaseModel):
+    flow_id: str = Field(min_length=1)
+
+
+class EvaluationSuiteIdPayload(StrictBaseModel):
+    suite_id: str = Field(min_length=1)
+
+
+class EvaluationSuiteCaseIdPayload(StrictBaseModel):
+    suite_id: str = Field(min_length=1)
+    case_id: str = Field(min_length=1)
+
+
+class EvaluationRunIdPayload(StrictBaseModel):
+    run_id: str = Field(min_length=1)
+
+
+class EvaluationRunsListPayload(StrictBaseModel):
+    suite_id: str = Field(min_length=1)
+    limit: int = Field(default=50, ge=1, le=200)
+
+
+class EvaluationEventsPagePayload(StrictBaseModel):
+    run_id: str = Field(min_length=1)
+    after_sequence: int = Field(default=0, ge=0)
+    limit: int = Field(default=200, ge=1, le=500)
+
+
+class EvaluationCompareRunsPayload(StrictBaseModel):
+    left_run_id: str = Field(min_length=1)
+    right_run_id: str = Field(min_length=1)
+
+
+class EvaluationMatrixPayload(StrictBaseModel):
+    suite_id: str = Field(min_length=1)
+    branch_id: str = Field(min_length=1)
+    limit: int = Field(default=50, ge=1, le=100)
+
+
+class EvaluationCaseRunIdPayload(StrictBaseModel):
+    case_run_id: str = Field(min_length=1)
+
+
+class EvaluationRubricIdPayload(StrictBaseModel):
+    rubric_id: str = Field(min_length=1)
+
+
+class EvaluationAnnotationIdPayload(StrictBaseModel):
+    annotation_id: str = Field(min_length=1)
+
+
+class EvaluationMonitorIdPayload(StrictBaseModel):
+    monitor_id: str = Field(min_length=1)
+
+
+class EvaluationMonitorObservationsPayload(StrictBaseModel):
+    monitor_id: str = Field(min_length=1)
+    limit: int = Field(default=100, ge=1, le=500)
+
+
+class EvaluationPendingJobsPayload(StrictBaseModel):
+    limit: int = Field(default=50, ge=1, le=100)
+
+
+class EvaluationGatePolicyIdPayload(StrictBaseModel):
+    gate_policy_id: str = Field(min_length=1)
+
+
+class EvaluationBaselineItemPayload(StrictBaseModel):
+    suite_id: str = Field(min_length=1)
+    branch_id: str = Field(min_length=1)
+
+
+class EvaluationBaselineComparePayload(StrictBaseModel):
+    suite_id: str = Field(min_length=1)
+    branch_id: str = Field(min_length=1)
+    run_id: str = Field(min_length=1)
+
+
+class EvaluationDeletedResponse(StrictBaseModel):
+    deleted: Literal[True] = True

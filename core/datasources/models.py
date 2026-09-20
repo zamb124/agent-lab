@@ -157,6 +157,15 @@ class DatasourceConnectionPatch(StrictBaseModel):
     flow_branch_id: str | None = None
 
 
+class DatasourceConnectionPatchPayload(DatasourceConnectionPatch):
+    datasource_id: str = Field(min_length=1)
+
+
+class DatasourceListPayload(StrictBaseModel):
+    limit: int = Field(default=200, ge=1, le=200)
+    offset: int = Field(default=0, ge=0)
+
+
 class DatasourceConnectorUpsert(StrictBaseModel):
     connector_id: str = Field(min_length=1)
     name: str = Field(min_length=1)
@@ -177,20 +186,13 @@ class DatasourceSchemaArgs(StrictBaseModel):
     datasource_id: str = Field(min_length=1)
 
 
-class DatasourceSqlCallArgs(StrictBaseModel):
+class DatasourceSqlRequest(StrictBaseModel):
+    sql: str = Field(min_length=1)
+    params: JsonObject = Field(default_factory=dict)
+
+
+class DatasourceSqlCallArgs(DatasourceSqlRequest):
     datasource_id: str = Field(min_length=1)
-    sql: str = Field(min_length=1)
-    params: JsonObject = Field(default_factory=dict)
-
-
-class DatasourceQueryRequest(StrictBaseModel):
-    sql: str = Field(min_length=1)
-    params: JsonObject = Field(default_factory=dict)
-
-
-class DatasourceExecuteRequest(StrictBaseModel):
-    sql: str = Field(min_length=1)
-    params: JsonObject = Field(default_factory=dict)
 
 
 DatasourceProtocolResult = (
@@ -203,17 +205,18 @@ __all__ = [
     "DatasourceConnection",
     "DatasourceConnectionCreate",
     "DatasourceConnectionPatch",
+    "DatasourceConnectionPatchPayload",
     "DatasourceConnectorSpec",
     "DatasourceConnectorUpsert",
-    "DatasourceExecuteRequest",
     "DatasourceExecuteResult",
     "DatasourceExecutorKind",
+    "DatasourceListPayload",
     "DatasourceOperation",
     "DatasourceProtocolResult",
-    "DatasourceQueryRequest",
     "DatasourceQueryResult",
     "DatasourceSchemaArgs",
     "DatasourceSqlCallArgs",
+    "DatasourceSqlRequest",
     "DatasourceSchemaSnapshot",
     "DatasourceSqlOperation",
     "DatasourceSslMode",

@@ -21,7 +21,6 @@ from tests.files.chunked_upload_helpers import (
     platform_auxiliary_upload_spec_json,
 )
 from tests.flows._a2a_v1 import A2A_HEADERS
-from tests.sync.api._helpers import platform_auxiliary_file_spec_json
 
 
 def _msg_with_file(

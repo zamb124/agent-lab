@@ -1,6 +1,7 @@
 """Flow UI: интерфейс flow поверх чистого A2A 1.0.
 
 - ``document`` — грамматика блоков и документ (``FlowUIDocument``), единственная спецификация;
+- ``schema`` — JSON Schema грамматики для редактора (``flow_ui_schema``);
 - ``protocol`` — mediaType, artifactId и payload-модели wire (``FlowUIRender``, ``FlowUIActionMessage``);
 - ``projection`` — проекция ``ExecutionState`` по путям интерфейса и патчи RFC 6902;
 - ``action`` — приём ``ui-action``: значения input-блоков становятся полями state;

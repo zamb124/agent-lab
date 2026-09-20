@@ -297,7 +297,7 @@ class TestBranchesAPIVariables:
 
     @pytest.mark.asyncio
     async def test_get_branch_returns_full_variables(self, client, app, unique_id):
-        """GET /flows/{id}/branches/{branch_id} возвращает полную структуру variables"""
+        """GET /flows/{id} возвращает variables ветки в FlowResponse.branches"""
         flow_id = f"test_branch_api_{unique_id}"
         await client.post(
             "/flows/api/v1/flows/",
@@ -325,9 +325,9 @@ class TestBranchesAPIVariables:
                 },
             },
         )
-        response = await client.get(f"/flows/api/v1/{flow_id}/branches/my_branch")
+        response = await client.get(f"/flows/api/v1/flows/{flow_id}")
         assert response.status_code == 200
-        data = response.json()
+        data = response.json()["branches"]["my_branch"]
         variables = data["variables"]
         assert "role" in variables
         role = variables["role"]
@@ -371,9 +371,9 @@ class TestBranchesAPIVariables:
             },
         )
         assert response.status_code == 201
-        get_response = await client.get(f"/flows/api/v1/{flow_id}/branches/new_branch")
+        get_response = await client.get(f"/flows/api/v1/flows/{flow_id}")
         assert get_response.status_code == 200
-        data = get_response.json()
+        data = get_response.json()["branches"]["new_branch"]
         variables = data["variables"]
         assert "param" in variables
         param = variables["param"]
@@ -419,9 +419,9 @@ class TestBranchesAPIVariables:
             },
         )
         assert response.status_code == 200
-        get_response = await client.get(f"/flows/api/v1/{flow_id}/branches/updatable")
+        get_response = await client.get(f"/flows/api/v1/flows/{flow_id}")
         assert get_response.status_code == 200
-        data = get_response.json()
+        data = get_response.json()["branches"]["updatable"]
         variables = data["variables"]
         config = variables["config"]
         assert config["value"] == "new_value"

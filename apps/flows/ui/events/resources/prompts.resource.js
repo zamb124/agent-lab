@@ -1,23 +1,15 @@
 /**
- * Prompts — рендер шаблона (для preview в редакторе ноды LLM).
+ * Preview-рендер шаблона промпта (LLM node editor).
  * REST: `apps/flows/src/api/v1/prompts.py`.
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
 
 export const promptRenderOp = createAsyncOp({
     name: 'flows/prompt_render',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/prompts/render_requested',
     restMirror: { method: 'POST', path: '/flows/api/v1/prompts/render' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('promptRenderOp: payload required');
-        }
-        return httpRequest({
-            method: 'POST',
-            url: '/flows/api/v1/prompts/render',
-            body: payload,
-        });
-    },
 });

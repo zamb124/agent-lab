@@ -52,20 +52,11 @@ class TestVariablesE2E:
     @pytest.fixture
     async def flow_id(self, client):
         """Получаем ID example_react flow."""
-        resp = await client.get("/flows/api/v1/registry/flows")
-        agents = resp.json()
-        flow_id = None
-        for agent in agents:
-            if agent.get("flow_id") == "example_react":
-                flow_id = "example_react"
-                break
-            url = agent.get("url", "")
-            if "example_react" in url:
-                fid = agent.get("flow_id")
-                if isinstance(fid, str) and fid:
-                    flow_id = fid
-                    break
-        assert flow_id, "В реестре flows не найден example_react (flow_id или url)"
+        resp = await client.get("/flows/api/v1/flows/example_react")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        flow_id = body["flow_id"]
+        assert flow_id == "example_react"
         return flow_id
 
     @pytest.mark.asyncio

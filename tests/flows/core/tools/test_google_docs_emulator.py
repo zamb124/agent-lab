@@ -75,7 +75,7 @@ async def test_all_gdocs_tools_via_run(
     doc_id = created["document_id"]
     assert isinstance(doc_id, str)
 
-    appended = _as_payload(
+    _ = _as_payload(
         await gdocs_append_text.run(
             {"document_id": doc_id, "text": "Hello world."},
             state,
@@ -87,35 +87,35 @@ async def test_all_gdocs_tools_via_run(
     )
     assert "Hello world." in str(read["text"])
 
-    inserted = _as_payload(
+    _ = _as_payload(
         await gdocs_insert_text.run(
             {"document_id": doc_id, "text": "X", "index": 1},
             state,
         )
     )
 
-    replaced = _as_payload(
+    _ = _as_payload(
         await gdocs_find_replace.run(
             {"document_id": doc_id, "find": "world", "replace": "planet"},
             state,
         )
     )
 
-    deleted = _as_payload(
+    _ = _as_payload(
         await gdocs_delete_range.run(
             {"document_id": doc_id, "start_index": 1, "end_index": 2},
             state,
         )
     )
 
-    shared = _as_payload(
+    _ = _as_payload(
         await gdocs_share_document.run(
             {"document_id": doc_id, "email": "share@example.com", "role": "reader"},
             state,
         )
     )
 
-    anyone = _as_payload(
+    _ = _as_payload(
         await gdocs_share_document.run(
             {"document_id": doc_id, "anyone": True, "role": "reader"},
             state,

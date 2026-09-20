@@ -82,9 +82,10 @@ async def _ensure_queue_member(client: httpx.AsyncClient, queue_id: str, user_id
         add_resp.raise_for_status()
     members_resp = await client.get(f"{WORKTRACKER_API_PREFIX}/work-queues/{queue_id}/members")
     members_resp.raise_for_status()
-    members = members_resp.json()
-    if not isinstance(members, list):
-        raise AssertionError(f"queue members must be a list, got {type(members)}")
+    payload = members_resp.json()
+    if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
+        raise AssertionError(f"queue members must be {{items: list}}, got {payload!r}")
+    members = payload["items"]
     for row in members:
         if _queue_member_user_id(row) == user_id:
             return

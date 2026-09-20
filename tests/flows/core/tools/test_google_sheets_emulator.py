@@ -104,7 +104,7 @@ async def test_all_sheets_tools_via_run(
     listed = _as_payload(await sheets_list_sheets.run({"spreadsheet_id": sid}, state))
     assert "Main" in listed["titles"]
 
-    updated = _as_payload(
+    _ = _as_payload(
         await sheets_update_values.run(
             {
                 "spreadsheet_id": sid,
@@ -132,7 +132,7 @@ async def test_all_sheets_tools_via_run(
     )
     assert len(batch_got["value_ranges"]) == 2
 
-    batch_upd = _as_payload(
+    _ = _as_payload(
         await sheets_batch_update_values.run(
             {
                 "spreadsheet_id": sid,
@@ -145,7 +145,7 @@ async def test_all_sheets_tools_via_run(
         )
     )
 
-    appended = _as_payload(
+    _ = _as_payload(
         await sheets_append_rows.run(
             {
                 "spreadsheet_id": sid,
@@ -157,21 +157,21 @@ async def test_all_sheets_tools_via_run(
         )
     )
 
-    cleared = _as_payload(
+    _ = _as_payload(
         await sheets_clear_values.run(
             {"spreadsheet_id": sid, "range": "Main!A1:B1"},
             state,
         )
     )
 
-    batch_clear = _as_payload(
+    _ = _as_payload(
         await sheets_batch_clear_values.run(
             {"spreadsheet_id": sid, "ranges": ["Main!C1"]},
             state,
         )
     )
 
-    shared = _as_payload(
+    _ = _as_payload(
         await sheets_share.run(
             {"spreadsheet_id": sid, "email": "share@example.com", "role": "reader"},
             state,
@@ -184,14 +184,14 @@ async def test_all_sheets_tools_via_run(
     sheet_id = added["sheet_id"]
     assert isinstance(sheet_id, int)
 
-    renamed = _as_payload(
+    _ = _as_payload(
         await sheets_rename_sheet.run(
             {"spreadsheet_id": sid, "sheet_id": sheet_id, "title": "Tab2b"},
             state,
         )
     )
 
-    deleted = _as_payload(
+    _ = _as_payload(
         await sheets_delete_sheet.run(
             {"spreadsheet_id": sid, "sheet_id": sheet_id},
             state,

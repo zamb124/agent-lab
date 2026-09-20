@@ -26,7 +26,6 @@ const NAMESPACE_NAME_PATTERN = /^[a-z][a-z0-9_-]{0,62}[a-z0-9]$|^[a-z]$/;
 const DEFAULT_TOP_K = 5;
 const DEFAULT_CHUNK_SIZE = 512;
 const DEFAULT_CHUNK_OVERLAP = 50;
-const DOCUMENTS_LIST_LIMIT = 100;
 
 export class FlowsRagResourceEditor extends PlatformElement {
     static properties = {
@@ -199,17 +198,36 @@ export class FlowsRagResourceEditor extends PlatformElement {
         this._createName = '';
         this._createDescription = '';
         this._dragOver = false;
-        this._namespacesList = this.useOp('flows/rag_namespaces_list');
-        this._namespacesCreate = this.useOp('flows/rag_namespaces_create');
-        this._searchDefaults = this.useOp('flows/rag_search_defaults');
-        this._docs = this.useOp('flows/rag_documents');
-        this._upload = this.useOp('flows/rag_document_upload');
-        this._remove = this.useOp('flows/rag_document_remove');
-        this._search = this.useOp('flows/rag_search');
+        this._pendingCreateName = '';
+        this._namespaces = this.useResource('rag/namespaces');
+        this._searchDefaults = this.useOp('rag/search_defaults');
+        this._docs = this.useOp('rag/documents');
+        this._upload = this.useOp('rag/document_upload');
+        this._remove = this.useOp('rag/document_remove');
         this._ragNodeTest = this.useSlice('flows/rag_node_test');
         this._locale = this.select((s) => s.i18n.locale);
         this._defaultsLoaded = false;
         this._namespacesLoaded = false;
+        this.useEvent(this._namespaces.resource.events.CREATED, (event) => {
+            const item = event.payload && event.payload.item;
+            if (!isPlainObject(item) || typeof item.name !== 'string' || item.name.length === 0) {
+                throw new Error('flows-rag-resource-editor: created namespace name required');
+            }
+            if (this._pendingCreateName.length === 0 || item.name !== this._pendingCreateName) {
+                return;
+            }
+            const description = typeof item.description === 'string' && item.description.length > 0
+                ? item.description
+                : null;
+            this._pendingCreateName = '';
+            this._emitConfig({
+                namespace: item.name,
+                namespace_description: description,
+            });
+            this._showCreate = false;
+            this._createName = '';
+            this._createDescription = '';
+        });
     }
 
     connectedCallback() {
@@ -220,7 +238,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
         }
         if (!this._namespacesLoaded) {
             this._namespacesLoaded = true;
-            void this._namespacesList.run({});
+            this._namespaces.load({});
         }
     }
 
@@ -231,11 +249,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
             return;
         }
         if (this._docs.state.loadedNamespaceId !== namespace) {
-            void this._docs.run({
-                namespaceId: namespace,
-                limit: DOCUMENTS_LIST_LIMIT,
-                offset: 0,
-            });
+            void this._docs.run({ namespace_id: namespace });
         }
     }
 
@@ -257,8 +271,10 @@ export class FlowsRagResourceEditor extends PlatformElement {
     }
 
     _namespaceOptions() {
-        const result = this._namespacesList.lastResult;
-        const items = isPlainObject(result) && Array.isArray(result.items) ? result.items : [];
+        const items = this._namespaces.items;
+        if (!Array.isArray(items)) {
+            throw new Error('flows-rag-resource-editor: namespaces.items array required');
+        }
         const opts = [];
         for (const item of items) {
             if (!isPlainObject(item)) {
@@ -445,9 +461,10 @@ export class FlowsRagResourceEditor extends PlatformElement {
         this._showCreate = false;
         this._createName = '';
         this._createDescription = '';
+        this._pendingCreateName = '';
     }
 
-    async _createNamespace() {
+    _createNamespace() {
         const name = this._createName.trim();
         if (!NAMESPACE_NAME_PATTERN.test(name)) {
             this.toast('rag_resource_editor.namespace_name_invalid', { type: 'error' });
@@ -455,21 +472,14 @@ export class FlowsRagResourceEditor extends PlatformElement {
         }
         const description = this._createDescription.trim();
         const descriptionValue = description.length === 0 ? null : description;
-        const created = await this._namespacesCreate.run({
+        this._pendingCreateName = name;
+        const requested = this._namespaces.create({
             name,
             description: descriptionValue,
         });
-        if (created == null) {
-            return;
+        if (requested === undefined) {
+            this._pendingCreateName = '';
         }
-        this._emitConfig({
-            namespace: name,
-            namespace_description: descriptionValue,
-        });
-        this._showCreate = false;
-        this._createName = '';
-        this._createDescription = '';
-        void this._namespacesList.run({});
     }
 
     _statusLabel(status) {
@@ -510,7 +520,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
             throw new Error('flows-rag-resource-editor: File required');
         }
         void this._upload.run({
-            namespaceId: namespace,
+            namespace_id: namespace,
             file,
             metadata: this._uploadMetadata(),
         });
@@ -585,7 +595,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
         if (!confirmed) {
             return;
         }
-        await this._remove.run({ namespaceId: namespace, documentId });
+        await this._remove.run({ namespace_id: namespace, document_id: documentId });
     }
 
     _docCreatedAt(doc) {
@@ -631,7 +641,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
         if (typeof this.nodeId !== 'string' || this.nodeId.length === 0) {
             return null;
         }
-        const byId = this._search.state.resultByNodeId;
+        const byId = this._ragNodeTest.value.resultByNodeId;
         if (!isPlainObject(byId)) {
             throw new Error('flows-rag-resource-editor: resultByNodeId object required');
         }
@@ -870,7 +880,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
                                 density="dense"
                                 title=${this.t('rag_resource_editor.create_submit')}
                                 aria-label=${this.t('rag_resource_editor.create_submit')}
-                                ?disabled=${this._namespacesCreate.busy}
+                                ?disabled=${this._namespaces.createInFlight}
                                 @click=${() => { void this._createNamespace(); }}
                             >
                                 <platform-icon name="check" size="14"></platform-icon>

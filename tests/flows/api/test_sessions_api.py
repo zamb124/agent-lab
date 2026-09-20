@@ -363,3 +363,18 @@ class TestSessionsAPI:
 
         response = await client.get("/flows/api/v1/sessions/?limit=50")
         assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_delete_session(self, client, app, unique_id):
+        _ = app
+        flow_id = f"flow_{unique_id}"
+        user_id = f"user_{unique_id}"
+        session_id = f"{flow_id}:context_{unique_id}"
+        await save_test_state(create_test_state(session_id, user_id))
+
+        removed = await client.delete(f"/flows/api/v1/sessions/{session_id}")
+        assert removed.status_code == 200
+        assert removed.json() == {"success": True, "session_id": session_id}
+
+        unknown = await client.delete(f"/flows/api/v1/sessions/{flow_id}:missing_{unique_id}")
+        assert unknown.status_code == 404

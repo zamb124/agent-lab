@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Literal
 
+from pydantic import Field
+
 from core.flow_ui.document import FlowUIDocument
 from core.models.base import StrictBaseModel
 from core.models.i18n_models import Language
@@ -25,6 +27,11 @@ class FlowUITemplate(StrictBaseModel):
     title: str
     description: str
     document: FlowUIDocument
+
+
+class FlowUITemplatesPayload(StrictBaseModel):
+    limit: int = Field(default=100, ge=1, le=200)
+    offset: int = Field(default=0, ge=0)
 
 
 def _copy(locale: Language, ru: str, en: str) -> str:
@@ -903,6 +910,7 @@ __all__ = [
     "DEFAULT_CHAT_TEMPLATE_ID",
     "FlowUITemplate",
     "FlowUITemplateCategory",
+    "FlowUITemplatesPayload",
     "default_chat_document",
     "flow_ui_templates",
 ]

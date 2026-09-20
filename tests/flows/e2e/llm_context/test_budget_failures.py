@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 
 from apps.flows.src.container import FlowContainer
-from apps.flows.src.services.agent_skill_service import AgentSkillCreateInput
+from apps.flows.src.models.agent_skill import AgentSkill
 from core.llm_context import LLMContextBudgetError
 from tests.fixtures.auth import service_client_asgi_auth_context
 from tests.flows.e2e.llm_context.harness import (
@@ -92,7 +92,7 @@ async def test_context_budget_rejects_required_skill_index(
     }
     with service_client_asgi_auth_context(auth_headers_system):
         await container.agent_skill_service.create(
-            AgentSkillCreateInput(
+            AgentSkill(
                 agent_skill_id=agent_skill_id,
                 name="budget-skill",
                 description=("required-index-" + ("token " * 80))[:1000],

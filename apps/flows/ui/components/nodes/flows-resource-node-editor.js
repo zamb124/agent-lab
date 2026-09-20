@@ -96,7 +96,6 @@ export class FlowsResourceNodeEditor extends PlatformElement {
         this.embedded = false;
         this._editor = this.useOp('flows/editor');
         this._resources = this.useResource('flows/resources');
-        this._update = this.useOp('flows/resource_update');
         this._catalogPending = new Map();
         this._branchPending = new Map();
         this._timers = new Map();
@@ -148,7 +147,13 @@ export class FlowsResourceNodeEditor extends PlatformElement {
             this._catalogPending.delete(resourceId);
             this._timers.delete(key);
             if (!payload) return;
-            void this._update.run({ resource_id: resourceId, body: payload });
+            this._resources.update(resourceId, {
+                name: payload.name,
+                description: payload.description,
+                config: payload.config,
+                tags: payload.tags,
+                permission: payload.permission,
+            });
         }, SAVE_DEBOUNCE_MS);
         this._timers.set(key, timer);
     }

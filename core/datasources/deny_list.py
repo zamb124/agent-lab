@@ -47,6 +47,7 @@ def _platform_postgres_urls(database: DatabaseConfig) -> tuple[tuple[str, str], 
         ("tracing_url", database.tracing_url),
         ("search_url", database.search_url),
         ("wiki_url", database.wiki_url),
+        ("realtime_url", database.realtime_url),
     )
     urls: list[tuple[str, str]] = []
     for field_name, url in candidates:

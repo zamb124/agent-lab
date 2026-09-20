@@ -4,7 +4,6 @@
  */
 
 import { createResourceCollection, createAsyncOp } from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
 
 const SSL_MODES = Object.freeze(['disable', 'require', 'verify-full']);
 const SQL_OPERATIONS = Object.freeze(['select', 'insert', 'update', 'delete']);
@@ -110,6 +109,15 @@ export const datasourcesResource = createResourceCollection({
     baseUrl: '/flows/api/v1/datasources',
     idField: 'datasource_id',
     operations: ['list', 'get', 'create', 'update', 'remove'],
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    restMirror: {
+        list: { method: 'GET', path: '/flows/api/v1/datasources' },
+        get: { method: 'GET', path: '/flows/api/v1/datasources/:datasource_id' },
+        create: { method: 'POST', path: '/flows/api/v1/datasources' },
+        update: { method: 'PATCH', path: '/flows/api/v1/datasources/:datasource_id' },
+        remove: { method: 'DELETE', path: '/flows/api/v1/datasources/:datasource_id' },
+    },
     mapItem: mapDatasourceConnection,
     toastKeys: {
         create: 'flows:toast.datasource_created',
@@ -121,80 +129,39 @@ export const datasourcesResource = createResourceCollection({
     },
 });
 
-function _requireDatasourceId(payload, opName) {
-    if (!payload || typeof payload.datasource_id !== 'string' || payload.datasource_id.length === 0) {
-        throw new Error(`${opName}: { datasource_id } required`);
-    }
-    return payload.datasource_id;
-}
-
 export const datasourceTestOp = createAsyncOp({
     name: 'flows/datasource_test',
     silent: true,
-    restMirror: { method: 'POST', path: '/flows/api/v1/datasources/{datasource_id}/test' },
-    request: async ({ payload }) => {
-        const datasourceId = _requireDatasourceId(payload, 'datasourceTestOp');
-        return httpRequest({
-            method: 'POST',
-            url: `/flows/api/v1/datasources/${encodeURIComponent(datasourceId)}/test`,
-            body: {},
-        });
-    },
+    transport: 'ws',
+    wsTimeoutMs: 30_000,
+    commandType: 'flows/datasources/test_requested',
+    restMirror: { method: 'POST', path: '/flows/api/v1/datasources/:datasource_id/test' },
 });
 
 export const datasourceIntrospectOp = createAsyncOp({
     name: 'flows/datasource_introspect',
     silent: true,
-    restMirror: { method: 'POST', path: '/flows/api/v1/datasources/{datasource_id}/introspect' },
-    request: async ({ payload }) => {
-        const datasourceId = _requireDatasourceId(payload, 'datasourceIntrospectOp');
-        return httpRequest({
-            method: 'POST',
-            url: `/flows/api/v1/datasources/${encodeURIComponent(datasourceId)}/introspect`,
-            body: {},
-        });
-    },
+    transport: 'ws',
+    wsTimeoutMs: 30_000,
+    commandType: 'flows/datasources/introspect_requested',
+    restMirror: { method: 'POST', path: '/flows/api/v1/datasources/:datasource_id/introspect' },
 });
 
 export const datasourceQueryOp = createAsyncOp({
     name: 'flows/datasource_query',
     silent: true,
-    restMirror: { method: 'POST', path: '/flows/api/v1/datasources/{datasource_id}/query' },
-    request: async ({ payload }) => {
-        const datasourceId = _requireDatasourceId(payload, 'datasourceQueryOp');
-        if (typeof payload.sql !== 'string' || payload.sql.trim().length === 0) {
-            throw new Error('datasourceQueryOp: sql required');
-        }
-        const params = payload.params;
-        if (params !== undefined && (params === null || typeof params !== 'object' || Array.isArray(params))) {
-            throw new Error('datasourceQueryOp: params must be object');
-        }
-        return httpRequest({
-            method: 'POST',
-            url: `/flows/api/v1/datasources/${encodeURIComponent(datasourceId)}/query`,
-            body: { sql: payload.sql, params: params === undefined ? {} : params },
-        });
-    },
+    transport: 'ws',
+    wsTimeoutMs: 30_000,
+    commandType: 'flows/datasources/query_requested',
+    restMirror: { method: 'POST', path: '/flows/api/v1/datasources/:datasource_id/query' },
 });
 
 export const datasourceExecuteOp = createAsyncOp({
     name: 'flows/datasource_execute',
     successToastKey: 'flows:toast.datasource_executed',
     errorToastKey: 'flows:toast.datasource_execute_error',
-    restMirror: { method: 'POST', path: '/flows/api/v1/datasources/{datasource_id}/execute' },
-    request: async ({ payload }) => {
-        const datasourceId = _requireDatasourceId(payload, 'datasourceExecuteOp');
-        if (typeof payload.sql !== 'string' || payload.sql.trim().length === 0) {
-            throw new Error('datasourceExecuteOp: sql required');
-        }
-        const params = payload.params;
-        if (params !== undefined && (params === null || typeof params !== 'object' || Array.isArray(params))) {
-            throw new Error('datasourceExecuteOp: params must be object');
-        }
-        return httpRequest({
-            method: 'POST',
-            url: `/flows/api/v1/datasources/${encodeURIComponent(datasourceId)}/execute`,
-            body: { sql: payload.sql, params: params === undefined ? {} : params },
-        });
-    },
+    transport: 'ws',
+    wsTimeoutMs: 30_000,
+    commandType: 'flows/datasources/execute_requested',
+    restMirror: { method: 'POST', path: '/flows/api/v1/datasources/:datasource_id/execute' },
 });

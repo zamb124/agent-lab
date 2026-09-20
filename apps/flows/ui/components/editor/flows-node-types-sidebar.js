@@ -2,9 +2,9 @@
  * flows-node-types-sidebar — палитра типов нод и ресурсов для drag-into-canvas.
  *
  * Источники:
- *   - useOp('flows/node_types').lastResult — runtime-ноды с category
+ *   - useOp('flows/node_types').lastResult.items — runtime-ноды с category
  *     (`core` | `tools` | `sources` | `integrations` | `channels`).
- *   - useOp('flows/resource_types').lastResult — ресурсные типы (раздел «Ресурсы»).
+ *   - useOp('flows/resource_types').lastResult.items — ресурсные типы (раздел «Ресурсы»).
  *   - useOp('flows/triggers_list').run({ flow_id }) — триггеры flow для
  *     отдельной секции в шапке сайдбара.
  * Кнопка «Лимиты и речь» над секцией триггеров — показ/скрытие панели
@@ -433,9 +433,13 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
 
     _renderTriggers() {
         const result = this._triggersOp.lastResult;
-        const triggerItems = Array.isArray(result && result.items)
-            ? result.items
-            : (Array.isArray(result) ? result : []);
+        let triggerItems = [];
+        if (result !== null && result !== undefined) {
+            if (typeof result !== 'object' || !Array.isArray(result.items)) {
+                throw new Error('flows/triggers_list: lastResult.items must be an array');
+            }
+            triggerItems = result.items;
+        }
         return html`
             <div class="triggers-section">
                 <div class="triggers-header">
@@ -595,9 +599,19 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
         return `node_types_sidebar.category_${category}`;
     }
 
+    _paletteCards(raw, factoryName) {
+        if (raw === null) {
+            return [];
+        }
+        if (typeof raw !== 'object' || !Array.isArray(raw.items)) {
+            throw new Error(`${factoryName}: lastResult.items must be an array`);
+        }
+        return raw.items;
+    }
+
     render() {
-        const nodeTypes = Array.isArray(this._nodeTypesOp.lastResult) ? this._nodeTypesOp.lastResult : [];
-        const resourceTypes = Array.isArray(this._resourceTypesOp.lastResult) ? this._resourceTypesOp.lastResult : [];
+        const nodeTypes = this._paletteCards(this._nodeTypesOp.lastResult, 'flows/node_types');
+        const resourceTypes = this._paletteCards(this._resourceTypesOp.lastResult, 'flows/resource_types');
         const paletteNodeTypes = nodeTypes.filter((it) => it && it.type !== 'resource');
         const filteredNodes = this._filterItems(paletteNodeTypes);
         const filteredResources = this._filterItems(resourceTypes);

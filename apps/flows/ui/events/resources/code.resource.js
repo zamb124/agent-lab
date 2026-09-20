@@ -1,23 +1,10 @@
 /**
- * Code — служебные операции для редактора (LSP session, docs, validate, execute, source).
- * REST: `apps/flows/src/api/v1/code.py`.
- *
- * Все операции — `silent: true` (внутренний инструментарий редактора, тосты не нужны).
+ * Code — служебные операции для редактора (docs, validate, execute, source).
+ * LSP session — HTTP bootstrap (JSON-RPC кадры идут отдельным WS, не command-router).
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
-
-export function buildCodeQueryUrl(path, payload) {
-    const query = payload && typeof payload === 'object' ? payload : {};
-    const params = new URLSearchParams();
-    for (const [k, v] of Object.entries(query)) {
-        if (v === null || v === undefined) continue;
-        params.append(k, String(v));
-    }
-    const qs = params.toString();
-    return `${path}${qs ? `?${qs}` : ''}`;
-}
 
 export const codeLspSessionOp = createAsyncOp({
     name: 'flows/code_lsp_session',
@@ -38,144 +25,80 @@ export const codeLspSessionOp = createAsyncOp({
 export const codeDocumentationOp = createAsyncOp({
     name: 'flows/code_documentation',
     silent: true,
+    transport: 'ws',
+    commandType: 'flows/code/documentation_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/code/documentation' },
-    request: async ({ payload }) => {
-        return httpRequest({
-            method: 'GET',
-            url: buildCodeQueryUrl('/flows/api/v1/code/documentation', payload),
-        });
-    },
+    wsTimeoutMs: 20000,
 });
 
 export const codeTemplatesOp = createAsyncOp({
     name: 'flows/code_templates',
     silent: true,
+    transport: 'ws',
+    commandType: 'flows/code/templates_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/code/templates' },
-    request: async ({ payload }) => {
-        return httpRequest({
-            method: 'GET',
-            url: buildCodeQueryUrl('/flows/api/v1/code/templates', payload),
-        });
-    },
+    wsTimeoutMs: 20000,
 });
 
 export const codeEditorStateOp = createAsyncOp({
     name: 'flows/code_editor_state',
     silent: true,
+    transport: 'ws',
+    commandType: 'flows/code/editor_state_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/code/editor-state' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.flow_id !== 'string' || payload.flow_id.length === 0) {
-            throw new Error('codeEditorStateOp: { flow_id, branch_id? } required');
-        }
-        const params = new URLSearchParams({
-            flow_id: payload.flow_id,
-            branch_id: typeof payload.branch_id === 'string' && payload.branch_id.length > 0 ? payload.branch_id : 'default',
-        });
-        return httpRequest({
-            method: 'GET',
-            url: `/flows/api/v1/code/editor-state?${params.toString()}`,
-        });
-    },
+    wsTimeoutMs: 20000,
 });
 
 export const codeSourceOp = createAsyncOp({
     name: 'flows/code_source',
     silent: true,
+    transport: 'ws',
+    commandType: 'flows/code/source_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/code/source' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('codeSourceOp: payload required');
-        }
-        const params = new URLSearchParams();
-        for (const [k, v] of Object.entries(payload)) {
-            if (v === null || v === undefined) continue;
-            params.append(k, String(v));
-        }
-        return httpRequest({
-            method: 'GET',
-            url: `/flows/api/v1/code/source${params.toString() ? '?' + params.toString() : ''}`,
-        });
-    },
+    wsTimeoutMs: 20000,
 });
 
 export const codeFlowFunctionsOp = createAsyncOp({
     name: 'flows/code_flow_functions',
     silent: true,
+    transport: 'ws',
+    commandType: 'flows/code/flow_functions_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/code/flow-functions' },
-    request: async () => {
-        return httpRequest({ method: 'GET', url: '/flows/api/v1/code/flow-functions' });
-    },
+    wsTimeoutMs: 20000,
 });
 
 export const codeToolSourceOp = createAsyncOp({
     name: 'flows/code_tool_source',
     silent: true,
+    transport: 'ws',
+    commandType: 'flows/code/tool_source_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/code/tool-source' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('codeToolSourceOp: payload object required');
-        }
-        const toolPath =
-            typeof payload.tool_path === 'string' && payload.tool_path.length > 0
-                ? payload.tool_path
-                : typeof payload.tool_id === 'string' && payload.tool_id.length > 0
-                  ? payload.tool_id
-                  : null;
-        if (toolPath === null) {
-            throw new Error('codeToolSourceOp: tool_path (or tool_id as module path) required');
-        }
-        const params = new URLSearchParams({ tool_path: toolPath });
-        return httpRequest({
-            method: 'GET',
-            url: `/flows/api/v1/code/tool-source?${params.toString()}`,
-        });
-    },
+    wsTimeoutMs: 20000,
 });
 
 export const codeParseSignatureOp = createAsyncOp({
     name: 'flows/code_parse_signature',
     silent: true,
+    transport: 'ws',
+    commandType: 'flows/code/parse_signature_requested',
     restMirror: { method: 'POST', path: '/flows/api/v1/code/parse-signature' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('codeParseSignatureOp: payload required');
-        }
-        return httpRequest({
-            method: 'POST',
-            url: '/flows/api/v1/code/parse-signature',
-            body: payload,
-        });
-    },
+    wsTimeoutMs: 20000,
 });
 
 export const codeValidateOp = createAsyncOp({
     name: 'flows/code_validate',
     silent: true,
+    transport: 'ws',
+    commandType: 'flows/code/validate_requested',
     restMirror: { method: 'POST', path: '/flows/api/v1/code/validate' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('codeValidateOp: payload required');
-        }
-        return httpRequest({
-            method: 'POST',
-            url: '/flows/api/v1/code/validate',
-            body: payload,
-        });
-    },
+    wsTimeoutMs: 30000,
 });
 
 export const codeExecuteOp = createAsyncOp({
     name: 'flows/code_execute',
     silent: true,
+    transport: 'ws',
+    commandType: 'flows/code/execute_requested',
     restMirror: { method: 'POST', path: '/flows/api/v1/code/execute' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('codeExecuteOp: payload required');
-        }
-        return httpRequest({
-            method: 'POST',
-            url: '/flows/api/v1/code/execute',
-            body: payload,
-        });
-    },
+    wsTimeoutMs: 60000,
 });

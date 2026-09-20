@@ -3,11 +3,21 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-__all__ = ["MCPServerBranding", "MCPServerBrandingResolved"]
+__all__ = [
+    "MCPServerBranding",
+    "MCPServerBrandingDeletedResponse",
+    "MCPServerBrandingIdPayload",
+    "MCPServerBrandingListPayload",
+    "MCPServerBrandingResolved",
+    "MCPServerBrandingSlugSuggestPayload",
+    "MCPServerBrandingSlugSuggestResponse",
+    "MCPServerBrandingUpsertPayload",
+    "MCPServerBrandingUpsertRequest",
+]
 
 
 class MCPServerBranding(BaseModel):
@@ -31,6 +41,50 @@ class MCPServerBrandingResolved(BaseModel):
     icon_url: str
     updated_at: datetime
     updated_by_user_id: str
+
+
+class MCPServerBrandingListPayload(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    search: str = ""
+    limit: int = Field(default=40, ge=1, le=200)
+    offset: int = Field(default=0, ge=0)
+
+
+class MCPServerBrandingSlugSuggestPayload(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    search: str = ""
+    limit: int = Field(default=15, ge=1, le=50)
+
+
+class MCPServerBrandingIdPayload(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    server_id: str = Field(..., min_length=1)
+
+
+class MCPServerBrandingUpsertRequest(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    icon_file_id: str = Field(..., min_length=1)
+
+
+class MCPServerBrandingUpsertPayload(MCPServerBrandingUpsertRequest):
+    server_id: str = Field(..., min_length=1)
+
+
+class MCPServerBrandingDeletedResponse(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    status: Literal["deleted"]
+    server_id: str
+
+
+class MCPServerBrandingSlugSuggestResponse(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    slugs: list[str]
 
 
 class MCPBrandingManifestEntryPayload(BaseModel):

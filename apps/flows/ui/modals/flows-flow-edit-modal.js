@@ -208,7 +208,7 @@ export class FlowsFlowEditModal extends PlatformFormModal {
             description: this._description,
             store_card_image_url: trimmedCard.length > 0 ? trimmedCard : null,
         };
-        this._update.run({ flow_id: this.flowId, body });
+        this._update.run({ ...body, flow_id: this.flowId });
         this.closeAfterSave();
     }
 

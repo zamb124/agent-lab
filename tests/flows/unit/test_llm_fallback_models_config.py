@@ -5,7 +5,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from apps.flows.src.api.v1.code import ExecuteRequest, _build_node_config
+from apps.flows.realtime.code_operations import _build_node_config
+from apps.flows.src.models.code_api import ExecuteRequest
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig, NodeType
 from apps.flows.src.models.resource import LLMResourceConfig, LLMResourcePatch
 

@@ -83,7 +83,7 @@ async def initialize_new_company_task(
     Инициализирует только что созданную компанию.
 
     Шаги:
-    1. flows: `/flows/api/v1/company/init` — заводит дефолтных агентов / тулы.
+    1. flows: `/flows/api/v1/internal/company/init` — заводит дефолтных агентов / тулы.
     2. sync: `/sync/api/v1/channels/` — создаёт дефолтный topic-канал.
 
     Каждая ошибка peer-сервиса пробрасывается → TaskIQ retry. После исчерпания
@@ -92,9 +92,7 @@ async def initialize_new_company_task(
     container = get_container()
     service_client = container.service_client
 
-    await _set_company_initialization_status(
-        company_id=company_id, status="in_progress"
-    )
+    await _set_company_initialization_status(company_id=company_id, status="in_progress")
 
     try:
         flows_response = await service_client.post(
@@ -155,9 +153,7 @@ async def initialize_new_company_task(
         )
         raise
 
-    await _set_company_initialization_status(
-        company_id=company_id, status="completed"
-    )
+    await _set_company_initialization_status(company_id=company_id, status="completed")
     logger.info("company_init.completed", company_id=company_id)
     return {
         "company_id": company_id,

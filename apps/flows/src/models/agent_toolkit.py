@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from core.models.base import StrictBaseModel
 
 
 class AgentToolkit(BaseModel):
@@ -35,3 +37,35 @@ class AgentToolkit(BaseModel):
         default="platform",
         description="platform — из registry bootstrap; custom — создана компанией",
     )
+
+
+class AgentToolkitIdPayload(StrictBaseModel):
+    toolkit_id: str = Field(min_length=1)
+
+
+class AgentToolkitCreateRequest(StrictBaseModel):
+    toolkit_id: str
+    name: str
+    description: str
+    default_enabled: bool = False
+    position: int = 100
+    flow_ids: list[str] = []
+    tool_ids: list[str] = []
+
+
+class AgentToolkitUpdateRequest(StrictBaseModel):
+    name: str
+    description: str
+    default_enabled: bool
+    position: int
+    flow_ids: list[str]
+    tool_ids: list[str]
+
+
+class AgentToolkitUpdatePayload(AgentToolkitUpdateRequest):
+    toolkit_id: str = Field(min_length=1)
+
+
+class AgentToolkitDeletedResponse(StrictBaseModel):
+    status: Literal["deleted"]
+    toolkit_id: str

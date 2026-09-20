@@ -690,7 +690,7 @@ export class FlowsHomePage extends PlatformPage {
         this._toolsCount = 0;
         this._bundles = this.useOp('flows/flow_store_bundles');
         this._integrations = this.useOp('flows/integrations_list');
-        this._workItemCounts = this.useOp('platform/work_item_counts');
+        this._workItemCounts = this.useOp('worktracker/work_item_counts');
         this._authSel = this.select((s) => {
             const auth = isPlainObject(s.auth) ? s.auth : {};
             return {

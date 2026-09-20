@@ -1453,17 +1453,3 @@ async def load_tools_to_db(
 
     logger.info(f"Загружено {len(loaded)} tools в БД")
     return loaded
-
-
-async def get_all_flows(flow_repository: FlowRepository) -> dict[str, FlowConfig]:
-    """
-    Все flow из БД.
-
-    Аргументы:
-        flow_repository: FlowRepository для чтения
-
-    Возвращает:
-        Словарь {flow_id: FlowConfig}
-    """
-    rows = await flow_repository.list(limit=10000)
-    return {fc.flow_id: fc for fc in rows}

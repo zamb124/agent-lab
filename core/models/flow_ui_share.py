@@ -54,10 +54,32 @@ class FlowUIShareExchangeResponse(StrictBaseModel):
     flows_base_url: str = Field(min_length=1)
 
 
+class FlowUIShareListPayload(StrictBaseModel):
+    flow_id: str = Field(min_length=1)
+    context_id: str = Field(min_length=1)
+
+
+class FlowUIShareCreatePayload(FlowUIShareCreateRequest):
+    public_host: str = ""
+
+
+class FlowUIShareGrantIdPayload(StrictBaseModel):
+    grant_id: str = Field(min_length=1)
+
+
+class FlowUIShareDeletedResponse(StrictBaseModel):
+    status: Literal["deleted"]
+    grant_id: str
+
+
 __all__ = [
+    "FlowUIShareCreatePayload",
     "FlowUIShareCreateRequest",
     "FlowUIShareCreateResponse",
+    "FlowUIShareDeletedResponse",
     "FlowUIShareExchangeResponse",
     "FlowUIShareGrant",
+    "FlowUIShareGrantIdPayload",
+    "FlowUIShareListPayload",
     "FlowUISharePermission",
 ]

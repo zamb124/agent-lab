@@ -98,58 +98,61 @@ async def test_mcp_branding_seed_catalog_generic_reuse_and_skip(
 
     target_server_ids = frozenset({"browser", "search", catalog_id_a, catalog_id_b})
 
-    set_context(_system_context())
     try:
-        stats = await seed_mcp_branding_from_bundle(
-            runtime,
-            manifest_path=manifest_path,
-            server_ids=target_server_ids,
-        )
+        set_context(_system_context())
+        try:
+            stats = await seed_mcp_branding_from_bundle(
+                runtime,
+                manifest_path=manifest_path,
+                server_ids=target_server_ids,
+            )
+        finally:
+            clear_context()
+
+        assert stats.targets == 4
+        assert stats.seeded == 4
+        assert stats.skipped_existing == 0
+
+        browser_row = await branding_repo.get("browser")
+        row_a = await branding_repo.get(catalog_id_a)
+        row_b = await branding_repo.get(catalog_id_b)
+        assert browser_row is not None
+        assert row_a is not None
+        assert row_b is not None
+        assert browser_row.icon_file_id != row_a.icon_file_id
+        assert row_a.icon_file_id == row_b.icon_file_id
+
+        set_context(_system_context())
+        try:
+            stats_second = await seed_mcp_branding_from_bundle(
+                runtime,
+                manifest_path=manifest_path,
+                server_ids=target_server_ids,
+            )
+        finally:
+            clear_context()
+
+        assert stats_second.targets == 4
+        assert stats_second.seeded == 0
+        assert stats_second.skipped_existing == 4
+
+        set_context(_system_context())
+        try:
+            stats_force = await seed_mcp_branding_from_bundle(
+                runtime,
+                force=True,
+                server_ids=frozenset({"browser"}),
+                manifest_path=manifest_path,
+            )
+        finally:
+            clear_context()
+
+        assert stats_force.targets == 1
+        assert stats_force.seeded == 1
     finally:
-        clear_context()
-
-    assert stats.targets == 4
-    assert stats.seeded == 4
-    assert stats.skipped_existing == 0
-
-    browser_row = await branding_repo.get("browser")
-    row_a = await branding_repo.get(catalog_id_a)
-    row_b = await branding_repo.get(catalog_id_b)
-    assert browser_row is not None
-    assert row_a is not None
-    assert row_b is not None
-    assert browser_row.icon_file_id != row_a.icon_file_id
-    assert row_a.icon_file_id == row_b.icon_file_id
-
-    set_context(_system_context())
-    try:
-        stats_second = await seed_mcp_branding_from_bundle(
-            runtime,
-            manifest_path=manifest_path,
-            server_ids=target_server_ids,
-        )
-    finally:
-        clear_context()
-
-    assert stats_second.targets == 4
-    assert stats_second.seeded == 0
-    assert stats_second.skipped_existing == 4
-
-    set_context(_system_context())
-    try:
-        stats_force = await seed_mcp_branding_from_bundle(
-            runtime,
-            force=True,
-            server_ids=frozenset({"browser"}),
-            manifest_path=manifest_path,
-        )
-    finally:
-        clear_context()
-
-    assert stats_force.targets == 1
-    assert stats_force.seeded == 1
-
-    for server_id in ("browser", "search", catalog_id_a, catalog_id_b):
-        existing = await branding_repo.get(server_id)
-        if existing is not None:
-            _ = await branding_repo.delete(server_id)
+        for server_id in ("browser", "search", catalog_id_a, catalog_id_b):
+            existing = await branding_repo.get(server_id)
+            if existing is not None:
+                _ = await branding_repo.delete(server_id)
+        _ = await runtime.mcp_catalog_repository.delete(catalog_id_a)
+        _ = await runtime.mcp_catalog_repository.delete(catalog_id_b)

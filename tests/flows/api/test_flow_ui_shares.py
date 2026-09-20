@@ -90,6 +90,7 @@ async def test_flow_ui_shares_create_list_exchange_revoke_and_short_link(
             json={"flow_id": flow_id, "context_id": context_id, "permission": "viewer"},
         )
         assert missing_session.status_code == 409, missing_session.text
+        assert missing_session.json()["error_code"] == "conflict"
 
         await _start_session(client, flow_id=flow_id, context_id=context_id, text="hello")
         grant_id, share_url = await _create_share(
@@ -106,10 +107,11 @@ async def test_flow_ui_shares_create_list_exchange_revoke_and_short_link(
             params={"flow_id": flow_id, "context_id": context_id},
         )
         assert listed.status_code == 200, listed.text
-        assert [item["grant_id"] for item in listed.json()] == [grant_id]
-        assert listed.json()[0]["permission"] == "viewer"
-        assert listed.json()[0]["redacted_paths"] == ["/secret"]
-        assert listed.json()[0]["branch_id"] == "default"
+        listed_items = listed.json()["items"]
+        assert [item["grant_id"] for item in listed_items] == [grant_id]
+        assert listed_items[0]["permission"] == "viewer"
+        assert listed_items[0]["redacted_paths"] == ["/secret"]
+        assert listed_items[0]["branch_id"] == "default"
 
         foreign_origin = await client.post(
             f"/flows/api/v1/flow-ui/shares/exchange/{grant_id}",
@@ -156,14 +158,15 @@ async def test_flow_ui_shares_create_list_exchange_revoke_and_short_link(
             assert 'href="/static/core/assets/css/tokens.css"' in page.text
 
         revoked = await client.delete(f"/flows/api/v1/flow-ui/shares/{grant_id}")
-        assert revoked.status_code == 204, revoked.text
+        assert revoked.status_code == 200, revoked.text
+        assert revoked.json() == {"status": "deleted", "grant_id": grant_id}
 
         listed_after = await client.get(
             "/flows/api/v1/flow-ui/shares",
             params={"flow_id": flow_id, "context_id": context_id},
         )
         assert listed_after.status_code == 200
-        assert listed_after.json()[0]["revoked_at"] is not None
+        assert listed_after.json()["items"][0]["revoked_at"] is not None
 
         blocked = await client.post(
             f"/flows/api/v1/flow-ui/shares/exchange/{grant_id}",
@@ -173,6 +176,7 @@ async def test_flow_ui_shares_create_list_exchange_revoke_and_short_link(
 
         missing = await client.delete(f"/flows/api/v1/flow-ui/shares/{grant_id}")
         assert missing.status_code == 404, missing.text
+        assert missing.json()["error_code"] == "not_found"
     finally:
         await delete_flow(client, flow_id)
 

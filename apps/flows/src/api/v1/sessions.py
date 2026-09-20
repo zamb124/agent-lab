@@ -1,18 +1,23 @@
-"""
-API endpoints для сессий.
-"""
+"""REST-зеркало каталога сессий: query/path → тот же `op_*`, что и WS."""
 
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Path, Query
+from fastapi import APIRouter, Path, Query
 
+from apps.flows.realtime.session_operations import (
+    op_flows_sessions_list,
+    op_flows_sessions_remove,
+)
 from apps.flows.src.dependencies import ContainerDep
-from apps.flows.src.models import SessionConfig
-from core.logging import get_logger
+from apps.flows.src.models.session_config import (
+    SessionConfig,
+    SessionDeletedResponse,
+    SessionIdPayload,
+    SessionListPayload,
+)
+from core.context import require_context
 from core.pagination import OffsetPage
-
-logger = get_logger(__name__)
 
 router = APIRouter(tags=["sessions"])
 
@@ -28,55 +33,28 @@ async def list_sessions(
     limit: Annotated[int, Query(ge=1, le=200, description="Максимум записей")] = 50,
     offset: Annotated[int, Query(ge=0, description="Смещение")] = 0,
 ) -> OffsetPage[SessionConfig]:
-    """
-    Получает список сессий с фильтрами.
-
-    Аргументы:
-        user_id: Фильтр по пользователю
-        flow_id: Фильтр по агенту
-        date_from: Начало периода
-        date_to: Конец периода
-        limit: Максимум записей
-        offset: Смещение
-        container: Контейнер платформы
-
-    Возвращает:
-        Список сессий с пагинацией
-    """
-    sessions, total = await container.workflow_runtime.search_sessions(
-        user_id=user_id,
-        flow_id=flow_id,
-        branch_id=branch_id,
-        date_from=date_from,
-        date_to=date_to,
-        limit=limit,
-        offset=offset,
-    )
-
-    return OffsetPage[SessionConfig](
-        items=sessions,
-        total=total,
-        limit=limit,
-        offset=offset,
+    return await op_flows_sessions_list(
+        SessionListPayload(
+            user_id=user_id,
+            flow_id=flow_id,
+            branch_id=branch_id,
+            date_from=date_from,
+            date_to=date_to,
+            limit=limit,
+            offset=offset,
+        ),
+        user=require_context().user,
+        container=container,
     )
 
 
-@router.delete("/{session_id}")
+@router.delete("/{session_id}", response_model=SessionDeletedResponse)
 async def delete_session(
     container: ContainerDep,
     session_id: Annotated[str, Path(description="ID сессии для удаления")],
-) -> dict[str, bool | str]:
-    """
-    Удаляет сессию по ID.
-
-    Аргументы:
-        session_id: ID сессии
-        container: Контейнер платформы
-
-    Возвращает:
-        Результат удаления
-    """
-    deleted = await container.workflow_runtime.delete_state(session_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Session not found")
-    return {"success": True, "session_id": session_id}
+) -> SessionDeletedResponse:
+    return await op_flows_sessions_remove(
+        SessionIdPayload(session_id=session_id),
+        user=require_context().user,
+        container=container,
+    )

@@ -247,7 +247,6 @@ export class FlowsAgentSkillEditor extends PlatformElement {
         this._duplicateId = '';
         this._duplicateName = '';
         this._duplicateBusy = false;
-        this._updateOp = this.useOp('flows/agent_skill_update');
         this._skills = this.useResource('flows/agent_skills');
         this._fileUpload = this.useOp('platform/file_create');
     }
@@ -468,10 +467,7 @@ export class FlowsAgentSkillEditor extends PlatformElement {
             references: this._draft.references,
             assets: this._draft.assets,
         };
-        const result = await this._updateOp.run({
-            agent_skill_id: this._draft.agent_skill_id,
-            body,
-        });
+        const result = await this._skills.update(this._draft.agent_skill_id, body);
         if (!result) return;
         const item = mapAgentSkillItem(result);
         this._dirty = false;
@@ -720,7 +716,7 @@ export class FlowsAgentSkillEditor extends PlatformElement {
                     <platform-button
                         variant="primary"
                         density="compact"
-                        ?disabled=${!this._dirty || this._updateOp.busy}
+                        ?disabled=${!this._dirty || this._skills.isBusy(draft.agent_skill_id)}
                         @click=${this._save}
                     >
                         ${this.t('common.action_save')}

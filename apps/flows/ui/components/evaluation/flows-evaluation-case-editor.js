@@ -686,7 +686,7 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
         this._nodeBusy = true;
         try {
             const body = flowBodyWithNode(current, this._branchId(), nodeId, nodeConfig);
-            await this._flowUpdate.run({ flow_id: this.flowId, body });
+            await this._flowUpdate.run({ ...body, flow_id: this.flowId });
             await this._flows.fetchItem(this.flowId);
             if (role === 'judge') {
                 this._patchActiveTurn({ judgeNodeId: nodeId });
@@ -776,7 +776,7 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
         this._nodeBusy = true;
         try {
             const body = flowBodyWithoutNode(current, this._branchId(), nodeId);
-            await this._flowUpdate.run({ flow_id: this.flowId, body });
+            await this._flowUpdate.run({ ...body, flow_id: this.flowId });
             await this._flows.fetchItem(this.flowId);
             this._turns = this._turns.map((turn) => {
                 if (role === 'judge') {
@@ -826,14 +826,12 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
             return;
         }
         const created = await this._rubricCreate.run({
-            body: {
-                flow_id: this.flowId,
-                name,
-                prompt,
-                pass_threshold: threshold,
-                description: '',
-                tags: [],
-            },
+            flow_id: this.flowId,
+            name,
+            prompt,
+            pass_threshold: threshold,
+            description: '',
+            tags: [],
         });
         if (!created || typeof created !== 'object') {
             throw new Error('FlowsEvaluationCaseEditor: rubric create returned empty payload');

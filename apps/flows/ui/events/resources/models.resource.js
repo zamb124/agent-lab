@@ -1,27 +1,15 @@
 /**
  * Models — capability-specific список доступных LLM-моделей (по провайдеру).
- * REST: `apps/flows/src/api/registry.py` (`/api/v1/registry/models/values`).
+ * REST: `apps/flows/src/api/v1/registry.py` (`/api/v1/registry/models/values`).
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
 
 export const modelsListOp = createAsyncOp({
     name: 'flows/models_list',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'flows/registry/models_list_requested',
     restMirror: { method: 'GET', path: '/flows/api/v1/registry/models/values' },
-    request: async ({ payload }) => {
-        const params = new URLSearchParams();
-        if (payload && typeof payload === 'object' && typeof payload.provider === 'string' && payload.provider.length > 0) {
-            params.append('provider', payload.provider);
-        }
-        if (payload && typeof payload === 'object' && typeof payload.capability === 'string' && payload.capability.length > 0) {
-            params.append('capability', payload.capability);
-        }
-        const qs = params.toString();
-        return httpRequest({
-            method: 'GET',
-            url: `/flows/api/v1/registry/models/values${qs ? '?' + qs : ''}`,
-        });
-    },
 });

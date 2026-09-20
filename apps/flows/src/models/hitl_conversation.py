@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from core.models import StrictBaseModel
 from core.worktracker.models import WorkItemInteractionPolicy
@@ -39,6 +39,27 @@ class ConversationSnapshot(StrictBaseModel):
     turns: list[ConversationTurn] = Field(default_factory=list)
     cursor: int = Field(default=0, ge=0, description="Курсор последнего turn (0 = пусто)")
     policy: WorkItemInteractionPolicy
+
+
+class HitlConversationWorkItemPayload(StrictBaseModel):
+    work_item_id: str = ""
+
+
+class OperatorMessageRequest(StrictBaseModel):
+    work_item_id: str = ""
+    text: str = ""
+    idempotency_key: str = Field(..., min_length=1)
+    file_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def require_text_or_files(self) -> OperatorMessageRequest:
+        clean = self.text.strip()
+        file_ids = [fid.strip() for fid in self.file_ids if fid.strip()]
+        if clean == "" and len(file_ids) == 0:
+            raise ValueError("Нужен text или file_ids")
+        if clean == self.text and file_ids == self.file_ids:
+            return self
+        return self.model_copy(update={"text": clean, "file_ids": file_ids})
 
 
 HITL_CONVERSATION_TURN_APPENDED = "flows/hitl_conversation/turn_appended"

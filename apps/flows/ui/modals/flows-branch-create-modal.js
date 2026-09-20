@@ -128,11 +128,9 @@ export class FlowsBranchCreateModal extends PlatformFormModal {
         if (this._createBranch.busy) return;
         await this._createBranch.run({
             flow_id: this.flowId,
-            body: {
-                branch_id: this._branchId.trim(),
-                name: this._name.trim(),
-                description: this._description,
-            },
+            branch_id: this._branchId.trim(),
+            name: this._name.trim(),
+            description: this._description,
         });
         await this._flows.get(this.flowId);
         this.closeAfterSave();
