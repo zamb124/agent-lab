@@ -78,22 +78,6 @@
     "retention_days": 30
   },
   "billing": {
-    "_docs_ru": [
-      "Этот ключ (_docs_ru) только для людей: приложение его игнорирует (валидный JSON не допускает // комментарии).",
-      "resource_base_prices — базовый прайс до merge: глобальный override в shared storage billing:resource_base_prices_json и пер-компания billing:company:{company_id}:resource_base_prices_json (см. billing.mdc, BillingService).",
-      "Числа — условные рубли за ОДНУ единицу списания по правилу settlement: для LLM чаще за 1 токен (или за platform.billing.quantity), для livekit поминутно — за 1 минуту (platform.billing.quantity на span session/composite/segmented usage; см. livekit_usage_spans). Итог = базовая_цена × множитель тарифа компании (TariffPlan в core/models/billing_models.py).",
-      "Структура: категория → имя_ресурса → цена. В списании span поле resource_name вида «категория:ресурс», например llm:gpt-4o или livekit:room_minute. Ключ «*» внутри категории — цена по умолчанию, если нет точного совпадения имени.",
-      "llm — запросы к моделям (трейсы llm.*, flows.llm_resource.*, flows.llm.*). «*»: типично цена за 1 токен; можно добавить отдельные ключи под конкретные модели.",
-      "embedding — пакетные эмбеддинги RAG (rag.embed.*); единица обычно из атрибута span (токены/батч) по правилу settlement.",
-      "livekit — аудио/видео: room_minute / egress_composite_minute / egress_segmented_minute — единица 1 минута использования (см. livekit_usage_spans); «*» — прочие livekit:*.",
-      "search — внешние Search provider calls через search.provider.*; при company/BYOK ключе cost_origin=company и баланс не списывается, system не ставит pending settlement.",
-      "Вызовы инструментов flows (категория tool в resource_name) в этом каталоге не задаются — для биллинга считаются бесплатно.",
-      "billing:rub — 1 ₽ за единицу quantity; quantity = platform.billing.settlement_quantity_rub (OpenRouter: USD из ответа × актуальный курс ЦБ РФ, округление).",
-      "usd_to_rub_rate — FALLBACK-курс USD/RUB, используется только если ЦБ РФ недоступен. При старте сервиса платформа запрашивает актуальный курс с cbr.ru и обновляет его каждые 5 минут; это значение подставляется только при ошибке или до первого успешного ответа ЦБ.",
-      "span_settlement — фоновая джоба idle worker: находит spans с platform.billing.pending_settlement и создаёт записи usage по правилам компании. enabled — вкл/выкл; cron — расписание; lookback_minutes — как глубоко искать spans назад; batch_limit — максимум spans за один тик; span без user_id считается ошибкой данных.",
-      "balance_enforcement_enabled — pre-flight перед LLM/embed/vision/billable LiveKit: при balance <= 0 операция не стартует (BillingBalanceBlockedError → HTTP 403). Не отменяет фоновый settlement.",
-      "balance_enforcement_exempt_company_ids — company_id без этой проверки (по умолчанию [\"system\"]; можно добавить демо-компанию для локальной разработки)."
-    ],
     "usd_to_rub_rate": 85.0,
     "resource_base_prices": {
       "llm": {
@@ -101,10 +85,10 @@
         "byok": 0
       },
       "embedding": {
-        "*": 5e-5
+        "*": 5e-05
       },
       "rerank": {
-        "*": 0.0000055,
+        "*": 5.5e-06,
         "byok": 0
       },
       "billing": {
@@ -557,8 +541,8 @@
     "buckets": {
       "shvedzilla": {
         "provider": "aws",
-        "access_key_id": "SELECTEL_ACCESS_KEY",
-        "secret_access_key": "SELECTEL_SECRET_KEY",
+        "access_key_id": "YOUR_SELECTEL_ACCESS_KEY",
+        "secret_access_key": "YOUR_SELECTEL_SECRET_KEY",
         "region_name": "ru-3",
         "endpoint_url": "https://s3.ru-3.storage.selcloud.ru",
         "bucket_name": "shvedzilla",
@@ -621,7 +605,6 @@
   },
   "nano_banana": {
     "enabled": true,
-    "api_key": "YOUR_NANO_BANANA_API_KEY",
     "model": "auto",
     "timeout": 60
   },
@@ -713,7 +696,6 @@
   },
   "services": {
     "flows": {
-      "service_name": "flows",
       "server": {
         "name": "flows",
         "host": "0.0.0.0",
@@ -769,13 +751,6 @@
         "flows": [],
         "health_check_interval": 60
       },
-      "files": {
-        "max_size_mb": 10,
-        "allowed_extensions": [".txt", ".pdf", ".docx", ".png", ".jpg", ".jpeg"]
-      },
-      "mock": {
-        "enabled": false
-      },
       "tracing": {
         "enabled": true,
         "postgres_enabled": true,
@@ -813,7 +788,6 @@
       }
     },
     "provider_litserve": {
-      "service_name": "provider_litserve",
       "provider_litserve": {
         "api": {
           "base_url": "https://humanitec.ru/litserve/v1"
@@ -846,7 +820,6 @@
       }
     },
     "rag": {
-      "service_name": "rag",
       "server": {
         "name": "rag",
         "host": "0.0.0.0",
@@ -868,7 +841,6 @@
       }
     },
     "rag_worker": {
-      "service_name": "rag_worker",
       "provider_litserve": {
         "api": {
           "base_url": "https://humanitec.ru/litserve/v1"
@@ -876,7 +848,6 @@
       }
     },
     "office": {
-      "service_name": "office",
       "server": {
         "name": "documents",
         "host": "0.0.0.0",
@@ -899,7 +870,6 @@
       }
     },
     "worktracker": {
-      "service_name": "worktracker",
       "server": {
         "name": "worktracker",
         "host": "0.0.0.0",
@@ -908,7 +878,6 @@
       }
     },
     "frontend": {
-      "service_name": "frontend",
       "server": {
         "name": "frontend",
         "host": "0.0.0.0",
@@ -917,7 +886,6 @@
       }
     },
     "scheduler": {
-      "service_name": "scheduler",
       "server": {
         "name": "scheduler",
         "host": "0.0.0.0",
@@ -926,7 +894,6 @@
       }
     },
     "secrets": {
-      "service_name": "secrets",
       "server": {
         "name": "secrets",
         "host": "0.0.0.0",
@@ -935,7 +902,6 @@
       }
     },
     "browser": {
-      "service_name": "browser",
       "server": {
         "name": "browser",
         "host": "0.0.0.0",
@@ -959,7 +925,6 @@
       }
     },
     "search": {
-      "service_name": "search",
       "server": {
         "name": "search",
         "host": "0.0.0.0",
@@ -979,7 +944,9 @@
         "unavailable_ttl_seconds": 300,
         "index": {
           "enabled": true,
-          "default_index_ids": ["runet"],
+          "default_index_ids": [
+            "runet"
+          ],
           "max_indexes_per_request": 3,
           "registry_cache_ttl_seconds": 60
         },
@@ -1018,8 +985,15 @@
         "http_timeout_seconds": 20.0,
         "min_extract_chars": 200,
         "tranco_seed_limit": 200,
-        "skip_categories": ["ecommerce", "social"],
-        "ru_com_whitelist": ["habr.com", "vc.ru", "tass.ru"],
+        "skip_categories": [
+          "ecommerce",
+          "social"
+        ],
+        "ru_com_whitelist": [
+          "habr.com",
+          "vc.ru",
+          "tass.ru"
+        ],
         "enrichment": {
           "provider": "humanitec_llm",
           "model": "auto",
@@ -1034,14 +1008,12 @@
       }
     },
     "voice": {
-      "service_name": "voice",
       "server": {
         "name": "voice",
         "port": 8015
       }
     },
     "capability_gateway": {
-      "service_name": "capability_gateway",
       "server": {
         "name": "capability_gateway",
         "host": "0.0.0.0",
@@ -1050,7 +1022,6 @@
       }
     },
     "code_runner_python": {
-      "service_name": "code_runner_python",
       "server": {
         "name": "code_runner_python",
         "host": "0.0.0.0",
@@ -1059,7 +1030,6 @@
       }
     },
     "code_runner_node": {
-      "service_name": "code_runner_node",
       "server": {
         "name": "code_runner_node",
         "host": "0.0.0.0",
@@ -1068,7 +1038,6 @@
       }
     },
     "code_runner_go": {
-      "service_name": "code_runner_go",
       "server": {
         "name": "code_runner_go",
         "host": "0.0.0.0",
@@ -1077,7 +1046,6 @@
       }
     },
     "code_runner_csharp": {
-      "service_name": "code_runner_csharp",
       "server": {
         "name": "code_runner_csharp",
         "host": "0.0.0.0",
@@ -1129,9 +1097,23 @@
         "authinfo_user": null,
         "authinfo_password": null
       },
-      "role_mailboxes": ["support", "hr", "pr", "sales", "info", "noreply"],
+      "role_mailboxes": [
+        "support",
+        "hr",
+        "pr",
+        "sales",
+        "info",
+        "noreply"
+      ],
       "user_local_part_strategy": "slug_unique",
-      "protected_local_parts": ["support", "hr", "pr", "sales", "info", "noreply"]
+      "protected_local_parts": [
+        "support",
+        "hr",
+        "pr",
+        "sales",
+        "info",
+        "noreply"
+      ]
     },
     "live_test": {
       "enabled": false,

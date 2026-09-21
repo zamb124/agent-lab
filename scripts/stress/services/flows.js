@@ -245,7 +245,7 @@ export default function runFlowsStress() {
 }
 
 export function handleSummary(data) {
-  const dir = __ENV.STRESS_RESULTS_DIR || "stress/results";
+  const dir = __ENV.STRESS_RESULTS_DIR || "scripts/stress/results";
   return {
     stdout: markdownSummary(data),
     [`${dir}/summary.json`]: JSON.stringify(data, null, 2),

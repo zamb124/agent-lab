@@ -118,7 +118,7 @@ Builtin specs — `apps/flows/tools/builtin_specs.py`. Runtime gate — `ToolAut
 - `ToolReference` остаётся runtime-материализацией; contract models — compat-слой для будущего compiler/pipeline.
 - CI: `scripts/check_tool_contracts.py` — object root + `additionalProperties: false` у builtin parameters; запрет `ServiceClient()` / container / `platform_facades` / legacy Port/Facade getters в `apps/flows/tools/*.py`.
 - Strict OpenAI compiler stub: `apps/flows/src/tools/provider_schema.py::compile_openai_strict_parameters`.
-- Backfill builtins → `ToolDefinition`: `apps/flows/src/services/tool_definition_backfill.py` (`iter_builtin_tool_definitions`, version `1` / semver `1.0.0`); script `scripts/backfill_tool_definitions.py` (`--write` → `apps/flows/bundles/_seed/tool_definitions_snapshot.json`).
+- Backfill builtins → `ToolDefinition`: `apps/flows/src/services/tool_definition_backfill.py` (`iter_builtin_tool_definitions`, version `1` / semver `1.0.0`); script `scripts/backfill_tool_definitions.py` печатает снимок, `--write` сохраняет его локально в `apps/flows/bundles/_seed/` (артефакт не коммитится).
 - Binding from embedded ref: `apps/flows/src/services/tool_binding_from_ref.py::binding_from_tool_reference`.
 - LLM eval dataset stubs (schema only): `tests/flows/evals/tool_selection_cases.json` + `tests/flows/evals/test_tool_eval_dataset_schema.py`.
 

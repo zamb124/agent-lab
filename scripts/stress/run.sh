@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SERVICE="${SERVICE:-flows}"
 PROFILE="${PROFILE:-${STRESS_PROFILE:-local}}"
 URL="${URL:-${STRESS_URL:-}}"
 TOKEN="${TOKEN:-${STRESS_TOKEN:-}}"
-RESULTS_DIR="${RESULTS_DIR:-${STRESS_RESULTS_DIR:-$ROOT_DIR/stress/results}}"
+RESULTS_DIR="${RESULTS_DIR:-${STRESS_RESULTS_DIR:-$ROOT_DIR/scripts/stress/results}}"
 RPS="${RPS:-${STRESS_RPS:-}}"
 USER_PRE_ALLOCATED_VUS="${PRE_ALLOCATED_VUS:-}"
 USER_MAX_VUS="${MAX_VUS:-}"
@@ -69,7 +69,7 @@ if [[ -n "$RPS" ]]; then
   fi
 fi
 
-SCRIPT="$ROOT_DIR/stress/services/$SERVICE.js"
+SCRIPT="$ROOT_DIR/scripts/stress/services/$SERVICE.js"
 if [[ ! -f "$SCRIPT" ]]; then
   echo "Stress service script not found: $SCRIPT" >&2
   exit 2

@@ -1,7 +1,7 @@
 # Stress
 
 Нагрузочный контур проекта. Инструмент: Grafana k6, сценарии лежат по сервисам в
-`stress/services`.
+`scripts/stress/services`.
 
 ## Быстрый запуск
 
@@ -36,7 +36,7 @@ make stress PROFILE=prod URL=https://humanitec.ru TOKEN=<jwt-or-api-token>
 make stress PROFILE=prod RPS=20
 ```
 
-Результаты пишутся в `stress/results`:
+Результаты пишутся в `scripts/stress/results`:
 
 - `report.md` - короткий человекочитаемый отчет;
 - `report.html` - HTML версия;
@@ -75,7 +75,7 @@ make stress 100 DRY_RUN=1
 
 ## Flows
 
-`stress/services/flows.js` тестирует A2A `SendMessage` в async-режиме:
+`scripts/stress/services/flows.js` тестирует A2A `SendMessage` в async-режиме:
 
 1. `SendMessage` с `configuration.returnImmediately=true` и header `A2A-Version: 1.0`.
 2. Получение `taskId` без ожидания выполнения flow.
@@ -113,7 +113,7 @@ make stress STRESS_USE_MOCK=false
 Новый сервис добавляется отдельным файлом:
 
 ```text
-stress/services/<service>.js
+scripts/stress/services/<service>.js
 ```
 
 После этого запуск:

@@ -88,7 +88,7 @@ alwaysApply: true
 |---|---|---|
 | `scripts/check_strict_agent_architecture.py`, `audit_wider_repo_strictness.py` | запрет `getattr(..., default)`, широких типов, фолбеков | этот файл |
 | `analyze_imports.py` | `Total local imports: 0` в `core/` + `apps/` | этот файл |
-| `check_conf_secrets.py`, `check_repo_hygiene.py` | секреты `conf.json` — только плейсхолдеры `YOUR_*`; корень репозитория — allowlist файлов, без дампов/документов/ключей | `configuration.mdc`, этот файл |
+| `check_conf_secrets.py`, `check_conf_keys_declared.py`, `check_repo_hygiene.py` | секреты `conf.json` — только плейсхолдеры `YOUR_*`, значения формы ключа провайдера запрещены; каждый ключ `conf.json` объявлен в Settings (`extra="forbid"`); корень репозитория — allowlist файлов и каталогов (индекс и диск), без дампов/документов/ключей | `configuration.mdc`, этот файл |
 | `check_ratchet_counts.py` | ratchet `scripts/ratchet_baseline.json`: `cast`, `type: ignore`, `object`, `os.environ`, `except: pass`, `force_global`, `Storage(db_url` вне репозиториев, `HTTPException` в `apps/`, f-string логи, `monkeypatch`/`AsyncMock`/`skip` в тестах — счётчик не растёт, снижение фиксируется `--update` | `main.mdc`, `testing_invariants.mdc` |
 | `check_billing_span_canon.py` | `record_usage` только в settlement; каждый span с `pending_settlement` покрыт правилом `default_settlement_rules` | `billing.mdc` |
 | `check_command_owner_catalogs.py`, `check_rest_handlers_call_ops.py` | owner ⇔ каталог `<SVC>_OPERATIONS`; REST-хендлеры COMMAND_WS-сервисов зовут `op_*` (ratchet `rest_handlers_without_op_baseline.json`) | `architecture.mdc` |

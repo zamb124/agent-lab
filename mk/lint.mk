@@ -52,6 +52,8 @@ _lint-py:
 	uv run python scripts/check_billing_span_canon.py
 	@echo "=== lint: conf.json secrets ==="
 	uv run python scripts/check_conf_secrets.py
+	@echo "=== lint: conf.json keys declared ==="
+	uv run python scripts/check_conf_keys_declared.py
 	@echo "=== lint: repo hygiene ==="
 	uv run python scripts/check_repo_hygiene.py
 	@echo "=== lint: ratchet counts ==="

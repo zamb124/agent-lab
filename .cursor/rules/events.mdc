@@ -91,8 +91,8 @@ Redis-клиент шины — `events_redis_client()` (`core/events/redis_clie
 
 - `register_platform_event(type, payload_model, description=...)` — сервис
   регистрирует свои типы при импорте своего events-модуля
-  (`apps/sync/realtime/events.py`, `core/worktracker/events.py`,
-  `apps/crm/services/crm_entity_events.py`, `core/mail/events.py`).
+  (`apps/<svc>/events.py` — crm, sync, wiki, office, rag; `apps/flows/src/events.py`;
+  `core/worktracker/events.py`, `core/mail/events.py`).
 - Один тип = один контракт payload (конфликт моделей — ошибка).
 - На старте каждый процесс публикует регистрации в Redis HASH
   `platform:event_catalog` (`store_registered_platform_events` в

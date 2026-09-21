@@ -2509,7 +2509,7 @@ def default_billing_resource_base_prices() -> dict[str, dict[str, float]]:
     - search: внешние Search provider calls из search.provider.* spans.
 
     Категория tool в биллинге не используется (тулы flows бесплатны в учёте).
-    Подробнее: conf.json → billing._docs_ru, configuration.mdc, billing.mdc.
+    Подробнее: configuration.mdc § billing, billing.mdc.
     """
     return {
         "llm": {"*": 0.0001},

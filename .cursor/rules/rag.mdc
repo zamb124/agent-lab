@@ -14,7 +14,7 @@ globs:
 
 Сервис документов и семантического поиска с провайдерами `pgvector` (PostgreSQL+pgvector) и `agentset` (внешний SaaS). Изоляция через namespaces, асинхронная индексация через TaskIQ, оригиналы файлов в S3/MinIO. Парсинг — канонический `FileReader.read(source, ReadFileArgs) → FileExtract` (hybrid PDF OCR / vision / STT); отдельного парсера в `core/rag` нет. Embeddings — OpenAI-compatible API; дефолт в Pydantic и продуктовом `conf.json` — **`provider_litserve`** с **Qwen3-Embedding-0.6B** и размерностью из `rag.embedding.api`; альтернатива — **`openrouter`** (`rag.embedding.base_url` или ключ из `llm`).
 
-Префикс REST: **`/rag/api/v1/`**. Структура: `apps/rag/{api,ui,realtime}` + `core/rag/{base_provider,factory,models,namespace_manager,repository,providers,services,post_retrieval_rerank,rag_http_namespace_search,constants}`.
+Префикс REST: **`/rag/api/v1/`**. Структура: `apps/rag/{api,ui,realtime}` + `core/rag/{base_provider,factory,models,repository,providers,services,post_retrieval_rerank,rag_http_namespace_search,rag_resource_bind,constants}`.
 
 Команды с сессией — `RAG_OPERATIONS` / `op_*` (`apps/rag/realtime/`): REST и Centrifugo RPC `platform.event` зовут одну функцию. Загрузка байтов (`rag/document_upload`) остаётся HTTP: chunked Files API в WS RPC не укладывается. `namespace_id` в payload — `Namespace.name`; `PlatformEvent.meta.namespace` для RAG не задаёт каталог.
 
@@ -39,7 +39,7 @@ Namespace CRUD — `require_company_admin` / `require_can_view(company)`. Docume
 
 1. **Префикс** `/rag/api/v1/` — всегда. Без префикса — запрещено.
 2. **Загрузка байтов** — только Files chunked API (`/{svc}/api/v1/files/uploads*`); индексация — `POST .../documents/index-file` JSON `{ file_id, metadata? }`. Multipart FormData upload в RAG **запрещён**.
-3. **NamespaceManager для scope** (`core/rag/namespace_manager.py::NamespaceManager.resolve_namespace(scope, context_id?, session_id?) -> str`); `scope ∈ {"flow","company","session"}`. Хардкод `f"flow:{...}"` запрещён.
+3. **Каталог индекса = platform `Namespace.name`** (`namespace.mdc`): flows-ресурс `rag` биндится через `core/rag/rag_resource_bind.py::RagResourceBindParams.namespace`, peer-сервисы передают `namespace_id` явно. Составные ключи вида `f"flow:{...}"` / `{company_id}_{namespace}` запрещены.
 4. **Async-индексация** — mutating-операции в воркере через TaskIQ (`process_document_upload`, `index_rag_document_s3_task`, `delete_document_task` в `apps/rag_worker/tasks/indexing_tasks.py` и связанные задачи). Синхронный `parse_document` в API — запрещён. В индекс только категории из `core/rag/indexable.py::RAG_INDEXABLE_FILE_CATEGORIES`; `signature`/archive/unknown — skip (не `failed`).
 5. **Доступ к namespace** — `apps/rag/namespace_access.py::require_registered_rag_namespace`: сначала FGA `require_can_view(AuthzObject.platform_namespace(company_id, namespace_id))` (нет tuples → **403**, existence leak запрещён), затем `namespace_repository.get` (после успешного Check SQL missing → **404**). Для `POST /rag/api/v1/search` — тот же Check на каждый `namespace_ids[i]`.
 6. **Межсервисный клиент** — только `core/clients/rag_client.py::RagClient` (поверх `ServiceClient`): `create_namespace`, `ingest_text`, `index_file`, `delete_namespace_document`, `get_document_processing_status`, `get_documents_processing_statuses` (`POST /rag/api/v1/documents/statuses`), `search`, `global_search`. Не плодить `ServiceClient("rag", path=...)` в peer-сервисах в обход `RagClient`.

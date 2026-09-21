@@ -147,12 +147,17 @@ class BaseSettings(PydanticBaseSettings):
     )
     agent: AgentSettings = Field(default_factory=AgentSettings)
 
+    # extra="forbid": ключ conf.json без поля в Settings — ошибка старта, а не тихо
+    # проигнорированная настройка (гейт scripts/check_conf_keys_declared.py ловит это статически).
+    # dotenv_filtering="only_existing": .env разработчика может содержать переменные для
+    # других инструментов (ключи деплоя, App Store) — они не проходят через Pydantic.
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         env_file=[".env"],
         env_file_encoding="utf-8",
         env_nested_delimiter="__",
         env_ignore_empty=True,
-        extra="allow",
+        extra="forbid",
+        dotenv_filtering="only_existing",
     )
 
     @classmethod

@@ -13,6 +13,8 @@ alwaysApply: false
 
 Загрузка — `core/config/loader.py`: мерж файлов, затем слой `services.<сервис>` поверх общего (для `load_merged_config(service_name="flows")`), ключ `services` из результата убирается. Отдельных `apps/*/conf.json` нет.
 
+**Каждый ключ конфига объявлен в Pydantic.** `BaseSettings.model_config` — `extra="forbid"`: ключ `conf.json`/`conf.local.json` без поля в Settings валит старт сервиса. Имя слоя `services.<name>` обязано соответствовать `apps/<name>/config.py` с единственным классом Settings (для `<svc>_worker` без своего config — `apps/<svc>/config.py`, как `sync_worker` → `SyncSettings`). Статический гейт — `scripts/check_conf_keys_declared.py` (`make lint`): рекурсивно сверяет корень и каждый сервисный слой `conf.json` с `model_fields`, ловит и ключи, которые вложенная модель с `extra="ignore"` отбросила бы молча. Комментарии в JSON (`_docs_*`) запрещены — документация живёт в rules. `.env` читается с `dotenv_filtering="only_existing"`: переменные других инструментов (ключи деплоя, App Store) в `.env` разработчика не ломают загрузку.
+
 ## Kubernetes: ConfigMap `app-conf`
 
 Поды читают смонтированный `deploy/helm/agent-lab/files/app-conf.json`. Файл собирается из `conf.json` + узкого `deploy/helm/agent-lab/files/app-conf.k8s-overlay.json`. Overlay не трогает `server.*_service_url` (их в кластере задаёт Helm ENV `SERVER__*_SERVICE_URL` в `templates/_helpers.tpl`); в overlay только дельты вида `services.<app>.browser` (например `null` для удаления `cdp_endpoints.lightpanda`). Артефакт пишет `deploy/scripts/render_helm_app_conf.py` (`.gitignore`); перед `helm` без `make k8s-*` — `make render-helm-app-conf`. CI и `make k8s-lint` делают то же.
