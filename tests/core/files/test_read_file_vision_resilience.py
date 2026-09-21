@@ -104,7 +104,7 @@ async def test_read_image_vision_heic_from_corpus(
     require_heic_entry_supported(entry.relative_path)
     mock_llm_with_queue(["MOCK_VISION"])
     file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
-    from apps.flows.tools.files import read_file
+    from apps.flows.tools.files.files import read_file
 
     state = ExecutionState.create(
         task_id="vision_task",
@@ -139,7 +139,7 @@ async def test_read_image_vision_shrink_on_error_flag_accepted(
     entry = next(e for e in POSITIVE if e.relative_path == "img/example.jpg")
     mock_llm_with_queue(["MOCK_VISION"])
     file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
-    from apps.flows.tools.files import read_file
+    from apps.flows.tools.files.files import read_file
 
     state = ExecutionState.create(
         task_id="vision_task2",

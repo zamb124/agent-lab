@@ -1,0 +1,178 @@
+"""
+Пул подключений Playwright к CDP endpoint (Lightpanda / Chromium).
+
+Этот модуль отвечает только за уровень Browser/CDP:
+- один общий Playwright driver на процесс;
+- одно CDP-подключение (`Browser`) на `endpoint_key`;
+- безопасный конкурентный реюз через `asyncio.Lock`.
+
+Изоляция параллельных сценариев обеспечивается не в пуле, а выше:
+- `ContextFactory` разводит выполнение по `(endpoint_key, context_signature_hash)`;
+- `PageLeaseManager` раздаёт отдельные `page` и учитывает lease/TTL по `session_id`.
+Пул не смешивает страницы и сессии между собой: он только выдаёт один и тот же
+Browser-объект для endpoint-а.
+
+Надёжность подключения:
+- Кешированный `Browser` отдаётся только если `is_connected()`. Мёртвый хэндл
+  (Chromium упал/перезапустился) выбрасывается и пересоздаётся.
+- На каждое подключение вешается `disconnected`-листенер, который сразу вычищает
+  endpoint из пула и зовёт `on_endpoint_disconnected`, чтобы верхние слои закрыли
+  свои контексты/lease на мёртвый Browser.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Awaitable, Callable
+
+from playwright.async_api import Playwright, async_playwright
+
+from apps.browser.models.types import BrowserHandle
+from apps.browser.services.cdp_url_normalize import normalize_playwright_cdp_connect_url
+from core.logging import get_logger
+from core.utils.background import run_with_log_context
+
+logger = get_logger(__name__)
+
+EndpointDisconnectedCallback = Callable[[str], Awaitable[None]]
+
+
+class CDPConnectionPool:
+    """
+    Пул CDP-подключений: один Playwright driver на процесс и реюз Browser по `endpoint_key`.
+
+    Мотивация:
+    - Убрать дорогой повторный `connect_over_cdp` для каждого запроса.
+    - Централизовать lifecycle transport-уровня отдельно от логики сессий/страниц.
+    - Избежать гонок при одновременном старте нескольких задач.
+
+    Связи:
+    - Используется `PlaywrightBrowserInteractor` для acquire браузера.
+    - Используется `CDPLifecycleManagerImpl` для endpoint-level disconnect/stop.
+
+    Состояние:
+    - `_playwright`: общий async Playwright instance.
+    - `_browsers`: map `endpoint_key -> Browser`.
+    - `_lock`: сериализация конкурентного старта/подключения/остановки.
+    - `_on_endpoint_disconnected`: callback верхнего слоя на разрыв подключения.
+
+    Инварианты:
+    - Для одного `endpoint_key` в пуле существует не более одного Browser объекта.
+    - В пуле никогда не остаётся отключённый Browser: либо живой, либо отсутствует.
+    - `start()` идемпотентен.
+    - `stop()` закрывает все Browser и после этого обнуляет `_playwright`.
+
+    Переиспользование:
+    - Стоит: всегда, когда задачи работают через один и тот же CDP endpoint.
+    - Не стоит: если нужна жёсткая изоляция по отдельным browser process на задачу —
+      в этом случае выдавайте уникальные `endpoint_key`/endpoint-ы на каждый поток.
+
+    Процесс работы (высокоуровнево):
+    1) `acquire_browser(endpoint_key, cdp_url)` валидирует аргументы и вызывает `start()`.
+    2) Под `_lock` проверяет `_browsers`:
+       - если Browser уже есть и `is_connected()`, возвращает его без нового connect;
+       - если хэндл мёртв, выбрасывает его и подключается заново;
+       - если нет, делает `connect_over_cdp(cdp_url)`, кладёт в map и возвращает.
+    3) Параллельные вызовы с одним `endpoint_key` сериализуются тем же `_lock`,
+       поэтому создаётся максимум одно новое подключение.
+    4) `disconnect(endpoint_key)` удаляет Browser из map и закрывает только его.
+    5) `stop()` закрывает все известные Browser и общий Playwright instance.
+    """
+
+    def __init__(
+        self,
+        *,
+        on_endpoint_disconnected: EndpointDisconnectedCallback | None = None,
+    ) -> None:
+        self._lock: asyncio.Lock = asyncio.Lock()
+        self._playwright: Playwright | None = None
+        self._browsers: dict[str, BrowserHandle] = {}
+        self._on_endpoint_disconnected: EndpointDisconnectedCallback | None = on_endpoint_disconnected
+
+    async def start(self) -> None:
+        async with self._lock:
+            if self._playwright is None:
+                self._playwright = await async_playwright().start()
+
+    async def acquire_browser(self, endpoint_key: str, cdp_url: str) -> BrowserHandle:
+        """
+        Вернуть живой Browser для endpoint-а, создав/пересоздав его при необходимости.
+
+        Поведение конкурентности:
+        - критическая секция под `_lock` гарантирует single-connect per endpoint;
+        - повторные acquire для того же endpoint возвращают уже подключённый Browser;
+        - отключённый хэндл выбрасывается и заменяется новым подключением.
+        """
+        if not endpoint_key:
+            raise ValueError("endpoint_key обязателен")
+        if not cdp_url:
+            raise ValueError("cdp_url обязателен")
+        await self.start()
+        async with self._lock:
+            if self._playwright is None:
+                raise RuntimeError("Playwright не инициализирован")
+            existing = self._browsers.get(endpoint_key)
+            if existing is not None:
+                if existing.is_connected():
+                    return existing
+                _ = self._browsers.pop(endpoint_key, None)
+                logger.warning(
+                    "browser.cdp.stale_handle_evicted",
+                    endpoint_key=endpoint_key,
+                )
+            ws_url = await normalize_playwright_cdp_connect_url(cdp_url)
+            browser = await self._playwright.chromium.connect_over_cdp(ws_url)
+            self._register_disconnect_listener(endpoint_key, browser)
+            self._browsers[endpoint_key] = browser
+            logger.info("browser.cdp.connected", endpoint_key=endpoint_key)
+            return browser
+
+    def _register_disconnect_listener(self, endpoint_key: str, browser: BrowserHandle) -> None:
+        def _on_disconnected(_browser: BrowserHandle) -> None:
+            _ = run_with_log_context(
+                self._handle_disconnect(endpoint_key, browser),
+                name="browser.cdp.disconnected",
+                background_kind="recovery",
+            )
+
+        browser.on("disconnected", _on_disconnected)
+
+    async def _handle_disconnect(self, endpoint_key: str, browser: BrowserHandle) -> None:
+        """
+        Реакция на разрыв CDP: выбросить именно этот Browser из пула и уведомить
+        верхний слой, чтобы он закрыл связанные контексты/lease.
+        """
+        async with self._lock:
+            current = self._browsers.get(endpoint_key)
+            if current is browser:
+                _ = self._browsers.pop(endpoint_key, None)
+                logger.warning("browser.cdp.disconnected_evicted", endpoint_key=endpoint_key)
+        if self._on_endpoint_disconnected is not None:
+            await self._on_endpoint_disconnected(endpoint_key)
+
+    async def disconnect(self, endpoint_key: str) -> None:
+        async with self._lock:
+            browser = self._browsers.pop(endpoint_key, None)
+        if browser is not None:
+            await browser.close()
+
+    async def stop(self) -> None:
+        async with self._lock:
+            browsers = list(self._browsers.values())
+            self._browsers.clear()
+            pw = self._playwright
+            self._playwright = None
+        for browser in browsers:
+            await browser.close()
+        if pw is not None:
+            await pw.stop()
+
+    def has_endpoint(self, endpoint_key: str) -> bool:
+        return endpoint_key in self._browsers
+
+    def connected_endpoint_count(self) -> int:
+        return sum(1 for browser in self._browsers.values() if browser.is_connected())
+
+    @property
+    def playwright(self) -> Playwright | None:
+        return self._playwright

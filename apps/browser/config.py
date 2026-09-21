@@ -8,7 +8,7 @@ from typing import ClassVar, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.browser.engine.types import BrowserRuntimeSettingsView
+from apps.browser.models.types import BrowserRuntimeSettingsView
 from core.config import BaseSettings
 from core.config.service_settings import ServiceSettingsCache
 

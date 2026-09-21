@@ -4,7 +4,7 @@
 Проверяем все сценарии переопределений на уровне данных.
 """
 
-from apps.flows.src.utils.merge import deep_merge
+from core.utils.json_merge import deep_merge
 
 
 class TestDeepMergeBasics:

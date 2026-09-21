@@ -234,7 +234,7 @@ PROVIDER_WHITELIST_PATHS = (
     "apps/flows/src/resources/wrappers/llm_resource.py",
     "apps/flows/src/models/node_config.py",
     "apps/flows/src/models/resource.py",
-    "apps/flows/tools/sandbox_codegen.py",
+    "apps/flows/tools/misc/sandbox_codegen.py",
     "apps/frontend/api/ai_providers.py",
     "apps/frontend/api/services.py",
     "apps/voice/api/company_voice_providers.py",

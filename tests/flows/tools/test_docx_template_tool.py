@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from apps.flows.tools.docx_template import fill_docx_template
+from apps.flows.tools.files.docx_template import fill_docx_template
 from core.files.file_ref import FileRef
 from core.files.writer.exceptions import FileWriteError
 from core.state import ExecutionState

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS, builtin_tool_ids
-from apps.flows.tools.documents_catalog import (
+from apps.flows.tools.documents.documents_catalog import (
     documents_find,
     documents_get_link,
     documents_list_catalog,

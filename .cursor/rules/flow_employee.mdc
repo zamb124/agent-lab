@@ -1,6 +1,6 @@
 ---
 description: "Flow как сотрудник: identity, inbox, Sync DM/@mention, WorkItem, UI enable, матрица готовности и долг"
-globs: "{core/identity/flow_employee.py,apps/flows/src/services/execution_identity.py,apps/flows/src/services/flow_employee_provisioning.py,apps/flows/src/services/employee_inbox_service.py,apps/flows/src/services/platform_event_consumer.py,apps/flows/src/models/flow_config.py,apps/flows/tools/sync_tools.py,apps/flows/ui/modals/flows-employee-settings-modal.js,apps/flows/ui/components/editor/flows-editor-header.js,apps/flows/ui/components/flow-card.js,apps/sync/realtime/handlers.py,core/worktracker/service.py,apps/frontend/ui/pages/team/**,tests/**/test*flow_employee*,tests/**/test*employee*}"
+globs: "{core/identity/flow_employee.py,apps/flows/src/services/execution_identity.py,apps/flows/src/services/flow_employee_provisioning.py,apps/flows/src/services/employee_inbox_service.py,apps/flows/src/services/platform_event_consumer.py,apps/flows/src/models/flow_config.py,apps/flows/tools/sync/sync_tools.py,apps/flows/ui/modals/flows-employee-settings-modal.js,apps/flows/ui/components/editor/flows-editor-header.js,apps/flows/ui/components/flow-card.js,apps/sync/realtime/handlers.py,core/worktracker/service.py,apps/frontend/ui/pages/team/**,tests/**/test*flow_employee*,tests/**/test*employee*}"
 alwaysApply: false
 ---
 # Flow как сотрудник
@@ -97,7 +97,7 @@ alwaysApply: false
 | UI header chip | `apps/flows/ui/components/editor/flows-editor-header.js` |
 | UI sidebar badge | `apps/flows/ui/components/flow-card.js` |
 | Sync событие (обогащение payload) | `apps/sync/events.py`, `realtime/handlers.py` |
-| Sync tools | `apps/flows/tools/sync_tools.py`, `sync_channel_tools.py`, `sync_thread_tools.py` |
+| Sync tools | `apps/flows/tools/sync/sync_tools.py`, `sync_channel_tools.py`, `sync_thread_tools.py` |
 | WorkItem событие assigned | `core/worktracker/events.py`, `service.py` |
 | Config model | `apps/flows/src/models/flow_config.py` (`FlowEmployeeConfig`) |
 

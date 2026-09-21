@@ -1,6 +1,6 @@
 """Тесты стабильности сигнатуры контекста."""
 
-from apps.browser.engine.types import ContextSignature
+from apps.browser.models.types import ContextSignature
 
 
 def test_context_signature_stable_hash_same_for_equal_fields() -> None:

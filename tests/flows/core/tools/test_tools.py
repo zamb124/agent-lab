@@ -4,9 +4,9 @@ import pytest
 
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.tools.base import BaseTool
-from apps.flows.tools.agent_session_tools import ask_user
-from apps.flows.tools.finish_tool import finish
-from apps.flows.tools.math_tools import calculator
+from apps.flows.tools.misc.agent_session_tools import ask_user
+from apps.flows.tools.misc.finish_tool import finish
+from apps.flows.tools.misc.math_tools import calculator
 from core.state import ExecutionState
 
 EMPTY_PARAMETERS_SCHEMA = {"type": "object", "properties": {}, "required": []}

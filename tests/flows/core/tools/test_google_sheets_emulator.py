@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from apps.flows.tools.google_sheets import (
+from apps.flows.tools.google_sheets.google_sheets import (
     sheets_add_sheet,
     sheets_append_rows,
     sheets_batch_clear_values,

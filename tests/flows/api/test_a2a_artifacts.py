@@ -4,7 +4,7 @@
 
 import pytest
 
-from apps.flows.src.utils import extract_json_from_response
+from core.types import parse_json_response_or_none
 from tests.flows._a2a_v1 import A2A_HEADERS
 
 
@@ -14,42 +14,42 @@ class TestExtractJsonFromResponse:
     def test_extract_from_markdown_block(self):
         """JSON в markdown блоке."""
         text = '```json\n{"key": "value"}\n```'
-        result = extract_json_from_response(text)
+        result = parse_json_response_or_none(text)
         assert result == {"key": "value"}
 
     def test_extract_from_markdown_with_text_before(self):
         """JSON в markdown блоке с текстом до."""
         text = 'Some text before\n```json\n{"key": "value"}\n```'
-        result = extract_json_from_response(text)
+        result = parse_json_response_or_none(text)
         assert result == {"key": "value"}
 
     def test_extract_direct_json_object(self):
         """Прямой JSON объект."""
         text = '{"key": "value"}'
-        result = extract_json_from_response(text)
+        result = parse_json_response_or_none(text)
         assert result == {"key": "value"}
 
     def test_extract_direct_json_array(self):
         """Прямой JSON массив."""
         text = '[{"a": 1}, {"b": 2}]'
-        result = extract_json_from_response(text)
+        result = parse_json_response_or_none(text)
         assert result == [{"a": 1}, {"b": 2}]
 
     def test_no_json_returns_none(self):
         """Текст без JSON возвращает None."""
         text = "Just some plain text without JSON"
-        result = extract_json_from_response(text)
+        result = parse_json_response_or_none(text)
         assert result is None
 
     def test_empty_text_returns_none(self):
         """Пустой текст возвращает None."""
-        result = extract_json_from_response("")
+        result = parse_json_response_or_none("")
         assert result is None
 
     def test_invalid_json_returns_none(self):
         """Невалидный JSON возвращает None."""
         text = '{"key": value}'  # без кавычек у value
-        result = extract_json_from_response(text)
+        result = parse_json_response_or_none(text)
         assert result is None
 
 

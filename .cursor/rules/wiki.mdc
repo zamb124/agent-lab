@@ -113,7 +113,7 @@ Wiki входит в `FACTORY_CANON_SERVICES` (`scripts/check_ui_canon.sh`, `scr
 
 ## Lara
 
-Tier-1 skill `wiki-platform` (children `wiki-pages`, `wiki-access`, `wiki-discovery`). Builtins `wiki_*` в `apps/flows/tools/wiki_tools.py` — тонкие обёртки над `core.clients.wiki_client.WikiClient` (не прямой REST в теле тула). Eval / `code_node`: `await wiki.create_page(...)` через capability-gateway (`wiki.*`, `sdk_namespace="wiki"`). Тело страницы для агента — markdown (`wiki_get_markdown` / `wiki_update_markdown` / `wiki_import_markdown`), не ProseMirror JSON. Ограничение доступа — `wiki_set_company_visible(company_visible=false)` первым шагом, затем `wiki_set_member(relation=viewer|editor)`; снятие ограничения — `wiki_set_company_visible(company_visible=true)`. Публичная ссылка — `wiki_rotate_public_link` (raw URL один раз).
+Tier-1 skill `wiki-platform` (children `wiki-pages`, `wiki-access`, `wiki-discovery`). Builtins `wiki_*` в `apps/flows/tools/wiki/wiki_tools.py` — тонкие обёртки над `core.clients.wiki_client.WikiClient` (не прямой REST в теле тула). Eval / `code_node`: `await wiki.create_page(...)` через capability-gateway (`wiki.*`, `sdk_namespace="wiki"`). Тело страницы для агента — markdown (`wiki_get_markdown` / `wiki_update_markdown` / `wiki_import_markdown`), не ProseMirror JSON. Ограничение доступа — `wiki_set_company_visible(company_visible=false)` первым шагом, затем `wiki_set_member(relation=viewer|editor)`; снятие ограничения — `wiki_set_company_visible(company_visible=true)`. Публичная ссылка — `wiki_rotate_public_link` (raw URL один раз).
 
 ## Тесты
 

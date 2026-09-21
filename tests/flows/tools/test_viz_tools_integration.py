@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from apps.flows.tools.viz import create_viz, export_viz, update_viz, viz_open_file
+from apps.flows.tools.viz.viz import create_viz, export_viz, update_viz, viz_open_file
 from core.clients.files_client import FilesClient
 from core.state import ExecutionState
 from core.types import require_json_object

@@ -2,7 +2,7 @@
 
 import pytest
 
-from apps.flows.tools.index_search import index_search
+from apps.flows.tools.web.index_search import index_search
 from tests.search.conftest import make_search_index_slug
 from tests.search.integration.snippet_support import strip_snippet_highlight
 

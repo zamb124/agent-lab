@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from apps.browser.observe.observe_store import ControlObserveStore
-from apps.browser.observe.snapshot_refs import RefMap
+from apps.browser.services.observe_store import ControlObserveStore
+from apps.browser.services.snapshot_refs import RefMap
 
 
 def test_get_refs_raises_without_observe() -> None:

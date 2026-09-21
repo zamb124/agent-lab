@@ -13,7 +13,7 @@ from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from apps.flows.src.tools.base import BaseTool
-from apps.flows.tools.math_tools import calculator
+from apps.flows.tools.misc.math_tools import calculator
 from core.clients.llm import LLMToolCall
 from core.state import ExecutionState
 from tests.flows.durable_runtime_harness import ensure_workflow_started

@@ -99,6 +99,10 @@ WS `*_failed`: те же поля мерджатся в `payload` рядом с 
 
 После accept invite ответ `AcceptInviteResponse.subdomain` — клиент делает полную навигацию на subdomain dashboard. Перевыпуск JWT — тот же `rebind_session_to_company`.
 
+## Исключения и middleware сервиса
+
+Всё app-level поведение задаётся параметрами `create_service_app`: `extra_middlewares` (в т.ч. flows `EmbedDynamicCorsMiddleware`), `extra_exception_handlers` — только для внешних wire-спек поверх платформенного JSON-конверта (OpenAI error envelope LLM proxy flows). `@app.exception_handler` / `app.add_middleware` в `apps/<svc>/main.py` запрещены; ошибки границы в хендлерах — `raise_invalid`/`Platform*Error`, а не глобальный `ValueError → 400`.
+
 ## Dependency Injection
 
 ### Контейнер и `@lazy`

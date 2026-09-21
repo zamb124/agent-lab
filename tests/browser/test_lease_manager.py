@@ -6,8 +6,8 @@ from typing import Any, Optional
 
 import pytest
 
-from apps.browser.engine.page_lease_manager import PageLeaseManager
-from apps.browser.engine.types import ContextSignature
+from apps.browser.models.types import ContextSignature
+from apps.browser.services.page_lease_manager import PageLeaseManager
 
 
 class _FakePage:

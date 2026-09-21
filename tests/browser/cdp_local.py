@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 import httpx
 
 from apps.browser.config import get_browser_settings
-from apps.browser.engine.cdp_url_normalize import (
+from apps.browser.services.cdp_url_normalize import (
     fetch_browser_web_socket_debugger_url,
     normalize_playwright_cdp_connect_url,
 )

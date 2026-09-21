@@ -6,8 +6,8 @@ from typing import Any
 
 import pytest
 
-from apps.browser.engine.context_factory import ContextFactory
-from apps.browser.engine.types import ContextSignature
+from apps.browser.models.types import ContextSignature
+from apps.browser.services.context_factory import ContextFactory
 
 
 class _FailingClosePage:
@@ -78,7 +78,7 @@ async def test_close_page_raises_when_page_close_fails(monkeypatch: pytest.Monke
         return None
 
     monkeypatch.setattr(
-        "apps.browser.engine.context_factory.apply_stealth_to_context",
+        "apps.browser.services.context_factory.apply_stealth_to_context",
         _noop_stealth,
     )
     factory = ContextFactory()

@@ -7,7 +7,7 @@ from copy import deepcopy
 from typing import cast, override
 
 from apps.flows.config import get_settings as get_flows_settings
-from apps.flows.src.constants.execution_limits import get_remote_code_runner_http_timeout_seconds
+from apps.flows.src.models.execution_limits import get_remote_code_runner_http_timeout_seconds
 from apps.flows.src.runners.base import BaseCodeRunner
 from apps.flows.src.runners.tool_context_view import build_tool_context_view
 from apps.flows.src.runtime.exceptions import FlowInterrupt

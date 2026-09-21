@@ -7,9 +7,9 @@ import pytest
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.services.flow_validator import FlowValidationResult, FlowValidator
 from apps.flows.src.services.flows_loader import FlowsLoader
-from apps.flows.tools.agent_session_tools import final_answer, reason
-from apps.flows.tools.finish_tool import finish
-from apps.flows.tools.math_tools import calculator
+from apps.flows.tools.misc.agent_session_tools import final_answer, reason
+from apps.flows.tools.misc.finish_tool import finish
+from apps.flows.tools.misc.math_tools import calculator
 
 
 class TestReactToolRoleEnum:

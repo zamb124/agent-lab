@@ -20,7 +20,7 @@ from apps.flows.src.runtime.agent_skill_runtime import (
 )
 from apps.flows.src.services.agent_skill_service import parse_skill_md
 from apps.flows.src.services.platform_assistant_skills import PLATFORM_ASSISTANT_SEED_SKILL_IDS
-from apps.flows.tools.agent_skill_tools import load_agent_skill, read_agent_skill_reference
+from apps.flows.tools.flows.agent_skill_tools import load_agent_skill, read_agent_skill_reference
 from core.authz.company_sync import sync_company_member_roles
 from core.context import Context, clear_context, get_context, set_context
 from core.files.create_spec import FileCreateSpec

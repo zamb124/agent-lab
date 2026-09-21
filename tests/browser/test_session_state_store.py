@@ -4,8 +4,8 @@ from typing import Any
 
 import pytest
 
-from apps.browser.engine.session_store import SessionStateStore
-from apps.browser.engine.types import ContextSignature
+from apps.browser.models.types import ContextSignature
+from apps.browser.services.session_store import SessionStateStore
 
 
 class _FakeRedis:

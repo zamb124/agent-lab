@@ -61,7 +61,7 @@ alwaysApply: false
 - Platform icon для Skill везде один: `AGENT_SKILL_ICON` (`scroll-text`) из `apps/flows/ui/_helpers/agent-skill-map.js` — chips, list, picker, sidebar, llm_node. В ленте Flow UI загрузка skill — чип блока `skill_activity` (`blocks/platform.js`, `data-kind="skill"`, `data-agent-skill-id`), без отдельной иконки.
 - Tool chips в Skill editor используют тот же visual meta, что llm_node (`getToolRefVisualMeta` / language icon).
 - Skill Library page и skill picker при открытии вызывают `ensure-seed`, затем list — backfill каталога без полного company re-init.
-- Flow UI: `load_agent_skill` ставит в очередь state рендер блока `FlowUISkillActivity` (`show_skill_activity` из `apps/flows/src/runtime_helpers/flow_ui_cards.py`, статусы `loading`/`loaded`/`failed`) в `conversation`; runtime публикует его артефактом `ui` на ближайшем `flush_ui`. Видимость — `FlowUIConversationSettings.show_skill_loads`; toast overlay отсутствует. Special UI event branch отсутствует.
+- Flow UI: `load_agent_skill` ставит в очередь state рендер блока `FlowUISkillActivity` (`show_skill_activity` из `apps/flows/src/services/flow_ui_cards.py`, статусы `loading`/`loaded`/`failed`) в `conversation`; runtime публикует его артефактом `ui` на ближайшем `flush_ui`. Видимость — `FlowUIConversationSettings.show_skill_loads`; toast overlay отсутствует. Special UI event branch отсутствует.
 
 ## Lara (канон)
 

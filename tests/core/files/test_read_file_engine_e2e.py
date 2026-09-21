@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from apps.capability_gateway.container import get_capability_gateway_container
-from apps.flows.tools.files import read_file
+from apps.flows.tools.files.files import read_file
 from core.files.reader.engine import read_files_to_envelope
 from core.files.reader.extract_cache import (
     extract_cache_key,

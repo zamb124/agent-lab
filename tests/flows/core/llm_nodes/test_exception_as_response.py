@@ -12,7 +12,7 @@ from apps.flows.src.runtime.nodes import BaseNode
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.decorator import tool
-from apps.flows.tools.agent_skill_tools import read_agent_skill_reference
+from apps.flows.tools.flows.agent_skill_tools import read_agent_skill_reference
 from core.clients.llm import LLMToolCall
 from core.state import ExecutionState
 from core.types import JsonObject

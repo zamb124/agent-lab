@@ -23,7 +23,7 @@ from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from apps.flows.src.streaming import InMemoryEmitter
-from apps.flows.tools.documents_catalog import (
+from apps.flows.tools.documents.documents_catalog import (
     documents_find,
     documents_get_link,
     documents_list_catalog,

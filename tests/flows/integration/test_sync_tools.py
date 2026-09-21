@@ -1,4 +1,4 @@
-"""Builtin sync-тулы сотрудника-агента (`apps/flows/tools/sync_tools.py`).
+"""Builtin sync-тулы сотрудника-агента (`apps/flows/tools/sync/sync_tools.py`).
 
 Сотрудник действует от собственного имени: ServiceClient шлёт signed internal
 headers с его user_id, sync применяет обычный ACL канала. Реальные sync+flows.
@@ -11,7 +11,7 @@ from contextlib import contextmanager
 import pytest
 from httpx import AsyncClient
 
-from apps.flows.tools.sync_tools import sync_list_messages, sync_send_message
+from apps.flows.tools.sync.sync_tools import sync_list_messages, sync_send_message
 from core.clients.service_client import ServiceClientError
 from core.context import clear_context, get_context, set_context
 from core.context.job_context import build_job_context

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from apps.flows.tools.pravo import pravo_document_rag_search
+from apps.flows.tools.knowledge.pravo import pravo_document_rag_search
 from core.clients.pravo import PravoLegislationDocument
 
 H64 = "007c57b8a5c11e0eb8e77ae8e75586909c5a0e5fb9ab0d295b8acc3344ac4ccf"

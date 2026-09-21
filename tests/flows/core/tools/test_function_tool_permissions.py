@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from apps.flows.tools.math_tools import calculator
+from apps.flows.tools.misc.math_tools import calculator
 from core.context import set_context
 from core.models.context_models import Context
 from core.models.identity_models import Company, User

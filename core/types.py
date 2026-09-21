@@ -220,6 +220,25 @@ def repair_json_text(candidate: str) -> str:
     return repaired
 
 
+def parse_json_response_or_none(text: str) -> JsonValue | None:
+    """JSON из ответа LLM: markdown-fence или текст, начинающийся с `{`/`[`; иначе None.
+
+    Намеренно без repair и без поиска фигурных скобок внутри прозы: артефакт
+    создаётся только из явного JSON-ответа, а не из текста с плейсхолдерами.
+    """
+    stripped = text.strip()
+    if not stripped:
+        return None
+    fenced = re.search(r"```(?:json)?\s*([\s\S]*?)```", stripped, flags=re.IGNORECASE)
+    candidate = fenced.group(1).strip() if fenced else stripped
+    if not fenced and not candidate.startswith(("{", "[")):
+        return None
+    try:
+        return parse_json_value(candidate, "llm_response")
+    except ValueError:
+        return None
+
+
 def parse_json_value(data: str | bytes, field_name: str = "value") -> JsonValue:
     """Распарсить JSON-строку в строгий JSON value."""
     text = data.decode("utf-8") if isinstance(data, bytes) else data

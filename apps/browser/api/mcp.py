@@ -47,8 +47,8 @@ from apps.browser.api.control import (
 )
 from apps.browser.container import BrowserContainer
 from apps.browser.dependencies import ContainerDep
-from apps.browser.engine.types import ContextSignature
-from apps.browser.interaction.interaction_profiles import (
+from apps.browser.models.types import ContextSignature
+from apps.browser.services.interaction_profiles import (
     InteractionProfileName,
     get_interaction_profile,
 )

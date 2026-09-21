@@ -20,7 +20,7 @@ import time
 import pytest
 
 from apps.flows.config import get_settings
-from apps.flows.src.constants.execution_limits import (
+from apps.flows.src.models.execution_limits import (
     get_flow_execution_wall_time_cap_seconds,
     get_graph_max_iterations,
     get_node_execution_wall_time_cap_seconds,

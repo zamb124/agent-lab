@@ -24,7 +24,7 @@ from a2a.helpers.proto_helpers import get_message_text
 
 from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig
-from apps.flows.tools.google_docs import (
+from apps.flows.tools.google_docs.google_docs import (
     gdocs_append_text,
     gdocs_create_document,
     gdocs_delete_range,

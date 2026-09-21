@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 
 from apps.guest_runtime.container import GuestRuntimeContainer
 from apps.guest_runtime.dependencies import ContainerDep
 from apps.guest_runtime.services.identity import guest_identity_scope
+from core.errors.boundary import PlatformAccessDeniedError, PlatformNotFoundError
 from core.guest_runtime.models import (
     GuestEnsureLeaseRequest,
     GuestEnsureLeaseResponse,
@@ -19,6 +20,7 @@ from core.guest_runtime.models import (
 )
 from core.models.identity_models import Company, User
 from core.types import JsonObject
+from core.websocket import raise_invalid
 
 router = APIRouter(tags=["guest-runtime"])
 
@@ -28,10 +30,10 @@ async def _load_identity(
 ) -> tuple[User, Company]:
     user = await container.user_repository.get(user_id)
     if user is None:
-        raise HTTPException(status_code=401, detail=f"user not found: {user_id}")
+        raise PlatformAccessDeniedError(f"user not found: {user_id}")
     company = await container.company_repository.get(company_id)
     if company is None:
-        raise HTTPException(status_code=401, detail=f"company not found: {company_id}")
+        raise PlatformAccessDeniedError(f"company not found: {company_id}")
     return user, company
 
 
@@ -44,7 +46,10 @@ async def rebuild_guest_image(
         container, user_id=body.user_id, company_id=body.company_id
     )
     async with guest_identity_scope(user=user, company=company):
-        return await container.farm_service.rebuild(body)
+        try:
+            return await container.farm_service.rebuild(body)
+        except ValueError as exc:
+            raise_invalid(exc)
 
 
 @router.post("/leases/ensure", response_model=GuestEnsureLeaseResponse)
@@ -56,7 +61,10 @@ async def ensure_guest_lease(
         container, user_id=body.user_id, company_id=body.company_id
     )
     async with guest_identity_scope(user=user, company=company):
-        return await container.farm_service.ensure_lease(body)
+        try:
+            return await container.farm_service.ensure_lease(body)
+        except ValueError as exc:
+            raise_invalid(exc)
 
 
 @router.get("/runtimes/{flow_id}/{node_id}", response_model=GuestRuntimeStatusResponse)
@@ -65,7 +73,10 @@ async def guest_runtime_status(
     node_id: str,
     container: ContainerDep,
 ) -> GuestRuntimeStatusResponse:
-    return await container.farm_service.status(flow_id, node_id)
+    try:
+        return await container.farm_service.status(flow_id, node_id)
+    except ValueError as exc:
+        raise_invalid(exc)
 
 
 @router.get("/runtimes/{flow_id}/{node_id}/logs", response_model=GuestRuntimeLogsResponse)
@@ -86,7 +97,7 @@ async def guest_runtime_logs(
             context_id=context_id,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise_invalid(exc)
 
 
 @router.delete("/runtimes/{flow_id}/{node_id}", status_code=204)
@@ -95,7 +106,10 @@ async def drop_guest_runtime(
     node_id: str,
     container: ContainerDep,
 ) -> None:
-    await container.farm_service.drop_runtime(flow_id, node_id)
+    try:
+        await container.farm_service.drop_runtime(flow_id, node_id)
+    except ValueError as exc:
+        raise_invalid(exc)
 
 
 @router.post("/a2a/{flow_id}/{node_id}")
@@ -107,9 +121,12 @@ async def guest_a2a(
 ) -> JsonObject:
     lease = await container.farm_service.get_lease(flow_id, node_id)
     if lease is None:
-        raise HTTPException(status_code=404, detail="guest lease not found")
+        raise PlatformNotFoundError("guest lease not found")
     user, company = await _load_identity(
         container, user_id=lease.user_id, company_id=lease.company_id
     )
     async with guest_identity_scope(user=user, company=company):
-        return await container.farm_service.invoke_a2a(flow_id, node_id, rpc)
+        try:
+            return await container.farm_service.invoke_a2a(flow_id, node_id, rpc)
+        except ValueError as exc:
+            raise_invalid(exc)

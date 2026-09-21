@@ -8,7 +8,7 @@ import pytest
 from apps.flows.src.services.flows_loader import FlowsLoader
 from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
 from apps.flows.tools.builtin_specs import builtin_tool_ids
-from apps.flows.tools.index_search import web_search
+from apps.flows.tools.web.index_search import web_search
 from core.flow_ui.projection import apply_json_patch
 from core.flow_ui.protocol import (
     JSON_MEDIA_TYPE,

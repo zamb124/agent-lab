@@ -17,26 +17,26 @@ from playwright.async_api import Error as PlaywrightError
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.browser.dependencies import ContainerDep
-from apps.browser.engine.types import (
+from apps.browser.models.types import (
     BrowserAcquireRequest,
     BrowserFetchRequest,
     BrowserLocator,
     BrowserPage,
     ContextSignature,
 )
-from apps.browser.interaction.human_interaction import HumanInteraction, InteractionRng
-from apps.browser.interaction.interaction_profiles import (
+from apps.browser.services.ax_snapshot import dom_accessibility_tree_dict_from_page
+from apps.browser.services.human_interaction import HumanInteraction, InteractionRng
+from apps.browser.services.interaction_profiles import (
     InteractionProfile,
     InteractionProfileName,
     get_interaction_profile,
 )
-from apps.browser.observe.ax_snapshot import dom_accessibility_tree_dict_from_page
-from apps.browser.observe.snapshot_refs import (
+from apps.browser.services.runtime_facade import BrowserRuntimeFacade
+from apps.browser.services.snapshot_refs import (
     RefMap,
     build_interactive_snapshot_with_refs,
     parse_ref,
 )
-from apps.browser.orchestration.runtime_facade import BrowserRuntimeFacade
 from core.authz.models import AuthzObject
 from core.clients.browser.control_types import (
     BrowserCapabilityError,

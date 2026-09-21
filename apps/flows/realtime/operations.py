@@ -14,7 +14,6 @@ import yaml
 from pydantic import Field, TypeAdapter, field_validator
 
 from apps.flows.config import get_settings
-from apps.flows.src.constants.execution_limits import get_graph_max_iterations
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.models import (
     BranchConfig,
@@ -34,6 +33,7 @@ from apps.flows.src.models import (
 )
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.exception_absorb_allow import list_exception_absorb_allow_values
+from apps.flows.src.models.execution_limits import get_graph_max_iterations
 from apps.flows.src.models.flow_api import (
     FLOW_NODE_TYPE_CARDS,
     FLOW_RESOURCE_TYPE_CARDS,

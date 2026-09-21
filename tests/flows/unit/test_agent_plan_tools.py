@@ -8,7 +8,7 @@ import pytest
 import pytest_asyncio
 from pydantic import ValidationError
 
-from apps.flows.tools.agent_plan_tools import agent_plan_get, agent_plan_write
+from apps.flows.tools.flows.agent_plan_tools import agent_plan_get, agent_plan_write
 from core.agent_plan.models import AgentPlanStepStatus
 from core.state import ExecutionState
 from tests.flows._tool_authz_context import bind_flow_tool_authz_context

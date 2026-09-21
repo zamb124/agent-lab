@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from apps.flows.tools.wiki_tools import wiki_get_page
+from apps.flows.tools.wiki.wiki_tools import wiki_get_page
 from core.clients.service_client import ServiceClientError
 from core.clients.wiki_models import WikiPageIdArgs
 from core.state import ExecutionState
@@ -22,7 +22,7 @@ async def test_wiki_tool_raises_service_client_error() -> None:
     )
     args = WikiPageIdArgs(wiki_page_id="missing-page").model_dump(mode="json")
     with patch(
-        "apps.flows.tools.wiki_tools.WikiClient.get_page",
+        "apps.flows.tools.wiki.wiki_tools.WikiClient.get_page",
         new=AsyncMock(
             side_effect=ServiceClientError(
                 "HTTP 404",

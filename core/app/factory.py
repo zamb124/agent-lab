@@ -32,6 +32,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError as PydanticValidationError
+from starlette.types import ExceptionHandler
 
 from core.api.auth import router as core_auth_router
 from core.api.calendar import router as core_calendar_router
@@ -79,6 +80,7 @@ from core.middleware.dev_inter_service_proxy import (
 )
 from core.middleware.platform_error_envelope import PlatformHttpErrorEnvelopeMiddleware
 from core.middleware.proxy_headers import ProxyHeadersMiddleware
+from core.middleware.static_core_module_cors import StaticCoreModuleCorsMiddleware
 from core.push.apns_credentials import resolve_apns_credentials
 from core.push.apns_service import init_apns_push_service
 from core.push.fcm_credentials import resolve_fcm_credentials
@@ -133,6 +135,7 @@ def create_service_app(
     cors_origins: list[str] | None = None,
     cors_allow_origin_regex: str | None = None,
     extra_middlewares: Sequence[tuple[type, Mapping[str, JsonValue]]] | None = None,
+    extra_exception_handlers: Sequence[tuple[type[Exception], ExceptionHandler]] | None = None,
     static_mounts: list[tuple[str, str, str]] | None = None,
     title: str | None = None,
     description: str | None = None,
@@ -165,6 +168,8 @@ def create_service_app(
         cors_origins: Разрешенные origins для CORS (конкретные URL; с credentials нельзя звёздочку как единственный origin)
         cors_allow_origin_regex: Regex для Origin (Starlette CORSMiddleware), суммируется с allow_origins
         extra_middlewares: Дополнительные middleware [(MiddlewareClass, {kwargs}), ...]
+        extra_exception_handlers: Обработчики внешних wire-спек поверх платформенных [(ExcType, handler), ...]
+            (например OpenAI error envelope на LLM proxy flows); платформенный JSON-конверт они не заменяют.
         static_mounts: Статические директории [(path, directory, name), ...]
         api_version: Версия API ("v1" для flows и др., None для frontend)
         docs_url, redoc_url, openapi_url: Пути для документации
@@ -424,6 +429,9 @@ def create_service_app(
         )
 
     _ = _payload_validation_handler
+
+    for exception_type, exception_handler in extra_exception_handlers or ():
+        app.add_exception_handler(exception_type, exception_handler)
 
     @app.exception_handler(Exception)
     async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -719,6 +727,10 @@ def create_service_app(
             allow_headers=cors_allow_headers,
             allow_origin_regex=resolved_cors_allow_origin_regex,
         )
+
+    # Публичные embed-ассеты `/static/core/...` открыты любому Origin, включая preflight:
+    # внешний слой над общим CORSMiddleware, одинаково на каждом сервисе.
+    app.add_middleware(StaticCoreModuleCorsMiddleware)
 
     logger.info("service.created", service=service_name)
 

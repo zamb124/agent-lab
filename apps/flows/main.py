@@ -318,7 +318,9 @@ app = create_service_app(
                 "https_only": False,
             },
         ),
+        *([(EmbedDynamicCorsMiddleware, {})] if _flow_settings.dynamic_embed_cors_enabled else []),
     ],
+    extra_exception_handlers=agent_llm_proxy.LLM_PROXY_EXCEPTION_HANDLERS,
     cors_origins=_flows_cors_origins,
     cors_allow_origin_regex=_cors_regex,
     api_version="v1",
@@ -326,10 +328,6 @@ app = create_service_app(
     description="Сервис flows: конфигурации, runtime и A2A",
     version="2.0.0",
 )
-agent_llm_proxy.install_llm_proxy_exception_handlers(app)
-
-if _flow_settings.dynamic_embed_cors_enabled:
-    app.add_middleware(EmbedDynamicCorsMiddleware, container=get_container())
 
 # Core frontend — раньше общего /static: иначе Mount("/static") забирает /static/core/... и ищет
 # core/... внутри apps/flows/static (404 на tokens.css, import map и т.д.).

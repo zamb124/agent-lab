@@ -2,7 +2,7 @@
 
 import pytest
 
-from apps.browser.adapters.playwright_control_adapter import PlaywrightAdapter
+from apps.browser.services.playwright_control_adapter import PlaywrightAdapter
 from core.clients.browser.control_types import BrowserCapabilityError
 
 

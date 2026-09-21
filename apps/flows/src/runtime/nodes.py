@@ -72,16 +72,15 @@ from apps.flows.src.runtime.llm_resource_config import (
     resolve_llm_config_with_resource_key,
 )
 from apps.flows.src.runtime.runners import LlmNodeRunner
-from apps.flows.src.runtime_helpers.flow_ui_cards import card_block_id, show_reflection
+from apps.flows.src.services.flow_ui_cards import card_block_id, show_reflection
 from apps.flows.src.services.hitl_work_item_service import HANDOFF_PREVIEW_MAX_LEN
 from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming.emitter import Emitter
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.registry import ToolMaterializeInput
-from apps.flows.src.variables import VariableResolver, VarResolver
-from apps.flows.tools.agent_skill_tools import load_agent_skill, read_agent_skill_reference
-from apps.flows.tools.tables import TABLES_TOOLS
+from apps.flows.tools.flows.agent_skill_tools import load_agent_skill, read_agent_skill_reference
+from apps.flows.tools.tables.tables import TABLES_TOOLS
 from core.a2a import artifact_from_json_dict, mapping_from_struct, struct_from_mapping
 from core.ai.runtime import create_llm_client_from_call_config
 from core.capabilities import (
@@ -147,6 +146,7 @@ from core.tracing.attributes import (
 )
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
+from core.variables import VariableResolver, VarResolver
 from core.worktracker.models import WorkItem, WorkItemState
 
 logger = get_logger(__name__)

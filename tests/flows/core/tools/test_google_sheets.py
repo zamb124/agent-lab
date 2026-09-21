@@ -7,7 +7,7 @@ import pytest
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.tools.base import ToolArguments
 from apps.flows.src.tools.decorator import FunctionTool
-from apps.flows.tools.google_sheets import (
+from apps.flows.tools.google_sheets.google_sheets import (
     sheets_append_rows,
     sheets_create_spreadsheet,
     sheets_get_values,

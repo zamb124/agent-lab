@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
 
 from apps.guest_runtime.api.v1 import router as v1_router
 from apps.guest_runtime.config import GuestRuntimeSettings, get_guest_runtime_settings
@@ -85,14 +84,6 @@ app = create_service_app(
     on_startup=on_startup,
     on_shutdown=on_shutdown,
 )
-
-
-@app.exception_handler(ValueError)
-async def _guest_value(_request: Request, exc: ValueError) -> JSONResponse:
-    return JSONResponse(status_code=400, content={"detail": str(exc)})
-
-
-_ = _guest_value
 
 
 if __name__ == "__main__":

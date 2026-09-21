@@ -23,22 +23,22 @@ from apps.flows.src.durable_execution import (
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.observability.handoff_timing import maybe_record_handoff_wall_time
 from apps.flows.src.runtime.a2a_messages import build_tool_result_message
-from apps.flows.src.runtime_helpers.flow_ui_cards import card_block_id, show_activity
+from apps.flows.src.services.flow_ui_cards import card_block_id, show_activity
 from apps.flows.src.services.handoff_context_service import (
     HandoffContextService,
     handoff_context_resource_key_from_body,
 )
-from apps.flows.src.state.interrupt_manager import InterruptManager
-from apps.flows.src.streaming.emitter import Emitter
-from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
-from apps.flows.src.tools.json_schema_parameters import validate_tool_args_against_parameters_schema
-from apps.flows.src.tracing.handoff_tracing import (
+from apps.flows.src.services.handoff_tracing import (
     HANDBACK_OP_COMPLETED,
     continue_handoff_trace_context,
     fork_handoff_trace_context,
     handoff_span_attributes,
     trace_context_to_kiq_payload,
 )
+from apps.flows.src.state.interrupt_manager import InterruptManager
+from apps.flows.src.streaming.emitter import Emitter
+from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
+from apps.flows.src.tools.json_schema_parameters import validate_tool_args_against_parameters_schema
 from core.clients.redis_client import RedisClient
 from core.context import Context
 from core.logging import get_logger

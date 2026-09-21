@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from apps.flows.tools.web_browser import bound_browser_markdown
+from apps.flows.tools.web.web_browser import bound_browser_markdown
 
 
 def test_bounded_markdown_keeps_short_text_unchanged() -> None:

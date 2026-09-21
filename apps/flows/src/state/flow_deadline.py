@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import time
 
-from apps.flows.src.constants.execution_limits import get_flow_execution_wall_time_cap_seconds
+from apps.flows.src.models.execution_limits import get_flow_execution_wall_time_cap_seconds
 from core.state import ExecutionState
 
 

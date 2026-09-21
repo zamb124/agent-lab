@@ -21,7 +21,7 @@ from typing import Annotated, ClassVar, Literal, cast
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
-from apps.flows.src.constants.execution_limits import get_flow_execution_wall_time_cap_seconds
+from apps.flows.src.models.execution_limits import get_flow_execution_wall_time_cap_seconds
 from core.flow_ui.document import FlowUIDocument
 from core.flow_ui.templates import default_chat_document
 from core.models import StrictBaseModel

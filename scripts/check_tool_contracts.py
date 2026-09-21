@@ -151,7 +151,7 @@ def _forbidden_imports_in_source(source: str) -> list[str]:
 def _collect_tools_dir_violations() -> list[str]:
     errors: list[str] = []
 
-    for path in sorted(TOOLS_DIR.glob("*.py")):
+    for path in sorted(TOOLS_DIR.rglob("*.py")):
         if path.name == "__init__.py":
             continue
         source = path.read_text(encoding="utf-8")

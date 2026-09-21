@@ -23,7 +23,7 @@ from a2a.helpers.proto_helpers import get_message_text
 
 from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig
-from apps.flows.tools.google_sheets import (
+from apps.flows.tools.google_sheets.google_sheets import (
     sheets_add_sheet,
     sheets_append_rows,
     sheets_batch_clear_values,

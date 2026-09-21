@@ -2,9 +2,9 @@ import random
 
 import pytest
 
-from apps.browser.interaction.human_interaction import HumanInteraction, InteractionRng
-from apps.browser.interaction.interaction_profiles import get_interaction_profile
-from apps.browser.observe.observe_store import ControlObserveStore
+from apps.browser.services.human_interaction import HumanInteraction, InteractionRng
+from apps.browser.services.interaction_profiles import get_interaction_profile
+from apps.browser.services.observe_store import ControlObserveStore
 
 
 class _FakeMouse:

@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 
 from apps.browser.config import get_browser_settings, settings_to_runtime_view
-from apps.browser.orchestration.runtime_facade import BrowserRuntimeFacade
+from apps.browser.services.runtime_facade import BrowserRuntimeFacade
 from core.container import BaseContainer, ContainerRegistry
 from core.logging import get_logger
 

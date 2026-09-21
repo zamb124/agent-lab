@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from apps.flows.tools.google_docs import (
+from apps.flows.tools.google_docs.google_docs import (
     gdocs_append_text,
     gdocs_create_document,
     gdocs_delete_range,

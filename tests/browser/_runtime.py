@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from apps.browser.config import get_browser_settings
-from apps.browser.engine.types import BrowserRuntimeSettingsView
-from apps.browser.orchestration.runtime_facade import BrowserRuntimeFacade
+from apps.browser.models.types import BrowserRuntimeSettingsView
+from apps.browser.services.runtime_facade import BrowserRuntimeFacade
 from core.clients.redis_client import RedisClient
 from core.context import get_context
 from core.db.storage import Storage

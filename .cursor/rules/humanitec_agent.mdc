@@ -113,7 +113,7 @@ Desktop E2E / LLM setup: device JWT читает `lara` только в namespac
 
 - `apps/flows/registry.yaml` — `agent_toolkits`
 - `apps/flows/bundles/lara/` — branch `linnex_agent`, `prompts/linnex_agent.md`
-- `apps/flows/tools/device_tools.py` — `device_tools_list` / `device_tools_call`
+- `apps/flows/tools/device/device_tools.py` — `device_tools_list` / `device_tools_call`
 - `apps/agent/device_binding.py` — resolve/bind online device → variables
 - `apps/flows/src/agent/platform_mcp.py`, `device_auth.py`; `apps/frontend/api/agent_tunnel.py`, `apps/agent/tunnel_bus.py`, `tunnel_registry.py`
 - `apps/agent/desktop/branding/humanitecLocalDeviceMcp.ts`

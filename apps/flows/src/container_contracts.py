@@ -58,7 +58,6 @@ if TYPE_CHECKING:
     from apps.flows.src.services.schedule_service import ScheduleService
     from apps.flows.src.services.tool_approval import ToolApprovalStore
     from apps.flows.src.tools.base import BaseTool
-    from apps.flows.src.variables import VariablesService
     from core.ai.llm_models_service import LLMModelsService
     from core.billing import BillingService
     from core.clients.a2a_client import A2AClient
@@ -84,6 +83,7 @@ if TYPE_CHECKING:
     from core.rag.repository import RAGRepository
     from core.state import ExecutionState
     from core.text_transforms import TextTransformService
+    from core.variables.service import VariablesService
 
 
 class _FlowRuntimeContainerSource(Protocol):

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import TypeAdapter
 
-from apps.flows.src.runtime_helpers.flow_ui_cards import (
+from apps.flows.src.services.flow_ui_cards import (
     card_block_id,
     show_action_preview,
     show_action_result,

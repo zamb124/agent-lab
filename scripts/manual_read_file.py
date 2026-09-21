@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from apps.flows.tools.files import read_file
+from apps.flows.tools.files.files import read_file
 from core.billing import set_billing_service
 from core.context import set_context
 from core.files.file_ref import FileRef

@@ -20,7 +20,7 @@ from apps.crm.db.models import CRMEntity
 from apps.flows.src.models.hitl_conversation import ConversationTurnRole
 from apps.flows.src.models.hitl_schemas import HitlHandoffCommand
 from apps.flows.src.runtime.a2a_messages import build_user_message
-from apps.flows.tools.work_item_tools import (
+from apps.flows.tools.worktracker.work_item_tools import (
     work_item_complete,
     work_item_create,
     work_item_list,

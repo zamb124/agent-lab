@@ -12,7 +12,7 @@ from apps.flows.src.services.platform_assistant_skills import (
     LARA_PLATFORM_SKILL_ROOTS,
     seed_platform_assistant_skills,
 )
-from apps.flows.tools.agent_skill_tools import load_agent_skill
+from apps.flows.tools.flows.agent_skill_tools import load_agent_skill
 from core.types import JsonObject, require_json_array, require_json_object
 from tests.flows.agent_skills_harness import (
     assert_lara_attach,

@@ -13,7 +13,7 @@ from pydantic import Field
 from apps.flows.config import FLOWS_PUBLIC_API_PREFIX, get_settings
 from apps.flows.src.models.mcp import MCPCallResult, MCPServerConfig
 from apps.flows.src.runtime.tool_call_context import get_active_tool_call_context
-from apps.flows.src.runtime_helpers.flow_ui_cards import card_block_id, show_browser_preview
+from apps.flows.src.services.flow_ui_cards import card_block_id, show_browser_preview
 from core.clients.redis_client import RedisClient
 from core.logging import get_logger
 from core.models.base import StrictBaseModel

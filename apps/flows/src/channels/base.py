@@ -70,9 +70,17 @@ from apps.flows.src.observability.flow_timing import (
     record_flow_task_enqueued,
 )
 from apps.flows.src.observability.handoff_timing import record_handoff_initiated
-from apps.flows.src.runtime_helpers.flow_ui_cards import card_block_id, show_activity
 from apps.flows.src.services.execution_identity import resolve_execution_context
 from apps.flows.src.services.flow_speech_resolve import attach_flow_speech_layers_to_context
+from apps.flows.src.services.flow_ui_cards import card_block_id, show_activity
+from apps.flows.src.services.handoff_tracing import (
+    HANDOFF_OP_INITIATED,
+    HANDOFF_OP_ROUTE_REPLY,
+    continue_handoff_trace_context,
+    handoff_span_attributes,
+    resolve_active_trace_context,
+    trace_context_to_kiq_payload,
+)
 from apps.flows.src.state import collect_flow_node_files
 from apps.flows.src.state.cancellation import (
     CancellationToken,
@@ -83,17 +91,8 @@ from apps.flows.src.state.flow_deadline import apply_flow_wall_clock_deadline
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming import Emitter
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
-from apps.flows.src.tracing.handoff_tracing import (
-    HANDOFF_OP_INITIATED,
-    HANDOFF_OP_ROUTE_REPLY,
-    continue_handoff_trace_context,
-    handoff_span_attributes,
-    resolve_active_trace_context,
-    trace_context_to_kiq_payload,
-)
 from apps.flows.src.triggers.output_actions import OutputActionExecutor
 from apps.flows.src.triggers.trigger_type_contract import effective_output_actions_for_trigger
-from apps.flows.src.utils import extract_json_from_response
 from apps.idle_worker.tasks.task_names import TASK_SEND_TASK_UPDATE
 from core.a2a import (
     A2AApplicationError,
@@ -128,7 +127,13 @@ from core.tracing import get_tracer
 from core.tracing.context import TraceContext
 from core.tracing.operation_span import traced_operation
 from core.tracing.provider import is_tracing_enabled
-from core.types import JsonObject, JsonValue, require_json_array, require_json_object
+from core.types import (
+    JsonObject,
+    JsonValue,
+    parse_json_response_or_none,
+    require_json_array,
+    require_json_object,
+)
 from core.utils.background import run_with_log_context
 from core.worktracker.models import TERMINAL_WORK_ITEM_STATES
 
@@ -1172,7 +1177,7 @@ class BaseChannel(ABC):
                     params.task_id, params.context_id, "completed", handback_text
                 )
             else:
-                json_data = extract_json_from_response(final_response)
+                json_data = parse_json_response_or_none(final_response)
                 has_artifact = json_data is not None
                 if has_artifact:
                     await emitter.emit_artifact(json.dumps(json_data, ensure_ascii=False))

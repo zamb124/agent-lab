@@ -18,11 +18,12 @@ from typing import ClassVar, Literal
 from urllib.parse import urlparse
 
 from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent
-from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.responses import Response as StarletteResponse
+from starlette.types import ExceptionHandler
 
 from apps.flows.src.agent.llm_auth import LlmProxyAuthResult, require_llm_proxy_auth
 from apps.flows.src.agent.llm_lara import (
@@ -198,9 +199,11 @@ async def _llm_proxy_http_exception_handler(
     )
 
 
-def install_llm_proxy_exception_handlers(app: FastAPI) -> None:
-    """OpenAI/OR error envelope ``{"error":{message,type,code}}`` для LLM proxy surface."""
-    app.add_exception_handler(HTTPException, _llm_proxy_http_exception_handler)
+# OpenAI/OR error envelope ``{"error":{message,type,code}}`` для LLM proxy surface —
+# внешняя wire-спека, подключается через `create_service_app(extra_exception_handlers=...)`.
+LLM_PROXY_EXCEPTION_HANDLERS: tuple[tuple[type[Exception], ExceptionHandler], ...] = (
+    (HTTPException, _llm_proxy_http_exception_handler),
+)
 
 
 def _agent_llm_option_value(option: str | JsonObject) -> str | None:

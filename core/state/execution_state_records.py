@@ -19,7 +19,7 @@ replay в durable runtime), а форма данных закреплена ко
 * ``breakpoint_state: BreakpointState | None`` — состояние активного
   breakpoint (если есть).
 * ``scheduled_tasks: list[ScheduledTaskRef]`` — projection локального
-  scheduler ledger в state (см. ``apps/flows/tools/scheduling.py``).
+  scheduler ledger в state (см. ``apps/flows/tools/scheduling/scheduling.py``).
 
 Принцип Zero-Guess: каждое поле — Pydantic с явным описанием.
 """
@@ -106,7 +106,7 @@ class BreakpointState(BaseModel):
 class ScheduledTaskRef(BaseModel):
     """Локальная projection scheduled task в state.
 
-    Минимальный контракт — поля, на которые опираются ``apps/flows/tools/scheduling.py``
+    Минимальный контракт — поля, на которые опираются ``apps/flows/tools/scheduling/scheduling.py``
     и читатели в ``apps/flows/src/services/schedule_service.py``. ``content`` —
     строка для напоминания (``content_type='reminder'``) или имя tool
     (``content_type='tool_call'``); ``tool_args`` обязательны только при

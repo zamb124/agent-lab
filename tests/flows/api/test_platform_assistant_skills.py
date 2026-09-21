@@ -13,8 +13,8 @@ from apps.flows.src.services.platform_assistant_skills import (
     PLATFORM_ASSISTANT_SEED_SKILL_IDS,
     seed_platform_assistant_skills,
 )
-from apps.flows.tools.agent_skill_tools import load_agent_skill, read_agent_skill_reference
 from apps.flows.tools.builtin_specs import builtin_tool_ids
+from apps.flows.tools.flows.agent_skill_tools import load_agent_skill, read_agent_skill_reference
 from tests.flows.agent_skills_harness import (
     company_scope,
     make_skill_state,

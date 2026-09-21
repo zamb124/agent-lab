@@ -80,7 +80,6 @@ from core.identity.flow_preview_handoff import (
 from core.identity.system_bootstrap import ensure_system_admin_membership
 from core.logging import get_logger
 from core.middleware.auth.company_resolver import build_service_base_url
-from core.middleware.static_core_module_cors import StaticCoreModuleCorsMiddleware
 from core.platform_brand.resolver import resolve_brand, resolve_public_base_url
 from core.short_links.kinds import SHORT_LINK_KIND_FLOW_PREVIEW_EMBED
 from core.short_links.payloads import FlowPreviewEmbedPayload
@@ -715,8 +714,6 @@ async def serve_spa(container: ContainerDep, full_path: str = ""):
 
     raise HTTPException(status_code=404, detail="Frontend UI not built yet")
 
-
-app.add_middleware(StaticCoreModuleCorsMiddleware)
 
 
 if __name__ == "__main__":

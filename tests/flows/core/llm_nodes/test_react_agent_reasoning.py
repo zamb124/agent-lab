@@ -16,8 +16,8 @@ from apps.flows.src.models.enums import NodeType, ReactToolRole
 from apps.flows.src.models.node_config import NodeLLMConfig
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from apps.flows.src.streaming import InMemoryEmitter
-from apps.flows.tools.agent_session_tools import reason
-from apps.flows.tools.math_tools import calculator
+from apps.flows.tools.misc.agent_session_tools import reason
+from apps.flows.tools.misc.math_tools import calculator
 from core.state import ExecutionState
 from core.types import JsonObject
 from tests.flows.durable_runtime_harness import ensure_workflow_started

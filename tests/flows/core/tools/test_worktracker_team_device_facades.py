@@ -9,8 +9,8 @@ import pytest
 from apps.flows.src.clients.device_client import DeviceClient
 from apps.flows.src.clients.team_client import TeamClient
 from apps.flows.src.clients.worktracker_client import WorktrackerClient
-from apps.flows.tools.scheduling import list_scheduled_tasks, schedule_cron_task
-from apps.flows.tools.wiki_tools import (
+from apps.flows.tools.scheduling.scheduling import list_scheduled_tasks, schedule_cron_task
+from apps.flows.tools.wiki.wiki_tools import (
     wiki_create_page,
     wiki_delete_page,
     wiki_list_tree,

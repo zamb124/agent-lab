@@ -180,7 +180,7 @@ Merge:
 
     raise FlowInterrupt(question="Как вас зовут?")
 
-Или использовать builtin tool `ask_user` из `apps/flows/tools/agent_session_tools.py`.
+Или использовать builtin tool `ask_user` из `apps/flows/tools/misc/agent_session_tools.py`.
 
 ### Ключевые компоненты
 

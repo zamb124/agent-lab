@@ -10,7 +10,7 @@ Pydantic-схемы аргументов MCP-tools Browser Runtime.
 уровне Python-импорта (architecture.mdc: peer-сервисы общаются только
 через HTTP/WS контракты, не через прямой import).
 
-InteractionProfileName живёт в apps/browser/interaction/interaction_profiles.py
+InteractionProfileName живёт в apps/browser/services/interaction_profiles.py
 как часть рантайма браузера; здесь повторяется как Literal без import-зависимости,
 чтобы core/ не тянуло apps/.
 """

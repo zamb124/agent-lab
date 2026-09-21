@@ -89,7 +89,7 @@ def main() -> int:
         "core/docs",
         "apps/flows/tools",
         "core/eval",
-        "apps/browser/engine/playwright_interactor.py",
+        "apps/browser/services/playwright_interactor.py",
         "apps/agent/desktop/vendor",
     }
 

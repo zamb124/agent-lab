@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 
 from apps.capability_gateway.container import get_capability_gateway_container
-from apps.flows.tools.files import read_file
+from apps.flows.tools.files.files import read_file
 from core.files.reader import FileReader
 from core.files.reader.models import ReadFileArgs
 from core.types import JsonObject, require_json_object

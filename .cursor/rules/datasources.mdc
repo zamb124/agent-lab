@@ -44,7 +44,7 @@ alwaysApply: false
 | `apps/flows/realtime/datasource_operations.py` | один `op_*` на verb для REST и Centrifugo RPC |
 | `core/clients/datasource_client.py` | `ServiceClient` → service `"flows"` |
 | `apps/flows/src/runtime/nodes.py` `DatasourceNode` | Durable activity; пустой `datasource_id` → `ValueError` |
-| `apps/flows/tools/datasource_tools.py` | `db_schema` / `db_query` / `db_execute`, tag `datasources` |
+| `apps/flows/tools/datasources/datasource_tools.py` | `db_schema` / `db_query` / `db_execute`, tag `datasources` |
 | `apps/capability_gateway/services/db_capabilities.py` | `db.schema` / `db.query` / `db.execute`, `sdk_namespace="db"` |
 
 ## Authorization

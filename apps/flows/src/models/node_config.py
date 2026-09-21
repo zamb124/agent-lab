@@ -14,7 +14,7 @@ from typing import ClassVar, Literal, cast
 
 from pydantic import AliasChoices, ConfigDict, Field, RootModel, field_validator, model_validator
 
-from apps.flows.src.constants.execution_limits import (
+from apps.flows.src.models.execution_limits import (
     get_graph_max_iterations,
     get_node_execution_wall_time_cap_seconds,
 )

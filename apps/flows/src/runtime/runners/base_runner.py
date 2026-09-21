@@ -20,7 +20,7 @@ from apps.flows.src.runtime.a2a_messages import build_user_message
 from apps.flows.src.runtime.message_author import build_flow_message_author
 from apps.flows.src.streaming.base import BaseEmitter, StreamEvent
 from apps.flows.src.tools.base import BaseTool
-from apps.flows.tools.finish_tool import finish
+from apps.flows.tools.misc.finish_tool import finish
 from core.a2a import struct_from_mapping
 from core.clients.llm import LLMClient, LLMToolCall, MockLLM
 from core.logging import get_logger

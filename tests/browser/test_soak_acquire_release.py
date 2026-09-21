@@ -7,7 +7,7 @@ import uuid
 
 import pytest
 
-from apps.browser.engine.types import (
+from apps.browser.models.types import (
     BrowserAcquireRequest,
     BrowserFetchRequest,
     BrowserRuntimeSettingsView,

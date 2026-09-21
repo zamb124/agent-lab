@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from apps.flows.tools.device_tools import _require_device_id, device_tools_list
+from apps.flows.tools.device.device_tools import _require_device_id, device_tools_list
 from core.state import ExecutionState
 
 

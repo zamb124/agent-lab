@@ -19,7 +19,6 @@ import asyncio
 import time
 from collections.abc import Mapping, Sequence
 
-from apps.flows.src.constants.execution_limits import get_graph_max_iterations
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.durable_execution import (
     BreakpointHitPayload,
@@ -41,6 +40,7 @@ from apps.flows.src.durable_execution import (
     hash_state_json,
 )
 from apps.flows.src.mapping import MappingResolver
+from apps.flows.src.models.execution_limits import get_graph_max_iterations
 from apps.flows.src.models.flow_config import (
     CodeEdgeCondition,
     Edge,

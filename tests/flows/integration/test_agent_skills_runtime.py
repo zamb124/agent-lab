@@ -20,7 +20,7 @@ from apps.flows.src.runtime.agent_skill_runtime import (
 from apps.flows.src.runtime.nodes import LlmNode
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from apps.flows.src.streaming import InMemoryEmitter
-from apps.flows.tools.agent_skill_tools import load_agent_skill, read_agent_skill_reference
+from apps.flows.tools.flows.agent_skill_tools import load_agent_skill, read_agent_skill_reference
 from core.files.create_spec import FileCreateSpec
 from core.files.file_ref import FileRef
 from core.types import JsonObject

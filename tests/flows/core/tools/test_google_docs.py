@@ -11,7 +11,7 @@ import pytest
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.tools.base import ToolArguments
 from apps.flows.src.tools.decorator import FunctionTool
-from apps.flows.tools.google_docs import (
+from apps.flows.tools.google_docs.google_docs import (
     gdocs_append_text,
     gdocs_create_document,
     gdocs_delete_range,

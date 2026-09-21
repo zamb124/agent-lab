@@ -78,7 +78,6 @@ from apps.flows.src.state.cancellation import (
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming import BaseEmitter, Emitter
 from apps.flows.src.tools.base import BaseTool, OpenAIToolSchema, ToolArguments, sanitize_tool_name
-from apps.flows.src.variables import VariableResolver
 from core.a2a import (
     coerce_usage_token_count,
     get_part_text,
@@ -150,6 +149,7 @@ from core.tracing.attributes import (
 from core.tracing.context import get_current_trace_context
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
+from core.variables import VariableResolver
 
 from .base_runner import BaseLlmNodeRunner, LlmNodeRunnerHost
 

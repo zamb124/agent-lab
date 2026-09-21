@@ -13,14 +13,14 @@ from playwright.async_api import Route
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from apps.browser.dependencies import ContainerDep
-from apps.browser.engine.types import (
+from apps.browser.models.types import (
     BrowserAcquireRequest,
     BrowserFetchRequest,
     BrowserPage,
     ContextSignature,
 )
-from apps.browser.interaction.human_interaction import HumanInteraction, InteractionRng
-from apps.browser.interaction.interaction_profiles import get_interaction_profile
+from apps.browser.services.human_interaction import HumanInteraction, InteractionRng
+from apps.browser.services.interaction_profiles import get_interaction_profile
 from core.authz.models import AuthzObject
 from core.clients.browser.control_types import BrowserCapabilityError
 from core.clients.browser.crawl_fetch_types import (
