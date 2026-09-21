@@ -14,7 +14,9 @@
  * Путь — `source_entity_id` / `target_entity_id`.
  */
 
-import { createAsyncOp } from '@platform/lib/events/index.js';
+import { createAsyncOp, rerunLastRequest } from '@platform/lib/events/index.js';
+
+const ENTITY_MERGE_SUCCEEDED = 'crm/entity_merge/succeeded';
 
 export const personEntitySelfOp = createAsyncOp({
     name: 'crm/person_entity_self',
@@ -79,6 +81,11 @@ export const exclusiveRelatedOp = createAsyncOp({
     restMirror: { method: 'GET', path: '/crm/api/v1/entities/:entity_id/exclusive-related' },
 });
 
+/**
+ * Границы таймлайна — корень цепочки загрузки графа (bounds → overview/influence).
+ * Merge сущностей меняет топологию рёбер, граф не patchable: фабрика перезапускает
+ * цепочку с последнего запроса, если граф уже открывали.
+ */
 export const timelineBoundsOp = createAsyncOp({
     name: 'crm/timeline_bounds',
     silent: true,
@@ -86,4 +93,10 @@ export const timelineBoundsOp = createAsyncOp({
     wsTimeoutMs: 8_000,
     commandType: 'crm/entities/timeline_bounds_requested',
     restMirror: { method: 'GET', path: '/crm/api/v1/entities/timeline/bounds' },
+    extraEffect: async (event, ctx) => {
+        if (event.type === ENTITY_MERGE_SUCCEEDED) {
+            rerunLastRequest(ctx, timelineBoundsOp);
+        }
+        return false;
+    },
 });

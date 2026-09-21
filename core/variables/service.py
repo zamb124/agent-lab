@@ -42,7 +42,7 @@ class VariablesService:
         context = get_context()
         if context is None or context.active_company is None:
             raise RuntimeError(
-                "VariablesService: требуется контекст запроса с активной компанией"
+                'VariablesService: request context with an active company is required'
             )
         return ResolutionContext(
             company_id=context.active_company.company_id,

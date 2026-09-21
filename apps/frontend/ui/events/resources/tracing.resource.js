@@ -1,22 +1,15 @@
 /**
- * Ресурсы tracing — admin span list, фасеты и trace tree.
- *
- * API:
- *   GET /frontend/api/platform-tracing/spans          (cursor pagination)
- *   GET /frontend/api/platform-tracing/traces/{id}    (tree)
- *   GET /frontend/api/platform-tracing/facets/companies|users|services|namespaces|operations|event-types
- *
- * Доступно только активной компании system. 403 → forbidden, 503 → unavailable.
+ * Ресурсы tracing — admin span list, фасеты и trace tree (команды `frontend/platform_tracing/*`,
+ * REST-зеркало `apps/frontend/api/platform_tracing.py`). Доступно только активной компании system:
+ * 403 → forbidden, 503 → unavailable.
  *
  * Состав:
- *   - tracingSpansList: createCursorList по spans, statusMap 403→forbidden,
- *     503→unavailable. Свой buildQuery маппит filters в *_query поля.
- *   - tracingFacets: 6 фасет с дебаунсом и минимальной длиной запроса 2.
- *   - tracingTraceLoadOp: GET /traces/{id}, payload { trace_id }.
+ *   - tracingSpansList: createCursorList по `spans_requested`; buildQuery маппит filters в *_query поля.
+ *   - tracingFacets: 6 фасет с дебаунсом и минимальной длиной запроса 2 (typeahead, HTTP).
+ *   - tracingTraceLoadOp: `trace_tree_requested`, payload { trace_id }.
  */
 
 import { createCursorList, createFacets, createAsyncOp } from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 
 const BASE = '/frontend/api/platform-tracing';
@@ -37,6 +30,9 @@ function _buildSpansQuery(filters) {
 export const tracingSpansList = createCursorList({
     name: 'frontend/tracing_spans',
     baseUrl: '/frontend/api/platform-tracing/spans',
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'frontend/platform_tracing/spans_requested',
     pageSize: 50,
     buildQuery: _buildSpansQuery,
     statusMap: { 403: 'forbidden', 503: 'unavailable' },
@@ -62,15 +58,10 @@ export const tracingFacets = createFacets({
 export const tracingTraceLoadOp = createAsyncOp({
     name: 'frontend/tracing_trace_load',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'frontend/platform_tracing/trace_tree_requested',
     restMirror: { method: 'GET', path: '/frontend/api/platform-tracing/traces/:trace_id' },
-    request: async ({ payload }) => {
-        const id = payload && payload.trace_id;
-        if (!id) throw new Error('tracing_trace_load: trace_id required');
-        return await httpRequest({
-            method: 'GET',
-            url: `${BASE}/traces/${encodeURIComponent(id)}`,
-        });
-    },
     onFailure: (ctx) => {
         ctx.dispatch(
             CoreEvents.UI_TOAST_SHOW,

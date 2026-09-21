@@ -54,5 +54,5 @@ async def op_flows_company_init(
     )
     task_id = task.task_id
     if not task_id:
-        raise RuntimeError("enqueue company init: пустой task_id")
+        raise RuntimeError("enqueue company init: empty task_id")
     return CompanyInitScheduledResponse(task_id=task_id, status="scheduled")

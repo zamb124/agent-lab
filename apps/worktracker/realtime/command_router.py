@@ -129,7 +129,4 @@ WORKTRACKER_OPERATIONS: dict[str, RegisteredOperation[WorktrackerContainer]] = {
 
 def register_worktracker_ws_commands() -> None:
     register_service_operations(WORKTRACKER_OPERATIONS, get_worktracker_container)
-    logger.info(
-        "Worktracker WS command-handlers зарегистрированы (%d операций)",
-        len(WORKTRACKER_OPERATIONS),
-    )
+    logger.info("worktracker.ws.command.handlers", WORKTRACKER_OPERATIONS_count=len(WORKTRACKER_OPERATIONS))

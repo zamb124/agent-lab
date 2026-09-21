@@ -8,7 +8,6 @@ from fastapi import APIRouter, Query
 
 from apps.sync.dependencies import ContainerDep
 from apps.sync.models.channels import ChannelRead
-from apps.sync.models.common import PaginationResponse
 from apps.sync.models.messages import MessageCreate, MessageEdit, MessageRead
 from apps.sync.realtime.operations import (
     MessagesDeletePayload,
@@ -38,20 +37,20 @@ from apps.sync.realtime.operations import (
     op_messages_transcribe_video,
 )
 from core.context import require_context
-from core.pagination import OffsetPage
+from core.pagination import CursorPage, OffsetPage
 from core.websocket import WsCommandError
 
 router = APIRouter()
 
 
-@router.get("/{channel_id}/messages", response_model=PaginationResponse[MessageRead])
+@router.get("/{channel_id}/messages", response_model=CursorPage[MessageRead])
 async def list_messages(
     channel_id: str,
     container: ContainerDep,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     before: str | None = None,
     after: str | None = None,
-) -> PaginationResponse[MessageRead]:
+) -> CursorPage[MessageRead]:
     user = require_context().user
     return await op_messages_list(
         MessagesListPayload(
@@ -137,7 +136,7 @@ async def forward_message(
     body: MessagesForwardPayload,
 ) -> MessageRead:
     if body.from_channel_id != channel_id or body.message_id != message_id:
-        raise WsCommandError("ws_invalid_payload", "channel_id or message_id mismatch")
+        raise WsCommandError("ws_invalid_payload", "channel_id or message_id mismatch", error_code='ws_invalid_payload')
     user = require_context().user
     return await op_messages_forward(body, user=user, container=container)
 
@@ -150,7 +149,7 @@ async def react_message(
     body: MessagesReactPayload,
 ) -> MessageRead:
     if body.channel_id != channel_id or body.message_id != message_id:
-        raise WsCommandError("ws_invalid_payload", "channel_id or message_id mismatch")
+        raise WsCommandError("ws_invalid_payload", "channel_id or message_id mismatch", error_code='ws_invalid_payload')
     user = require_context().user
     return await op_messages_react(body, user=user, container=container)
 
@@ -179,7 +178,7 @@ async def pin_message(
     container: ContainerDep, channel_id: str, body: MessagesPinPayload
 ) -> ChannelRead:
     if body.channel_id != channel_id:
-        raise WsCommandError("ws_invalid_payload", "channel_id mismatch")
+        raise WsCommandError("ws_invalid_payload", "channel_id mismatch", error_code='ws_invalid_payload')
     user = require_context().user
     return await op_messages_pin(body, user=user, container=container)
 

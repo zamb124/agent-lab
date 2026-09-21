@@ -31,7 +31,7 @@ async def auth_callback(
 
     auth_state = await auth_service.get_auth_state(state)
     if not auth_state:
-        raise HTTPException(status_code=400, detail="Недействительный state")
+        raise HTTPException(status_code=400, detail="Invalid state")
 
     if provider is None:
         provider_enum = auth_state.provider
@@ -39,7 +39,7 @@ async def auth_callback(
         try:
             provider_enum = AuthProvider(provider.lower())
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Неизвестный провайдер: {provider}")
+            raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
 
     original_host = auth_state.original_host
     return_path = auth_state.return_path

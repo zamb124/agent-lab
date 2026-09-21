@@ -64,13 +64,13 @@ class TextOpenPayload(BaseModel):
     @model_validator(mode="after")
     def presentation_matches_default_view_mode(self) -> Self:
         if self.presentation == "code" and self.default_view_mode != "source":
-            raise ValueError("default_view_mode для presentation=code должен быть source")
+            raise ValueError('default_view_mode for presentation=code must be source')
         if self.presentation in {"html", "markdown"} and self.default_view_mode not in {
             "preview",
             "source",
         }:
             raise ValueError(
-                f"default_view_mode недопустим для presentation={self.presentation}"
+                f"default_view_mode is not allowed for presentation={self.presentation}"
             )
         return self
 
@@ -152,10 +152,10 @@ class DocumentOpenConfigResponse(BaseModel):
         }
         active = payload_fields[self.handler]
         if active is None:
-            raise ValueError(f"payload для handler={self.handler} обязателен")
+            raise ValueError(f"payload for handler={self.handler} is required")
         for handler_id, payload in payload_fields.items():
             if handler_id != self.handler and payload is not None:
-                raise ValueError(f"payload.{handler_id} недопустим при handler={self.handler}")
+                raise ValueError(f"payload.{handler_id} is not allowed for handler={self.handler}")
         return self
 
 

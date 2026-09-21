@@ -206,7 +206,7 @@ class ServiceClient:
 
         except httpx.HTTPStatusError as e:
             raise ServiceClientError(
-                f"HTTP {e.response.status_code} при запросе к {service}: {e.response.text}",
+                f"HTTP {e.response.status_code} while requesting {service}: {e.response.text}",
                 status_code=e.response.status_code,
                 response_text=e.response.text,
             ) from e
@@ -221,7 +221,7 @@ class ServiceClient:
                         f"{detail} caused by {type(cause).__name__}"
                         + (f": {cause_detail}" if cause_detail else "")
                     )
-            raise ServiceClientError(f"Ошибка запроса к {service}: {detail}") from e
+            raise ServiceClientError(f"Request error for {service}: {detail}") from e
 
     async def get(
         self,

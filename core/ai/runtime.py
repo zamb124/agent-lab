@@ -22,6 +22,7 @@ from core.ai.providers import (
 from core.ai.requirements import AIRequestRequirements, AISelection
 from core.ai.rerank_client import AIRerankerHTTPClient
 from core.ai.resolver import resolve_ai_model
+from core.clients.llm.billing import LLMClientBilling, billing_from_resolved_model
 from core.clients.llm.client import LLMClient
 from core.clients.llm.messages import MessageInput, StreamEvent
 from core.clients.llm.mock import MockLLM, get_or_create_global_mock_llm
@@ -82,6 +83,15 @@ def _string_headers(headers: JsonObject) -> dict[str, str] | None:
     return {key: str(value) for key, value in headers.items()} or None
 
 
+def _with_llm_billing(
+    client: LLMClient | MockLLM,
+    billing: LLMClientBilling,
+) -> LLMClient | MockLLM:
+    if isinstance(client, LLMClient):
+        client.billing = billing
+    return client
+
+
 def create_llm_client_from_ai_model(
     resolved: ResolvedAIModel,
     *,
@@ -110,25 +120,28 @@ def create_llm_client_from_ai_model(
         raise ValueError(f"capability {resolved.capability.value}: resolved LLM model is empty")
     if resolved.provider is None or not resolved.provider.strip():
         raise ValueError(f"capability {resolved.capability.value}: resolved LLM provider is empty")
-    return create_llm_transport_client(
-        model_name=resolved.model,
-        provider=resolved.provider,
-        api_key=resolved.api_key,
-        base_url=resolved.base_url,
-        folder_id=resolved.folder_id,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        state=state,
-        allow_platform_paid_fallback=allow_platform_paid_fallback,
-        top_p=top_p,
-        top_k=top_k,
-        frequency_penalty=frequency_penalty,
-        presence_penalty=presence_penalty,
-        seed=seed,
-        reasoning_effort=reasoning_effort,
-        extra_request_headers=_string_headers(resolved.headers),
-        extra_request_body=resolved.body or None,
-        fallback_models=list(resolved.fallback_models or ()) or None,
+    return _with_llm_billing(
+        create_llm_transport_client(
+            model_name=resolved.model,
+            provider=resolved.provider,
+            api_key=resolved.api_key,
+            base_url=resolved.base_url,
+            folder_id=resolved.folder_id,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            state=state,
+            allow_platform_paid_fallback=allow_platform_paid_fallback,
+            top_p=top_p,
+            top_k=top_k,
+            frequency_penalty=frequency_penalty,
+            presence_penalty=presence_penalty,
+            seed=seed,
+            reasoning_effort=reasoning_effort,
+            extra_request_headers=_string_headers(resolved.headers),
+            extra_request_body=resolved.body or None,
+            fallback_models=list(resolved.fallback_models or ()) or None,
+        ),
+        billing_from_resolved_model(resolved),
     )
 
 
@@ -161,7 +174,7 @@ def create_llm_client_for_capability(
         include_platform_default=include_platform_default,
     )
     if resolved is None:
-        raise ValueError(f"AI capability {capability.value}: LLM route не настроен")
+        raise ValueError(f"AI capability {capability.value}: LLM route is not configured")
     merged_fallbacks: Sequence[LLMCallConfig | JsonObject] | None = (
         fallback_models if fallback_models is not None else resolved.fallback_models
     )
@@ -188,32 +201,44 @@ def create_llm_client_from_call_config(
     state: "ExecutionState | None" = None,
     fallback_models: Sequence[LLMCallConfig | JsonObject] | None = None,
     allow_platform_paid_fallback: bool = True,
+    cost_origin: str = "platform",
+    billing_resource_name: str | None = None,
 ) -> LLMClient | MockLLM:
     """Create an LLM client from an explicit per-call config."""
+    billing = LLMClientBilling(
+        cost_origin=cost_origin,
+        billing_resource_name=billing_resource_name,
+    )
     if config is None:
-        return create_llm_transport_client(
+        return _with_llm_billing(
+            create_llm_transport_client(
+                state=state,
+                allow_platform_paid_fallback=allow_platform_paid_fallback,
+            ),
+            billing,
+        )
+    return _with_llm_billing(
+        create_llm_transport_client(
+            model_name=config.model,
+            provider=config.provider,
+            api_key=config.api_key,
+            base_url=config.base_url,
+            folder_id=config.folder_id,
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
             state=state,
             allow_platform_paid_fallback=allow_platform_paid_fallback,
-        )
-    return create_llm_transport_client(
-        model_name=config.model,
-        provider=config.provider,
-        api_key=config.api_key,
-        base_url=config.base_url,
-        folder_id=config.folder_id,
-        temperature=config.temperature,
-        max_tokens=config.max_tokens,
-        state=state,
-        allow_platform_paid_fallback=allow_platform_paid_fallback,
-        top_p=config.top_p,
-        top_k=config.top_k,
-        frequency_penalty=config.frequency_penalty,
-        presence_penalty=config.presence_penalty,
-        seed=config.seed,
-        reasoning_effort=config.reasoning_effort,
-        extra_request_headers=config.extra_request_headers,
-        extra_request_body=config.extra_request_body,
-        fallback_models=list(fallback_models or ()) or None,
+            top_p=config.top_p,
+            top_k=config.top_k,
+            frequency_penalty=config.frequency_penalty,
+            presence_penalty=config.presence_penalty,
+            seed=config.seed,
+            reasoning_effort=config.reasoning_effort,
+            extra_request_headers=config.extra_request_headers,
+            extra_request_body=config.extra_request_body,
+            fallback_models=list(fallback_models or ()) or None,
+        ),
+        billing,
     )
 
 
@@ -228,14 +253,14 @@ def _testing_vision_ai_model() -> ResolvedAIModel:
 def _explicit_vision_ai_model(model_name: str) -> ResolvedAIModel:
     requested_model = model_name.strip()
     if not requested_model:
-        raise ValueError("vision_model задан пустой строкой")
+        raise ValueError('vision_model is set to an empty string')
     split_provider, split_model = split_provider_prefixed_model(None, requested_model)
     resolved_model = str(split_model or requested_model).strip()
     if not resolved_model:
-        raise ValueError("vision_model не удалось разобрать в непустую модель")
+        raise ValueError('vision_model could not be parsed into a non-empty model')
     resolved_provider = split_provider or get_settings().llm.provider
     if not str(resolved_provider).strip():
-        raise ValueError("settings.llm.provider обязателен для явной vision_model")
+        raise ValueError('settings.llm.provider is required for an explicit vision_model')
     resolved = resolve_ai_model(
         AICapability.LLM_VISION,
         selection=AISelection(
@@ -245,7 +270,7 @@ def _explicit_vision_ai_model(model_name: str) -> ResolvedAIModel:
         include_platform_default=False,
     )
     if resolved is None:
-        raise ValueError("vision_model не удалось разрешить")
+        raise ValueError('vision_model failed to resolve')
     return resolved
 
 
@@ -260,7 +285,7 @@ def resolve_vision_ai_model(model_name: str | None = None) -> ResolvedAIModel:
         return resolved
     platform_default = resolve_ai_model(AICapability.LLM_VISION, include_platform_default=True)
     if platform_default is None:
-        raise ValueError("platform default для llm_vision не настроен")
+        raise ValueError('platform default for llm_vision is not configured')
     return platform_default
 
 
@@ -269,7 +294,7 @@ def create_vision_llm_client(resolved: ResolvedAIModel) -> LLMClient | MockLLM:
     if resolved.capability != AICapability.LLM_VISION:
         raise ValueError(f"capability {resolved.capability.value!r} is not executable as vision")
     if resolved.model is None or not resolved.model.strip():
-        raise ValueError("vision LLM model пуст")
+        raise ValueError('vision LLM model is empty')
     if is_testing():
         return get_or_create_global_mock_llm(resolved.model)
     return create_llm_client_from_ai_model(
@@ -352,7 +377,7 @@ async def embed_texts(
         include_platform_default=True,
     )
     if resolved is None:
-        raise ValueError("AI capability embedding: route не настроен")
+        raise ValueError('AI capability embedding: route is not configured')
     client = create_embedding_client_from_ai_model(resolved, timeout=timeout)
     return await client.generate_embeddings(texts)
 

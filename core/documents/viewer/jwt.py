@@ -54,7 +54,7 @@ def decode_viewer_stream_token(token: str, secret: str) -> OfficeViewerStreamTok
     try:
         return OfficeViewerStreamTokenClaims.model_validate(data)
     except ValueError as exc:
-        raise OnlyOfficeJwtError("Некорректный viewer stream token") from exc
+        raise OnlyOfficeJwtError('Invalid viewer stream token') from exc
 
 
 def encode_viewer_save_token(
@@ -87,4 +87,4 @@ def decode_viewer_save_token(token: str, secret: str) -> OfficeViewerSaveTokenCl
     try:
         return OfficeViewerSaveTokenClaims.model_validate(data)
     except ValueError as exc:
-        raise OnlyOfficeJwtError("Некорректный viewer save token") from exc
+        raise OnlyOfficeJwtError('Invalid viewer save token') from exc

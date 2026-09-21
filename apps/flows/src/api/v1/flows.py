@@ -6,7 +6,6 @@ from fastapi import APIRouter, Query
 
 from apps.flows.realtime.operations import (
     FlowDataflowInspectRequest,
-    FlowsEmptyPayload,
     FlowsFlowIdPayload,
     FlowsFlowVersionPayload,
     FlowsListPayload,
@@ -49,6 +48,7 @@ from apps.flows.src.models.flow_api import (
 )
 from core.context import require_context
 from core.pagination import ListResponse, OffsetPage
+from core.websocket import EmptyPayload
 
 router = APIRouter(tags=["flows"])
 
@@ -91,7 +91,7 @@ async def list_flows(
 @router.get("/store/bundles", response_model=ListResponse[FlowStoreBundleResponse])
 async def list_store_bundles(container: ContainerDep) -> ListResponse[FlowStoreBundleResponse]:
     return await op_flows_store_bundles(
-        FlowsEmptyPayload(),
+        EmptyPayload(),
         user=require_context().user,
         container=container,
     )

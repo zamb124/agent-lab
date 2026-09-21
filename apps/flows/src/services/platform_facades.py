@@ -65,7 +65,7 @@ async def get_mcp_client(
 ) -> "MCPClient":
     """Вернуть MCP-клиент по `server_id` для trusted platform code."""
     if server_id.strip() == "":
-        raise ValueError("server_id обязателен")
+        raise ValueError("server_id is required")
     config = await require_current_container().mcp_server_repository.get(server_id.strip())
     if config is None:
         raise ValueError(f"MCP server not found: {server_id}")
@@ -87,7 +87,7 @@ async def call_mcp_tool(
 ) -> "MCPCallResult":
     """Вызвать MCP tool и вернуть `MCPCallResult`."""
     if tool_name.strip() == "":
-        raise ValueError("tool_name обязателен")
+        raise ValueError("tool_name is required")
     client = await get_mcp_client(server_id, state=state, timeout=timeout)
     return await client.call_tool(tool_name.strip(), arguments if arguments is not None else {})
 
@@ -106,11 +106,11 @@ async def transcribe_audio(
 ) -> str:
     """STT: распознаёт persisted-аудио по `file_id` и возвращает текст."""
     if file_id.strip() == "":
-        raise ValueError("transcribe_audio: file_id обязателен.")
+        raise ValueError("transcribe_audio: file_id is required.")
 
     ctx = get_context()
     if ctx is None or ctx.active_company is None:
-        raise ValueError("transcribe_audio: нужен Context с active_company.")
+        raise ValueError("transcribe_audio: Context with active_company is required.")
     company_id = ctx.active_company.company_id
 
     container = require_current_container()
@@ -175,11 +175,11 @@ async def synthesize_speech(
 ) -> str:
     """TTS: синтезирует речь и сохраняет результат; возвращает `file_id`."""
     if text.strip() == "":
-        raise ValueError("synthesize_speech: text обязателен.")
+        raise ValueError("synthesize_speech: text is required.")
 
     ctx = get_context()
     if ctx is None or ctx.active_company is None:
-        raise ValueError("synthesize_speech: нужен Context с active_company.")
+        raise ValueError("synthesize_speech: Context with active_company is required.")
     company_id = ctx.active_company.company_id
 
     override = SpeechOverride(

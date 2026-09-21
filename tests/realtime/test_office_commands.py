@@ -20,6 +20,10 @@ from httpx import AsyncClient, Response
 from apps.office.realtime.command_router import OFFICE_OPERATIONS
 from core.types import JsonObject, JsonValue, require_json_object
 from core.utils.tokens import get_token_service
+from tests.files.chunked_upload_helpers import (
+    chunked_upload_file,
+    platform_auxiliary_upload_spec_json,
+)
 from tests.office.helpers import upload_office_file_bytes
 from tests.realtime.centrifugo_ws import connect_centrifugo, rpc_platform_event
 
@@ -55,6 +59,7 @@ _VOLATILE_KEYS = frozenset(
         "service",
         "observability",
         "url",
+        "token",
     }
 )
 
@@ -522,6 +527,30 @@ async def _setup_share_create(ctx: LiveCtx) -> JsonObject:
     }
 
 
+async def _setup_editor_config(ctx: LiveCtx) -> JsonObject:
+    catalog = await _create_catalog(ctx)
+    doc = await _create_empty_doc(ctx, catalog_id=_str_field(catalog, "catalog_id"))
+    return {"file_id": _str_field(doc, "file_id"), "public_origin": _ORIGIN}
+
+
+async def _setup_editor_sync(ctx: LiveCtx) -> JsonObject:
+    catalog = await _create_catalog(ctx)
+    doc = await _create_empty_doc(ctx, catalog_id=_str_field(catalog, "catalog_id"))
+    return {"file_id": _str_field(doc, "file_id"), "close": False, "settle_ms": 0, "dirty": False}
+
+
+async def _setup_share_resolve(ctx: LiveCtx) -> JsonObject:
+    share_payload = await _setup_share_create(ctx)
+    created = await ctx.client.post(
+        f"{_API}/documents/{share_payload['file_id']}/shares",
+        headers=ctx.headers,
+        json={"permission": "viewer"},
+    )
+    share = await _expect_json(created, ok=(200, 201), label="share create")
+    share_url = _str_field(share, "share_url")
+    return {"token": share_url.rstrip("/").rsplit("/", 1)[-1]}
+
+
 async def _create_data_table(ctx: LiveCtx, *, with_rows: bool = False) -> str:
     created = await ctx.client.post(
         f"{_API}/data-tables",
@@ -623,6 +652,34 @@ async def _setup_data_table_query(ctx: LiveCtx) -> JsonObject:
     return {
         "file_id": await _create_data_table(ctx, with_rows=True),
         "sql": "SELECT title, score FROM leads ORDER BY score",
+    }
+
+
+async def _setup_data_table_export(ctx: LiveCtx) -> JsonObject:
+    return {
+        "file_id": await _create_data_table(ctx, with_rows=True),
+        "table_name": "leads",
+        "source_format": "csv",
+    }
+
+
+async def _setup_data_table_import(ctx: LiveCtx) -> JsonObject:
+    file_id = await _create_data_table(ctx)
+    upload = await chunked_upload_file(
+        ctx.client,
+        ctx.headers,
+        content="city,pop\nParis,10\n".encode("utf-8-sig"),
+        original_name=f"import{_token(ctx)}.csv",
+        content_type="text/csv",
+        spec_json=platform_auxiliary_upload_spec_json(is_public=False),
+        files_api_prefix=f"{_API}/files",
+    )
+    uploaded = await _expect_json(upload, ok=(200,), label="chunked upload")
+    return {
+        "file_id": file_id,
+        "table_name": "imported",
+        "source_format": "csv",
+        "upload_file_id": _str_field(uploaded, "file_id"),
     }
 
 
@@ -784,6 +841,21 @@ _CASES: dict[str, OpCase] = {
     "office/documents/editor_session_requested": _op(
         "POST", f"{_API}/documents/{{file_id}}/editor-session", "none", _setup_file_id, same=True,
     ),
+    "office/editor/file_config_requested": _op(
+        "GET", f"{_API}/files/{{file_id}}/editor-config", "none", _setup_editor_config, same=True,
+    ),
+    "office/editor/document_config_requested": _op(
+        "GET", f"{_API}/documents/{{file_id}}/editor-config", "none", _setup_editor_config, same=True,
+    ),
+    "office/editor/file_sync_requested": _op(
+        "POST", f"{_API}/files/{{file_id}}/sync", "body_minus_path", _setup_editor_sync, same=True,
+    ),
+    "office/editor/document_sync_requested": _op(
+        "POST", f"{_API}/documents/{{file_id}}/sync", "body_minus_path", _setup_editor_sync, same=True,
+    ),
+    "office/document_share/resolve_requested": _op(
+        "GET", f"{_API}/shares/{{token}}", "none", _setup_share_resolve, same=True,
+    ),
     "office/documents/replace_text_requested": _op(
         "POST",
         f"{_API}/documents/{{file_id}}/mutations/replace-text",
@@ -937,6 +1009,20 @@ _CASES: dict[str, OpCase] = {
         "body_minus_path",
         _setup_data_table_query,
         same=True,
+    ),
+    "office/data_tables/export_requested": _op(
+        "GET",
+        f"{_API}/data-tables/{{file_id}}/tables/{{table_name}}/export",
+        "query",
+        _setup_data_table_export,
+        same=True,
+    ),
+    "office/data_tables/import_requested": _op(
+        "POST",
+        f"{_API}/data-tables/{{file_id}}/import",
+        "body_minus_path",
+        _setup_data_table_import,
+        same=False,
     ),
 }
 

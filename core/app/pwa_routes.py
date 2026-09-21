@@ -32,11 +32,11 @@ def register_platform_pwa_routes(app: FastAPI, project_root: Path) -> None:
     aasa_path = pwa_dir / "apple-app-site-association"
 
     if not manifest_path.is_file():
-        raise FileNotFoundError(f"PWA manifest не найден: {manifest_path}")
+        raise FileNotFoundError(f"PWA manifest not found: {manifest_path}")
     if not sw_path.is_file():
-        raise FileNotFoundError(f"PWA sw.js не найден: {sw_path}")
+        raise FileNotFoundError(f"PWA sw.js not found: {sw_path}")
     if not offline_path.is_file():
-        raise FileNotFoundError(f"PWA offline.html не найден: {offline_path}")
+        raise FileNotFoundError(f"PWA offline.html not found: {offline_path}")
 
     @app.get("/manifest.json")
     async def serve_manifest() -> FileResponse:

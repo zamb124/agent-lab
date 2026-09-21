@@ -30,7 +30,7 @@ async def try_claim_onlyoffice_callback(
         False — дубликат callback, вернуть OnlyOffice error=0 без повторной записи.
     """
     if not redis_url or not redis_url.strip():
-        raise ValueError("database.redis_url обязателен для OnlyOffice callback")
+        raise ValueError("database.redis_url is required for OnlyOffice callback")
     key = callback_dedupe_redis_key(file_id, status, url)
     client = RedisClient(redis_url)
     try:

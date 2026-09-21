@@ -159,7 +159,7 @@ class BaseTool(ABC):
         _ = args
         permission_error = await self._check_permission(state)
         if permission_error:
-            logger.warning(f"Tool {self.name}: permission denied")
+            logger.warning("flows.tool.permission_denied", tool_name=self.name)
             return permission_error
 
         return None
@@ -282,7 +282,7 @@ class ExternalAPITool(BaseTool):
             raw = result["interrupt"]
             if not isinstance(raw, dict):
                 raise ValueError(
-                    f"External API tool: interrupt должен быть dict, получено {type(raw)}"
+                    f"External API tool: interrupt must be a dict, got {type(raw)}"
                 )
             body = parse_interrupt_body_from_external_dict(raw)
             raise FlowInterrupt(body=body)

@@ -12,5 +12,5 @@ def get_logger(name: str) -> structlog.stdlib.BoundLogger:
     структурированных полей.
     """
     if not name.strip():
-        raise ValueError("get_logger требует непустое строковое имя (обычно __name__)")
+        raise ValueError('get_logger requires a non-empty string name (usually __name__)')
     return structlog.stdlib.get_logger(name)

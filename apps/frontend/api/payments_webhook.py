@@ -47,7 +47,7 @@ async def payment_webhook(
     provider = PaymentProviderFactory.get_provider(provider_name)
     if not provider:
         logger.error("payments.webhook_provider_missing", provider=provider_name)
-        raise HTTPException(status_code=404, detail=f"Провайдер {provider_name} не найден")
+        raise HTTPException(status_code=404, detail=f"Provider {provider_name} not found")
 
     verification = await provider.verify_webhook(raw_body)
 

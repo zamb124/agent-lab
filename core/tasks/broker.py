@@ -277,7 +277,7 @@ def register_worker_events(
         service_name: имя сервиса для service.name в логах (ОБЯЗАТЕЛЬНО)
     """
     if not service_name:
-        raise ValueError("register_worker_events: service_name пустой")
+        raise ValueError('register_worker_events: service_name is empty')
 
     async def _logging_pre_startup(_state: TaskiqState) -> None:
         setup_logging(service_name=service_name)

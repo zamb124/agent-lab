@@ -51,7 +51,7 @@ async def execute_tool(
     container = get_container()
     tool = await container.tool_registry.create_tool(tool_config)
     tool_id = tool.name
-    logger.debug(f"Executing tool: {tool_id}")
+    logger.debug("flows.tool.execute", tool_id=tool_id)
 
     tool_state = ExecutionState.model_validate(state_dict)
 
@@ -62,7 +62,11 @@ async def execute_tool(
             nested = tool_state.nested_states
             path = [item.model_dump() for item in tool_state.interrupt_path]
             logger.info(
-                f"Tool {tool_id} interrupt: {e.question[:50]}..., nested_keys={list(nested.keys())}, path_len={len(path)}"
+                "tool.interrupt",
+                tool_id=tool_id,
+                question_preview=e.question[:50],
+                nested_keys=list(nested.keys()),
+                path_len=len(path),
             )
             InterruptManager.apply_interrupt(
                 tool_state,
@@ -72,7 +76,7 @@ async def execute_tool(
             )
             packed = tool_state.interrupt
             if packed is None:
-                raise RuntimeError("execute_tool: apply_interrupt не выставил interrupt")
+                raise RuntimeError("execute_tool: apply_interrupt did not set interrupt")
             state_payload = require_json_object(
                 tool_state.model_dump(mode="json"),
                 "execute_tool.state",
@@ -94,7 +98,7 @@ async def execute_tool(
                 ),
             }
 
-        logger.debug(f"Tool {tool_id} completed")
+        logger.debug("flows.tool.completed", tool_id=tool_id)
         state_payload = require_json_object(
             tool_state.model_dump(mode="json"),
             "execute_tool.state",

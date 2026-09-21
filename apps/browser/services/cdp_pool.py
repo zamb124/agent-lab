@@ -104,13 +104,13 @@ class CDPConnectionPool:
         - отключённый хэндл выбрасывается и заменяется новым подключением.
         """
         if not endpoint_key:
-            raise ValueError("endpoint_key обязателен")
+            raise ValueError("endpoint_key is required")
         if not cdp_url:
-            raise ValueError("cdp_url обязателен")
+            raise ValueError("cdp_url is required")
         await self.start()
         async with self._lock:
             if self._playwright is None:
-                raise RuntimeError("Playwright не инициализирован")
+                raise RuntimeError("Playwright is not initialized")
             existing = self._browsers.get(endpoint_key)
             if existing is not None:
                 if existing.is_connected():

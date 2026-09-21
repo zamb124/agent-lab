@@ -226,7 +226,7 @@ export class FrontendAiCustomProviderModal extends PlatformFormModal {
     async handleSubmit() {
         if (this._editingId) {
             const body = {
-                id: this._editingId,
+                provider_id: this._editingId,
                 label: this._label.trim(),
                 base_url: this._baseUrl.trim(),
                 capabilities: [...this._capabilities],

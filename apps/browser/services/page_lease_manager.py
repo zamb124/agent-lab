@@ -167,7 +167,7 @@ class PageLeaseManager:
         max_contexts: int = 0,
     ) -> None:
         if max_contexts < 0:
-            raise ValueError("max_contexts должен быть >= 0 (0 — без лимита)")
+            raise ValueError("max_contexts must be >= 0 (0 — no limit)")
         self._factory: ContextFactory = context_factory
         self._lock: asyncio.Lock = asyncio.Lock()
         self._leases: dict[int, LeaseRecord] = {}
@@ -203,7 +203,7 @@ class PageLeaseManager:
 
     async def is_session_recently_closed(self, session_id: str) -> bool:
         if not session_id:
-            raise ValueError("session_id обязателен")
+            raise ValueError("session_id is required")
         async with self._lock:
             closed_at = self._closed_session_ids.get(session_id)
             if closed_at is None:
@@ -230,7 +230,7 @@ class PageLeaseManager:
 
     def _append_console_event(self, session_id: str, event: JsonObject) -> None:
         if not session_id:
-            raise ValueError("session_id обязателен")
+            raise ValueError("session_id is required")
         if self._page_event_logger is not None:
             payload: JsonObject = dict(event)
             payload["ts_ms"] = int(time.time() * 1000)
@@ -239,7 +239,7 @@ class PageLeaseManager:
     def _attach_console_listeners(self, *, session_id: str, page: BrowserPage) -> None:
         pid = id(page)
         if pid in self._console_listeners_by_page:
-            raise RuntimeError("Console listeners уже зарегистрированы для страницы")
+            raise RuntimeError("Console listeners are already registered for the page")
 
         def on_console(msg: ConsoleMessage) -> None:
             self._append_console_event(
@@ -312,19 +312,19 @@ class PageLeaseManager:
         - Согласовать kill_session с in-flight navigate.
         """
         if not session_id:
-            raise ValueError("session_id обязателен")
+            raise ValueError("session_id is required")
         lock = self._navigate_locks.setdefault(session_id, asyncio.Lock())
         async with lock:
             yield
 
     async def begin_human_takeover(self, session_id: str, *, owner: str) -> HumanTakeoverRecord:
         if not session_id:
-            raise ValueError("session_id обязателен")
+            raise ValueError("session_id is required")
         takeover_owner = owner.strip() if owner.strip() else "human"
         async with self._lock:
             pids = self._session_pages.get(session_id)
             if pids is None or len(pids) == 0:
-                raise KeyError(f"Нет активной страницы для session_id={session_id}")
+                raise KeyError(f"No active page for session_id={session_id}")
             record = HumanTakeoverRecord(
                 session_id=session_id,
                 owner=takeover_owner,
@@ -335,13 +335,13 @@ class PageLeaseManager:
 
     async def end_human_takeover(self, session_id: str) -> HumanTakeoverRecord | None:
         if not session_id:
-            raise ValueError("session_id обязателен")
+            raise ValueError("session_id is required")
         async with self._lock:
             return self._human_takeovers.pop(session_id, None)
 
     async def human_takeover_for_session(self, session_id: str) -> HumanTakeoverRecord | None:
         if not session_id:
-            raise ValueError("session_id обязателен")
+            raise ValueError("session_id is required")
         async with self._lock:
             return self._human_takeovers.get(session_id)
 
@@ -355,17 +355,17 @@ class PageLeaseManager:
         async with self._lock:
             ctx_rec = self._session_contexts.get(session_id)
             if ctx_rec is None:
-                raise KeyError(f"Нет контекста для session_id={session_id}")
+                raise KeyError(f"No context for session_id={session_id}")
             pids = self._session_pages.get(session_id)
             if pids is None or len(pids) != 1:
                 raise RuntimeError(
-                    "swap_active_page_for_session: ожидалась ровно одна страница для "
-                    + f"session_id={session_id}, активно {0 if pids is None else len(pids)}",
+                    "swap_active_page_for_session: expected exactly one page for "
+                    + f"session_id={session_id}, active {0 if pids is None else len(pids)}",
                 )
             old_pid = next(iter(pids))
             old_rec = self._leases.pop(old_pid, None)
             if old_rec is None:
-                raise RuntimeError("swap_active_page_for_session: lease record отсутствует")
+                raise RuntimeError("swap_active_page_for_session: lease record is missing")
             old_page = old_rec.page
             _ = self._session_pages.pop(session_id, None)
 
@@ -387,7 +387,7 @@ class PageLeaseManager:
         async with self._lock:
             current_ctx = self._session_contexts.get(session_id)
             if current_ctx is not ctx_rec:
-                raise RuntimeError("swap_active_page_for_session: контекст сессии изменился во время swap")
+                raise RuntimeError("swap_active_page_for_session: session context changed during swap")
             self._leases[new_pid] = new_rec
             self._session_pages[session_id] = {new_pid}
         return new_page
@@ -401,7 +401,7 @@ class PageLeaseManager:
 
     def set_endpoint_drain(self, endpoint_key: str, value: bool) -> None:
         if not endpoint_key:
-            raise ValueError("endpoint_key обязателен")
+            raise ValueError("endpoint_key is required")
         if value:
             self._draining_endpoints.add(endpoint_key)
             return
@@ -418,7 +418,7 @@ class PageLeaseManager:
             for record in self._session_contexts.values():
                 if record.context is context:
                     return record.context_signature
-        raise RuntimeError("BrowserContext не зарегистрирован в PageLeaseManager")
+        raise RuntimeError("BrowserContext is not registered in PageLeaseManager")
 
     async def lease_page(
         self,
@@ -433,9 +433,9 @@ class PageLeaseManager:
         warm_idle_sec: int,
     ) -> tuple[BrowserContextHandle, BrowserPage, bool]:
         if not self._allow_acquire:
-            raise RuntimeError("Новые lease запрещены (drain)")
+            raise RuntimeError("New leases are forbidden (drain)")
         if endpoint_key in self._draining_endpoints:
-            raise RuntimeError(f"Новые lease запрещены для endpoint={endpoint_key} (drain)")
+            raise RuntimeError(f"New leases are forbidden for endpoint={endpoint_key} (drain)")
         await self._release_expired_leases(
             warm_idle_sec=warm_idle_sec,
         )
@@ -464,13 +464,13 @@ class PageLeaseManager:
         else:
             if ctx_rec.endpoint_key != endpoint_key:
                 raise RuntimeError(
-                    f"Сессия привязана к другому endpoint: session_id={session_id} "
-                    + f"endpoint={ctx_rec.endpoint_key} (запрошен {endpoint_key})"
+                    f"Session is bound to another endpoint: session_id={session_id} "
+                    + f"endpoint={ctx_rec.endpoint_key} (requested {endpoint_key})"
                 )
             if ctx_rec.context_signature.stable_hash() != signature.stable_hash():
                 raise RuntimeError(
-                    f"Сессия привязана к другой сигнатуре контекста: session_id={session_id} "
-                    + f"signature_hash={ctx_rec.context_signature.stable_hash()} (запрошен {signature.stable_hash()})"
+                    f"Session is bound to another context signature: session_id={session_id} "
+                    + f"signature_hash={ctx_rec.context_signature.stable_hash()} (requested {signature.stable_hash()})"
                 )
             ctx_rec.idle_deadline_monotonic = None
             ctx_rec.session_mode = session_mode
@@ -505,7 +505,7 @@ class PageLeaseManager:
         async with self._lock:
             rec = self._leases.pop(pid, None)
             if rec is None:
-                raise RuntimeError("Страница не зарегистрирована в менеджере аренды")
+                raise RuntimeError("Page is not registered in the lease manager")
             sess = self._session_pages.get(rec.session_id)
             if sess is not None:
                 sess.discard(pid)
@@ -660,8 +660,8 @@ class PageLeaseManager:
             idle.sort(key=lambda item: item[1].idle_deadline_monotonic or 0.0)
             if len(idle) < overflow:
                 raise RuntimeError(
-                    f"Достигнут потолок контекстов ({self._max_contexts}): "
-                    + f"активных без idle-резерва, освободить нельзя (нужно {overflow}, idle {len(idle)})"
+                    f"Context ceiling reached ({self._max_contexts}): "
+                    + f"active without idle reserve, cannot free (need {overflow}, idle {len(idle)})"
                 )
             for sid, ctx in idle[:overflow]:
                 _ = self._session_contexts.pop(sid, None)
@@ -691,14 +691,14 @@ class PageLeaseManager:
         async with self._lock:
             pids = self._session_pages.get(session_id)
             if pids is None or len(pids) == 0:
-                raise KeyError(f"Нет активной страницы для session_id={session_id}")
+                raise KeyError(f"No active page for session_id={session_id}")
             if len(pids) > 1:
                 raise RuntimeError(
-                    f"Ожидалась одна страница на session_id={session_id}, "
-                    + f"активно {len(pids)} (control API не выбирает неявно)",
+                    f"Expected one page for session_id={session_id}, "
+                    + f"active {len(pids)} (control API does not pick implicitly)",
                 )
             pid = next(iter(pids))
             rec = self._leases.get(pid)
             if rec is None:
-                raise RuntimeError(f"Lease record отсутствует для page id={pid}")
+                raise RuntimeError(f"Lease record is missing for page id={pid}")
             return rec.page

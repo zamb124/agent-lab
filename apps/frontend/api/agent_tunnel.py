@@ -31,16 +31,16 @@ def _device_id_from_token(token: str) -> tuple[str, str | None]:
     token_service = TokenService()
     token_data = token_service.validate_token(token)
     if token_data is None:
-        raise HTTPException(status_code=401, detail="Недействительный device token")
+        raise HTTPException(status_code=401, detail="Invalid device token")
     metadata = token_data.metadata
     token_purpose = metadata.get("token_purpose")
     if token_purpose != "device":
-        raise HTTPException(status_code=401, detail="Токен не является device token")
+        raise HTTPException(status_code=401, detail="Token is not a device token")
     device_id = metadata.get("device_id")
     if not isinstance(device_id, str) or not device_id:
-        raise HTTPException(status_code=401, detail="device_id отсутствует в токене")
+        raise HTTPException(status_code=401, detail="device_id is missing from the token")
     if device_id == "pending":
-        raise HTTPException(status_code=401, detail="device token ещё не привязан к устройству")
+        raise HTTPException(status_code=401, detail="device token is not bound to a device yet")
     device_jti = metadata.get("jti")
     resolved_jti = device_jti if isinstance(device_jti, str) and device_jti else None
     return device_id, resolved_jti

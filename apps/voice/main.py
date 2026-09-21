@@ -30,10 +30,10 @@ async def on_startup(
     """
     _ = app, container
     logger.info(
-        "voice service startup: stt=%s tts=%s vad=%s",
-        settings.voice.stt.provider,
-        settings.voice.tts.provider,
-        settings.voice.vad.provider,
+        "voice.service.startup.stt.tts",
+        stt=settings.voice.stt.provider,
+        tts=settings.voice.tts.provider,
+        vad=settings.voice.vad.provider,
     )
 
 

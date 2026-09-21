@@ -58,8 +58,6 @@ from core.clients.tts_client import (
 from core.clients.tts_pronunciation.models import (
     CompiledPronunciation,
     NormalizationConfig,
-    PronunciationRule,
-    PronunciationRuleKind,
     PronunciationRuleSet,
 )
 from core.clients.tts_streaming import BaseTTSStreamer, BatchBackedTTSStreamer
@@ -70,7 +68,6 @@ from core.clients.vad_client import (
 from core.clients.voice_observability import ObservedSTTClient, ObservedTTSClient
 from core.config import get_settings
 from core.config.models import ProviderLitserveTTSModelEntry
-from core.db.models.platform import CompanyPronunciationRule, PlatformPronunciationRule
 from core.db.repositories.company_voice_provider_repository import (
     CompanyVoiceProviderRepository,
     VoiceKind,
@@ -78,6 +75,7 @@ from core.db.repositories.company_voice_provider_repository import (
 from core.db.repositories.pronunciation_rule_repository import (
     CompanyPronunciationRuleRepository,
     PlatformPronunciationRuleRepository,
+    pronunciation_rule,
 )
 from core.logging import get_logger
 
@@ -154,7 +152,7 @@ def _get_repo() -> CompanyVoiceProviderRepository:
         db_url = settings.database.shared_url
         if not db_url:
             raise ValueError(
-                "voice_resolver: settings.database.shared_url не задан — невозможно прочитать company_voice_providers."
+                "voice_resolver: settings.database.shared_url is not set — cannot read company_voice_providers."
             )
         _voice_provider_repo = CompanyVoiceProviderRepository(db_url=db_url)
     return _voice_provider_repo
@@ -193,7 +191,7 @@ async def _load_company_override(
 def invalidate_company_overrides_cache(company_id: str) -> None:
     """Снять in-memory-кэш для stt/tts одной компании (VAD — только deployment)."""
     if company_id == "":
-        raise ValueError("company_id не может быть пустым.")
+        raise ValueError("company_id cannot be empty.")
     cached_kinds: tuple[VoiceKind, VoiceKind] = ("stt", "tts")
     for kind in cached_kinds:
         _ = _company_cache.pop((company_id, kind), None)
@@ -220,7 +218,7 @@ def reset_voice_resolver_for_tests() -> None:
 
 def _validate_company_id(company_id: str) -> None:
     if company_id == "":
-        raise ValueError("voice_resolver: company_id не может быть пустым.")
+        raise ValueError("voice_resolver: company_id cannot be empty.")
 
 
 def _validate_override(override: SpeechOverride | None) -> SpeechOverride:
@@ -471,35 +469,11 @@ def _get_pronunciation_repo() -> tuple[PlatformPronunciationRuleRepository, Comp
         db_url = settings.database.shared_url
         if not db_url:
             raise ValueError(
-                "voice_resolver: settings.database.shared_url не задан — невозможно прочитать pronunciation_rules."
+                "voice_resolver: settings.database.shared_url is not set — cannot read pronunciation_rules."
             )
         _platform_pronunciation_repo = PlatformPronunciationRuleRepository(db_url=db_url)
         _company_pronunciation_repo = CompanyPronunciationRuleRepository(db_url=db_url)
     return _platform_pronunciation_repo, _company_pronunciation_repo
-
-
-def _pronunciation_rule_kind(value: str) -> PronunciationRuleKind:
-    if value not in ("alias", "regex", "stress"):
-        raise ValueError(f"voice_resolver: неизвестный kind правила произношения: {value!r}")
-    return value
-
-
-def _db_row_to_pronunciation_rule(
-    row: PlatformPronunciationRule | CompanyPronunciationRule,
-) -> PronunciationRule:
-    return PronunciationRule(
-        id=row.id,
-        kind=_pronunciation_rule_kind(row.kind),
-        pattern=row.pattern,
-        replacement=row.replacement,
-        language=row.language,
-        case_sensitive=row.case_sensitive,
-        word_boundary=row.word_boundary,
-        providers=list(row.providers) if row.providers else None,
-        voices=list(row.voices) if row.voices else None,
-        enabled=row.enabled,
-        note=row.note,
-    )
 
 
 async def _load_platform_pronunciation() -> CompiledPronunciation:
@@ -513,7 +487,7 @@ async def _load_platform_pronunciation() -> CompiledPronunciation:
 
     platform_repo, _ = _get_pronunciation_repo()
     rows = await platform_repo.list_enabled()
-    rules = [_db_row_to_pronunciation_rule(r) for r in rows]
+    rules = [pronunciation_rule(r) for r in rows]
     rule_set = PronunciationRuleSet(rules=rules, normalization=NormalizationConfig())
     compiled = CompiledPronunciation.from_rule_set(
         rule_set,
@@ -532,7 +506,7 @@ async def _load_company_pronunciation(company_id: str) -> CompiledPronunciation:
 
     _, company_repo = _get_pronunciation_repo()
     rows = await company_repo.list_enabled(company_id=company_id)
-    rules = [_db_row_to_pronunciation_rule(r) for r in rows]
+    rules = [pronunciation_rule(r) for r in rows]
     rule_set = PronunciationRuleSet(rules=rules, normalization=NormalizationConfig())
     compiled = CompiledPronunciation.from_rule_set(rule_set)
     _pronunciation_company_cache[company_id] = (now, compiled)
@@ -760,7 +734,7 @@ async def get_stt_streamer(
     частоте дискретизации (обычно 16000 для voice-сессии).
     """
     if sample_rate <= 0:
-        raise ValueError("voice_resolver.get_stt_streamer: sample_rate должен быть > 0.")
+        raise ValueError("voice_resolver.get_stt_streamer: sample_rate must be > 0.")
 
     stt_client = await get_stt_client(company_id=company_id, override=override)
     language = None
@@ -807,7 +781,7 @@ async def get_tts_streamer(
     )
     if response_format not in _TTS_MIME_BY_FORMAT:
         raise ValueError(
-            f"voice_resolver.get_tts_streamer: неизвестный response_format={response_format!r} (допустимые: {sorted(_TTS_MIME_BY_FORMAT)})"
+            f"voice_resolver.get_tts_streamer: unknown response_format={response_format!r} (allowed: {sorted(_TTS_MIME_BY_FORMAT)})"
         )
     content_type = _TTS_MIME_BY_FORMAT[response_format]
 

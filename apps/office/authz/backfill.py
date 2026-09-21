@@ -85,11 +85,7 @@ async def backfill_office_authz(*, limit: int | None = None) -> tuple[int, int]:
         )
         documents_written += 1
 
-    logger.info(
-        "office authz backfill complete catalog_tuples=%s documents=%s",
-        catalogs_written,
-        documents_written,
-    )
+    logger.info("office.authz.backfill.complete.catalog_tuples", catalog_tuples=catalogs_written, documents=documents_written)
     return catalogs_written, documents_written
 
 

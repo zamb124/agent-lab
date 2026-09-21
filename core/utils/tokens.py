@@ -48,7 +48,7 @@ class TokenService:
         secret_key = settings.auth.jwt_secret_key
 
         if not secret_key:
-            raise ValueError("JWT secret key не настроен в конфигурации (auth.jwt_secret_key)")
+            raise ValueError('JWT secret key is not configured (auth.jwt_secret_key)')
 
         self.secret_key: str = secret_key
         self.algorithm: str = "HS256"
@@ -116,7 +116,7 @@ class TokenService:
 
         token = jwt.encode(payload, self.secret_key, algorithm=self.algorithm)
 
-        logger.info(f"Создан {token_type.value} токен для пользователя {user_id}, компания {company_id}")
+        logger.info("auth.token.created", token_type=token_type.value, user_id=user_id, company_id=company_id)
 
         return token
 
@@ -200,23 +200,23 @@ class TokenService:
         try:
             decoded_payload: JsonValue = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
         except jwt.ExpiredSignatureError:
-            logger.warning("JWT токен истек")
+            logger.warning("utils.jwt")
             return None
         except jwt.DecodeError as e:
-            logger.warning(f"JWT токен недействителен: {e}")
+            logger.warning("auth.token.invalid", error=str(e))
             return None
         except jwt.InvalidTokenError as e:
-            logger.warning(f"JWT токен имеет неверный формат: {e}")
+            logger.warning("auth.token.malformed", error=str(e))
             return None
 
         payload = require_json_object(decoded_payload, "jwt.payload")
         token_data = TokenData.model_validate(payload)
 
         if token_data.exp < datetime.now(timezone.utc):
-            logger.warning("JWT токен истек")
+            logger.warning("utils.jwt")
             return None
 
-        logger.debug(f"JWT токен валиден: user={token_data.user_id}, company={token_data.company_id}")
+        logger.debug("auth.token.valid", user_id=token_data.user_id, company_id=token_data.company_id)
 
         return token_data
 

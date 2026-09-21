@@ -44,7 +44,7 @@ async def ensure_demo_company_and_user(
     password = demo.password
     if password is None or password == "":
         raise ValueError(
-            "auth.demo.login_enabled=true, но пароль пустой: задайте AUTH__DEMO__PASSWORD"
+            'auth.demo.login_enabled=true but password is empty: set AUTH__DEMO__PASSWORD'
         )
 
     company_id = demo.company_id
@@ -60,7 +60,7 @@ async def ensure_demo_company_and_user(
             members={},
             status="active",
         )
-        logger.info("Demo bootstrap: создана компания %s", company_id)
+        logger.info("identity.demo.bootstrap", company_id=company_id)
     else:
         updated = False
         if company.name != company_name:
@@ -73,12 +73,12 @@ async def ensure_demo_company_and_user(
             company.status = "active"
             updated = True
         if updated:
-            logger.info("Demo bootstrap: обновлены поля компании %s", company_id)
+            logger.info("identity.demo.bootstrap", company_id=company_id)
 
     matched = await user_repository.find_all_by_email_ci(demo.email)
     if len(matched) > 1:
         raise ValueError(
-            f"Несколько пользователей с email {demo.email}: "
+            f"Multiple users with email {demo.email}: "
             + f"{', '.join(u.user_id for u in matched)}"
         )
 
@@ -95,7 +95,7 @@ async def ensure_demo_company_and_user(
         roles = user.companies.get(company_id, [])
         merged_roles = list(dict.fromkeys([*roles, *DEMO_OWNER_ROLES]))
         user.companies[company_id] = merged_roles
-        logger.info("Demo bootstrap: обновлён пользователь %s", user.user_id)
+        logger.info("identity.demo.bootstrap", user_id=user.user_id)
     else:
         user_id = f"user_demo_{uuid.uuid4().hex[:12]}"
         user = User(
@@ -107,7 +107,7 @@ async def ensure_demo_company_and_user(
             active_company_id=company_id,
             companies={company_id: list(DEMO_OWNER_ROLES)},
         )
-        logger.info("Demo bootstrap: создан пользователь %s", user_id)
+        logger.info("identity.demo.bootstrap", user_id=user_id)
 
     company.owner_user_id = user.user_id
     member_roles = company.members.get(user.user_id, [])
@@ -168,10 +168,6 @@ async def ensure_demo_company_and_user(
         task_id = init_response.get("task_id")
         if not isinstance(task_id, str) or task_id == "":
             raise ValueError("flows company/init response.task_id required")
-        logger.info(
-            "Demo bootstrap: flows company/init для %s: task_id=%s",
-            company_id,
-            task_id,
-        )
+        logger.info("identity.demo.bootstrap.flows.company.init", company_id=company_id, task_id=task_id)
     finally:
         clear_context()

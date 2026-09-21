@@ -9,7 +9,7 @@
 
 15 копий одного и того же кода — это:
 - 15 потенциально разных трактовок lazy-инициализации,
-- 15 копий `logger.info("…Container инициализирован")` без единого формата,
+- 15 копий `logger.info("container.initialized")` без единого формата,
 - 15 копий проверок `settings.database.* not None`, разбросанных по апп-коду,
 - невозможность ввести что-то новое (например, hook на reset, метрику
   cold-start контейнера) единообразно во всех сервисах.
@@ -76,7 +76,7 @@ class ContainerRegistry(Generic[ContainerT]):
 
     def __init__(self, factory: Callable[[], ContainerT], *, name: str) -> None:
         if not name:
-            raise ValueError("ContainerRegistry: name обязателен (используется в логах)")
+            raise ValueError('ContainerRegistry: name is required (used in logs)')
         self._factory: Callable[[], ContainerT] = factory
         self._name: str = name
         self._instance: ContainerT | None = None

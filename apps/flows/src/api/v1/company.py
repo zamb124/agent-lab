@@ -22,7 +22,7 @@ async def init_company(
     container: ContainerDep,
 ) -> CompanyInitScheduledResponse:
     if body.company_id == "system":
-        raise_invalid(ValueError("System namespace инициализируется через internal bootstrap"))
+        raise_invalid(ValueError("system namespace is initialized via internal bootstrap"))
     return await op_flows_company_init(
         body,
         user=require_context().user,

@@ -46,7 +46,7 @@ async def load_file_extract(*, file_id: str | None, checksum: str | None) -> Fil
     try:
         return FileExtract.model_validate_json(raw)
     except ValueError as exc:
-        logger.warning("extract_cache: повреждённая запись %s: %s", key, exc)
+        logger.warning("files.extract_cache", key=key, exc=exc)
         return None
 
 
@@ -56,7 +56,7 @@ async def store_file_extract(extract: FileExtract) -> None:
         return
     stored = await _client().set(key, extract.model_dump_json(), ttl=_EXTRACT_CACHE_TTL_SECONDS)
     if not stored:
-        logger.warning("extract_cache: не удалось записать %s (Redis недоступен) — продолжаем", key)
+        logger.warning("files.extract_cache", key=key)
 
 
 def _vision_page_key(*, file_id: str | None, checksum: str | None, page: int) -> str | None:

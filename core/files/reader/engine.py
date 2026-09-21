@@ -203,7 +203,7 @@ def _merge_page_text(*, base_text: str, image_ocr_blocks: list[str]) -> str:
 
 def _require_asset_content_type(content_type: str | None) -> str:
     if content_type is None or not content_type.strip():
-        raise FileReadError("ассет без content_type")
+        raise FileReadError("asset has no content_type")
     return content_type
 
 
@@ -216,13 +216,13 @@ def _asset_extension(content_type: str) -> str:
         return "webp"
     if content_type == "image/gif":
         return "gif"
-    raise FileReadError(f"неизвестный content_type ассета: {content_type}")
+    raise FileReadError(f"unknown asset content_type: {content_type}")
 
 
 def _asset_bytes(asset: ReadAsset, *, file_name: str, page_index: int) -> bytes:
     if not asset.bytes_b64:
         raise FileReadError(
-            f"ассет без bytes на {file_name}#p{page_index + 1} ({asset.kind.value})"
+            f"asset has no bytes at {file_name}#p{page_index + 1} ({asset.kind.value})"
         )
     return base64.b64decode(asset.bytes_b64)
 
@@ -292,7 +292,7 @@ async def _persist_page_assets(
     if persist_namespace is None:
         return []
     if source_file_id is None or not source_file_id.strip():
-        raise ValueError("index persist требует file_id источника")
+        raise ValueError("index persist requires source file_id")
     files_service = FileReader.require_files_service()
     refs: list[FileRef] = []
     for image_index, asset in enumerate(assets, start=1):
@@ -412,7 +412,7 @@ async def _extract_document(
     info = reader.recognize_file_type(file_name=file_name, head=resolved_raw[:8192])
     persist_namespace = args.persist_assets_namespace
     if persist_namespace is not None and (file_id is None or not file_id.strip()):
-        raise ValueError("index persist требует file_id источника")
+        raise ValueError("index persist requires source file_id")
 
     vision_prompt = args.vision_prompt.strip() if args.vision_prompt.strip() else None
     prompt = vision_prompt or "Опиши содержимое страницы и извлеки весь видимый текст."
@@ -465,8 +465,8 @@ async def _extract_document(
     if force_vision and not any(page.assets for page in source_pages):
         if forced_lane is ReadLane.VISION:
             raise FileReadError(
-                "lane=vision требует изображения на странице, "
-                + f"а тип — {kind.value}"
+                "lane=vision requires an image on the page, "
+                + f"but type is {kind.value}"
             )
         warnings.append(
             f"hybrid: у {kind.value} нет ассетов на страницах, прочитан только текст"
@@ -535,8 +535,8 @@ async def _get_or_extract(
         info = reader.recognize_file_type(file_name=_display_name(file_ref))
         if info.detected_kind in (FileReadKind.IMAGE, FileReadKind.AUDIO, FileReadKind.VIDEO):
             raise FileReadError(
-                f"text lane не применим к типу {info.detected_kind.value}; "
-                + "используйте универсальный read_file или vision/stt tool"
+                f"text lane is not applicable to type {info.detected_kind.value}; "
+                + "use the universal read_file or a vision/stt tool"
             )
 
     cached = await load_file_extract(file_id=file_id, checksum=None)

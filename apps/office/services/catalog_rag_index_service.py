@@ -57,19 +57,19 @@ class OfficeCatalogRagIndexService:
     def rag_namespace_id(catalog_id: str) -> str:
         normalized = catalog_id.strip()
         if normalized == "":
-            raise ValueError("catalog_id обязателен")
+            raise ValueError("catalog_id is required")
         return f"{OFFICE_CATALOG_RAG_NAMESPACE_PREFIX}{normalized}"
 
     def _require_context(self) -> tuple[str, str, str]:
         context = get_context()
         if context is None:
-            raise ValueError("Нет контекста запроса")
+            raise ValueError("Request context is missing")
         if context.active_company is None:
-            raise ValueError("Нет активной компании")
+            raise ValueError("No active company")
         company_id = context.active_company.company_id
         workspace_namespace = context.active_namespace.strip()
         if workspace_namespace == "":
-            raise ValueError("active_namespace обязателен")
+            raise ValueError("active_namespace is required")
         return company_id, workspace_namespace, context.user.user_id
 
     async def _get_catalog_or_raise(
@@ -81,7 +81,7 @@ class OfficeCatalogRagIndexService:
     ) -> OfficeDocumentCatalog:
         catalog = await self._catalog_repository.get(catalog_id, company_id, workspace_namespace)
         if catalog is None:
-            raise ValueError("Каталог не найден")
+            raise ValueError("Catalog not found")
         return catalog
 
     @staticmethod
@@ -131,7 +131,7 @@ class OfficeCatalogRagIndexService:
             enabled=True,
         )
         if updated is None:
-            raise ValueError("Каталог не найден")
+            raise ValueError("Catalog not found")
         rebuild = await self.rebuild_catalog(catalog.catalog_id)
         return OfficeCatalogRagIndexEnableResponse(
             rag_namespace_id=rag_namespace_id,
@@ -158,7 +158,7 @@ class OfficeCatalogRagIndexService:
             enabled=False,
         )
         if updated is None:
-            raise ValueError("Каталог не найден")
+            raise ValueError("Catalog not found")
 
     async def index_binding(
         self,
@@ -177,11 +177,11 @@ class OfficeCatalogRagIndexService:
             workspace_namespace = scope_workspace_namespace.strip()
             user_id = scope_user_id.strip()
             if company_id == "":
-                raise ValueError("scope_company_id обязателен")
+                raise ValueError("scope_company_id is required")
             if workspace_namespace == "":
-                raise ValueError("scope_workspace_namespace обязателен")
+                raise ValueError("scope_workspace_namespace is required")
             if user_id == "":
-                raise ValueError("scope_user_id обязателен")
+                raise ValueError("scope_user_id is required")
         else:
             company_id, workspace_namespace, user_id = self._require_context()
         catalog = await self._catalog_repository.get(
@@ -190,13 +190,13 @@ class OfficeCatalogRagIndexService:
             workspace_namespace,
         )
         if catalog is None:
-            raise ValueError("Каталог не найден")
+            raise ValueError("Catalog not found")
         if not catalog.rag_index_enabled:
             return None
 
         file_record = await self._file_repository.get(binding.file_id)
         if file_record is None:
-            raise ValueError(f"FileRecord не найден: {binding.file_id}")
+            raise ValueError(f"FileRecord not found: {binding.file_id}")
 
         resolved_category = effective_rag_file_category(
             file_category=binding.file_category,
@@ -204,14 +204,11 @@ class OfficeCatalogRagIndexService:
         )
         if not is_rag_indexable_file_category(resolved_category):
             logger.info(
-                (
-                    "Office catalog RAG index skip non-indexable file_id=%s "
-                    "catalog_id=%s file_category=%s document_name=%s"
-                ),
-                binding.file_id,
-                catalog.catalog_id,
-                resolved_category,
-                file_record.original_name,
+                "office.catalog.rag.index.skip",
+                file_id=binding.file_id,
+                catalog_id=catalog.catalog_id,
+                file_category=resolved_category,
+                document_name=file_record.original_name,
             )
             return None
 
@@ -228,11 +225,7 @@ class OfficeCatalogRagIndexService:
             metadata=metadata,
             document_name=file_record.original_name,
         )
-        logger.info(
-            "Office catalog RAG index enqueued file_id=%s catalog_id=%s",
-            binding.file_id,
-            catalog.catalog_id,
-        )
+        logger.info("office.catalog.rag.index.enqueued", file_id=binding.file_id, catalog_id=catalog.catalog_id)
         return response
 
     async def unindex_binding(self, catalog_id: str, file_id: str) -> None:
@@ -295,7 +288,7 @@ class OfficeCatalogRagIndexService:
                 continue
             task_id = response.get("task_id")
             if not isinstance(task_id, str) or task_id.strip() == "":
-                raise ValueError(f"RAG index_file без task_id для file_id={binding.file_id}")
+                raise ValueError(f"RAG index_file without task_id for file_id={binding.file_id}")
             last_task_id = task_id
             enqueued += 1
         return last_task_id, enqueued
@@ -324,7 +317,7 @@ class OfficeCatalogRagIndexService:
             update_search_options=update_search_options,
         )
         if updated is None:
-            raise ValueError("Каталог не найден")
+            raise ValueError("Catalog not found")
         return OfficeCatalogRagIndexSettingsResponse(
             include_subcatalogs=updated.rag_index_include_subcatalogs,
             search_options=self.catalog_search_options_model(updated),
@@ -358,7 +351,7 @@ class OfficeCatalogRagIndexService:
             workspace_namespace=workspace_namespace,
         )
         if not catalog.rag_index_enabled:
-            raise ValueError("RAG-индекс для каталога не включён")
+            raise ValueError("RAG index is not enabled for the catalog")
 
         searchable_catalog_ids = await self._searchable_catalog_ids_in_scope(
             catalog,
@@ -366,7 +359,7 @@ class OfficeCatalogRagIndexService:
             workspace_namespace=workspace_namespace,
         )
         if not searchable_catalog_ids:
-            raise ValueError("RAG-индекс для каталога не включён")
+            raise ValueError("RAG index is not enabled for the catalog")
 
         last_task_id: str | None = None
         enqueued_total = 0
@@ -489,7 +482,7 @@ class OfficeCatalogRagIndexService:
             return "failed"
         if status_value == "completed":
             return "ready"
-        raise ValueError(f"Неизвестный статус индексации RAG: {status_value}")
+        raise ValueError(f"Unknown RAG indexing status: {status_value}")
 
     async def _status_bucket_for_file(
         self,
@@ -545,7 +538,7 @@ class OfficeCatalogRagIndexService:
         )
         normalized_query = request.query.strip()
         if normalized_query == "":
-            raise ValueError("query обязателен")
+            raise ValueError("query is required")
         limit = request.limit
 
         searchable_catalog_ids = await self._searchable_catalog_ids_in_scope(
@@ -554,7 +547,7 @@ class OfficeCatalogRagIndexService:
             workspace_namespace=workspace_namespace,
         )
         if not searchable_catalog_ids:
-            raise ValueError("Нет проиндексированных каталогов для поиска")
+            raise ValueError("No indexed catalogs to search")
 
         namespace_ids = [self.rag_namespace_id(searchable_id) for searchable_id in searchable_catalog_ids]
         settings = get_settings()

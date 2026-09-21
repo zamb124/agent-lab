@@ -7,6 +7,8 @@ CI-gate: деньги проходят только через billing spans.
    `operation_name` покрыт правилом из `core/billing/default_settlement_rules.py`
    (`operation_name_prefix` / `operation_name_equals`); operation_name с f-строкой
    проверяется по литеральному префиксу до первой `{`.
+3. `require_balance_for_billable_operation` и `record_llm_response` — только в
+   allowlist (LLMClient, billing, speech/embedding/rerank/livekit/guest/search).
 """
 
 from __future__ import annotations
@@ -20,6 +22,21 @@ SCAN_ROOTS = (REPO_ROOT / "apps", REPO_ROOT / "core")
 SETTLEMENT_ALLOWED_FILE = REPO_ROOT / "core" / "billing" / "service.py"
 RULES_PATH = REPO_ROOT / "core" / "billing" / "default_settlement_rules.py"
 SKIP_PARTS: frozenset[str] = frozenset({"vendor", "__pycache__", "desktop"})
+REQUIRE_BALANCE_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        "core/clients/llm/billing.py",
+        "core/ai/embedding_client.py",
+        "core/calls/livekit_client.py",
+        "apps/guest_runtime/services/farm_service.py",
+        "apps/search/services/meta.py",
+        "apps/voice/api/session.py",
+    }
+)
+RECORD_LLM_RESPONSE_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        "core/clients/llm/billing.py",
+    }
+)
 
 
 def _iter_python_files() -> list[Path]:
@@ -108,6 +125,15 @@ def main() -> int:
             name = callee.id if isinstance(callee, ast.Name) else callee.attr if isinstance(callee, ast.Attribute) else ""
             if name == "record_usage" and path != SETTLEMENT_ALLOWED_FILE:
                 errors.append(f"{rel}:{node.lineno}: прямой record_usage — деньги идут только через billing span + settlement")
+            if name == "require_balance_for_billable_operation" and rel not in REQUIRE_BALANCE_ALLOWLIST:
+                errors.append(
+                    f"{rel}:{node.lineno}: require_balance_for_billable_operation вне allowlist "
+                    + "(LLM — core/clients/llm/billing.py; остальные — speech/embedding/livekit/guest/search)"
+                )
+            if name == "record_llm_response" and rel not in RECORD_LLM_RESPONSE_ALLOWLIST:
+                errors.append(
+                    f"{rel}:{node.lineno}: record_llm_response вне allowlist — только core/clients/llm/billing.py"
+                )
             if name != "traced_operation":
                 continue
             pending = any(

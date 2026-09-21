@@ -93,7 +93,7 @@ async def rag_add_text(
     merged_meta: RAGMetadata = dict(metadata) if metadata is not None else {}
     if "collection_id" in merged_meta and merged_meta["collection_id"] != collection_id:
         raise ValueError(
-            "metadata.collection_id не совпадает с аргументом collection_id",
+            "metadata.collection_id does not match the collection_id argument",
         )
     merged_meta["collection_id"] = collection_id
     raw = await RagClient().ingest_text(
@@ -130,7 +130,7 @@ async def rag_search(
     merged_filters: RAGMetadataFilter = dict(filters) if filters is not None else {}
     if "collection_id" in merged_filters and merged_filters["collection_id"] != collection_id:
         raise ValueError(
-            "filters.collection_id не совпадает с аргументом collection_id",
+            "filters.collection_id does not match the collection_id argument",
         )
     merged_filters["collection_id"] = collection_id
     return await RagClient().search(

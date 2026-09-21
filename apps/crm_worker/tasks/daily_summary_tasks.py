@@ -210,7 +210,7 @@ async def rebuild_daily_summary_task(
             summary_state=state,
             container=container,
         )
-    logger.info(f"CRM daily summary rebuilt: company_id={company_id}, namespace={namespace or 'all'}, date={date_str}, reason={reason}")
+    logger.info("crm.summary.daily_rebuilt", company_id=company_id, namespace=namespace, date=date_str, reason=reason)
     return state
 
 
@@ -324,7 +324,7 @@ async def rebuild_period_summary_task(
             },
             container=container,
         )
-    logger.info(f"CRM period summary rebuilt: company_id={company_id}, namespace={namespace or 'all'}, from={date_from}, to={date_to}, reason={reason}")
+    logger.info("crm.summary.period_rebuilt", company_id=company_id, namespace=namespace, date_from=date_from, date_to=date_to, reason=reason)
     return state
 
 

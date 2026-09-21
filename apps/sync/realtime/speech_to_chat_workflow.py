@@ -101,7 +101,7 @@ def _redis_eval_int(value: int | str | bytes | None, label: str) -> int:
         return value
     if isinstance(value, str):
         return int(value)
-    raise ValueError(f"{label}: Redis eval вернул пустой результат")
+    raise ValueError(f"{label}: Redis eval returned an empty result")
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,10 +130,7 @@ async def _stc_poll_lock_renew_loop(
                 str(ttl_sec),
             )
             if _redis_eval_int(extended, "speech_to_chat lock extend") != 1:
-                logger.warning(
-                    "speech_to_chat poll: не удалось продлить lock key=%s (возможно истёк TTL)",
-                    lock_key,
-                )
+                logger.warning("sync.speech_to_chat", key=lock_key)
                 break
     except asyncio.CancelledError:
         raise
@@ -164,7 +161,7 @@ def _normalize_storage_url_for_worker(*, storage_url: str, testing: bool) -> str
     else:
         netloc = f"localhost:{parsed.port}"
     if parsed.scheme == "":
-        raise ValueError(f"Некорректный storage_url без схемы: {storage_url}")
+        raise ValueError(f"Invalid storage_url without a scheme: {storage_url}")
     return f"{parsed.scheme}://{netloc}{parsed.path}"
 
 
@@ -231,7 +228,7 @@ async def _audio_segment_entries_from_s3_prefix(
         return []
     default_key = settings.s3.default_bucket
     if default_key == "" or default_key not in settings.s3.buckets:
-        raise ValueError("s3.default_bucket не настроен для speech-to-chat.")
+        raise ValueError("s3.default_bucket is not set for speech-to-chat.")
     client = S3ClientFactory.create_client_for_bucket(default_key)
     listed = await client.list_objects(
         prefix=prefix,
@@ -275,7 +272,7 @@ async def _http_get_segment_bytes(url: str) -> bytes:
         _ = response.raise_for_status()
         body = response.content
     if not body:
-        raise ValueError("Пустой ответ при загрузке сегмента speech-to-chat.")
+        raise ValueError("Empty response while downloading a speech-to-chat segment.")
     return body
 
 
@@ -287,7 +284,7 @@ async def _fetch_segment_bytes(*, storage_url: str) -> bytes:
     settings = get_settings()
     parsed = urlparse(storage_url)
     if parsed.scheme not in ("http", "https"):
-        raise ValueError(f"Некорректный URL сегмента speech-to-chat: {storage_url}")
+        raise ValueError(f"Invalid speech-to-chat segment URL: {storage_url}")
     path = parsed.path.lstrip("/")
     if "/" in path and settings.s3.enabled and settings.s3.default_bucket != "":
         bucket_part, _, object_key = path.partition("/")
@@ -344,7 +341,7 @@ async def _post_segment_file_as_message(
 ) -> None:
     settings = get_settings()
     if not settings.s3.enabled or settings.s3.default_bucket == "":
-        raise ValueError("S3 не настроен: speech-to-chat не может сохранить сегмент как файл канала.")
+        raise ValueError("S3 is not configured: speech-to-chat cannot store the segment as a channel file.")
 
     normalized_url = _normalize_storage_url_for_worker(
         storage_url=storage_url,
@@ -353,7 +350,7 @@ async def _post_segment_file_as_message(
     raw = await _fetch_segment_bytes(storage_url=normalized_url)
     if file_size > 0 and len(raw) != file_size:
         raise ValueError(
-            f"Размер сегмента не совпадает с ожидаемым: got={len(raw)} expected={file_size} url={normalized_url}"
+            f"Segment size does not match expected: got={len(raw)} expected={file_size} url={normalized_url}"
         )
 
     normalized_audio, upload_name, upload_mime = await _normalize_egress_audio_for_upload_pipeline(
@@ -369,10 +366,10 @@ async def _post_segment_file_as_message(
         )
         if max_vol_db < stc.speech_segment_discard_below_max_volume_db:
             logger.info(
-                "speech_to_chat: сегмент без существенного сигнала call_id=%s track=%s max_volume_db=%s",
-                call_id,
-                row.track_sid,
-                max_vol_db,
+                "sync.speech_to_chat",
+                call_id=call_id,
+                track=row.track_sid,
+                max_volume_db=max_vol_db,
             )
             return
         normalized_audio = await trim_leading_trailing_silence_from_bytes(
@@ -386,10 +383,10 @@ async def _post_segment_file_as_message(
         )
         if duration_ms < stc.speech_segment_min_post_duration_ms:
             logger.info(
-                "speech_to_chat: после обрезки тишины сегмент слишком короткий call_id=%s track=%s duration_ms=%s",
-                call_id,
-                row.track_sid,
-                duration_ms,
+                "sync.speech_to_chat",
+                call_id=call_id,
+                track=row.track_sid,
+                duration_ms=duration_ms,
             )
             return
     else:
@@ -397,7 +394,7 @@ async def _post_segment_file_as_message(
             normalized_audio, upload_suffix
         )
     if duration_ms <= 0:
-        raise ValueError("Не удалось определить длительность сегмента speech-to-chat.")
+        raise ValueError("Failed to determine speech-to-chat segment duration.")
 
     checksum = hashlib.sha256(normalized_audio).hexdigest()
     api_prefix = f"/{settings.server.name}/api/v1"
@@ -563,24 +560,24 @@ async def process_new_files_for_egress_row(
 def _s3_params_from_settings() -> tuple[str, str, str, str, str | None]:
     settings = get_settings()
     if not settings.s3.enabled:
-        raise ValueError("S3 отключен: speech-to-chat egress в S3 недоступен.")
+        raise ValueError("S3 is disabled: speech-to-chat egress to S3 is unavailable.")
     default_bucket_key = settings.s3.default_bucket
     if default_bucket_key == "":
-        raise ValueError("s3.default_bucket не настроен.")
+        raise ValueError("s3.default_bucket is not set.")
     if default_bucket_key not in settings.s3.buckets:
-        raise ValueError(f"Конфиг S3 bucket '{default_bucket_key}' не найден.")
+        raise ValueError(f"S3 bucket config '{default_bucket_key}' not found.")
     bucket_config = settings.s3.buckets[default_bucket_key]
     if not bucket_config.enabled:
-        raise ValueError(f"S3 bucket '{default_bucket_key}' выключен.")
+        raise ValueError(f"S3 bucket '{default_bucket_key}' is disabled.")
     if not bucket_config.access_key_id:
-        raise ValueError(f"S3 access_key_id не настроен для bucket '{default_bucket_key}'.")
+        raise ValueError(f"S3 access_key_id is not set for bucket '{default_bucket_key}'.")
     if not bucket_config.secret_access_key:
-        raise ValueError(f"S3 secret_access_key не настроен для bucket '{default_bucket_key}'.")
+        raise ValueError(f"S3 secret_access_key is not set for bucket '{default_bucket_key}'.")
     if not bucket_config.region_name:
-        raise ValueError(f"S3 region_name не настроен для bucket '{default_bucket_key}'.")
+        raise ValueError(f"S3 region_name is not set for bucket '{default_bucket_key}'.")
     real_bucket_name = bucket_config.bucket_name or default_bucket_key
     if real_bucket_name == "":
-        raise ValueError("Имя S3 bucket для egress не может быть пустым.")
+        raise ValueError("S3 bucket name for egress must not be empty.")
 
     endpoint_raw = bucket_config.endpoint_url
     ep: str | None = None
@@ -590,11 +587,11 @@ def _s3_params_from_settings() -> tuple[str, str, str, str, str | None]:
         if parsed.scheme == "":
             ep = trimmed
         elif parsed.netloc == "":
-            raise ValueError(f"Некорректный endpoint_url для S3 egress: {endpoint_raw}")
+            raise ValueError(f"Invalid endpoint_url for S3 egress: {endpoint_raw}")
         else:
             hostname = parsed.hostname
             if hostname is None or hostname == "":
-                raise ValueError(f"Некорректный hostname в endpoint_url для S3 egress: {endpoint_raw}")
+                raise ValueError(f"Invalid hostname in endpoint_url for S3 egress: {endpoint_raw}")
             if hostname == "localhost" or hostname == "127.0.0.1":
                 hostname = "host.docker.internal"
             if parsed.port is None:
@@ -628,9 +625,9 @@ async def run_speech_to_chat_poll_cycle(
 
     channel_entity = await container.channel_repository.get(call.channel_id)
     if channel_entity is None:
-        raise ValueError(f"Канал {call.channel_id} не найден.")
+        raise ValueError(f"Channel {call.channel_id} not found.")
     if channel_entity.company_id != company_id:
-        raise ValueError(f"Канал {call.channel_id} не принадлежит компании.")
+        raise ValueError(f"Channel {call.channel_id} does not belong to the company.")
     if not channel_entity.speech_to_chat_enabled:
         return SpeechToChatPollOutcome(schedule_next=False)
 
@@ -638,7 +635,7 @@ async def run_speech_to_chat_poll_cycle(
     stc = settings.calls.speech_to_chat
     redis_url = settings.database.redis_url
     if redis_url.strip() == "":
-        raise ValueError("database.redis_url обязателен для speech-to-chat poll (single-flight).")
+        raise ValueError("database.redis_url is required for speech-to-chat poll (single-flight).")
 
     r = _speech_to_chat_poll_redis(redis_url)
     lock_key = f"sync:stc_poll:{company_id}:{call_id}"
@@ -652,11 +649,7 @@ async def run_speech_to_chat_poll_cycle(
             ex=stc.poll_lock_ttl_seconds,
         )
         if not acquired:
-            logger.debug(
-                "speech_to_chat poll пропуск: lock занят call_id=%s company=%s",
-                call_id,
-                company_id,
-            )
+            logger.debug("sync.speech_to_chat", call_id=call_id, company=company_id)
             return SpeechToChatPollOutcome(
                 schedule_next=True,
                 next_delay="lock_busy",
@@ -696,9 +689,9 @@ async def _run_speech_to_chat_poll_cycle_inner(*, call_id: str, company_id: str)
 
     channel_entity = await container.channel_repository.get(call.channel_id)
     if channel_entity is None:
-        raise ValueError(f"Канал {call.channel_id} не найден.")
+        raise ValueError(f"Channel {call.channel_id} not found.")
     if channel_entity.company_id != company_id:
-        raise ValueError(f"Канал {call.channel_id} не принадлежит компании.")
+        raise ValueError(f"Channel {call.channel_id} does not belong to the company.")
     if not channel_entity.speech_to_chat_enabled:
         return False
 
@@ -706,7 +699,7 @@ async def _run_speech_to_chat_poll_cycle_inner(*, call_id: str, company_id: str)
     try:
         ak, sk, region, bucket, endpoint = _s3_params_from_settings()
     except ValueError as exc:
-        logger.error("speech_to_chat: %s", str(exc))
+        logger.error("sync.speech_to_chat", exc=str(exc))
         return False
 
     lk = LiveKitClient(
@@ -729,7 +722,7 @@ async def _run_speech_to_chat_poll_cycle_inner(*, call_id: str, company_id: str)
                 try:
                     res = await api.room.list_participants(ListParticipantsRequest(room=room_name))
                 except TimeoutError:
-                    logger.warning("speech_to_chat: list_participants timed out room=%s", room_name)
+                    logger.warning("sync.speech_to_chat", room=room_name)
                     return True
                 participants = list(res.participants)
 
@@ -767,15 +760,15 @@ async def _run_speech_to_chat_poll_cycle_inner(*, call_id: str, company_id: str)
                             )
                         except TwirpError as exc:
                             logger.warning(
-                                "speech_to_chat: не удалось стартовать egress track=%s call=%s: %s",
-                                track_sid,
-                                call_id,
-                                str(exc),
+                                "sync.speech_to_chat",
+                                track=track_sid,
+                                call=call_id,
+                                exc=str(exc),
                             )
                             continue
                         egress_id = egress_info.egress_id
                         if egress_id == "":
-                            raise RuntimeError("LiveKit не вернул egress_id для speech-to-chat.")
+                            raise RuntimeError("LiveKit did not return egress_id for speech-to-chat.")
                         row = SyncCallSpeechEgressTrack(
                             row_id=uuid4().hex,
                             call_id=call_id,
@@ -788,11 +781,11 @@ async def _run_speech_to_chat_poll_cycle_inner(*, call_id: str, company_id: str)
                         )
                         _ = await speech_repo.create(row)
                         logger.info(
-                            "speech_to_chat egress started: call_id=%s identity=%s track=%s egress_id=%s",
-                            call_id,
-                            identity,
-                            track_sid,
-                            egress_id,
+                            "sync.speech_to_chat",
+                            call_id=call_id,
+                            identity=identity,
+                            track=track_sid,
+                            egress_id=egress_id,
                         )
 
                 rows = await speech_repo.list_for_call(call_id, company_id)
@@ -801,7 +794,7 @@ async def _run_speech_to_chat_poll_cycle_inner(*, call_id: str, company_id: str)
                         row=row, egress_info=None, call_id=call_id
                     )
     except TimeoutError:
-        logger.warning("speech_to_chat: LiveKit запрос превысил таймаут room=%s", room_name)
+        logger.warning("sync.speech_to_chat", room=room_name)
         return True
 
     return True
@@ -820,7 +813,7 @@ async def stop_speech_egresses_for_call_room(
     if len(rows) == 0:
         return
     if actor_user_id.strip() == "":
-        raise ValueError("actor_user_id обязателен для stop_speech_egresses_for_call_room.")
+        raise ValueError("actor_user_id is required for stop_speech_egresses_for_call_room.")
 
     settings = get_settings()
     lk = LiveKitClient(
@@ -849,11 +842,7 @@ async def stop_speech_egresses_for_call_room(
                     )
                 except TwirpError as exc:
                     if exc.code in (TwirpErrorCode.NOT_FOUND, TwirpErrorCode.FAILED_PRECONDITION):
-                        logger.warning(
-                            "speech_to_chat egress stop skipped (already done): call_id=%s egress_id=%s",
-                            call_id,
-                            row.egress_id,
-                        )
+                        logger.warning("sync.speech_to_chat", call_id=call_id, egress_id=row.egress_id)
                     else:
                         raise
                 if info is None:
@@ -883,8 +872,8 @@ async def stop_speech_egresses_for_call_room(
 
     await repo.delete_for_call(call_id, company_id)
     logger.info(
-        "speech_to_chat egress очищено: call_id=%s room=%s rows=%s",
-        call_id,
-        room_name,
-        len(rows),
+        "sync.speech_to_chat",
+        call_id=call_id,
+        room=room_name,
+        rows=len(rows),
     )

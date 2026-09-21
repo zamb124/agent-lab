@@ -41,5 +41,5 @@ class FilePurgeService:
             else:
                 failed.append(record.file_id)
         if purged:
-            logger.info("file purge batch completed", purged_count=purged)
+            logger.info("files.file.purge.batch.completed", purged_count=purged)
         return PurgeBatchResult(purged_count=purged, failed_file_ids=failed)

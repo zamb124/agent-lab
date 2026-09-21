@@ -36,7 +36,7 @@ def _derive_fernet_key() -> bytes:
             digest = hashlib.sha256(raw.strip().encode("utf-8")).digest()
             return base64.urlsafe_b64encode(digest)
     raise ValueError(
-        "core.ai.company_settings.crypto: ни auth.jwt_secret_key, ни auth.secret_key не заданы; без секрета нельзя шифровать секреты company AI providers"
+        'core.ai.company_settings.crypto: neither auth.jwt_secret_key nor auth.secret_key is set; cannot encrypt company AI provider secrets without a secret'
     )
 
 
@@ -47,7 +47,7 @@ def _fernet() -> Fernet:
 def encrypt_secret(plaintext: str) -> str:
     """Шифрует секрет в base64-токен Fernet. Пустую строку считаем ошибкой."""
     if not plaintext.strip():
-        raise ValueError("encrypt_secret: plaintext пуст")
+        raise ValueError('encrypt_secret: plaintext is empty')
     token = _fernet().encrypt(plaintext.encode("utf-8"))
     return token.decode("ascii")
 
@@ -55,12 +55,12 @@ def encrypt_secret(plaintext: str) -> str:
 def decrypt_secret(token: str) -> str:
     """Расшифровывает Fernet-токен; невалидный/чужой ключ → ValueError."""
     if not token.strip():
-        raise ValueError("decrypt_secret: token пуст")
+        raise ValueError('decrypt_secret: token is empty')
     try:
         plain = _fernet().decrypt(token.encode("ascii"))
     except InvalidToken as e:
         raise ValueError(
-            "decrypt_secret: невалидный Fernet-токен (или несовпадающий auth.secret_key)"
+            'decrypt_secret: invalid Fernet token (or mismatched auth.secret_key)'
         ) from e
     return plain.decode("utf-8")
 

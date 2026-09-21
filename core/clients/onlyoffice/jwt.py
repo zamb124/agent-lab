@@ -33,13 +33,13 @@ class OnlyOfficeJwtError(Exception):
 
 def sign_onlyoffice_jwt_hs256(payload: JsonObject, secret: str) -> str:
     if not secret.strip():
-        raise OnlyOfficeJwtError("secret пуст")
+        raise OnlyOfficeJwtError("secret is empty")
     return jwt.encode(payload, secret, algorithm="HS256")
 
 
 def verify_onlyoffice_jwt_hs256(token: str, secret: str) -> JsonObject:
     if not secret.strip():
-        raise OnlyOfficeJwtError("secret пуст")
+        raise OnlyOfficeJwtError("secret is empty")
     try:
         decoded = jwt.decode(token, secret, algorithms=["HS256"])
     except jwt.InvalidTokenError as exc:

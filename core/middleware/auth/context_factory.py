@@ -238,7 +238,7 @@ class ContextFactory:
         if ns is None:
             raise HTTPException(
                 status_code=400,
-                detail=f"Namespace «{raw}» не найден",
+                detail=f"Namespace «{raw} not found",
             )
         try:
             await self.container.authz_service.require_can_view(
@@ -248,7 +248,7 @@ class ContextFactory:
         except AuthzDenied as exc:
             raise HTTPException(
                 status_code=403,
-                detail="Namespace не принадлежит активной компании",
+                detail='Namespace does not belong to the active company',
             ) from exc
         except AuthzUnavailable as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc

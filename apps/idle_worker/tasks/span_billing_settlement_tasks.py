@@ -36,7 +36,7 @@ async def span_billing_settlement_tick(
 
     if not settings.tracing.postgres_enabled or not settings.database.tracing_url:
         raise ValueError(
-            "billing.span_settlement.enabled требует tracing.postgres_enabled и database.tracing_url"
+            "billing.span_settlement.enabled requires tracing.postgres_enabled and database.tracing_url"
         )
 
     now = datetime.now(timezone.utc)
@@ -64,10 +64,7 @@ async def span_billing_settlement_tick(
         span_company_id = span.company_id
         if not span_company_id:
             errors += 1
-            logger.error(
-                "span_billing_settlement_tick: span без company_id span_id=%s",
-                span.span_id,
-            )
+            logger.error("idle.span_billing_settlement_tick", span_id=span.span_id)
             continue
 
         if span_company_id != prev_company_id:
@@ -104,18 +101,18 @@ async def span_billing_settlement_tick(
         except Exception as exc:
             errors += 1
             logger.error(
-                "span_billing_settlement_tick: span_id=%s error=%s",
-                span.span_id,
-                exc,
+                "idle.span_billing_settlement_tick",
+                span_id=span.span_id,
+                error=exc,
                 exc_info=(type(exc), exc, exc.__traceback__),
             )
 
     logger.info(
-        "span_billing_settlement_tick done: spans_fetched=%s settled=%s errors=%s schedule_task_id=%s company_id=%s",
-        len(spans),
-        settled,
-        errors,
-        schedule_task_id,
-        scoped_company_id,
+        "idle.span_billing_settlement_tick",
+        spans_fetched=len(spans),
+        settled=settled,
+        errors=errors,
+        schedule_task_id=schedule_task_id,
+        company_id=scoped_company_id,
     )
     return {"spans_fetched": len(spans), "settled": settled, "errors": errors}

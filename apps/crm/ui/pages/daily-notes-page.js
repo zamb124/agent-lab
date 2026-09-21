@@ -876,17 +876,6 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
 
         this.useEvent(this._tasks.resource.events.LIST_LOADED, () => this._rebuildAnalyzeTaskMap());
         this.useEvent(CRM_TASK_UPDATED, () => this._rebuildAnalyzeTaskMap());
-        this.useEvent(CoreEvents.WS_CONNECTED, () => {
-            const items = this._tasks.items;
-            const hasActiveAnalyze = items.some(
-                (t) => t
-                    && t.task_type === 'note_analyze'
-                    && ACTIVE_ANALYZE_TASK_STATUSES.has(t.status),
-            );
-            if (hasActiveAnalyze || this._analyze.busy) {
-                this._loadAnalyzeTasks();
-            }
-        });
 
         this.useEvent('crm/notes_list/loaded', (event) => {
             const items = event.payload && Array.isArray(event.payload.items) ? event.payload.items : [];

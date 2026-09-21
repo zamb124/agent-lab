@@ -17,6 +17,7 @@ class CursorPage(BaseModel, Generic[T]):
 
     items: list[T]
     next_cursor: str | None = None
+    prev_cursor: str | None = None
     has_more: bool
 
 
@@ -66,4 +67,4 @@ def decode_cursor(cursor: str) -> tuple[datetime, str]:
         decoded = CursorToken.model_validate_json(payload)
         return decoded.ts, decoded.entity_id
     except (binascii.Error, ValueError, ValidationError) as exc:
-        raise ValueError(f"Невалидный cursor: {cursor!r}") from exc
+        raise ValueError(f"Invalid cursor: {cursor!r}") from exc

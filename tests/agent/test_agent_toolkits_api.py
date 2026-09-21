@@ -38,7 +38,7 @@ async def test_catalog_shape_and_mcp_url(
                 headers=auth_headers,
             )
             assert response.status_code == 200, response.text
-            items = response.json()
+            items = response.json()["items"]
             assert isinstance(items, list)
             matched = next(
                 (item for item in items if item.get("toolkit_id") == toolkit_id),
@@ -85,7 +85,7 @@ async def test_catalog_mcp_url_linnex_host(
             )
             assert response.status_code == 200, response.text
             matched = next(
-                (item for item in response.json() if item.get("toolkit_id") == toolkit_id),
+                (item for item in response.json()["items"] if item.get("toolkit_id") == toolkit_id),
                 None,
             )
             assert matched is not None
@@ -122,7 +122,7 @@ async def test_catalog_device_jwt(
         headers={"Authorization": f"Bearer {device_token}"},
     )
     assert response.status_code == 200, response.text
-    items = response.json()
+    items = response.json()["items"]
     assert isinstance(items, list)
     toolkit_ids = {item["toolkit_id"] for item in items if isinstance(item, dict)}
     assert toolkit_ids == {"lara"}
@@ -181,7 +181,7 @@ async def test_catalog_device_jwt_forces_lara_default_enabled(
         headers={"Authorization": f"Bearer {register.json()['token']}"},
     )
     assert response.status_code == 200, response.text
-    items = response.json()
+    items = response.json()["items"]
     assert len(items) == 1
     assert items[0]["toolkit_id"] == "lara"
     assert items[0]["default_enabled"] is True
@@ -210,7 +210,8 @@ async def test_catalog_revoked_device_returns_401(
     assert register.status_code == 200, register.text
     device_token = register.json()["token"]
     revoke = await frontend_client_with_auth.delete(f"{AGENT_API_PREFIX}/devices/{device_id}")
-    assert revoke.status_code == 204
+    assert revoke.status_code == 200, revoke.text
+    assert revoke.json() == {"device_id": device_id, "revoked": True}
     response = await flows_client.get(
         "/flows/api/v1/agent/toolkits",
         headers={"Authorization": f"Bearer {device_token}"},
@@ -262,7 +263,7 @@ async def test_catalog_lazy_backfill_empty_company(
             headers=auth_headers,
         )
         assert response.status_code == 200, response.text
-        items = response.json()
+        items = response.json()["items"]
         toolkit_ids = {item["toolkit_id"] for item in items if isinstance(item, dict)}
         assert "humanitec_core" in toolkit_ids
     finally:

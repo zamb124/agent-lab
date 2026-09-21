@@ -103,10 +103,10 @@ class ToolApprovalStore:
         if not saved:
             raise RuntimeError("Failed to persist tool approval")
         logger.info(
-            "tool_approval_pending approval_id=%s tool_id=%s company_id=%s",
-            record.approval_id,
-            tool_id,
-            company_id,
+            "flows.tool_approval_pending",
+            approval_id=record.approval_id,
+            tool_id=tool_id,
+            company_id=company_id,
         )
         return record
 
@@ -145,11 +145,7 @@ class ToolApprovalStore:
         saved = await self._redis.set(key, consumed.model_dump_json(), ttl=self._ttl_seconds)
         if not saved:
             raise RuntimeError("Failed to persist consumed tool approval")
-        logger.info(
-            "tool_approval_consumed approval_id=%s tool_id=%s",
-            approval_id,
-            tool_id,
-        )
+        logger.info("flows.tool_approval_consumed", approval_id=approval_id, tool_id=tool_id)
         return consumed
 
     async def invalidate(self, *, company_id: str, approval_id: str) -> ToolApprovalRecord:
@@ -161,9 +157,5 @@ class ToolApprovalStore:
         saved = await self._redis.set(key, invalidated.model_dump_json(), ttl=self._ttl_seconds)
         if not saved:
             raise RuntimeError("Failed to persist invalidated tool approval")
-        logger.info(
-            "tool_approval_invalidated approval_id=%s tool_id=%s",
-            approval_id,
-            record.tool_id,
-        )
+        logger.info("flows.tool_approval_invalidated", approval_id=approval_id, tool_id=record.tool_id)
         return invalidated

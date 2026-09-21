@@ -102,7 +102,7 @@ def _pcm16le_to_unit_floats(audio_bytes: bytes) -> list[float]:
 
 def _vad_segment_from_json(value: JsonValue) -> VADSegment:
     if not isinstance(value, Mapping):
-        raise ValueError("VAD litserve: элемент segments должен быть JSON-объектом.")
+        raise ValueError("VAD litserve: segments item must be a JSON object.")
     start = value.get("start")
     end = value.get("end")
     if (
@@ -111,7 +111,7 @@ def _vad_segment_from_json(value: JsonValue) -> VADSegment:
         or not isinstance(start, int | float)
         or not isinstance(end, int | float)
     ):
-        raise ValueError("VAD litserve: segment.start и segment.end должны быть числами.")
+        raise ValueError("VAD litserve: segment.start and segment.end must be numbers.")
     return VADSegment(start=float(start), end=float(end))
 
 
@@ -152,7 +152,7 @@ class BaseVADClient(ABC):
     ) -> float:
         _ = audio_bytes, sample_rate
         raise NotImplementedError(
-            f"{type(self).__name__}: streaming detect_speech_prob не поддержан."
+            f"{type(self).__name__}: streaming detect_speech_prob is not supported."
         )
 
     def reset_streaming_state(self) -> None:
@@ -170,11 +170,11 @@ class LitserveVADClient(BaseVADClient):
         timeout: float,
     ) -> None:
         if base_url == "":
-            raise ValueError("VAD litserve base_url не может быть пустым.")
+            raise ValueError("VAD litserve base_url cannot be empty.")
         if model == "":
-            raise ValueError("VAD litserve model не может быть пустым.")
+            raise ValueError("VAD litserve model cannot be empty.")
         if timeout <= 0:
-            raise ValueError("VAD litserve timeout должен быть больше 0.")
+            raise ValueError("VAD litserve timeout must be greater than 0.")
         self._base_url: str = base_url.rstrip("/")
         self._model: str = model
         self._timeout: float = timeout
@@ -188,9 +188,9 @@ class LitserveVADClient(BaseVADClient):
         threshold: float | None = None,
     ) -> list[VADSegment]:
         if not audio_bytes:
-            raise ValueError("VAD litserve: audio_bytes пуст.")
+            raise ValueError("VAD litserve: audio_bytes is empty.")
         if sample_rate <= 0:
-            raise ValueError("VAD litserve: sample_rate должен быть > 0.")
+            raise ValueError("VAD litserve: sample_rate must be > 0.")
 
         url = f"{self._base_url}/v1/audio/vad"
         payload: JsonObject = {
@@ -226,9 +226,9 @@ class LocalSileroVADClient(BaseVADClient):
         threshold: float,
     ) -> None:
         if sample_rate <= 0:
-            raise ValueError("VAD silero_local: sample_rate должен быть > 0.")
+            raise ValueError("VAD silero_local: sample_rate must be > 0.")
         if not 0.0 <= threshold <= 1.0:
-            raise ValueError("VAD silero_local: threshold должен быть в [0.0, 1.0].")
+            raise ValueError("VAD silero_local: threshold must be in [0.0, 1.0].")
         self._default_sample_rate: int = sample_rate
         self._default_threshold: float = threshold
         self._model: _SileroModel | None = None
@@ -243,7 +243,7 @@ class LocalSileroVADClient(BaseVADClient):
                 silero_vad.get_speech_timestamps,
             )
         if self._get_speech_ts is None:
-            raise RuntimeError("VAD silero_local: get_speech_timestamps не инициализирован.")
+            raise RuntimeError("VAD silero_local: get_speech_timestamps is not initialized.")
         return self._model, self._get_speech_ts
 
     @override
@@ -255,9 +255,9 @@ class LocalSileroVADClient(BaseVADClient):
         threshold: float | None = None,
     ) -> list[VADSegment]:
         if not audio_bytes:
-            raise ValueError("VAD silero_local: audio_bytes пуст.")
+            raise ValueError("VAD silero_local: audio_bytes is empty.")
         if sample_rate <= 0:
-            raise ValueError("VAD silero_local: sample_rate должен быть > 0.")
+            raise ValueError("VAD silero_local: sample_rate must be > 0.")
         chosen_threshold = threshold if threshold is not None else self._default_threshold
 
         model, get_speech_ts = self._ensure_loaded()
@@ -308,16 +308,16 @@ class LocalSileroVADClient(BaseVADClient):
         """
         if sample_rate not in (8000, 16000):
             raise ValueError(
-                "VAD silero_local streaming: поддерживаются только "
-                + f"sample_rate ∈ {{8000, 16000}}, получено {sample_rate}."
+                "VAD silero_local streaming: only "
+                + f"sample_rate ∈ {{8000, 16000}} is supported, got {sample_rate}."
             )
         expected_samples = 512 if sample_rate == 16000 else 256
         expected_bytes = expected_samples * 2
         if len(audio_bytes) != expected_bytes:
             raise ValueError(
-                "VAD silero_local streaming: chunk должен быть ровно "
-                + f"{expected_bytes} байт ({expected_samples} сэмплов "
-                + f"PCM-16 mono LE), получено {len(audio_bytes)} байт."
+                "VAD silero_local streaming: chunk must be exactly "
+                + f"{expected_bytes} bytes ({expected_samples} samples "
+                + f"PCM-16 mono LE), got {len(audio_bytes)} bytes."
             )
 
         model, _ = self._ensure_loaded()
@@ -397,18 +397,18 @@ class VADClientFactory:
         """Создать клиент по уже резолвнутым параметрам."""
         _ = secrets or {}
         if provider_name == "":
-            raise ValueError("VAD provider не задан после tier-резолва.")
+            raise ValueError("VAD provider is not set after tier resolve.")
 
         if provider_name == "litserve":
             backend = cfg.litserve
             if not backend.enabled:
                 raise ValueError(
-                    "VAD провайдер `litserve` выключен в `voice.vad.litserve.enabled`."
+                    "VAD provider `litserve` is disabled in `voice.vad.litserve.enabled`."
                 )
             chosen_model = model or cfg.default_model
             if not chosen_model:
                 raise ValueError(
-                    "VAD litserve: model не задан ни в override, ни в "
+                    "VAD litserve: model is set neither in override nor in "
                     + "`voice.vad.default_model`."
                 )
             return LitserveVADClient(
@@ -420,7 +420,7 @@ class VADClientFactory:
             backend_local: LocalSileroVADBackendConfig = cfg.silero_local
             if not backend_local.enabled:
                 raise ValueError(
-                    "VAD провайдер `silero_local` выключен в "
+                    "VAD provider `silero_local` is disabled in "
                     + "`voice.vad.silero_local.enabled`."
                 )
             return LocalSileroVADClient(
@@ -430,7 +430,7 @@ class VADClientFactory:
         if provider_name == "mock":
             return MockVADClient()
 
-        raise ValueError(f"Неизвестный VAD провайдер: {provider_name!r}")
+        raise ValueError(f"Unknown VAD provider: {provider_name!r}")
 
 
 __all__ = [

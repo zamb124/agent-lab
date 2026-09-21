@@ -16,6 +16,6 @@ LIGHTPANDA_COMPAT_ENDPOINT_KEYS: set[str] = {
 
 def is_lightpanda_compat_endpoint(endpoint_key: str) -> bool:
     if not endpoint_key:
-        raise ValueError("endpoint_key обязателен")
+        raise ValueError("endpoint_key is required")
     return endpoint_key in LIGHTPANDA_COMPAT_ENDPOINT_KEYS
 

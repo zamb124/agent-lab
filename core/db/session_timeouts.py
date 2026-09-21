@@ -40,15 +40,15 @@ async def override_session_timeouts(
     """
     if statement_timeout_ms is not None:
         if statement_timeout_ms < 0:
-            raise ValueError("statement_timeout_ms должен быть >= 0")
+            raise ValueError('statement_timeout_ms must be >= 0')
         _ = await session.execute(text(f"SET LOCAL statement_timeout = {statement_timeout_ms}"))
     if lock_timeout_ms is not None:
         if lock_timeout_ms < 0:
-            raise ValueError("lock_timeout_ms должен быть >= 0")
+            raise ValueError('lock_timeout_ms must be >= 0')
         _ = await session.execute(text(f"SET LOCAL lock_timeout = {lock_timeout_ms}"))
     if idle_in_transaction_session_timeout_ms is not None:
         if idle_in_transaction_session_timeout_ms < 0:
-            raise ValueError("idle_in_transaction_session_timeout_ms должен быть >= 0")
+            raise ValueError('idle_in_transaction_session_timeout_ms must be >= 0')
         _ = await session.execute(
             text(
                 "SET LOCAL idle_in_transaction_session_timeout = " +

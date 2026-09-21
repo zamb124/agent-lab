@@ -6,7 +6,6 @@ from collections.abc import Awaitable
 from typing import TypeVar
 
 from apps.flows.realtime.operations import (
-    FlowsEmptyPayload,
     require_company_member,
 )
 from apps.flows.src.container import FlowContainer
@@ -28,6 +27,7 @@ from core.datasources.models import (
 from core.models.identity_models import User
 from core.pagination import ListResponse, OffsetPage
 from core.websocket import (
+    EmptyPayload,
     raise_forbidden,
     raise_invalid,
 )
@@ -45,7 +45,7 @@ async def _datasource_call(coro: Awaitable[T]) -> T:
 
 
 async def op_flows_datasources_connectors_list(
-    payload: FlowsEmptyPayload,
+    payload: EmptyPayload,
     *,
     user: User,
     container: FlowContainer,

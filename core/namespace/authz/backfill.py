@@ -87,11 +87,7 @@ async def backfill_platform_namespace_authz(
             )
             owners_written += 1
 
-    logger.info(
-        "platform namespace authz backfill company=%s owners=%s",
-        company_written,
-        owners_written,
-    )
+    logger.info("platform.namespace.authz.backfill.company", company=company_written, owners=owners_written)
     return company_written, owners_written
 
 

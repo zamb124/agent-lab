@@ -1,71 +1,53 @@
 /**
- * Ресурсы billing — подписка, usage, история транзакций, смена тарифа,
- * пополнение баланса. Все операции через прокси `/frontend/api/billing/*`.
+ * Ресурсы billing — подписка, usage, история транзакций, смена тарифа, пополнение баланса
+ * (команды `frontend/billing/*`, REST-зеркало `apps/frontend/api/billing.py`).
  *
  * Состав:
- *   - billingSubscriptionLoadOp: GET /subscription, silent.
- *   - billingUsageLoadOp:        GET /usage, silent.
- *   - billingHistoryLoadOp:      GET /history, silent (lastResult.items).
- *   - billingPlanChangeOp:       PATCH /plan, успех показывает toast и
- *     перезагружает subscription.
- *   - billingTopupOp:            POST /topup, успех показывает toast и
- *     редиректит на payment_url через router.
+ *   - billingSubscriptionLoadOp / billingUsageLoadOp / billingHistoryLoadOp: снимки, silent.
+ *   - billingPlanChangeOp: успех показывает toast и перезапрашивает подписку.
+ *   - billingTopupOp: успех показывает toast и уводит на `payment_url` провайдера.
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 
-const BASE = '/frontend/api/billing';
+const WS_TIMEOUT_MS = 8_000;
 
 export const billingSubscriptionLoadOp = createAsyncOp({
     name: 'frontend/billing_subscription',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: WS_TIMEOUT_MS,
+    commandType: 'frontend/billing/subscription_requested',
     restMirror: { method: 'GET', path: '/frontend/api/billing/subscription' },
-    request: async () => await httpRequest({
-        method: 'GET',
-        url: `${BASE}/subscription`,
-    }),
 });
 
 export const billingUsageLoadOp = createAsyncOp({
     name: 'frontend/billing_usage',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: WS_TIMEOUT_MS,
+    commandType: 'frontend/billing/usage_requested',
     restMirror: { method: 'GET', path: '/frontend/api/billing/usage' },
-    request: async () => await httpRequest({
-        method: 'GET',
-        url: `${BASE}/usage`,
-    }),
 });
 
 export const billingHistoryLoadOp = createAsyncOp({
     name: 'frontend/billing_history',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: WS_TIMEOUT_MS,
+    commandType: 'frontend/billing/payment_history_requested',
     restMirror: { method: 'GET', path: '/frontend/api/billing/history' },
-    request: async () => {
-        const data = await httpRequest({
-            method: 'GET',
-            url: `${BASE}/history`,
-        });
-        return { items: Array.isArray(data.payments) ? data.payments : [] };
-    },
 });
 
 export const billingPlanChangeOp = createAsyncOp({
     name: 'frontend/billing_plan_change',
     successToastKey: 'frontend:billing_page.toast_plan_changed',
     errorToastKey: 'frontend:billing_page.err_plan_change_failed',
+    transport: 'ws',
+    wsTimeoutMs: WS_TIMEOUT_MS,
+    commandType: 'frontend/billing/plan_change_requested',
     restMirror: { method: 'PATCH', path: '/frontend/api/billing/plan' },
-    request: async ({ payload }) => {
-        const plan = payload && payload.plan;
-        if (!plan) throw new Error('billingPlanChangeOp: plan required');
-        await httpRequest({
-            method: 'PATCH',
-            url: `${BASE}/plan`,
-            body: { plan },
-        });
-        return { plan };
-    },
     onSuccess: (ctx) => {
         ctx.dispatch(billingSubscriptionLoadOp.events.REQUESTED, null, { source: 'local' });
     },
@@ -74,24 +56,19 @@ export const billingPlanChangeOp = createAsyncOp({
 export const billingTopupOp = createAsyncOp({
     name: 'frontend/billing_topup',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'frontend/billing/topup_requested',
     restMirror: { method: 'POST', path: '/frontend/api/billing/topup' },
-    request: async ({ payload }) => {
-        const amount = payload && payload.amount;
-        if (!amount) throw new Error('billingTopupOp: amount required');
-        return await httpRequest({
-            method: 'POST',
-            url: `${BASE}/topup`,
-            body: { amount },
-        });
-    },
     onSuccess: (ctx, result) => {
         ctx.dispatch(
             CoreEvents.UI_TOAST_SHOW,
             { type: 'info', i18n_key: 'frontend:topup_modal.toast_redirect' },
             { source: 'local' },
         );
-        if (result && result.payment_url) {
-            window.location.assign(result.payment_url);
+        if (!result || typeof result.payment_url !== 'string' || result.payment_url === '') {
+            throw new Error('billingTopupOp: payment_url required in result');
         }
+        window.location.assign(result.payment_url);
     },
 });

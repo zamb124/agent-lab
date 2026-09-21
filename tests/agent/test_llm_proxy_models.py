@@ -16,7 +16,7 @@ from a2a.types import (
     TaskStatusUpdateEvent,
 )
 from a2a.types.a2a_pb2 import ROLE_AGENT, TASK_STATE_COMPLETED
-from fastapi import HTTPException
+from core.websocket import WsCommandError
 
 from apps.flows.src.agent.llm_proxy import (
     AgentOpenAIChatCompletionsRequest,
@@ -50,9 +50,10 @@ def test_agent_llm_option_value_reads_string_and_json_object() -> None:
 
 def test_validate_requested_agent_model_rejects_unknown_model() -> None:
     allowed = {HUMANITEC_LLM_AUTO_MODEL, "openrouter:qwen/qwen3-coder:free"}
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(WsCommandError) as exc_info:
         _validate_requested_agent_model("anthropic:claude-3.5-sonnet", allowed)
-    assert exc_info.value.status_code == 400
+    assert exc_info.value.code == "ws_invalid_payload"
+    assert exc_info.value.error_code == "agent_llm_model_not_allowed"
 
 
 def test_validate_requested_agent_model_accepts_auto() -> None:
@@ -277,19 +278,7 @@ def _rate_limited_client_factory(*args: object, **kwargs: object) -> _RateLimite
 
 
 @pytest.mark.asyncio
-async def test_stream_agent_llm_sse_emits_rate_limit_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "apps.flows.src.agent.llm_proxy.create_llm_client_from_ai_model",
-        _rate_limited_client_factory,
-    )
-    resolved = ResolvedAIModel(
-        capability=AICapability.LLM_CHAT,
-        provider="openrouter",
-        model="qwen/qwen3-coder:free",
-        cost_origin="platform",
-    )
+async def test_stream_agent_llm_sse_emits_rate_limit_error() -> None:
     body = AgentOpenAIChatCompletionsRequest(
         model="openrouter:qwen/qwen3-coder:free",
         messages=[AgentOpenAIChatMessage(role="user", content="hi")],
@@ -299,8 +288,7 @@ async def test_stream_agent_llm_sse_emits_rate_limit_error(
         chunk
         async for chunk in _stream_agent_llm_sse(
             body=body,
-            resolved=resolved,
-            allow_platform_paid_fallback=True,
+            llm=_rate_limited_client_factory(),
             response_model_id="openrouter:qwen/qwen3-coder:free",
         )
     ]
@@ -357,25 +345,8 @@ class _RecordingStreamLLM:
 
 
 @pytest.mark.asyncio
-async def test_stream_agent_llm_sse_does_not_run_platform_context_layer(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_stream_agent_llm_sse_does_not_run_platform_context_layer() -> None:
     recording_llm = _RecordingStreamLLM()
-
-    def _recording_client_factory(*args: object, **kwargs: object) -> _RecordingStreamLLM:
-        _ = args, kwargs
-        return recording_llm
-
-    monkeypatch.setattr(
-        "apps.flows.src.agent.llm_proxy.create_llm_client_from_ai_model",
-        _recording_client_factory,
-    )
-    resolved = ResolvedAIModel(
-        capability=AICapability.LLM_CHAT,
-        provider="openrouter",
-        model="qwen/qwen3-coder:free",
-        cost_origin="platform",
-    )
     body = AgentOpenAIChatCompletionsRequest(
         model="openrouter:qwen/qwen3-coder:free",
         messages=[AgentOpenAIChatMessage(role="user", content="hi")],
@@ -385,8 +356,7 @@ async def test_stream_agent_llm_sse_does_not_run_platform_context_layer(
         chunk
         async for chunk in _stream_agent_llm_sse(
             body=body,
-            resolved=resolved,
-            allow_platform_paid_fallback=True,
+            llm=recording_llm,
             response_model_id="openrouter:qwen/qwen3-coder:free",
         )
     ]

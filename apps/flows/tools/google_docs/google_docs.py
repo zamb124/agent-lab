@@ -332,7 +332,7 @@ async def gdocs_share_document(
     elif email:
         _ = await client.share_document(document_id, email, role=role)
     else:
-        raise ValueError("Укажите email или anyone=true для выдачи доступа.")
+        raise ValueError("Specify email or anyone=true to grant access.")
 
     return {"document_id": document_id}
 

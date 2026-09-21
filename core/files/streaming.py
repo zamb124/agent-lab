@@ -30,7 +30,7 @@ async def stream_s3_file(
     """
     target_bucket = s3_client.bucket_name if bucket is None else bucket
     if target_bucket == "":
-        raise ValueError("Bucket не указан")
+        raise ValueError("Bucket is not specified")
 
     try:
         metadata = await s3_client.get_object_metadata(s3_key, bucket=target_bucket)

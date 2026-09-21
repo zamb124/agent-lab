@@ -36,7 +36,7 @@ class ControlObserveStore:
     @staticmethod
     def _seed_from_session_id(session_id: str) -> int:
         if not session_id:
-            raise ValueError("session_id обязателен")
+            raise ValueError("session_id is required")
         raw = hashlib.sha256(session_id.encode("utf-8")).digest()
         return int.from_bytes(raw[:8], "big", signed=False)
 
@@ -48,7 +48,7 @@ class ControlObserveStore:
         seed: int | None,
     ) -> None:
         if not session_id:
-            raise ValueError("session_id обязателен")
+            raise ValueError("session_id is required")
         self._interaction_profile[session_id] = profile
         self._interaction_seed[session_id] = seed if seed is not None else self._seed_from_session_id(session_id)
         self._interaction_step[session_id] = 0
@@ -56,7 +56,7 @@ class ControlObserveStore:
     def get_interaction_profile(self, session_id: str) -> InteractionProfileName:
         p = self._interaction_profile.get(session_id)
         if p is None:
-            raise KeyError(f"Нет interaction_profile для session_id={session_id}")
+            raise KeyError(f"No interaction_profile for session_id={session_id}")
         return p
 
     def next_interaction_nonce(self, session_id: str) -> tuple[int, int]:
@@ -64,11 +64,11 @@ class ControlObserveStore:
         Вернуть (seed, step) для детерминированного RNG и инкрементировать step.
         """
         if session_id not in self._interaction_seed:
-            raise KeyError(f"Нет interaction_seed для session_id={session_id}")
+            raise KeyError(f"No interaction_seed for session_id={session_id}")
         seed = self._interaction_seed[session_id]
         step = self._interaction_step.get(session_id)
         if step is None:
-            raise KeyError(f"Нет interaction_step для session_id={session_id}")
+            raise KeyError(f"No interaction_step for session_id={session_id}")
         self._interaction_step[session_id] = step + 1
         return seed, step
 
@@ -81,5 +81,5 @@ class ControlObserveStore:
     def get_refs(self, session_id: str) -> RefMap:
         refs = self._last_refs.get(session_id)
         if refs is None:
-            raise KeyError(f"Нет refs для session_id={session_id}")
+            raise KeyError(f"No refs for session_id={session_id}")
         return refs

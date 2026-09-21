@@ -82,13 +82,13 @@ class DataTableViewerHandler:
         except ClientError as exc:
             code = exc.response["Error"]["Code"]
             logger.warning(
-                "data-table-handler: S3 error file_id=%s bucket=%s key=%s code=%s",
-                file_record.file_id,
-                file_record.s3_bucket,
-                file_record.s3_key,
-                code,
+                "office.data.table.handler.s3.error",
+                file_id=file_record.file_id,
+                bucket=file_record.s3_bucket,
+                key=file_record.s3_key,
+                code=code,
             )
-            raise ValueError(f"не удалось прочитать DataTable файл: {code}") from exc
+            raise ValueError(f"failed to read DataTable file: {code}") from exc
         finally:
             await s3.close()
         tmp = tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False)

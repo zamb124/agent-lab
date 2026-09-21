@@ -101,7 +101,7 @@ async def typing_channel(
     container: ContainerDep, channel_id: str, body: ChannelsTypingPayload
 ) -> None:
     if body.channel_id != channel_id:
-        raise WsCommandError("ws_invalid_payload", "channel_id mismatch")
+        raise WsCommandError("ws_invalid_payload", "channel_id mismatch", error_code='ws_invalid_payload')
     user = require_context().user
     await op_channels_typing(body, user=user, container=container)
 

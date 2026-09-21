@@ -117,7 +117,7 @@ class AudioProcessor:
         tags: list[str] | None = None,
         public: bool = True,
     ) -> AudioRecord:
-        logger.info("Обработка аудио: %s, размер=%s байт", original_name, len(data))
+        logger.info("files.event", original_name=original_name, data_count=len(data))
 
         file_id = f"file_{uuid.uuid4().hex[:12]}"
         file_hash = hashlib.sha256(data).hexdigest()[:16]
@@ -176,7 +176,7 @@ class AudioProcessor:
         )
 
         _ = await self.file_repository.set(audio_record)
-        logger.info("Аудио обработано: %s", file_id)
+        logger.info("files.event", file_id=file_id)
         return audio_record
 
     async def get_audio_record(self, audio_id: str) -> AudioRecord | None:
@@ -185,7 +185,8 @@ class AudioProcessor:
             return None
         if isinstance(record, AudioRecord):
             return record
-        return AudioRecord.model_validate(record.model_dump(mode="json"))
+        fields = {name: getattr(record, name) for name in FileRecord.model_fields}
+        return AudioRecord.model_validate(fields)
 
 
 def initialize_default_processors(file_repository: FileRepository) -> None:

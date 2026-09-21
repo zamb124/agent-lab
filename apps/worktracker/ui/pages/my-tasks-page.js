@@ -32,13 +32,6 @@ export class WorktrackerMyTasksPage extends PlatformPage {
         super();
         this._workItems = this.useResource('worktracker/work_items');
         this._userSel = this.select((s) => s.auth.user);
-        this.useEvent(this._workItems.resource.events.CREATED, () => {
-            const user = this._userSel.value;
-            if (!user || typeof user.user_id !== 'string' || user.user_id.length === 0) {
-                throw new Error('WorktrackerMyTasksPage: auth user required');
-            }
-            this._workItems.load({ assignee_user_id: user.user_id, exclude_terminal: true });
-        });
     }
 
     connectedCallback() {

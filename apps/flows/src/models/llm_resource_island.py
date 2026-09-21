@@ -105,17 +105,17 @@ def validate_llm_resource_islands_in_graph(
             continue
         if not is_llm_resource_island_dict(n, merged) and resource_node_has_non_empty_llm(n):
             raise ValueError(
-                f"resource node '{nid}': поле llm допустимо только для LLM resource island "
-                + "(ровно одна привязка resources к типу llm)"
+                f"resource node '{nid}': llm is allowed only for an LLM resource island "
+                + "(exactly one resources binding to type llm)"
             )
     for e in edges or ():
         fn, tn = _edge_pair(e)
         if fn in island_ids:
-            raise ValueError(f"ребро с LLM resource island запрещено: исходная нода '{fn}'")
+            raise ValueError(f"edge with an LLM resource island is forbidden: source node '{fn}'")
         if tn is not None and tn in island_ids:
-            raise ValueError(f"ребро с LLM resource island запрещено: целевая нода '{tn}'")
+            raise ValueError(f"edge with an LLM resource island is forbidden: target node '{tn}'")
     if entry is not None and entry.strip() and entry in island_ids:
-        raise ValueError(f"entry не может быть LLM resource island: '{entry}'")
+        raise ValueError(f"entry cannot be an LLM resource island: '{entry}'")
 
 
 def _resource_ref_plain(ref_raw: ResourceReferenceInput) -> ResourceReference:

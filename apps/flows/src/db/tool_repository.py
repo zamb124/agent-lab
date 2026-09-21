@@ -124,7 +124,7 @@ class ToolRepository(BaseRepository[ToolReference]):
                     try:
                         items.append(ToolListIndexItem.model_validate(payload))
                     except ValidationError as e:
-                        logger.warning("Failed to parse tool list index: %s", e)
+                        logger.warning("flows.failed.parse.tool.list.index", e=e)
                         continue
                 if len(rows) < self._LIST_INDEX_PAGE:
                     return items

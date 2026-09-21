@@ -46,13 +46,13 @@ RefMap = dict[str, InteractiveSnapshotRef]
 def parse_ref(value: str) -> str:
     v = value.strip()
     if not v:
-        raise ValueError("ref должен быть непустой строкой")
+        raise ValueError("ref must be a non-empty string")
     if v.startswith("@"):
         v = v[1:]
     if v.startswith("ref="):
         v = v[len("ref=") :]
     if not (v.startswith("e") and v[1:].isdigit()):
-        raise ValueError(f"Неверный ref: {value!r} (ожидался @eN)")
+        raise ValueError(f"Invalid ref: {value!r} (expected @eN)")
     return v
 
 

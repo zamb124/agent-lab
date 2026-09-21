@@ -10,6 +10,6 @@ def normalize_openai_v1_base_url(url: str) -> str:
     u = url.strip().rstrip("/")
     if not u.endswith("/v1"):
         raise ValueError(
-            f"provider_litserve: base_url должен заканчиваться на /v1 (корень OpenAI API), получено: {url!r}"
+            f"provider_litserve: base_url must end with /v1 (OpenAI API root), got: {url!r}"
         )
     return u

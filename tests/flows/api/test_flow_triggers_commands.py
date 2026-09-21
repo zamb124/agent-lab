@@ -8,7 +8,7 @@ from contextlib import contextmanager
 import pytest
 from httpx import AsyncClient
 
-from apps.flows.realtime.operations import FlowsEmptyPayload, FlowsFlowIdPayload
+from apps.flows.realtime.operations import FlowsFlowIdPayload
 from apps.flows.realtime.trigger_operations import (
     op_flows_platform_events_catalog,
     op_flows_triggers_create,
@@ -29,6 +29,7 @@ from core.events import PlatformEventCatalogResponse
 from core.models.context_models import Context
 from core.models.identity_models import User
 from core.pagination import ListResponse
+from core.websocket import EmptyPayload
 from tests.fixtures.ai_provider_defaults import make_test_company
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.timeout(60)]
@@ -179,7 +180,7 @@ async def test_platform_events_catalog_rest_and_op_share_payload(
     _ = PlatformEventCatalogResponse.model_validate(http_resp.json())
     with _system_scope(system_user_id) as user:
         catalog = await op_flows_platform_events_catalog(
-            FlowsEmptyPayload(),
+            EmptyPayload(),
             user=user,
             container=container,
         )

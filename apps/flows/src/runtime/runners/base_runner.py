@@ -87,22 +87,23 @@ class BaseLlmNodeRunner(ABC):
 
         existing_exit = self._find_tool_by_react_role(ReactToolRole.EXIT)
         if existing_exit:
-            logger.debug(f"[node:{self.node_config.name}] exit tool '{existing_exit.name}' already exists")
+            logger.debug("flows.runner.exit_tool_exists", node_name=self.node_config.name, tool_name=existing_exit.name)
             return
 
         exit_tool_name = react_config.exit_tool
         if any(t.name == exit_tool_name for t in self.tools):
-            logger.debug(f"[node:{self.node_config.name}] exit tool '{exit_tool_name}' already exists (by name)")
+            logger.debug("flows.runner.exit_tool_name_exists", node_name=self.node_config.name, tool_name=exit_tool_name)
             return
 
         if exit_tool_name == "finish":
             self.tools.append(finish)
             self.auto_exit_tool_added = True
-            logger.info(f"[node:{self.node_config.name}] finish tool auto-injected for explicit mode")
+            logger.info("flows.runner.finish_tool_injected", node_name=self.node_config.name)
         else:
             logger.warning(
-                f"[node:{self.node_config.name}] EXPLICIT mode requires exit_tool '{exit_tool_name}' "
-                + "but it's not in tools and is not 'finish'. The node may not be able to exit."
+                "flows.runner.exit_tool_missing",
+                node_name=self.node_config.name,
+                exit_tool_name=exit_tool_name,
             )
 
     def _find_tool_by_react_role(self, react_role: ReactToolRole) -> BaseTool | None:

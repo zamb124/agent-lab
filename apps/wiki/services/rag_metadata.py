@@ -91,7 +91,7 @@ def ensure_page_filter_size(size: int, kind: str = "перечисленных")
     """Проверить, что список идентификаторов помещается в фильтр `$in`/`$nin`."""
     if size > MAX_PAGE_ID_FILTER_SIZE:
         message = f"Список {kind} страниц ({size}) превышает предел {MAX_PAGE_ID_FILTER_SIZE}"
-        raise WikiRagFilterOverflowError(f"{message}; сузьте поиск через root_page_id")
+        raise WikiRagFilterOverflowError(f"{message}; narrow the search via root_page_id")
 
 
 def build_wiki_search_filter(spec: WikiSearchFilter) -> RAGMetadataFilter:

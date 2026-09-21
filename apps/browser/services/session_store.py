@@ -45,7 +45,7 @@ class SessionStateStore:
 
     def __init__(self, *, redis_client: RedisClient, ttl_sec: int) -> None:
         if ttl_sec <= 0:
-            raise ValueError("ttl_sec должен быть положительным")
+            raise ValueError("ttl_sec must be positive")
         self._redis: RedisClient = redis_client
         self._ttl_sec: int = ttl_sec
 
@@ -56,7 +56,7 @@ class SessionStateStore:
     @staticmethod
     def _redis_key(state_key: str) -> str:
         if not state_key:
-            raise ValueError("state_key обязателен")
+            raise ValueError("state_key is required")
         return f"{_KEY_PREFIX}{state_key}"
 
     @staticmethod
@@ -87,13 +87,13 @@ class SessionStateStore:
         key = self._new_key()
         ok = await self._redis.set(self._redis_key(key), self._serialize(blob), ttl=self._ttl_sec)
         if not ok:
-            raise RedisOperationError(f"put({key}): Redis недоступен, состояние сессии не сохранено")
+            raise RedisOperationError(f"put({key}): Redis is unavailable, session state was not saved")
         return key
 
     async def get(self, state_key: str) -> SessionStateBlob:
         raw = await self._redis.get(self._redis_key(state_key))
         if raw is None:
-            raise KeyError(f"Неизвестный state_key: {state_key}")
+            raise KeyError(f"Unknown state_key: {state_key}")
         return self._deserialize(raw)
 
     async def delete(self, state_key: str) -> None:
@@ -110,7 +110,7 @@ class SessionStateStore:
     ) -> str:
         current_url = page.url
         if current_url.startswith("about:"):
-            raise ValueError("Нельзя сохранить состояние: current_url должен быть реальным URL, не about:*")
+            raise ValueError("Cannot save state: current_url must be a real URL, not about:*")
         _ = origin_from_url(current_url)
         storage_state = await context.storage_state()
         origin = origin_from_url(current_url)
@@ -131,12 +131,12 @@ class SessionStateStore:
             ),
         )
         if not isinstance(raw_session_storage, dict):
-            raise ValueError("sessionStorage dump должен быть JSON object")
+            raise ValueError("sessionStorage dump must be a JSON object")
         raw_session_storage_map = cast(Mapping[object, object], raw_session_storage)
         session_storage_dump: dict[str, str] = {}
         for key, value in raw_session_storage_map.items():
             if not isinstance(key, str) or not isinstance(value, str):
-                raise ValueError("sessionStorage dump должен содержать только string -> string")
+                raise ValueError("sessionStorage dump must contain only string -> string")
             session_storage_dump[key] = value
         by_origin: dict[str, dict[str, str]] = {origin: dict(session_storage_dump)}
         blob = SessionStateBlob(
@@ -169,12 +169,12 @@ class SessionStateStore:
     async def current_url(self, state_key: str) -> str:
         blob = await self.get(state_key)
         if not blob.current_url:
-            raise RuntimeError("SessionStateBlob.current_url должен быть непустой строкой")
+            raise RuntimeError("SessionStateBlob.current_url must be a non-empty string")
         return blob.current_url
 
 
 def origin_from_url(url: str) -> str:
     parsed = urlparse(url)
     if not parsed.scheme or not parsed.netloc:
-        raise ValueError(f"Некорректный URL для origin: {url}")
+        raise ValueError(f"Invalid URL for origin: {url}")
     return f"{parsed.scheme}://{parsed.netloc}"

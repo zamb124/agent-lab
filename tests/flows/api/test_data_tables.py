@@ -8,6 +8,7 @@ from core.data_tables.import_tabular import parse_tabular_bytes
 from core.data_tables.models import DATA_TABLE_CONTENT_TYPE
 from core.utils.slug import slugify
 from tests.fixtures.s3 import require_s3_configured
+from tests.office.test_data_tables_api import _export_bytes
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.timeout(120)]
 
@@ -136,30 +137,22 @@ async def test_flow_asset_data_table_create_office_roundtrip_and_export(
     assert values["flag"] is False
     assert values["meta"] == [1, 2]
 
-    csv_response = await office_client.get(
-        f"/documents/api/v1/data-tables/{file_id}/tables/leads/export",
-        headers=auth_headers_system,
-        params={"format": "csv"},
+    _csv_response, csv_export = await _export_bytes(
+        office_client, auth_headers_system, file_id, "leads", source_format="csv"
     )
-    assert csv_response.status_code == 200, csv_response.text
-    assert csv_response.content.startswith(b"\xef\xbb\xbf")
-    assert not csv_response.content.startswith(_SQLITE_MAGIC)
-    csv_columns, csv_rows = parse_tabular_bytes(csv_response.content, source_format="csv")
+    assert csv_export.startswith(b"\xef\xbb\xbf")
+    assert not csv_export.startswith(_SQLITE_MAGIC)
+    csv_columns, csv_rows = parse_tabular_bytes(csv_export, source_format="csv")
     assert [column.name for column in csv_columns] == ["title", "score", "flag", "meta"]
     assert csv_rows[0]["title"] == "Ada"
     assert csv_rows[0]["flag"] == "false"
 
-    xlsx_response = await office_client.get(
-        f"/documents/api/v1/data-tables/{file_id}/tables/leads/export",
-        headers=auth_headers_system,
-        params={"format": "xlsx"},
+    _xlsx_response, xlsx_export = await _export_bytes(
+        office_client, auth_headers_system, file_id, "leads", source_format="xlsx"
     )
-    assert xlsx_response.status_code == 200, xlsx_response.text
-    assert xlsx_response.content.startswith(b"PK")
-    assert _SQLITE_MAGIC not in xlsx_response.content[:64]
-    xlsx_columns, xlsx_rows = parse_tabular_bytes(
-        xlsx_response.content, source_format="xlsx"
-    )
+    assert xlsx_export.startswith(b"PK")
+    assert _SQLITE_MAGIC not in xlsx_export[:64]
+    xlsx_columns, xlsx_rows = parse_tabular_bytes(xlsx_export, source_format="xlsx")
     assert [column.name for column in xlsx_columns] == ["title", "score", "flag", "meta"]
     assert xlsx_rows[0]["title"] == "Ada"
 

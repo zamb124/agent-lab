@@ -181,7 +181,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 if ac is None or ac.company_id != "system":
                     raise HTTPException(
                         status_code=403,
-                        detail="Интерфейс LitServe доступен только при активной компании system.",
+                        detail='LitServe interface is available only when the active company is system.',
                     )
 
             response = await call_next(request)
@@ -313,7 +313,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             if not self.route_matcher.allows_deleting_company(request.url.path):
                 raise HTTPException(
                     status_code=403,
-                    detail="Компания удаляется. Пожалуйста, выберите другую компанию.",
+                    detail='Company is being deleted. Please select another company.',
                 )
 
         # Проверка доступа пользователя к компании (для frontend)
@@ -335,7 +335,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             if company.company_id not in user.companies:
                 raise HTTPException(
                     status_code=403,
-                    detail="У вас нет доступа к компании с этим адресом (субдомен).",
+                    detail='You do not have access to the company at this address (subdomain).',
                 )
             jwt_str, session_td = await rebind_session_to_company(
                 container=container,

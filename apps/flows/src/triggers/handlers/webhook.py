@@ -55,10 +55,10 @@ class WebhookTriggerHandler(BaseTriggerHandler):
         trigger.status = TriggerStatus.ACTIVE
         trigger.last_error = None
         logger.info(
-            "Webhook trigger registered: flow_id=%s trigger=%s url=%s",
-            flow_id,
-            trigger.trigger_id,
-            trigger.webhook_url,
+            "flows.webhook.trigger.registered.flow_id.trigger",
+            flow_id=flow_id,
+            trigger=trigger.trigger_id,
+            url=trigger.webhook_url,
         )
         return trigger
 

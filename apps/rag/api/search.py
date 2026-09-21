@@ -8,7 +8,6 @@ from fastapi import APIRouter, Query
 
 from apps.rag.models import GlobalSearchResponse, SearchResponse
 from apps.rag.realtime.operations import (
-    RagEmptyPayload,
     RagGlobalSearchPayload,
     RagNamespaceSearchPayload,
     op_search_defaults,
@@ -18,6 +17,7 @@ from apps.rag.realtime.operations import (
 from core.context import require_context
 from core.rag.models import RAGGlobalSearchRequest, RAGNamespaceSearchRequest, RAGSearchOptions
 from core.types import parse_json_object
+from core.websocket import EmptyPayload
 
 from ..dependencies import ContainerDep
 
@@ -27,7 +27,7 @@ router = APIRouter(tags=["search"])
 @router.get("/search-defaults", response_model=RAGSearchOptions)
 async def get_search_defaults(container: ContainerDep) -> RAGSearchOptions:
     return await op_search_defaults(
-        RagEmptyPayload(), user=require_context().user, container=container
+        EmptyPayload(), user=require_context().user, container=container
     )
 
 

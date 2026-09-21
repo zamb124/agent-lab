@@ -27,10 +27,10 @@ from apps.search.services.crawl.report_service import CrawlReportService
 from apps.search.services.crawl_service import SearchCrawlService
 from apps.search.services.search_index_service import SearchIndexService
 from apps.search.services.serp_cache import SerpCacheService
-from apps.search.services.system_context import build_search_system_context
 from core.clients.browser_fetch_client import BrowserFetchClient
 from core.clients.rag_client import RagClient
 from core.container import BaseContainer, ContainerRegistry, lazy
+from core.identity.system_bootstrap import build_system_admin_job_context
 
 
 class SearchContainer(BaseContainer):
@@ -78,10 +78,12 @@ class SearchContainer(BaseContainer):
         )
 
     async def _build_index_system_context(self, trace_id: str):
-        return await build_search_system_context(
-            trace_id=trace_id,
+        return await build_system_admin_job_context(
             company_repository=self.company_repository,
             user_repository=self.user_repository,
+            trace_id=trace_id,
+            session_id=f"search:{trace_id}",
+            channel="search",
         )
 
     @lazy
@@ -197,9 +199,9 @@ class SearchContainer(BaseContainer):
 
 def _build_search_container(settings: SearchSettings) -> SearchContainer:
     if not settings.database.shared_url:
-        raise ValueError("database.shared_url is required для сервиса search")
+        raise ValueError("database.shared_url is required for the search service")
     if not settings.database.search_url:
-        raise ValueError("database.search_url is required для сервиса search")
+        raise ValueError("database.search_url is required for the search service")
     return SearchContainer(
         db_url=settings.database.search_url,
         shared_db_url=settings.database.shared_url,

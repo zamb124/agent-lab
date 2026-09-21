@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 from urllib.parse import urlparse, urlunparse
 
 import httpx
-from fastapi import HTTPException
 
 from apps.agent.authz.tuples import agent_device_company_link, agent_device_owner_tuple
 from apps.agent.desktop.build_contract import (
@@ -48,6 +47,12 @@ from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.container.base import BaseContainer
 from core.db.storage import Storage
+from core.errors.boundary import (
+    PlatformAccessDeniedError,
+    PlatformConflictError,
+    PlatformNotFoundError,
+    PlatformUnavailableError,
+)
 from core.logging import get_logger
 from core.platform_brand.resolver import (
     UnknownPlatformDomainError,
@@ -63,6 +68,7 @@ from core.utils.domain import (
     split_host_port,
 )
 from core.utils.tokens import TokenService
+from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
 
@@ -217,11 +223,15 @@ return current
         str(PAIRING_RATE_WINDOW_SECONDS),
     )
     if not isinstance(count_raw, int):
-        raise HTTPException(status_code=503, detail="Pairing rate limit недоступен")
+        raise PlatformUnavailableError(
+            "pairing rate limit unavailable",
+            error_code="pairing_rate_limit_unavailable",
+        )
     if count_raw > settings.pairing_rate_limit_per_hour:
-        raise HTTPException(
-            status_code=429,
-            detail="Превышен лимит создания pairing code. Попробуйте позже.",
+        raise WsCommandError(
+            "rate_limited",
+            "pairing rate limit exceeded",
+            error_code="pairing_rate_limit_exceeded",
         )
 
 
@@ -241,11 +251,15 @@ return current
         str(PAIRING_RATE_WINDOW_SECONDS),
     )
     if not isinstance(count_raw, int):
-        raise HTTPException(status_code=503, detail="Register rate limit недоступен")
+        raise PlatformUnavailableError(
+            "register rate limit unavailable",
+            error_code="register_rate_limit_unavailable",
+        )
     if count_raw > settings.register_rate_limit_per_hour:
-        raise HTTPException(
-            status_code=429,
-            detail="Превышен лимит регистрации устройств. Попробуйте позже.",
+        raise WsCommandError(
+            "rate_limited",
+            "register rate limit exceeded",
+            error_code="register_rate_limit_exceeded",
         )
 
 
@@ -256,7 +270,11 @@ async def list_agent_audit_events(
     limit: int = 50,
 ) -> AgentAuditListResponse:
     if limit < 1 or limit > 500:
-        raise HTTPException(status_code=400, detail="limit должен быть от 1 до 500")
+        raise WsCommandError(
+            "ws_invalid_payload",
+            "limit must be between 1 and 500",
+            error_code="audit_limit_invalid",
+        )
     audit_key = _audit_storage_key(company_id)
     raw_items = await container.redis_client.lrange(audit_key, -limit, -1)
     events: list[AgentAuditEvent] = []
@@ -365,9 +383,10 @@ def resolve_frontend_base_url(
     if origin_override is not None:
         ro = origin_override.rstrip("/")
         if not is_allowed_integration_return_origin(ro, public_base):
-            raise HTTPException(
-                status_code=400,
-                detail="origin не разрешён для register/discover",
+            raise WsCommandError(
+                "ws_invalid_payload",
+                "origin is not allowed for register/discover",
+                error_code="origin_not_allowed",
             )
         return ro
     if request_host is not None and str(request_host).strip():
@@ -451,7 +470,11 @@ def _resolve_asset_url_from_release(release_payload: JsonObject, platform: str) 
     distro = load_default_distro_config()
     assets_raw = release_payload.get("assets")
     if not isinstance(assets_raw, list):
-        raise HTTPException(status_code=404, detail=f"Релизный asset для платформы {platform!r} не найден")
+        raise PlatformNotFoundError(
+            f"release asset for platform {platform!r} not found",
+            error_code="release_asset_not_found",
+            error_params={"platform": platform},
+        )
 
     for asset in assets_raw:
         if not isinstance(asset, dict):
@@ -464,7 +487,11 @@ def _resolve_asset_url_from_release(release_payload: JsonObject, platform: str) 
             logger.info("agent.download.resolved", platform=platform, asset=name)
             return download_url
 
-    raise HTTPException(status_code=404, detail=f"Релизный asset для платформы {platform!r} не найден")
+    raise PlatformNotFoundError(
+        f"release asset for platform {platform!r} not found",
+        error_code="release_asset_not_found",
+        error_params={"platform": platform},
+    )
 
 
 async def fetch_latest_release_asset_url(
@@ -671,19 +698,35 @@ async def register_device(
     redis_key = _pairing_storage_key(request.pairing_code)
     pairing_data_raw = await container.shared_storage.get(redis_key, force_global=True)
     if pairing_data_raw is None:
-        raise HTTPException(status_code=400, detail="Недействительный или истёкший pairing code")
+        raise WsCommandError(
+            "ws_invalid_payload",
+            "pairing code is invalid or expired",
+            error_code="pairing_code_invalid",
+        )
 
     try:
         pairing_data = parse_json_object(pairing_data_raw, "pairing_code")
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Повреждённые данные pairing code") from exc
+        raise WsCommandError(
+            "ws_invalid_payload",
+            "pairing code payload is corrupt",
+            error_code="pairing_code_corrupt",
+        ) from exc
 
     user_id = pairing_data.get("user_id")
     company_id = pairing_data.get("company_id")
     if not isinstance(user_id, str) or not user_id:
-        raise HTTPException(status_code=400, detail="Неполные данные pairing code")
+        raise WsCommandError(
+            "ws_invalid_payload",
+            "pairing code payload is incomplete",
+            error_code="pairing_code_incomplete",
+        )
     if not isinstance(company_id, str) or not company_id:
-        raise HTTPException(status_code=400, detail="Неполные данные pairing code")
+        raise WsCommandError(
+            "ws_invalid_payload",
+            "pairing code payload is incomplete",
+            error_code="pairing_code_incomplete",
+        )
 
     _ = await container.shared_storage.delete(redis_key, force_global=True)
 
@@ -755,7 +798,11 @@ async def register_device(
 
     company_record = await container.company_repository.get(company_id)
     if company_record is None:
-        raise HTTPException(status_code=404, detail=f"Компания не найдена: {company_id}")
+        raise PlatformNotFoundError(
+            f"company not found: {company_id}",
+            error_code="company_not_found",
+            error_params={"company_id": company_id},
+        )
 
     frontend_base_url = resolve_frontend_base_url(
         origin_override,
@@ -786,11 +833,20 @@ async def register_device_with_auth(
     if existing_raw is not None:
         existing = AgentDeviceRecord.model_validate_json(existing_raw)
         if existing.company_id != company_id:
-            raise HTTPException(status_code=409, detail="device_id уже зарегистрирован в другой компании")
+            raise PlatformConflictError(
+                "device_id is already registered in another company",
+                error_code="device_registered_other_company",
+            )
         if existing.user_id != user_id:
-            raise HTTPException(status_code=409, detail="device_id принадлежит другому пользователю")
+            raise PlatformConflictError(
+                "device_id belongs to another user",
+                error_code="device_registered_other_user",
+            )
         if not existing.is_active:
-            raise HTTPException(status_code=409, detail="device_id отозван")
+            raise PlatformConflictError(
+                "device_id is revoked",
+                error_code="device_revoked",
+            )
 
     device_record = AgentDeviceRecord(
         device_id=request.device_id,
@@ -860,7 +916,11 @@ async def register_device_with_auth(
 
     company_record = await container.company_repository.get(company_id)
     if company_record is None:
-        raise HTTPException(status_code=404, detail=f"Компания не найдена: {company_id}")
+        raise PlatformNotFoundError(
+            f"company not found: {company_id}",
+            error_code="company_not_found",
+            error_params={"company_id": company_id},
+        )
 
     frontend_base_url = resolve_frontend_base_url(
         origin_override,
@@ -934,7 +994,7 @@ async def get_device_record(
         force_global=True,
     )
     if raw_value is None:
-        raise HTTPException(status_code=404, detail="Устройство не найдено")
+        raise PlatformNotFoundError("device not found", error_code="device_not_found")
     return AgentDeviceRecord.model_validate_json(raw_value)
 
 
@@ -946,7 +1006,10 @@ async def mark_device_tunnel_online(
     settings = get_settings().agent
     device = await get_device_record(container, device_id)
     if not device.is_active:
-        raise HTTPException(status_code=403, detail="Устройство деактивировано")
+        raise PlatformAccessDeniedError(
+            "device is deactivated",
+            error_code="device_deactivated",
+        )
 
     device.last_seen_at = datetime.now(timezone.utc)
     _ = await container.shared_storage.set(
@@ -994,7 +1057,7 @@ async def update_device_policy(
 ) -> AgentDeviceRecord:
     device = await get_device_record(container, device_id)
     if device.company_id != company_id:
-        raise HTTPException(status_code=404, detail="Устройство не найдено")
+        raise PlatformNotFoundError("device not found", error_code="device_not_found")
     device.policy = policy
     _ = await container.shared_storage.set(
         _device_storage_key(device_id),
@@ -1022,14 +1085,17 @@ async def revoke_device(
 ) -> None:
     device = await get_device_record(container, device_id)
     if device.company_id != company_id:
-        raise HTTPException(status_code=404, detail="Устройство не найдено")
+        raise PlatformNotFoundError("device not found", error_code="device_not_found")
     try:
         await container.authz_service.require_can_admin(
             AuthzObject.agent_device(device_id),
             user_id=actor_user_id,
         )
     except AuthzDenied as exc:
-        raise HTTPException(status_code=403, detail="Недостаточно прав для отзыва устройства") from exc
+        raise PlatformAccessDeniedError(
+            "not allowed to revoke device",
+            error_code="device_revoke_forbidden",
+        ) from exc
     device.is_active = False
     _ = await container.shared_storage.set(
         _device_storage_key(device_id),

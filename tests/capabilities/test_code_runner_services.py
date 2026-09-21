@@ -22,11 +22,11 @@ from core.capabilities import (
     CodeExecutionKind,
     CodeExecutionRequest,
     CodeValidationRequest,
-    JsonObject,
     execution_token_exp,
     issue_execution_token,
     locked_down_code_sandbox_policy,
 )
+from core.types import JsonObject
 
 pytestmark = pytest.mark.timeout(180)
 TOOLS_PACKAGE_ROOT = Path(__file__).resolve().parents[2] / "apps" / "flows" / "tools"

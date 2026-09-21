@@ -56,15 +56,12 @@ from core.models.identity_models import User
 from core.pagination import ListResponse
 from core.request_scope import NamespaceScope, require_company, require_namespace
 from core.websocket import (
+    EmptyPayload,
     WsCommandError,
     raise_forbidden,
     raise_invalid,
     raise_not_found,
 )
-
-
-class WikiEmptyPayload(StrictBaseModel):
-    pass
 
 
 class WikiPageIdPayload(StrictBaseModel):
@@ -162,17 +159,17 @@ def _resolve_content(
     content: ProseMirrorNode | None, markdown: str | None
 ) -> ProseMirrorNode | None:
     if content is not None and markdown is not None:
-        raise ValueError("Укажите либо content, либо markdown, но не оба поля")
+        raise ValueError("Specify either content or markdown, not both")
     if markdown is None:
         return content
     try:
         return markdown_to_document(markdown)
     except WikiMarkdownError as exc:
-        raise ValueError(f"Markdown не разобран: {exc}") from exc
+        raise ValueError(f"Markdown is not parsed: {exc}") from exc
 
 
 async def op_pages_list(
-    payload: WikiEmptyPayload,
+    payload: EmptyPayload,
     *,
     user: User,
     container: WikiContainer,
@@ -184,7 +181,7 @@ async def op_pages_list(
 
 
 async def op_pages_deleted_list(
-    payload: WikiEmptyPayload,
+    payload: EmptyPayload,
     *,
     user: User,
     container: WikiContainer,
@@ -217,9 +214,9 @@ async def op_pages_create(
     except WikiSchemaError as exc:
         raise_invalid(exc)
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Родительская страница не найдена")
+        raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
-        raise WsCommandError("forbidden", "Нет прав на создание страницы") from exc
+        raise WsCommandError("forbidden", "No permission to create a page", error_code='forbidden') from exc
     except ValueError as exc:
         raise_invalid(exc)
     return await container.wiki_service.page_response(page, user_id=scope.user_id)
@@ -238,9 +235,9 @@ async def op_pages_get(
             scope.company_id, scope.namespace, payload.wiki_page_id, scope.user_id
         )
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Страница не найдена")
+        raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
-        raise WsCommandError("forbidden", "Нет доступа к странице") from exc
+        raise WsCommandError("forbidden", "No access to page", error_code='forbidden') from exc
     return await container.wiki_service.page_response(page, user_id=scope.user_id)
 
 
@@ -257,9 +254,9 @@ async def op_pages_markdown(
             scope.company_id, scope.namespace, payload.wiki_page_id, scope.user_id
         )
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Страница не найдена")
+        raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
-        raise WsCommandError("forbidden", "Нет доступа к странице") from exc
+        raise WsCommandError("forbidden", "No access to page", error_code='forbidden') from exc
     return WikiMarkdownResponse(
         wiki_page_id=page.wiki_page_id,
         title=page.title,
@@ -280,9 +277,9 @@ async def op_pages_markdown_file(
             scope.company_id, scope.namespace, payload.wiki_page_id, scope.user_id
         )
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Страница не найдена")
+        raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
-        raise WsCommandError("forbidden", "Нет доступа к странице") from exc
+        raise WsCommandError("forbidden", "No access to page", error_code='forbidden') from exc
     return WikiMarkdownFileResult(
         body=container.wiki_service.export_markdown_file(page),
         file_name=markdown_file_name(page.title, page.wiki_page_id),
@@ -301,7 +298,7 @@ async def op_pages_markdown_parse(
     try:
         parsed = parse_markdown(parts.body)
     except WikiMarkdownError as exc:
-        raise WsCommandError("ws_invalid_payload", f"Markdown не разобран: {exc}") from exc
+        raise WsCommandError("ws_invalid_payload", f"Markdown is not parsed: {exc}", error_code='ws_invalid_payload') from exc
     return WikiMarkdownParseResponse(
         document=parsed.document, notices=[*parts.notices, *parsed.notices]
     )
@@ -325,11 +322,11 @@ async def op_pages_markdown_create(
             apply_front_matter=payload.apply_front_matter,
         )
     except WikiMarkdownError as exc:
-        raise WsCommandError("ws_invalid_payload", f"Markdown не разобран: {exc}") from exc
+        raise WsCommandError("ws_invalid_payload", f"Markdown is not parsed: {exc}", error_code='ws_invalid_payload') from exc
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Родительская страница не найдена")
+        raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
-        raise WsCommandError("forbidden", "Нет прав на создание страницы") from exc
+        raise WsCommandError("forbidden", "No permission to create a page", error_code='forbidden') from exc
     return WikiMarkdownImportResponse(page=page, notices=notices)
 
 
@@ -351,11 +348,11 @@ async def op_pages_markdown_import(
             apply_front_matter=payload.apply_front_matter,
         )
     except WikiMarkdownError as exc:
-        raise WsCommandError("ws_invalid_payload", f"Markdown не разобран: {exc}") from exc
+        raise WsCommandError("ws_invalid_payload", f"Markdown is not parsed: {exc}", error_code='ws_invalid_payload') from exc
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Страница не найдена")
+        raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
-        raise WsCommandError("forbidden", "Нет прав на изменение страницы") from exc
+        raise WsCommandError("forbidden", "No permission to edit page", error_code='forbidden') from exc
     return WikiMarkdownImportResponse(page=page, notices=notices)
 
 
@@ -370,7 +367,7 @@ async def op_pages_content_update(
     try:
         content = _resolve_content(payload.content, payload.markdown)
         if content is None:
-            raise ValueError("Не передано содержимое страницы")
+            raise ValueError("Page content was not provided")
         page = await container.wiki_service.update_page_content(
             company_id=scope.company_id,
             namespace=scope.namespace,
@@ -383,9 +380,9 @@ async def op_pages_content_update(
     except WikiSchemaError as exc:
         raise_invalid(exc)
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Страница не найдена")
+        raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
-        raise WsCommandError("forbidden", "Нет прав на изменение страницы") from exc
+        raise WsCommandError("forbidden", "No permission to edit page", error_code='forbidden') from exc
     except ValueError as exc:
         raise_invalid(exc)
     return await container.wiki_service.page_response(page, user_id=scope.user_id)
@@ -413,9 +410,9 @@ async def op_pages_properties_update(
             is_full_width=payload.is_full_width,
         )
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Страница не найдена")
+        raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
-        raise WsCommandError("forbidden", "Нет прав на изменение страницы") from exc
+        raise WsCommandError("forbidden", "No permission to edit page", error_code='forbidden') from exc
     return await container.wiki_service.page_response(page, user_id=scope.user_id)
 
 
@@ -437,9 +434,9 @@ async def op_pages_move(
             position=payload.position,
         )
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Страница не найдена")
+        raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
-        raise WsCommandError("forbidden", "Нет прав на перемещение") from exc
+        raise WsCommandError("forbidden", "No permission to move", error_code='forbidden') from exc
     except ValueError as exc:
         raise_invalid(exc)
     return await container.wiki_service.page_response(page, user_id=scope.user_id)
@@ -455,7 +452,7 @@ async def op_pages_move_namespace(
     scope = await _scope(container)
     target = await container.namespace_service.get(payload.target_namespace)
     if target is None or target.company_id != scope.company_id:
-        raise WsCommandError("ws_invalid_payload", "Целевое пространство недоступно")
+        raise WsCommandError("ws_invalid_payload", "Target workspace is unavailable", error_code='ws_invalid_payload')
     try:
         page = await container.wiki_service.move_page_to_namespace(
             company_id=scope.company_id,
@@ -466,9 +463,9 @@ async def op_pages_move_namespace(
             new_parent_page_id=payload.parent_page_id,
         )
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Страница не найдена")
+        raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
-        raise WsCommandError("forbidden", "Нет прав на перенос страницы") from exc
+        raise WsCommandError("forbidden", "No permission to transfer the page", error_code='forbidden') from exc
     except ValueError as exc:
         raise_invalid(exc)
     return await container.wiki_service.page_response(page, user_id=scope.user_id)
@@ -487,9 +484,9 @@ async def op_pages_remove(
             scope.company_id, scope.namespace, scope.user_id, payload.wiki_page_id
         )
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Страница не найдена")
+        raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
-        raise WsCommandError("forbidden", "Нет прав на удаление") from exc
+        raise WsCommandError("forbidden", "No permission to delete", error_code='forbidden') from exc
 
 
 async def op_pages_restore(
@@ -505,7 +502,7 @@ async def op_pages_restore(
             scope.company_id, scope.namespace, scope.user_id, payload.wiki_page_id
         )
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Страница не найдена")
+        raise_not_found(exc)
     return await container.wiki_service.page_response(page, user_id=scope.user_id)
 
 
@@ -522,9 +519,9 @@ async def op_pages_children_list(
             scope.company_id, scope.namespace, payload.wiki_page_id, scope.user_id
         )
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Страница не найдена")
+        raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
-        raise WsCommandError("forbidden", "Нет доступа к странице") from exc
+        raise WsCommandError("forbidden", "No access to page", error_code='forbidden') from exc
     tree = await container.wiki_service.list_tree(scope.company_id, scope.namespace, scope.user_id)
     children = [item for item in tree if item.parent_page_id == payload.wiki_page_id]
     if payload.include_self:
@@ -545,9 +542,9 @@ async def op_pages_access(
             scope.company_id, scope.namespace, scope.user_id, payload.wiki_page_id
         )
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Страница не найдена")
+        raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
-        raise WsCommandError("forbidden", "Нет доступа к странице") from exc
+        raise WsCommandError("forbidden", "No access to page", error_code='forbidden') from exc
 
 
 async def op_pages_company_visible(
@@ -567,9 +564,9 @@ async def op_pages_company_visible(
             company_visible=payload.company_visible,
         )
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Страница не найдена")
+        raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
-        raise WsCommandError("forbidden", "Нет прав на изменение доступа") from exc
+        raise WsCommandError("forbidden", "No permission to change access", error_code='forbidden') from exc
     except ValueError as exc:
         raise_invalid(exc)
 
@@ -592,9 +589,9 @@ async def op_pages_member_add(
             relation=payload.relation,
         )
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Страница не найдена")
+        raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
-        raise WsCommandError("forbidden", "Нет прав на изменение доступа") from exc
+        raise WsCommandError("forbidden", "No permission to change access", error_code='forbidden') from exc
     except ValueError as exc:
         raise_invalid(exc)
 
@@ -616,9 +613,9 @@ async def op_pages_member_remove(
             member_user_id=payload.member_user_id,
         )
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Страница не найдена")
+        raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
-        raise WsCommandError("forbidden", "Нет прав на изменение доступа") from exc
+        raise WsCommandError("forbidden", "No permission to change access", error_code='forbidden') from exc
 
 
 async def op_pages_public_link(
@@ -639,9 +636,9 @@ async def op_pages_public_link(
             permission=payload.permission,
         )
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Страница не найдена")
+        raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
-        raise WsCommandError("forbidden", "Нет прав на публикацию ссылки") from exc
+        raise WsCommandError("forbidden", "No permission to publish a link", error_code='forbidden') from exc
     if raw_token is None:
         return WikiPublicLinkResponse(enabled=False, permission=payload.permission, url=None)
     origin = payload.origin.rstrip("/")
@@ -669,9 +666,9 @@ async def op_pages_revisions_list(
             payload.limit,
         )
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Страница не найдена")
+        raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
-        raise WsCommandError("forbidden", "Нет доступа к странице") from exc
+        raise WsCommandError("forbidden", "No access to page", error_code='forbidden') from exc
     return ListResponse[WikiRevisionSummary](items=items)
 
 
@@ -688,9 +685,9 @@ async def op_revisions_get(
             scope.company_id, scope.namespace, scope.user_id, payload.wiki_revision_id
         )
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Ревизия не найдена")
+        raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
-        raise WsCommandError("forbidden", "Нет доступа к странице") from exc
+        raise WsCommandError("forbidden", "No access to page", error_code='forbidden') from exc
 
 
 async def op_revisions_restore(
@@ -706,9 +703,9 @@ async def op_revisions_restore(
             scope.company_id, scope.namespace, scope.user_id, payload.wiki_revision_id
         )
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Ревизия не найдена")
+        raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
-        raise WsCommandError("forbidden", "Нет прав на изменение страницы") from exc
+        raise WsCommandError("forbidden", "No permission to edit page", error_code='forbidden') from exc
     return await container.wiki_service.page_response(page, user_id=scope.user_id)
 
 
@@ -725,9 +722,9 @@ async def op_pages_comments_list(
             scope.company_id, scope.namespace, scope.user_id, payload.wiki_page_id
         )
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Страница не найдена")
+        raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
-        raise WsCommandError("forbidden", "Нет доступа к странице") from exc
+        raise WsCommandError("forbidden", "No access to page", error_code='forbidden') from exc
     return ListResponse[WikiComment](items=items)
 
 
@@ -750,9 +747,9 @@ async def op_pages_comment_create(
             parent_comment_id=payload.parent_comment_id,
         )
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Страница не найдена")
+        raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
-        raise WsCommandError("forbidden", "Нет доступа к странице") from exc
+        raise WsCommandError("forbidden", "No access to page", error_code='forbidden') from exc
 
 
 async def op_comments_resolve(
@@ -772,7 +769,7 @@ async def op_comments_resolve(
             payload.resolved,
         )
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Комментарий не найден")
+        raise_not_found(exc)
 
 
 async def op_comments_remove(
@@ -788,7 +785,7 @@ async def op_comments_remove(
             scope.company_id, scope.namespace, scope.user_id, payload.wiki_comment_id
         )
     except PlatformNotFoundError as exc:
-        raise_not_found(exc, "Комментарий не найден")
+        raise_not_found(exc)
 
 
 async def op_search_run(

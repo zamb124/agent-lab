@@ -71,6 +71,10 @@ _VOLATILE_KEYS = frozenset(
         "service",
         "observability",
         "url",
+        "s3_key",
+        "checksum",
+        "file_size",
+        "expires_at",
     }
 )
 
@@ -534,6 +538,11 @@ async def _setup_bulk_delete(ctx: LiveCtx) -> JsonObject:
 async def _setup_aggregate(ctx: LiveCtx) -> JsonObject:
     _ = ctx
     return {"namespace": _NAMESPACE}
+
+
+async def _setup_entities_export(ctx: LiveCtx) -> JsonObject:
+    _ = await _create_entity(ctx)
+    return {"namespace": _NAMESPACE, "export_format": "csv", "entity_type": "note", "limit": 50}
 
 
 async def _setup_cards_bulk(ctx: LiveCtx) -> JsonObject:
@@ -1018,6 +1027,9 @@ _CASES: dict[str, OpCase] = {
     ),
     "crm/entities/aggregate_requested": _op(
         "GET", f"{_API}/entities/aggregate", "query", _setup_aggregate, same=True,
+    ),
+    "crm/entities/export_requested": _op(
+        "GET", f"{_API}/entities/export", "query", _setup_entities_export, same=True,
     ),
     "crm/entities/cards_bulk_requested": _op(
         "POST", f"{_API}/entities/cards/bulk", "body_minus_path", _setup_cards_bulk, same=True,

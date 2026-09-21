@@ -112,9 +112,9 @@ class OfficeContainer(BaseContainer):
 def _create_office_container() -> OfficeContainer:
     settings = get_settings()
     if not settings.database.office_url:
-        raise ValueError("database.office_url не задан")
+        raise ValueError("database.office_url is not set")
     if not settings.database.shared_url:
-        raise ValueError("database.shared_url не задан")
+        raise ValueError("database.shared_url is not set")
     return OfficeContainer(
         db_url=settings.database.office_url,
         shared_db_url=settings.database.shared_url,

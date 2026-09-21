@@ -23,6 +23,7 @@ LOG_COMPANY_ID = "company_id"
 LOG_COMPANY_SUBDOMAIN = "company_subdomain"
 LOG_SESSION_ID = "session_id"  # JWT / WebSocket — авторизационная сессия
 LOG_SESSION_AGENT = "session_agent"  # flow_id:context_id — сессия исполнения агента flows
+LOG_TEST_SCOPE = "test_scope"  # метка теста для MockLLM (TESTING)
 LOG_CONTEXT_ID = "context_id"  # context_id исполнения flow (A2A / code_agent)
 LOG_NAMESPACE = "namespace"
 

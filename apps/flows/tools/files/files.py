@@ -13,8 +13,7 @@ from apps.flows.src.services.flow_ui_cards import show_files
 from apps.flows.src.state.state_utils import find_file
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
-from core.files.file_ref import FileRef
-from core.files.models import FileResponse
+from core.files.file_ref import FileRef, stored_file_ref
 from core.files.reader.engine import read_files_to_envelope
 from core.files.reader.models import (
     MAX_READ_BUDGET,
@@ -154,7 +153,7 @@ async def read_file(
 ) -> JsonObject:
     all_files = state.files
     if not all_files:
-        raise ValueError("Нет файлов для чтения")
+        raise ValueError("No files to read")
 
     if names:
         file_refs, errors = _resolve_file_refs_for_read(state, names)
@@ -196,12 +195,12 @@ async def read_file(
     if not file_refs and errors:
         raise ValueError(
             "; ".join(
-                err.error if err.error else f"Файл '{err.file_name}' не найден"
+                err.error if err.error else f"File '{err.file_name}' not found"
                 for err in errors
             )
         )
     if not file_refs:
-        raise ValueError("Нет файлов для чтения")
+        raise ValueError("No files to read")
 
     envelope = await read_files_to_envelope(file_refs, args, tool_name="read_file")
     if errors:
@@ -238,9 +237,8 @@ async def create_file(
         public=True,
     )
 
-    response = FileResponse.from_record(record)
-    payload = require_json_object(response.model_dump(mode="json"), "create_file.response")
-    file_item = FileRef.from_response(response)
+    file_item = stored_file_ref(record)
+    payload = require_json_object(file_item.model_dump(mode="json"), "create_file.response")
     upsert_state_file(state, file_item)
     _ = show_files(state, [file_item])
     return payload

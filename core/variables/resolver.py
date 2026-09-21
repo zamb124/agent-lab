@@ -581,7 +581,7 @@ class VariableResolver:
                             elif safe:
                                 result.append(text[start:i])
                             else:
-                                raise ValueError(f"Переменная '{expr}' не найдена и нет default значения")
+                                raise ValueError(f"Variable '{expr}' not found and no default value")
                         else:
                             if VariableResolver._is_empty_value(value):
                                 if has_default:
@@ -688,5 +688,5 @@ def set_state_in_context(state: VariableDict) -> None:
     """
     context = get_context()
     if context is None:
-        raise RuntimeError("Нельзя установить state: контекст запроса не установлен")
+        raise RuntimeError('Cannot set state: request context is not set')
     context.state = require_json_object(state, "context.state")

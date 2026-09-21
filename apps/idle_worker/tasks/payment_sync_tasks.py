@@ -25,7 +25,7 @@ async def payment_sync_tick(
     settings = get_settings()
 
     if not settings.payment_providers.sync_enabled:
-        logger.debug("payment_sync_tick: sync_enabled=False, пропускаем")
+        logger.debug("idle.payment_sync_tick")
         return {"companies_checked": 0, "total_updated": 0}
 
     container = get_container()
@@ -44,10 +44,10 @@ async def payment_sync_tick(
     stats = await sync_service.sync_all_companies()
 
     logger.info(
-        "payment_sync_tick done: companies=%s pending=%s updated=%s",
-        stats.companies_checked,
-        stats.total_pending,
-        stats.total_updated,
+        "idle.payment_sync_tick",
+        companies=stats.companies_checked,
+        pending=stats.total_pending,
+        updated=stats.total_updated,
     )
 
     return {

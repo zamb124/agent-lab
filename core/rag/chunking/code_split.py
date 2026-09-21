@@ -46,13 +46,13 @@ def resolve_code_language(split_config: IndexProfileSplitConfig, file_name: str)
     configured = split_config.chonkie_code_language.strip()
     if configured != "auto":
         if not configured:
-            raise ValueError("split.strategy=code: chonkie_code_language пустой")
+            raise ValueError('split.strategy=code: chonkie_code_language is empty')
         return configured
     suffix = Path(file_name).suffix.lower()
     if suffix not in _CODE_LANGUAGE_BY_SUFFIX:
         raise ValueError(
-            "split.strategy=code: chonkie_code_language=auto требует известный суффикс файла, "
-            + f"получен {suffix!r} ({file_name})"
+            'split.strategy=code: chonkie_code_language=auto requires a known file suffix, '
+            + f"got {suffix!r} ({file_name})"
         )
     return _CODE_LANGUAGE_BY_SUFFIX[suffix]
 
@@ -71,11 +71,11 @@ def split_code_text(
         parser: Parser = get_parser(language)
     except RuntimeError as exc:
         raise ValueError(
-            f"split.strategy=code: tree-sitter язык {language!r} недоступен"
+            f"split.strategy=code: tree-sitter language {language!r} is unavailable"
         ) from exc
     tree: Tree | None = parser.parse(raw)
     if tree is None:
-        raise ValueError(f"split.strategy=code: tree-sitter не разобрал {language!r}")
+        raise ValueError(f"split.strategy=code: tree-sitter did not parse {language!r}")
     root: Node = tree.root_node()
     source_bytes = raw.encode("utf-8")
     named_count = root.named_child_count()
@@ -89,7 +89,7 @@ def split_code_text(
         node = root.named_child(index)
         if node is None:
             raise ValueError(
-                f"split.strategy=code: named_child({index}) пустой для {language!r}"
+                f"split.strategy=code: named_child({index}) is empty for {language!r}"
             )
         fragment = source_bytes[node.start_byte() : node.end_byte()].decode("utf-8")
         stripped = fragment.strip()

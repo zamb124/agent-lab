@@ -47,7 +47,6 @@ from core.integrations.models import (
     CredentialInfo,
     IntegrationCredentialRefPayload,
     IntegrationDeletedResponse,
-    IntegrationEmptyPayload,
     IntegrationProvider,
 )
 from core.integrations.operations import (
@@ -61,6 +60,7 @@ from core.logging import get_logger
 from core.models.identity_models import SYSTEM_COMPANY_ID
 from core.pagination import ListResponse
 from core.types import JsonObject
+from core.websocket import EmptyPayload
 
 logger = get_logger(__name__)
 
@@ -140,7 +140,7 @@ class FlowResumeContext(BaseModel):
 @router.get("/credentials", response_model=ListResponse[CredentialInfo])
 async def list_credentials(request: Request) -> ListResponse[CredentialInfo]:
     return await op_integrations_credentials_list(
-        IntegrationEmptyPayload(),
+        EmptyPayload(),
         user=require_context().user,
         container=_integration_container(request),
     )
@@ -238,7 +238,7 @@ async def get_google_workspace_company_credential(
     request: Request,
 ) -> GoogleWorkspaceCompanyCredentialPublic:
     return await op_integrations_workspace_company_get(
-        IntegrationEmptyPayload(),
+        EmptyPayload(),
         user=require_context().user,
         container=_integration_container(request),
     )
@@ -267,7 +267,7 @@ async def delete_google_workspace_company_credential(
     request: Request,
 ) -> IntegrationDeletedResponse:
     return await op_integrations_workspace_company_delete(
-        IntegrationEmptyPayload(),
+        EmptyPayload(),
         user=require_context().user,
         container=_integration_container(request),
     )
@@ -318,7 +318,7 @@ async def oauth_callback(
     Если flow_context присутствует — запускает resume flow через TaskIQ.
     """
     if error:
-        logger.error("Integration OAuth error: %s", error)
+        logger.error("api.integration.oauth.error", error=error)
         raise HTTPException(status_code=400, detail=f"OAuth error: {error}")
 
     if not code or not state:
@@ -345,7 +345,7 @@ async def oauth_callback(
             referer=referer,
         )
     except GuidedIntegrationError as exc:
-        logger.warning("OAuth complete_oauth GuidedIntegrationError: code=%s", exc.code)
+        logger.warning("api.oauth.complete_oauth.guidedintegrationerror.code", code=exc.code)
         prefers_html = oauth_callback_prefers_html_response(request)
         if prefers_html:
             body = build_integration_oauth_error_html(
@@ -364,7 +364,7 @@ async def oauth_callback(
             },
         )
     except ValueError as exc:
-        logger.warning("OAuth complete_oauth ValueError: %s", exc)
+        logger.warning("api.oauth.complete_oauth.valueerror", exc=exc)
         msg = str(exc)
         if oauth_callback_prefers_html_response(request):
             body = build_integration_oauth_simple_error_html(
@@ -375,7 +375,7 @@ async def oauth_callback(
             return HTMLResponse(content=body, status_code=400)
         raise HTTPException(status_code=400, detail=msg)
     except httpx.HTTPStatusError as exc:
-        logger.error("OAuth provider token exchange error: status=%d", exc.response.status_code)
+        logger.error("api.oauth.provider.token.exchange.error", status=exc.response.status_code)
         raise HTTPException(status_code=502, detail="OAuth provider error")
 
     if flow_context is not None:
@@ -425,11 +425,11 @@ async def _resume_flow(
         trace_context=resume_context.trace_context,
     )
     logger.info(
-        "OAuth auto-resume kicked: flow_id=%s session_id=%s provider=%s service=%s",
-        resume_context.flow_id,
-        resume_context.session_id,
-        provider,
-        service,
+        "api.oauth.auto.resume.kicked.flow_id",
+        flow_id=resume_context.flow_id,
+        session_id=resume_context.session_id,
+        provider=provider,
+        service=service,
     )
 
 

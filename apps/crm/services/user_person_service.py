@@ -89,7 +89,7 @@ class UserPersonService:
                 if existing.entity_type == CONTACT_ENTITY_TYPE:
                     existing.entity_type = MEMBER_ENTITY_TYPE
                     _ = await self._entity_repo.update(existing)
-                    logger.info(f"Migrated entity {existing_id} from contact to member")
+                    logger.info("crm.member.migrated", entity_id=existing_id)
                 await self._sync_person_fields_from_user(existing, user)
                 return existing_id
 
@@ -98,7 +98,7 @@ class UserPersonService:
             namespace=USER_PERSON_NAMESPACE,
         )
         if member_type is None:
-            raise ValueError("Тип сущности member не найден для компании (инициализация CRM?)")
+            raise ValueError("Entity type member not found for the company (CRM init?)")
 
         display = self._display_name_from_user(user)
         attributes: JsonObject = {
@@ -137,7 +137,7 @@ class UserPersonService:
         user.updated_at = datetime.now(UTC)
         _ = await self._user_repository.set(user)
 
-        logger.info(f"Created member entity {entity.entity_id} for user {user_id}")
+        logger.info("crm.member.created", entity_id=entity.entity_id, user_id=user_id)
         return entity.entity_id
 
     async def record_last_voice_entity(
@@ -219,7 +219,7 @@ class UserPersonService:
             return " ".join(parts)
         if user.name and user.name.strip():
             return user.name.strip()
-        raise ValueError("У пользователя нет имени для сущности member")
+        raise ValueError("User has no name for a member entity")
 
     async def _ensure_member_belongs_to_company(
         self,

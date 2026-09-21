@@ -1157,10 +1157,6 @@ export class CRMEntityCard extends PlatformElement {
             this.useEvent(this._cardOp.op.events.FAILED, (event) => this._onCardFailed(event));
             this.useEvent(this._updateOp.op.events.SUCCEEDED, () => this._onUpdateSucceeded());
             this.useEvent(this._attachmentsListOp.op.events.SUCCEEDED, (event) => this._onAttachmentsLoaded(event));
-            this.useEvent(this._attachmentUploadOp.op.events.SUCCEEDED, () => this._reloadAttachments());
-            this.useEvent(this._attachmentDeleteOp.op.events.SUCCEEDED, () => this._reloadAttachments());
-            this.useEvent(this._relationships.resource.events.CREATED, () => this._onRelationshipChanged());
-            this.useEvent(this._relationships.resource.events.REMOVED, () => this._onRelationshipChanged());
             this.useEvent(this._entitySearchOp.op.events.SUCCEEDED, (event) => this._onSearchResults(event));
             this._relationshipTypes.load(null);
             this._applyCardBundleOrLoad();
@@ -1168,8 +1164,6 @@ export class CRMEntityCard extends PlatformElement {
         }
 
         this.useEvent(this._attachmentsListOp.op.events.SUCCEEDED, (event) => this._onAttachmentsLoaded(event));
-        this.useEvent(this._attachmentUploadOp.op.events.SUCCEEDED, () => this._reloadAttachments());
-        this.useEvent(this._attachmentDeleteOp.op.events.SUCCEEDED, () => this._reloadAttachments());
         const viewAttachId = this._effectiveEntityId();
         if (typeof viewAttachId === 'string' && viewAttachId.length > 0 && !this.cardBundle) {
             this._reloadAttachments();
@@ -1450,9 +1444,6 @@ export class CRMEntityCard extends PlatformElement {
 
     _onUpdateSucceeded() {
         this.emit('entity-saved', { entity_id: this._effectiveEntityId() });
-        if (this.surface === 'page') {
-            this._loadCard();
-        }
     }
 
     _loadCard() {
@@ -1468,13 +1459,6 @@ export class CRMEntityCard extends PlatformElement {
         if (typeof id !== 'string' || id.length === 0) return;
         this._loadingAttachments = true;
         this._attachmentsListOp.run({ entity_id: id });
-    }
-
-    _onRelationshipChanged() {
-        const id = this._effectiveEntityId();
-        if (typeof id === 'string' && id.length > 0) {
-            this._cardOp.run({ entity_id: id });
-        }
     }
 
     _isStaleEntityCardOpEvent(event) {

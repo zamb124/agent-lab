@@ -1,35 +1,25 @@
 /**
- * Version history for a company variable (offset pagination).
+ * История версий переменной компании (offset-пагинация) — `secrets/variables/versions_requested`.
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
 import { mapPlatformVariable } from './secrets-variables.resource.js';
 
 export const secretsVariableVersionsLoadOp = createAsyncOp({
     name: 'secrets/variable_versions_load',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'secrets/variables/versions_requested',
     restMirror: { method: 'GET', path: '/secrets/api/v1/variables/:variable_key/versions' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('secrets/variable_versions_load: payload required');
+    extraReducer: (state, event, events) => {
+        if (event.type !== events.SUCCEEDED) {
+            return state;
         }
-        const variableKey = payload.variable_key;
-        if (typeof variableKey !== 'string' || variableKey.trim() === '') {
-            throw new Error('secrets/variable_versions_load: variable_key required');
+        const page = event.payload.result;
+        if (!page || typeof page !== 'object' || !Array.isArray(page.items)) {
+            throw new Error('secrets/variable_versions_load: OffsetPage result required');
         }
-        const limit = typeof payload.limit === 'number' ? payload.limit : 50;
-        const offset = typeof payload.offset === 'number' ? payload.offset : 0;
-        const response = await httpRequest({
-            method: 'GET',
-            url: `/secrets/api/v1/variables/${encodeURIComponent(variableKey)}/versions?limit=${limit}&offset=${offset}`,
-        });
-        if (!response || typeof response !== 'object' || !Array.isArray(response.items)) {
-            throw new Error('secrets/variable_versions_load: invalid response');
-        }
-        return {
-            ...response,
-            items: response.items.map((item) => mapPlatformVariable(item)),
-        };
+        return { ...state, lastResult: { ...page, items: page.items.map((item) => mapPlatformVariable(item)) } };
     },
 });

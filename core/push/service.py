@@ -53,7 +53,7 @@ class WebPushService:
             True если успешно, False если ошибка или подписка истекла
         """
         if not self._initialized:
-            logger.warning("WebPushService не настроен - пропускаем отправку")
+            logger.warning("push.webpushservice")
             return False
 
         payload: JsonObject = {
@@ -84,20 +84,20 @@ class WebPushService:
                 vapid_private_key=self.vapid_private_key,
                 vapid_claims=vapid_claims,
             )
-            logger.debug(f"Push отправлен: {title} -> {subscription.platform}")
+            logger.debug("push.sent", title=title, platform=subscription.platform)
             return True
 
         except WebPushException as e:
             if e.response and e.response.status_code == 410:
                 # 410 Gone — подписка истекла, нужно удалить
-                logger.info(f"Push подписка истекла: {subscription.endpoint[:50]}...")
+                logger.info("push.subscription.expired", endpoint=subscription.endpoint[:50])
                 return False
             elif e.response and e.response.status_code == 404:
                 # 404 Not Found — подписка не существует
-                logger.info(f"Push подписка не найдена: {subscription.endpoint[:50]}...")
+                logger.info("push.subscription.gone", endpoint=subscription.endpoint[:50])
                 return False
             else:
-                logger.error(f"Ошибка отправки push: {e}")
+                logger.error("push.send_failed", error=str(e))
                 return False
 
     async def send_to_user(

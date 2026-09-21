@@ -84,7 +84,9 @@ async with SystemLogScope(lifecycle_phase="startup"):
 |---|---|
 | `get_logger(name)` | Единственный способ получить логгер. Имя — обычно `__name__`. |
 | `setup_logging(service_name, config?)` | Идемпотентная инициализация: HTTP — в `create_service_app`; TaskIQ — в `register_worker_events`; scheduler — при загрузке `apps/scheduler/scheduler.py`. |
-| `bind_log_context(**fields)` | Биндит поля в structlog contextvars. |
+| `bind_log_context(**fields)` | Биндит поля в structlog contextvars. В `apps/` запрещён — только хелперы ниже. |
+| `bind_session_agent(session_id)` | Биндит `session_agent` (исполнение flow). |
+| `bind_test_scope(test_scope)` | Биндит `test_scope` (MockLLM / TESTING). |
 | `unbind_log_context(*keys)` | Снимает конкретные ключи. |
 | `clear_log_context()` | Полная очистка contextvars; **только** внутри `core/logging`. |
 | `get_log_context()` | Snapshot текущего контекста (для пробрасывания в фоновую задачу). |
@@ -228,10 +230,11 @@ Exit 1 на нарушении:
 5. Эмодзи в любом `logger.*` запрещены.
 6. `setup_logging(...)` запрещён в `apps/*_worker/broker.py` и `apps/sync/realtime/broker.py` — только `register_worker_events(...)`.
 7. `asyncio.create_task(...)` запрещён вне whitelisted инфраструктуры.
-8. Счётчик `logger.<level>(f"...")` — ratchet: `F_LIMIT` в `scripts/check_logging_canon.sh` равен текущему минимуму (330) и снижается с каждой миграцией на kwargs; рост — FAIL. Тот же счётчик дублируется метрикой `logger_fstring` в `scripts/ratchet_baseline.json`.
+8. `logger.<level>(f"...")` в `apps/`/`core/` запрещён (`scripts/check_logging_canon.sh`). Тот же счётчик — `logger_fstring` в `scripts/ratchet_baseline.json` (должен быть 0). Рядом ratchet: `logger_percent` (`%s`-format) и `logger_sentence` (пробел в первом аргументе вместо event-id).
 9. `enter_request_scope(...)` — только в платформенных точках входа.
 10. `clear_log_context()` запрещён вне `core/logging/**`.
 11. Прямые `.kiq(` / `find_task(` / `AsyncKicker(` / `create_broker(` вне whitelist — **FAIL**. Канон постановки в очередь — `core.tasks.enqueue`. Полный реестр/wiring — `scripts/check_taskiq_canon.py` / `make check-taskiq-canon`.
+12. `bind_log_context(...)` в `apps/` запрещён — `bind_session_agent` / `bind_test_scope`.
 
 ## Сбор логов
 

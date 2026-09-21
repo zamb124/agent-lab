@@ -32,7 +32,7 @@ class CustomFlowWithLogging(LlmNode):
     async def _run_impl(self, state: ExecutionState, inputs: NodeInputs) -> NodeRunResult:
         """Выполняет ноду с логированием до и после."""
         start_time = datetime.now()
-        logger.info(f"[{self.node_id}] Начало выполнения: {start_time.isoformat()}")
+        logger.info("flows.custom_node.start", node_id=self.node_id, start_time=start_time.isoformat())
 
         metadata_raw = state.variables.get("__custom_metadata__")
         metadata: JsonObject = metadata_raw if isinstance(metadata_raw, dict) else {}
@@ -46,7 +46,7 @@ class CustomFlowWithLogging(LlmNode):
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
 
-        logger.info(f"[{self.node_id}] Завершение: {end_time.isoformat()}, длительность: {duration:.2f}s")
+        logger.info("flows.custom_node.complete", node_id=self.node_id, end_time=end_time.isoformat(), duration_seconds=duration)
 
         metadata["end_time"] = end_time.isoformat()
         metadata["duration_seconds"] = duration
@@ -74,7 +74,7 @@ class CustomFlowWithPreprocessing(LlmNode):
         original_content = str(inputs.get("content", ""))
         processed_content = self._preprocess(original_content)
 
-        logger.info(f"[{self.node_id}] Предобработка: '{original_content[:50]}' -> '{processed_content[:50]}'")
+        logger.info("flows.custom_node.preprocess", node_id=self.node_id, original_preview=original_content[:50], processed_preview=processed_content[:50])
 
         inputs["content"] = processed_content
         state.variables["__original_content__"] = original_content

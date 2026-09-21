@@ -31,7 +31,7 @@ Centrifugo RPC platform.event → bus realtime ──┘  (command_router → т
 - **Все операции (read + mutating)** — `async def op_<entity>_<verb>(payload, *, user, container) -> Result | None` в `apps/sync/realtime/operations.py`. Один handler — оба транспорта.
 - **Транспорт:** `apps/sync/realtime/command_router.SYNC_OPERATIONS = {canonical_type → Operation(payload_model, fn)}`. `_make_ws_handler(op)` валидирует payload Pydantic'ом и зовёт `op.fn`. `WsCommandError` → WS `*_failed`-фрейм.
 - **REST-обвязка** — каждый route в `apps/sync/api/**` собирает тот же Pydantic payload, что WS, и возвращает тот же тип, что `op_*`. Path id обязан совпасть с полем payload (`WsCommandError("ws_invalid_payload")`). Запрещены twin-модели `_FooBody`, unwrap `.items`, ручная сборка `OffsetPage`/`ListResponse`/`{"status"}`/`{"message_id"}`.
-- **Списки:** `OffsetPage[T]` / `ListResponse[T]` из `core/pagination.py`. Двунаправленная лента сообщений — локальный `PaginationResponse[T]` (`apps/sync/models/common.py`, исключение: `next_cursor` + `prev_cursor`).
+- **Списки:** `OffsetPage[T]` / `ListResponse[T]` / `CursorPage[T]` из `core/pagination.py`. Лента сообщений — `CursorPage` (`next_cursor` старше, `prev_cursor` новее); декод `before`/`after` живёт в sync.
 - **Запись звонка:** ORM `SyncCallRecording` → домен `CallRecordingRead` один раз в `call_recording_read` (`meeting_repository.py`).
 - `WsCommandError` → HTTP через `WS_COMMAND_ERROR_HTTP_STATUS` (`core/websocket/operation.py`) и envelope middleware в `create_service_app`. Отдельный `@app.exception_handler` в `apps/sync/main.py` не используется.
 - **TaskIQ** — **только** для heavy-транскрипции (`messages.transcribe_audio/video/call` → `enqueue(SYNC_TRANSCRIBE_AUDIO_MESSAGE | SYNC_TRANSCRIBE_VIDEO_MESSAGE | SYNC_AGGREGATE_CALL_TRANSCRIPT, ...)`). Все остальные mutating-команды — in-process в `op_*`.
@@ -73,7 +73,7 @@ Naming канон: `sync/<entity>/<verb>_requested` (3 сегмента, snake_c
 
 Tier-1 skill `sync-platform` → children `sync-messaging`, `sync-channels`, `sync-threads`, `team-directory`. Builtins в `apps/flows/tools/sync_*.py` ходят в Sync REST через `ServiceClient` (JWT employee + `op_*` ACL). Calls/Git/presence — UI-only (skill boundary). Methodology — `sync-platform/references/sync-employee-methodology.md`.
 
-Namespace-операции (`list`/`sync_settings update`) — REST-only через `apps/sync/api/namespaces.py` (HTTP-фабрики `sync/namespaces`, `sync/namespace_update`); зеркал по WS не нужно (админка namespace симметрична CRM — тоже HTTP).
+Namespace-операции: список — общий `core/namespace/operations.py::op_namespaces_list` (`sync/namespaces/list_requested`), запись — только секция `Namespace.sync_settings` через `op_namespaces_sync_settings_update` (`sync/namespace/sync_settings_update_requested`, REST-зеркало `PUT /sync/api/v1/namespaces/{name}`); имя/описание/crm_settings пространства — CRM. UI-фабрики `sync/namespaces`, `sync/namespace_update` — `transport: 'ws'`.
 
 ## Таблицы (`sync_*`)
 
@@ -197,7 +197,7 @@ Namespace-операции (`list`/`sync_settings update`) — REST-only чер�
 
 ## Файлы
 
-Байты — только платформенный chunked Files API `/sync/api/v1/files/uploads*` (`uploadPlatformFile` / `platform/file_create`, `FileSourceKind.SYNC_MESSAGE` / `SYNC_CALL_RECORDING` / `SYNC_SPEECH_SEGMENT` / `SYNC_CHANNEL_ASSET`; Documents bind автоматически, → **`files.mdc`**). После complete клиент зовёт `sync/files/upload_completed_requested` (REST `POST /sync/api/v1/files/upload-completed`, `op_files_upload_completed`) и получает каноничный `FileResponse` (`file_id`, `url`, `original_name`, …). Превью/аватары используют `url` (same-origin к `GET .../files/download/{file_id}`); вложения в сообщениях — `file_id` в блоках контента. Таблица `sync_files` — только исторические FK, новые строки не создаются.
+Байты — только платформенный chunked Files API `/sync/api/v1/files/uploads*` (`uploadPlatformFile` / `platform/file_create`, `FileSourceKind.SYNC_MESSAGE` / `SYNC_CALL_RECORDING` / `SYNC_SPEECH_SEGMENT` / `SYNC_CHANNEL_ASSET`; Documents bind автоматически, → **`files.mdc`**). После complete клиент зовёт `sync/files/upload_completed_requested` (REST `POST /sync/api/v1/files/upload-completed`, `op_files_upload_completed`) и получает каноничный `FileRef` (`file_id`, `url`, `original_name`, `created_at`, …). Превью/аватары используют `url` (same-origin к `GET .../files/download/{file_id}`); вложения в сообщениях — `file_id` в блоках контента. Таблица `sync_files` — только исторические FK, новые строки не создаются.
 
 ## UI
 

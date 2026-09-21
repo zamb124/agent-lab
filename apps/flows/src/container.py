@@ -237,7 +237,7 @@ class FlowContainer(BaseContainer):
         """
         settings = get_settings()
         if not settings.database.shared_url:
-            raise ValueError("database.shared_url обязателен для scheduler_task_repository")
+            raise ValueError("database.shared_url is required for scheduler_task_repository")
         return SchedulerTaskRepository(db_url=settings.database.shared_url)
 
     @lazy
@@ -268,7 +268,7 @@ class FlowContainer(BaseContainer):
     def worktracker_repository(self) -> WorktrackerRepository:
         settings = get_settings()
         if not settings.database.worktracker_url:
-            raise ValueError("database.worktracker_url обязателен для worktracker_repository")
+            raise ValueError("database.worktracker_url is required for worktracker_repository")
         return WorktrackerRepository(db=WorktrackerDatabase(settings.database.worktracker_url))
 
     @lazy
@@ -557,7 +557,7 @@ def get_container() -> FlowContainer:
             container.use_worker = False
         set_current_container(as_flow_runtime_container(container))
         _bind_tool_authz_gate(container)
-        logger.info("FlowContainer создан")
+        logger.info("flows.flowcontainer")
         return container
     return cast(FlowContainer, cast(object, current))
 

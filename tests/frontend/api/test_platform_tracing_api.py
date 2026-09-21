@@ -77,14 +77,14 @@ async def test_platform_tracing_spans_unauthorized(frontend_client):
 
 
 @pytest.mark.asyncio
-async def test_platform_tracing_substring_query_too_short_returns_422(
+async def test_platform_tracing_substring_query_too_short_returns_400(
     frontend_client_system,
 ):
     response = await frontend_client_system.get(
         "/frontend/api/platform-tracing/spans",
         params={"company_id_query": "a"},
     )
-    assert response.status_code == 422
+    assert response.status_code == 400, response.text
 
 
 @pytest.mark.asyncio

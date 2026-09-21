@@ -71,7 +71,7 @@ class CRMDatabase:
             if db_url is None:
                 db_url = get_settings().database.crm_url
                 if not db_url:
-                    raise ValueError("database.crm_url не задан")
+                    raise ValueError("database.crm_url is not set")
             cls._instance = cls(db_url)
         return cls._instance
 
@@ -133,7 +133,7 @@ class BaseCRMRepository(ABC, Generic[T]):
         """
         context = get_context()
         if context is None or context.active_company is None:
-            raise ValueError("Нет активной компании в контексте")
+            raise ValueError("No active company in context")
         return context.active_company.company_id
 
     @property

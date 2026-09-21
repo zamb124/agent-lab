@@ -22,7 +22,7 @@ def resolve_user_roles_in_company(user: User, company: Company) -> list[str]:
     member_roles = company.members.get(user.user_id)
     if member_roles is None:
         raise ValueError(
-            f"resolve_user_roles_in_company: пользователь {user.user_id} не состоит в компании {company_id}",
+            f"resolve_user_roles_in_company: user {user.user_id} is not a member of company {company_id}",
         )
     return member_roles
 
@@ -94,4 +94,4 @@ async def pick_company_billing_user(
         if loaded is not None and cid in loaded.companies:
             return loaded
 
-    raise ValueError(f"pick_company_billing_user: у компании {cid} нет валидного owner-пользователя")
+    raise ValueError(f"pick_company_billing_user: company {cid} has no valid owner user")

@@ -15,7 +15,10 @@ from apps.voice.services.speak_worker import (
 )
 from apps.voice.services.voice_session import VoiceSession
 from core.clients.tts_streaming import BaseTTSStreamer
+from core.context import Context, reset_context, set_context
 from core.logging.attributes import LOG_TTS_PROVIDER, LOG_TTS_TTFA_MS
+from core.models.i18n_models import Language
+from core.models.identity_models import Company, User
 from tests.fixtures.observability_log_capture import (
     find_caplog_record,
     require_log_fields,
@@ -96,15 +99,35 @@ async def test_voice_tts_response_includes_ttfa(
     observability_caplog: pytest.LogCaptureFixture,
     unique_id: str,
 ) -> None:
+    token = set_context(
+        Context(
+            user=User(user_id=f"voice-obs-user-{unique_id}", name="voice-obs"),
+            host="test",
+            session_id=f"voice-obs:{unique_id}",
+            channel="test",
+            language=Language.RU,
+            active_company=Company(
+                company_id=f"voice-obs-co-{unique_id}",
+                name="voice-obs",
+                subdomain="voice-obs",
+            ),
+            user_companies=[],
+            trace_id=unique_id,
+            auth_token="voice-obs-token",
+        )
+    )
     session = VoiceSession(session_id=f"voice-obs-{unique_id}")
     streamer = _FakeTTSStreamer()
     channel = _FakeChannel()
-    worker = await _spawn_speak_worker(session, streamer, channel)
-    await enqueue_speak(session, "Привет мир это тест.")
-    await asyncio.sleep(0.1)
-    await enqueue_end_of_utterance(session)
-    await asyncio.sleep(0.05)
-    await _shutdown_speak_worker(session, worker)
+    try:
+        worker = await _spawn_speak_worker(session, streamer, channel)
+        await enqueue_speak(session, "Привет мир это тест.")
+        await asyncio.sleep(0.1)
+        await enqueue_end_of_utterance(session)
+        await asyncio.sleep(0.05)
+        await _shutdown_speak_worker(session, worker)
+    finally:
+        reset_context(token)
 
     rec = find_caplog_record(
         observability_caplog,

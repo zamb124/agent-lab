@@ -67,7 +67,7 @@ async def chunked_upload_file(
     spec_json: str,
     files_api_prefix: str = DEFAULT_FILES_API_PREFIX,
 ) -> Response:
-    """init → PUT parts → complete. Возвращает Response complete (FileResponse JSON)."""
+    """init → PUT parts → complete. Возвращает Response complete (FileRef JSON)."""
     if len(content) == 0:
         raise ValueError("chunked_upload_file: empty content")
     if original_name.strip() == "":

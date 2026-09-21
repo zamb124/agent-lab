@@ -101,10 +101,10 @@ def _json_array(value: JsonValue | None, field_name: str) -> JsonArray:
 
 def _non_empty_json_string(value: JsonValue | None, field_name: str) -> str:
     if not isinstance(value, str):
-        raise PravoClientError(f"Ответ IPS: поле {field_name} должно быть непустой строкой")
+        raise PravoClientError(f"IPS response: field {field_name} must be a non-empty string")
     result = value.strip()
     if result == "":
-        raise PravoClientError(f"Ответ IPS: поле {field_name} должно быть непустой строкой")
+        raise PravoClientError(f"IPS response: field {field_name} must be a non-empty string")
     return result
 
 
@@ -127,7 +127,7 @@ class PravoClient:
         """Извлекает 64-символьный hash документа IPS из URL или строки-hash."""
         s = ref.strip()
         if not s:
-            raise ValueError("Пустая ссылка на документ IPS")
+            raise ValueError("Empty IPS document reference")
         if _STANDALONE_HASH_RE.match(s):
             return s.lower()
         if s.startswith("//"):
@@ -135,10 +135,10 @@ class PravoClient:
         parsed = urlparse(s)
         host = (parsed.netloc or "").lower().split(":")[0]
         if host and host != _PRAVO_IPS_NETLOC:
-            raise ValueError(f"Ожидается хост {_PRAVO_IPS_NETLOC}, получено: {parsed.netloc}")
+            raise ValueError(f"Expected host {_PRAVO_IPS_NETLOC}, got: {parsed.netloc}")
         m = _LEGISLATION_HASH_RE.search(s)
         if not m:
-            raise ValueError("В URL нет параметра hash= (64 hex) документа IPS")
+            raise ValueError("URL has no hash= (64 hex) IPS document parameter")
         return m.group(1).lower()
 
     @staticmethod
@@ -146,7 +146,7 @@ class PravoClient:
         """Канонический URL API legislation/document."""
         h = document_hash.strip().lower()
         if not _STANDALONE_HASH_RE.match(h):
-            raise ValueError("document_hash должен быть 64 hex-символа")
+            raise ValueError("document_hash must be 64 hex characters")
         return f"{_PRAVO_IPS_SCHEME}://{_PRAVO_IPS_NETLOC}/api/ips/legislation/document?baseid=None&hash={h}"
 
     @staticmethod
@@ -163,16 +163,16 @@ class PravoClient:
     ) -> PravoLegislationDocument:
         """Загружает текст нормативного акта по hash или URL API legislation/document."""
         if document_hash is not None and source_url is not None:
-            raise ValueError("Задайте ровно один из аргументов: document_hash или source_url")
+            raise ValueError("Provide exactly one of: document_hash or source_url")
         if document_hash is None and source_url is None:
-            raise ValueError("Нужен document_hash или source_url")
+            raise ValueError("document_hash or source_url is required")
 
         if source_url is not None:
             h = self.extract_legislation_document_hash(source_url)
             url = self.legislation_document_api_url(h)
         else:
             if document_hash is None:
-                raise ValueError("Нужен document_hash или source_url")
+                raise ValueError("document_hash or source_url is required")
             h = self.extract_legislation_document_hash(document_hash)
             url = self.legislation_document_api_url(h)
 
@@ -183,7 +183,7 @@ class PravoClient:
             content_type,
         )
         if not text:
-            raise PravoClientError("Из ответа IPS получен пустой текст")
+            raise PravoClientError("IPS response text is empty")
         return PravoLegislationDocument(
             text=text,
             source_url=url,
@@ -201,7 +201,7 @@ class PravoClient:
     ) -> list[PravoCatalogHit]:
         """Ищет документы в каталоге IPS через POST search.json (гибридный поиск)."""
         if page < 1:
-            raise ValueError("page должен быть >= 1")
+            raise ValueError("page must be >= 1")
         query_lexemes = self._format_hybrid_search_query(keyword)
         page_size = self._coerce_ips_search_limit(limit)
         url = f"{_IPS_ORIGIN}{_IPS_SEARCH_JSON_PATH}"
@@ -225,7 +225,7 @@ class PravoClient:
         try:
             body = parse_json_object(response.text, "pravo.search.response")
         except ValueError as exc:
-            raise PravoClientError("Ответ поиска IPS не является JSON-объектом") from exc
+            raise PravoClientError("IPS search response is not a JSON object") from exc
         return self._hits_from_search_json(body)
 
     async def document_rag_search(
@@ -327,12 +327,12 @@ class PravoClient:
                 response = await client.get(url, headers=self._headers)
         except httpx.RequestError as exc:
             detail = str(exc).strip() or type(exc).__name__
-            raise PravoClientError(f"Ошибка сетевого запроса IPS: {detail} ({url})") from exc
+            raise PravoClientError(f"IPS network request error: {detail} ({url})") from exc
 
         try:
             _ = response.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            raise PravoClientError(f"HTTP {response.status_code} при запросе IPS: {url}") from exc
+            raise PravoClientError(f"HTTP {response.status_code} while requesting IPS: {url}") from exc
         return response
 
     async def _post_form(self, url: str, *, headers: dict[str, str], data: dict[str, str]) -> httpx.Response:
@@ -345,12 +345,12 @@ class PravoClient:
                 response = await client.post(url, headers=headers, data=data)
         except httpx.RequestError as exc:
             detail = str(exc).strip() or type(exc).__name__
-            raise PravoClientError(f"Ошибка сетевого запроса IPS: {detail} ({url})") from exc
+            raise PravoClientError(f"IPS network request error: {detail} ({url})") from exc
 
         try:
             _ = response.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            raise PravoClientError(f"HTTP {response.status_code} при запросе IPS: {url}") from exc
+            raise PravoClientError(f"HTTP {response.status_code} while requesting IPS: {url}") from exc
         return response
 
     @staticmethod
@@ -358,7 +358,7 @@ class PravoClient:
         """Строка query для IPS: лексемы через ``&`` (как в форме hybridSearch)."""
         parts = [p for p in keyword.strip().split() if p]
         if not parts:
-            raise ValueError("keyword не должен быть пустым")
+            raise ValueError("keyword must not be empty")
         return "&".join(parts)
 
     @staticmethod
@@ -371,11 +371,11 @@ class PravoClient:
     def _hits_from_search_json(cls, body: JsonObject) -> list[PravoCatalogHit]:
         if body.get("status") == 400:
             err = _non_empty_json_string(body.get("error"), "error")
-            raise PravoClientError(f"Поиск IPS: {err}")
+            raise PravoClientError(f"IPS search: {err}")
         docs = body.get("docs")
         if docs is None and "error" in body:
             err = _non_empty_json_string(body.get("error"), "error")
-            raise PravoClientError(f"Поиск IPS: {err}")
+            raise PravoClientError(f"IPS search: {err}")
         docs_array = _json_array(docs, "docs")
 
         out: list[PravoCatalogHit] = []
@@ -383,7 +383,7 @@ class PravoClient:
             doc = _json_object(doc_value, f"docs[{idx}]")
             raw_hash = doc.get("hash")
             if not isinstance(raw_hash, str) or not _STANDALONE_HASH_RE.match(raw_hash):
-                raise PravoClientError(f"Ответ поиска IPS: docs[{idx}].hash должен быть 64 hex")
+                raise PravoClientError(f"IPS search response: docs[{idx}].hash must be 64 hex")
             dh = raw_hash.lower()
             name = _optional_json_string(doc.get("name"), f"docs[{idx}].name")
             adoption = _optional_json_string(doc.get("adoption"), f"docs[{idx}].adoption")
@@ -393,7 +393,7 @@ class PravoClient:
                 title = adoption
             else:
                 raise PravoClientError(
-                    f"Ответ поиска IPS: docs[{idx}] должен содержать name или adoption"
+                    f"IPS search response: docs[{idx}] must contain name or adoption"
                 )
             out.append(
                 PravoCatalogHit(
@@ -440,7 +440,7 @@ class PravoClient:
         if nested_data is not None:
             return cls._text_from_pravo_json(nested_data)
 
-        raise PravoClientError("Не удалось извлечь текст из JSON ответа IPS (нет ожидаемых полей)")
+        raise PravoClientError("Failed to extract text from IPS JSON response (expected fields are missing)")
 
     @classmethod
     def _parse_legislation_response_body(cls, body: str, content_type: str | None) -> tuple[str, str | None]:
@@ -449,17 +449,17 @@ class PravoClient:
             try:
                 data = parse_json_value(body, "pravo.document.response")
             except ValueError as exc:
-                raise PravoClientError("Тело ответа IPS не является корректным JSON") from exc
+                raise PravoClientError("IPS response body is not valid JSON") from exc
             return cls._text_from_pravo_json(data)
 
         is_html = "html" in ct or body.lstrip().lower().startswith("<!doctype") or "<html" in body[:2000].lower()
         if is_html:
             plain = cls._html_to_plain_text(body)
             if not plain:
-                raise PravoClientError("Пустой текст после разбора HTML ответа IPS")
+                raise PravoClientError("Empty text after parsing IPS HTML response")
             return plain, None
 
         plain = body.strip()
         if not plain:
-            raise PravoClientError("Пустое тело ответа IPS")
+            raise PravoClientError("IPS response body is empty")
         return plain, None

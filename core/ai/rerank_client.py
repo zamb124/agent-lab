@@ -9,12 +9,9 @@ import core.tracing.attributes as trace_attributes
 from core.ai.models import AICostOrigin
 from core.context import get_context
 from core.http import ProxyStrategy, get_httpx_client
-from core.logging import get_logger
 from core.models.billing_models import UsageType
 from core.tracing.operation_span import traced_operation
 from core.types import JsonValue, require_json_object, require_json_value
-
-logger = get_logger(__name__)
 
 
 class AIRerankerClientError(Exception):
@@ -63,8 +60,7 @@ class AIRerankerHTTPClient:
         """Billing span `rerank.{model}`: quantity — токены; цена — `billing.resource_base_prices.rerank`."""
         context = get_context()
         if context is None or context.active_company is None:
-            logger.debug("Rerank: no active_company context, billing span skipped")
-            return
+            raise ValueError('Rerank: Context with active_company is required for billing')
         resource = self.billing_resource_id.strip() or "rerank"
         is_company = self.cost_origin == "company"
         resource_name = "rerank:byok" if is_company else f"rerank:{resource}"

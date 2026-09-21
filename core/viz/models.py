@@ -42,7 +42,7 @@ def resolve_viz_engine(kind: VizKind, engine: VizEngine | None) -> VizEngine:
         return engine
     resolved = _KIND_DEFAULT_ENGINE.get(kind)
     if resolved is None:
-        raise ValueError(f"нет default engine для kind={kind.value}")
+        raise ValueError(f"no default engine for kind={kind.value}")
     return resolved
 
 
@@ -60,26 +60,26 @@ class VizDocument(BaseModel):
         if self.engine == VizEngine.MERMAID:
             source = self.spec.get("source")
             if not isinstance(source, str) or source.strip() == "":
-                raise ValueError("viz mermaid.spec.source обязателен (непустая строка)")
+                raise ValueError('viz mermaid.spec.source is required (non-empty string)')
             return self
         if self.engine == VizEngine.ECHARTS:
             option = self.spec.get("option")
             if not isinstance(option, dict):
-                raise ValueError("viz echarts.spec.option обязателен (JSON object)")
+                raise ValueError('viz echarts.spec.option is required (JSON object)')
             return self
-        raise ValueError(f"неизвестный viz engine={self.engine.value}")
+        raise ValueError(f"unknown viz engine={self.engine.value}")
 
 
 def parse_viz_document_bytes(payload: bytes) -> VizDocument:
     if len(payload) == 0:
-        raise ValueError("viz document пуст")
+        raise ValueError('viz document is empty')
     if len(payload) > VIZ_MAX_BYTES:
-        raise ValueError(f"viz document превышает лимит {VIZ_MAX_BYTES} байт")
+        raise ValueError(f"viz document exceeds the limit {VIZ_MAX_BYTES} bytes")
     try:
         text = payload.decode("utf-8")
     except UnicodeDecodeError as exc:
-        raise ValueError("viz document должен быть UTF-8 JSON") from exc
+        raise ValueError('viz document must be UTF-8 JSON') from exc
     try:
         return VizDocument.model_validate_json(text)
     except ValidationError as exc:
-        raise ValueError(f"viz document JSON невалиден: {exc}") from exc
+        raise ValueError(f"viz document JSON is invalid: {exc}") from exc

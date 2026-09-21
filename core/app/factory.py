@@ -57,8 +57,10 @@ from core.config.testing import is_testing
 from core.container.base import BaseContainer
 from core.errors.boundary import (
     PlatformAccessDeniedError,
+    PlatformBoundaryError,
     PlatformConflictError,
     PlatformNotFoundError,
+    PlatformUnavailableError,
 )
 from core.events import store_registered_platform_events
 from core.events.publisher import close_publisher_client
@@ -92,8 +94,8 @@ from core.tracing import setup_tracing
 from core.tracing.tracer import set_span_repository, set_tracing_service_name
 from core.types import JsonObject, JsonValue
 from core.utils.background import run_with_log_context
-from core.websocket import WsCommandError
-from core.websocket.operation import WS_COMMAND_ERROR_HTTP_STATUS
+from core.websocket import WsCommandError, command_failure_payload
+from core.websocket.operation import WS_COMMAND_ERROR_HTTP_STATUS, ws_command_error_status
 
 logger = get_logger(__name__)
 
@@ -227,11 +229,11 @@ def create_service_app(
             if settings.tracing.postgres_enabled:
                 if not settings.database.tracing_url:
                     raise ValueError(
-                        "tracing.postgres_enabled требует database.tracing_url (DATABASE__TRACING_URL)"
+                        'tracing.postgres_enabled requires database.tracing_url (DATABASE__TRACING_URL)'
                     )
                 set_tracing_service_name(service_name)
                 set_span_repository(container.span_repository)
-            logger.info("Трейсинг инициализирован")
+            logger.info("app.event")
 
         if include_platform_lifecycle:
 
@@ -240,7 +242,7 @@ def create_service_app(
 
             # Инициализация глобального BillingService
             set_billing_service(container.billing_service)
-            logger.info("BillingService инициализирован")
+            logger.info("app.billingservice")
 
             # Инициализация курса USD/RUB от ЦБ РФ: один запрос при старте,
             # затем фоновое обновление каждые 5 минут.
@@ -262,22 +264,20 @@ def create_service_app(
 
             if hasattr(container, "file_repository"):
                 initialize_default_processors(container.file_repository)
-                logger.info(
-                    "initialize_default_processors: FileReader может грузить файлы по file_id / S3"
-                )
+                logger.info("app.initialize_default_processors")
 
             # Инициализация WebPushService
             if settings.push.enabled:
                 if not settings.push.vapid_private_key or not settings.push.vapid_public_key:
                     raise ValueError(
-                        "push.enabled=true требует push.vapid_private_key и push.vapid_public_key"
+                        'push.enabled=true requires push.vapid_private_key and push.vapid_public_key'
                     )
                 _ = init_web_push_service(
                     vapid_private_key=settings.push.vapid_private_key,
                     vapid_public_key=settings.push.vapid_public_key,
                     vapid_email=settings.push.vapid_email,
                 )
-                logger.info("WebPushService инициализирован")
+                logger.info("app.webpushservice")
 
             apns = resolve_apns_credentials(settings)
             if apns:
@@ -288,7 +288,7 @@ def create_service_app(
                     bundle_id=apns.bundle_id,
                     use_sandbox=apns.use_sandbox,
                 )
-                logger.info("ApnsPushService инициализирован")
+                logger.info("app.apnspushservice")
 
             fcm = resolve_fcm_credentials(settings.push)
             if fcm:
@@ -298,7 +298,7 @@ def create_service_app(
                     private_key_pem=fcm.private_key_pem,
                     token_uri=fcm.token_uri,
                 )
-                logger.info("FcmPushService инициализирован project_id=%s", fcm.project_id)
+                logger.info("app.fcmpushservice.project_id", project_id=fcm.project_id)
 
         # Кастомный startup
         if on_startup:
@@ -376,17 +376,43 @@ def create_service_app(
         )
     _ = _authz_config_error_handler
 
-    def _boundary_error_response(code: str, detail: str) -> JSONResponse:
+    def _boundary_error_response(
+        transport_code: str,
+        detail: str,
+        *,
+        error_code: str,
+        error_params: JsonObject,
+    ) -> JSONResponse:
         return JSONResponse(
-            status_code=WS_COMMAND_ERROR_HTTP_STATUS[code],
-            content={"error_code": code, "error_detail": detail, "detail": detail},
+            status_code=WS_COMMAND_ERROR_HTTP_STATUS[transport_code],
+            content=command_failure_payload(
+                WsCommandError(
+                    transport_code,
+                    detail,
+                    error_code=error_code,
+                    error_params=error_params,
+                )
+            ),
+        )
+
+    def _platform_boundary_response(
+        transport_code: str, exc: PlatformBoundaryError
+    ) -> JSONResponse:
+        return _boundary_error_response(
+            transport_code,
+            str(exc),
+            error_code=exc.error_code,
+            error_params=exc.error_params,
         )
 
     @app.exception_handler(WsCommandError)
     async def _ws_command_error_handler(
         _request: Request, exc: WsCommandError
     ) -> JSONResponse:
-        return _boundary_error_response(exc.code, exc.detail)
+        return JSONResponse(
+            status_code=ws_command_error_status(exc),
+            content=command_failure_payload(exc),
+        )
 
     _ = _ws_command_error_handler
 
@@ -394,7 +420,7 @@ def create_service_app(
     async def _platform_not_found_handler(
         _request: Request, exc: PlatformNotFoundError
     ) -> JSONResponse:
-        return _boundary_error_response("not_found", str(exc))
+        return _platform_boundary_response("not_found", exc)
 
     _ = _platform_not_found_handler
 
@@ -402,7 +428,7 @@ def create_service_app(
     async def _platform_conflict_handler(
         _request: Request, exc: PlatformConflictError
     ) -> JSONResponse:
-        return _boundary_error_response("conflict", str(exc))
+        return _platform_boundary_response("conflict", exc)
 
     _ = _platform_conflict_handler
 
@@ -410,9 +436,17 @@ def create_service_app(
     async def _platform_access_denied_handler(
         _request: Request, exc: PlatformAccessDeniedError
     ) -> JSONResponse:
-        return _boundary_error_response("forbidden", str(exc))
+        return _platform_boundary_response("forbidden", exc)
 
     _ = _platform_access_denied_handler
+
+    @app.exception_handler(PlatformUnavailableError)
+    async def _platform_unavailable_handler(
+        _request: Request, exc: PlatformUnavailableError
+    ) -> JSONResponse:
+        return _platform_boundary_response("unavailable", exc)
+
+    _ = _platform_unavailable_handler
 
     @app.exception_handler(PydanticValidationError)
     async def _payload_validation_handler(
@@ -611,14 +645,14 @@ def create_service_app(
 
     if include_platform_routers and include_platform_pwa:
         register_platform_pwa_routes(app, project_root)
-        logger.info("PWA: /manifest.json, /sw.js, /offline.html")
+        logger.info("app.pwa.manifest.json.sw.js")
 
     if include_platform_routers:
         register_platform_i18n_routes(app, project_root)
-        logger.info("I18n: GET /api/i18n/{locale}")
+        logger.info("app.i18n.api.i18n.locale")
 
         register_platform_file_types_route(app)
-        logger.info("FileTypes: GET /api/platform/file-types")
+        logger.info("app.filetypes.api.platform.file.types")
 
     if services_spa_index is not None and services_spa_index.is_file():
         _services_spa_html = services_spa_index.read_text(encoding="utf-8")
@@ -630,10 +664,10 @@ def create_service_app(
         _ = platform_services_spa
 
         logger.info(
-            "Platform services SPA: GET /%s/services, /%s/services/ -> %s",
-            public_segment,
-            public_segment,
-            services_spa_index,
+            "app.platform.services.spa.services.services",
+            public_segment=public_segment,
+            public_segment_2=public_segment,
+            services_spa_index=services_spa_index,
         )
 
     # Health-эндпоинты

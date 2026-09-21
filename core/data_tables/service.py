@@ -456,13 +456,13 @@ class DataTableService:
         except ClientError as exc:
             code = exc.response["Error"]["Code"]
             logger.warning(
-                "data-table: S3 error file_id=%s bucket=%s key=%s code=%s",
-                record.file_id,
-                record.s3_bucket,
-                record.s3_key,
-                code,
+                "data_tables.data.table.s3.error.file_id",
+                file_id=record.file_id,
+                bucket=record.s3_bucket,
+                key=record.s3_key,
+                code=code,
             )
-            raise DataTableNotFoundError(f"не удалось прочитать DataTable: {code}") from exc
+            raise DataTableNotFoundError(f"failed to read DataTable: {code}") from exc
         finally:
             await s3.close()
 

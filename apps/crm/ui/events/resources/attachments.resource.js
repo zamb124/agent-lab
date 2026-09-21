@@ -5,11 +5,15 @@
  * Привязка / список / удаление — `crm/attachments/*_requested`.
  */
 
-import { createAsyncOp } from '@platform/lib/events/index.js';
+import { createAsyncOp, rerunLastRequest } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
 import { uploadPlatformFile } from '@platform/lib/utils/platform-file-upload.js';
 import { buildCrmEntityFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 
+/**
+ * Список вложений сущности; после upload/remove фабрика перечитывает его сама:
+ * результат привязки не содержит полной записи, а статус обработки меняется асинхронно.
+ */
 export const attachmentsListOp = createAsyncOp({
     name: 'crm/attachments_list',
     silent: true,
@@ -19,11 +23,18 @@ export const attachmentsListOp = createAsyncOp({
     restMirror: { method: 'GET', path: '/crm/api/v1/entities/:entity_id/attachments' },
 });
 
+function _rerunAttachmentsFor(ctx, entityId) {
+    rerunLastRequest(ctx, attachmentsListOp, {
+        when: (request) => Boolean(request) && request.entity_id === entityId,
+    });
+}
+
 export const attachmentUploadOp = createAsyncOp({
     name: 'crm/attachment_upload',
     successToastKey: 'crm:toast.attachment.uploaded',
     errorToastKey: 'crm:toast.attachment.upload_failed',
     restMirror: { method: 'POST', path: '/crm/api/v1/entities/:entity_id/attachments' },
+    onSuccess: (ctx, _result, event) => _rerunAttachmentsFor(ctx, event.payload.entity_id),
     request: async ({ payload }) => {
         if (!payload || typeof payload.entity_id !== 'string' || !(payload.file instanceof File)) {
             throw new Error('attachmentUploadOp: { entity_id, file: File } required');
@@ -58,4 +69,5 @@ export const attachmentDeleteOp = createAsyncOp({
     wsTimeoutMs: 8_000,
     commandType: 'crm/attachments/remove_requested',
     restMirror: { method: 'DELETE', path: '/crm/api/v1/entities/:entity_id/attachments/:attachment_id' },
+    onSuccess: (ctx, _result, event) => _rerunAttachmentsFor(ctx, event.payload.entity_id),
 });

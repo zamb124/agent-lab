@@ -97,13 +97,13 @@ class VizViewerHandler:
         except ClientError as exc:
             code = exc.response["Error"]["Code"]
             logger.warning(
-                "viz-handler: S3 error file_id=%s bucket=%s key=%s code=%s",
-                file_record.file_id,
-                file_record.s3_bucket,
-                file_record.s3_key,
-                code,
+                "office.viz.handler.s3.error.file_id",
+                file_id=file_record.file_id,
+                bucket=file_record.s3_bucket,
+                key=file_record.s3_key,
+                code=code,
             )
-            raise ValueError(f"не удалось прочитать viz файл: {code}") from exc
+            raise ValueError(f"failed to read viz file: {code}") from exc
         finally:
             await s3.close()
         viz_document = parse_viz_document_bytes(body)

@@ -42,7 +42,7 @@ def register_service(
 
     location = alembic_script_location or f"migrations/{name}"
     _registry.append(ServiceDBConfig(name, get_db_url, models_module, location))
-    logger.debug(f"Service '{name}' registered for migrations (tree: {location})")
+    logger.debug("db.service_registered", name=name, location=str(location))
 
 def get_all_services() -> list[ServiceDBConfig]:
     """Возвращает все зарегистрированные сервисы."""
@@ -53,7 +53,7 @@ def get_service_by_name(name: str) -> ServiceDBConfig:
     for svc in _registry:
         if svc.name == name:
             return svc
-    raise KeyError(f"Сервис БД не зарегистрирован: {name!r}")
+    raise KeyError(f"Database service is not registered: {name!r}")
 
 def get_unique_db_urls() -> dict[str, list[str]]:
     """

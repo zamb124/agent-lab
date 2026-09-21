@@ -215,7 +215,7 @@ async def bootstrap_agent_toolkits_from_registry(
     only_missing: bool = False,
 ) -> int:
     if not registry_path.exists():
-        logger.warning("agent_toolkits registry not found: %s", registry_path)
+        logger.warning("flows.agent_toolkits", registry_path=registry_path)
         return 0
     with open(registry_path, encoding="utf-8") as registry_file:
         registry_raw = require_json_object(yaml.safe_load(registry_file) or {}, "registry.yaml")
@@ -236,10 +236,10 @@ async def bootstrap_agent_toolkits_from_registry(
         _ = await repository.set(merged)
         loaded_count += 1
     logger.info(
-        "agent_toolkits bootstrap loaded=%s filter_public=%s only_missing=%s",
-        loaded_count,
-        filter_public,
-        only_missing,
+        "flows.agent_toolkits",
+        loaded=loaded_count,
+        filter_public=filter_public,
+        only_missing=only_missing,
     )
     return loaded_count
 

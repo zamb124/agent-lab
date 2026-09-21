@@ -13,11 +13,11 @@ from core.files.writer.exceptions import FileWriteError
 def _normalize_image_url(raw: str) -> str:
     u = raw.strip().strip("<>").strip()
     if not u:
-        raise FileWriteError("Пустой URL в разметке изображения markdown")
+        raise FileWriteError("Empty URL in markdown image markup")
     parsed = urlparse(u)
     if parsed.scheme not in ("http", "https"):
         raise FileWriteError(
-            f"URL изображения должен быть http или https (стандартный markdown ![]()): {u!r}"
+            f"Image URL must be http or https (standard markdown ![]()): {u!r}"
         )
     return u
 
@@ -38,18 +38,18 @@ def fetch_url_bytes(
             _ = response.raise_for_status()
     except httpx.HTTPStatusError as exc:
         raise FileWriteError(
-            f"Не удалось загрузить изображение {normalized!r}: HTTP {exc.response.status_code}"
+            f"Failed to download image {normalized!r}: HTTP {exc.response.status_code}"
         ) from exc
     except httpx.RequestError as exc:
-        raise FileWriteError(f"Ошибка сети при загрузке изображения {normalized!r}: {exc}") from exc
+        raise FileWriteError(f"Network error while downloading image {normalized!r}: {exc}") from exc
 
     data = response.content
     if len(data) > max_bytes:
         raise FileWriteError(
-            f"Изображение {normalized!r} превышает лимит {max_bytes} байт (получено {len(data)})"
+            f"Image {normalized!r} exceeds the limit of {max_bytes} bytes (got {len(data)})"
         )
     if len(data) == 0:
-        raise FileWriteError(f"Пустой ответ при загрузке изображения {normalized!r}")
+        raise FileWriteError(f"Empty response while downloading image {normalized!r}")
 
     mime: str | None = None
     if "content-type" in response.headers:

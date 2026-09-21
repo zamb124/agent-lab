@@ -24,7 +24,7 @@ def _derive_fernet_key() -> bytes:
     raw = get_settings().secrets.encryption_key
     if raw is None or not raw.strip():
         raise ValueError(
-            "core.secrets.crypto: secrets.encryption_key не задан; без ключа нельзя шифровать секреты"
+            'core.secrets.crypto: secrets.encryption_key is not set; cannot encrypt secrets without a key'
         )
     digest = hashlib.sha256(raw.strip().encode("utf-8")).digest()
     return base64.urlsafe_b64encode(digest)
@@ -37,7 +37,7 @@ def _fernet() -> Fernet:
 def encrypt_secret(plaintext: str) -> str:
     """Шифрует секрет в base64-токен Fernet. Пустую строку считаем ошибкой."""
     if not plaintext.strip():
-        raise ValueError("encrypt_secret: plaintext пуст")
+        raise ValueError('encrypt_secret: plaintext is empty')
     token = _fernet().encrypt(plaintext.encode("utf-8"))
     return token.decode("ascii")
 
@@ -45,12 +45,12 @@ def encrypt_secret(plaintext: str) -> str:
 def decrypt_secret(token: str) -> str:
     """Расшифровывает Fernet-токен; невалидный/чужой ключ → ValueError."""
     if not token.strip():
-        raise ValueError("decrypt_secret: token пуст")
+        raise ValueError('decrypt_secret: token is empty')
     try:
         plain = _fernet().decrypt(token.encode("ascii"))
     except InvalidToken as error:
         raise ValueError(
-            "decrypt_secret: невалидный Fernet-токен (или несовпадающий secrets.encryption_key)"
+            'decrypt_secret: invalid Fernet token (or mismatched secrets.encryption_key)'
         ) from error
     return plain.decode("utf-8")
 

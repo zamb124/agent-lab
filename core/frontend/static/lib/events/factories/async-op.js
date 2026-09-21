@@ -25,6 +25,8 @@
  *     имя фабрики (`sync/calls_invite`) не совпадает с каноничным именем
  *     backend-команды (`sync/calls/invite_requested`).
  *   - extraInitial: { ... } — мерджится в initial slice.
+ *   - SUCCEEDED payload = { result, request } (request — payload команды);
+ *   - slice.lastRequest = { payload } последнего REQUESTED (null до первого запуска);
  *   - extraReducer(state, event, events) — вызывается ПОСЛЕ базового reducer'а;
  *     возвращает новое состояние или то же ссылочно (no-op).
  *   - extraEffect(event, ctx, events) — до базового effect; return true = handled
@@ -84,6 +86,7 @@ const INITIAL_SLICE = freeze({
     error: null,
     lastResult: null,
     lastRequestId: null,
+    lastRequest: null,
 });
 
 export function createAsyncOp(options) {
@@ -197,7 +200,13 @@ export function createAsyncOp(options) {
     function _baseReducer(state, event) {
         switch (event.type) {
             case events.REQUESTED:
-                return freeze({ ...state, busy: true, error: null, lastRequestId: event.id });
+                return freeze({
+                    ...state,
+                    busy: true,
+                    error: null,
+                    lastRequestId: event.id,
+                    lastRequest: freeze({ payload: event.payload === undefined ? null : event.payload }),
+                });
             case events.SUCCEEDED: {
                 if (!event.payload || !('result' in event.payload)) {
                     throw new Error(`createAsyncOp(${name}): SUCCEEDED payload must include "result"`);
@@ -229,6 +238,7 @@ export function createAsyncOp(options) {
         error:        (state) => _readSlice(state).error,
         lastResult:   (state) => _readSlice(state).lastResult,
         lastRequestId:(state) => _readSlice(state).lastRequestId,
+        lastRequest:  (state) => _readSlice(state).lastRequest,
     });
 
     const wsCommandType = commandType !== null ? commandType : events.REQUESTED;
@@ -326,9 +336,11 @@ async function _runEffect(event, ctx, opts) {
         }
         return;
     }
+    // `request` — payload команды: extraReducer других фабрик мержит исход
+    // (например, удаление по id, которого нет в result).
     ctx.dispatch(
         opts.events.SUCCEEDED,
-        { result },
+        { result, request: payload },
         { causation_id: event.id, source: opts.transport === 'ws' ? 'ws' : 'http' },
     );
     if (!opts.silent && !(payload && payload.suppressSuccessToast === true)) {

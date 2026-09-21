@@ -136,9 +136,7 @@ export class WorktrackerBoardPage extends PlatformPage {
             }
             this._selectBoard(item.board_id);
         });
-        this.useEvent(this._boards.resource.events.UPDATED, () => {
-            this._boards.load({});
-        });
+        // Созданная задача уже смержена коллекцией; страница лишь переключается на её доску.
         this.useEvent(this._workItems.resource.events.CREATED, (event) => {
             const payload = event.payload;
             if (!payload || typeof payload !== 'object' || !('item' in payload)) {
@@ -150,9 +148,7 @@ export class WorktrackerBoardPage extends PlatformPage {
             }
             if (this._activeBoardId !== item.board_id) {
                 this._selectBoard(item.board_id);
-                return;
             }
-            this._workItems.load({ board_id: item.board_id });
         });
     }
 
@@ -161,14 +157,18 @@ export class WorktrackerBoardPage extends PlatformPage {
         const urlBoardId = this._readBoardIdFromUrl();
         if (urlBoardId.length > 0) {
             this._activeBoardId = urlBoardId;
-            this._boards.get(urlBoardId);
-            this._workItems.load({ board_id: urlBoardId });
         }
         this._boards.load({});
     }
 
     updated(changed) {
         super.updated(changed);
+        // Загрузка привязана к выбранной доске, а не к событиям: смена `_activeBoardId` —
+        // единственная точка, где читаются доска и её задачи.
+        if (changed.has('_activeBoardId') && this._activeBoardId) {
+            this._boards.get(this._activeBoardId);
+            this._workItems.load({ board_id: this._activeBoardId });
+        }
         const boards = this._boards.items;
         if (!Array.isArray(boards) || boards.length === 0) {
             return;
@@ -221,8 +221,6 @@ export class WorktrackerBoardPage extends PlatformPage {
         }
         this._activeBoardId = boardId;
         this._persistBoardId(boardId);
-        this._boards.get(boardId);
-        this._workItems.load({ board_id: boardId });
     }
 
     _openCreateTask() {

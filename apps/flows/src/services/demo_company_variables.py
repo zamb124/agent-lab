@@ -20,7 +20,7 @@ _SEED_PATH = Path(__file__).resolve().parent.parent.parent / "bundles" / "_seed"
 
 def _load_seed_requests() -> list[VariableWriteRequest]:
     if not _SEED_PATH.is_file():
-        raise FileNotFoundError(f"Demo variables seed не найден: {_SEED_PATH}")
+        raise FileNotFoundError(f"Demo variables seed not found: {_SEED_PATH}")
     seed_root = parse_json_object(_SEED_PATH.read_text(encoding="utf-8"), "demo_company_variables.json")
     variables_raw = require_json_array(seed_root["variables"], "variables")
     requests: list[VariableWriteRequest] = []

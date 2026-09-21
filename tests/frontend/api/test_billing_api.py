@@ -389,8 +389,7 @@ class TestBillingAPI:
         assert response.status_code == 200
         data = response.json()
 
-        # Пока mock, но структура должна быть правильной
-        assert "payments" in data
+        assert "items" in data
 
     async def test_billing_isolation_between_companies(
         self,

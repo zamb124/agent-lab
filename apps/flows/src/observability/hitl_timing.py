@@ -23,7 +23,7 @@ _HITL_INTERRUPT_TS_TTL_SECONDS = 604800
 
 def _hitl_key(work_item_id: str) -> str:
     if work_item_id == "":
-        raise ValueError("work_item_id обязателен для HITL timing")
+        raise ValueError("work_item_id is required for HITL timing")
     return f"{_HITL_INTERRUPT_TS_PREFIX}{work_item_id}"
 
 
@@ -41,7 +41,7 @@ async def record_hitl_interrupt(
     )
     if not stored:
         raise RuntimeError(
-            f"Не удалось записать HITL interrupt timestamp: work_item_id={work_item_id!r}"
+            f"Failed to write HITL interrupt timestamp: work_item_id={work_item_id!r}"
         )
 
 
@@ -61,7 +61,7 @@ async def maybe_record_hitl_operator_response(
         interrupted_at = float(raw_interrupted_at)
     except ValueError as exc:
         raise ValueError(
-            f"Некорректный HITL interrupt timestamp: work_item_id={work_item_id!r}"
+            f"Invalid HITL interrupt timestamp: work_item_id={work_item_id!r}"
         ) from exc
     wait_ms = round((time.time() - interrupted_at) * 1000.0, 3)
     _logger.info(

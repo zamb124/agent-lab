@@ -596,10 +596,10 @@ export class PlatformDataTableHost extends PlatformElement {
         if (!this.tableName) {
             throw new Error('platform-data-table-host: table name required for export');
         }
-        return `${this._rowsUrl()}/${encodeURIComponent(this.tableName)}/export?format=${sourceFormat}`;
+        return `${this._rowsUrl()}/${encodeURIComponent(this.tableName)}/export?source_format=${sourceFormat}`;
     }
 
-    _exportTable(sourceFormat) {
+    async _exportTable(sourceFormat) {
         if (sourceFormat !== 'csv' && sourceFormat !== 'xlsx') {
             throw new Error(`platform-data-table-host: invalid export format ${sourceFormat}`);
         }
@@ -608,14 +608,23 @@ export class PlatformDataTableHost extends PlatformElement {
             return;
         }
         this._exporting = sourceFormat;
-        const link = document.createElement('a');
-        link.href = this._exportUrl(sourceFormat);
-        link.download = `${this.tableName}.${sourceFormat}`;
-        link.rel = 'noopener';
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        this._exporting = '';
+        try {
+            const exported = await this._fetchJson(this._exportUrl(sourceFormat));
+            if (!exported || typeof exported.download_url !== 'string' || exported.download_url.length === 0) {
+                throw new Error('platform-data-table-host: export must return FileRecord.download_url');
+            }
+            const link = document.createElement('a');
+            link.href = exported.download_url;
+            link.download = `${this.tableName}.${sourceFormat}`;
+            link.rel = 'noopener';
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (error) {
+            this._formError = error instanceof Error ? error.message : String(error);
+        } finally {
+            this._exporting = '';
+        }
     }
 
     _columnSpec(columnName) {

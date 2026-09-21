@@ -29,27 +29,27 @@ _ = importlib.import_module("apps.rag.events")
 async def on_startup(app: FastAPI, container: RAGContainer, settings: RAGSettings) -> None:
     """Кастомная логика при запуске сервиса RAG"""
     _ = app
-    logger.info("RAG Service запускается...")
+    logger.info("rag.service")
 
     register_rag_ws_commands()
     if not settings.rag.enabled:
-        logger.warning("RAG отключен в конфигурации")
+        logger.warning("rag.rag")
         return
     _ = container.rag_provider
     FileReader.configure_asset_persist(container.files_service)
-    logger.info(f"RAG провайдер по умолчанию: {settings.rag.default_provider}")
+    logger.info("rag.startup.default_provider", provider=settings.rag.default_provider)
 
     enabled_providers = [
         name for name, config in settings.rag.providers.items()
         if config.enabled
     ]
-    logger.info(f"Включенные провайдеры: {', '.join(enabled_providers)}")
+    logger.info("rag.startup.enabled_providers", providers=enabled_providers)
 
 
 async def on_shutdown(app: FastAPI, container: RAGContainer) -> None:
     """Кастомная логика при остановке сервиса RAG"""
     _ = app, container
-    logger.info("RAG Service останавливается...")
+    logger.info("rag.service")
 
 
 app = create_service_app(

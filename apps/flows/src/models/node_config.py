@@ -43,18 +43,18 @@ from .tool_reference import ToolReference
 
 def _parse_config_int(value: JsonValue, field_name: str) -> int:
     if isinstance(value, bool):
-        raise ValueError(f"{field_name}: ожидается целое число, получено bool")
+        raise ValueError(f"{field_name}: expected integer, got bool")
     if isinstance(value, int):
         return value
     if isinstance(value, str):
         stripped = value.strip()
         if not stripped:
-            raise ValueError(f"{field_name}: ожидается целое число, получена пустая строка")
+            raise ValueError(f"{field_name}: expected integer, got an empty string")
         try:
             return int(stripped, 10)
         except ValueError as exc:
-            raise ValueError(f"{field_name}: ожидается целое число, получено {value!r}") from exc
-    raise ValueError(f"{field_name}: ожидается целое число, получено {type(value).__name__}")
+            raise ValueError(f"{field_name}: expected integer, got {value!r}") from exc
+    raise ValueError(f"{field_name}: expected integer, got {type(value).__name__}")
 
 
 def _blank_optional_str(value: object) -> object:
@@ -270,7 +270,7 @@ class NodeConfig(StrictBaseModel):
     def validate_node_id(cls, v: JsonValue) -> str:
         """Принимает URN или plain ID, извлекает ID."""
         if not isinstance(v, str):
-            raise ValueError(f"node_id: ожидается строка, получено {type(v).__name__}")
+            raise ValueError(f"node_id: expected string, got {type(v).__name__}")
         return extract_resource_id(v)
 
     description: str = Field(default="", description="Описание ноды")
@@ -367,7 +367,7 @@ class NodeConfig(StrictBaseModel):
         if v is None:
             return "any"
         if v not in ("any", "all"):
-            raise ValueError(f"incoming_policy: ожидается 'any' или 'all', получено {v!r}")
+            raise ValueError(f"incoming_policy: expected 'any' or 'all', got {v!r}")
         return v
 
     @field_validator("messages_filter", mode="before")
@@ -377,21 +377,21 @@ class NodeConfig(StrictBaseModel):
             return "all"
         if isinstance(v, str):
             if v not in ("all", "own"):
-                raise ValueError(f"messages_filter: ожидается 'all' или 'own', получено {v!r}")
+                raise ValueError(f"messages_filter: expected 'all' or 'own', got {v!r}")
             return v
         if isinstance(v, list):
             if not v:
-                raise ValueError("messages_filter: список node_id не может быть пустым")
+                raise ValueError("messages_filter: node_id list cannot be empty")
             out: list[str] = []
             for i, item in enumerate(v):
                 if not isinstance(item, str) or not item.strip():
                     raise ValueError(
-                        f"messages_filter: элемент #{i} должен быть непустой строкой (node_id)"
+                        f"messages_filter: item #{i} must be a non-empty string (node_id)"
                     )
                 out.append(extract_resource_id(item))
             return out
         raise ValueError(
-            f"messages_filter: ожидается 'all', 'own' или список строк, получено {type(v).__name__}"
+            f"messages_filter: expected 'all', 'own' or a list of strings, got {type(v).__name__}"
         )
 
     input_mapping: NodeInputMapping = Field(
@@ -627,11 +627,11 @@ class NodeConfig(StrictBaseModel):
             return None
         iv = _parse_config_int(v, "node_timeout_seconds")
         if iv < 1:
-            raise ValueError(f"node_timeout_seconds: ожидается >= 1, получено {iv}")
+            raise ValueError(f"node_timeout_seconds: expected >= 1, got {iv}")
         cap = get_node_execution_wall_time_cap_seconds()
         if iv > cap:
             raise ValueError(
-                f"node_timeout_seconds: максимум {cap}с (node_execution_wall_time_cap_seconds), получено {iv}"
+                f"node_timeout_seconds: maximum {cap}s (node_execution_wall_time_cap_seconds), got {iv}"
             )
         return iv
 
@@ -642,11 +642,11 @@ class NodeConfig(StrictBaseModel):
             return None
         iv = _parse_config_int(v, "max_visits_per_run")
         if iv < 1:
-            raise ValueError(f"max_visits_per_run: ожидается >= 1, получено {iv}")
+            raise ValueError(f"max_visits_per_run: expected >= 1, got {iv}")
         cap = get_graph_max_iterations()
         if iv > cap:
             raise ValueError(
-                f"max_visits_per_run: максимум {cap} (graph_max_iterations), получено {iv}"
+                f"max_visits_per_run: maximum {cap} (graph_max_iterations), got {iv}"
             )
         return iv
 

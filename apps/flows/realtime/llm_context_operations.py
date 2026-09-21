@@ -80,11 +80,7 @@ async def op_flows_llm_context_resolve_parent(
         company=company_patch,
         resource=resource_patch,
     )
-    logger.info(
-        "llm_context resolve-parent key=%s has_resource=%s",
-        key if key else "-",
-        resource_patch is not None,
-    )
+    logger.info("flows.llm_context", key=key if key else '-', has_resource=resource_patch is not None)
     return LlmContextResolveParentResponse(
         resolved=resolved_public,
         profiles=list(settings.profiles.keys()),

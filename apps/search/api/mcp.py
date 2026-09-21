@@ -4,15 +4,23 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import ClassVar, Literal
 
 from fastapi import APIRouter, Request, Response
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 from apps.search.container import SearchContainer
 from apps.search.dependencies import ContainerDep
 from core.context import get_context
-from core.integrations.mcp import MCP_PROTOCOL_VERSION, MCPToolDefinition
+from core.integrations.mcp import (
+    MCP_PROTOCOL_VERSION,
+    MCPInitializeResult,
+    MCPJsonRpcError,
+    MCPJsonRpcRequest,
+    MCPJsonRpcResponse,
+    MCPToolCallResult,
+    MCPToolDefinition,
+    MCPToolsListResult,
+)
 from core.models.identity_models import Company
 from core.search import (
     MetaSearchRefineRequest,
@@ -27,54 +35,6 @@ from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 
 router = APIRouter(prefix="/mcp", tags=["search-mcp"])
-
-
-class JsonRpcRequest(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    jsonrpc: Literal["2.0"] = "2.0"
-    id: int | str | None = None
-    method: str
-    params: JsonObject | None = None
-
-
-class JsonRpcError(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    code: int
-    message: str
-    data: JsonObject | None = None
-
-
-class JsonRpcResponse(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    jsonrpc: Literal["2.0"] = "2.0"
-    id: int | str | None
-    result: JsonObject | None = None
-    error: JsonRpcError | None = None
-
-
-class McpInitializeResult(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    protocolVersion: str
-    capabilities: JsonObject
-    serverInfo: JsonObject
-
-
-class McpToolsListResult(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    tools: list[MCPToolDefinition]
-
-
-class McpToolCallResult(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    content: list[JsonObject]
-    structuredContent: JsonObject | None = None
-    isError: bool = False
 
 
 def _schema_for_model(model: type[BaseModel]) -> JsonObject:
@@ -143,19 +103,25 @@ def _tools() -> list[MCPToolDefinition]:
 
 
 def _model_json_object(model: BaseModel) -> JsonObject:
-    return require_json_object(model.model_dump(mode="json"), model.__class__.__name__)
+    return require_json_object(
+        model.model_dump(mode="json", by_alias=True, exclude_none=True),
+        model.__class__.__name__,
+    )
 
 
-def _jsonrpc_payload(response: JsonRpcResponse) -> JsonObject:
-    return require_json_object(response.model_dump(mode="json", exclude_none=True), "JsonRpcResponse")
+def _jsonrpc_payload(response: MCPJsonRpcResponse) -> JsonObject:
+    return require_json_object(
+        response.model_dump(mode="json", exclude_none=True),
+        "MCPJsonRpcResponse",
+    )
 
 
 def _json_text_content(value: JsonValue) -> list[JsonObject]:
     return [{"type": "text", "text": json.dumps(value, ensure_ascii=False)}]
 
 
-def _error(code: int, message: str, data: JsonObject | None = None) -> JsonRpcError:
-    return JsonRpcError(code=code, message=message, data=data)
+def _error(code: int, message: str, data: JsonObject | None = None) -> MCPJsonRpcError:
+    return MCPJsonRpcError(code=code, message=message, data=data)
 
 
 async def _tool_call(
@@ -165,7 +131,7 @@ async def _tool_call(
     container: SearchContainer,
     company: Company | None,
     user_id: str | None,
-) -> McpToolCallResult:
+) -> MCPToolCallResult:
     if tool_name == "meta_web_search":
         request = MetaSearchRequest.model_validate(arguments)
         response = await container.meta_search_service.search(
@@ -174,28 +140,28 @@ async def _tool_call(
             user_id=user_id,
         )
         payload = require_json_object(response.model_dump(mode="json"), "MetaSearchResponse")
-        return McpToolCallResult(
+        return MCPToolCallResult(
             content=_json_text_content(require_json_value(payload, "meta_web_search result")),
-            structuredContent=payload,
-            isError=False,
+            structured_content=payload,
+            is_error=False,
         )
     if tool_name == "refine_serp":
         refine_request = MetaSearchRefineRequest.model_validate(arguments)
         refine_response = await container.meta_search_service.refine(refine_request)
         payload = require_json_object(refine_response.model_dump(mode="json"), "MetaSearchResponse")
-        return McpToolCallResult(
+        return MCPToolCallResult(
             content=_json_text_content(require_json_value(payload, "refine_serp result")),
-            structuredContent=payload,
-            isError=False,
+            structured_content=payload,
+            is_error=False,
         )
     if tool_name == "search_suggest":
         request = SearchSuggestRequest.model_validate(arguments)
         response = container.search_suggestion_service.suggest(request)
         payload = require_json_object(response.model_dump(mode="json"), "SearchSuggestResponse")
-        return McpToolCallResult(
+        return MCPToolCallResult(
             content=_json_text_content(require_json_value(payload, "search_suggest result")),
-            structuredContent=payload,
-            isError=False,
+            structured_content=payload,
+            is_error=False,
         )
     if tool_name == "search_result_insights":
         request = SearchResultInsightsRequest.model_validate(arguments)
@@ -204,17 +170,17 @@ async def _tool_call(
             response.model_dump(mode="json"),
             "SearchResultInsightsResponse",
         )
-        return McpToolCallResult(
+        return MCPToolCallResult(
             content=_json_text_content(require_json_value(payload, "search_result_insights result")),
-            structuredContent=payload,
-            isError=False,
+            structured_content=payload,
+            is_error=False,
         )
     raise ValueError(f"Tool not found: {tool_name}")
 
 
 @router.post("")
 async def mcp_jsonrpc(
-    req: JsonRpcRequest,
+    req: MCPJsonRpcRequest,
     request: Request,
     response: Response,
     container: ContainerDep,
@@ -227,42 +193,42 @@ async def mcp_jsonrpc(
         mcp_session_id = response.headers.get("Mcp-Session-Id")
         if not mcp_session_id:
             response.headers["Mcp-Session-Id"] = str(uuid.uuid4())
-        res = McpInitializeResult(
-            protocolVersion=MCP_PROTOCOL_VERSION,
+        res = MCPInitializeResult(
+            protocol_version=MCP_PROTOCOL_VERSION,
             capabilities={},
-            serverInfo={"name": "platform-search", "version": "1.0.0"},
+            server_info={"name": "platform-search", "version": "1.0.0"},
         )
-        return _jsonrpc_payload(JsonRpcResponse(id=req_id, result=_model_json_object(res)))
+        return _jsonrpc_payload(MCPJsonRpcResponse(id=req_id, result=_model_json_object(res)))
 
     protocol_header = request.headers.get("MCP-Protocol-Version")
     if protocol_header != MCP_PROTOCOL_VERSION:
         response.status_code = 400
         err = _error(-32000, "MCP-Protocol-Version header is required")
-        return _jsonrpc_payload(JsonRpcResponse(id=req_id, error=err))
+        return _jsonrpc_payload(MCPJsonRpcResponse(id=req_id, error=err))
 
     if method == "notifications/initialized":
         response.status_code = 202
         return {}
 
     if method == "tools/list":
-        res = McpToolsListResult(tools=_tools())
+        res = MCPToolsListResult(tools=_tools())
         result = require_json_object(
-            res.model_dump(mode="json", by_alias=True),
-            "McpToolsListResult",
+            res.model_dump(mode="json", by_alias=True, exclude_none=True),
+            "MCPToolsListResult",
         )
-        return _jsonrpc_payload(JsonRpcResponse(id=req_id, result=result))
+        return _jsonrpc_payload(MCPJsonRpcResponse(id=req_id, result=result))
 
     if method == "tools/call":
         name = params.get("name")
         arguments = params.get("arguments")
         if not isinstance(name, str) or not name.strip():
             err = _error(-32602, "tools/call: params.name is required")
-            return _jsonrpc_payload(JsonRpcResponse(id=req_id, error=err))
+            return _jsonrpc_payload(MCPJsonRpcResponse(id=req_id, error=err))
         if arguments is None:
             arguments = {}
         if not isinstance(arguments, dict):
             err = _error(-32602, "tools/call: params.arguments must be object")
-            return _jsonrpc_payload(JsonRpcResponse(id=req_id, error=err))
+            return _jsonrpc_payload(MCPJsonRpcResponse(id=req_id, error=err))
         arguments_obj = require_json_object(arguments, "tools/call.params.arguments")
         try:
             context = get_context()
@@ -285,11 +251,11 @@ async def mcp_jsonrpc(
                     company=company,
                     user_id=user_id,
                 )
-                span.set_attribute("platform.mcp.tool_result_is_error", bool(call_res.isError))
+                span.set_attribute("platform.mcp.tool_result_is_error", bool(call_res.is_error))
         except Exception as exc:
             err = _error(-32000, str(exc), data={"tool": name})
-            return _jsonrpc_payload(JsonRpcResponse(id=req_id, error=err))
-        return _jsonrpc_payload(JsonRpcResponse(id=req_id, result=_model_json_object(call_res)))
+            return _jsonrpc_payload(MCPJsonRpcResponse(id=req_id, error=err))
+        return _jsonrpc_payload(MCPJsonRpcResponse(id=req_id, result=_model_json_object(call_res)))
 
     err = _error(-32601, f"Method not found: {method}")
-    return _jsonrpc_payload(JsonRpcResponse(id=req_id, error=err))
+    return _jsonrpc_payload(MCPJsonRpcResponse(id=req_id, error=err))

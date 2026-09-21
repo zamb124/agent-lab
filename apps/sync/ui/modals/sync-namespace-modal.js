@@ -106,11 +106,9 @@ export class SyncNamespaceModal extends PlatformFormModal {
         if (typeof this.name !== 'string' || this.name === '') return;
         await this._update.run({
             name: this.name,
-            body: {
-                sync_settings: {
-                    transcribe_voice_messages: this._transcribe,
-                    speech_to_chat_enabled: this._speechToChat,
-                },
+            sync_settings: {
+                transcribe_voice_messages: this._transcribe,
+                speech_to_chat_enabled: this._speechToChat,
             },
         });
         if (this._update.error) return;

@@ -25,7 +25,7 @@ async def load_text_from_stored_file_id(file_id: str) -> str:
     """Извлечь полный текст файла из shared storage по file_id."""
     fid = str(file_id).strip()
     if not fid:
-        raise ValueError("file_id пуст")
+        raise ValueError("file_id is empty")
     raw, name = await read_stored_file_by_id(fid)
     reader = FileReader()
     extract = await reader.read(raw, ReadFileArgs(page_end=-1), file_name=name, file_id=fid)
@@ -36,7 +36,7 @@ async def load_text_and_name_from_stored_file_id(file_id: str) -> tuple[str, str
     """Извлечь текст и оригинальное имя файла из shared storage по file_id."""
     fid = str(file_id).strip()
     if not fid:
-        raise ValueError("file_id пуст")
+        raise ValueError("file_id is empty")
     raw, name = await read_stored_file_by_id(fid)
     reader = FileReader()
     extract = await reader.read(raw, ReadFileArgs(page_end=-1), file_name=name, file_id=fid)

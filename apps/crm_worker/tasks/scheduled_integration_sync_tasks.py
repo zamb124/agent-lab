@@ -35,11 +35,11 @@ async def scheduled_namespace_integration_unified_sync(
     pid = provider_id.strip()
     uid = oauth_user_id.strip()
     if not ns:
-        raise ValueError("namespace обязателен")
+        raise ValueError("namespace is required")
     if not pid:
-        raise ValueError("provider_id обязателен")
+        raise ValueError("provider_id is required")
     if not uid:
-        raise ValueError("oauth_user_id обязателен")
+        raise ValueError("oauth_user_id is required")
 
     container = get_crm_container()
     repo = container.task_repository
@@ -52,11 +52,7 @@ async def scheduled_namespace_integration_unified_sync(
             company_id,
         )
         if existing is not None:
-            logger.info(
-                "scheduled_namespace_integration_unified_sync: skip tick, active job %s task_id=%s",
-                job,
-                existing.task_id,
-            )
+            logger.info("crm.scheduled_namespace_integration_unified_sync", job=job, task_id=existing.task_id)
             skip_now = datetime.now(timezone.utc)
             skip_tid = str(uuid.uuid4())
             _ = await repo.create(
@@ -145,14 +141,13 @@ async def scheduled_namespace_integration_unified_sync(
         )
 
         logger.info(
-            "scheduled_namespace_integration_unified_sync: done company=%s ns=%s provider=%s "
-            + "schedule_task_id=%s entities=%s fields=%s",
-            company_id,
-            ns,
-            pid,
-            schedule_task_id,
-            entities_stats,
-            fields_stats,
+            "crm.scheduled_namespace_integration_unified_sync.done",
+            company_id=company_id,
+            namespace=ns,
+            provider=pid,
+            schedule_task_id=schedule_task_id,
+            entities_stats=entities_stats,
+            fields_stats=fields_stats,
         )
         return {
             "status": "completed",

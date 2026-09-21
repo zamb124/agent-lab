@@ -387,7 +387,7 @@ class WikiRepository:
         seen: set[str] = set()
         while current is not None and current.parent_page_id is not None:
             if current.parent_page_id in seen:
-                raise ValueError(f"Цикл в дереве wiki на {current.parent_page_id}")
+                raise ValueError(f"Cycle in wiki tree at {current.parent_page_id}")
             seen.add(current.parent_page_id)
             parent = rows.get(current.parent_page_id)
             if parent is None:
@@ -405,7 +405,7 @@ class WikiRepository:
             )
             row = (await session.execute(stmt)).scalar_one_or_none()
             if row is None:
-                raise ValueError(f"Страница {page.wiki_page_id} не найдена в {page.namespace}")
+                raise ValueError(f"Page {page.wiki_page_id} not found in {page.namespace}")
 
             row.parent_page_id = page.parent_page_id
             row.root_page_id = page.root_page_id

@@ -20,7 +20,7 @@ def scheduler_broker_for_queue(queue_name: str) -> AsyncBroker:
     """Брокер TaskIQ для AsyncKicker: задача должна быть зарегистрирована на этом брокере."""
     brokers = registered_queue_brokers()
     if queue_name not in brokers:
-        raise ValueError(f"Неизвестная очередь для scheduler kicker: {queue_name}")
+        raise ValueError(f"Unknown queue for scheduler kicker: {queue_name}")
     return brokers[queue_name]
 
 

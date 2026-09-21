@@ -79,7 +79,7 @@ async def op_flows_resources_create(
     if existing is not None:
         raise_conflict(ValueError(f"Resource '{payload.resource_id}' already exists"))
     _ = await container.resource_repository.set(payload)
-    logger.info("Resource created: %s", payload.resource_id)
+    logger.info("flows.resource.created", resource_id=payload.resource_id)
     return payload
 
 
@@ -124,7 +124,7 @@ async def op_flows_resources_update(
     except ValueError as exc:
         raise_invalid(exc)
     _ = await container.resource_repository.set(updated_resource)
-    logger.info("Resource updated: %s", payload.resource_id)
+    logger.info("flows.resource.updated", resource_id=payload.resource_id)
     return updated_resource
 
 
@@ -139,5 +139,5 @@ async def op_flows_resources_remove(
     deleted = await container.resource_repository.delete(payload.resource_id)
     if not deleted:
         raise_not_found(LookupError("Resource not found"))
-    logger.info("Resource deleted: %s", payload.resource_id)
+    logger.info("flows.resource.deleted", resource_id=payload.resource_id)
     return ResourceDeletedResponse(status="deleted", resource_id=payload.resource_id)

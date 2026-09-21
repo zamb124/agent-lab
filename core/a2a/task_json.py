@@ -113,7 +113,7 @@ def extract_text_from_task_json(task_payload: JsonObject) -> str:
         if chunks:
             return "\n".join(chunks)
 
-    raise ValueError("A2A Task JSON не содержит текстового ответа")
+    raise ValueError('A2A Task JSON contains no text response')
 
 
 def iter_artifact_parts_from_task_json(task_payload: JsonObject) -> Iterator[JsonObject]:

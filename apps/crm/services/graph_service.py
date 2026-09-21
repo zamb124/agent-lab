@@ -138,8 +138,8 @@ class GraphService:
         )
         if count > MAX_NODES_IN_GRAPH:
             raise GraphEntityLimitExceededError(
-                f"В выбранном периоде слишком много сущностей ({count}), "
-                + f"максимум для графа — {MAX_NODES_IN_GRAPH}. Сузьте период на таймлайне."
+                f"Too many entities in the selected period ({count}), "
+                + f"graph maximum is {MAX_NODES_IN_GRAPH}. Narrow the timeline period."
             )
 
     def _get_context_info(self) -> tuple[str | None, str | None]:
@@ -199,12 +199,12 @@ class GraphService:
         sorted_ids = sorted(candidate_ids)
         truncated = set(sorted_ids[:space])
         logger.warning(
-            "%s graph: truncated candidates from %s to %s (visited=%s, cap=%s)",
-            graph_kind,
-            len(candidate_ids),
-            len(truncated),
-            len(visited),
-            cap,
+            "crm.graph.truncated.candidates.visited.cap",
+            graph_kind=graph_kind,
+            candidate_ids_count=len(candidate_ids),
+            truncated_count=len(truncated),
+            visited=len(visited),
+            cap=cap,
         )
         return truncated
 
@@ -250,11 +250,7 @@ class GraphService:
             if not current_wave:
                 break
             if len(visited) >= INFLUENCE_GRAPH_MAX_NODES:
-                logger.warning(
-                    "influence graph: expansion stopped at visited=%s (cap=%s)",
-                    len(visited),
-                    INFLUENCE_GRAPH_MAX_NODES,
-                )
+                logger.warning("crm.influence.graph.expansion.stopped.visited", visited=len(visited), cap=INFLUENCE_GRAPH_MAX_NODES)
                 break
 
             batch_edges = await self._relationship_repo.get_neighbors(
@@ -317,12 +313,12 @@ class GraphService:
         filtered_count = sum(1 for node in nodes if not node.access)
 
         logger.info(
-            "Built influence graph: root=%s, depth=%s, nodes=%s, edges=%s, filtered=%s",
-            entity_id,
-            max_depth,
-            len(nodes),
-            len(edges),
-            filtered_count,
+            "crm.built.influence.graph.root.depth",
+            root=entity_id,
+            depth=max_depth,
+            nodes=len(nodes),
+            edges=len(edges),
+            filtered=filtered_count,
         )
 
         return InfluenceGraphResponse(
@@ -375,10 +371,7 @@ class GraphService:
         initial_wave: list[str] = []
         for seed_id in entity_ids:
             if len(visited) >= INFLUENCE_GRAPH_MAX_NODES:
-                logger.warning(
-                    "overview graph: seed list truncated at cap=%s",
-                    INFLUENCE_GRAPH_MAX_NODES,
-                )
+                logger.warning("crm.overview.graph.seed.list.truncated", cap=INFLUENCE_GRAPH_MAX_NODES)
                 break
             if seed_id in visited:
                 continue
@@ -398,11 +391,7 @@ class GraphService:
             if not current_wave:
                 break
             if len(visited) >= INFLUENCE_GRAPH_MAX_NODES:
-                logger.warning(
-                    "overview graph: expansion stopped at visited=%s (cap=%s)",
-                    len(visited),
-                    INFLUENCE_GRAPH_MAX_NODES,
-                )
+                logger.warning("crm.overview.graph.expansion.stopped.visited", visited=len(visited), cap=INFLUENCE_GRAPH_MAX_NODES)
                 break
 
             batch_edges = await self._relationship_repo.get_neighbors(
@@ -452,7 +441,7 @@ class GraphService:
 
             if len(visited) > MAX_NODES_IN_GRAPH:
                 raise GraphEntityLimitExceededError(
-                    f"Граф превышает лимит {MAX_NODES_IN_GRAPH} вершин; сузьте период или глубину."
+                    f"Graph exceeds the limit of {MAX_NODES_IN_GRAPH} vertices; narrow the period or depth."
                 )
 
         nodes = await self._apply_access_control(
@@ -467,12 +456,12 @@ class GraphService:
         filtered_count = sum(1 for node in nodes if not node.access)
 
         logger.info(
-            "Built overview graph: seeds=%s, depth=%s, nodes=%s, edges=%s, filtered=%s",
-            len(entity_ids),
-            max_depth,
-            len(nodes),
-            len(edges),
-            filtered_count,
+            "crm.built.overview.graph.seeds.depth",
+            seeds=len(entity_ids),
+            depth=max_depth,
+            nodes=len(nodes),
+            edges=len(edges),
+            filtered=filtered_count,
         )
 
         return InfluenceGraphResponse(
@@ -508,7 +497,11 @@ class GraphService:
         await self._ensure_graph_entity_count_within_limit(namespace, timeline_from, timeline_to)
 
         logger.info(
-            f"Finding shortest path: from={from_entity_id}, to={to_entity_id}, user={user_id}, company={company_id}"
+            "crm.graph.shortest_path",
+            from_entity_id=from_entity_id,
+            to_entity_id=to_entity_id,
+            user_id=user_id,
+            company_id=company_id,
         )
 
         from_entity = await self._require_viewable_entity(from_entity_id, user_id)
@@ -558,11 +551,11 @@ class GraphService:
             )
 
         logger.info(
-            "Found paths: directed_exists=%s, undirected_exists=%s, from=%s, to=%s",
-            bool(directed_path),
-            bool(undirected_path),
-            from_entity_id,
-            to_entity_id,
+            "crm.found.paths.directed_exists.undirected_exists",
+            directed_exists=bool(directed_path),
+            undirected_exists=bool(undirected_path),
+            from_value=from_entity_id,
+            to=to_entity_id,
         )
 
         return ShortestPathResponse(
@@ -622,7 +615,9 @@ class GraphService:
             rel_info = direction_map.get(rel.relationship_type)
             if not rel_info:
                 logger.warning(
-                    f"Unknown relationship_type in get_related_entities: {rel.relationship_type}"
+                    "crm.graph.unknown_relationship_type",
+                    relationship_type=rel.relationship_type,
+                    source="get_related_entities",
                 )
                 continue
             is_directed = rel_info["is_directed"]
@@ -704,7 +699,7 @@ class GraphService:
         """Проверяет можно ли пройти ребро от from_entity_id."""
         rel_info = direction_map.get(relationship.relationship_type)
         if not rel_info:
-            logger.warning(f"Unknown relationship_type: {relationship.relationship_type}")
+            logger.warning("crm.graph.unknown_relationship_type", relationship_type=relationship.relationship_type)
             return False, None
 
         is_directed = rel_info["is_directed"]
@@ -785,7 +780,9 @@ class GraphService:
             rel_info = direction_map.get(rel.relationship_type)
             if not rel_info:
                 logger.warning(
-                    f"Unknown relationship_type in _build_edges: {rel.relationship_type}"
+                    "crm.graph.unknown_relationship_type",
+                    relationship_type=rel.relationship_type,
+                    source="_build_edges",
                 )
                 continue
 
@@ -841,19 +838,11 @@ class GraphService:
         edges = self._filter_edges_to_nodes(edges, nodes)
         nodes, dup_node_rows = self._dedupe_graph_nodes_min_level(nodes)
         if dup_node_rows > 0:
-            logger.warning(
-                "%s: merged %s duplicate GraphNode rows (same entity_id), minimal level kept",
-                log_prefix,
-                dup_node_rows,
-            )
+            logger.warning("crm.merged.duplicate.graphnode.rows.same", log_prefix=log_prefix, dup_node_rows=dup_node_rows)
             edges = self._filter_edges_to_nodes(edges, nodes)
         edges, dup_edge_rows = self._dedupe_graph_edges_by_edge_id(edges)
         if dup_edge_rows > 0:
-            logger.warning(
-                "%s: dropped %s duplicate GraphEdge rows (same edge_id)",
-                log_prefix,
-                dup_edge_rows,
-            )
+            logger.warning("crm.dropped.duplicate.graphedge.rows.same", log_prefix=log_prefix, dup_edge_rows=dup_edge_rows)
         return nodes, edges
 
     async def _dijkstra_shortest_path(

@@ -38,8 +38,8 @@ def classify_content(text: str) -> ContentKind:
 
     if has_md and looks_b64 and decoded_ok:
         raise FileWriteError(
-            "Неоднозначный контент: похож одновременно на markdown и на base64. " +
-            "Укажите content_mode явно: markdown, base64 или raw."
+            "Ambiguous content: looks like both markdown and base64. " +
+            "Set content_mode explicitly: markdown, base64, or raw."
         )
     if looks_b64 and decoded_ok:
         return ContentKind.BASE64

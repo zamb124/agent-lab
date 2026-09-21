@@ -84,9 +84,9 @@ class FlowFactory:
         if config is None:
             if config_version:
                 raise ValueError(
-                    f"Flow '{flow_id}' версия '{config_version}' не найдена в flows_versions"
+                    f"Flow '{flow_id}' version '{config_version}' not found in flows_versions"
                 )
-            logger.warning(f"Flow не найден: {flow_id}")
+            logger.warning("flows.factory.flow_missing", flow_id=flow_id)
             return None
 
         return await self._create_flow(config, branch_id)
@@ -107,7 +107,7 @@ class FlowFactory:
         if config is None:
             if config_version:
                 raise ValueError(
-                    f"Flow '{flow_id}' версия '{config_version}' не найдена в flows_versions"
+                    f"Flow '{flow_id}' version '{config_version}' not found in flows_versions"
                 )
             return {}, None
 
@@ -137,9 +137,9 @@ class FlowFactory:
         if config is None:
             if config_version:
                 raise ValueError(
-                    f"Flow '{flow_id}' версия '{config_version}' не найдена в flows_versions"
+                    f"Flow '{flow_id}' version '{config_version}' not found in flows_versions"
                 )
-            raise ValueError(f"Flow '{flow_id}' не найден")
+            raise ValueError(f"Flow '{flow_id}' not found")
         effective = self.apply_branch(config, branch_id)
         nodes = effective["nodes"]
         return nodes
@@ -159,9 +159,9 @@ class FlowFactory:
         if config is None:
             if config_version:
                 raise ValueError(
-                    f"Flow '{flow_id}' версия '{config_version}' не найдена в flows_versions"
+                    f"Flow '{flow_id}' version '{config_version}' not found in flows_versions"
                 )
-            raise ValueError(f"Flow '{flow_id}' не найден")
+            raise ValueError(f"Flow '{flow_id}' not found")
         effective = self.apply_branch(config, branch_id)
         return await self._resolve_variables(effective["variables"])
 
@@ -182,7 +182,7 @@ class FlowFactory:
         entry = effective["entry"]
         if entry is None:
             raise InvalidGraphError(
-                message=f"Flow '{config.flow_id}' branch '{branch_id}' не имеет entry-ноды",
+                message=f"Flow '{config.flow_id}' branch '{branch_id}' has no entry node",
                 payload={"flow_id": config.flow_id, "branch_id": branch_id},
             )
 
@@ -254,7 +254,7 @@ class FlowFactory:
         branch = config.branches.get(branch_id)
         if branch is None:
             if branch_id != "default":
-                logger.warning(f"Branch '{branch_id}' не найдена во flow '{config.flow_id}'")
+                logger.warning("flows.factory.branch_missing", branch_id=branch_id, flow_id=config.flow_id)
             return result
 
         # Точка входа (всегда replace)
@@ -409,7 +409,7 @@ class FlowFactory:
             else:
                 _ = await self.flow_repository.set(previous)
             raise
-        logger.info(f"Flow сохранён: {config.flow_id}")
+        logger.info("flows.factory.flow_saved", flow_id=config.flow_id)
         return await self._create_flow(config, branch_id)
 
     async def delete_flow(self, flow_id: str) -> bool:

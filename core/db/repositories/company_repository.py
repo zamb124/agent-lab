@@ -123,6 +123,6 @@ class CompanyRepository(BaseRepository[Company]):
                 entity = self.model_class.model_validate_json(data)
                 entities.append(entity)
             except Exception as e:
-                logger.error(f"Ошибка парсинга {key}: {e}")
+                logger.error("company.parse_failed", key=key, error=str(e))
                 continue
         return entities

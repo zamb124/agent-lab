@@ -551,25 +551,18 @@ export class CRMNamespaceModal extends PlatformFormModal {
         }
 
         this._editForm.openForm({ name: '', description: '' });
-        this.useEvent(this._update.op.events.SUCCEEDED, () => {
-            this._namespaces.load();
-            this.closeAfterSave();
-        });
+        this.useEvent(this._update.op.events.SUCCEEDED, () => this.closeAfterSave());
         this.useEvent(this._update.op.events.FAILED, () => {
             this._editForm.openForm(this._editForm.draft);
         });
 
-        this.useEvent(this._grantCreateOp.op.events.SUCCEEDED, () => {
-            this._resetGrantForm();
-            this._reloadGrants();
-        });
+        this.useEvent(this._grantCreateOp.op.events.SUCCEEDED, () => this._resetGrantForm());
         this.useEvent(this._grantCreateOp.op.events.FAILED, (event) => {
             const message = event && event.payload && typeof event.payload.message === 'string'
                 ? event.payload.message
                 : this.t('namespace_modal.grants_submit_failed');
             this._grantSubmitError = message;
         });
-        this.useEvent(this._grantRevokeOp.op.events.SUCCEEDED, () => this._reloadGrants());
     }
 
     disconnectedCallback() {

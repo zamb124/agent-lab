@@ -143,7 +143,7 @@ class BillingSettlementSpan(BaseModel):
     def required_billing_resource_name(self) -> str:
         value = self.attributes.get(trace_attr.ATTR_BILLING_RESOURCE_NAME)
         if not isinstance(value, str) or not value:
-            raise ValueError(f"span {self.span_id}: отсутствует {trace_attr.ATTR_BILLING_RESOURCE_NAME}")
+            raise ValueError(f"span {self.span_id}: missing {trace_attr.ATTR_BILLING_RESOURCE_NAME}")
         return value
 
     def billing_usage_type_or_default(self) -> UsageType:
@@ -151,11 +151,11 @@ class BillingSettlementSpan(BaseModel):
         if value is None or value == "":
             return UsageType.TOOL_CALL
         if not isinstance(value, str):
-            raise ValueError(f"span {self.span_id}: {trace_attr.ATTR_BILLING_USAGE_TYPE} должен быть строкой")
+            raise ValueError(f"span {self.span_id}: {trace_attr.ATTR_BILLING_USAGE_TYPE} must be a string")
         try:
             return UsageType(value)
         except ValueError as exc:
-            raise ValueError(f"span {self.span_id}: неизвестный UsageType {value!r}") from exc
+            raise ValueError(f"span {self.span_id}: unknown UsageType {value!r}") from exc
 
     def billing_quantity_or_default(self) -> int:
         value = self.attributes.get(trace_attr.ATTR_BILLING_QUANTITY)
@@ -163,7 +163,7 @@ class BillingSettlementSpan(BaseModel):
             return 1
         quantity = _json_value_to_non_negative_int(value, trace_attr.ATTR_BILLING_QUANTITY)
         if quantity < 1:
-            raise ValueError(f"span {self.span_id}: platform.billing.quantity должна быть >= 1")
+            raise ValueError(f"span {self.span_id}: platform.billing.quantity must be >= 1")
         return quantity
 
     def billing_cost_origin_or_default(self) -> BillingCostOrigin:
@@ -171,35 +171,35 @@ class BillingSettlementSpan(BaseModel):
         if value is None or value == "":
             return "platform"
         if not isinstance(value, str):
-            raise ValueError(f"span {self.span_id}: неизвестный cost_origin {value!r}")
+            raise ValueError(f"span {self.span_id}: unknown cost_origin {value!r}")
         if value == "platform":
             return "platform"
         if value == "company":
             return "company"
-        raise ValueError(f"span {self.span_id}: неизвестный cost_origin {value!r}")
+        raise ValueError(f"span {self.span_id}: unknown cost_origin {value!r}")
 
     def billing_custom_provider_id(self) -> str | None:
         value = self.attributes.get(trace_attr.ATTR_BILLING_CUSTOM_PROVIDER_ID)
         if value is None:
             return None
         if not isinstance(value, str) or not value:
-            raise ValueError(f"span {self.span_id}: {trace_attr.ATTR_BILLING_CUSTOM_PROVIDER_ID} должен быть строкой")
+            raise ValueError(f"span {self.span_id}: {trace_attr.ATTR_BILLING_CUSTOM_PROVIDER_ID} must be a string")
         return value
 
 
 def _json_value_to_non_negative_int(value: JsonValue, field_name: str) -> int:
     if isinstance(value, bool):
-        raise ValueError(f"{field_name} должен быть целым числом")
+        raise ValueError(f"{field_name} must be an integer")
     if isinstance(value, int):
         quantity = value
     elif isinstance(value, float):
         if not value.is_integer():
-            raise ValueError(f"{field_name} должен быть целым числом")
+            raise ValueError(f"{field_name} must be an integer")
         quantity = int(value)
     elif isinstance(value, str):
         quantity = int(value)
     else:
-        raise ValueError(f"{field_name} должен быть целым числом")
+        raise ValueError(f"{field_name} must be an integer")
     if quantity < 0:
-        raise ValueError(f"{field_name} должен быть >= 0")
+        raise ValueError(f"{field_name} must be >= 0")
     return quantity

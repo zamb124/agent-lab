@@ -16,13 +16,13 @@ async def get_user_from_websocket(websocket: WebSocket) -> User | None:
     """Извлечь пользователя из cookie auth_token; вернуть None при отсутствии/невалидности."""
     auth_token = websocket.cookies.get("auth_token")
     if not auth_token:
-        logger.debug("WebSocket: no auth_token cookie")
+        logger.debug("websocket.auth_token.cookie")
         return None
 
     token_service = get_token_service()
     token_data = token_service.validate_token(auth_token)
     if not token_data or not token_data.user_id:
-        logger.debug("WebSocket: invalid token")
+        logger.debug("websocket.invalid.token")
         return None
 
     return User(

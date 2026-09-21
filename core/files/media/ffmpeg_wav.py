@@ -25,7 +25,7 @@ _CONTENT_TYPE_SUFFIX = {
 
 def _input_suffix(*, audio_bytes: bytes, file_name: str, content_type: str) -> str:
     if not audio_bytes:
-        raise ValueError("_input_suffix: audio_bytes пустой.")
+        raise ValueError("_input_suffix: audio_bytes is empty.")
     if audio_bytes[:4] == b"\x1a\x45\xdf\xa3":
         return ".webm"
     if audio_bytes[:4] == b"RIFF":
@@ -39,16 +39,16 @@ def _input_suffix(*, audio_bytes: bytes, file_name: str, content_type: str) -> s
         return suffix
     if content_type == "":
         raise ValueError(
-            "Неизвестный аудиоконтейнер: нет расширения файла и пустой content_type."
+            "Unknown audio container: no file extension and empty content_type."
         )
     base = content_type.split(";", 1)[0].strip().lower()
     if "/" not in base:
-        raise ValueError(f"Неизвестный audio content_type={content_type!r} без расширения файла.")
+        raise ValueError(f"Unknown audio content_type={content_type!r} without a file extension.")
     subtype = base.split("/", 1)[1]
     mapped = _CONTENT_TYPE_SUFFIX.get(subtype)
     if mapped is None:
         raise ValueError(
-            f"Неизвестный audio content_type={content_type!r} без расширения файла."
+            f"Unknown audio content_type={content_type!r} without a file extension."
         )
     return mapped
 
@@ -61,11 +61,11 @@ def transcode_audio_bytes_to_wav_pcm16_mono(
     sample_rate: int = STT_WAV_SAMPLE_RATE,
 ) -> bytes:
     if not audio_bytes:
-        raise ValueError("transcode_audio_bytes_to_wav_pcm16_mono: audio_bytes пустой.")
+        raise ValueError("transcode_audio_bytes_to_wav_pcm16_mono: audio_bytes is empty.")
     if sample_rate <= 0:
-        raise ValueError("transcode_audio_bytes_to_wav_pcm16_mono: sample_rate должен быть > 0.")
+        raise ValueError("transcode_audio_bytes_to_wav_pcm16_mono: sample_rate must be > 0.")
     if file_name == "":
-        raise ValueError("transcode_audio_bytes_to_wav_pcm16_mono: file_name не может быть пустым.")
+        raise ValueError("transcode_audio_bytes_to_wav_pcm16_mono: file_name cannot be empty.")
     suffix = _input_suffix(
         audio_bytes=audio_bytes,
         file_name=file_name,
@@ -101,14 +101,14 @@ def transcode_audio_bytes_to_wav_pcm16_mono(
         if ffmpeg_result.returncode != 0:
             stderr = ffmpeg_result.stderr.strip()
             raise ValueError(
-                "Не удалось нормализовать аудио в WAV для STT. "
+                "Failed to normalize audio to WAV for STT. "
                 + f"return_code={ffmpeg_result.returncode}; stderr={stderr}"
             )
         wav_bytes = out_path.read_bytes()
         if len(wav_bytes) == 0:
-            raise ValueError("Нормализация STT дала пустой WAV.")
+            raise ValueError("STT normalization produced an empty WAV.")
         if wav_bytes[:4] != b"RIFF":
-            raise ValueError("Нормализация STT не дала WAV (нет RIFF).")
+            raise ValueError("STT normalization did not produce WAV (no RIFF).")
         return wav_bytes
 
 

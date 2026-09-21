@@ -42,7 +42,7 @@ class WorktrackerContainer(BaseContainer):
 def _create_worktracker_container() -> WorktrackerContainer:
     settings = get_settings()
     if not settings.database.worktracker_url:
-        raise ValueError("database.worktracker_url не задан")
+        raise ValueError("database.worktracker_url is not set")
     return WorktrackerContainer(
         db_url=settings.database.worktracker_url,
         shared_db_url=settings.database.shared_url,

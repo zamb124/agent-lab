@@ -43,7 +43,7 @@ async def on_startup(app: FastAPI, container: RealtimeContainer, settings: Realt
         name="realtime.sweeper",
         background_kind="polling",
     )
-    logger.info("Realtime bus: запущен")
+    logger.info("realtime.bus")
 
 
 async def on_shutdown(app: FastAPI, container: RealtimeContainer) -> None:
@@ -53,7 +53,7 @@ async def on_shutdown(app: FastAPI, container: RealtimeContainer) -> None:
         _ = _sweeper_task.cancel()
         _sweeper_task = None
     unbind_local_event_ingest()
-    logger.info("Realtime bus: остановлен")
+    logger.info("realtime.bus")
 
 
 app = create_service_app(

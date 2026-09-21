@@ -20,18 +20,18 @@ def _usage_id_from_storage_raw(raw: str, *, span_id: str, rule_id: str) -> str:
     """
     stripped = raw.strip()
     if not stripped:
-        raise ValueError(f"settlement composite key {span_id!r}/{rule_id!r}: usage_id пуст")
+        raise ValueError(f"settlement composite key {span_id!r}/{rule_id!r}: usage_id is empty")
     try:
         parsed = parse_json_value(stripped, "settlement.usage_id")
     except ValueError as exc:
         if stripped.startswith(("{", "[", '"')):
             raise ValueError(
-                f"settlement composite key {span_id!r}/{rule_id!r}: ожидалась строка usage_id"
+                f"settlement composite key {span_id!r}/{rule_id!r}: expected usage_id string"
             ) from exc
         return raw
     if not isinstance(parsed, str):
         raise ValueError(
-            f"settlement composite key {span_id!r}/{rule_id!r}: ожидалась строка usage_id, получено {type(parsed).__name__}"
+            f"settlement composite key {span_id!r}/{rule_id!r}: expected usage_id string, got {type(parsed).__name__}"
         )
     return parsed
 

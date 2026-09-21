@@ -31,6 +31,8 @@ from apps.voice.providers.base import BaseSTTProvider, BaseVADProvider
 from apps.voice.services.voice_barge_in import BargeInController
 from apps.voice.services.voice_client_channel import VoiceClientChannel
 from apps.voice.services.voice_session import MicFinalizeRequest, VoiceSession
+from core.billing.service import COST_ORIGIN_PLATFORM
+from core.billing.speech_usage import record_stt_usage_span, require_speech_billing_subjects
 from core.clients.voice_logging import log_voice_stt_response
 from core.config import get_settings
 from core.logging import get_logger
@@ -43,6 +45,26 @@ VadCallbackState = Literal["started", "ended"]
 OnVadState = Callable[[VoiceSession, VadCallbackState], Awaitable[None]] | None
 
 _FRAME_DURATION_S = 0.02
+
+
+async def _record_session_stt(
+    *,
+    session: VoiceSession,
+    provider: str,
+    audio_seconds: float,
+) -> None:
+    user, company = require_speech_billing_subjects()
+    await record_stt_usage_span(
+        user=user,
+        company=company,
+        provider=provider,
+        audio_seconds=audio_seconds,
+        cost_origin=COST_ORIGIN_PLATFORM,
+        extra_attributes={
+            "endpoint": "voice.session",
+            "session_id": session.session_id,
+        },
+    )
 
 
 async def _process_mic_finalize_request(
@@ -64,6 +86,7 @@ async def _process_mic_finalize_request(
     speech_out = speech_frames_in_window
     lp_frame = last_partial_at_frame
     lp_preview = last_partial_preview
+    billed_seconds = speech_frames_in_window * _FRAME_DURATION_S
 
     try:
         if vad_open_before:
@@ -104,6 +127,11 @@ async def _process_mic_finalize_request(
                             "voice.stt_worker.mic_finalize_transcription",
                             session_id=session.session_id,
                             text_length=len(result.text),
+                        )
+                        await _record_session_stt(
+                            session=session,
+                            provider=result.provider,
+                            audio_seconds=billed_seconds,
                         )
                         await on_final_transcription(session, result.text, language)
                     except Exception as exc:
@@ -252,6 +280,7 @@ async def run_stt_worker(
             continue
 
         if not is_speech and vad_open:
+            billed_seconds = speech_frames_in_window * _FRAME_DURATION_S
             vad_open = False
             speech_frames_in_window = 0
             last_partial_at_frame = 0
@@ -295,6 +324,11 @@ async def run_stt_worker(
                 audio_bytes=0,
                 text_length=len(result.text),
                 mode="final",
+            )
+            await _record_session_stt(
+                session=session,
+                provider=result.provider,
+                audio_seconds=billed_seconds,
             )
             if on_final_transcription is not None:
                 await on_final_transcription(session, result.text, language)

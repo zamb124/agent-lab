@@ -83,7 +83,6 @@ from apps.office.services.document_mutations import (
 from apps.office.services.file_binding_metadata import resolve_binding_metadata
 from apps.office.services.minimal_ooxml import minimal_pptx_bytes, minimal_xlsx_bytes
 from apps.office.services.viewer_service import integration_configured
-from core.api.team import TeamMemberResponse
 from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzObject
 from core.authz.types import AuthzRelation
@@ -103,11 +102,6 @@ from core.files.registry import default_retention_for_source
 from core.files.s3_client import S3ClientFactory
 from core.files.types import FileCategory
 from core.http import get_httpx_client
-from core.identity.flow_employee import (
-    flow_employee_curator_user_ids,
-    is_flow_employee,
-    require_flow_employee_flow_id,
-)
 from core.logging import get_log_context, get_logger
 from core.models.base import StrictBaseModel
 from core.models.identity_models import User
@@ -115,6 +109,7 @@ from core.pagination import ListResponse, OffsetPage
 from core.request_scope import CompanyScope, NamespaceScope, require_company, require_namespace
 from core.types import JsonObject, parse_json_object, require_json_array
 from core.websocket import (
+    EmptyPayload,
     WsCommandError,
     raise_conflict,
     raise_forbidden,
@@ -131,7 +126,7 @@ OfficeDocumentSortKey = Literal["created_at", "title", "file_size", "updated_at"
 OfficeDocumentSortOrder = Literal["asc", "desc"]
 _DocumentBytesMutation = Callable[[bytes, str], bytes | tuple[bytes, int]]
 
-_ONLYOFFICE_COMMAND_ERROR_DETAILS = {
+ONLYOFFICE_COMMAND_ERROR_DETAILS = {
     1: "document key is missing or no open document with this key was found",
     2: "callback URL is not correct or is not reachable from Document Server",
     3: "internal Document Server error",
@@ -139,10 +134,6 @@ _ONLYOFFICE_COMMAND_ERROR_DETAILS = {
     5: "command is not correct",
     6: "invalid Document Server JWT token",
 }
-
-
-class OfficeEmptyPayload(StrictBaseModel):
-    pass
 
 
 class OfficeCatalogIdPayload(StrictBaseModel):
@@ -238,7 +229,7 @@ class OfficeDocumentShareCreatePayload(OfficeDocumentShareCreateRequest):
 
 
 
-async def _namespace_scope(container: OfficeContainer) -> NamespaceScope:
+async def namespace_scope(container: OfficeContainer) -> NamespaceScope:
     return await require_namespace(container.namespace_service)
 
 
@@ -252,27 +243,28 @@ def raise_from_service_client(service: str, exc: ServiceClientError) -> Never:
     if match:
         code = int(match.group(1))
         if code == 404:
-            raise WsCommandError("not_found", message) from exc
+            raise WsCommandError("not_found", message, error_code='not_found') from exc
         if code == 403:
-            raise WsCommandError("forbidden", message) from exc
+            raise WsCommandError("forbidden", message, error_code='forbidden') from exc
         if 400 <= code < 500:
-            raise WsCommandError("ws_invalid_payload", message) from exc
+            raise WsCommandError("ws_invalid_payload", message, error_code='ws_invalid_payload') from exc
     raise WsCommandError(
         "internal",
-        f"Сервис {service} недоступен или вернул ошибку: {message}",
-    ) from exc
+        f"Service {service} is unavailable or returned an error: {message}",
+              error_code='internal',
+          ) from exc
 
 
 def raise_from_catalog_rag_value_error(exc: ValueError) -> Never:
     message = str(exc)
-    if message == "Каталог не найден":
-        raise WsCommandError("not_found", message) from exc
+    if message == "Catalog not found":
+        raise WsCommandError("not_found", message, error_code='not_found') from exc
     if message in {
-        "RAG-индекс для каталога не включён",
-        "Нет проиндексированных каталогов для поиска",
+        "RAG index is not enabled for the catalog",
+        "No indexed catalogs to search",
     }:
-        raise WsCommandError("conflict", message) from exc
-    raise WsCommandError("ws_invalid_payload", message) from exc
+        raise WsCommandError("conflict", message, error_code='conflict') from exc
+    raise WsCommandError("ws_invalid_payload", message, error_code='ws_invalid_payload') from exc
 
 
 async def index_binding_if_catalog_enabled(
@@ -303,18 +295,18 @@ async def index_binding_if_catalog_enabled_with_job_context(
     normalized_namespace = workspace_namespace.strip()
     normalized_user_id = user_id.strip()
     if normalized_company_id == "":
-        raise ValueError("company_id обязателен")
+        raise ValueError("company_id is required")
     if normalized_namespace == "":
-        raise ValueError("workspace_namespace обязателен")
+        raise ValueError("workspace_namespace is required")
     if normalized_user_id == "":
-        raise ValueError("user_id обязателен")
+        raise ValueError("user_id is required")
 
     company = await container.company_repository.get(normalized_company_id)
     if company is None:
-        raise ValueError(f"Компания не найдена: {normalized_company_id}")
+        raise ValueError(f"Company not found: {normalized_company_id}")
     user = await container.user_repository.get(normalized_user_id)
     if user is None:
-        raise ValueError(f"Пользователь не найден: {normalized_user_id}")
+        raise ValueError(f"User not found: {normalized_user_id}")
 
     log_ctx = get_log_context()
     trace_raw = log_ctx.get("trace_id")
@@ -411,8 +403,8 @@ async def _require_catalog_view(
     if allowed:
         return
     if missing_as == "forbidden":
-        raise WsCommandError("forbidden", "Нет доступа к каталогу")
-    raise WsCommandError("not_found", "Каталог не найден")
+        raise WsCommandError("forbidden", "No access to catalog", error_code='forbidden')
+    raise WsCommandError("not_found", "Catalog not found", error_code='not_found')
 
 
 async def _require_catalog_admin(
@@ -444,7 +436,7 @@ async def _require_catalog_share(
         raise_forbidden(exc)
 
 
-async def _require_binding_catalog_access(
+async def require_binding_catalog_access(
     container: OfficeContainer,
     row: OfficeDocumentBinding,
     user_id: str,
@@ -456,7 +448,7 @@ async def _require_binding_catalog_access(
         user_id=user_id,
     )
     if not allowed:
-        raise WsCommandError("forbidden", "Нет доступа к каталогу документа")
+        raise WsCommandError("forbidden", "No access to the document catalog", error_code='forbidden')
 
 
 async def _require_trashed_binding_access(
@@ -471,7 +463,7 @@ async def _require_trashed_binding_access(
         user_id=user_id,
     )
     if not allowed:
-        raise WsCommandError("forbidden", "Нет доступа к каталогу документа")
+        raise WsCommandError("forbidden", "No access to the document catalog", error_code='forbidden')
 
 
 async def _resolve_catalog_for_create(
@@ -481,14 +473,14 @@ async def _resolve_catalog_for_create(
     catalog_id: str | None,
 ) -> str:
     if catalog_id is None or catalog_id.strip() == "":
-        raise WsCommandError("ws_invalid_payload", "Укажите catalog_id: сначала создайте каталог")
+        raise WsCommandError("ws_invalid_payload", "Specify catalog_id: create a catalog first", error_code='ws_invalid_payload')
     cid = catalog_id.strip()
     allowed = await container.authz_service.can_view(
         AuthzObject.office_catalog(cid),
         user_id=user_id,
     )
     if not allowed:
-        raise WsCommandError("forbidden", "Нет доступа к каталогу")
+        raise WsCommandError("forbidden", "No access to catalog", error_code='forbidden')
     return cid
 
 
@@ -637,7 +629,7 @@ async def document_mutation_lock(
             while True:
                 remaining = deadline - asyncio.get_running_loop().time()
                 if remaining <= 0:
-                    raise WsCommandError("conflict", "Документ уже изменяется")
+                    raise WsCommandError("conflict", "Document is already being modified", error_code='conflict')
                 _ = await pubsub.get_message(
                     ignore_subscribe_messages=True,
                     timeout=min(remaining, _LOCK_POLL_SECONDS),
@@ -687,48 +679,49 @@ async def post_onlyoffice_command(
             _ = response.raise_for_status()
     except HTTPStatusError as exc:
         logger.exception(
-            "OnlyOffice command failed before mutation file_id=%s command=%s http_status=%s response=%s",
-            file_id,
-            command_name,
-            exc.response.status_code,
-            exc.response.text[:500],
+            "office.onlyoffice.command.failed.mutation.file_id",
+            file_id=file_id,
+            command=command_name,
+            http_status=exc.response.status_code,
+            response=exc.response.text[:500],
         )
-        raise WsCommandError("conflict", f"OnlyOffice {command_name} command failed") from exc
+        raise WsCommandError("conflict", f"OnlyOffice {command_name} command failed", error_code='conflict') from exc
     except HTTPError as exc:
         logger.exception(
-            "OnlyOffice command failed before mutation file_id=%s command=%s http_status=%s response=%s",
-            file_id,
-            command_name,
-            None,
-            "",
+            "office.onlyoffice.command.failed.mutation.file_id",
+            file_id=file_id,
+            command=command_name,
+            http_status=None,
+            response='',
         )
-        raise WsCommandError("conflict", f"OnlyOffice {command_name} command failed") from exc
+        raise WsCommandError("conflict", f"OnlyOffice {command_name} command failed", error_code='conflict') from exc
     data = parse_json_object(response.content, "OnlyOffice command response")
     if "error" not in data:
-        raise WsCommandError("conflict", f"OnlyOffice {command_name} returned invalid response")
+        raise WsCommandError("conflict", f"OnlyOffice {command_name} returned invalid response", error_code='conflict')
     error_code = data["error"]
     if not isinstance(error_code, str | int):
-        raise WsCommandError("conflict", f"OnlyOffice {command_name} returned invalid response")
+        raise WsCommandError("conflict", f"OnlyOffice {command_name} returned invalid response", error_code='conflict')
     try:
         code = int(error_code)
     except ValueError:
         raise WsCommandError(
-            "conflict", f"OnlyOffice {command_name} returned invalid response"
-        ) from None
+            "conflict", f"OnlyOffice {command_name} returned invalid response",
+                  error_code='conflict',
+              ) from None
     if code != 0:
         logger.warning(
-            "OnlyOffice command returned error file_id=%s command=%s code=%s detail=%s",
-            file_id,
-            command_name,
-            code,
-            _ONLYOFFICE_COMMAND_ERROR_DETAILS.get(code, "unknown error"),
+            "office.onlyoffice.command.returned.error.file_id",
+            file_id=file_id,
+            command=command_name,
+            code=code,
+            detail=ONLYOFFICE_COMMAND_ERROR_DETAILS.get(code, 'unknown error'),
         )
     else:
         logger.info(
-            "OnlyOffice command accepted file_id=%s command=%s key=%s",
-            file_id,
-            command_name,
-            key,
+            "office.onlyoffice.command.accepted.file_id.command",
+            file_id=file_id,
+            command=command_name,
+            key=key,
         )
     return code
 
@@ -745,8 +738,8 @@ async def force_save_open_editor_if_needed(*, file_id: str, document_key: str) -
     )
     if code is None or code in (0, 1, 4):
         return code
-    detail = _ONLYOFFICE_COMMAND_ERROR_DETAILS.get(code, "unknown error")
-    raise WsCommandError("conflict", f"OnlyOffice forcesave failed: error={code} ({detail})")
+    detail = ONLYOFFICE_COMMAND_ERROR_DETAILS.get(code, "unknown error")
+    raise WsCommandError("conflict", f"OnlyOffice forcesave failed: error={code} ({detail})", error_code='conflict')
 
 
 async def drop_open_editor_sessions(*, file_id: str, document_key: str) -> None:
@@ -757,8 +750,8 @@ async def drop_open_editor_sessions(*, file_id: str, document_key: str) -> None:
     )
     if code is None or code in (0, 1):
         return
-    detail = _ONLYOFFICE_COMMAND_ERROR_DETAILS.get(code, "unknown error")
-    raise WsCommandError("conflict", f"OnlyOffice drop failed: error={code} ({detail})")
+    detail = ONLYOFFICE_COMMAND_ERROR_DETAILS.get(code, "unknown error")
+    raise WsCommandError("conflict", f"OnlyOffice drop failed: error={code} ({detail})", error_code='conflict')
 
 
 async def wait_for_file_change_after_forcesave(
@@ -774,23 +767,23 @@ async def wait_for_file_change_after_forcesave(
         await asyncio.sleep(0.5)
         meta = await container.files_service.get_optional(file_id)
         if meta is None:
-            raise WsCommandError("not_found", "Файл не найден")
+            raise WsCommandError("not_found", "File not found", error_code='not_found')
         if meta.checksum != previous_checksum or meta.file_size != previous_file_size:
             logger.info(
-                "OnlyOffice forcesave materialized file_id=%s old_size=%s new_size=%s",
-                file_id,
-                previous_file_size,
-                meta.file_size,
+                "office.onlyoffice.forcesave.materialized.file_id.old_size",
+                file_id=file_id,
+                old_size=previous_file_size,
+                new_size=meta.file_size,
             )
             return True
     logger.warning(
-        "OnlyOffice forcesave callback did not update file file_id=%s old_size=%s old_checksum=%s",
-        file_id,
-        previous_file_size,
-        previous_checksum,
+        "office.onlyoffice.forcesave.callback.update.file",
+        file_id=file_id,
+        old_size=previous_file_size,
+        old_checksum=previous_checksum,
     )
     if raise_on_timeout:
-        raise WsCommandError("conflict", "Не удалось дождаться сохранения открытого редактора")
+        raise WsCommandError("conflict", "Timed out waiting for the open editor to save", error_code='conflict')
     return False
 
 
@@ -813,7 +806,7 @@ def _sort_office_document_items(
     return sorted(items, key=sort_key, reverse=reverse)
 
 
-async def _load_binding(
+async def load_binding(
     container: OfficeContainer,
     scope: NamespaceScope,
     file_id: str,
@@ -827,18 +820,18 @@ async def _load_binding(
         scope.namespace,
     )
     if row is None:
-        raise WsCommandError("not_found", "Привязка не найдена")
+        raise WsCommandError("not_found", "Binding not found", error_code='not_found')
     if require_trashed:
         if row.deleted_at is None:
-            raise WsCommandError("not_found", "Привязка не найдена в корзине")
+            raise WsCommandError("not_found", "Binding not found in trash", error_code='not_found')
         return row
     if row.deleted_at is not None and not allow_deleted:
-        raise WsCommandError("not_found", "Привязка не найдена")
+        raise WsCommandError("not_found", "Binding not found", error_code='not_found')
     return row
 
 
 async def op_integration_status(
-    payload: OfficeEmptyPayload,
+    payload: EmptyPayload,
     *,
     user: User,
     container: OfficeContainer,
@@ -849,7 +842,7 @@ async def op_integration_status(
 
 
 async def op_namespaces_templates(
-    payload: OfficeEmptyPayload,
+    payload: EmptyPayload,
     *,
     user: User,
     container: OfficeContainer,
@@ -863,18 +856,18 @@ async def op_namespaces_templates(
         raise_from_service_client("crm", exc)
     raw_items_value = raw.get("items") if isinstance(raw, dict) else None
     if not isinstance(raw_items_value, list):
-        raise WsCommandError("internal", "CRM: неверный формат списка шаблонов namespace")
+        raise WsCommandError("internal", "CRM: invalid namespace template list format", error_code='internal')
     raw_items = require_json_array(raw_items_value, "crm.namespace_templates.items")
     out: list[OfficeNamespaceTemplateItem] = []
     for item in raw_items:
         if not isinstance(item, dict):
-            raise WsCommandError("internal", "CRM: элемент шаблона namespace не объект")
+            raise WsCommandError("internal", "CRM: namespace template item is not an object", error_code='internal')
         template_id = item.get("template_id")
         if not isinstance(template_id, str) or not template_id.strip():
-            raise WsCommandError("internal", "CRM: у шаблона нет template_id")
+            raise WsCommandError("internal", "CRM: template has no template_id", error_code='internal')
         name = item.get("name")
         if not isinstance(name, str) or not name.strip():
-            raise WsCommandError("internal", "CRM: у шаблона нет name")
+            raise WsCommandError("internal", "CRM: template has no name", error_code='internal')
         description = item.get("description")
         icon = item.get("icon")
         entity_types = item.get("entity_type_ids")
@@ -915,13 +908,13 @@ async def op_namespaces_create(
     except ServiceClientError as exc:
         raise_from_service_client("crm", exc)
     if not isinstance(raw, dict):
-        raise WsCommandError("internal", "CRM: неверный ответ при создании namespace")
+        raise WsCommandError("internal", "CRM: invalid response when creating namespace", error_code='internal')
     name = raw.get("name")
     company_id = raw.get("company_id")
     if not isinstance(name, str) or not name.strip():
-        raise WsCommandError("internal", "CRM: в ответе нет name")
+        raise WsCommandError("internal", "CRM: response has no name", error_code='internal')
     if not isinstance(company_id, str) or not company_id.strip():
-        raise WsCommandError("internal", "CRM: в ответе нет company_id")
+        raise WsCommandError("internal", "CRM: response has no company_id", error_code='internal')
     description = raw.get("description")
     return OfficeNamespaceCreateResponse(
         name=name.strip(),
@@ -931,49 +924,14 @@ async def op_namespaces_create(
     )
 
 
-async def op_company_members_list(
-    payload: OfficeEmptyPayload,
-    *,
-    user: User,
-    container: OfficeContainer,
-) -> ListResponse[TeamMemberResponse]:
-    _ = payload, user
-    scope = _company_scope()
-    company = await container.company_repository.get(scope.company_id)
-    if company is None:
-        raise WsCommandError("not_found", "Компания не найдена")
-    users_by_id = await container.user_repository.get_many(list(company.members.keys()))
-    members: list[TeamMemberResponse] = []
-    for member_user_id, roles in company.members.items():
-        member_user = users_by_id.get(member_user_id)
-        if member_user is None:
-            continue
-        member_email = member_user.emails[0] if member_user.emails else None
-        member_is_employee = is_flow_employee(member_user)
-        members.append(
-            TeamMemberResponse(
-                user_id=member_user_id,
-                name=member_user.name,
-                email=member_email,
-                roles=roles,
-                joined_at=member_user.created_at,
-                avatar_url=member_user.avatar_url,
-                is_flow_employee=member_is_employee,
-                flow_id=require_flow_employee_flow_id(member_user) if member_is_employee else None,
-                curator_user_ids=flow_employee_curator_user_ids(member_user) if member_is_employee else [],
-            )
-        )
-    return ListResponse[TeamMemberResponse](items=members)
-
-
 async def op_catalogs_list(
-    payload: OfficeEmptyPayload,
+    payload: EmptyPayload,
     *,
     user: User,
     container: OfficeContainer,
 ) -> OfficeCatalogListResponse:
     _ = payload, user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     rows = await container.office_access_service.list_accessible_catalogs_with_file_counts(
         company_id=scope.company_id,
         namespace=scope.namespace,
@@ -999,9 +957,9 @@ async def op_catalogs_ensure_path(
     container: OfficeContainer,
 ) -> DocsEnsurePathResult:
     _ = user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     if not payload.path_segments:
-        raise WsCommandError("ws_invalid_payload", "path_segments required")
+        raise WsCommandError("ws_invalid_payload", "path_segments required", error_code='ws_invalid_payload')
     catalog_id = await container.docs_placement_service.ensure_catalog_path(
         company_id=scope.company_id,
         namespace=scope.namespace,
@@ -1018,7 +976,7 @@ async def op_catalogs_create(
     container: OfficeContainer,
 ) -> OfficeCatalogDetailResponse:
     _ = user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     if payload.parent_catalog_id is not None:
         await _require_catalog_admin(container, payload.parent_catalog_id, scope.user_id)
     try:
@@ -1053,7 +1011,7 @@ async def op_catalogs_item(
     container: OfficeContainer,
 ) -> OfficeCatalogDetailResponse:
     _ = user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     await _require_catalog_view(container, payload.catalog_id, scope.user_id)
     catalog = await container.catalog_repository.get(
         payload.catalog_id,
@@ -1061,7 +1019,7 @@ async def op_catalogs_item(
         scope.namespace,
     )
     if catalog is None:
-        raise WsCommandError("not_found", "Каталог не найден")
+        raise WsCommandError("not_found", "Catalog not found", error_code='not_found')
     return await _build_catalog_detail_response(
         container,
         catalog=catalog,
@@ -1076,7 +1034,7 @@ async def op_catalogs_items(
     container: OfficeContainer,
 ) -> OfficeCatalogItemsResponse:
     _ = user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     await _require_catalog_view(container, payload.catalog_id, scope.user_id)
     catalog = await container.catalog_repository.get(
         payload.catalog_id,
@@ -1084,7 +1042,7 @@ async def op_catalogs_items(
         scope.namespace,
     )
     if catalog is None:
-        raise WsCommandError("not_found", "Каталог не найден")
+        raise WsCommandError("not_found", "Catalog not found", error_code='not_found')
     children = await container.catalog_repository.list_children(
         company_id=scope.company_id,
         namespace=scope.namespace,
@@ -1127,7 +1085,7 @@ async def op_catalogs_update(
     container: OfficeContainer,
 ) -> OfficeCatalogDetailResponse:
     _ = user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     await _require_catalog_admin(container, payload.catalog_id, scope.user_id)
     updated = await container.catalog_repository.update_catalog(
         payload.catalog_id,
@@ -1136,7 +1094,7 @@ async def op_catalogs_update(
         title=payload.title,
     )
     if updated is None:
-        raise WsCommandError("not_found", "Каталог не найден")
+        raise WsCommandError("not_found", "Catalog not found", error_code='not_found')
     if payload.company_visible is not None:
         await container.office_access_service.set_catalog_company_visible(
             updated,
@@ -1156,7 +1114,7 @@ async def op_catalogs_remove(
     container: OfficeContainer,
 ) -> None:
     _ = user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     await _require_catalog_admin(container, payload.catalog_id, scope.user_id)
     catalog = await container.catalog_repository.get(
         payload.catalog_id,
@@ -1164,7 +1122,7 @@ async def op_catalogs_remove(
         scope.namespace,
     )
     if catalog is None:
-        raise WsCommandError("not_found", "Каталог не найден")
+        raise WsCommandError("not_found", "Catalog not found", error_code='not_found')
     if catalog.rag_index_enabled:
         try:
             await container.catalog_rag_index_service.disable(payload.catalog_id)
@@ -1181,7 +1139,7 @@ async def op_catalogs_remove(
     except ValueError as exc:
         raise_conflict(exc, str(exc))
     if not deleted:
-        raise WsCommandError("not_found", "Каталог не найден")
+        raise WsCommandError("not_found", "Catalog not found", error_code='not_found')
     await container.office_access_service.sync_catalog_deleted(payload.catalog_id)
 
 
@@ -1192,7 +1150,7 @@ async def op_catalogs_rag_enable(
     container: OfficeContainer,
 ) -> OfficeCatalogRagIndexEnableResponse:
     _ = user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     await _require_catalog_admin(container, payload.catalog_id, scope.user_id)
     try:
         return await container.catalog_rag_index_service.enable(payload.catalog_id)
@@ -1209,7 +1167,7 @@ async def op_catalogs_rag_disable(
     container: OfficeContainer,
 ) -> OfficeCatalogRagIndexDisableResponse:
     _ = user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     await _require_catalog_admin(container, payload.catalog_id, scope.user_id)
     try:
         await container.catalog_rag_index_service.disable(payload.catalog_id)
@@ -1227,7 +1185,7 @@ async def op_catalogs_rag_rebuild(
     container: OfficeContainer,
 ) -> OfficeCatalogRagIndexRebuildResponse:
     _ = user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     await _require_catalog_admin(container, payload.catalog_id, scope.user_id)
     try:
         return await container.catalog_rag_index_service.rebuild_catalog(payload.catalog_id)
@@ -1242,7 +1200,7 @@ async def op_catalogs_rag_status(
     container: OfficeContainer,
 ) -> OfficeCatalogRagIndexStatusResponse:
     _ = user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     await _require_catalog_view(
         container, payload.catalog_id, scope.user_id, missing_as="forbidden"
     )
@@ -1261,7 +1219,7 @@ async def op_catalogs_rag_settings(
     container: OfficeContainer,
 ) -> OfficeCatalogRagIndexSettingsResponse:
     _ = user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     await _require_catalog_admin(container, payload.catalog_id, scope.user_id)
     body = OfficeCatalogRagIndexSettingsPatchRequest.model_validate(
         payload.model_dump(exclude={"catalog_id"})
@@ -1282,7 +1240,7 @@ async def op_catalogs_rag_search(
     container: OfficeContainer,
 ) -> OfficeCatalogSemanticSearchResponse:
     _ = user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     await _require_catalog_view(
         container, payload.catalog_id, scope.user_id, missing_as="forbidden"
     )
@@ -1307,7 +1265,7 @@ async def op_catalogs_members_list(
     container: OfficeContainer,
 ) -> OfficeCatalogMembersResponse:
     _ = user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     await _require_catalog_view(container, payload.catalog_id, scope.user_id)
     catalog = await container.catalog_repository.get(
         payload.catalog_id,
@@ -1315,7 +1273,7 @@ async def op_catalogs_members_list(
         scope.namespace,
     )
     if catalog is None:
-        raise WsCommandError("not_found", "Каталог не найден")
+        raise WsCommandError("not_found", "Catalog not found", error_code='not_found')
     items = await _list_catalog_member_items(
         container,
         catalog_id=payload.catalog_id,
@@ -1332,7 +1290,7 @@ async def op_catalogs_member_add(
     container: OfficeContainer,
 ) -> OfficeCatalogMembersResponse:
     _ = user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     await _require_catalog_admin(container, payload.catalog_id, scope.user_id)
     try:
         await container.office_access_service.add_catalog_member(
@@ -1360,7 +1318,7 @@ async def op_catalogs_member_remove(
     container: OfficeContainer,
 ) -> None:
     _ = user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     await _require_catalog_admin(container, payload.catalog_id, scope.user_id)
     catalog = await container.catalog_repository.get(
         payload.catalog_id,
@@ -1368,7 +1326,7 @@ async def op_catalogs_member_remove(
         scope.namespace,
     )
     if catalog is None:
-        raise WsCommandError("not_found", "Каталог не найден")
+        raise WsCommandError("not_found", "Catalog not found", error_code='not_found')
     try:
         await container.office_access_service.remove_catalog_member(
             payload.catalog_id,
@@ -1385,7 +1343,7 @@ async def op_catalogs_access(
     container: OfficeContainer,
 ) -> OfficeResourceAccessResponse:
     _ = user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     await _require_catalog_share(container, payload.catalog_id, scope.user_id)
     try:
         return await container.office_access_service.get_catalog_access(
@@ -1404,7 +1362,7 @@ async def op_catalogs_access_update(
     container: OfficeContainer,
 ) -> OfficeResourceAccessResponse:
     _ = user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     await _require_catalog_share(container, payload.catalog_id, scope.user_id)
     body = OfficeResourceAccessPatchRequest.model_validate(
         payload.model_dump(exclude={"catalog_id", "origin"})
@@ -1429,7 +1387,7 @@ async def op_catalogs_access_rotate_link(
     container: OfficeContainer,
 ) -> OfficeResourceAccessRotateLinkResponse:
     _ = user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     await _require_catalog_share(container, payload.catalog_id, scope.user_id)
     try:
         return await container.office_access_service.rotate_catalog_link(
@@ -1449,7 +1407,7 @@ async def op_documents_list(
     container: OfficeContainer,
 ) -> OfficeDocumentListResponse:
     _ = user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     seen: set[str] = set()
     resolved_ids: list[str] = []
     for raw_id in payload.catalog_ids:
@@ -1461,8 +1419,9 @@ async def op_documents_list(
     if not resolved_ids:
         raise WsCommandError(
             "ws_invalid_payload",
-            "Укажите catalog_id или хотя бы одно значение catalog_ids",
-        )
+            "Specify catalog_id or at least one catalog_ids value",
+                  error_code='ws_invalid_payload',
+              )
     for catalog_id in resolved_ids:
         await _require_catalog_view(
             container, catalog_id, scope.user_id, missing_as="forbidden"
@@ -1487,13 +1446,13 @@ async def op_documents_create_from_file(
     container: OfficeContainer,
 ) -> OfficeDocumentCreateResponse:
     _ = user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     file_id = payload.file_id.strip()
     meta = await container.files_service.get_optional(file_id)
     if meta is None:
-        raise WsCommandError("not_found", "Файл не найден")
+        raise WsCommandError("not_found", "File not found", error_code='not_found')
     if meta.company_id != scope.company_id:
-        raise WsCommandError("forbidden", "Файл не принадлежит компании")
+        raise WsCommandError("forbidden", "File does not belong to the company", error_code='forbidden')
     file_category, onlyoffice_document_type = resolve_binding_metadata(
         meta.original_name,
         (meta.content_type or "application/octet-stream").split(";")[0].strip(),
@@ -1503,7 +1462,7 @@ async def op_documents_create_from_file(
         scope.company_id,
     )
     if existing is not None:
-        await _require_binding_catalog_access(container, existing, scope.user_id)
+        await require_binding_catalog_access(container, existing, scope.user_id)
         return OfficeDocumentCreateResponse(
             file_id=existing.file_id,
             catalog_id=existing.catalog_id,
@@ -1536,7 +1495,7 @@ async def op_documents_create_from_file(
         )
         if existing is None:
             raise
-        await _require_binding_catalog_access(container, existing, scope.user_id)
+        await require_binding_catalog_access(container, existing, scope.user_id)
         return OfficeDocumentCreateResponse(
             file_id=existing.file_id,
             catalog_id=existing.catalog_id,
@@ -1588,19 +1547,19 @@ async def op_documents_rag_statuses(
     container: OfficeContainer,
 ) -> OfficeDocumentsRagIndexStatusesResponse:
     _ = user
-    _ = await _namespace_scope(container)
+    _ = await namespace_scope(container)
     normalized_ids: list[str] = []
     seen: set[str] = set()
     for raw_id in payload.file_ids:
         file_id = raw_id.strip()
         if file_id == "":
-            raise WsCommandError("ws_invalid_payload", "file_ids не должен содержать пустые значения")
+            raise WsCommandError("ws_invalid_payload", "file_ids must not contain empty values", error_code='ws_invalid_payload')
         if file_id in seen:
             continue
         seen.add(file_id)
         normalized_ids.append(file_id)
     if not normalized_ids:
-        raise WsCommandError("ws_invalid_payload", "file_ids обязателен")
+        raise WsCommandError("ws_invalid_payload", "file_ids is required", error_code='ws_invalid_payload')
     statuses = await container.catalog_rag_index_service.batch_status_buckets(normalized_ids)
     return OfficeDocumentsRagIndexStatusesResponse(statuses=statuses)
 
@@ -1612,15 +1571,15 @@ async def op_documents_empty(
     container: OfficeContainer,
 ) -> OfficeDocumentCreateResponse:
     _ = user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     settings = get_settings()
     if not settings.s3.enabled or not settings.s3.default_bucket:
-        raise WsCommandError("internal", "S3 не настроен")
+        raise WsCommandError("internal", "S3 is not configured", error_code='internal')
     stem = _safe_filename_stem(payload.title)
     kind = payload.document_type
     if kind == "word":
         if not _EMPTY_DOCX.is_file():
-            raise WsCommandError("internal", "Шаблон пустого документа не найден")
+            raise WsCommandError("internal", "Empty document template not found", error_code='internal')
         data = _EMPTY_DOCX.read_bytes()
         original_name = f"{stem}.docx"
         content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -1699,9 +1658,9 @@ async def op_documents_editor_session(
     container: OfficeContainer,
 ) -> OfficeDocumentEditorSessionResponse:
     _ = user
-    scope = await _namespace_scope(container)
-    row = await _load_binding(container, scope, payload.file_id, allow_deleted=True)
-    await _require_binding_catalog_access(container, row, scope.user_id)
+    scope = await namespace_scope(container)
+    row = await load_binding(container, scope, payload.file_id, allow_deleted=True)
+    await require_binding_catalog_access(container, row, scope.user_id)
     return OfficeDocumentEditorSessionResponse(
         file_id=row.file_id,
         catalog_id=row.catalog_id,
@@ -1720,13 +1679,13 @@ async def _apply_document_bytes_mutation(
     mutate: _DocumentBytesMutation,
     changed_count: int | None = None,
 ) -> OfficeDocumentMutationResponse:
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     async with document_mutation_lock(container, file_id):
-        row = await _load_binding(container, scope, file_id)
-        await _require_binding_catalog_access(container, row, scope.user_id)
+        row = await load_binding(container, scope, file_id)
+        await require_binding_catalog_access(container, row, scope.user_id)
         meta = await container.files_service.get_optional(row.file_id)
         if meta is None:
-            raise WsCommandError("not_found", "Файл не найден")
+            raise WsCommandError("not_found", "File not found", error_code='not_found')
         caps = container.viewer_service.capabilities_for_file(
             file_category=row.file_category,
             file_record=meta,
@@ -1734,8 +1693,9 @@ async def _apply_document_bytes_mutation(
         if not caps.server_mutations:
             raise WsCommandError(
                 "ws_invalid_payload",
-                "Серверные мутации недоступны для этого типа файла",
-            )
+                "Server mutations are not available for this file type",
+                      error_code='ws_invalid_payload',
+                  )
         document_key = onlyoffice_document_key(row.file_id, meta.checksum)
         force_code = await force_save_open_editor_if_needed(
             file_id=row.file_id,
@@ -1751,13 +1711,10 @@ async def _apply_document_bytes_mutation(
                 raise_on_timeout=False,
             )
             if not materialized:
-                logger.info(
-                    "OnlyOffice forcesave did not change file before server mutation; continuing file_id=%s",
-                    row.file_id,
-                )
+                logger.info("office.onlyoffice.forcesave.change.file.server", file_id=row.file_id)
             meta = await container.files_service.get_optional(row.file_id)
             if meta is None:
-                raise WsCommandError("not_found", "Файл не найден")
+                raise WsCommandError("not_found", "File not found", error_code='not_found')
         if force_code in (0, 4):
             await drop_open_editor_sessions(
                 file_id=row.file_id,
@@ -1771,7 +1728,7 @@ async def _apply_document_bytes_mutation(
         try:
             mutation_result = mutate(current_bytes, meta.original_name)
         except DocumentMutationError as exc:
-            raise WsCommandError("ws_invalid_payload", str(exc)) from exc
+            raise WsCommandError("ws_invalid_payload", str(exc), error_code='ws_invalid_payload') from exc
         if isinstance(mutation_result, tuple):
             new_bytes, changed = mutation_result
         else:
@@ -1874,9 +1831,9 @@ async def op_documents_rename(
     container: OfficeContainer,
 ) -> OfficeDocumentRenameResponse:
     _ = user
-    scope = await _namespace_scope(container)
-    row = await _load_binding(container, scope, payload.file_id)
-    await _require_binding_catalog_access(container, row, scope.user_id)
+    scope = await namespace_scope(container)
+    row = await load_binding(container, scope, payload.file_id)
+    await require_binding_catalog_access(container, row, scope.user_id)
     updated = await container.document_binding_repository.update_title(
         payload.file_id,
         scope.company_id,
@@ -1884,7 +1841,7 @@ async def op_documents_rename(
         payload.title.strip(),
     )
     if updated is None:
-        raise WsCommandError("not_found", "Привязка не найдена")
+        raise WsCommandError("not_found", "Binding not found", error_code='not_found')
     return OfficeDocumentRenameResponse(file_id=updated.file_id, title=updated.title)
 
 
@@ -1895,9 +1852,9 @@ async def op_documents_remove(
     container: OfficeContainer,
 ) -> None:
     _ = user
-    scope = await _namespace_scope(container)
-    row = await _load_binding(container, scope, payload.file_id)
-    await _require_binding_catalog_access(container, row, scope.user_id)
+    scope = await namespace_scope(container)
+    row = await load_binding(container, scope, payload.file_id)
+    await require_binding_catalog_access(container, row, scope.user_id)
     try:
         await unindex_binding_from_catalog(container, row.catalog_id, row.file_id)
     except ServiceClientError as exc:
@@ -1911,7 +1868,7 @@ async def op_documents_remove(
         scope.user_id,
     )
     if not deleted:
-        raise WsCommandError("not_found", "Привязка не найдена")
+        raise WsCommandError("not_found", "Binding not found", error_code='not_found')
     await record_document_event(
         container,
         file_id=payload.file_id,
@@ -1922,13 +1879,13 @@ async def op_documents_remove(
 
 
 async def op_documents_deleted_list(
-    payload: OfficeEmptyPayload,
+    payload: EmptyPayload,
     *,
     user: User,
     container: OfficeContainer,
 ) -> OfficeDocumentListResponse:
     _ = payload, user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     rows = await container.document_binding_repository.list_deleted_by_namespace(
         scope.company_id,
         scope.namespace,
@@ -1944,15 +1901,15 @@ async def op_documents_restore(
     container: OfficeContainer,
 ) -> OfficeDocumentItem:
     _ = user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     row = await container.document_binding_repository.restore(
         payload.file_id,
         scope.company_id,
         scope.namespace,
     )
     if row is None:
-        raise WsCommandError("not_found", "Привязка не найдена в корзине")
-    await _require_binding_catalog_access(container, row, scope.user_id)
+        raise WsCommandError("not_found", "Binding not found in trash", error_code='not_found')
+    await require_binding_catalog_access(container, row, scope.user_id)
     await record_document_event(
         container,
         file_id=payload.file_id,
@@ -1976,8 +1933,8 @@ async def op_documents_permanent_remove(
     container: OfficeContainer,
 ) -> None:
     _ = user
-    scope = await _namespace_scope(container)
-    row = await _load_binding(container, scope, payload.file_id, require_trashed=True)
+    scope = await namespace_scope(container)
+    row = await load_binding(container, scope, payload.file_id, require_trashed=True)
     await _require_trashed_binding_access(container, row, scope.user_id)
     try:
         await unindex_binding_from_catalog(container, row.catalog_id, row.file_id)
@@ -1991,7 +1948,7 @@ async def op_documents_permanent_remove(
         scope.namespace,
     )
     if not deleted:
-        raise WsCommandError("not_found", "Привязка не найдена")
+        raise WsCommandError("not_found", "Binding not found", error_code='not_found')
     await container.office_access_service.sync_document_deleted(payload.file_id)
 
 
@@ -2002,9 +1959,9 @@ async def op_documents_move(
     container: OfficeContainer,
 ) -> OfficeDocumentItem:
     _ = user
-    scope = await _namespace_scope(container)
-    row = await _load_binding(container, scope, payload.file_id)
-    await _require_binding_catalog_access(container, row, scope.user_id)
+    scope = await namespace_scope(container)
+    row = await load_binding(container, scope, payload.file_id)
+    await require_binding_catalog_access(container, row, scope.user_id)
     await _require_catalog_view(
         container, payload.catalog_id, scope.user_id, missing_as="forbidden"
     )
@@ -2016,7 +1973,7 @@ async def op_documents_move(
         payload.catalog_id,
     )
     if moved is None:
-        raise WsCommandError("not_found", "Привязка не найдена")
+        raise WsCommandError("not_found", "Binding not found", error_code='not_found')
     await container.office_access_service.sync_document_moved(
         moved,
         old_catalog_id=source_catalog_id,
@@ -2046,15 +2003,15 @@ async def op_documents_copy(
     container: OfficeContainer,
 ) -> OfficeDocumentCreateResponse:
     _ = user
-    scope = await _namespace_scope(container)
-    row = await _load_binding(container, scope, payload.file_id)
-    await _require_binding_catalog_access(container, row, scope.user_id)
+    scope = await namespace_scope(container)
+    row = await load_binding(container, scope, payload.file_id)
+    await require_binding_catalog_access(container, row, scope.user_id)
     await _require_catalog_view(
         container, payload.catalog_id, scope.user_id, missing_as="forbidden"
     )
     meta = await container.files_service.get_optional(row.file_id)
     if meta is None:
-        raise WsCommandError("not_found", "Файл не найден")
+        raise WsCommandError("not_found", "File not found", error_code='not_found')
     s3 = S3ClientFactory.create_client_for_bucket(meta.s3_bucket)
     try:
         file_bytes = await s3.download_bytes(meta.s3_key)
@@ -2119,7 +2076,7 @@ async def op_documents_search(
     container: OfficeContainer,
 ) -> OfficeDocumentListResponse:
     _ = user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     rows = await container.document_binding_repository.search_by_title(
         scope.company_id,
         scope.namespace,
@@ -2136,9 +2093,9 @@ async def op_documents_access(
     container: OfficeContainer,
 ) -> OfficeResourceAccessResponse:
     _ = user
-    scope = await _namespace_scope(container)
-    row = await _load_binding(container, scope, payload.file_id)
-    await _require_binding_catalog_access(container, row, scope.user_id)
+    scope = await namespace_scope(container)
+    row = await load_binding(container, scope, payload.file_id)
+    await require_binding_catalog_access(container, row, scope.user_id)
     return await container.office_access_service.get_binding_access(row)
 
 
@@ -2149,9 +2106,9 @@ async def op_documents_access_update(
     container: OfficeContainer,
 ) -> OfficeResourceAccessResponse:
     _ = user
-    scope = await _namespace_scope(container)
-    row = await _load_binding(container, scope, payload.file_id)
-    await _require_binding_catalog_access(container, row, scope.user_id)
+    scope = await namespace_scope(container)
+    row = await load_binding(container, scope, payload.file_id)
+    await require_binding_catalog_access(container, row, scope.user_id)
     body = OfficeResourceAccessPatchRequest.model_validate(
         payload.model_dump(exclude={"file_id", "origin"})
     )
@@ -2173,9 +2130,9 @@ async def op_documents_access_rotate_link(
     container: OfficeContainer,
 ) -> OfficeResourceAccessRotateLinkResponse:
     _ = user
-    scope = await _namespace_scope(container)
-    row = await _load_binding(container, scope, payload.file_id)
-    await _require_binding_catalog_access(container, row, scope.user_id)
+    scope = await namespace_scope(container)
+    row = await load_binding(container, scope, payload.file_id)
+    await require_binding_catalog_access(container, row, scope.user_id)
     try:
         return await container.office_access_service.rotate_binding_link(row, payload.origin)
     except ValueError as exc:
@@ -2189,12 +2146,12 @@ async def op_documents_preview(
     container: OfficeContainer,
 ) -> OfficeDocumentPreviewResponse:
     _ = user
-    scope = await _namespace_scope(container)
-    row = await _load_binding(container, scope, payload.file_id)
-    await _require_binding_catalog_access(container, row, scope.user_id)
+    scope = await namespace_scope(container)
+    row = await load_binding(container, scope, payload.file_id)
+    await require_binding_catalog_access(container, row, scope.user_id)
     meta = await container.files_service.get_optional(row.file_id)
     if meta is None:
-        raise WsCommandError("not_found", "Файл не найден")
+        raise WsCommandError("not_found", "File not found", error_code='not_found')
     preview_url = await container.viewer_service.preview_for_binding(binding=row, file_record=meta)
     return OfficeDocumentPreviewResponse(file_id=row.file_id, preview_url=preview_url)
 
@@ -2206,9 +2163,9 @@ async def op_documents_share_create(
     container: OfficeContainer,
 ) -> OfficeDocumentShareItem:
     _ = user
-    scope = await _namespace_scope(container)
-    row = await _load_binding(container, scope, payload.file_id)
-    await _require_binding_catalog_access(container, row, scope.user_id)
+    scope = await namespace_scope(container)
+    row = await load_binding(container, scope, payload.file_id)
+    await require_binding_catalog_access(container, row, scope.user_id)
     permission = payload.permission
     patch_body = OfficeResourceAccessPatchRequest(
         link_enabled=True,
@@ -2227,7 +2184,7 @@ async def op_documents_share_create(
                 payload.origin,
             )
             if access_response.public_url is None:
-                raise ValueError("Не удалось создать публичную ссылку")
+                raise ValueError("Failed to create a public link")
             public_url = access_response.public_url
     except ValueError as exc:
         raise_invalid(exc)
@@ -2256,16 +2213,17 @@ async def op_documents_shares_list(
     container: OfficeContainer,
 ) -> ListResponse[OfficeDocumentShareItem]:
     _ = user
-    scope = await _namespace_scope(container)
-    row = await _load_binding(container, scope, payload.file_id)
-    await _require_binding_catalog_access(container, row, scope.user_id)
+    scope = await namespace_scope(container)
+    row = await load_binding(container, scope, payload.file_id)
+    await require_binding_catalog_access(container, row, scope.user_id)
     items: list[OfficeDocumentShareItem] = []
     if row.link_enabled and row.link_token_hash is not None:
         if row.link_permission not in ("viewer", "editor"):
             raise WsCommandError(
                 "ws_invalid_payload",
                 f"Invalid link_permission: {row.link_permission}",
-            )
+                      error_code='ws_invalid_payload',
+                  )
         items.append(
             OfficeDocumentShareItem(
                 share_id=payload.file_id,
@@ -2286,9 +2244,9 @@ async def op_documents_revisions_list(
     container: OfficeContainer,
 ) -> ListResponse[OfficeDocumentRevisionItem]:
     _ = user
-    scope = await _namespace_scope(container)
-    row = await _load_binding(container, scope, payload.file_id)
-    await _require_binding_catalog_access(container, row, scope.user_id)
+    scope = await namespace_scope(container)
+    row = await load_binding(container, scope, payload.file_id)
+    await require_binding_catalog_access(container, row, scope.user_id)
     revisions = await container.document_revision_repository.list_for_file(payload.file_id)
     return ListResponse[OfficeDocumentRevisionItem](
         items=[
@@ -2311,9 +2269,9 @@ async def op_documents_revision_create(
     container: OfficeContainer,
 ) -> OfficeDocumentRevisionItem:
     _ = user
-    scope = await _namespace_scope(container)
-    row = await _load_binding(container, scope, payload.file_id)
-    await _require_binding_catalog_access(container, row, scope.user_id)
+    scope = await namespace_scope(container)
+    row = await load_binding(container, scope, payload.file_id)
+    await require_binding_catalog_access(container, row, scope.user_id)
     revision = await container.document_revision_repository.create(
         file_id=payload.file_id,
         revision_file_id=row.file_id,
@@ -2343,15 +2301,15 @@ async def op_documents_events_list(
     container: OfficeContainer,
 ) -> ListResponse[OfficeDocumentEventItem]:
     _ = user
-    scope = await _namespace_scope(container)
+    scope = await namespace_scope(container)
     row = await container.document_binding_repository.get(
         payload.file_id,
         scope.company_id,
         scope.namespace,
     )
     if row is None:
-        raise WsCommandError("not_found", "Привязка не найдена")
-    await _require_binding_catalog_access(container, row, scope.user_id)
+        raise WsCommandError("not_found", "Binding not found", error_code='not_found')
+    await require_binding_catalog_access(container, row, scope.user_id)
     events = await container.document_event_repository.list_for_file(payload.file_id)
     return ListResponse[OfficeDocumentEventItem](
         items=[
@@ -2373,9 +2331,9 @@ async def op_documents_metadata(
     container: OfficeContainer,
 ) -> OfficeDocumentMetadataResponse:
     _ = user
-    scope = await _namespace_scope(container)
-    row = await _load_binding(container, scope, payload.file_id)
-    await _require_binding_catalog_access(container, row, scope.user_id)
+    scope = await namespace_scope(container)
+    row = await load_binding(container, scope, payload.file_id)
+    await require_binding_catalog_access(container, row, scope.user_id)
     return OfficeDocumentMetadataResponse(file_id=row.file_id)
 
 
@@ -2386,9 +2344,9 @@ async def op_documents_ai_summary(
     container: OfficeContainer,
 ) -> OfficeDocumentAiSummaryResponse:
     _ = user
-    scope = await _namespace_scope(container)
-    row = await _load_binding(container, scope, payload.file_id)
-    await _require_binding_catalog_access(container, row, scope.user_id)
+    scope = await namespace_scope(container)
+    row = await load_binding(container, scope, payload.file_id)
+    await require_binding_catalog_access(container, row, scope.user_id)
     return OfficeDocumentAiSummaryResponse(
         file_id=row.file_id,
         summary="",

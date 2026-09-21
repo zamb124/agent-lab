@@ -89,7 +89,7 @@ async def transcribe_incoming_audio_files(
     пустая строка.
     """
     if company_id == "":
-        raise ValueError("transcribe_incoming_audio_files: company_id обязателен.")
+        raise ValueError("transcribe_incoming_audio_files: company_id is required.")
 
     audio_items: list[FileRef] = [
         item for item in files_data if _is_audio_item(item)

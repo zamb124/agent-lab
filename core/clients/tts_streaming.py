@@ -91,11 +91,11 @@ class BatchBackedTTSStreamer(BaseTTSStreamer):
         min_words: int = 3,
     ) -> None:
         if sample_rate <= 0:
-            raise ValueError("BatchBackedTTSStreamer: sample_rate должен быть > 0.")
+            raise ValueError("BatchBackedTTSStreamer: sample_rate must be > 0.")
         if provider_name == "":
-            raise ValueError("BatchBackedTTSStreamer: provider_name обязателен.")
+            raise ValueError("BatchBackedTTSStreamer: provider_name is required.")
         if content_type == "":
-            raise ValueError("BatchBackedTTSStreamer: content_type обязателен.")
+            raise ValueError("BatchBackedTTSStreamer: content_type is required.")
         self._tts_client: BaseTTSClient = tts_client
         self._sample_rate: int = sample_rate
         self._provider: str = provider_name
@@ -125,7 +125,7 @@ class BatchBackedTTSStreamer(BaseTTSStreamer):
         result = await self._tts_client.synthesize(text=text)
         if len(result.audio_bytes) == 0:
             raise ValueError(
-                f"BatchBackedTTSStreamer.synthesize_chunk: провайдер вернул пустой audio_bytes после успешного HTTP (provider={self._provider!r})."
+                f"BatchBackedTTSStreamer.synthesize_chunk: provider returned empty audio_bytes after a successful HTTP response (provider={self._provider!r})."
             )
         return result.audio_bytes
 

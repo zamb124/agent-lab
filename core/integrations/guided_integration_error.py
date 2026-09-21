@@ -47,7 +47,7 @@ class GuidedIntegrationError(Exception):
         steps_en: tuple[str, ...] = (),
     ) -> None:
         if code.strip() == "":
-            raise ValueError("GuidedIntegrationError: code обязателен")
+            raise ValueError('GuidedIntegrationError: code is required')
         self.code: str = code.strip()
         self.title_ru: str = title_ru
         self.title_en: str = title_en

@@ -25,13 +25,13 @@ def _normalize_reactions(raw: list[JsonObject]) -> list[ReactionEntry]:
         em = item.get("emoji")
         cat = item.get("created_at")
         if not isinstance(uid, str) or not isinstance(em, str):
-            raise ValueError("reactions: user_id и emoji обязательны.")
+            raise ValueError("reactions: user_id and emoji are required.")
         if isinstance(cat, str):
             created = datetime.fromisoformat(cat.replace("Z", "+00:00"))
         elif isinstance(cat, datetime):
             created = cat
         else:
-            raise ValueError("reactions: created_at некорректен.")
+            raise ValueError("reactions: created_at is invalid.")
         out.append(ReactionEntry(user_id=uid, emoji=em, created_at=created))
     return out
 
@@ -44,7 +44,7 @@ def mentioned_user_ids_from_contents(contents: list[MessageContentModel]) -> lis
         d = c.data
         if isinstance(d, TextPlainContent):
             return d.mentions
-        raise ValueError("text/plain: ожидается TextPlainContent.")
+        raise ValueError("text/plain: expected TextPlainContent.")
     return None
 
 

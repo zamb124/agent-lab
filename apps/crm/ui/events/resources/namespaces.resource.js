@@ -18,7 +18,11 @@ import {
     createResourceCollection,
     createAsyncOp,
     createForm,
+    rerunLastRequest,
+    upsertItem,
 } from '@platform/lib/events/index.js';
+
+const NAMESPACE_UPDATE_SUCCEEDED = 'crm/namespace_update/succeeded';
 
 const NAMESPACE_NAME_PATTERN = /^[a-z][a-z0-9_]*$/;
 
@@ -34,6 +38,16 @@ export const namespacesResource = createResourceCollection({
         create: 'crm:toast.namespace.created',
         create_error: 'crm:toast.namespace.create_failed',
     },
+    extraReducer: (state, event) => {
+        if (event.type !== NAMESPACE_UPDATE_SUCCEEDED) {
+            return state;
+        }
+        const namespace = event.payload.result;
+        if (!namespace || typeof namespace.name !== 'string') {
+            return state;
+        }
+        return upsertItem(state, namespace, 'name');
+    },
 });
 
 export const namespaceUpdateOp = createAsyncOp({
@@ -44,6 +58,12 @@ export const namespaceUpdateOp = createAsyncOp({
     wsTimeoutMs: 8_000,
     commandType: 'crm/namespaces/update_requested',
     restMirror: { method: 'PUT', path: '/crm/api/v1/namespaces/:namespace_name' },
+    // allowed_type_ids меняют редактируемость: открытая editability перечитывается фабрикой.
+    onSuccess: (ctx, result) => {
+        rerunLastRequest(ctx, namespaceEditabilityOp, {
+            when: (request) => Boolean(request) && request.name === result.name,
+        });
+    },
 });
 
 export const namespaceEditabilityOp = createAsyncOp({

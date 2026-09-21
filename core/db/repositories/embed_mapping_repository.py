@@ -53,10 +53,10 @@ class EmbedMappingRepository(BaseRepository[EmbedMapping]):
         """
         mapping = await self.get(embed_id)
         if mapping:
-            logger.debug(f"Найден маппинг для {embed_id} -> {mapping.company_id}")
+            logger.debug("embed.mapping.found", embed_id=embed_id, company_id=mapping.company_id)
             return mapping.company_id
 
-        logger.warning(f"Маппинг для {embed_id} не найден")
+        logger.warning("embed.mapping.missing", embed_id=embed_id)
         return None
 
     async def delete_by_embed_id(self, embed_id: str) -> bool:
@@ -72,6 +72,6 @@ class EmbedMappingRepository(BaseRepository[EmbedMapping]):
         mapping = await self.get(embed_id)
         if mapping:
             _ = await self.delete(embed_id)
-            logger.info(f"Удален маппинг для {embed_id}")
+            logger.info("embed.mapping.deleted", embed_id=embed_id)
             return True
         return False

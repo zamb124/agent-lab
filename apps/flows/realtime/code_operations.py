@@ -730,7 +730,7 @@ def _parse_function_signature(code: str, func_name: str | None = None) -> Parsed
         }
 
     target = func_name or "run/first top-level function"
-    raise ValueError(f"Функция не найдена: {target}")
+    raise ValueError(f"Function not found: {target}")
 
 
 async def op_flows_code_parse_signature(
@@ -822,7 +822,7 @@ async def _merge_execute_state_with_flow(
     """
     runtime_flow = await container.flow_factory.get_flow(flow_id, branch_id)
     if runtime_flow is None:
-        raise ValueError(f"Flow не найден: {flow_id}")
+        raise ValueError(f"Flow not found: {flow_id}")
 
     raw_cfg_nodes = runtime_flow.config.get("nodes")
     cfg_nodes_raw = (
@@ -1074,7 +1074,7 @@ async def op_flows_code_execute(
         )
     except Exception as e:
         duration_ms = int((time.time() - start_time) * 1000)
-        logger.error(f"Ошибка выполнения: {e}", exc_info=True)
+        logger.error("flows.code.execute_failed", error=str(e), exc_info=True)
         error_payload = e.payload if isinstance(e, ImanBaseError) else None
         return ExecuteResponse(
             success=False,
@@ -1092,19 +1092,19 @@ def _validate_node_config(config: JsonObject) -> None:
     if node_type == "code":
         code = config.get("code")
         if not isinstance(code, str) or not code.strip():
-            raise ValueError("code, tool_id или function обязателен")
+            raise ValueError("code, tool_id or function is required")
 
     elif node_type == "external_api":
         if not config.get("url"):
-            raise ValueError("url обязателен для external_api")
+            raise ValueError("url is required for external_api")
 
     elif node_type == "remote_flow":
         flow_id = config.get("flow_id")
         if isinstance(flow_id, str) and flow_id.strip():
-            raise ValueError("remote_flow не поддерживает registry flow_id — укажите url")
+            raise ValueError("remote_flow does not support registry flow_id — specify url")
         url = config.get("url")
         if not isinstance(url, str) or not url.strip():
-            raise ValueError("url обязателен для remote_flow")
+            raise ValueError("url is required for remote_flow")
         metadata_template = config.get("metadata_template")
         if metadata_template is not None:
             if not isinstance(metadata_template, str):
@@ -1115,25 +1115,25 @@ def _validate_node_config(config: JsonObject) -> None:
 
     elif node_type == "flow":
         if not config.get("flow_id"):
-            raise ValueError("flow_id обязателен для flow")
+            raise ValueError("flow_id is required for flow")
 
     elif node_type == "llm_node":
         if not config.get("prompt"):
-            raise ValueError("prompt обязателен для llm_node")
+            raise ValueError("prompt is required for llm_node")
 
     elif node_type == "mcp":
         if not config.get("server_id"):
-            raise ValueError("server_id обязателен для mcp")
+            raise ValueError("server_id is required for mcp")
         if not config.get("tool_name"):
-            raise ValueError("tool_name обязателен для mcp")
+            raise ValueError("tool_name is required for mcp")
 
     elif node_type == "datasource":
         if not config.get("connector_id"):
-            raise ValueError("connector_id обязателен для datasource")
+            raise ValueError("connector_id is required for datasource")
         if not config.get("datasource_id"):
-            raise ValueError("datasource_id обязателен для datasource")
+            raise ValueError("datasource_id is required for datasource")
         if not config.get("datasource_operation"):
-            raise ValueError("datasource_operation обязателен для datasource")
+            raise ValueError("datasource_operation is required for datasource")
 
 
 def _graph_node_config_allowed_keys() -> frozenset[str]:

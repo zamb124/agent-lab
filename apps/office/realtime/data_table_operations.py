@@ -1,6 +1,7 @@
 """DataTable (SQLite FileRecord): один `op_*` на verb для REST и WS RPC.
 
-Байты остаются REST: экспорт таблицы (`GET .../export`) и импорт (multipart `POST .../import`).
+Байты ходят только через Files API: экспорт создаёт ephemeral `FileRecord`,
+импорт читает уже загруженный chunked upload по `upload_file_id`.
 """
 
 from __future__ import annotations
@@ -37,7 +38,10 @@ from core.data_tables.models import (
 )
 from core.data_tables.service import DataTableNotFoundError
 from core.documents.placement import DocsPlacement, DocsPlacementAnchor
+from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.models import FileRecord
+from core.files.registry import default_retention_for_source
+from core.files.types import ext_to_mime
 from core.models.base import StrictBaseModel
 from core.models.identity_models import User
 from core.pagination import CursorPage
@@ -94,6 +98,16 @@ class OfficeDataTableDeleteRowsPayload(DataTableDeleteRowsRequest):
 
 class OfficeDataTableQueryPayload(DataTableQueryRequest):
     file_id: str = Field(min_length=1)
+
+
+class OfficeDataTableExportPayload(StrictBaseModel):
+    file_id: str = Field(min_length=1)
+    table_name: str = Field(min_length=1)
+    source_format: Literal["csv", "xlsx"]
+
+
+class OfficeDataTableImportPayload(OfficeDataTableExportPayload):
+    upload_file_id: str = Field(min_length=1)
 
 
 async def _run(awaitable: Awaitable[T]) -> T:
@@ -363,3 +377,57 @@ async def op_data_tables_query(
     else:
         await _require_view(container, payload.file_id)
     return await _run(container.data_table_service.query(payload.file_id, payload.sql))
+
+
+async def op_data_tables_export(
+    payload: OfficeDataTableExportPayload,
+    *,
+    user: User,
+    container: OfficeContainer,
+) -> FileRecord:
+    """Выгрузка таблицы в CSV/XLSX как ephemeral файл; клиент скачивает его по `download_url`."""
+    _ = user
+    await _require_view(container, payload.file_id)
+    exported, filename = await _run(
+        container.data_table_service.export_tabular(
+            payload.file_id,
+            table_name=payload.table_name,
+            source_format=payload.source_format,
+        )
+    )
+    spec = FileCreateSpec(
+        source_kind=FileSourceKind.GENERATED_EPHEMERAL,
+        source_ref=FileSourceRef(),
+        retention=default_retention_for_source(FileSourceKind.GENERATED_EPHEMERAL),
+        post_create=FilePostCreate(is_public=False),
+    )
+    return await container.files_service.create(
+        spec,
+        exported,
+        original_name=filename,
+        content_type=ext_to_mime(f".{payload.source_format}"),
+    )
+
+
+async def op_data_tables_import(
+    payload: OfficeDataTableImportPayload,
+    *,
+    user: User,
+    container: OfficeContainer,
+) -> DataTableSchemaSnapshot:
+    """Импорт CSV/XLSX из файла, уже загруженного chunked Files API, в новую таблицу."""
+    _ = user
+    await _require_edit(container, payload.file_id)
+    company_id = require_active_company().company_id
+    upload = await container.files_service.get_optional(payload.upload_file_id)
+    if upload is None or upload.company_id != company_id:
+        raise_not_found(LookupError(f"import file {payload.upload_file_id!r} not found"))
+    raw = await container.files_service.read_bytes(upload)
+    return await _run(
+        container.data_table_service.import_tabular(
+            payload.file_id,
+            table_name=payload.table_name,
+            source_format=payload.source_format,
+            raw=raw,
+        )
+    )

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import Field, model_validator
+from pydantic import Field, computed_field, model_validator
 
 from core.models.base import StrictBaseModel
 from core.models.calendar_models import CalendarAutolinkStatus
@@ -84,22 +84,10 @@ class MailFoldersReorderPayload(StrictBaseModel):
     mailbox_binding_id: str
     folder_names: list[str] = Field(min_length=1)
 
-class StoredMailAttachmentRef(StrictBaseModel):
-    """Ссылка на вложение в локальном store (file_id после materialize)."""
-
-    filename: str = Field(min_length=1)
-    content_type: str = Field(min_length=1)
-    size: int = Field(default=0, ge=0)
-    file_id: str | None = None
-    available: bool = True
-    parse_error: str | None = None
-    content_id: str | None = None
-
-
 class IspmanagerProvisionConfig(StrictBaseModel):
     base_url: str
     authinfo_user: str
-    authinfo_password_encrypted: str | None = None
+    authinfo_password_encrypted: str | None = Field(default=None, exclude=True)
 
 
 class CompanyMailConnection(StrictBaseModel):
@@ -119,6 +107,12 @@ class CompanyMailConnection(StrictBaseModel):
     ispmanager: IspmanagerProvisionConfig | None = None
     created_at: datetime
     updated_at: datetime
+
+    @computed_field
+    @property
+    def has_ispmanager_auth(self) -> bool:
+        secret = None if self.ispmanager is None else self.ispmanager.authinfo_password_encrypted
+        return secret is not None and secret.strip() != ""
 
 
 class CompanyMailConnectionUpsertPayload(StrictBaseModel):
@@ -148,9 +142,21 @@ class MailboxBinding(StrictBaseModel):
     calendar_color: str = "default"
     calendar_autolink_status: CalendarAutolinkStatus = CalendarAutolinkStatus.DISABLED
     calendar_autolink_detail: str | None = None
-    password_encrypted: str | None = None
+    password_encrypted: str | None = Field(default=None, exclude=True)
+    connection_scope: MailConnectionScope = MailConnectionScope.COMPANY
+    imap_host: str | None = None
+    imap_port: int | None = Field(default=None, ge=1, le=65535)
+    smtp_host: str | None = None
+    smtp_port: int | None = Field(default=None, ge=1, le=65535)
+    use_ssl: bool | None = None
     created_at: datetime
     updated_at: datetime
+
+    @computed_field
+    @property
+    def has_password(self) -> bool:
+        secret = self.password_encrypted
+        return secret is not None and secret.strip() != ""
 
 
 class MailboxBindingCreatePayload(StrictBaseModel):
@@ -210,34 +216,10 @@ class MailboxBindingPatchPayload(StrictBaseModel):
     use_ssl: bool | None = None
 
 
-class MailboxBindingPublic(StrictBaseModel):
-    mailbox_binding_id: str
-    company_id: str
-    company_mail_connection_id: str
-    connection_scope: MailConnectionScope
-    user_id: str | None = None
-    kind: MailboxBindingKind
-    email_address: str
-    local_part: str
-    sync_enabled: bool
-    is_default: bool
-    calendar_color: str
-    calendar_autolink_status: CalendarAutolinkStatus
-    calendar_autolink_detail: str | None = None
-    has_password: bool
-    imap_host: str | None = None
-    imap_port: int | None = None
-    smtp_host: str | None = None
-    smtp_port: int | None = None
-    use_ssl: bool | None = None
-    created_at: datetime
-    updated_at: datetime
-
-
 class MailboxBindingsMeResponse(StrictBaseModel):
     """Мои mailbox bindings + server-driven company admin capability."""
 
-    items: list[MailboxBindingPublic]
+    items: list[MailboxBinding]
     can_admin: bool
 
 
@@ -382,62 +364,13 @@ class MailThreadPayload(StrictBaseModel):
     uid: str
 
 
-class MailAttachmentPublic(StrictBaseModel):
-    filename: str
-    content_type: str
-    size: int
-    available: bool = True
-    parse_error: str | None = None
-    file_id: str | None = None
-    content_id: str | None = None
-
-
-class InboundMailMessagePublic(StrictBaseModel):
-    uid: str
-    message_id: str | None = None
-    subject: str | None = None
-    from_address: str | None = None
-    to_addresses: list[str] = Field(default_factory=list)
-    body_text: str | None = None
-    body_html: str | None = None
-    unread: bool = True
-    flagged: bool = False
-    date: datetime | None = None
-    in_reply_to: str | None = None
-    references: str | None = None
-    attachments: list[MailAttachmentPublic] = Field(default_factory=list)
-
-
-class MailThreadMessagePublic(InboundMailMessagePublic):
-    folder: str
-
-
 class MailThreadResult(StrictBaseModel):
     thread_id: str
     subject: str | None = None
     participant_emails: list[str] = Field(default_factory=list)
-    items: list[MailThreadMessagePublic] = Field(default_factory=list)
+    items: list["MailThreadMessage"] = Field(default_factory=list)
     # UID в payload.folder, которые локально помечены seen при открытии треда (для IMAP enqueue).
     marked_seen_uids: list[str] = Field(default_factory=list)
-
-
-class CompanyMailConnectionPublic(StrictBaseModel):
-    company_mail_connection_id: str
-    company_id: str
-    scope: MailConnectionScope
-    owner_user_id: str | None = None
-    mail_domain: str
-    provider: MailProvider
-    imap_host: str
-    imap_port: int
-    smtp_host: str
-    smtp_port: int
-    use_ssl: bool
-    supports_provision: bool
-    status: MailConnectionStatus
-    has_ispmanager_auth: bool
-    created_at: datetime
-    updated_at: datetime
 
 
 class MailboxSecret(StrictBaseModel):
@@ -474,7 +407,7 @@ class MailAttachment(StrictBaseModel):
 
     filename: str = Field(min_length=1)
     content_type: str = Field(min_length=1)
-    content: bytes = Field(default=b"")
+    content: bytes = Field(default=b"", exclude=True)
     size: int = Field(default=0, ge=0)
     available: bool = True
     parse_error: str | None = None
@@ -564,6 +497,10 @@ class InboundMailMessage(StrictBaseModel):
     in_reply_to: str | None = None
     references: str | None = None
     attachments: list[MailAttachment] = Field(default_factory=list)
+
+
+class MailThreadMessage(InboundMailMessage):
+    folder: str
 
 
 class MailImapSystemFlag(StrEnum):
@@ -678,7 +615,7 @@ class StoredMailMessage(StrictBaseModel):
     snippet: str = ""
     body_text: str | None = None
     body_html: str | None = None
-    attachments: list[StoredMailAttachmentRef] = Field(default_factory=list)
+    attachments: list[MailAttachment] = Field(default_factory=list)
     in_reply_to: str | None = None
     references: str | None = None
     rag_document_id: str | None = None
@@ -730,3 +667,6 @@ class StoredMailboxFolder(StrictBaseModel):
     capabilities: list[str] = Field(default_factory=list)
     sort_index: int = 0
     updated_at: datetime
+
+
+_ = MailThreadResult.model_rebuild()

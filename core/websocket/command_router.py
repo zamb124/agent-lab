@@ -25,8 +25,10 @@ from pydantic import BaseModel, ValidationError
 
 from core.errors.boundary import (
     PlatformAccessDeniedError,
+    PlatformBoundaryError,
     PlatformConflictError,
     PlatformNotFoundError,
+    PlatformUnavailableError,
 )
 from core.events import register_platform_event
 from core.logging import get_logger
@@ -45,14 +47,47 @@ PayloadModelT = TypeVar("PayloadModelT", bound=BaseModel)
 class WsCommandError(Exception):
     """Доменная ошибка WS-команды. Превращается в `*_failed` фрейм."""
 
-    def __init__(self, code: str, detail: str) -> None:
+    def __init__(
+        self,
+        code: str,
+        detail: str,
+        *,
+        error_code: str | None = None,
+        error_params: JsonObject | None = None,
+    ) -> None:
         super().__init__(detail)
         if not code:
             raise ValueError("WsCommandError.code must be non-empty string")
         if not detail:
             raise ValueError("WsCommandError.detail must be non-empty string")
+        resolved_error_code = error_code if error_code is not None else code
+        if not resolved_error_code:
+            raise ValueError("WsCommandError.error_code must be non-empty string")
         self.code: str = code
         self.detail: str = detail
+        self.error_code: str = resolved_error_code
+        self.error_params: JsonObject = error_params if error_params is not None else {}
+
+
+def command_failure_payload(error: WsCommandError) -> JsonObject:
+    payload: JsonObject = {
+        "error_code": error.error_code,
+        "error_detail": error.detail,
+        "detail": error.detail,
+    }
+    if error.error_params:
+        payload["error_params"] = error.error_params
+    return payload
+
+
+def _boundary_failure_payload(error: PlatformBoundaryError) -> JsonObject:
+    payload: JsonObject = {
+        "error_code": error.error_code,
+        "error_detail": str(error),
+    }
+    if error.error_params:
+        payload["error_params"] = error.error_params
+    return payload
 
 
 CommandHandler = Callable[[JsonObject, User], Awaitable[JsonObject | None]]
@@ -142,7 +177,7 @@ def validate_ws_payload(model: type[PayloadModelT], payload: JsonObject) -> Payl
     try:
         return model.model_validate(payload)
     except ValidationError as exc:
-        raise WsCommandError("ws_invalid_payload", str(exc)) from exc
+        raise WsCommandError("ws_invalid_payload", str(exc), error_code="ws_invalid_payload") from exc
 
 
 def dump_ws_result(result: BaseModel | JsonValue | None) -> JsonObject | None:
@@ -164,12 +199,16 @@ async def dispatch_ws_command(
 
     - На успех: `(<command_type без _requested>_succeeded, handler_result)`.
     - На `WsCommandError` и ошибки границы `Platform*Error`:
-      `(<command_type без _requested>_failed, { error_code, error_detail })`.
+      `(<command_type без _requested>_failed, { error_code, error_detail, error_params? })`.
     - Любая другая ошибка handler'а пробрасывается наружу.
     """
     handler = get_ws_command_handler(command_type)
     if handler is None:
-        raise WsCommandError("ws_handler_not_found", f"No WS command handler for {command_type!r}")
+        raise WsCommandError(
+            "ws_handler_not_found",
+            f"No WS command handler for {command_type!r}",
+            error_code="ws_handler_not_found",
+        )
     if payload is None:
         payload_dict: JsonObject = {}
     else:
@@ -179,15 +218,18 @@ async def dispatch_ws_command(
             raise WsCommandError(
                 "ws_invalid_payload",
                 f"WS command {command_type!r} payload must be object|null",
+                error_code="ws_invalid_payload",
             ) from exc
     try:
         result = await handler(payload_dict, user)
     except WsCommandError as err:
-        return derive_failed_type(command_type), {"error_code": err.code, "error_detail": err.detail}
+        return derive_failed_type(command_type), command_failure_payload(err)
     except PlatformNotFoundError as err:
-        return derive_failed_type(command_type), {"error_code": "not_found", "error_detail": str(err)}
+        return derive_failed_type(command_type), _boundary_failure_payload(err)
     except PlatformConflictError as err:
-        return derive_failed_type(command_type), {"error_code": "conflict", "error_detail": str(err)}
+        return derive_failed_type(command_type), _boundary_failure_payload(err)
     except PlatformAccessDeniedError as err:
-        return derive_failed_type(command_type), {"error_code": "forbidden", "error_detail": str(err)}
+        return derive_failed_type(command_type), _boundary_failure_payload(err)
+    except PlatformUnavailableError as err:
+        return derive_failed_type(command_type), _boundary_failure_payload(err)
     return (derive_succeeded_type(command_type), result)

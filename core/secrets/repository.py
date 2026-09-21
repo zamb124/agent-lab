@@ -32,7 +32,7 @@ def _payload_from_row(
             return _MASKED_PAYLOAD.model_copy(deep=True)
         if row.value_encrypted is None:
             raise ValueError(
-                f"Секретная переменная '{row.variable_key}' без value_encrypted"
+                f"Secret variable '{row.variable_key}' without value_encrypted"
             )
         return VariableValuePayload.model_validate_json(decrypt_secret(row.value_encrypted))
     return VariableValuePayload.model_validate(require_json_object(row.value_payload, "value_payload"))

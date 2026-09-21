@@ -4,11 +4,13 @@
   "object_annotations": 385,
   "os_environ": 75,
   "except_pass": 39,
-  "force_global": 70,
+  "force_global": 69,
   "raw_storage_in_services": 3,
-  "http_exception_in_services": 696,
-  "logger_fstring": 405,
-  "tests_monkeypatch_internal": 186,
+  "http_exception_in_services": 373,
+  "logger_fstring": 0,
+  "logger_percent": 0,
+  "logger_sentence": 0,
+  "tests_monkeypatch_internal": 184,
   "tests_asyncmock": 457,
   "tests_skip_markers": 199
 }

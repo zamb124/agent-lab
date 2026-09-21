@@ -195,7 +195,7 @@ def _record_content(metadata: JsonObject, document_content: str) -> str:
 def _memory_scope(value: JsonValue | None) -> LLMContextMemoryScope:
     if isinstance(value, str) and value in _MEMORY_SCOPES:
         return value
-    raise ValueError("LLM context memory attributes.memory_scope должен быть допустимым scope")
+    raise ValueError('LLM context memory attributes.memory_scope must be a valid scope')
 
 
 def _required_metadata_str(metadata: JsonObject, key: str) -> str:

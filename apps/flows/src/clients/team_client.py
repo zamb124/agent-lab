@@ -57,7 +57,7 @@ class TeamClient:
         company_id = require_active_company().company_id
         stored_company = await self._company_repository.get(company_id)
         if stored_company is None:
-            raise ValueError(f"Company {company_id!r} не найдена")
+            raise ValueError(f"Company {company_id!r} not found")
         rows: list[JsonObject] = []
         for user_id, roles in stored_company.members.items():
             member_user = await self._user_repository.get(user_id)
@@ -84,9 +84,9 @@ class TeamClient:
     async def resolve_user(self, query: str, *, limit: int = 10) -> list[JsonObject]:
         needle = query.strip().casefold()
         if needle == "":
-            raise ValueError("query обязателен (имя или email)")
+            raise ValueError("query is required (name or email)")
         if limit < 1:
-            raise ValueError("limit должен быть >= 1")
+            raise ValueError("limit must be >= 1")
         matches: list[JsonObject] = []
         for row in await self.list_members():
             name = str(row["name"]).casefold()

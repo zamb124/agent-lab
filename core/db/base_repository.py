@@ -51,7 +51,7 @@ class BaseRepository(ABC, Generic[T]):
         Переопределяется в каждом репозитории для указания своего контейнера.
         """
         raise NotImplementedError(
-            f"Репозиторий {cls.__name__} должен реализовать get_service_url() для работы через HTTP"
+            f"Repository {cls.__name__} must implement get_service_url() to work over HTTP"
         )
 
     def __init__(self, storage: Storage, model_class: type[T]):
@@ -142,7 +142,7 @@ class BaseRepository(ABC, Generic[T]):
         if not context or not context.active_company:
             repository_name = self.__class__.__name__
             raise ValueError(
-                f"Репозиторий {repository_name} требует активную компанию в контексте (is_global=False)"
+                f"Repository {repository_name} requires an active company in context (is_global=False)"
             )
 
         # Используем subdomain если есть, иначе company_id
@@ -245,7 +245,7 @@ class BaseRepository(ABC, Generic[T]):
                 entity = self.model_class.model_validate_json(data)
                 entities.append(entity)
             except Exception as e:
-                logger.error(f"Ошибка парсинга {key}: {e}")
+                logger.error("db.repo.parse_failed", key=key, error=str(e))
                 continue
 
         return entities
@@ -283,7 +283,7 @@ class BaseRepository(ABC, Generic[T]):
                     entity = self.model_class.model_validate_json(all_data[final_key])
                     result[entity_id] = entity
                 except Exception as e:
-                    logger.error(f"Ошибка парсинга {entity_id}: {e}")
+                    logger.error("db.repo.entity_parse_failed", entity_id=entity_id, error=str(e))
                     continue
 
         return result

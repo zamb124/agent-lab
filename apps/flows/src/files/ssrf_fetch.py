@@ -50,7 +50,7 @@ def assert_public_http_url(url: str) -> str:
     """
     normalized = url.strip()
     if not normalized:
-        raise ValueError("Part.url пустой")
+        raise ValueError("Part.url is empty")
     parsed = urlparse(normalized)
     if parsed.scheme not in ("http", "https"):
         raise ValueError(f"Part.url scheme must be http or https, got {parsed.scheme!r}")

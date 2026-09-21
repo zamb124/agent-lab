@@ -11,7 +11,6 @@ import {
     agentDevicePolicyPatchOp,
     agentAuditLoadOp,
 } from '../../../../apps/frontend/ui/events/resources/agent.resource.js';
-import { buildCtx } from '../../helpers/bus-fixtures.js';
 
 describe('frontend/agent resource restMirror', () => {
     it('pairing create mirrors POST /frontend/api/agent/pairing', () => {
@@ -35,16 +34,35 @@ describe('frontend/agent resource restMirror', () => {
         });
     });
 
-    it('revoke requires device_id payload', async () => {
-        await expect(agentDeviceRevokeOp.run({}, buildCtx())).rejects.toThrow(
-            'agent_device_revoke: device_id required',
-        );
+    it('all ops are WS commands frontend/agent/* with REST mirror', () => {
+        const expected = {
+            [agentPairingCreateOp.name]: 'frontend/agent/pairing_create_requested',
+            [agentDevicesLoadOp.name]: 'frontend/agent/devices_list_requested',
+            [agentDeviceRevokeOp.name]: 'frontend/agent/device_revoke_requested',
+            [agentDevicePolicyPatchOp.name]: 'frontend/agent/device_policy_update_requested',
+            [agentAuditLoadOp.name]: 'frontend/agent/audit_list_requested',
+        };
+        for (const op of [
+            agentPairingCreateOp,
+            agentDevicesLoadOp,
+            agentDeviceRevokeOp,
+            agentDevicePolicyPatchOp,
+            agentAuditLoadOp,
+        ]) {
+            expect(op.transport).toBe('ws');
+            expect(op.commandType).toBe(expected[op.name]);
+        }
     });
 
-    it('policy patch requires policy payload', async () => {
-        await expect(
-            agentDevicePolicyPatchOp.run({ device_id: 'device-1' }, buildCtx()),
-        ).rejects.toThrow('agent_device_policy_patch: policy required');
+    it('revoke and policy patch mirror device routes', () => {
+        expect(agentDeviceRevokeOp.restMirror).toEqual({
+            method: 'DELETE',
+            path: '/frontend/api/agent/devices/:device_id',
+        });
+        expect(agentDevicePolicyPatchOp.restMirror).toEqual({
+            method: 'PATCH',
+            path: '/frontend/api/agent/devices/:device_id/policy',
+        });
     });
 
     it('releases status mirrors GET /frontend/api/agent/releases/status', () => {

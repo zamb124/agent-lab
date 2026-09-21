@@ -8,16 +8,10 @@ from a2a.types import Message, Part, Role
 from core.ai.models import ResolvedAIModel
 from core.ai.providers import AICapability, split_provider_prefixed_model
 from core.ai.requirements import AISelection
-from core.ai.resolver import COST_ORIGIN_PLATFORM, resolve_ai_model
-from core.ai.runtime import (
-    create_llm_client_from_ai_model,
-    should_use_platform_default_free_pool,
-)
-from core.billing import get_billing_service
-from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
+from core.ai.resolver import resolve_ai_model
+from core.ai.runtime import create_llm_client_from_ai_model
 from core.clients.llm.messages import build_a2a_message
 from core.config import get_settings
-from core.context import get_context
 from core.text_transforms.chunking import split_text_into_markdown_chunks
 from core.types import JsonObject
 
@@ -54,20 +48,16 @@ class TextTransformService:
     ) -> str:
         stripped = text.strip()
         if not stripped:
-            raise ValueError("summarize: text пуст")
+            raise ValueError('summarize: text is empty')
 
         resolved = self._resolve_company_llm_args(
             AICapability.LLM_SUMMARIZE,
             provider=provider,
             model=model,
         )
-        allow_platform_paid_fallback = await self._prepare_llm_billing(
-            resolved=resolved,
-        )
         llm = create_llm_client_from_ai_model(
             resolved,
             max_tokens=max_output_tokens,
-            allow_platform_paid_fallback=allow_platform_paid_fallback,
         )
         sys_text = instruction.strip() if instruction is not None and instruction.strip() else _DEFAULT_SUMMARY_INSTRUCTION
         messages: list[Message] = [
@@ -79,7 +69,7 @@ class TextTransformService:
         out = await llm.chat(messages, llm_context=_INTERNAL_TEXT_TRANSFORM_LLM_CONTEXT)
         summary = get_message_text(out).strip()
         if not summary:
-            raise ValueError("summarize: пустой ответ модели")
+            raise ValueError('summarize: empty model response')
         return summary
 
     async def format_markdown(
@@ -88,7 +78,7 @@ class TextTransformService:
     ) -> str:
         stripped = text.strip()
         if not stripped:
-            raise ValueError("format_markdown: text пуст")
+            raise ValueError('format_markdown: text is empty')
 
         resolved = self._resolve_company_llm_args(
             AICapability.LLM_FORMAT_MARKDOWN,
@@ -99,16 +89,10 @@ class TextTransformService:
         text_transform_cfg = settings.text_transforms
         chunk_lim = int(text_transform_cfg.markdown_max_chunk_chars)
 
-        allow_platform_paid_fallback = await self._prepare_llm_billing(
-            resolved=resolved,
-        )
-        llm = create_llm_client_from_ai_model(
-            resolved,
-            allow_platform_paid_fallback=allow_platform_paid_fallback,
-        )
+        llm = create_llm_client_from_ai_model(resolved)
         chunks = split_text_into_markdown_chunks(stripped, int(chunk_lim))
         if not chunks:
-            raise ValueError("format_markdown: нет чанков после разбиения")
+            raise ValueError('format_markdown: no chunks after split')
 
         joiner = text_transform_cfg.markdown_chunk_join
         formatted_parts: list[str] = []
@@ -129,7 +113,7 @@ class TextTransformService:
 
         result = joiner.join(formatted_parts).strip()
         if not result:
-            raise ValueError("format_markdown: пустой результат LLM-пути")
+            raise ValueError('format_markdown: empty LLM-path result')
         return result
 
     def _resolve_company_llm_args(
@@ -147,14 +131,14 @@ class TextTransformService:
             resolved = resolve_ai_model(capability, include_platform_default=True)
             if resolved is None:
                 raise ValueError(
-                    f"TextTransformService: platform default для capability={capability.value} "
-                    + "не настроен"
+                    f"TextTransformService: platform default for capability={capability.value} "
+                    + 'is not configured'
                 )
             return resolved
         if rp is None:
             raise ValueError(
-                f"TextTransformService: для capability={capability.value} provider и model "
-                + "должны быть заданы вместе"
+                f"TextTransformService: for capability={capability.value} provider and model "
+                + 'must be set together'
             )
         resolved = resolve_ai_model(
             capability,
@@ -163,45 +147,7 @@ class TextTransformService:
         )
         if resolved is None:
             raise ValueError(
-                f"TextTransformService: explicit provider/model для capability={capability.value} "
-                + "не удалось разрешить"
+                f"TextTransformService: explicit provider/model for capability={capability.value} "
+                + 'failed to resolve'
             )
         return resolved
-
-    async def _prepare_llm_billing(
-        self,
-        *,
-        resolved: ResolvedAIModel,
-    ) -> bool:
-        if resolved.model is None:
-            raise ValueError("TextTransformService: resolved LLM model пуст")
-        if resolved.cost_origin == COST_ORIGIN_PLATFORM and should_use_platform_default_free_pool(
-            model=resolved.model,
-            provider=resolved.provider,
-            api_key=resolved.api_key,
-            base_url=resolved.base_url,
-            folder_id=resolved.folder_id,
-            settings=get_settings(),
-        ):
-            actx = get_context()
-            if actx is None or actx.active_company is None:
-                raise ValueError("TextTransformService: нужен Context с active_company (биллинг)")
-            return await get_billing_service().company_may_incur_billable_operation_charge(
-                actx.active_company.company_id
-            )
-        await self._require_llm_balance(cost_origin=resolved.cost_origin)
-        return True
-
-    async def _require_llm_balance(self, *, cost_origin: str = COST_ORIGIN_PLATFORM) -> None:
-        actx = get_context()
-        if actx is None or actx.active_company is None:
-            raise ValueError("TextTransformService: нужен Context с active_company (биллинг)")
-        if not str(actx.user.user_id).strip():
-            raise ValueError("TextTransformService: нужен Context с user (биллинг)")
-        await get_billing_service().require_balance_for_billable_operation(
-            actx.active_company.company_id,
-            str(actx.user.user_id).strip(),
-            operation_code=BALANCE_BLOCK_OPERATION_LLM,
-            notification_service="flows",
-            cost_origin=cost_origin,
-        )

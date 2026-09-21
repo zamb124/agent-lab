@@ -34,9 +34,9 @@ _original_get_current_datetime: Callable[[bool], datetime.datetime] | None = Non
 def _read_date_header(url: str, method: Literal["GET", "HEAD"]) -> str | None:
     parsed = urlsplit(url)
     if parsed.scheme not in ("http", "https"):
-        raise ValueError(f"SigV4 clock sync: неподдерживаемая схема endpoint URL: {url!r}")
+        raise ValueError(f"SigV4 clock sync: unsupported endpoint URL scheme: {url!r}")
     if parsed.hostname is None:
-        raise ValueError(f"SigV4 clock sync: endpoint URL без host: {url!r}")
+        raise ValueError(f"SigV4 clock sync: endpoint URL has no host: {url!r}")
 
     path = parsed.path if parsed.path != "" else "/"
     if parsed.query != "":
@@ -86,7 +86,7 @@ def _apply_process_wide_offset(offset: datetime.timedelta) -> None:
 
     def _patched_get_current_datetime(remove_tzinfo: bool = True) -> datetime.datetime:
         if _original_get_current_datetime is None:
-            raise RuntimeError("s3_sigv4_clock: потерян оригинал get_current_datetime")
+            raise RuntimeError("s3_sigv4_clock: original get_current_datetime is lost")
         base = _original_get_current_datetime(remove_tzinfo)
         return base + offset
 
@@ -111,10 +111,7 @@ def _apply_process_wide_offset(offset: datetime.timedelta) -> None:
             setattr(crt_auth, "get_current_datetime", _patched_get_current_datetime)
 
     _clock_patch_applied = True
-    logger.info(
-        "SigV4: сдвиг времени относительно HTTP Date S3 endpoint: %s",
-        offset,
-    )
+    logger.info("files.sigv4.http.date.s3.endpoint", offset=offset)
 
 
 def ensure_sigv4_clock_aligned_with_endpoint(endpoint_url: str | None) -> None:
@@ -134,16 +131,13 @@ def ensure_sigv4_clock_aligned_with_endpoint(endpoint_url: str | None) -> None:
 
     date_hdr = _http_date_for_endpoint(raw)
     if not date_hdr:
-        logger.warning(
-            "SigV4 clock sync: не получен HTTP Date с %s — подпись по локальным часам",
-            raw,
-        )
+        logger.warning("files.sigv4.clock.sync.http.date", raw=raw)
         return
 
     try:
         server_dt = parsedate_to_datetime(date_hdr)
     except (TypeError, ValueError) as exc:
-        logger.warning("SigV4 clock sync: не разобрали Date %r: %s", date_hdr, exc)
+        logger.warning("files.sigv4.clock.sync.date", date_hdr=date_hdr, exc=exc)
         return
 
     if server_dt.tzinfo is not None:
@@ -159,7 +153,7 @@ def ensure_sigv4_clock_aligned_with_endpoint(endpoint_url: str | None) -> None:
     offset = server_utc_naive - local_utc_naive
 
     if abs(offset.total_seconds()) < 2.0:
-        logger.debug("SigV4 clock sync: |offset| < 2s, патч не нужен")
+        logger.debug("files.sigv4.clock.sync.offset.s")
         return
 
     _apply_process_wide_offset(offset)

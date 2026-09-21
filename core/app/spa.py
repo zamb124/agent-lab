@@ -38,11 +38,11 @@ def mount_service_spa(
     """
     index_file = ui_dir / "index.html"
     if not index_file.is_file():
-        raise FileNotFoundError(f"SPA index.html не найден: {index_file}")
+        raise FileNotFoundError(f"SPA index.html not found: {index_file}")
 
     core_frontend_path = get_project_root() / "core" / "frontend" / "static"
     if not core_frontend_path.is_dir():
-        raise FileNotFoundError(f"core/frontend/static не найден: {core_frontend_path}")
+        raise FileNotFoundError(f"core/frontend/static not found: {core_frontend_path}")
     app.mount(
         CORE_FRONTEND_MOUNT_PATH,
         StaticFiles(directory=str(core_frontend_path)),
@@ -55,7 +55,7 @@ def mount_service_spa(
     )
     for mount_path, directory, name in extra_static_mounts:
         if not directory.is_dir():
-            raise FileNotFoundError(f"static mount {name}: каталог не найден: {directory}")
+            raise FileNotFoundError(f"static mount {name}: catalog not found: {directory}")
         app.mount(mount_path, StaticFiles(directory=str(directory)), name=name)
 
     excluded = tuple(excluded_prefixes)

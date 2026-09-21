@@ -18,9 +18,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from apps.voice.dependencies import ContainerDep
 from core.ai.runtime import invalidate_voice_platform_pronunciation_cache
-from core.clients.tts_pronunciation.models import PronunciationRuleKind
+from core.clients.tts_pronunciation.models import PronunciationRule
 from core.context import require_context
-from core.db.models.platform import PlatformPronunciationRule
+from core.db.repositories.pronunciation_rule_repository import pronunciation_rule
 from core.logging import get_logger
 from core.models.identity_models import User
 
@@ -30,26 +30,6 @@ router = APIRouter(
     prefix="/api/v1/platform/pronunciation-rules",
     tags=["frontend", "platform", "pronunciation"],
 )
-
-
-# ---------------------------------------------------------------------------
-# DTO
-# ---------------------------------------------------------------------------
-
-class PlatformPronunciationRuleDTO(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    id: str
-    kind: Literal["alias", "regex", "stress"]
-    pattern: str
-    replacement: str
-    language: str | None = None
-    case_sensitive: bool = False
-    word_boundary: bool = True
-    providers: list[str] | None = None
-    voices: list[str] | None = None
-    enabled: bool = True
-    note: str | None = None
 
 
 class PlatformPronunciationRuleCreateRequest(BaseModel):
@@ -85,7 +65,7 @@ class PlatformPronunciationRuleUpdateRequest(BaseModel):
 class PlatformPronunciationRulesListResponse(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    items: list[PlatformPronunciationRuleDTO]
+    items: list[PronunciationRule]
 
 
 # ---------------------------------------------------------------------------
@@ -98,35 +78,13 @@ async def _require_superadmin(container: ContainerDep) -> User:
     company = context.active_company
     if company is None or company.company_id != "system":
         raise HTTPException(
-            status_code=403, detail="Управление платформенными правилами доступно только системным администраторам"
+            status_code=403, detail="Platform rules can be managed only by system administrators"
         )
     await container.authz_service.require_company_admin(
         company_id="system",
         user_id=user.user_id,
     )
     return user
-
-
-def _rule_kind(value: str) -> PronunciationRuleKind:
-    if value not in ("alias", "regex", "stress"):
-        raise ValueError(f"Неизвестный kind правила произношения: {value!r}")
-    return value
-
-
-def _row_to_dto(row: PlatformPronunciationRule) -> PlatformPronunciationRuleDTO:
-    return PlatformPronunciationRuleDTO(
-        id=row.id,
-        kind=_rule_kind(row.kind),
-        pattern=row.pattern,
-        replacement=row.replacement,
-        language=row.language,
-        case_sensitive=row.case_sensitive,
-        word_boundary=row.word_boundary,
-        providers=list(row.providers) if row.providers else None,
-        voices=list(row.voices) if row.voices else None,
-        enabled=row.enabled,
-        note=row.note,
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -140,14 +98,14 @@ async def list_platform_pronunciation_rules(
     """Список платформенных правил произношения TTS."""
     _ = await _require_superadmin(container)
     rows = await container.platform_pronunciation_rule_repository.list_all()
-    return PlatformPronunciationRulesListResponse(items=[_row_to_dto(r) for r in rows])
+    return PlatformPronunciationRulesListResponse(items=[pronunciation_rule(r) for r in rows])
 
 
-@router.post("", response_model=PlatformPronunciationRuleDTO, status_code=201)
+@router.post("", response_model=PronunciationRule, status_code=201)
 async def create_platform_pronunciation_rule(
     payload: PlatformPronunciationRuleCreateRequest,
     container: ContainerDep,
-) -> PlatformPronunciationRuleDTO:
+) -> PronunciationRule:
     """Создать платформенное правило произношения TTS."""
     user = await _require_superadmin(container)
     row = await container.platform_pronunciation_rule_repository.create(
@@ -169,15 +127,15 @@ async def create_platform_pronunciation_rule(
         kind=payload.kind,
         actor_user_id=user.user_id,
     )
-    return _row_to_dto(row)
+    return pronunciation_rule(row)
 
 
-@router.put("/{rule_id}", response_model=PlatformPronunciationRuleDTO)
+@router.put("/{rule_id}", response_model=PronunciationRule)
 async def update_platform_pronunciation_rule(
     rule_id: str,
     payload: PlatformPronunciationRuleUpdateRequest,
     container: ContainerDep,
-) -> PlatformPronunciationRuleDTO:
+) -> PronunciationRule:
     """Обновить платформенное правило произношения TTS."""
     user = await _require_superadmin(container)
     row = await container.platform_pronunciation_rule_repository.update(
@@ -194,14 +152,14 @@ async def update_platform_pronunciation_rule(
         note=payload.note,
     )
     if row is None:
-        raise HTTPException(status_code=404, detail="Правило не найдено")
+        raise HTTPException(status_code=404, detail="Rule not found")
     invalidate_voice_platform_pronunciation_cache()
     logger.info(
         "frontend.platform_pronunciation_rule_updated",
         rule_id=rule_id,
         actor_user_id=user.user_id,
     )
-    return _row_to_dto(row)
+    return pronunciation_rule(row)
 
 
 @router.delete("/{rule_id}")

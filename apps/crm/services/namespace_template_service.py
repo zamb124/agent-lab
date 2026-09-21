@@ -46,7 +46,7 @@ class NamespaceTemplateService:
     def _get_company_id() -> str:
         context = get_context()
         if context is None or context.active_company is None:
-            raise ValueError("Нет активной компании в контексте")
+            raise ValueError("No active company in context")
         return context.active_company.company_id
 
     async def _load_company_types(self) -> list[EntityType]:
@@ -84,7 +84,7 @@ class NamespaceTemplateService:
         missing = REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS - final_ids
         if missing:
             raise ValueError(
-                f"Шаблон namespace обязан содержать типы note и task; в шаблоне отсутствуют: {', '.join(sorted(missing))}"
+                f"Namespace template must contain note and task types; missing: {', '.join(sorted(missing))}"
             )
 
     async def _materialize_entity_type_row(
@@ -157,7 +157,7 @@ class NamespaceTemplateService:
         )
         if refreshed is None:
             raise ValueError(
-                f"EntityType {item.type_id!r} не найден после update_metadata в namespace {target_namespace!r}"
+                f"EntityType {item.type_id!r} not found after update_metadata in namespace {target_namespace!r}"
             )
         return refreshed
 
@@ -208,7 +208,7 @@ class NamespaceTemplateService:
                 break
         if source_ns is None:
             raise ValueError(
-                f"Тип сущности {type_id!r} не найден ни в одном namespace компании. Добавьте тип в каталоге или через шаблон namespace."
+                f"Entity type {type_id!r} was not found in any company namespace. Add the type in the catalog or via a namespace template."
             )
         _ = await self._entity_type_repo.clone_entity_type_between_namespaces(
             type_id,
@@ -360,7 +360,7 @@ class NamespaceTemplateService:
             missing_locked = locked_type_ids - requested_set
             if missing_locked:
                 raise ValueError(
-                    f"Нельзя убрать типы с существующими сущностями: {', '.join(sorted(missing_locked))}"
+                    f"Cannot remove types that still have entities: {', '.join(sorted(missing_locked))}"
                 )
 
             current_allowed_type_ids = set(editability.current_allowed_type_ids)

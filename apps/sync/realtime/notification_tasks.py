@@ -29,11 +29,7 @@ async def deliver_channel_message_notification(
     body_preview: str,
 ) -> None:
     if await is_user_connected(recipient_user_id, company_id=company_id):
-        logger.debug(
-            "sync notify skipped: user connected: user=%s channel=%s",
-            recipient_user_id,
-            channel_id,
-        )
+        logger.debug("sync.notify.skipped.user.connected", user=recipient_user_id, channel=channel_id)
         return
 
     container = get_sync_container()
@@ -43,11 +39,7 @@ async def deliver_channel_message_notification(
         company_id=company_id,
     )
     if muted:
-        logger.debug(
-            "sync notify skipped: muted: user=%s channel=%s",
-            recipient_user_id,
-            channel_id,
-        )
+        logger.debug("sync.notify.skipped.muted.user", user=recipient_user_id, channel=channel_id)
         return
 
     line = f"{sender_display_name}: {body_preview}".strip()
@@ -90,11 +82,7 @@ async def deliver_sync_mention_notification(
         company_id=company_id,
     )
     if muted:
-        logger.debug(
-            "sync mention notify skipped: muted: user=%s channel=%s",
-            recipient_user_id,
-            channel_id,
-        )
+        logger.debug("sync.mention.notify.skipped.muted", user=recipient_user_id, channel=channel_id)
         return
 
     line = f"{sender_display_name}: {body_preview}".strip()

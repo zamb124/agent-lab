@@ -28,8 +28,8 @@ from apps.flows.src.models.tool_reference import (
     ToolsListPayload,
     ToolsTagGroupsPayload,
     ToolsToolIdPayload,
-    ToolTagGroupResponse,
 )
+from apps.flows.src.models.tool_tag_group import ToolTagGroup
 from apps.flows.src.services.tool_preview import ToolPreviewRequest, ToolPreviewResponse
 from core.context import reset_context, set_context
 from core.models.context_models import Context
@@ -188,7 +188,7 @@ async def test_tools_tag_groups_rest_and_op_share_payload(
         headers=auth_headers_system,
     )
     assert http_resp.status_code == 200, http_resp.text
-    _ = OffsetPage[ToolTagGroupResponse].model_validate(http_resp.json())
+    _ = OffsetPage[ToolTagGroup].model_validate(http_resp.json())
     with _system_scope(system_user_id) as user:
         listed = await op_flows_tools_tag_groups(payload, user=user, container=container)
     assert listed.model_dump(mode="json") == http_resp.json()

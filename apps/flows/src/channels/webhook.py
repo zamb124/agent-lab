@@ -326,13 +326,15 @@ class WebhookChannelHandler(BaseChannelHandler):
 
             if response.status_code >= 400:
                 logger.error(
-                    f"Webhook request failed: {response.status_code} - {response.text}"
+                    "webhook.request_failed",
+                    status_code=response.status_code,
+                    response_text=response.text,
                 )
                 raise RuntimeError(
                     f"Webhook error: {response.status_code} - {response.text}"
                 )
 
-            logger.info(f"Webhook sent to {url}: {response.status_code}")
+            logger.info("flows.webhook.sent", url=url, status_code=response.status_code)
 
             return parse_json_object(response.content, "webhook.response")
 

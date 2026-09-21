@@ -1,176 +1,119 @@
 ---
-description: "БД, репозитории, модели, Storage, изоляция, миграции"
+description: "БД, репозитории, модели Oxyde, изоляция, одна начальная миграция на базу"
 alwaysApply: false
 ---
 # База данных и репозитории
 
-**Главный принцип:** все данные **только** через репозитории. `Storage` — приватный класс. Схема PostgreSQL задаётся **только Alembic** (`migrations/<service>/`, `make migrate`); в `apps/*` запрещены `Base.metadata.create_all` и скрытые DDL-обходы.
+Доступ к PostgreSQL — только через репозиторий. Таблица — класс `oxyde.Model`: тот же класс является Pydantic-сущностью. Отдельной строки SQLAlchemy, KV-конверта `key`/`value` и функции, которая перекладывает поля между ними, нет.
+
+Схема базы — один файл `migrations/<db>/0001_initial.py`, снятый с моделей этой базы. Цепочки ревизий нет.
 
 ## Схема БД (каждый сервис — своя PostgreSQL-база)
 
-| ENV | База | Владелец моделей |
+| ENV | База | Модели |
 |---|---|---|
-| `DATABASE__SHARED_URL` | `platform_shared` | `core/db/models/platform.py` |
-| `DATABASE__FLOWS_URL` | `platform_agents` | `apps/flows/src/db/models.py` |
-| `DATABASE__CRM_URL` | `platform_crm` | `apps/crm/db/models.py` |
-| `DATABASE__SYNC_URL` | `platform_sync` | `apps/sync/db/models.py` |
+| `DATABASE__SHARED_URL` | `platform_shared` | `core/db/models/` |
+| `DATABASE__FLOWS_URL` | `platform_agents` | `apps/flows/src/db/models/` |
+| `DATABASE__CRM_URL` | `platform_crm` | `apps/crm/db/models/` |
+| `DATABASE__SYNC_URL` | `platform_sync` | `apps/sync/db/models/` |
 | `DATABASE__RAG_URL` | `platform_rag` | `core/db/models/rag.py` |
-| `DATABASE__SECRETS_URL` | `platform_secrets` | `core/secrets/db_models.py` |
+| `DATABASE__OFFICE_URL` | `platform_office` | `apps/office/db/models/` |
+| `DATABASE__WIKI_URL` | `platform_wiki` | `apps/wiki/db/models/` |
+| `DATABASE__WORKTRACKER_URL` | `platform_worktracker` | `core/worktracker/models.py` |
+| `DATABASE__SEARCH_URL` | `platform_search` | `apps/search/db/models/` |
+| `DATABASE__SECRETS_URL` | `platform_secrets` | `core/secrets/models.py` |
+| `DATABASE__TRACING_URL` | `platform_tracing` | `core/db/models/tracing.py` |
+| `DATABASE__REALTIME_URL` | `platform_realtime` | `apps/realtime/db/models/` |
 | `DATABASE__REDIS_URL` | Redis | — |
 
-Таблицы из `core/db/models/platform.py` (`users`, `usage`, `push_subscriptions`, `cookie_consents`, …) живут только в **shared**. Legacy `variables` в shared удалена миграцией `20260628_0016`; версионируемые переменные компании — в **secrets** (`platform_secrets`, `SecretsRepository`). Журнал cookie consent — SQL `cookie_consents` (не KV), пишет `CookieConsentRepository` во frontend.
+Один и тот же URL во все `DATABASE__*_URL` нельзя: у каждой базы свой каталог моделей и свой `0001_initial.py`.
 
-CLI миграций — `scripts/db_migrate.py` (argparse). Подробности — `migrations.mdc`.
+CLI — `scripts/db_migrate.py`. Накат и состав баз — **`migrations.mdc`**.
 
-## Структура
-
-```
-core/db/
-├── models/{__init__.py,base.py,platform.py,rag.py}
-├── storage.py              # Storage (приватный)
-├── base_repository.py      # BaseRepository (композиция со Storage)
-├── service_registry.py
-├── migrations.py
-└── repositories/           # core репозитории (shared)
-
-apps/flows/src/db/
-├── models.py               # Flows, FlowsVersions, Nodes, Tools, workflow ledger, Resources, ScheduledTasks, ...
-└── *_repository.py         # flow / node / tool / durable execution / evaluation / llm_model / scheduled_task / mcp / resource
-
-apps/crm/db/models.py       # CRMEntity, EntityType, RelationshipType, ...
-apps/sync/db/models.py      # SyncSpace, SyncChannel, SyncMessage, ...
-```
-
-## `BaseRepository`
+## Модель
 
 ```python
-class BaseRepository(ABC, Generic[T]):
-    is_global: bool = False
-    owner_service: str = "core"
+from oxyde import Field, Model
 
-    def __init__(self, storage: Storage, model_class: Type[T]):
-        self._storage = storage
-        self.model_class = model_class
+class User(Model):
+    user_id: str = Field(db_pk=True)
 
-    def _build_final_key(self, key: str) -> str:
-        if self.is_global:
-            return key
-        company_id = get_context().active_company.company_id
-        return f"company:{company_id}:{key}"
-
-    @abstractmethod
-    def _extract_entity_id(self, entity: T) -> str: ...
-    # _get_key / _get_prefix / _get_table_name — переопределяются при необходимости
+    class Meta:
+        is_table = True
+        table_name = "users"
 ```
 
-API: `get`, `set`, `delete`, `list_all`, `get_many`. `CompanyRepository.put_member_roles` / `discard_member` — атомарный roster (SELECT FOR UPDATE), чтобы параллельный `set` всей Company не затирал чужих `members`. `EvaluationRepository`/`ScheduledTaskRepository` — свои методы (`save`, `list_tasks`, …).
+- Базовый класс — `oxyde.Model`. Поля — `oxyde.Field`. `Meta.is_table = True` обязателен у таблицы.
+- `Field` принимает параметры Pydantic (`title`, `description`, `json_schema_extra`, `ge`, `max_length`, `pattern`) и параметры колонки (`db_pk`, `db_index`, `db_unique`, `db_type`, `db_default`, `db_column`, `db_on_delete`). Второй фабрики поля нет.
+- Один класс на сущность. Response с теми же колонками не заводится. Отдельный тип допустим, когда форма другая: тело команды, patch, список без тела, проекция нескольких таблиц, секрет не отдаётся наружу.
+- Первичный ключ — одна колонка (`user_id`, `company_id`, `flow_id`, `entity_id`, …). Составная уникальность — `Meta.unique_together`.
+- `int` на PostgreSQL — `BIGINT`, PK — `BIGSERIAL`. Четырёхбайтовый счётчик — `db_type="INTEGER"`.
+- `str` без `max_length` — `VARCHAR(255)`. Длинный текст — `db_type="TEXT"`.
+- `dict` — `JSONB`. `list[T]` — массив PostgreSQL. Свой тип — `db_type` (`vector(1024)`, `TSVECTOR`).
+- Строковый `Enum` — нативный enum PostgreSQL. `IntEnum` запрещён: Oxyde поднимает `TypeError` на объявлении класса. Хранить целое — аннотация `int`.
+- Индекс на колонке — `db_index=True`. Составной и частичный — `Meta.indexes` (`Index(..., where="...")`). GIN — `method="gin"` или `db_index_method="gin"`.
+- `created_at` / `updated_at` выставляют `pre_save`. Колонка, которую заполняет сама база, — `db_default="CURRENT_TIMESTAMP"`.
+- Вложенный документ (граф flow, `attributes`) — поле этой же модели. Отдельной таблицы и KV-строки под него нет. Если вложенный BaseModel не сериализуется в JSONB, колонка имеет `db_type="JSONB"`, а `pre_save` валидирует значение тем же классом. Модуля перевода между двумя моделями нет.
+- Связь объявляется типом поля. Без `.join()` / `.prefetch()` связанный объект пустой. Ленивой загрузки нет.
 
-## Реестр репозиториев
+### Глобальные модели
 
-### Core (shared БД)
+Без колонки `company_id`:
 
-| Репозиторий | is_global | Таблица | Префикс ключа |
-|---|---|---|---|
-| `UserRepository` | True | `users` | `user:` |
-| `CompanyRepository` | True | `storage` | `company:` |
-| `AuthSessionRepository` | True | `users` | `auth_session:` |
-| `SubdomainRepository` | True | `storage` | `subdomain:` |
-| `SecretsRepository` | False | `platform_secrets` (БД secrets) | `secret_variable:` |
-| `UsageRepository` | False | `usage` | `company:X:usage:` |
-| `FileRepository` | False | `storage` | `company:X:file:` |
-| `DocumentStatusRepository` | False | `storage` | `company:X:doc_status:` |
-| `EmbedConfigRepository` / `EmbedMappingRepository` | False | `storage` | `company:X:embed_config:` / `…:embed_mapping:` |
-| `NamespaceRepository` | False | `namespaces` | `company:X:namespace:` |
-| `PushSubscriptionRepository` | False | `push_subscriptions` | `company:X:push:` |
-| `AIModelCatalogRepository` | **True** | `storage` | `ai_model_catalog:{provider}:{model_id}` |
-| `GuestRuntimeRepository` | **True** | `storage` (shared) | `guest_runtime:{flow_id}:{node_id}` |
+- `User`, `UserProvider`, `AuthSession`
+- каталог AI-моделей
+- `GuestRuntime`
 
-### Сервис flows (БД `platform_agents`)
+`Company` — сама тенант-запись, первичный ключ `company_id`. Остальные модели содержат `company_id: str = Field(db_index=True)`.
 
-| Репозиторий | is_global | Таблица | Ключ |
-|---|---|---|---|
-| `FlowRepository` | False | `flows` (+ `flows_versions`) | `flow:{flow_id}` |
-| `NodeRepository` | False | `nodes` | `node:{id}` |
-| `ToolRepository` | False | `tools` | `tool:{id}` |
-| `DurableWorkflowRepository` | False | `workflow_events`, `workflow_snapshots`, `workflow_instances`, `execution_branches`, `activity_tasks` | ledger по `company_id + session_id` |
-| `ResourceRepository` | False | `resources` | `resource:{id}` |
-| `MCPServerRepository` | False | `mcp_servers` | `mcp_server:{id}` |
-| `EvaluationRepository` | — | `evaluation_results` | прямые INSERT/SELECT |
-| `ScheduledTaskRepository` | — | `scheduled_tasks` | SQL по `ScheduledTasks`, не наследует `BaseRepository` |
+## Подключение
 
-## `is_global`
-
-- **`is_global=True`** — глобальные сущности (User, Company, AuthSession, Subdomain, AI model catalog). Ключ без префикса `company:`.
-- **`is_global=False`** — изолированы по компании. `BaseRepository._build_final_key` сам добавляет `company:{id}:` к ключу.
-
-**Запрещено:**
-- Ручное добавление префикса `company:` (репозиторий сам делает).
-- Обход изоляции через `force_global` у `Storage` из прикладного кода.
-
-## Service vs Shared БД
-
-`FlowContainer(db_url="postgresql://localhost/platform_agents", shared_db_url="postgresql://localhost/platform_shared")`. Маршрутизация:
-
-- `flow_repo`, `node_repo`, `tool_repo`, `durable_workflow_repository`, `resource_repo`, `mcp_repo`, `llm_model_repo` → service БД (`storage` / соответствующие таблицы).
-- `user_repo`, `company_repo`, `usage_repo`, `file_repo`, `push_subscription_repo` → shared БД (`shared_storage`).
-- `GuestRuntimeRepository` (`apps/guest_runtime`, `owner_service=guest_runtime`, `is_global=True`) → **shared** `storage` (`GuestRuntimeContainer` поднимается с `db_url=shared_url`). Ключ `guest_runtime:{flow_id}:{node_id}`. Не service-БД flows.
-- Переменные компании — `SecretsRepository` / `VariablesService` через сервис **secrets** (`DATABASE__SECRETS_URL`), не через shared `variables`.
-
-## Использование
+Процесс поднимает свою базу как `default`. Shared подключается вторым алиасом, когда репозитории процесса читают shared.
 
 ```python
-from apps.flows.src.container import get_container
-container = get_container()
+from oxyde import PoolSettings, db
 
-flow = await container.flow_repository.get("flow_id")
-await container.flow_repository.set(flow)
-await container.flow_repository.delete("flow_id")
-flows = await container.flow_repository.list_all(limit=100)
-batch = await container.flow_repository.get_many(["id1", "id2"])
+await db.init(
+    default=settings.database.flows_url,
+    shared=settings.database.shared_url,
+    settings=PoolSettings(max_connections=settings.database.pool_max_connections),
+)
 ```
 
-## Создание нового репозитория
+`pool_max_connections` задан в настройках. Молчаливого размера пула в коде нет.
+
+Модели shared читаются менеджером, у которого `using="shared"` зафиксирован. Голого `objects` у них нет: запрос без алиаса в default-базу процесса не уходит. Закрытие — `await db.close()` в shutdown `create_service_app`.
+
+`AsyncSession`, `create_async_engine` и SQLAlchemy в `apps/` и `core/` не используются.
+
+## Репозиторий
+
+Сервис, нода и таск ходят в базу только через репозиторий из контейнера (`@lazy`). Прямой `Model.objects` снаружи репозитория запрещён.
+
+Репозиторий не собирает модель из `dict`, не вызывает `model_dump` ради записи и не держит сессию. Фильтр компании добавляет менеджер `core.db.company_scope`: `company_id` берётся из `get_context()`. Глобальный менеджер фильтр не добавляет. Shared-менеджер дополнительно фиксирует алиас `shared`.
 
 ```python
-class MyRepository(BaseRepository[MyModel]):
-    is_global = False
-    owner_service = "flows"
-
-    def __init__(self, storage: Storage):
-        super().__init__(storage=storage, model_class=MyModel)
-
-    def _get_key(self, entity_id: str) -> str: return f"my:{entity_id}"
-    def _get_prefix(self) -> str: return "my:"
-    def _get_table_name(self) -> str: return "storage"
-    def _extract_entity_id(self, entity: MyModel) -> str: return entity.id
+user = await User.shared.get(user_id=user_id)
+flows = await Flow.company.filter(flow_id=flow_id).all()
 ```
 
-Регистрация в контейнере — `@lazy` property; FastAPI dependency — через `ContainerDep` (см. `architecture.mdc` — DI).
+Создание — `objects.create` или `save`. Частичное обновление — `save(update_fields=[...])` или `QuerySet.update`. Атомарный счётчик — `F`. Граница транзакции — `async with transaction.atomic()`. Вложенный `atomic` — savepoint.
 
-## Межсервисный доступ к данным
+Операция, которая пишет в свою базу и в shared, — два `atomic()` на двух алиасах, по порядку. Общей транзакции на две базы нет: при падении второй записи репозиторий явно откатывает первую. Скрытого двухфазного коммита нет.
 
-Репозиторий приоритетнее `ServiceClient`; прямой `httpx` между сервисами запрещён — канон в **`architecture.mdc`** § «Межсервисный доступ к данным», механика клиентов — **`integrations.mdc`**.
+Поиск по `vector` и `tsvector` — `execute_raw` в репозитории владельца (RAG, CRM). Результат валидируется в ту же модель. Второго построителя запросов нет.
 
-## Модели
+## Схема и миграция
 
-### Shared vs service-specific
+Источник правды — классы моделей. У каждой базы каталог `migrations/<db>/` и ровно один файл `0001_initial.py`. Его снимает `oxyde makemigrations --name initial` с конфига этой базы (`MODELS`, `DIALECT = "postgres"`, `MIGRATIONS_DIR`, URL из `DATABASE__*_URL`).
 
-- **Shared (`core/models/`)**: `identity_models.py` (User, Company, AuthSession), `context_models.py` (Context), `files/models.py` (FileRecord, AudioRecord, AudioAttachmentContent, AudioTranscriptionStatus — единый аудио/STT контракт: `duration_ms`, `transcription_{status,text,error}`).
-- **Service-specific (`apps/flows/src/models/`)**: `flow_config.py` (FlowConfig, NodeConfig, BranchConfig, …), `enums.py` (NodeType, CodeMode, …), `evaluation_result.py`, `llm_model.py`, `resource.py`, `mcp.py`.
-- `ExecutionState` — `core/state/` (Pydantic), не в `apps/flows/src/models/`.
+Правка схемы: меняешь модель, удаляешь `0001_initial.py`, генерируешь его заново, удаляешь базу, накатываешь `0001`. Файлов `0002_*` нет. Данные со старой схемы не переносятся.
 
-**Запрет дубликатов:** не создавать `context_models.py`/`identity_models.py`/`file_models.py` в `apps/flows/src/models/` — они в core.
+`create_tables()` / `drop_tables()` в `apps/` и в lifespan сервиса запрещены. Интеграционные тесты и прод накатывают `0001`.
 
-### Кастомный `Field`
+`CREATE EXTENSION IF NOT EXISTS vector` — первая команда `upgrade()` в `0001` баз `platform_shared`, `platform_crm`, `platform_rag`. После повторной генерации `0001` эта строка обязана остаться.
 
-**Используй `from core.fields import Field`**, не `from pydantic import Field`. Кастомные поля автоматически переносятся в `json_schema_extra`: `readonly`, `placeholder`, `groups`, `widget_attrs`, `exclude_from_form`, `editable_in_table`, `hidden`.
-
-```python
-from core.fields import Field
-
-class User(BaseModel):
-    user_id: str = Field(title="ID", readonly=True, placeholder="user_123")
-```
+Создание пустых баз (`CREATE DATABASE`) делает `core.db.postgres_service_databases` до `oxyde migrate`. Oxyde базы не создаёт.
 
 ## Redis (доменный кэш)
 
@@ -196,25 +139,25 @@ class User(BaseModel):
 - **Pub/Sub** (`publish` / `subscribe`) — не ключи, TTL не применим.
 - **TaskIQ** (`TASKS__BROKER_URL`) — retention через `stream_maxlen_by_queue`; мониторинг — Grafana dashboard **Redis** + `redis_inventory_tick`.
 
+OAuth `auth_state` живёт в Redis с TTL, не в PostgreSQL.
+
 ### Workflow projection cache
 
 Ключ `flows:workflow_projection:{company_id}:{session_id}` — disposable cache поверх Postgres ledger (`session.mdc`). TTL 14 суток (скользящий при append); при terminal status (`completed`/`failed`/`canceled`) ключ удаляется. Источник истины — `workflow_events`, не Redis.
 
 Инвентаризация Redis: idle-задача `redis_inventory_tick` (каждые 15 мин) + Grafana dashboard **Redis** (Platform). Structured logs: `redis.inventory.*` в Loki.
 
-## Storage — только для репозиториев
+## Межсервисный доступ к данным
 
-Использовать `Storage` напрямую из прикладного кода запрещено: `await container.storage.get("flow:my_flow")` — нет; `await container.flow_repository.get("my_flow")` — да.
+Репозиторий приоритетнее `ServiceClient`; прямой `httpx` между сервисами запрещён — канон в **`architecture.mdc`** § «Межсервисный доступ к данным», механика клиентов — **`integrations.mdc`**.
 
-`BaseRepository` обращается к `_storage._get_with_session_and_table(key, table)` / `_set_with_table(key, value, table)` — только внутри репозитория.
+## Запреты
 
-## КРИТИЧНЫЕ ПРАВИЛА
-
-1. Всегда через репозитории; никогда напрямую `Storage`.
-2. Не добавлять префикс `company:` вручную — `BaseRepository` делает.
-3. Всегда определять `is_global` в классе.
-4. Не обходить изоляцию через `force_global` у `Storage` из прикладного кода.
-5. Репозитории — только из контейнера.
-6. Никаких дубликатов моделей между core и apps.
-7. Shared (User, Company, FileRecord) → `core/` → shared БД. Service-specific (FlowConfig, NodeConfig) → `apps/flows/`. `ExecutionState` (тип) → `core/state/`; durable history → `DurableWorkflowRepository` → service БД.
-8. `core.fields.Field` — везде в Pydantic v2.
+1. SQLAlchemy, Alembic, `Storage`, `BaseRepository`, префиксы ключей `user:` / `company:` / `flow:`.
+2. Вторая модель с тем же набором колонок.
+3. `Model.objects` вне репозитория.
+4. Больше одного файла миграции на базу.
+5. `create_tables()` в сервисе.
+6. Ручной `company_id` мимо менеджера `company_scope` в прикладном запросе.
+7. Репозиторий не из контейнера.
+8. Дубль модели между `core/` и `apps/<svc>/`. Shared-сущности (`User`, `Company`, файл) живут в `core/` и в `platform_shared`. Сущности сервиса — в его базе.

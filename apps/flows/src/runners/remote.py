@@ -23,8 +23,6 @@ from core.capabilities import (
     CodeSandboxPolicy,
     CodeValidationRequest,
     CodeValidationResponse,
-    JsonObject,
-    JsonValue,
     locked_down_code_sandbox_policy,
 )
 from core.capabilities.source_sanitize import reject_forbidden_platform_imports
@@ -46,6 +44,7 @@ from core.state.mutation_policy import (
     snapshot_frozen_fields,
 )
 from core.tracing.operation_span import traced_operation
+from core.types import JsonObject, JsonValue
 
 CAPABILITY_MANIFEST_PATH = "/capability-gateway/api/v1/capabilities/manifest"
 TOOL_RUNTIME_MANIFEST_PATH = "/flows/api/v1/tool-runtime/manifest"

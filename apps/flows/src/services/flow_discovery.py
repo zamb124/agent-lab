@@ -40,11 +40,11 @@ class FlowDiscoveryService:
                     name=item.name,
                 )
                 registered += 1
-                logger.info(f"Flow '{flow_cfg.name}' registered from config: {item.url}")
+                logger.info("flows.discovery.registered_from_config", name=flow_cfg.name, url=item.url)
             except Exception as e:
-                logger.warning(f"Failed to register external flow from config {item.url}: {e}")
+                logger.warning("flows.discovery.register_from_config_failed", url=item.url, error=str(e))
 
-        logger.info(f"Initialized {registered}/{len(external_flows_config)} external flows from config")
+        logger.info("flows.discovery.config_initialized", registered=registered, total=len(external_flows_config))
         return registered
 
     async def register_agent(
@@ -64,7 +64,7 @@ class FlowDiscoveryService:
         stored_flows = await self._repository.list(limit=10000)
         for existing in stored_flows:
             if existing.type == FlowType.EXTERNAL and existing.url == url:
-                logger.info(f"External flow already registered: {url}")
+                logger.info("flows.discovery.already_registered", url=url)
                 return existing
 
         card_payload = await self._fetch_agent_card(url, headers)
@@ -99,7 +99,7 @@ class FlowDiscoveryService:
         )
 
         _ = await self._repository.set(flow_cfg)
-        logger.info(f"Registered external flow: {display_name} ({url})")
+        logger.info("flows.discovery.registered", name=display_name, url=url)
 
         return flow_cfg
 
@@ -107,7 +107,7 @@ class FlowDiscoveryService:
         """Удаляет запись EXTERNAL flow из репозитория."""
         result = await self._repository.delete(flow_id)
         if result:
-            logger.info(f"Unregistered external flow: {flow_id}")
+            logger.info("flows.discovery.unregistered", flow_id=flow_id)
         return result
 
     async def get_flow(self, flow_id: str) -> FlowConfig | None:
@@ -163,11 +163,11 @@ class FlowDiscoveryService:
             ext_cfg.updated_at = datetime.now(timezone.utc)
             _ = await self._repository.set(ext_cfg)
 
-            logger.debug(f"External flow {flow_id} is healthy")
+            logger.debug("flows.discovery.healthy", flow_id=flow_id)
             return True
 
         except Exception as e:
-            logger.warning(f"External flow {flow_id} health check failed: {e}")
+            logger.warning("flows.discovery.health_failed", flow_id=flow_id, error=str(e))
 
             ext_cfg.status = ExternalAgentStatus.UNHEALTHY
             ext_cfg.last_health_check = datetime.now(timezone.utc)

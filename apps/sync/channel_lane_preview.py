@@ -33,7 +33,7 @@ def lane_preview_from_content(content: MessageContentModel) -> str:
     """Текст превью из первого блока контента последнего сообщения."""
     if content.type == MessageContentType.TEXT_PLAIN:
         if not isinstance(content.data, TextPlainContent):
-            raise ValueError("text/plain: ожидается TextPlainContent.")
+            raise ValueError("text/plain: expected TextPlainContent.")
         stripped = content.data.body.strip()
         if stripped == "":
             return ""
@@ -54,7 +54,7 @@ def lane_preview_from_content(content: MessageContentModel) -> str:
         return "[Транскрипт звонка]"
     if content.type == MessageContentType.CALL_BOUNDARY:
         if not isinstance(content.data, CallBoundaryContent):
-            raise ValueError("call/boundary: ожидается CallBoundaryContent.")
+            raise ValueError("call/boundary: expected CallBoundaryContent.")
         if content.data.phase == "started":
             return "[Звонок начался]"
         if content.data.phase == "ended":
@@ -63,4 +63,4 @@ def lane_preview_from_content(content: MessageContentModel) -> str:
         return "[Git]"
     if content.type == MessageContentType.CUSTOM_TOOL_RESPONSE:
         return "[Инструмент]"
-    raise ValueError(f"Неизвестный тип контента для превью: {content.type.value!r}.")
+    raise ValueError(f"Unknown content type for preview: {content.type.value!r}.")

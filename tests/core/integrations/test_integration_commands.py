@@ -15,7 +15,6 @@ from core.context import reset_context, set_context
 from core.integrations.models import (
     IntegrationCredential,
     IntegrationCredentialRefPayload,
-    IntegrationEmptyPayload,
     IntegrationProvider,
 )
 from core.integrations.operations import (
@@ -26,7 +25,7 @@ from core.integrations.operations import (
 from core.integrations.repository import IntegrationCredentialRepository
 from core.models.context_models import Context
 from core.models.identity_models import User
-from core.websocket import WsCommandError
+from core.websocket import EmptyPayload, WsCommandError
 from tests.fixtures.ai_provider_defaults import make_test_company
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.timeout(60)]
@@ -102,7 +101,7 @@ async def test_credentials_list_rest_match_op(
     assert http.status_code == 200, http.text
     with _system_scope(system_user_id) as user:
         op_result = await op_integrations_credentials_list(
-            IntegrationEmptyPayload(),
+            EmptyPayload(),
             user=user,
             container=container,
         )
@@ -148,7 +147,7 @@ async def test_workspace_company_get_rest_match_op(
     assert http.status_code == 200, http.text
     with _system_scope(system_user_id) as user:
         op_result = await op_integrations_workspace_company_get(
-            IntegrationEmptyPayload(),
+            EmptyPayload(),
             user=user,
             container=container,
         )

@@ -53,7 +53,7 @@ class ApnsPushService:
         pem = private_key_pem.strip()
         if not team_id or not key_id or not pem or not bundle_id:
             raise ValueError(
-                "APNs: apns_team_id, apns_key_id, apns_private_key и apns_bundle_id обязательны"
+                'APNs: apns_team_id, apns_key_id, apns_private_key and apns_bundle_id are required'
             )
         self._team_id: str = team_id
         self._key_id: str = key_id
@@ -99,7 +99,7 @@ class ApnsPushService:
                 headers=headers,
             )
         except PyJWTError as e:
-            raise ValueError(f"APNs: не удалось подписать JWT: {e}") from e
+            raise ValueError(f"APNs: failed to sign JWT: {e}") from e
         self._jwt_expires_at = now + 3500
         return self._jwt_token
 
@@ -148,21 +148,14 @@ class ApnsPushService:
             return True, False
 
         if response.status_code == 410:
-            logger.info("APNs: токен неактивен (410), подписка будет удалена")
+            logger.info("push.apns")
             return False, True
 
         if response.status_code == 400:
-            logger.info(
-                "APNs: 400 — вероятно неверный токен, подписка будет удалена: %s",
-                response.text[:200],
-            )
+            logger.info("push.apns", text=response.text[:200])
             return False, True
 
-        logger.error(
-            "APNs: ошибка отправки status=%s body=%s",
-            response.status_code,
-            response.text[:500],
-        )
+        logger.error("push.apns.status.body", status=response.status_code, body=response.text[:500])
         return False, False
 
 

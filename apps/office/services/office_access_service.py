@@ -68,7 +68,7 @@ class OfficeAccessService:
     def build_public_page_url(origin: str, raw_token: str) -> str:
         base = origin.rstrip("/")
         if not base:
-            raise ValueError("origin обязателен для публичной ссылки")
+            raise ValueError("origin is required for a public link")
         return f"{base}/documents/p/{raw_token}"
 
     def _catalog_obj(self, catalog_id: str) -> AuthzObject:
@@ -262,7 +262,7 @@ class OfficeAccessService:
     async def resolve_public_token(self, raw_token: str) -> PublicLinkTarget:
         normalized = raw_token.strip()
         if normalized == "":
-            raise ValueError("token обязателен")
+            raise ValueError("token is required")
         token_hash = hash_token(normalized)
         binding = await self._access_repository.get_binding_by_link_token_hash(token_hash)
         if binding is not None:
@@ -280,7 +280,7 @@ class OfficeAccessService:
                 binding=None,
                 token_hash=token_hash,
             )
-        raise ValueError("Ссылка не найдена")
+        raise ValueError("Link not found")
 
     async def _list_member_items(self, obj: AuthzObject) -> list[OfficeResourceAccessMemberItem]:
         items: list[OfficeResourceAccessMemberItem] = []
@@ -311,7 +311,7 @@ class OfficeAccessService:
     ) -> OfficeResourceAccessResponse:
         catalog = await self._catalog_repository.get(catalog_id, company_id, namespace)
         if catalog is None:
-            raise ValueError("Каталог не найден")
+            raise ValueError("Catalog not found")
         members = await self._list_member_items(self._catalog_obj(catalog_id))
         return OfficeResourceAccessResponse(
             resource_kind="catalog",
@@ -377,7 +377,7 @@ class OfficeAccessService:
     ) -> tuple[OfficeResourceAccessResponse, str | None]:
         catalog = await self._catalog_repository.get(catalog_id, company_id, namespace)
         if catalog is None:
-            raise ValueError("Каталог не найден")
+            raise ValueError("Catalog not found")
         raw_token: str | None = None
         link_enabled = catalog.link_enabled
         link_token_hash = catalog.link_token_hash
@@ -386,7 +386,7 @@ class OfficeAccessService:
             await self.set_catalog_company_visible(catalog, company_visible=body.company_visible)
             if body.company_visible and body.members:
                 raise ValueError(
-                    "Company-visible каталог доступен всей компании; members не задаются"
+                    "Company-visible catalog is available to the whole company; members are not set"
                 )
         if body.link_enabled is not None:
             link_enabled = body.link_enabled
@@ -407,12 +407,12 @@ class OfficeAccessService:
             link_permission=link_permission,
         )
         if updated_catalog is None:
-            raise ValueError("Каталог не найден")
+            raise ValueError("Catalog not found")
         if body.members is not None:
             if await self.catalog_is_company_visible(catalog_id, company_id):
                 if body.members:
                     raise ValueError(
-                        "Company-visible каталог доступен всей компании в этом пространстве"
+                        "Company-visible catalog is available to the whole company in this workspace"
                     )
             else:
                 owner_user_id = await self.resolve_catalog_owner_user_id(catalog_id)
@@ -441,7 +441,7 @@ class OfficeAccessService:
         link_token_hash = binding.link_token_hash
         link_permission = binding.link_permission
         if body.company_visible is not None:
-            raise ValueError("company_visible задаётся на каталоге, не на документе")
+            raise ValueError("company_visible is set on the catalog, not on the document")
         if body.link_enabled is not None:
             link_enabled = body.link_enabled
             if link_enabled:
@@ -458,7 +458,7 @@ class OfficeAccessService:
             link_permission=link_permission,
         )
         if updated_binding is None:
-            raise ValueError("Привязка не найдена")
+            raise ValueError("Binding not found")
         if body.members is not None:
             await self._replace_members(
                 self._document_obj(binding.file_id),
@@ -483,18 +483,18 @@ class OfficeAccessService:
     ) -> None:
         catalog = await self._catalog_repository.get(catalog_id, company_id, namespace)
         if catalog is None:
-            raise ValueError("Каталог не найден")
+            raise ValueError("Catalog not found")
         if await self.catalog_is_company_visible(catalog_id, company_id):
-            raise ValueError("Company-visible каталог доступен всей компании в этом пространстве")
+            raise ValueError("Company-visible catalog is available to the whole company in this workspace")
         owner_user_id = await self.resolve_catalog_owner_user_id(catalog_id)
         if user_id == owner_user_id:
-            raise ValueError("Владелец уже имеет полный доступ к каталогу")
+            raise ValueError("Owner already has full access to the catalog")
         await self._authz.write([office_catalog_member_tuple(catalog_id, user_id, relation)])
 
     async def remove_catalog_member(self, catalog_id: str, user_id: str) -> None:
         owner_user_id = await self.resolve_catalog_owner_user_id(catalog_id)
         if user_id == owner_user_id:
-            raise ValueError("Нельзя удалить владельца из members")
+            raise ValueError("Cannot remove the owner from members")
         await self._authz.delete(
             [
                 office_catalog_member_tuple(catalog_id, user_id, AuthzRelation.VIEWER),
@@ -515,9 +515,9 @@ class OfficeAccessService:
     ) -> OfficeResourceAccessRotateLinkResponse:
         catalog = await self._catalog_repository.get(catalog_id, company_id, namespace)
         if catalog is None:
-            raise ValueError("Каталог не найден")
+            raise ValueError("Catalog not found")
         if not catalog.link_enabled:
-            raise ValueError("Публичная ссылка не включена")
+            raise ValueError("Public link is not enabled")
         raw_token, token_hash = create_share_token()
         updated = await self._access_repository.set_catalog_link(
             catalog_id,
@@ -528,7 +528,7 @@ class OfficeAccessService:
             link_permission=catalog.link_permission,
         )
         if updated is None:
-            raise ValueError("Каталог не найден")
+            raise ValueError("Catalog not found")
         return OfficeResourceAccessRotateLinkResponse(
             public_url=self.build_public_page_url(origin, raw_token),
         )
@@ -539,7 +539,7 @@ class OfficeAccessService:
         origin: str,
     ) -> OfficeResourceAccessRotateLinkResponse:
         if not binding.link_enabled:
-            raise ValueError("Публичная ссылка не включена")
+            raise ValueError("Public link is not enabled")
         raw_token, token_hash = create_share_token()
         updated = await self._access_repository.set_document_link(
             binding.file_id,
@@ -548,7 +548,7 @@ class OfficeAccessService:
             link_permission=binding.link_permission,
         )
         if updated is None:
-            raise ValueError("Привязка не найдена")
+            raise ValueError("Binding not found")
         return OfficeResourceAccessRotateLinkResponse(
             public_url=self.build_public_page_url(origin, raw_token),
         )
@@ -557,7 +557,7 @@ class OfficeAccessService:
         if target.kind == "binding":
             binding = target.binding
             if binding is None:
-                raise ValueError("binding обязателен")
+                raise ValueError("binding is required")
             return OfficePublicResolveResponse(
                 resource_kind="binding",
                 resource_id=binding.file_id,
@@ -568,7 +568,7 @@ class OfficeAccessService:
             )
         catalog = target.catalog
         if catalog is None:
-            raise ValueError("catalog обязателен")
+            raise ValueError("catalog is required")
         return OfficePublicResolveResponse(
             resource_kind="catalog",
             resource_id=catalog.catalog_id,
@@ -582,7 +582,7 @@ class OfficeAccessService:
         self, target: PublicLinkTarget
     ) -> OfficePublicCatalogItemsResponse:
         if target.kind != "catalog" or target.catalog is None:
-            raise ValueError("Токен не относится к каталогу")
+            raise ValueError("Token does not belong to the catalog")
         catalog = target.catalog
         bindings = await self._binding_repository.list_by_company_namespace_and_catalog(
             catalog.company_id,
@@ -614,7 +614,7 @@ class OfficeAccessService:
         file_id: str,
     ) -> OfficeDocumentBinding:
         if catalog_target.kind != "catalog" or catalog_target.catalog is None:
-            raise ValueError("Токен не относится к каталогу")
+            raise ValueError("Token does not belong to the catalog")
         catalog = catalog_target.catalog
         binding = await self._binding_repository.get(
             file_id,
@@ -622,11 +622,11 @@ class OfficeAccessService:
             catalog.namespace,
         )
         if binding is None or binding.deleted_at is not None:
-            raise ValueError("Файл не найден")
+            raise ValueError("File not found")
         if binding.catalog_id != catalog.catalog_id:
-            raise ValueError("Файл не принадлежит каталогу")
+            raise ValueError("File does not belong to the catalog")
         if not await self.binding_visible_in_public_catalog(binding):
-            raise ValueError("Файл недоступен по публичной ссылке")
+            raise ValueError("File is not available via the public link")
         return binding
 
 
@@ -635,7 +635,7 @@ def _parse_link_permission(value: str) -> OfficeLinkPermission:
         return "editor"
     if value == "viewer":
         return "viewer"
-    raise ValueError(f"Неизвестное link_permission: {value}")
+    raise ValueError(f"Unknown link_permission: {value}")
 
 
 def _member_to_relation(value: OfficeAccessMemberRelation) -> AuthzRelation:

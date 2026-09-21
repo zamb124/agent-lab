@@ -1,19 +1,15 @@
 /**
  * Ресурсы leads — заявки с лендинга и системный список заявок.
  *
- * API (apps/frontend/api/leads.py):
- *   POST /api/leads             ← LeadCreateBody (contact_name, email|phone обязательны)
- *   GET  /api/lead-requests     → { items, next_cursor, has_more } (только system)
- *
  * Состав:
- *   - leadSubmitOp:  POST /leads, success/error toasts.
- *   - leadRequestsList: cursor-list по /lead-requests, statusMap 403→forbidden.
+ *   - leadSubmitOp: анонимная форма лендинга `POST /frontend/api/leads` — HTTP до сессии,
+ *     не команда (`COMMAND_WS_HTTP_ALLOWLIST`).
+ *   - leadRequestsList: cursor-list по команде `frontend/lead_requests/list_requested`
+ *     (REST-зеркало `GET /frontend/api/lead-requests`, только system), statusMap 403→forbidden.
  */
 
 import { createAsyncOp, createCursorList } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
-
-const BASE = '/frontend/api';
 
 export const leadSubmitOp = createAsyncOp({
     name: 'frontend/lead_submit',
@@ -26,7 +22,7 @@ export const leadSubmitOp = createAsyncOp({
         }
         return await httpRequest({
             method: 'POST',
-            url: `${BASE}/leads`,
+            url: '/frontend/api/leads',
             body: payload,
         });
     },
@@ -35,6 +31,9 @@ export const leadSubmitOp = createAsyncOp({
 export const leadRequestsList = createCursorList({
     name: 'frontend/lead_requests',
     baseUrl: '/frontend/api/lead-requests',
+    transport: 'ws',
+    wsTimeoutMs: 15_000,
+    commandType: 'frontend/lead_requests/list_requested',
     pageSize: 50,
     buildQuery: () => ({}),
     statusMap: { 403: 'forbidden' },

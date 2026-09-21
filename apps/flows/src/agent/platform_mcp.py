@@ -12,7 +12,7 @@ import uuid
 
 from a2a.types import Message, Part, SendMessageRequest
 from a2a.types.a2a_pb2 import ROLE_USER
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 from google.protobuf.json_format import MessageToDict
 
@@ -46,6 +46,7 @@ from core.context import get_context, require_context
 from core.logging import get_logger
 from core.state import ExecutionState
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
+from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["agent-platform-mcp"])
@@ -300,7 +301,7 @@ def _extract_task_text(task_payload: JsonObject) -> str:
     try:
         return extract_text_from_task_json(task_payload)
     except ValueError as exc:
-        raise ValueError("Flow task не содержит текстового ответа") from exc
+        raise ValueError("Flow task has no text response") from exc
 
 
 def _extract_task_state(task_payload: JsonObject) -> str:
@@ -324,11 +325,20 @@ async def _execute_flow_tool_call(
 ) -> tuple[str, str, str]:
     flow_config = await container.flow_repository.get(flow_id)
     if flow_config is None:
-        raise HTTPException(status_code=404, detail=f"Flow {flow_id!r} не найден")
+        raise WsCommandError(
+            "not_found",
+            f"flow {flow_id!r} not found",
+            error_code="flow_not_found",
+            error_params={"flow_id": flow_id},
+        )
 
     context = get_context()
     if context is None:
-        raise HTTPException(status_code=401, detail="Контекст не установлен")
+        raise WsCommandError(
+            "unauthorized",
+            "context is not set",
+            error_code="context_not_set",
+        )
 
     message_id = str(uuid.uuid4())
     resolved_context_id = context_id if context_id is not None else str(uuid.uuid4())
@@ -363,8 +373,16 @@ async def _execute_flow_tool_call(
         except ValueError:
             fail_text = None
         if fail_text is not None:
-            raise HTTPException(status_code=500, detail=fail_text)
-        raise HTTPException(status_code=500, detail="Flow task failed")
+            raise WsCommandError(
+                "internal",
+                fail_text,
+                error_code="flow_task_failed",
+            )
+        raise WsCommandError(
+            "internal",
+            "flow task failed",
+            error_code="flow_task_failed",
+        )
     response_text = _extract_task_text(task_payload)
     return response_text, resolved_context_id, task_state
 
@@ -431,8 +449,8 @@ async def _handle_flow_tools_call(
             context_id=sticky_context_id,
             device_id=device_id,
         )
-    except HTTPException as exc:
-        return _rpc_error(rpc_id, -32000, str(exc.detail))
+    except WsCommandError as exc:
+        return _rpc_error(rpc_id, -32000, exc.detail)
     except ValueError as exc:
         return _rpc_error(rpc_id, -32000, str(exc))
     await _persist_sticky_context_id(
@@ -534,7 +552,12 @@ async def platform_mcp_discover_toolkit(
     await _reject_revoked_device_bearer(request, container)
     toolkit = await get_agent_toolkit(container.agent_toolkit_repository, toolkit_id)
     if toolkit is None:
-        raise HTTPException(status_code=404, detail=f"Toolkit {toolkit_id!r} не найден")
+        raise WsCommandError(
+            "not_found",
+            f"toolkit {toolkit_id!r} not found",
+            error_code="toolkit_not_found",
+            error_params={"toolkit_id": toolkit_id},
+        )
     accept_header = request.headers.get("accept", "")
     if "text/event-stream" in accept_header.lower():
         return Response(status_code=405)
@@ -558,7 +581,12 @@ async def platform_mcp_message_toolkit(
     await _reject_revoked_device_bearer(request, container)
     toolkit = await get_agent_toolkit(container.agent_toolkit_repository, toolkit_id)
     if toolkit is None:
-        raise HTTPException(status_code=404, detail=f"Toolkit {toolkit_id!r} не найден")
+        raise WsCommandError(
+            "not_found",
+            f"toolkit {toolkit_id!r} not found",
+            error_code="toolkit_not_found",
+            error_params={"toolkit_id": toolkit_id},
+        )
     return await _platform_mcp_message_handler(request, container, toolkit_id=toolkit_id)
 
 
@@ -571,7 +599,11 @@ async def _platform_mcp_message_handler(
     await _reject_revoked_device_bearer(request, container)
     raw_body = await request.body()
     if not raw_body:
-        raise HTTPException(status_code=400, detail="Пустое MCP сообщение")
+        raise WsCommandError(
+            "ws_invalid_payload",
+            "MCP message is empty",
+            error_code="mcp_message_empty",
+        )
 
     message = parse_json_object(raw_body.decode("utf-8"), "agent.platform_mcp.message")
     method = message.get("method")
@@ -586,7 +618,12 @@ async def _platform_mcp_message_handler(
         if toolkit_id is not None:
             toolkit = await get_agent_toolkit(container.agent_toolkit_repository, toolkit_id)
             if toolkit is None:
-                raise HTTPException(status_code=404, detail=f"Toolkit {toolkit_id!r} не найден")
+                raise WsCommandError(
+            "not_found",
+            f"toolkit {toolkit_id!r} not found",
+            error_code="toolkit_not_found",
+            error_params={"toolkit_id": toolkit_id},
+        )
             server_info = {"name": toolkit.name, "version": "1.0.0"}
         initialize_result: JsonObject = {
             "protocolVersion": _PROTOCOL_VERSION,

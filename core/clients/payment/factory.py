@@ -67,11 +67,11 @@ class PaymentProviderFactory:
         password = config_entry.password.strip()
         api_url = config_entry.api_url.strip()
         if terminal_key == "":
-            raise ValueError("terminal_key обязателен для Tinkoff")
+            raise ValueError("terminal_key is required for Tinkoff")
         if password == "":
-            raise ValueError("password обязателен для Tinkoff")
+            raise ValueError("password is required for Tinkoff")
         if api_url == "":
-            raise ValueError("api_url обязателен для Tinkoff")
+            raise ValueError("api_url is required for Tinkoff")
         return TinkoffConfig(
             provider_type="tinkoff",
             enabled=config_entry.enabled,

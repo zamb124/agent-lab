@@ -13,7 +13,11 @@
 import {
     createResourceCollection,
     createAsyncOp,
+    removeItem,
+    upsertItem,
 } from '@platform/lib/events/index.js';
+
+const ACCESS_REQUEST_UPDATE_SUCCEEDED = 'crm/access_request_update/succeeded';
 
 export const accessRequestsResource = createResourceCollection({
     name: 'crm/access_requests',
@@ -35,6 +39,23 @@ export const accessRequestsResource = createResourceCollection({
     },
     toastKeys: {
         create: 'crm:toast.access_request.created',
+    },
+    // Решение по запросу: строка выпадает из списка, отфильтрованного по другому статусу.
+    extraReducer: (state, event) => {
+        if (event.type !== ACCESS_REQUEST_UPDATE_SUCCEEDED) {
+            return state;
+        }
+        const request = event.payload.result;
+        if (!request || typeof request.access_request_id !== 'string') {
+            return state;
+        }
+        const listStatus = state.lastListQuery && state.lastListQuery.payload
+            ? state.lastListQuery.payload.status
+            : undefined;
+        if (typeof listStatus === 'string' && listStatus.length > 0 && request.status !== listStatus) {
+            return removeItem(state, request.access_request_id, 'access_request_id');
+        }
+        return upsertItem(state, request, 'access_request_id');
     },
 });
 

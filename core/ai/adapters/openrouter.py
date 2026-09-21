@@ -34,7 +34,7 @@ def parse_artificial_analysis_payload(payload: JsonValue) -> dict[str, Artificia
         item = require_json_object(raw_item, f"openrouter.benchmarks.data[{idx}]")
         slug_raw = item.get("model_permaslug")
         if not isinstance(slug_raw, str) or not slug_raw.strip():
-            raise ValueError(f"openrouter.benchmarks.data[{idx}].model_permaslug обязателен")
+            raise ValueError(f"openrouter.benchmarks.data[{idx}].model_permaslug is required")
         intelligence = item.get("intelligence_index")
         if intelligence is None:
             continue
@@ -110,10 +110,10 @@ class OpenRouterModelCatalogAdapter(OpenAICompatibleModelCatalogAdapter):
     @override
     async def list_models(self, *, probe_embeddings: bool = True) -> list[AIModelRecord]:
         if not self.is_configured():
-            raise ValueError("openrouter model provider не настроен")
+            raise ValueError('openrouter model provider is not configured')
         cfg = self._configured_llm_provider()
         if cfg is None:
-            raise ValueError("openrouter provider config не настроен")
+            raise ValueError('openrouter provider config is not configured')
         records: list[AIModelRecord] = []
         headers = self.provider_model_list_headers()
         payload = await self._fetch_provider_catalog_payload(
@@ -144,7 +144,7 @@ class OpenRouterModelCatalogAdapter(OpenAICompatibleModelCatalogAdapter):
 
     async def list_artificial_analysis(self) -> dict[str, ArtificialAnalysisIndices]:
         if not self.is_configured():
-            raise ValueError("openrouter model provider не настроен")
+            raise ValueError('openrouter model provider is not configured')
         payload = await self._fetch_provider_catalog_payload(
             url=_OPENROUTER_BENCHMARKS_URL,
             headers=self.provider_model_list_headers(),

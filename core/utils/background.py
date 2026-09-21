@@ -81,7 +81,7 @@ def run_with_log_context(
         ValueError: если name пустой или нет background_kind вне request scope.
     """
     if not name.strip():
-        raise ValueError("background-task name обязателен и должен быть непустой строкой")
+        raise ValueError('background-task name is required and must be a non-empty string')
 
     snapshot = require_json_object(get_log_context(), "log.context")
     inherited_request_id = snapshot.get("request_id")

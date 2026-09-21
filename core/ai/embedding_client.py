@@ -86,9 +86,9 @@ class AIEmbeddingClient:
         extra_headers: dict[str, str] | None = None,
     ) -> None:
         if not api_key:
-            raise ValueError("API key обязателен для AIEmbeddingClient")
+            raise ValueError('API key is required for AIEmbeddingClient')
         if not model.strip():
-            raise ValueError("Embedding model обязателен для AIEmbeddingClient")
+            raise ValueError('Embedding model is required for AIEmbeddingClient')
 
         self.api_key: str = api_key
         self.model_name: str = model.strip()
@@ -245,10 +245,10 @@ class AIEmbeddingClient:
         }
         actx = get_context()
         if actx is None or actx.active_company is None:
-            raise ValueError("Контекст с active_company обязателен для generate_embeddings")
+            raise ValueError('Context with active_company is required for generate_embeddings')
         user_id = str(actx.user.user_id).strip()
         if not user_id:
-            raise ValueError("Контекст с user обязателен для generate_embeddings (биллинг и уведомления)")
+            raise ValueError('Context with user is required for generate_embeddings (billing and notifications)')
 
         await get_billing_service().require_balance_for_billable_operation(
             actx.active_company.company_id,
@@ -327,7 +327,7 @@ class AIEmbeddingClient:
         for vec in vectors:
             if len(vec) < n:
                 raise ValueError(
-                    f"Вектор длины {len(vec)} короче mrl_output_dimension ({n})"
+                    f"Vector length {len(vec)} is shorter than mrl_output_dimension ({n})"
                 )
             tail: list[float] = vec[:n]
             norm = math.sqrt(sum(value * value for value in tail))
@@ -344,7 +344,7 @@ class AIEmbeddingClient:
                 )
                 raise ValueError(message)
             if n > full:
-                raise ValueError("mrl_output_dimension не может превышать полную размерность вектора")
+                raise ValueError('mrl_output_dimension cannot exceed the full vector dimension')
             padded.append(tail + [0.0] * (full - n))
         return padded
 
@@ -355,7 +355,7 @@ class AIEmbeddingClient:
         if self._response_dimension is not None:
             return self._response_dimension
         raise ValueError(
-            "Не задана размерность embedding: укажите dimension в конфиге или сохраните verified metadata в model catalog"
+            'embedding dimension is not set: set dimension in config or persist verified metadata in the model catalog'
         )
 
     def get_active_model(self) -> str | None:

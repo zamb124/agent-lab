@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from apps.flows.src.state.state_utils import find_file, normalize_file_lookup_name
 from apps.flows.src.tools.decorator import tool
 from core.files.docx_template import DocxTemplater
-from core.files.models import FileResponse
+from core.files.file_ref import stored_file_ref
 from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 
@@ -110,11 +110,11 @@ async def fill_docx_template(
     if not files:
         if file_name:
             raise ValueError(
-                f"state.files пуст: вложение {file_name!r} недоступно. "
-                + "Сначала пользователь должен прикрепить .docx к сообщению в канале."
+                f"state.files is empty: attachment {file_name!r} is unavailable. "
+                + "The user must first attach a .docx to the channel message."
             )
         raise ValueError(
-            "state.files пуст: прикрепите шаблон .docx к сообщению, затем вызовите fill_docx_template."
+            "state.files is empty: attach a .docx template to the message, then call fill_docx_template."
         )
 
     docx_entries = [
@@ -130,11 +130,11 @@ async def fill_docx_template(
 
     if finfo is None:
         raise ValueError(
-            f"Файл не найден. Доступные: {[file_ref.original_name for file_ref in files]}"
+            f"File not found. Available: {[file_ref.original_name for file_ref in files]}"
         )
 
     if not finfo.original_name.lower().endswith(".docx"):
-        raise ValueError(f"Шаблон должен быть .docx, получено: {finfo.original_name!r}")
+        raise ValueError(f"Template must be .docx, got: {finfo.original_name!r}")
 
     record = await DocxTemplater().fill_and_create(
         file_ref=finfo,
@@ -143,10 +143,10 @@ async def fill_docx_template(
         strict=strict,
     )
 
-    response = FileResponse.from_record(record)
+    file_item = stored_file_ref(record)
     return {
         "success": True,
-        **require_json_object(response.model_dump(mode="json"), "fill_docx_template.response"),
+        **require_json_object(file_item.model_dump(mode="json"), "fill_docx_template.response"),
     }
 
 

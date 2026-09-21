@@ -82,6 +82,14 @@ class DataTableQueryRequest(StrictBaseModel):
     sql: str
 
 
+class DataTableImportRequest(StrictBaseModel):
+    """Импорт таблицы из CSV/XLSX, уже загруженного через chunked Files API."""
+
+    table_name: str = Field(min_length=1)
+    source_format: Literal["csv", "xlsx"]
+    upload_file_id: str = Field(min_length=1)
+
+
 class DataTableDeleteRowsRequest(StrictBaseModel):
     row_ids: list[int] = Field(min_length=1)
 
@@ -105,12 +113,6 @@ class DataTableFileSnapshot(StrictBaseModel):
     file_size: int
     checksum: str | None = None
     schema_snapshot: DataTableSchemaSnapshot
-
-
-class DataTableImportRequest(StrictBaseModel):
-    table_name: str
-    source_format: Literal["csv", "xlsx"]
-    original_name: str
 
 
 class DataTableQueryResult(StrictBaseModel):

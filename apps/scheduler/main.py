@@ -32,6 +32,7 @@ from apps.scheduler.api.v1 import api_v1_router
 from apps.scheduler.config import SchedulerSettings, get_scheduler_settings
 from apps.scheduler.container import SchedulerContainer, get_scheduler_container
 from apps.scheduler.crawl_schedule_bootstrap import ensure_search_crawl_schedules
+from apps.scheduler.realtime.command_router import register_scheduler_ws_commands
 from core.ai.task_names import TASK_REFRESH_PLATFORM_FREE_MODELS, TASK_SYNC_LLM_MODELS
 from core.app import create_service_app
 from core.config.testing import is_testing
@@ -114,10 +115,10 @@ async def _reconcile_idle_interval_payload(
         recreate_schedule=recreate_schedule,
     )
     logger.warning(
-        "%s interval schedule reconciled: schedule_task_id=%s recreate_schedule=%s",
-        log_label,
-        repaired.schedule_task_id,
-        recreate_schedule,
+        "scheduler.interval.schedule.reconciled.schedule_task_id.recreate_schedule",
+        log_label=log_label,
+        schedule_task_id=repaired.schedule_task_id,
+        recreate_schedule=recreate_schedule,
     )
     return repaired
 
@@ -173,11 +174,11 @@ async def _reconcile_cron_payload(
         recreate_schedule=recreate_schedule,
     )
     logger.warning(
-        "%s cron schedule reconciled: schedule_task_id=%s recreate_schedule=%s cron=%s",
-        log_label,
-        repaired.schedule_task_id,
-        recreate_schedule,
-        cron,
+        "scheduler.cron.schedule.reconciled.schedule_task_id.recreate_schedule",
+        log_label=log_label,
+        schedule_task_id=repaired.schedule_task_id,
+        recreate_schedule=recreate_schedule,
+        cron=cron,
     )
     return repaired
 
@@ -192,7 +193,7 @@ async def _ensure_calendar_schedule(
     run_now_on_start: bool = False,
 ) -> None:
     if not config_enabled:
-        logger.info("%s: disabled in config", log_label)
+        logger.info("scheduler.disabled.config", log_label=log_label)
         return
     tasks = await container.scheduler_service.list(
         company_id=SYSTEM_SCHEDULER_COMPANY_ID,
@@ -205,7 +206,7 @@ async def _ensure_calendar_schedule(
     task: PlatformScheduledTask | None = None
     pending_tasks = [task for task in tasks if task.status == ScheduledTaskStatus.PENDING]
     if len(pending_tasks) > 0:
-        logger.info("%s schedule already exists, count=%s", log_label, len(pending_tasks))
+        logger.info("scheduler.schedule.exists.count", log_label=log_label, count=len(pending_tasks))
         task = await _reconcile_cron_payload(
             container=container,
             task=pending_tasks[0],
@@ -221,10 +222,10 @@ async def _ensure_calendar_schedule(
                 schedule_task_id=paused_tasks[0].schedule_task_id,
             )
             logger.info(
-                "%s schedule resumed: schedule_task_id=%s schedule_id=%s",
-                log_label,
-                resumed.schedule_task_id,
-                resumed.schedule_id,
+                "scheduler.schedule.resumed.schedule_task_id.schedule_id",
+                log_label=log_label,
+                schedule_task_id=resumed.schedule_task_id,
+                schedule_id=resumed.schedule_id,
             )
             task = await _reconcile_cron_payload(
                 container=container,
@@ -249,21 +250,17 @@ async def _ensure_calendar_schedule(
                 request=request,
             )
             logger.info(
-                "%s schedule created: schedule_task_id=%s schedule_id=%s",
-                log_label,
-                task.schedule_task_id,
-                task.schedule_id,
+                "scheduler.schedule.created.schedule_task_id.schedule_id",
+                log_label=log_label,
+                schedule_task_id=task.schedule_task_id,
+                schedule_id=task.schedule_id,
             )
     if run_now_on_start:
         _ = await container.scheduler_service.run_now(
             company_id=SYSTEM_SCHEDULER_COMPANY_ID,
             schedule_task_id=task.schedule_task_id,
         )
-        logger.info(
-            "%s cron schedule kicked immediately: schedule_task_id=%s",
-            log_label,
-            task.schedule_task_id,
-        )
+        logger.info("scheduler.cron.schedule.kicked.immediately.schedule_task_id", log_label=log_label, schedule_task_id=task.schedule_task_id)
 
 
 async def _ensure_idle_interval_schedule(
@@ -277,7 +274,7 @@ async def _ensure_idle_interval_schedule(
     run_now_on_start: bool = False,
 ) -> None:
     if not config_enabled:
-        logger.info("%s: disabled in config", log_label)
+        logger.info("scheduler.disabled.config", log_label=log_label)
         return
     tasks = await container.scheduler_service.list(
         company_id=SYSTEM_SCHEDULER_COMPANY_ID,
@@ -300,14 +297,14 @@ async def _ensure_idle_interval_schedule(
     ]
     if incompatible_pending:
         logger.warning(
-            "%s has incompatible pending schedules, leaving them untouched: %s",
-            log_label,
-            [task.schedule_task_id for task in incompatible_pending],
+            "scheduler.incompatible.pending.schedules.leaving.them",
+            log_label=log_label,
+            value_1=[task.schedule_task_id for task in incompatible_pending],
         )
     pending_tasks = [task for task in compatible_tasks if task.status == ScheduledTaskStatus.PENDING]
     if pending_tasks:
         task = pending_tasks[0]
-        logger.info("%s interval schedule already exists, count=%s", log_label, len(pending_tasks))
+        logger.info("scheduler.interval.schedule.exists.count", log_label=log_label, count=len(pending_tasks))
     else:
         paused_tasks = [task for task in compatible_tasks if task.status == ScheduledTaskStatus.PAUSED]
         if paused_tasks:
@@ -316,10 +313,10 @@ async def _ensure_idle_interval_schedule(
                 schedule_task_id=paused_tasks[0].schedule_task_id,
             )
             logger.info(
-                "%s interval schedule resumed: schedule_task_id=%s schedule_id=%s",
-                log_label,
-                task.schedule_task_id,
-                task.schedule_id,
+                "scheduler.interval.schedule.resumed.schedule_task_id.schedule_id",
+                log_label=log_label,
+                schedule_task_id=task.schedule_task_id,
+                schedule_id=task.schedule_id,
             )
         else:
             request = PlatformScheduleCreateRequest(
@@ -338,10 +335,10 @@ async def _ensure_idle_interval_schedule(
                 request=request,
             )
             logger.info(
-                "%s interval schedule created: schedule_task_id=%s schedule_id=%s",
-                log_label,
-                task.schedule_task_id,
-                task.schedule_id,
+                "scheduler.interval.schedule.created.schedule_task_id.schedule_id",
+                log_label=log_label,
+                schedule_task_id=task.schedule_task_id,
+                schedule_id=task.schedule_id,
             )
     task = await _reconcile_idle_interval_payload(
         container=container,
@@ -356,11 +353,7 @@ async def _ensure_idle_interval_schedule(
             company_id=SYSTEM_SCHEDULER_COMPANY_ID,
             schedule_task_id=task.schedule_task_id,
         )
-        logger.info(
-            "%s interval schedule kicked immediately: schedule_task_id=%s",
-            log_label,
-            task.schedule_task_id,
-        )
+        logger.info("scheduler.interval.schedule.kicked.immediately.schedule_task_id", log_label=log_label, schedule_task_id=task.schedule_task_id)
 
 
 async def _ensure_rag_ttl_cleanup_schedule(
@@ -372,7 +365,7 @@ async def _ensure_rag_ttl_cleanup_schedule(
     log_label: str,
 ) -> None:
     if not config_enabled:
-        logger.info("%s: disabled in config", log_label)
+        logger.info("scheduler.disabled.config", log_label=log_label)
         return
     tasks = await container.scheduler_service.list(
         company_id=SYSTEM_SCHEDULER_COMPANY_ID,
@@ -384,7 +377,7 @@ async def _ensure_rag_ttl_cleanup_schedule(
     )
     pending_tasks = [task for task in tasks if task.status == ScheduledTaskStatus.PENDING]
     if len(pending_tasks) > 0:
-        logger.info("%s schedule already exists, count=%s", log_label, len(pending_tasks))
+        logger.info("scheduler.schedule.exists.count", log_label=log_label, count=len(pending_tasks))
         return
     paused_tasks = [task for task in tasks if task.status == ScheduledTaskStatus.PAUSED]
     if len(paused_tasks) > 0:
@@ -393,10 +386,10 @@ async def _ensure_rag_ttl_cleanup_schedule(
             schedule_task_id=paused_tasks[0].schedule_task_id,
         )
         logger.info(
-            "%s schedule resumed: schedule_task_id=%s schedule_id=%s",
-            log_label,
-            resumed.schedule_task_id,
-            resumed.schedule_id,
+            "scheduler.schedule.resumed.schedule_task_id.schedule_id",
+            log_label=log_label,
+            schedule_task_id=resumed.schedule_task_id,
+            schedule_id=resumed.schedule_id,
         )
         return
     request = PlatformScheduleCreateRequest(
@@ -414,10 +407,10 @@ async def _ensure_rag_ttl_cleanup_schedule(
         request=request,
     )
     logger.info(
-        "%s schedule created: schedule_task_id=%s schedule_id=%s",
-        log_label,
-        created.schedule_task_id,
-        created.schedule_id,
+        "scheduler.schedule.created.schedule_task_id.schedule_id",
+        log_label=log_label,
+        schedule_task_id=created.schedule_task_id,
+        schedule_id=created.schedule_id,
     )
 
 
@@ -430,7 +423,7 @@ async def _ensure_crm_cron_schedule(
     log_label: str,
 ) -> None:
     if not config_enabled:
-        logger.info("%s: disabled in config", log_label)
+        logger.info("scheduler.disabled.config", log_label=log_label)
         return
     tasks = await container.scheduler_service.list(
         company_id=SYSTEM_SCHEDULER_COMPANY_ID,
@@ -442,7 +435,7 @@ async def _ensure_crm_cron_schedule(
     )
     pending_tasks = [task for task in tasks if task.status == ScheduledTaskStatus.PENDING]
     if len(pending_tasks) > 0:
-        logger.info("%s schedule already exists, count=%s", log_label, len(pending_tasks))
+        logger.info("scheduler.schedule.exists.count", log_label=log_label, count=len(pending_tasks))
         return
     paused_tasks = [task for task in tasks if task.status == ScheduledTaskStatus.PAUSED]
     if len(paused_tasks) > 0:
@@ -451,10 +444,10 @@ async def _ensure_crm_cron_schedule(
             schedule_task_id=paused_tasks[0].schedule_task_id,
         )
         logger.info(
-            "%s schedule resumed: schedule_task_id=%s schedule_id=%s",
-            log_label,
-            resumed.schedule_task_id,
-            resumed.schedule_id,
+            "scheduler.schedule.resumed.schedule_task_id.schedule_id",
+            log_label=log_label,
+            schedule_task_id=resumed.schedule_task_id,
+            schedule_id=resumed.schedule_id,
         )
         return
     request = PlatformScheduleCreateRequest(
@@ -472,15 +465,16 @@ async def _ensure_crm_cron_schedule(
         request=request,
     )
     logger.info(
-        "%s schedule created: schedule_task_id=%s schedule_id=%s",
-        log_label,
-        created.schedule_task_id,
-        created.schedule_id,
+        "scheduler.schedule.created.schedule_task_id.schedule_id",
+        log_label=log_label,
+        schedule_task_id=created.schedule_task_id,
+        schedule_id=created.schedule_id,
     )
 
 
 async def on_startup(app: FastAPI, container: SchedulerContainer, settings: SchedulerSettings) -> None:
     _ = app
+    register_scheduler_ws_commands()
     if not is_testing():
         _ = await ensure_system_company_exists(
             company_repository=container.company_repository,

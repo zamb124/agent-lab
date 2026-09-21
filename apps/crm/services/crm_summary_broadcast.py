@@ -42,11 +42,7 @@ async def broadcast_crm_daily_summary_updated(
         CRM_DAILY_SUMMARY_UPDATED,
         payload,
     )
-    logger.debug(
-        "CRM daily summary platform event: date=%s namespace=%s delivery=company",
-        date_str,
-        normalized_namespace,
-    )
+    logger.debug("crm.daily.summary.platform.event", date=date_str, namespace=normalized_namespace)
 
 
 async def broadcast_crm_period_summary_updated(
@@ -73,8 +69,8 @@ async def broadcast_crm_period_summary_updated(
         payload,
     )
     logger.debug(
-        "CRM period summary platform event: range=%s..%s namespace=%s delivery=company",
-        date_from,
-        date_to,
-        normalized_namespace,
+        "crm.period.summary.platform.event",
+        range=date_from,
+        date_to=date_to,
+        namespace=normalized_namespace,
     )

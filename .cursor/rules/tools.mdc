@@ -114,7 +114,7 @@ Builtin specs — `apps/flows/tools/builtin_specs.py`. Runtime gate — `ToolAut
 
 ## Tool contracts (Phase 1–4 foundations)
 
-- Канонические модели: `apps/flows/src/models/tool_contracts.py` (`ToolDefinition`, `ToolBinding`, `ToolRevision`, `ToolGrantClaims`, `ToolResultEnvelope`).
+- Канонические модели: `apps/flows/src/models/tool_contracts.py` (`ToolDefinition`, `ToolRevision`, `ToolGrantClaims`, `ToolResultEnvelope`). Редактируемый контракт ноды — `ToolReference`.
 - `ToolReference` остаётся runtime-материализацией; contract models — compat-слой для будущего compiler/pipeline.
 - CI: `scripts/check_tool_contracts.py` — object root + `additionalProperties: false` у builtin parameters; запрет `ServiceClient()` / container / `platform_facades` / legacy Port/Facade getters в `apps/flows/tools/**/*.py`.
 - Strict OpenAI compiler stub: `apps/flows/src/tools/provider_schema.py::compile_openai_strict_parameters`.

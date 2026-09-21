@@ -597,4 +597,4 @@ async def op_work_queues_member_remove(
     except AuthzDenied as exc:
         raise_forbidden(exc)
     if not removed:
-        raise WsCommandError("not_found", "Участник очереди не найден")
+        raise WsCommandError("not_found", "Queue member not found", error_code='not_found')

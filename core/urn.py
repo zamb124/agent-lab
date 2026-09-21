@@ -40,8 +40,8 @@ def _parse_urn_resource_type(value: str) -> URNResourceType:
         return "variable"
     valid_types = ("flow", "node", "tool", "branch", "variable")
     raise ValueError(
-        f"Неизвестный тип ресурса: '{value}'. "
-        + f"Допустимые значения: {', '.join(valid_types)}"
+        f"Unknown resource type: '{value}'. "
+        + f"Allowed values: {', '.join(valid_types)}"
     )
 
 
@@ -83,17 +83,17 @@ class URN(BaseModel):
         parts = urn_string.split(":")
         if len(parts) != 4:
             raise ValueError(
-                f"Невалидный URN формат: '{urn_string}'. "
-                + "Ожидается: 'urn:namespace:resource_type:resource_id'"
+                f"Invalid URN format: '{urn_string}'. "
+                + "Expected: 'urn:namespace:resource_type:resource_id'"
             )
 
         prefix, namespace_part, resource_type_part, resource_id = parts
 
         if prefix != "urn":
-            raise ValueError(f"URN должен начинаться с 'urn:', получено: '{prefix}:'")
+            raise ValueError(f"URN must start with 'urn:', got: '{prefix}:'")
 
         if namespace_part != "iman":
-            raise ValueError(f"Namespace должен быть 'iman', получено: '{namespace_part}'")
+            raise ValueError(f"Namespace must be 'iman', got: '{namespace_part}'")
 
         namespace: URNNamespace = "iman"
         parsed_resource_type = _parse_urn_resource_type(resource_type_part)

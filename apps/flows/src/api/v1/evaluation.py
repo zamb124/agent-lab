@@ -66,7 +66,6 @@ from apps.flows.realtime.evaluation_operations import (
     op_flows_evaluation_suite_update,
     op_flows_evaluation_suites_list,
 )
-from apps.flows.realtime.operations import FlowsEmptyPayload
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.evaluation_lab import (
     EvaluationActiveMonitorCyclesRequest,
@@ -143,6 +142,7 @@ from apps.flows.src.models.evaluation_lab import (
 )
 from core.context import require_context
 from core.pagination import ListResponse
+from core.websocket import EmptyPayload
 
 router = APIRouter(tags=["evaluation"])
 
@@ -152,7 +152,7 @@ async def get_evaluation_evaluator_catalog(
     container: ContainerDep,
 ) -> EvaluationBuiltinEvaluatorCatalog:
     return await op_flows_evaluation_evaluator_catalog(
-        FlowsEmptyPayload(),
+        EmptyPayload(),
         user=require_context().user,
         container=container,
     )

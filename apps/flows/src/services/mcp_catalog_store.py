@@ -111,7 +111,7 @@ async def install_catalog_entry_for_company(
     )
     _ = await container.mcp_server_repository.set(server)
     _ = await sync_mcp_server_tools(container=container, server_config=server)
-    logger.info("MCP Store install: catalog_id=%s server_id=%s", catalog_id, server_id)
+    logger.info("flows.mcp.store.install.catalog_id.server_id", catalog_id=catalog_id, server_id=server_id)
     return server
 
 
@@ -140,4 +140,4 @@ async def uninstall_catalog_entry_from_company(
             tool_id, company_id=require_active_company().company_id
         )
     _ = await container.mcp_server_repository.delete(server_id)
-    logger.info("MCP Store uninstall: catalog_id=%s server_id=%s", catalog_id, server_id)
+    logger.info("flows.mcp.store.uninstall.catalog_id.server_id", catalog_id=catalog_id, server_id=server_id)

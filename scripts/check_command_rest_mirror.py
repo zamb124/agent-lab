@@ -51,6 +51,9 @@ FACTORY_CANON_SERVICES = {
     "flows",
     "wiki",
     "worktracker",
+    "search",
+    "secrets",
+    "scheduler",
 }
 
 COMMAND_WS_SERVICES = {
@@ -62,14 +65,15 @@ COMMAND_WS_SERVICES = {
     "crm",
     "flows",
     "search",
+    "secrets",
+    "scheduler",
+    "frontend",
 }
 
 COMMAND_WS_HTTP_ALLOWLIST: frozenset[str] = frozenset(
     {
         "sync/call_join_info",
         "sync/call_join_accept",
-        "sync/namespaces",
-        "sync/namespace_update",
         "wiki/public_page",
         "wiki/public_tree",
         "wiki/public_site_page",
@@ -89,6 +93,22 @@ COMMAND_WS_HTTP_ALLOWLIST: frozenset[str] = frozenset(
         "flows/editor",
         "flows/api_console_run",
         "flows/code_lsp_session",
+        # frontend: анонимный публичный сайт/лендинг/поиск, cookie-consent, инвайты до сессии, форма заявки
+        "frontend/cookie_consent_record",
+        "frontend/services_status_load",
+        "frontend/agent_releases_status",
+        "frontend/landing_agents_load",
+        "frontend/landing_demo_session",
+        "frontend/invite_preview",
+        "frontend/invite_accept",
+        "frontend/lead_submit",
+        "frontend/public_search_run",
+        "frontend/public_search_serp_more",
+        "frontend/public_search_serp_click",
+        "frontend/public_search_source_describe",
+        "frontend/public_site_bundle",
+        "frontend/public_blog_list",
+        "frontend/public_blog_post",
     }
 )
 
@@ -108,6 +128,19 @@ CORE_FLOWS_FACTORY_FILES = (
     "flows-agent-toolkits.resource.js",
     "flows-flows-list.resource.js",
 )
+# Сервисы без своего UI: их фабрики живут в core и проверяются под владельцем.
+CORE_OWNER_FACTORY_FILES: dict[str, tuple[str, ...]] = {
+    "secrets": (
+        "secrets-variables.resource.js",
+        "secrets-variable-versions.resource.js",
+        "secrets-variables-resolve.resource.js",
+    ),
+    "scheduler": ("scheduler-schedules.resource.js",),
+    "search": (
+        "search-crawl-report.resource.js",
+        "search-providers.resource.js",
+    ),
+}
 # Все мигрированные на event-канон сервисы. Парсер `_resolve_external_prefixes`
 # умеет резолвить вложенные `include_router(child, prefix='/...')`-цепочки
 # (используются в `apps/sync/api/__init__.py::get_api_router` и
@@ -659,6 +692,9 @@ def main() -> int:
                 factory_files.extend(sorted(CORE_FACTORY_RESOURCES.glob(factory_name)))
         if svc == "flows" and CORE_FACTORY_RESOURCES.exists():
             for factory_name in CORE_FLOWS_FACTORY_FILES:
+                factory_files.extend(sorted(CORE_FACTORY_RESOURCES.glob(factory_name)))
+        if svc in CORE_OWNER_FACTORY_FILES and CORE_FACTORY_RESOURCES.exists():
+            for factory_name in CORE_OWNER_FACTORY_FILES[svc]:
                 factory_files.extend(sorted(CORE_FACTORY_RESOURCES.glob(factory_name)))
         if not factory_files:
             continue

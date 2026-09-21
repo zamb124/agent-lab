@@ -249,7 +249,7 @@ async def calendar_sync_tick(
 
     stats = _TickStats(integrations_total=len(integrations))
     if stats.integrations_total == 0:
-        logger.info("calendar_sync_tick: no enabled integrations")
+        logger.info("idle.calendar_sync_tick")
         return {
             "integrations_total": 0,
             "integrations_success": 0,
@@ -290,14 +290,14 @@ async def calendar_sync_tick(
             else:
                 stats.failures_unknown += 1
             logger.error(
-                "calendar_sync_tick: sync failed for integration_id=%s provider=%s company_id=%s user_id=%s error_type=%s failure_kind=%s error=%s",
-                integration.integration_id,
-                CalendarProvider(integration.provider).value,
-                integration.company_id,
-                integration.user_id,
-                type(outcome).__name__,
-                failure_kind,
-                str(outcome),
+                "idle.calendar_sync_tick",
+                integration_id=integration.integration_id,
+                provider=CalendarProvider(integration.provider).value,
+                company_id=integration.company_id,
+                user_id=integration.user_id,
+                error_type=type(outcome).__name__,
+                failure_kind=failure_kind,
+                error=str(outcome),
                 exc_info=(type(outcome), outcome, outcome.__traceback__),
             )
             continue
@@ -307,18 +307,18 @@ async def calendar_sync_tick(
         stats.notifications_sent += sent_notifications
 
     logger.info(
-        "calendar_sync_tick done: integrations_total=%s success=%s failed=%s auth_failed=%s network_failed=%s validation_failed=%s unknown_failed=%s new_events=%s notifications=%s schedule_task_id=%s company_id=%s",
-        stats.integrations_total,
-        stats.integrations_success,
-        stats.integrations_failed,
-        stats.failures_auth,
-        stats.failures_network,
-        stats.failures_validation,
-        stats.failures_unknown,
-        stats.events_new,
-        stats.notifications_sent,
-        schedule_task_id,
-        company_id,
+        "idle.calendar_sync_tick",
+        integrations_total=stats.integrations_total,
+        success=stats.integrations_success,
+        failed=stats.integrations_failed,
+        auth_failed=stats.failures_auth,
+        network_failed=stats.failures_network,
+        validation_failed=stats.failures_validation,
+        unknown_failed=stats.failures_unknown,
+        new_events=stats.events_new,
+        notifications=stats.notifications_sent,
+        schedule_task_id=schedule_task_id,
+        company_id=company_id,
     )
     return {
         "integrations_total": stats.integrations_total,
@@ -366,10 +366,10 @@ async def calendar_sync_meeting_reminder_tick(
         action_url = event.deep_link
         if action_url is None or action_url == "":
             if SYNC_LINK_TOKEN_META not in event.metadata:
-                raise ValueError(f"У события {event.event_id} нет {SYNC_LINK_TOKEN_META} в metadata.")
+                raise ValueError(f"Event {event.event_id} has no {SYNC_LINK_TOKEN_META} in metadata.")
             token = event.metadata[SYNC_LINK_TOKEN_META]
             if token == "":
-                raise ValueError(f"У события {event.event_id} нет {SYNC_LINK_TOKEN_META} в metadata.")
+                raise ValueError(f"Event {event.event_id} has no {SYNC_LINK_TOKEN_META} in metadata.")
             action_url = await container.short_link_service.mint_sync_call_join(
                 token, event.end_at, event.company_id
             )
@@ -395,10 +395,10 @@ async def calendar_sync_meeting_reminder_tick(
         await calendar_service.mark_sync_meeting_reminder_sent(event.event_id, event.company_id)
 
     logger.info(
-        "calendar_sync_meeting_reminder_tick done: events=%s notifications=%s schedule_task_id=%s company_id=%s",
-        len(events),
-        sent,
-        schedule_task_id,
-        company_id,
+        "idle.calendar_sync_meeting_reminder_tick",
+        events=len(events),
+        notifications=sent,
+        schedule_task_id=schedule_task_id,
+        company_id=company_id,
     )
     return {"events_checked": len(events), "notifications_sent": sent}

@@ -55,7 +55,7 @@ async def verify_telegram_config(config: JsonObject) -> VerifyResult:
         async with get_httpx_client(timeout=20.0) as client:
             response = await client.get(url)
     except Exception as e:
-        logger.warning("Telegram getMe request failed: %s", e)
+        logger.warning("flows.telegram.getme.request.failed", e=e)
         return False, {}, "http_error", str(e)
 
     try:

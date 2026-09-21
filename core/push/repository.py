@@ -122,7 +122,7 @@ class PushSubscriptionRepository:
             await session.commit()
 
             subscription = result.scalar_one()
-            logger.info(f"Push подписка upsert: user={user_id}, platform={platform}")
+            logger.info("push.subscription.upserted", user_id=user_id, platform=platform)
 
             return subscription
 
@@ -148,7 +148,7 @@ class PushSubscriptionRepository:
 
             deleted = get_rowcount(result) > 0
             if deleted:
-                logger.info(f"Push подписка удалена: user={user_id}")
+                logger.info("push.subscription.deleted", user_id=user_id)
 
             return deleted
 
@@ -171,7 +171,7 @@ class PushSubscriptionRepository:
 
             deleted = get_rowcount(result) > 0
             if deleted:
-                logger.info("Push подписка удалена по endpoint (expired)")
+                logger.info("push.endpoint.expired")
 
             return deleted
 

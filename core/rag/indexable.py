@@ -30,7 +30,7 @@ def is_rag_indexable_file_category(file_category: str) -> bool:
     """True если category из whitelist RAG (не archive/signature/unknown и т.п.)."""
     normalized = file_category.strip()
     if normalized == "":
-        raise ValueError("file_category обязателен")
+        raise ValueError('file_category is required')
     return normalized in _RAG_INDEXABLE_CATEGORY_VALUES
 
 
@@ -38,7 +38,7 @@ def rag_file_category_for_document_name(document_name: str) -> str:
     """Категория для имени файла (как при upload binding); иначе unknown."""
     name = document_name.strip()
     if name == "":
-        raise ValueError("document_name обязателен")
+        raise ValueError('document_name is required')
     return resolve_file_category_for_upload(name, None)
 
 
@@ -46,7 +46,7 @@ def effective_rag_file_category(*, file_category: str, document_name: str) -> st
     """Категория binding; для ``unknown`` — повторный резолв по имени (реестр мог расшириться)."""
     normalized = file_category.strip()
     if normalized == "":
-        raise ValueError("file_category обязателен")
+        raise ValueError('file_category is required')
     if normalized == UNKNOWN_FILE_CATEGORY:
         return rag_file_category_for_document_name(document_name)
     return normalized

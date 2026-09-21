@@ -38,7 +38,7 @@ def require_scheduled_tasks_registered() -> None:
             missing.append(f"{spec.queue}:{spec.name}")
     if missing:
         raise RuntimeError(
-            "TaskIQ scheduler: не зарегистрированы scheduled-задачи: "
+            "TaskIQ scheduler: no scheduled tasks registered: "
             + ", ".join(sorted(missing))
         )
     logger.info(
@@ -59,7 +59,7 @@ class QueueAwareTaskiqScheduler(TaskiqScheduler):
         brokers = registered_queue_brokers()
         target_broker = brokers.get(queue_name)
         if target_broker is None:
-            raise ValueError(f"Неизвестная очередь для dispatch планировщика: {queue_name}")
+            raise ValueError(f"Unknown queue for scheduler dispatch: {queue_name}")
         try:
             await maybe_awaitable(source.pre_send(task))
         except ScheduledTaskCancelledError:
@@ -110,7 +110,7 @@ def create_scheduler(redis_url: str) -> TaskiqScheduler:
     flows_broker = brokers.get("flows_worker")
     if not isinstance(flows_broker, RedisStreamBroker):
         raise RuntimeError(
-            "create_scheduler: брокер flows_worker не зарегистрирован (вызовите wire_all)"
+            "create_scheduler: flows_worker broker is not registered (call wire_all)"
         )
     scheduler = QueueAwareTaskiqScheduler(broker=flows_broker, sources=[source])
     logger.info("task.scheduler_created")

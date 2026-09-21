@@ -44,9 +44,16 @@ class FileRecord(BaseModel):
     file_id: str = Field(description="Уникальный ID файла в системе")
     provider: str = Field(description="Провайдер S3 (aws, yandex, minio, etc.)")
     original_name: str = Field(description="Оригинальное имя файла")
-    s3_key: str = Field(description="Ключ файла в S3")
-    s3_bucket: str = Field(description="Ключ bucket в settings.s3.buckets (не физическое имя в S3)")
-    s3_endpoint: str | None = Field(default=None, description="Endpoint URL провайдера")
+    s3_key: str = Field(description="Ключ файла в S3", exclude=True)
+    s3_bucket: str = Field(
+        description="Ключ bucket в settings.s3.buckets (не физическое имя в S3)",
+        exclude=True,
+    )
+    s3_endpoint: str | None = Field(
+        default=None,
+        description="Endpoint URL провайдера",
+        exclude=True,
+    )
     storage_url: str | None = Field(default=None, description="Прямой URL источника файла для proxy-download")
     content_type: str = Field(description="MIME тип файла")
     file_size: int = Field(description="Размер файла в байтах")
@@ -101,46 +108,6 @@ class FileRecord(BaseModel):
         if self.download_url:
             return self.download_url
         return files_download_url(self.file_id)
-
-
-class FileResponse(BaseModel):
-    """
-    Публичное представление файла для API-ответов.
-
-    Не содержит внутренних полей (s3_key, s3_bucket, s3_endpoint).
-    Используется как return-тип всех file-эндпоинтов во всех сервисах.
-    """
-
-    file_id: str
-    original_name: str
-    content_type: str
-    file_size: int
-    url: str
-    checksum: str | None = None
-    is_public: bool
-    created_at: datetime
-
-    @classmethod
-    def from_record(
-        cls,
-        record: "FileRecord",
-        *,
-        route_segment: str | None = None,
-    ) -> "FileResponse":
-        if record.download_url:
-            url = record.download_url
-        else:
-            url = files_download_url(record.file_id, route_segment=route_segment)
-        return cls(
-            file_id=record.file_id,
-            original_name=record.original_name,
-            content_type=record.content_type,
-            file_size=record.file_size,
-            url=url,
-            checksum=record.checksum,
-            is_public=record.is_public,
-            created_at=record.created_at,
-        )
 
 
 class AudioRecord(FileRecord):

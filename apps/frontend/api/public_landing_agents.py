@@ -74,7 +74,7 @@ def _normalize_origin(raw: str) -> str:
         return ""
     parsed = urlparse(value)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise HTTPException(status_code=400, detail="origin должен быть HTTP(S) origin")
+        raise HTTPException(status_code=400, detail="origin must be an HTTP(S) origin")
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
@@ -186,31 +186,31 @@ async def issue_public_landing_session(
     mapping_repo = container.embed_mapping_repository
     mapping = await mapping_repo.get(embed_id)
     if mapping is None:
-        raise HTTPException(status_code=404, detail="Виджет не найден")
+        raise HTTPException(status_code=404, detail="Widget not found")
     if mapping.company_id != SYSTEM_COMPANY_ID:
-        raise HTTPException(status_code=404, detail="Виджет не найден")
+        raise HTTPException(status_code=404, detail="Widget not found")
 
     embed_repo = container.embed_config_repository
     config = await embed_repo.get_for_company_identifier(SYSTEM_COMPANY_SUBDOMAIN, embed_id)
     if config is None:
-        raise HTTPException(status_code=404, detail="Конфигурация не найдена")
+        raise HTTPException(status_code=404, detail="Configuration not found")
     if config.status != EmbedStatus.ACTIVE:
-        raise HTTPException(status_code=403, detail="Виджет отключён")
+        raise HTTPException(status_code=403, detail="Widget is disabled")
     if not config.landing_visible:
-        raise HTTPException(status_code=403, detail="Виджет недоступен для публичного чата")
+        raise HTTPException(status_code=403, detail="Widget is not available for public chat")
     session_flow_cfg = await _landing_flow_config(container, config.flow_id)
     img = _effective_landing_card_image_url(config, session_flow_cfg)
     if not img:
-        raise HTTPException(status_code=403, detail="Виджет не опубликован в каталоге")
+        raise HTTPException(status_code=403, detail="Widget is not published in the catalog")
 
     origin = _normalize_origin(request.headers.get("origin", ""))
     referer_origin = _origin_from_referer(request.headers.get("referer", ""))
     if not origin and referer_origin:
         origin = referer_origin
     if origin and referer_origin and origin != referer_origin:
-        raise HTTPException(status_code=403, detail="origin не совпадает со страницей каталога")
+        raise HTTPException(status_code=403, detail="origin does not match the catalog page")
     if not origin:
-        raise HTTPException(status_code=403, detail="origin обязателен для публичной сессии")
+        raise HTTPException(status_code=403, detail="origin is required for a public session")
 
     await enforce_public_session_issue_rate_limit(
         redis_client=container.redis_client,

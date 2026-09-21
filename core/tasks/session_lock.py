@@ -66,7 +66,7 @@ class SessionLockMiddleware(TaskiqMiddleware):
 
     def set_queue_name(self, queue_name: str) -> None:
         if not queue_name.strip():
-            raise ValueError("SessionLockMiddleware: queue_name обязателен")
+            raise ValueError('SessionLockMiddleware: queue_name is required')
         self._queue_name = queue_name
 
     async def _get_redis(self) -> RedisClient:

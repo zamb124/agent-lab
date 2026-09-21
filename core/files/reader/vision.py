@@ -44,7 +44,7 @@ cast(_PillowHeifModule, _as_object(pillow_heif)).register_heif_opener()
 
 if _cairosvg_raw is None:
     _cairosvg: _CairoSvgModule | None = None
-    logger.warning("cairosvg недоступен (нет libcairo): SVG-транскод отключён: %s", _cairosvg_error)
+    logger.warning("files.cairosvg.libcairo.svg", _cairosvg_error=_cairosvg_error)
 else:
     _cairosvg = cast(_CairoSvgModule, _as_object(_cairosvg_raw))
 
@@ -70,7 +70,7 @@ def transcode_to_jpeg(raw: bytes, *, file_name: str, mime: str) -> tuple[bytes, 
     if is_svg:
         if _cairosvg is None:
             raise FileReadError(
-                "SVG-транскод недоступен: в рантайме нет нативной libcairo (cairosvg)"
+                "SVG transcode is unavailable: native libcairo (cairosvg) is missing at runtime"
             )
         png_bytes = _cairosvg.svg2png(bytestring=raw)
         image = Image.open(BytesIO(png_bytes))

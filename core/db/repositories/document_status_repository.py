@@ -58,7 +58,7 @@ class DocumentStatusRepository:
     ) -> DocumentStatusModel:
         """Создаёт или сбрасывает строку статуса в pending (повторная загрузка)."""
         if int(ttl_seconds) < 0:
-            raise ValueError("ttl_seconds не может быть отрицательным")
+            raise ValueError('ttl_seconds cannot be negative')
         session_factory = await self._get_session_factory()
         async with session_factory() as session:
             now = datetime.now(timezone.utc)
@@ -105,11 +105,7 @@ class DocumentStatusRepository:
                 select(DBDocumentStatus).where(DBDocumentStatus.document_id == document_id)
             )
             db_status = result.scalar_one()
-            logger.info(
-                "Статус документа: document_id=%s task=%s (создан или сброшен в pending)",
-                document_id,
-                task_id,
-            )
+            logger.info("db.document_id.task.pending", document_id=document_id, task=task_id)
             return DocumentStatusModel.model_validate(db_status)
 
     async def finalize_enqueued_indexing_task(
@@ -118,7 +114,7 @@ class DocumentStatusRepository:
         task_id: str,
     ) -> DocumentStatusModel:
         if not task_id:
-            raise ValueError("task_id обязателен")
+            raise ValueError('task_id is required')
         session_factory = await self._get_session_factory()
         async with session_factory() as session:
             now = datetime.now(timezone.utc)
@@ -130,11 +126,7 @@ class DocumentStatusRepository:
             row.updated_at = now
             await session.commit()
             await session.refresh(row)
-            logger.info(
-                "Документ %s: поставлена задача индексации task_id=%s",
-                document_id,
-                task_id,
-            )
+            logger.info("db.task_id", document_id=document_id, task_id=task_id)
             return DocumentStatusModel.model_validate(row)
 
     async def try_mark_processing(self, document_id: str) -> None:
@@ -178,7 +170,7 @@ class DocumentStatusRepository:
             em: JsonObject = dict(row.extra_metadata or {})
             raw_prev_runs = em.get("indexing_run_count", 0)
             if not isinstance(raw_prev_runs, int) or isinstance(raw_prev_runs, bool):
-                raise ValueError("extra_metadata.indexing_run_count должен быть целым числом")
+                raise ValueError('extra_metadata.indexing_run_count must be an integer')
             prev_runs = raw_prev_runs
             em["indexing_run_count"] = prev_runs + 1
             if indexing_runtime is not None:
@@ -186,11 +178,7 @@ class DocumentStatusRepository:
             row.extra_metadata = em
             await session.commit()
             await session.refresh(row)
-            logger.info(
-                "Документ %s: индексация завершена, чанков=%s",
-                document_id,
-                chunks,
-            )
+            logger.info("db.event", document_id=document_id, chunks=chunks)
             return DocumentStatusModel.model_validate(row)
 
     async def record_indexing_failed(self, document_id: str, error: str) -> None:
@@ -210,11 +198,7 @@ class DocumentStatusRepository:
                 )
             )
             await session.commit()
-            logger.error(
-                "Индексация документа %s провалилась: %s",
-                document_id,
-                msg,
-            )
+            logger.error("db.event", document_id=document_id, msg=msg)
 
     async def get_by_document_id(self, document_id: str) -> DocumentStatusModel | None:
         session_factory = await self._get_session_factory()
@@ -301,11 +285,7 @@ class DocumentStatusRepository:
             )
             db_status = result.scalar_one()
 
-            logger.info(
-                "Обновлен статус документа %s: %s",
-                document_id,
-                status,
-            )
+            logger.info("db.event", document_id=document_id, status=status)
 
             return DocumentStatusModel.model_validate(db_status)
 
@@ -393,7 +373,7 @@ class DocumentStatusRepository:
             if ns not in out:
                 continue
             if status not in out[ns]:
-                raise ValueError(f"Неожиданный статус в агрегации: {status!r}")
+                raise ValueError(f"Unexpected status in aggregation: {status!r}")
             out[ns][status] = cnt
 
         return out
@@ -446,10 +426,7 @@ class DocumentStatusRepository:
             await session.commit()
             n = get_rowcount(result)
             if n:
-                logger.info(
-                    "Удалена строка статуса документа document_id=%s",
-                    document_id,
-                )
+                logger.info("db.document_id", document_id=document_id)
             return n
 
     async def list_expired_document_candidates(
@@ -465,7 +442,7 @@ class DocumentStatusRepository:
         и чанки только в ``vector_documents`` без строки статуса (`min(created_at)` + TTL из metadata).
         """
         if limit < 1:
-            raise ValueError("limit должен быть >= 1")
+            raise ValueError('limit must be >= 1')
 
         expiry_status = (
             DBDocumentStatus.completed_at

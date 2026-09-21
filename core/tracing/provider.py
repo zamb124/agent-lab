@@ -58,7 +58,7 @@ def setup_tracing(config: "TracingConfig") -> None:
 
     if not config.enabled:
         _ = ensure_tracer_provider(config.service_name)
-        logger.info("Tracing export disabled; SDK spans remain available")
+        logger.info("tracing.export.disabled.sdk.spans")
         return
 
     tracer_provider = ensure_tracer_provider(config.service_name)
@@ -81,7 +81,7 @@ def setup_tracing(config: "TracingConfig") -> None:
     if not _shutdown_registered:
         _ = atexit.register(shutdown_tracing)
         _shutdown_registered = True
-    logger.info(f"Tracing initialized: service={config.service_name}, sampling={config.sampling_rate}")
+    logger.info("trace.initialized", service=config.service_name, sampling=config.sampling_rate)
 
 
 def shutdown_tracing() -> None:

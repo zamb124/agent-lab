@@ -1,10 +1,11 @@
 """Device JWT validation для HumanitecAgent HTTP endpoints."""
 
-from fastapi import HTTPException, Request
+from fastapi import Request
 
 from apps.agent.service import is_device_token_denied_shared
 from apps.flows.src.dependencies import ContainerDep
 from core.utils.tokens import TokenService
+from core.websocket import WsCommandError
 
 
 def extract_device_id_from_bearer(request: Request) -> str | None:
@@ -48,7 +49,11 @@ async def reject_revoked_device_bearer_if_present(request: Request, container: C
         return
     device_id = metadata.get("device_id")
     if not isinstance(device_id, str) or not device_id:
-        raise HTTPException(status_code=401, detail="device_id отсутствует в токене")
+        raise WsCommandError(
+            "unauthorized",
+            "device_id is missing from token",
+            error_code="device_id_missing",
+        )
     device_jti = metadata.get("jti")
     resolved_jti = device_jti if isinstance(device_jti, str) and device_jti else None
     if await is_device_token_denied_shared(
@@ -56,7 +61,11 @@ async def reject_revoked_device_bearer_if_present(request: Request, container: C
         device_id,
         device_jti=resolved_jti,
     ):
-        raise HTTPException(status_code=401, detail="Device token revoked")
+        raise WsCommandError(
+            "unauthorized",
+            "device token revoked",
+            error_code="device_token_revoked",
+        )
 
 
 async def require_active_device_bearer(request: Request, container: ContainerDep) -> None:
@@ -66,26 +75,50 @@ async def require_active_device_bearer(request: Request, container: ContainerDep
     """
     authorization = request.headers.get("Authorization")
     if authorization is None:
-        raise HTTPException(status_code=401, detail="Authorization Bearer обязателен")
+        raise WsCommandError(
+            "unauthorized",
+            "Authorization Bearer is required",
+            error_code="authorization_bearer_required",
+        )
     if not authorization.lower().startswith("bearer "):
-        raise HTTPException(status_code=401, detail="Authorization Bearer обязателен")
+        raise WsCommandError(
+            "unauthorized",
+            "Authorization Bearer is required",
+            error_code="authorization_bearer_required",
+        )
 
     token = authorization.removeprefix("Bearer ").removeprefix("bearer ").strip()
     if not token:
-        raise HTTPException(status_code=401, detail="Authorization Bearer обязателен")
+        raise WsCommandError(
+            "unauthorized",
+            "Authorization Bearer is required",
+            error_code="authorization_bearer_required",
+        )
 
     token_data = TokenService().validate_token(token)
     if token_data is None:
-        raise HTTPException(status_code=401, detail="Недействительный device token")
+        raise WsCommandError(
+            "unauthorized",
+            "device token is invalid",
+            error_code="device_token_invalid",
+        )
 
     metadata = token_data.metadata
     token_purpose = metadata.get("token_purpose")
     if token_purpose != "device":
-        raise HTTPException(status_code=403, detail="Требуется device token")
+        raise WsCommandError(
+            "forbidden",
+            "device token required",
+            error_code="device_token_required",
+        )
 
     device_id = metadata.get("device_id")
     if not isinstance(device_id, str) or not device_id:
-        raise HTTPException(status_code=401, detail="device_id отсутствует в токене")
+        raise WsCommandError(
+            "unauthorized",
+            "device_id is missing from token",
+            error_code="device_id_missing",
+        )
 
     device_jti = metadata.get("jti")
     resolved_jti = device_jti if isinstance(device_jti, str) and device_jti else None
@@ -94,4 +127,8 @@ async def require_active_device_bearer(request: Request, container: ContainerDep
         device_id,
         device_jti=resolved_jti,
     ):
-        raise HTTPException(status_code=401, detail="Device token revoked")
+        raise WsCommandError(
+            "unauthorized",
+            "device token revoked",
+            error_code="device_token_revoked",
+        )

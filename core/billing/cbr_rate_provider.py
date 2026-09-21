@@ -133,7 +133,7 @@ def _parse_usd_rate(xml_text: str) -> tuple[float, date]:
             int(date_str[0:2]),
         )
     except (ValueError, IndexError) as exc:
-        raise _CbrParseError(f"Неверный формат Date в ответе ЦБ: {date_str!r}") from exc
+        raise _CbrParseError(f"Invalid Date format in CBR response: {date_str!r}") from exc
 
     for valute in root.findall("Valute"):
         char_code = valute.findtext("CharCode", "")
@@ -145,20 +145,20 @@ def _parse_usd_rate(xml_text: str) -> tuple[float, date]:
             value_text = valute.findtext("Value", "")
             nominal_text = valute.findtext("Nominal", "1")
             if not value_text:
-                raise _CbrParseError("Нет ни VunitRate, ни Value для USD в ответе ЦБ")
+                raise _CbrParseError('Neither VunitRate nor Value for USD in CBR response')
             try:
                 rate = float(value_text.replace(",", ".")) / float(nominal_text.replace(",", "."))
             except ValueError as exc:
-                raise _CbrParseError(f"Не удалось разобрать Value/Nominal USD: {exc}") from exc
+                raise _CbrParseError(f"Failed to parse USD Value/Nominal: {exc}") from exc
         else:
             try:
                 rate = float(vunit_rate_text.replace(",", "."))
             except ValueError as exc:
-                raise _CbrParseError(f"Не удалось разобрать VunitRate USD: {exc}") from exc
+                raise _CbrParseError(f"Failed to parse USD VunitRate: {exc}") from exc
 
         if rate <= 0:
-            raise _CbrParseError(f"Курс USD из ЦБ некорректен: {rate}")
+            raise _CbrParseError(f"USD rate from CBR is invalid: {rate}")
 
         return rate, effective_date
 
-    raise _CbrParseError("USD не найден в ответе ЦБ")
+    raise _CbrParseError('USD not found in CBR response')

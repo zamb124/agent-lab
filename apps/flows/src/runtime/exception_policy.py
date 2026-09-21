@@ -24,12 +24,12 @@ def normalize_allow_types(raw: JsonValue | None) -> list[str]:
     try:
         items = require_json_array(raw, "exception_allow_types")
     except ValueError as exc:
-        raise TypeError("exception_allow_types: ожидается list[str]") from exc
+        raise TypeError("exception_allow_types: expected list[str]") from exc
     out: list[str] = []
     for item in items:
         if not isinstance(item, str):
             raise TypeError(
-                f"exception_allow_types: элемент должен быть str, получено {type(item).__name__}"
+                f"exception_allow_types: item must be str, got {type(item).__name__}"
             )
         s = item.strip()
         if s:
@@ -45,7 +45,7 @@ def node_exception_policy(config: JsonObject) -> tuple[bool, list[str]]:
     elif isinstance(raw_enabled, bool):
         enabled = raw_enabled
     else:
-        raise TypeError("exception_as_response: ожидается bool")
+        raise TypeError("exception_as_response: expected bool")
     allow_types = normalize_allow_types(config.get("exception_allow_types"))
     return enabled, allow_types
 

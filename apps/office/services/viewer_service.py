@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from urllib.parse import urlparse
 
-from fastapi import HTTPException, Request
-
 from apps.office.config import get_office_settings
 from apps.office.db.models import OfficeDocumentBinding
 from apps.office.services.document_type import supports_onlyoffice_viewer
@@ -25,8 +23,8 @@ from core.documents.viewer.models import (
     OfficeViewerScope,
 )
 from core.documents.viewer.resolver import resolve_viewer_handler_id
+from core.errors.boundary import PlatformUnavailableError
 from core.files.models import FileRecord
-from core.middleware.auth.company_resolver import build_service_base_url
 from core.models.i18n_models import Language
 from core.platform_brand.resolver import resolve_infrastructure_service_url
 
@@ -54,42 +52,24 @@ def integration_configured() -> tuple[bool, str]:
     return True, ""
 
 
-def _request_public_scheme(request: Request) -> str:
-    forwarded_proto = (request.headers.get("x-forwarded-proto") or "").split(",", 1)[0].strip().lower()
-    if forwarded_proto in {"http", "https"}:
-        return forwarded_proto
-    return request.url.scheme
+def browser_document_server_url(raw_url: str, public_origin: str) -> str:
+    """URL Document Server для браузера пользователя.
 
-
-def browser_public_base_url(request: Request) -> str:
-    return build_service_base_url(request)
-
-
-def _request_host_header(request: Request) -> str:
-    forwarded_host = (request.headers.get("x-forwarded-host") or "").strip()
-    host = forwarded_host or (request.headers.get("host") or "").strip() or (request.url.netloc or "").strip()
-    if not host:
-        raise ValueError("request host is required for document server URL resolution")
-    return host
-
-
-def browser_document_server_url(raw_url: str, request: Request) -> str:
+    Локальный `document_server_public_url` (dev) проксируется через тот же origin,
+    что и SPA; иначе адрес берётся из карты инфраструктуры бренда по host'у origin'а.
+    """
     value = raw_url.strip().rstrip("/")
     if not value:
-        raise ValueError("document_server_public_url пуст")
+        raise ValueError("document_server_public_url is empty")
+    origin = urlparse(public_origin)
+    if origin.scheme not in ("http", "https") or not origin.netloc:
+        raise ValueError(f"public_origin must be http(s)://host[:port], got {public_origin!r}")
     parsed = urlparse(value)
     host = (parsed.hostname or "").lower()
     if host in _LOCAL_DOCUMENT_SERVER_HOSTS:
-        scheme = _request_public_scheme(request)
-        port = request.url.port
-        netloc = request.url.netloc
-        if port and f":{port}" not in netloc:
-            netloc = f"{request.url.hostname}:{port}"
-        return f"{scheme}://{netloc}".rstrip("/")
-    request_host = _request_host_header(request)
-    resolved = resolve_infrastructure_service_url(request_host, "onlyoffice")
-    scheme = _request_public_scheme(request)
-    return urlparse(resolved)._replace(scheme=scheme).geturl().rstrip("/")
+        return f"{origin.scheme}://{origin.netloc}"
+    resolved = resolve_infrastructure_service_url(origin.netloc, "onlyoffice")
+    return urlparse(resolved)._replace(scheme=origin.scheme).geturl().rstrip("/")
 
 
 class DocumentViewerService:
@@ -120,19 +100,19 @@ class DocumentViewerService:
             )
         except ValueError as exc:
             if str(exc) == "office_integration_not_configured":
-                raise HTTPException(status_code=503, detail=str(exc)) from exc
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+                raise PlatformUnavailableError(str(exc)) from exc
+            raise
 
-    def _handler(self, handler_id: DocumentViewerHandlerId):
+    def _handler(self, handler_id: DocumentViewerHandlerId) -> _OfficeViewerHandler:
         handler = self._handlers.get(handler_id)
         if handler is None:
-            raise HTTPException(status_code=500, detail=f"Handler {handler_id} не зарегистрирован")
+            raise RuntimeError(f"Handler {handler_id} is not registered")
         return handler
 
     def build_context(
         self,
         *,
-        request: Request,
+        public_origin: str,
         handler_id: DocumentViewerHandlerId,
         viewer_scope: OfficeViewerScope,
         file_record: FileRecord,
@@ -165,10 +145,10 @@ class DocumentViewerService:
             document_server_public_url=integ.document_server_public_url,
             jwt_secret=integ.jwt_secret,
             download_token_ttl_seconds=integ.download_token_ttl_seconds,
-            browser_public_base_url=browser_public_base_url(request),
+            browser_public_base_url=public_origin,
             browser_document_server_url=browser_document_server_url(
                 integ.document_server_public_url,
-                request,
+                public_origin,
             ),
             link_permission=link_permission,
             public_link_token_hash=public_link_token_hash,
@@ -177,7 +157,7 @@ class DocumentViewerService:
     async def open_config_for_binding(
         self,
         *,
-        request: Request,
+        public_origin: str,
         binding: OfficeDocumentBinding,
         file_record: FileRecord,
         user_id: str,
@@ -193,9 +173,9 @@ class DocumentViewerService:
             integration_ok=integration_ok,
         )
         if handler_id == "onlyoffice" and not integration_ok:
-            raise HTTPException(status_code=503, detail=detail)
+            raise PlatformUnavailableError(detail)
         ctx = self.build_context(
-            request=request,
+            public_origin=public_origin,
             handler_id=handler_id,
             viewer_scope="catalog",
             file_record=file_record,
@@ -208,20 +188,17 @@ class DocumentViewerService:
             user_name=user_name,
             editor_lang=editor_lang,
         )
-        try:
-            return await self._handler(handler_id).build_open_config(ctx)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return await self._handler(handler_id).build_open_config(ctx)
 
     async def open_config_for_public_link(
         self,
         *,
-        request: Request,
+        public_origin: str,
         target: PublicLinkTarget,
         file_record: FileRecord,
     ) -> DocumentOpenConfigResponse:
         if target.kind != "binding" or target.binding is None:
-            raise HTTPException(status_code=400, detail="Откройте файл по прямой ссылке")
+            raise ValueError("Open the file via a direct link")
         binding = target.binding
         integration_ok, detail = integration_configured()
         file_category = binding.file_category
@@ -232,15 +209,12 @@ class DocumentViewerService:
             integration_ok=integration_ok,
         )
         if handler_id == "onlyoffice" and not integration_ok:
-            raise HTTPException(status_code=503, detail=detail)
+            raise PlatformUnavailableError(detail)
         if binding.link_permission not in ("viewer", "editor"):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid link_permission: {binding.link_permission}",
-            )
+            raise ValueError(f"Invalid link_permission: {binding.link_permission}")
         resolved_link_permission: OfficeViewerLinkPermission = binding.link_permission
         ctx = self.build_context(
-            request=request,
+            public_origin=public_origin,
             handler_id=handler_id,
             viewer_scope="catalog",
             file_record=file_record,
@@ -255,15 +229,12 @@ class DocumentViewerService:
             link_permission=resolved_link_permission,
             public_link_token_hash=target.token_hash,
         )
-        try:
-            return await self._handler(handler_id).build_open_config(ctx)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return await self._handler(handler_id).build_open_config(ctx)
 
     async def open_config_for_file(
         self,
         *,
-        request: Request,
+        public_origin: str,
         file_record: FileRecord,
         company_id: str,
         user_id: str,
@@ -281,9 +252,9 @@ class DocumentViewerService:
             integration_ok=integration_ok,
         )
         if handler_id == "onlyoffice" and not integration_ok:
-            raise HTTPException(status_code=503, detail=detail)
+            raise PlatformUnavailableError(detail)
         ctx = self.build_context(
-            request=request,
+            public_origin=public_origin,
             handler_id=handler_id,
             viewer_scope="file",
             file_record=file_record,
@@ -296,10 +267,7 @@ class DocumentViewerService:
             user_name=user_name,
             editor_lang=editor_lang,
         )
-        try:
-            return await self._handler(handler_id).build_open_config(ctx)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return await self._handler(handler_id).build_open_config(ctx)
 
     def capabilities_for_file(
         self,

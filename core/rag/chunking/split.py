@@ -122,7 +122,7 @@ def split_file_extract(
 ) -> list[RAGChunk]:
     """Единая точка нарезки FileExtract по профилю."""
     if split_config.strategy == "auto":
-        raise ValueError("split_file_extract требует resolved strategy, не auto")
+        raise ValueError('split_file_extract requires a resolved strategy, not auto')
     units = _split_units(extract, split_config)
     if not units:
         return []
@@ -188,7 +188,7 @@ def _texts_for_strategy(
     if strategy == "table":
         chunker = TableChunker(tokenizer="row", chunk_size=split_config.chunk_size)
         return _chunker_to_texts(chunker, raw)
-    raise ValueError(f"Неизвестная split.strategy: {strategy!r}")
+    raise ValueError(f"Unknown split.strategy: {strategy!r}")
 
 
 def _split_pages_with_text_strategy(

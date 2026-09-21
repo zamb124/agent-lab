@@ -26,6 +26,7 @@ import {
     createAsyncOp,
     createCursorList,
     createForm,
+    rerunLastRequest,
 } from '@platform/lib/events/index.js';
 
 const ENTITY_NAME_MAX = 256;
@@ -83,6 +84,16 @@ export const entitiesResource = createResourceCollection({
     },
 });
 
+const RELATIONSHIP_CHANGED_EVENTS = new Set([
+    'crm/relationships/created',
+    'crm/relationships/removed',
+]);
+
+/**
+ * Карточка сущности (entity + relationships + related_entities + attachments):
+ * связи и related нельзя смержить из исхода команды, поэтому после изменения
+ * связей и обновления сущности фабрика перечитывает открытую карточку сама.
+ */
 export const entityCardOp = createAsyncOp({
     name: 'crm/entity_card',
     silent: true,
@@ -90,6 +101,13 @@ export const entityCardOp = createAsyncOp({
     wsTimeoutMs: 8_000,
     commandType: 'crm/entities/card_requested',
     restMirror: { method: 'GET', path: '/crm/api/v1/entities/:entity_id/card' },
+    extraEffect: async (event, ctx) => {
+        if (!RELATIONSHIP_CHANGED_EVENTS.has(event.type)) {
+            return false;
+        }
+        rerunLastRequest(ctx, entityCardOp);
+        return false;
+    },
 });
 
 export const entityUpdateOp = createAsyncOp({
@@ -100,6 +118,11 @@ export const entityUpdateOp = createAsyncOp({
     wsTimeoutMs: 8_000,
     commandType: 'crm/entities/update_requested',
     restMirror: { method: 'PUT', path: '/crm/api/v1/entities/:entity_id' },
+    onSuccess: (ctx, result) => {
+        rerunLastRequest(ctx, entityCardOp, {
+            when: (request) => Boolean(request) && request.entity_id === result.entity_id,
+        });
+    },
 });
 
 function _buildEntityQueryFilters(filters, dateField) {

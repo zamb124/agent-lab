@@ -383,13 +383,13 @@ class SidebarNavEntry(BaseModel):
         rk = (self.route_key or "").strip()
         if bool(has_children):
             if bool(rk):
-                raise ValueError("SidebarNavEntry: у группы не задают route_key")
+                raise ValueError('SidebarNavEntry: group must not set route_key')
             sch = (self.search or "").strip()
             if bool(sch):
-                raise ValueError("SidebarNavEntry: у группы не задают search")
+                raise ValueError('SidebarNavEntry: group must not set search')
         else:
             if not bool(rk):
-                raise ValueError("SidebarNavEntry: лист требует непустой route_key")
+                raise ValueError('SidebarNavEntry: leaf requires a non-empty route_key')
         return self
 
 

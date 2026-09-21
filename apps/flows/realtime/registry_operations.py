@@ -51,7 +51,7 @@ def _capability_from_query(raw: str | None) -> AICapability:
     if capability.value not in _LLM_CAPABILITY_VALUES:
         raise_invalid(
             ValueError(
-                f"Capability {capability.value!r} не поддерживается registry LLM catalog"
+                f"capability {capability.value!r} is not supported by registry LLM catalog"
             )
         )
     return capability
@@ -112,12 +112,12 @@ def _custom_provider_models(
     capability: AICapability,
 ) -> list[str]:
     if not provider_ref.startswith(CUSTOM_PROVIDER_REF_PREFIX):
-        raise ValueError(f"Не custom-провайдер: {provider_ref!r}")
+        raise ValueError(f"Not a custom provider: {provider_ref!r}")
     custom_id = provider_ref[len(CUSTOM_PROVIDER_REF_PREFIX) :].strip()
     try:
         provider = aip.find_custom(custom_id)
     except KeyError as exc:
-        raise ValueError(f"Неизвестный custom-провайдер: {custom_id!r}") from exc
+        raise ValueError(f"Unknown custom provider: {custom_id!r}") from exc
     model = provider.model_by_capability.get(capability.value)
     return [model] if model else []
 

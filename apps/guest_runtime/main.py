@@ -52,7 +52,7 @@ async def on_startup(
         name="guest_runtime.reaper",
         background_kind="polling",
     )
-    logger.info("guest_runtime started")
+    logger.info("guest_runtime.guest_runtime")
 
 
 async def on_shutdown(app: FastAPI, container: GuestRuntimeContainer) -> None:

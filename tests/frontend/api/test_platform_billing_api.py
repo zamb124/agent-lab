@@ -180,7 +180,7 @@ async def test_platform_billing_settlement_rules_invalid_422(frontend_client_sys
         "/frontend/api/platform-billing/settlement-rules/system",
         json=body,
     )
-    assert response.status_code == 422
+    assert response.status_code == 422, response.text
 
 
 @pytest.mark.asyncio
@@ -251,25 +251,25 @@ async def test_platform_billing_company_prices_include_tariff_unit_price(
 
 
 @pytest.mark.asyncio
-async def test_platform_billing_put_prices_invalid_catalog_422(frontend_client_system):
+async def test_platform_billing_put_prices_invalid_catalog_400(frontend_client_system):
     response = await frontend_client_system.put(
         "/frontend/api/platform-billing/prices",
         json={"llm": "not-a-dict"},
     )
-    assert response.status_code == 422
+    assert response.status_code == 400, response.text
 
 
 @pytest.mark.asyncio
-async def test_platform_billing_put_prices_tool_category_rejected_422(frontend_client_system):
+async def test_platform_billing_put_prices_tool_category_rejected_400(frontend_client_system):
     response = await frontend_client_system.put(
         "/frontend/api/platform-billing/prices",
         json={"tool": {"*": 1.0}},
     )
-    assert response.status_code == 422
+    assert response.status_code == 400, response.text
 
 
 @pytest.mark.asyncio
-async def test_platform_billing_put_settlement_rules_tool_resource_rejected_422(
+async def test_platform_billing_put_settlement_rules_tool_resource_rejected_400(
     frontend_client_system,
 ):
     body = {
@@ -291,11 +291,11 @@ async def test_platform_billing_put_settlement_rules_tool_resource_rejected_422(
         "/frontend/api/platform-billing/settlement-rules/system",
         json=body,
     )
-    assert response.status_code == 422
+    assert response.status_code == 400, response.text
 
 
 @pytest.mark.asyncio
-async def test_platform_billing_put_company_prices_invalid_422(
+async def test_platform_billing_put_company_prices_invalid_400(
     frontend_client_system, unique_id: str,
 ):
     cid = f"co_bad_{unique_id}"
@@ -303,11 +303,11 @@ async def test_platform_billing_put_company_prices_invalid_422(
         f"/frontend/api/platform-billing/prices/company/{cid}",
         json={"x": 1},
     )
-    assert response.status_code == 422
+    assert response.status_code == 400, response.text
 
 
 @pytest.mark.asyncio
-async def test_platform_billing_put_company_prices_tool_category_rejected_422(
+async def test_platform_billing_put_company_prices_tool_category_rejected_400(
     frontend_client_system, unique_id: str,
 ):
     cid = f"co_tool_{unique_id}"
@@ -315,13 +315,13 @@ async def test_platform_billing_put_company_prices_tool_category_rejected_422(
         f"/frontend/api/platform-billing/prices/company/{cid}",
         json={"tool": {"*": 1.0}},
     )
-    assert response.status_code == 422
+    assert response.status_code == 400, response.text
 
 
 @pytest.mark.asyncio
 async def test_platform_billing_get_company_prices_whitespace_id_422(frontend_client_system):
     response = await frontend_client_system.get("/frontend/api/platform-billing/prices/company/%20")
-    assert response.status_code == 422
+    assert response.status_code == 422, response.text
 
 
 @pytest.mark.asyncio

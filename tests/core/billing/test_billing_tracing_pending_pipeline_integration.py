@@ -144,9 +144,9 @@ async def test_save_pending_span_list_then_rule_settle_creates_usage(
     )
     assert n2 == 0
 
-    recs = await frontend_container.usage_repository.admin_search_usage_records(
+    recs = (await frontend_container.usage_repository.admin_search_usage_records(
         company_id=cid, limit=20
-    )
+    )).items
     matched = [r for r in recs if r.metadata.get("span_id") == sid]
     assert len(matched) == 1
     assert matched[0].quantity == 2
@@ -246,9 +246,9 @@ async def test_pending_span_rules_engine_quantity_from_attr(
     )
     assert n == 1
 
-    recs = await frontend_container.usage_repository.admin_search_usage_records(
+    recs = (await frontend_container.usage_repository.admin_search_usage_records(
         company_id=cid, limit=20
-    )
+    )).items
     matched = [r for r in recs if r.metadata.get("rule_id") == f"tok_rule_{unique_id}"]
     assert len(matched) == 1
     assert matched[0].quantity == 100

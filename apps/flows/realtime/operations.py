@@ -37,7 +37,6 @@ from apps.flows.src.models.execution_limits import get_graph_max_iterations
 from apps.flows.src.models.flow_api import (
     FLOW_NODE_TYPE_CARDS,
     FLOW_RESOURCE_TYPE_CARDS,
-    BranchResponse,
     BulkDeleteNodesRequest,
     BulkDeleteNodesResponse,
     FlowCreateRequest,
@@ -108,6 +107,7 @@ from core.types import (
 )
 from core.utils.tokens import get_token_service
 from core.websocket import (
+    EmptyPayload,
     raise_conflict,
     raise_forbidden,
     raise_internal,
@@ -128,10 +128,6 @@ class FlowsListPayload(StrictBaseModel):
 
 class FlowsFlowIdPayload(StrictBaseModel):
     flow_id: str = Field(min_length=1)
-
-
-class FlowsEmptyPayload(StrictBaseModel):
-    pass
 
 
 class FlowsFlowVersionPayload(StrictBaseModel):
@@ -361,26 +357,6 @@ def generate_flow_url(
         return external_url
     settings = get_settings()
     return f"https://{settings.server.host}:{settings.server.port}/flows/{flow_id}"
-
-
-def branch_config_to_response(branch_cfg: BranchConfig) -> BranchResponse:
-    return BranchResponse(
-        name=branch_cfg.name,
-        description=branch_cfg.description,
-        tags=branch_cfg.tags,
-        permission=branch_cfg.permission,
-        entry=branch_cfg.entry,
-        nodes=branch_cfg.nodes,
-        edges=branch_cfg.edges if branch_cfg.edges else None,
-        variables=branch_cfg.variables,
-        nodes_mode=branch_cfg.nodes_mode.value,
-        edges_mode=branch_cfg.edges_mode.value,
-        variables_mode=branch_cfg.variables_mode.value,
-        resources=branch_cfg.resources,
-        resources_mode=branch_cfg.resources_mode.value,
-        speech=speech_to_json(branch_cfg.speech),
-        interface=branch_cfg.interface,
-    )
 
 
 def flow_variable_models(
@@ -685,13 +661,6 @@ async def flow_agent_toolkit_ids(container: FlowContainer, flow_id: str) -> list
     return await get_toolkit_ids_for_flow(container.agent_toolkit_repository, flow_id)
 
 
-def _branches_response(flow_cfg: FlowConfig) -> dict[str, BranchResponse]:
-    return {
-        branch_id: branch_config_to_response(branch_cfg)
-        for branch_id, branch_cfg in flow_cfg.branches.items()
-    }
-
-
 def _flow_item_response(
     flow_cfg: FlowConfig,
     *,
@@ -709,7 +678,7 @@ def _flow_item_response(
         edges=flow_cfg.edges,
         variables=flow_cfg.variables,
         tags=flow_cfg.tags,
-        branches=_branches_response(flow_cfg),
+        branches=flow_cfg.branches,
         hidden=flow_cfg.hidden,
         url=generate_flow_url(flow_cfg.flow_id, flow_cfg.type, flow_cfg.url),
         triggers=flow_cfg.triggers,
@@ -964,7 +933,7 @@ def _store_bundle_tags(raw_tags: JsonValue | None, bundle_id: str) -> list[str]:
 
 
 async def op_flows_store_bundles(
-    payload: FlowsEmptyPayload,
+    payload: EmptyPayload,
     *,
     user: User,
     container: FlowContainer,
@@ -1214,7 +1183,7 @@ async def _validate_merged_branch(
             for error in validation_result.errors
             if error.severity == ValidationSeverity.ERROR
         ]
-        raise_invalid(ValueError(f"Ошибка валидации ветки: {'; '.join(errors)}"))
+        raise_invalid(ValueError(f"branch validation failed: {'; '.join(errors)}"))
 
 
 async def op_flows_branch_create(
@@ -1230,7 +1199,7 @@ async def op_flows_branch_create(
     if flow_config is None:
         raise_not_found(PlatformNotFoundError(f"Flow '{flow_id}' not found"))
     if payload.branch_id in flow_config.branches:
-        raise_conflict(PlatformConflictError(f"Ветка '{payload.branch_id}' уже существует"))
+        raise_conflict(PlatformConflictError(f"branch {payload.branch_id!r} already exists"))
     candidate = flow_config.model_copy(deep=True)
     candidate.branches[payload.branch_id] = branch_payload_to_config(payload)
     await _validate_merged_branch(container, candidate, payload.branch_id)
@@ -1290,7 +1259,7 @@ async def op_flows_branch_remove(
     if flow_config is None:
         raise_not_found(PlatformNotFoundError(f"Flow '{payload.flow_id}' not found"))
     if payload.branch_id not in flow_config.branches:
-        raise_not_found(PlatformNotFoundError(f"Ветка '{payload.branch_id}' не найдена"))
+        raise_not_found(PlatformNotFoundError(f"branch {payload.branch_id!r} not found"))
     candidate = flow_config.model_copy(deep=True)
     del candidate.branches[payload.branch_id]
     _ = await container.flow_repository.set(candidate)
@@ -1639,7 +1608,7 @@ def _datasource_palette_card(spec: DatasourceConnectorSpec) -> FlowNodeTypeCard:
 
 
 async def op_flows_node_types(
-    payload: FlowsEmptyPayload,
+    payload: EmptyPayload,
     *,
     user: User,
     container: FlowContainer,
@@ -1654,7 +1623,7 @@ async def op_flows_node_types(
 
 
 async def op_flows_resource_types(
-    payload: FlowsEmptyPayload,
+    payload: EmptyPayload,
     *,
     user: User,
     container: FlowContainer,
@@ -1666,7 +1635,7 @@ async def op_flows_resource_types(
 
 
 async def op_flows_exception_absorb_allow_names(
-    payload: FlowsEmptyPayload,
+    payload: EmptyPayload,
     *,
     user: User,
     container: FlowContainer,
@@ -1678,7 +1647,7 @@ async def op_flows_exception_absorb_allow_names(
 
 
 async def op_flows_execution_limits(
-    payload: FlowsEmptyPayload,
+    payload: EmptyPayload,
     *,
     user: User,
     container: FlowContainer,

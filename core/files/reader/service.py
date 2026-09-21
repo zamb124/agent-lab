@@ -40,17 +40,14 @@ from pymupdf import mupdf as pymupdf_lowlevel
 from striprtf.striprtf import rtf_to_text
 from unstructured.partition.auto import partition as raw_partition
 
-from core.ai.resolver import COST_ORIGIN_COMPANY
 from core.ai.runtime import create_vision_llm_client, resolve_vision_ai_model
-from core.billing import get_billing_service
-from core.billing.service import BALANCE_BLOCK_OPERATION_VISION
 from core.context import get_context
 from core.data_tables.sqlite_format import summarize_sqlite_bytes
 from core.files.checksum import compute_content_checksum_sha256
 from core.files.default_storage import get_default_storage
 from core.files.file_ref import FileRef, FileRefSource, file_id_from_download_url
 from core.files.media.transcriber import MediaTranscriber
-from core.files.models import FileRecord, FileResponse
+from core.files.models import FileRecord
 from core.files.reader.exceptions import FileReadError
 from core.files.reader.models import (
     CompressionMode,
@@ -73,7 +70,6 @@ from core.files.s3_client import S3ClientFactory
 from core.files.service import FilesService
 from core.files.types import FileCategory, extensions_for
 from core.http import get_httpx_client
-from core.models.billing_models import UsageType
 from core.tracing.operation_span import traced_operation
 
 SourceInput = Path | str | bytes
@@ -252,7 +248,7 @@ class _ExtractMsgModule(Protocol):
 
 
 def is_file_ref_source(source: SourceInput | FileRefSource) -> TypeIs[FileRefSource]:
-    if isinstance(source, (FileRef, FileRecord, FileResponse)):
+    if isinstance(source, (FileRef, FileRecord)):
         return True
     if isinstance(source, Mapping):
         file_id = source.get("file_id")
@@ -261,7 +257,7 @@ def is_file_ref_source(source: SourceInput | FileRefSource) -> TypeIs[FileRefSou
             isinstance(url, str) and url.strip()
         ):
             return True
-        raise TypeError("Если source — словарь, укажите непустой file_id или url")
+        raise TypeError("If source is a dict, provide a non-empty file_id or url")
     return False
 
 
@@ -289,7 +285,7 @@ async def _read_stored_file_by_id(file_id: str) -> tuple[bytes, str]:
     storage = get_default_storage()
     record = await storage.get(file_id)
     if record is None:
-        raise FileReadError(f"Файл не найден в хранилище: {file_id}")
+        raise FileReadError(f"File not found in storage: {file_id}")
     s3_bucket = record.s3_bucket
     s3_key = record.s3_key
     if s3_bucket != "" and s3_key != "":
@@ -303,12 +299,12 @@ async def _read_stored_file_by_id(file_id: str) -> tuple[bytes, str]:
                     raise
                 if code in ("NoSuchKey", "404", "NotFound"):
                     raise FileReadError(
-                        "Файл не найден в хранилище: метаданные есть, объект отсутствует "
-                        + "очистка бакета, смена окружения или устаревший идентификатор. "
+                        "File not found in storage: metadata exists, object is missing "
+                        + "(bucket cleanup, environment change, or stale identifier). "
                         + f"file_id={file_id}"
                     ) from exc
                 raise FileReadError(
-                    f"Ошибка объектного хранилища при чтении файла (код {code}): {file_id}"
+                    f"Object storage error while reading the file (code {code}): {file_id}"
                 ) from exc
             return raw, record.original_name
         finally:
@@ -317,7 +313,7 @@ async def _read_stored_file_by_id(file_id: str) -> tuple[bytes, str]:
     if storage_url is not None and storage_url.startswith(("http://", "https://")):
         raw = await _read_http_bytes(storage_url)
         return raw, record.original_name
-    raise FileReadError(f"Источник файла не настроен: {file_id}")
+    raise FileReadError(f"File source is not configured: {file_id}")
 
 
 async def read_stored_file_by_id(file_id: str) -> tuple[bytes, str]:
@@ -433,7 +429,7 @@ def _zip_embedded_media_assets(
     try:
         archive = zipfile.ZipFile(BytesIO(raw))
     except zipfile.BadZipFile as exc:
-        raise FileReadError("не удалось открыть office zip для media") from exc
+        raise FileReadError("failed to open office zip for media") from exc
     assets: list[ReadAsset] = []
     with archive:
         names = [
@@ -466,7 +462,7 @@ def _pptx_picture_asset(shape: _PptxShape, *, include_bytes: bool) -> ReadAsset 
     image = shape.image
     content_type = image.content_type
     if not content_type.strip():
-        raise FileReadError("PPTX picture без content_type")
+        raise FileReadError("PPTX picture has no content_type")
     return _read_asset_from_bytes(
         image.blob,
         content_type=content_type,
@@ -565,8 +561,8 @@ class FileReader:
     def require_files_service(cls) -> FilesService:
         if cls._process_files_service is None:
             raise ValueError(
-                "FileReader persist: files_service не настроен — "
-                + "вызовите FileReader.configure_asset_persist при старте процесса"
+                "FileReader persist: files_service is not configured — "
+                + "call FileReader.configure_asset_persist at process start"
             )
         return cls._process_files_service
 
@@ -601,7 +597,7 @@ class FileReader:
     ) -> tuple[bytes, str]:
         if isinstance(source, bytes):
             if not file_name or not str(file_name).strip():
-                raise ValueError("file_name обязателен при source=bytes")
+                raise ValueError("file_name is required when source=bytes")
             return source, str(file_name)
 
         path = source if isinstance(source, Path) else Path(str(source).strip())
@@ -628,7 +624,7 @@ class FileReader:
             name = file_name if file_name else default_name
             return data, name
 
-        raise FileReadError(f"Файл не найден: {s}")
+        raise FileReadError(f"File not found: {s}")
 
     async def read_raw_bytes(
         self,
@@ -669,7 +665,7 @@ class FileReader:
             }
         )
         if result.page_count != len(result.pages):
-            raise RuntimeError("инвариант FileReadResult: page_count должен совпадать с len(pages)")
+            raise RuntimeError("FileReadResult invariant: page_count must match len(pages)")
         return result
 
     async def raw_from_file_ref(
@@ -726,7 +722,7 @@ class FileReader:
         file_id: str | None = None,
     ) -> FileExtract:
         _ = (source, args, file_name, file_id)
-        raise RuntimeError("FileReader.read доступен после import core.files.reader")
+        raise RuntimeError("FileReader.read is available after import core.files.reader")
 
 
 async def run_vision_on_image_bytes(
@@ -759,26 +755,15 @@ async def run_vision_on_image_bytes(
     llm = create_vision_llm_client(resolved_llm)
     actx = get_context()
     if actx is None or actx.active_company is None:
-        raise ValueError("Контекст с active_company обязателен для vision-чтения изображения")
+        raise ValueError("Context with active_company is required for vision image reading")
     if not str(actx.user.user_id).strip():
         raise ValueError(
-            "Контекст с user обязателен для vision-чтения изображения (биллинг и уведомления)"
-        )
-    if resolved_llm.cost_origin != COST_ORIGIN_COMPANY:
-        await get_billing_service().require_balance_for_billable_operation(
-            actx.active_company.company_id,
-            str(actx.user.user_id).strip(),
-            operation_code=BALANCE_BLOCK_OPERATION_VISION,
-            notification_service="frontend",
+            "Context with user is required for vision image reading (billing and notifications)"
         )
     async with traced_operation(
         trace_name,
         event_type="llm.vision",
         operation_category="llm",
-        billing_usage_type=UsageType.LLM_REQUEST.value,
-        billing_resource_name=resolved_llm.billing_resource_name,
-        billing_quantity=1,
-        billing_pending_settlement=True,
     ):
         vision_result = await llm.invoke([message], json_output=False)
     return str(vision_result)
@@ -793,9 +778,9 @@ async def _read_image_impl(
     if opts.vision_prompt is not None:
         stripped = opts.vision_prompt.strip()
         if not stripped:
-            raise ValueError("ReadOptions.vision_prompt задан пустой строкой")
+            raise ValueError("ReadOptions.vision_prompt is set to an empty string")
     if not mime.strip():
-        raise FileReadError(f"image без content_type: {file_name}")
+        raise FileReadError(f"image has no content_type: {file_name}")
     asset = _read_asset_from_bytes(
         raw,
         content_type=mime,
@@ -840,7 +825,7 @@ def _read_html_sync(
             tag.decompose()
         extracted = soup.get_text(separator="\n", strip=True)
     if not extracted or not extracted.strip():
-        raise FileReadError(f"HTML не содержит текста: {file_name}")
+        raise FileReadError(f"HTML contains no text: {file_name}")
     page = ReadPage(index=0, text=extracted, assets=[], label=None)
     return FileReadResult(
         file_name=file_name,
@@ -870,7 +855,7 @@ def _decode_text_bytes(raw: bytes, file_name: str) -> str:
     except UnicodeDecodeError:
         best = from_bytes(raw).best()
         if best is None:
-            raise FileReadError(f"Не удалось определить кодировку текстового файла: {file_name}")
+            raise FileReadError(f"Failed to detect text file encoding: {file_name}")
         return str(best)
 
 
@@ -952,7 +937,7 @@ def _read_xls_sync(
                 )
             )
     if not pages:
-        raise FileReadError(f"xlrd не извлёк данные: {file_name}")
+        raise FileReadError(f"xlrd extracted no data: {file_name}")
     return FileReadResult(
         file_name=file_name,
         content_type=mime or "application/vnd.ms-excel",
@@ -981,7 +966,7 @@ def _read_doc_choosing_backend_sync(
         return _read_unstructured_sync(raw, eff_name, eff_mime, FileReadKind.OFFICE, opts)
     if _is_msword_ole_compound(raw):
         return _read_doc_ole_sync(raw, file_name, mime, opts)
-    raise FileReadError(f"Файл .doc не распознан (нет OLE/ZIP сигнатур): {file_name}")
+    raise FileReadError(f".doc file was not recognized (no OLE/ZIP signatures): {file_name}")
 
 
 def _read_doc_ole_sync(
@@ -996,7 +981,7 @@ def _read_doc_ole_sync(
     if not text:
         text = _extract_text_from_ole_word_stream(raw)
     if not text or not text.strip():
-        raise FileReadError(f".doc файл не содержит извлекаемого текста: {file_name}")
+        raise FileReadError(f".doc file contains no extractable text: {file_name}")
     page = ReadPage(index=0, text=text, assets=[], label=None)
     return FileReadResult(
         file_name=file_name,
@@ -1104,11 +1089,11 @@ def _pdf_page_embedded_images(page: _PdfPage, doc: _PdfDocument) -> list[PdfPage
             extracted = doc.extract_image(xref)
         except pymupdf_lowlevel.FzErrorBase as exc:
             raise FileReadError(
-                f"Не удалось извлечь embedded image из PDF xref={xref}: {exc}"
+                f"Failed to extract embedded image from PDF xref={xref}: {exc}"
             ) from exc
         except (ValueError, RuntimeError, OSError) as exc:
             raise FileReadError(
-                f"Не удалось извлечь embedded image из PDF xref={xref}: {exc}"
+                f"Failed to extract embedded image from PDF xref={xref}: {exc}"
             ) from exc
         image_bytes = extracted["image"]
         width = extracted["width"]
@@ -1133,18 +1118,18 @@ def _pdf_page_embedded_images(page: _PdfPage, doc: _PdfDocument) -> list[PdfPage
 
 def _require_str_object_map(value: object, where: str) -> dict[str, object]:
     if not isinstance(value, dict):
-        raise FileReadError(f"{where} должен быть dict")
+        raise FileReadError(f"{where} must be a dict")
     mapping: dict[str, object] = {}
     for key, item in cast(dict[object, object], value).items():
         if not isinstance(key, str):
-            raise FileReadError(f"{where}: ключ должен быть str")
+            raise FileReadError(f"{where}: key must be str")
         mapping[key] = item
     return mapping
 
 
 def _require_object_list(value: object, where: str) -> list[object]:
     if not isinstance(value, list):
-        raise FileReadError(f"{where} должен быть списком")
+        raise FileReadError(f"{where} must be a list")
     return cast(list[object], value)
 
 
@@ -1316,7 +1301,7 @@ def _read_pdf_sync(
             assets: list[ReadAsset] = []
             if opts.include_asset_bytes and not skip_raster:
                 if page is None:
-                    raise FileReadError(f"Не удалось получить страницу PDF: {file_name}#{i + 1}")
+                    raise FileReadError(f"Failed to get PDF page: {file_name}#{i + 1}")
                 assets.extend(
                     _pdf_page_embedded_image_assets(
                         page,
@@ -1423,7 +1408,7 @@ def _read_unstructured_sync(
     try:
         elements = partition(file=file_obj, metadata_filename=file_name, languages=["rus", "eng"])
     except Exception as exc:
-        raise FileReadError(f"Не удалось разобрать файл через Unstructured: {file_name}") from exc
+        raise FileReadError(f"Failed to parse file with Unstructured: {file_name}") from exc
     by_group: dict[str, list[ExtractBlock]] = defaultdict(list)
     group_order: list[str] = []
     group_labels: dict[str, str | None] = {}
@@ -1434,7 +1419,7 @@ def _read_unstructured_sync(
             continue
         category = el.category
         if not category.strip():
-            raise FileReadError(f"Unstructured element без category: {file_name}")
+            raise FileReadError(f"Unstructured element has no category: {file_name}")
         block = _extract_block_from_unstructured(category, t)
         if block is None:
             continue
@@ -1447,7 +1432,7 @@ def _read_unstructured_sync(
             group_labels[group_key] = group_label
         by_group[group_key].append(block)
     if not by_group:
-        raise FileReadError(f"Unstructured не извлёк текст: {file_name}")
+        raise FileReadError(f"Unstructured extracted no text: {file_name}")
     if no_page_meta and len(by_group) == 1:
         warnings.append("Парсер не вернул номера страниц; весь текст на одной логической странице")
     pages: list[ReadPage] = []
@@ -1494,7 +1479,7 @@ def _read_pptx_sync(
     try:
         prs = presentation(BytesIO(raw))
     except Exception as exc:
-        raise FileReadError(f"Не удалось открыть PPTX: {file_name}") from exc
+        raise FileReadError(f"Failed to open PPTX: {file_name}") from exc
     pages: list[ReadPage] = []
     for slide_idx, slide in enumerate(prs.slides):
         chunks: list[str] = []
@@ -1542,7 +1527,7 @@ def _read_pptx_sync(
             )
         )
     if not pages:
-        raise FileReadError(f"PPTX не содержит слайдов: {file_name}")
+        raise FileReadError(f"PPTX contains no slides: {file_name}")
     return FileReadResult(
         file_name=file_name,
         content_type=mime
@@ -1569,8 +1554,8 @@ def _read_ppt_sync(
             opts,
         )
     raise FileReadError(
-        f"Legacy .ppt (PowerPoint 97-2003) не поддерживается без libreoffice: {file_name}. "
-        + "Конвертируйте в .pptx."
+        f"Legacy .ppt (PowerPoint 97-2003) is not supported without libreoffice: {file_name}. "
+        + "Convert it to .pptx."
     )
 
 
@@ -1586,9 +1571,9 @@ def _read_rtf_sync(
         rtf_text = raw.decode("utf-8", errors="replace")
         text = rtf_to_text(rtf_text, errors="ignore")
     except Exception as exc:
-        raise FileReadError(f"Не удалось разобрать RTF: {file_name}") from exc
+        raise FileReadError(f"Failed to parse RTF: {file_name}") from exc
     if not text.strip():
-        raise FileReadError(f"RTF пустой: {file_name}")
+        raise FileReadError(f"RTF is empty: {file_name}")
     return FileReadResult(
         file_name=file_name,
         content_type=mime or "application/rtf",
@@ -1617,7 +1602,7 @@ def _read_odt_sync(
     try:
         doc = opendocument.load(BytesIO(raw))
     except Exception as exc:
-        raise FileReadError(f"Не удалось открыть ODT: {file_name}") from exc
+        raise FileReadError(f"Failed to open ODT: {file_name}") from exc
     parts: list[str] = []
     for elem in doc.getElementsByType(odf_text_module.P):
         s = teletype.extractText(elem)
@@ -1629,7 +1614,7 @@ def _read_odt_sync(
             parts.append(s)
     body = "\n".join(parts)
     if not body.strip():
-        raise FileReadError(f"ODT пустой: {file_name}")
+        raise FileReadError(f"ODT is empty: {file_name}")
     return FileReadResult(
         file_name=file_name,
         content_type=mime or "application/vnd.oasis.opendocument.text",
@@ -1659,7 +1644,7 @@ def _read_epub_sync(
         try:
             book = typed_epub.read_epub(tmp_path)
         except Exception as exc:
-            raise FileReadError(f"Не удалось открыть EPUB: {file_name}") from exc
+            raise FileReadError(f"Failed to open EPUB: {file_name}") from exc
         pages: list[ReadPage] = []
         for idx, item in enumerate(book.get_items_of_type(typed_ebooklib.ITEM_DOCUMENT)):
             soup = BeautifulSoup(item.get_content(), "html.parser")
@@ -1676,7 +1661,7 @@ def _read_epub_sync(
     finally:
         Path(tmp_path).unlink(missing_ok=True)
     if not pages:
-        raise FileReadError(f"EPUB не содержит документов: {file_name}")
+        raise FileReadError(f"EPUB contains no documents: {file_name}")
     return FileReadResult(
         file_name=file_name,
         content_type=mime or "application/epub+zip",
@@ -1704,7 +1689,7 @@ def _read_msg_sync(
         try:
             msg = typed_extract_msg.openMsg(tmp_path)
         except Exception as exc:
-            raise FileReadError(f"Не удалось открыть MSG: {file_name}") from exc
+            raise FileReadError(f"Failed to open MSG: {file_name}") from exc
         try:
             parts: list[str] = []
             subject = _text_or_none(msg.subject)
@@ -1732,7 +1717,7 @@ def _read_msg_sync(
     finally:
         Path(tmp_path).unlink(missing_ok=True)
     if not text.strip():
-        raise FileReadError(f"MSG пустой: {file_name}")
+        raise FileReadError(f"MSG is empty: {file_name}")
     return FileReadResult(
         file_name=file_name,
         content_type=mime or "application/vnd.ms-outlook",
@@ -1754,7 +1739,7 @@ def _read_eml_sync(
     try:
         msg = BytesParser(policy=policy.default).parsebytes(raw)
     except Exception as exc:
-        raise FileReadError(f"Не удалось разобрать EML: {file_name}") from exc
+        raise FileReadError(f"Failed to parse EML: {file_name}") from exc
     parts: list[str] = []
     for header in ("Subject", "From", "To", "Cc", "Date"):
         v = msg.get(header)
@@ -1796,7 +1781,7 @@ def _read_eml_sync(
         parts.append(body)
     text = "\n".join(parts)
     if not text.strip():
-        raise FileReadError(f"EML пустой: {file_name}")
+        raise FileReadError(f"EML is empty: {file_name}")
     return FileReadResult(
         file_name=file_name,
         content_type=mime or "message/rfc822",
@@ -1890,9 +1875,9 @@ def _read_primary_sync(
         return _read_unstructured_sync(raw, name, mime, info.detected_kind, opts)
     if info.detected_kind == FileReadKind.UNKNOWN:
         if not info.extension:
-            raise FileReadError(f"Файл без расширения не поддерживается: {name}")
+            raise FileReadError(f"File without an extension is not supported: {name}")
         return _read_unstructured_sync(raw, name, mime, FileReadKind.UNKNOWN, opts)
-    raise FileReadError(f"Неподдерживаемый тип: {info.detected_kind}")
+    raise FileReadError(f"Unsupported type: {info.detected_kind}")
 
 
 def _read_plain_text_handler_fallback_sync(

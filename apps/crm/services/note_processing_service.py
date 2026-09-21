@@ -49,7 +49,7 @@ class NoteProcessingService:
         """
         note = await self._entity_service.get_entity(note_id)
         if note is None:
-            raise ValueError(f"Заметка не найдена: {note_id}")
+            raise ValueError(f"Note not found: {note_id}")
 
         parts: list[str] = []
         desc_raw = strip_auto_merged_attachment_blocks_from_note_description(
@@ -68,7 +68,7 @@ class NoteProcessingService:
                 stripped = text.strip()
                 if not stripped:
                     raise ValueError(
-                        f"Вложение '{filename}' (file_id={file_id}) не содержит извлекаемого текста. Анализ без полного содержимого всех вложений невозможен."
+                        f"Attachment '{filename}' (file_id={file_id}) has no extractable text. Analysis without the full content of all attachments is not possible."
                     )
                 if len(stripped) > attachment_chars_limit:
                     if progress_cb:
@@ -79,13 +79,13 @@ class NoteProcessingService:
                     stripped = stripped.strip()
                     if not stripped:
                         raise ValueError(
-                            f"Суммаризация вложения '{filename}' (file_id={file_id}) не вернула текст."
+                            f"Attachment summarization '{filename}' (file_id={file_id}) returned no text."
                         )
                 parts.append(f"=== Вложение {i + 1}: {filename} ===\n{stripped}")
 
         combined = "\n\n---\n\n".join(parts)
         if not combined.strip():
-            raise ValueError(f"Заметка {note_id} не содержит текста для анализа")
+            raise ValueError(f"Note {note_id} has no text for analysis")
         return combined
 
     async def analyze(
@@ -98,7 +98,7 @@ class NoteProcessingService:
         """Шаг 1: AI-анализ текста заметки, сохранение черновика."""
         note = await self._entity_service.get_entity(note_id)
         if note is None:
-            raise ValueError(f"Заметка не найдена: {note_id}")
+            raise ValueError(f"Note not found: {note_id}")
 
         text = await self.resolve_note_text(
             note_id,

@@ -23,10 +23,10 @@ class OpenAICompatibleModelCatalogAdapter(BaseModelCatalogAdapter):
     @override
     async def list_models(self, *, probe_embeddings: bool = True) -> list[AIModelRecord]:
         if not self.is_configured():
-            raise ValueError(f"{self.provider} model provider не настроен")
+            raise ValueError(f"{self.provider} model provider is not configured")
         cfg = self._configured_llm_provider()
         if cfg is None:
-            raise ValueError(f"{self.provider} provider config не настроен")
+            raise ValueError(f"{self.provider} provider config is not configured")
         payload = await self._fetch_provider_catalog_payload(
             url=self._provider_models_url(cfg),
             headers=self.provider_model_list_headers(),
@@ -35,7 +35,7 @@ class OpenAICompatibleModelCatalogAdapter(BaseModelCatalogAdapter):
         records = self._extract_provider_model_records(payload, self.provider)
         if probe_embeddings:
             records = await self._probe_embedding_dimensions(records)
-        logger.info("%s: получено %d моделей", self.provider, len(records))
+        logger.info("ai.event", provider=self.provider, records_count=len(records))
         return records
 
 

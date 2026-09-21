@@ -134,7 +134,7 @@ def _reject_vad_path_kind(kind: str) -> None:
     if kind == "vad":
         raise HTTPException(
             status_code=410,
-            detail="VAD настраивается на уровне развёртывания; per-company override удалён.",
+            detail="VAD is configured at deployment level; per-company override was removed.",
         )
 
 
@@ -155,7 +155,7 @@ def _validate_kind(kind: str) -> VoiceKind:
         return "tts"
     raise HTTPException(
         status_code=400,
-        detail=f"Неизвестный kind: {kind!r}. Допустимы: {', '.join(_VOICE_KINDS)}",
+        detail=f"Unknown kind: {kind!r}. Allowed: {', '.join(_VOICE_KINDS)}",
     )
 
 
@@ -165,8 +165,7 @@ def _validate_provider(kind: VoiceKind, provider: str) -> None:
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Неизвестный provider {provider!r} для kind={kind!r}; "
-                f"допустимы: {', '.join(sorted(allowed))}"
+                f"Unknown provider {provider!r} for kind={kind!r}; allowed: {', '.join(sorted(allowed))}"
             ),
         )
 
@@ -188,7 +187,7 @@ def _validate_model_for_voice(
             if model_value not in allowed:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"model допустимо только одно из: {', '.join(allowed)}",
+                    detail=f"model must be one of: {', '.join(allowed)}",
                 )
             return
         if provider == "yandex":
@@ -197,7 +196,7 @@ def _validate_model_for_voice(
             if model_value not in _YANDEX_SPEECH_MODELS:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"model Yandex допустимо одно из: {', '.join(_YANDEX_SPEECH_MODELS)}",
+                    detail=f"Yandex model must be one of: {', '.join(_YANDEX_SPEECH_MODELS)}",
                 )
             return
         if provider == "sber":
@@ -206,7 +205,7 @@ def _validate_model_for_voice(
             if model_value not in _SBER_SPEECH_MODELS:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"model Sber допустимо одно из: {', '.join(_SBER_SPEECH_MODELS)}",
+                    detail=f"Sber model must be one of: {', '.join(_SBER_SPEECH_MODELS)}",
                 )
             return
         return
@@ -223,7 +222,7 @@ def _validate_model_for_voice(
     if model_value not in allowed:
         raise HTTPException(
             status_code=400,
-            detail=f"Неизвестная модель {voice_product_name}: {model_value!r}",
+            detail=f"Unknown model {voice_product_name}: {model_value!r}",
         )
 
 
@@ -232,7 +231,7 @@ def _item_kind(value: str) -> Literal["stt", "tts"]:
         return "stt"
     if value == "tts":
         return "tts"
-    raise HTTPException(status_code=500, detail=f"Некорректный kind в БД: {value!r}")
+    raise HTTPException(status_code=500, detail=f"Invalid kind in DB: {value!r}")
 
 
 def _response_format(
@@ -252,7 +251,7 @@ def _response_format(
         return "lpcm"
     raise HTTPException(
         status_code=500,
-        detail=f"Некорректный response_format в БД: {value!r}",
+        detail=f"Invalid response_format in DB: {value!r}",
     )
 
 

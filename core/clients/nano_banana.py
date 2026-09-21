@@ -53,7 +53,7 @@ class NanoBananaClient:
                 self._llm = create_llm_client_from_ai_model(resolved)
             else:
                 raise ValueError(
-                    "NanoBananaClient: platform default для capability=image_gen не настроен"
+                    "NanoBananaClient: platform default for capability=image_gen is not configured"
                 )
         return self._llm
 
@@ -76,7 +76,7 @@ class NanoBananaClient:
         Возвращает:
             Список file_id сгенерированных изображений
         """
-        logger.info(f"Генерация {num_images} изображений через LLM: {prompt[:50]}...")
+        logger.info("image.generate.started", num_images=num_images, prompt_preview=prompt[:50])
 
         parts: list[Part] = []
 
@@ -94,14 +94,14 @@ class NanoBananaClient:
 - ADD the product to the EXISTING person in the BASE IMAGE"""))
 
         if reference_file_ids:
-            logger.info(f"Добавляем {len(reference_file_ids)} референсных изображений")
+            logger.info("image.generate.references", count=len(reference_file_ids))
 
             for idx, file_id in enumerate(reference_file_ids):
                 file_key = f"file:{file_id}"
                 file_data_json = await self._storage.get(file_key)
 
                 if not file_data_json:
-                    logger.warning(f"Файл {file_id} не найден")
+                    logger.warning("image.generate.file_missing", file_id=file_id)
                     continue
 
                 file_record = FileRecord.model_validate_json(file_data_json)
@@ -126,7 +126,7 @@ class NanoBananaClient:
                         )
                     )
 
-                    logger.info(f"Добавлено изображение {file_id} (индекс {idx})")
+                    logger.info("image.generate.reference_added", file_id=file_id, index=idx)
 
         parts.append(Part(text=prompt))
 
@@ -147,9 +147,9 @@ class NanoBananaClient:
             file_ids.append(f"file_{file_match.group(1)}")
 
         if file_ids:
-            logger.info(f"Сгенерировано {len(file_ids)} изображений: {file_ids}")
+            logger.info("image.generate.completed", file_ids=file_ids, count=len(file_ids))
         else:
-            logger.warning("Не удалось найти file_id в ответе LLM")
+            logger.warning("clients.file_id.llm")
 
         return file_ids
 
@@ -162,7 +162,7 @@ class NanoBananaClientFactory:
         settings = get_settings()
 
         if not settings.nano_banana.enabled:
-            raise ValueError("Nano Banana не настроен в конфигурации")
+            raise ValueError("Nano Banana is not configured")
 
         return NanoBananaClient(
             storage=storage,

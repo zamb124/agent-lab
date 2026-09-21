@@ -191,11 +191,11 @@ async def _request_direct_burst(
             except _CONNECT_RETRY_EXCEPTIONS as e:
                 last = e
                 logger.warning(
-                    "Прямой запрос к %s: %s (попытка %s/%s)",
-                    url,
-                    type(e).__name__,
-                    attempt + 1,
-                    attempts,
+                    "http.event",
+                    url=url,
+                    __name__=type(e).__name__,
+                    attempt=attempt + 1,
+                    attempts=attempts,
                 )
     if last is None:
         raise RuntimeError("request_public_oauth: attempts must be >= 1")
@@ -237,11 +237,7 @@ async def request_public_oauth(
             ) as client:
                 return await client.request(method.upper(), url, **kwargs)
         except _CONNECT_RETRY_EXCEPTIONS as e:
-            logger.warning(
-                "Запрос через прокси к %s не удался (%s), снова прямое подключение",
-                url,
-                type(e).__name__,
-            )
+            logger.warning("http.event", url=url, __name__=type(e).__name__)
 
     return await _request_direct_burst(
         method,
@@ -345,10 +341,7 @@ async def request_with_strategy(
                         pass
                     return resp
             except _CONNECT_RETRY_EXCEPTIONS:
-                logger.warning(
-                    "Запрос через прокси к %s не удался, повторное прямое подключение",
-                    url,
-                )
+                logger.warning("http.event", url=url)
                 # Прокси тоже не работает — сбрасываем предпочтение
                 try:
                     await egress_prefer_proxy_delete(origin)
@@ -375,10 +368,7 @@ async def request_with_strategy(
                 ) as client:
                     return await client.request(method.upper(), url, **kwargs)
             except _CONNECT_RETRY_EXCEPTIONS:
-                logger.warning(
-                    "Запрос через прокси к %s не удался, переключение на прямое подключение",
-                    url,
-                )
+                logger.warning("http.event", url=url)
 
         return await _request_direct_burst(
             method,
@@ -479,8 +469,8 @@ class SmartProxyClient:
         base = self.kwargs.get("base_url")
         if base is None:
             raise ValueError(
-                "SmartProxyClient: для относительного URL нужен base_url в kwargs клиента "
-                + "(egress preference по origin)."
+                'SmartProxyClient: relative URL requires base_url in client kwargs '
+                + '(egress preference by origin).'
             )
         return urljoin(str(base), url)
 
@@ -510,11 +500,7 @@ class SmartProxyClient:
 
         for attempt in range(self.MAX_PROXY_RETRIES):
             proxy_url = settings.proxy.get_next_proxy()
-            logger.debug(
-                "Using proxy: %s... -> %s",
-                proxy_url[:40] if proxy_url else "None",
-                url,
-            )
+            logger.debug("http.proxy", proxy_url=proxy_url[:40] if proxy_url else 'None', url=url)
 
             try:
                 async with self._create_client(proxy_url) as client:
@@ -526,14 +512,14 @@ class SmartProxyClient:
 
                 if attempt < self.MAX_PROXY_RETRIES - 1:
                     logger.warning(
-                        "Proxy %s failed (%s), switching to next proxy (attempt %s/%s)",
-                        proxy_url,
-                        type(e).__name__,
-                        attempt + 2,
-                        self.MAX_PROXY_RETRIES,
+                        "http.proxy.failed.switching.next.proxy",
+                        proxy_url=proxy_url,
+                        __name__=type(e).__name__,
+                        attempt=attempt + 2,
+                        MAX_PROXY_RETRIES=self.MAX_PROXY_RETRIES,
                     )
                 else:
-                    logger.error("All proxy attempts failed for %s", url)
+                    logger.error("http.proxy.attempts.failed", url=url)
                     raise
         raise RuntimeError("proxy rotation exited without response")
 
@@ -589,11 +575,7 @@ class SmartProxyClient:
                     return response
                 raise
             if await _should_retry_http_via_proxy(response) and _platform_proxy_active():
-                logger.warning(
-                    "HTTP %s для %s, повтор через platform proxy",
-                    response.status_code,
-                    url,
-                )
+                logger.warning("http.platform.proxy", status_code=response.status_code, url=url)
                 await response.aclose()
                 response = await self._request_via_proxy_rotation(http_method, url, **kwargs)
                 if response.is_success:
@@ -714,11 +696,7 @@ class _StreamContextManager:
                     settings.proxy.mark_last_proxy_failed()
                     await self._cleanup_stream()
                     if attempt < self._smart_client.MAX_PROXY_RETRIES - 1:
-                        logger.warning(
-                            "Proxy %s failed (%s), switching to next proxy (stream)",
-                            proxy_url,
-                            type(e).__name__,
-                        )
+                        logger.warning("http.proxy.failed.switching.next.proxy", proxy_url=proxy_url, __name__=type(e).__name__)
             await egress_prefer_proxy_delete(origin)
             if last_exc is not None:
                 return await self._enter_direct_stream()
@@ -747,22 +725,14 @@ class _StreamContextManager:
                             settings.proxy.mark_last_proxy_failed()
                             await self._cleanup_stream()
                             if attempt < self._smart_client.MAX_PROXY_RETRIES - 1:
-                                logger.warning(
-                                    "Proxy %s failed (%s), stream connect retry",
-                                    proxy_url,
-                                    type(e).__name__,
-                                )
+                                logger.warning("http.proxy.failed.stream.connect.retry", proxy_url=proxy_url, __name__=type(e).__name__)
                             else:
                                 raise
                 else:
                     raise
             else:
                 if await _should_retry_http_via_proxy(response) and _platform_proxy_active():
-                    logger.warning(
-                        "HTTP %s для stream %s, повтор через platform proxy",
-                        response.status_code,
-                        self._url,
-                    )
+                    logger.warning("http.stream.platform.proxy", status_code=response.status_code, _url=self._url)
                     await self._cleanup_stream()
                     settings = self._smart_client.platform_settings()
                     for attempt in range(self._smart_client.MAX_PROXY_RETRIES):
@@ -783,14 +753,14 @@ class _StreamContextManager:
                             await self._cleanup_stream()
                             if attempt < self._smart_client.MAX_PROXY_RETRIES - 1:
                                 logger.warning(
-                                    "Proxy %s failed (%s), stream (attempt %s/%s)",
-                                    proxy_url,
-                                    type(e).__name__,
-                                    attempt + 2,
-                                    self._smart_client.MAX_PROXY_RETRIES,
+                                    "http.proxy.failed.stream.attempt",
+                                    proxy_url=proxy_url,
+                                    __name__=type(e).__name__,
+                                    attempt=attempt + 2,
+                                    MAX_PROXY_RETRIES=self._smart_client.MAX_PROXY_RETRIES,
                                 )
                             else:
-                                logger.error("All proxy stream attempts failed for %s", self._url)
+                                logger.error("http.proxy.stream.attempts.failed", _url=self._url)
                                 raise
                 return response
 
@@ -801,11 +771,7 @@ class _StreamContextManager:
 
         for attempt in range(self._smart_client.MAX_PROXY_RETRIES):
             proxy_url = settings.proxy.get_next_proxy()
-            logger.debug(
-                "Using proxy for stream: %s... -> %s",
-                proxy_url[:40] if proxy_url else "None",
-                self._url,
-            )
+            logger.debug("http.proxy.stream", proxy_url=proxy_url[:40] if proxy_url else 'None', _url=self._url)
 
             try:
                 self._client = self._smart_client.create_client(proxy_url)
@@ -822,14 +788,14 @@ class _StreamContextManager:
 
                 if attempt < self._smart_client.MAX_PROXY_RETRIES - 1:
                     logger.warning(
-                        "Proxy %s failed (%s), stream (attempt %s/%s)",
-                        proxy_url,
-                        type(e).__name__,
-                        attempt + 2,
-                        self._smart_client.MAX_PROXY_RETRIES,
+                        "http.proxy.failed.stream.attempt",
+                        proxy_url=proxy_url,
+                        __name__=type(e).__name__,
+                        attempt=attempt + 2,
+                        MAX_PROXY_RETRIES=self._smart_client.MAX_PROXY_RETRIES,
                     )
                 else:
-                    logger.error("All proxy attempts failed for %s", self._url)
+                    logger.error("http.proxy.attempts.failed", _url=self._url)
                     raise
         raise RuntimeError("stream proxy rotation exited without response")
 

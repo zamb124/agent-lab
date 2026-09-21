@@ -129,8 +129,8 @@ class CrmClient:
         if not q:
             raise ValueError(
                 (
-                    "Нужен непустой параметр query — короткая строка семантического поиска "
-                    "(ключевые слова из запроса пользователя)."
+                    "Non-empty query is required — a short semantic search string "
+                    "(keywords from the user request)."
                 )
             )
         ns = self._resolve_namespace(args.namespace)

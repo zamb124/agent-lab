@@ -132,7 +132,7 @@ async def handle_call_invite(
     if not await authz.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=actor_user_id
     ):
-        raise PermissionError("Нет доступа к каналу.")
+        raise PermissionError("No access to channel.")
 
     existing = await calls.get_active_call_for_channel(payload.channel_id, company_id)
     if existing is not None:
@@ -195,7 +195,7 @@ async def handle_call_invite(
 
     ch_entity = await channels.get(payload.channel_id)
     if ch_entity is None:
-        raise ValueError(f"Канал {payload.channel_id} не найден.")
+        raise ValueError(f"Channel {payload.channel_id} not found.")
 
     caller_display_name = actor_user_id
     if user_repository is not None:
@@ -233,7 +233,7 @@ async def handle_call_accept(
     call = await calls.get_call(payload.call_id, company_id)
 
     if call.status == "ended":
-        raise ValueError("Звонок уже завершён.")
+        raise ValueError("Call is already ended.")
 
     was_ringing = call.status == "ringing"
     now = datetime.now(UTC)
@@ -282,7 +282,7 @@ async def handle_call_decline(
     call = await calls.get_call(payload.call_id, company_id)
 
     if call.status == "ended":
-        raise ValueError("Звонок уже завершён.")
+        raise ValueError("Call is already ended.")
 
     await calls.update_participant_status(payload.call_id, actor_user_id, "declined")
     participants = await calls.list_participants(payload.call_id)
@@ -313,7 +313,7 @@ async def handle_call_hangup(
     call = await calls.get_call(payload.call_id, company_id)
 
     if call.status == "ended":
-        raise ValueError("Звонок уже завершён.")
+        raise ValueError("Call is already ended.")
 
     now = datetime.now(UTC)
     await calls.update_participant_status(
@@ -359,16 +359,12 @@ async def handle_call_hangup(
                 )
             except TwirpError as exc:
                 if exc.code in (TwirpErrorCode.NOT_FOUND, TwirpErrorCode.FAILED_PRECONDITION):
-                    logger.warning(
-                        "LiveKit delete_room: комната уже отсутствует room=%s code=%s",
-                        call.livekit_room_name,
-                        exc.code,
-                    )
+                    logger.warning("sync.livekit.delete_room.room.code", room=call.livekit_room_name, code=exc.code)
                 else:
                     raise
             except aiohttp.ClientError as exc:
                 raise RuntimeError(
-                    f"LiveKit delete_room: сетевая ошибка aiohttp room={call.livekit_room_name}"
+                    f"LiveKit delete_room: aiohttp network error room={call.livekit_room_name}"
                 ) from exc
 
         ended_call = await calls.get_call(payload.call_id, company_id)

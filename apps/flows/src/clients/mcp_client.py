@@ -369,7 +369,7 @@ class MCPClient:
         self._initialize_result = result
         self._initialized = True
         await self._rpc_notification("notifications/initialized")
-        logger.info("MCP session initialized: server_id=%s session=%s", self.config.server_id, self.session_id)
+        logger.info("flows.mcp.session.initialized.server_id.session", server_id=self.config.server_id, session=self.session_id)
         return result
 
     async def list_tools(self) -> list[MCPDiscoveredTool]:
@@ -395,7 +395,7 @@ class MCPClient:
                 )
             )
 
-        logger.info("MCP server %s: %s tools available", self.config.server_id, len(tools))
+        logger.info("flows.mcp.server.tools.available", server_id=self.config.server_id, tools_count=len(tools))
         return tools
 
     async def require_tool_contract(

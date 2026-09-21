@@ -22,7 +22,7 @@ _HANDOFF_INITIATED_TS_TTL_SECONDS = 86400
 
 def _handoff_key(child_session_id: str) -> str:
     if child_session_id == "":
-        raise ValueError("child_session_id обязателен для handoff timing")
+        raise ValueError("child_session_id is required for handoff timing")
     return f"{_HANDOFF_INITIATED_TS_PREFIX}{child_session_id}"
 
 
@@ -40,7 +40,7 @@ async def record_handoff_initiated(
     )
     if not stored:
         raise RuntimeError(
-            f"Не удалось записать handoff initiated timestamp: child_session_id={child_session_id!r}"
+            f"Failed to write handoff initiated timestamp: child_session_id={child_session_id!r}"
         )
 
 
@@ -59,7 +59,7 @@ async def maybe_record_handoff_wall_time(
         initiated_at = float(raw_initiated_at)
     except ValueError as exc:
         raise ValueError(
-            f"Некорректный handoff initiated timestamp: child_session_id={child_session_id!r}"
+            f"Invalid handoff initiated timestamp: child_session_id={child_session_id!r}"
         ) from exc
     wall_ms = round((time.time() - initiated_at) * 1000.0, 3)
     _logger.info(

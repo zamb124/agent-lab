@@ -13,7 +13,6 @@ from apps.flows.realtime.agent_toolkit_operations import (
     op_flows_agent_toolkits_list,
     op_flows_agent_toolkits_remove,
 )
-from apps.flows.realtime.operations import FlowsEmptyPayload
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.agent_toolkit import (
     AgentToolkit,
@@ -23,7 +22,7 @@ from apps.flows.src.models.agent_toolkit import (
 from core.context import reset_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import User
-from core.websocket import WsCommandError
+from core.websocket import EmptyPayload, WsCommandError
 from tests.fixtures.ai_provider_defaults import make_test_company
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.timeout(60)]
@@ -70,7 +69,7 @@ async def test_agent_toolkits_list_rest_match_op(
     assert http.status_code == 200, http.text
     with _system_scope(system_user_id) as user:
         listed = await op_flows_agent_toolkits_list(
-            FlowsEmptyPayload(),
+            EmptyPayload(),
             user=user,
             container=container,
         )

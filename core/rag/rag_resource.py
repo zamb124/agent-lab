@@ -93,10 +93,10 @@ class RAGResource:
 
         raw_results = data.get("results")
         if raw_results is None:
-            raise ServiceClientError("rag search: в ответе нет поля results")
+            raise ServiceClientError('rag search: response has no results field')
 
         if not isinstance(raw_results, list):
-            raise ServiceClientError("rag search: results должен быть массивом")
+            raise ServiceClientError('rag search: results must be an array')
 
         out: list[JsonObject] = []
         for item in raw_results:
@@ -105,7 +105,7 @@ class RAGResource:
             if md is None:
                 md = {}
             elif not isinstance(md, dict):
-                raise ServiceClientError("rag search: metadata должен быть объектом")
+                raise ServiceClientError('rag search: metadata must be an object')
             out.append(
                 {
                     "content": result["content"],
@@ -129,7 +129,7 @@ class RAGResource:
         repo = self._container.rag_repository
         context = get_context()
         if context is None or context.active_company is None:
-            raise ValueError("RAGResource.add_document: контекст с active_company обязателен")
+            raise ValueError('RAGResource.add_document: context with active_company is required')
         _ = await self._container.namespace_service.get_or_create(
             self._bind.namespace,
             description=self._bind.namespace_description,

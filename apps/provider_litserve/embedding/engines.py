@@ -56,7 +56,7 @@ def parse_embedding_body(raw: BaseModel | JsonValue) -> OpenAIEmbeddingsRequest:
     else:
         raw_payload = raw
     if not isinstance(raw_payload, dict):
-        raise HTTPException(status_code=422, detail="Тело запроса: ожидается JSON-объект")
+        raise HTTPException(status_code=422, detail="Request body: JSON object expected")
     try:
         body = OpenAIEmbeddingsRequest.model_validate(raw_payload)
     except ValidationError as e:
@@ -88,10 +88,10 @@ class LocalEmbeddingEngine:
         )
         model_kwargs: dict[str, Literal["bfloat16"]] | None = {"torch_dtype": "bfloat16"} if use_bf16 else None
         logger.info(
-            "Loading SentenceTransformer model '%s' on '%s' (bf16=%s)",
-            hf_model_id,
-            self._device,
-            use_bf16,
+            "provider_litserve.loading.sentencetransformer.model.bf16",
+            hf_model_id=hf_model_id,
+            _device=self._device,
+            bf16=use_bf16,
         )
         started_at = time.monotonic()
         model = SentenceTransformer(
@@ -99,7 +99,7 @@ class LocalEmbeddingEngine:
             device=self._device,
             model_kwargs=model_kwargs,
         )
-        logger.info("Model '%s' loaded in %.2fs", hf_model_id, time.monotonic() - started_at)
+        logger.info("provider_litserve.model.loaded.s", hf_model_id=hf_model_id, value_1=time.monotonic() - started_at)
         self._models[hf_model_id] = model
         return model
 
@@ -111,11 +111,7 @@ class LocalEmbeddingEngine:
         hf_model_id = resolve_hf_model_id("embedding", rid, self._cfg)
         if hf_model_id is None:
             allowed = sorted(self.allowed_model_ids())
-            logger.warning(
-                "POST /v1/embeddings: unknown_embedding_model request=%r allowed=%s",
-                requested_model,
-                allowed,
-            )
+            logger.warning("provider_litserve.post.v1.embeddings.unknown_embedding_model.request", request=requested_model, allowed=allowed)
             raise HTTPException(
                 status_code=422,
                 detail={
@@ -140,10 +136,10 @@ class LocalEmbeddingEngine:
         started_at = time.monotonic()
         matrix = model.encode(texts, normalize_embeddings=True)
         logger.info(
-            "Embedding generated: model='%s', texts=%d, duration=%.2fs",
-            canonical,
-            len(texts),
-            time.monotonic() - started_at,
+            "provider_litserve.embedding.generated.model.texts.duration",
+            canonical=canonical,
+            texts=len(texts),
+            duration=time.monotonic() - started_at,
         )
         if len(matrix.shape) != 2:
             raise TypeError("SentenceTransformer.encode must return a 2D embedding matrix")

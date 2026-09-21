@@ -145,7 +145,7 @@ class FlowSettings(BaseSettings):
     def _default_flow_timeout_within_cap(self) -> Self:
         if self.default_flow_timeout_seconds > self.flow_execution_wall_time_cap_seconds:
             raise ValueError(
-                "default_flow_timeout_seconds не больше flow_execution_wall_time_cap_seconds: "
+                "default_flow_timeout_seconds must not exceed flow_execution_wall_time_cap_seconds: "
                 + f"{self.default_flow_timeout_seconds} > {self.flow_execution_wall_time_cap_seconds}"
             )
         return self

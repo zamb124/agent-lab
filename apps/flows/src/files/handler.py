@@ -39,7 +39,7 @@ def _payload_from_raw(part: Part) -> IncomingA2aFile:
     file_bytes = get_part_raw(part)
     filename = part.filename.strip() if part.filename else ""
     if not filename:
-        raise ValueError("Part.raw требует filename")
+        raise ValueError("Part.raw requires filename")
     media_type = part.media_type.strip() if part.media_type else None
     return IncomingA2aFile(
         original_name=filename,
@@ -52,10 +52,10 @@ def _payload_from_raw(part: Part) -> IncomingA2aFile:
 def _payload_from_url(part: Part) -> IncomingA2aFile:
     uri = get_part_url(part)
     if not uri.strip():
-        raise ValueError("Part.url пустой")
+        raise ValueError("Part.url is empty")
     filename = part.filename.strip() if part.filename else ""
     if not filename:
-        raise ValueError("Part.url требует filename")
+        raise ValueError("Part.url requires filename")
     media_type = part.media_type.strip() if part.media_type else None
     return IncomingA2aFile(
         original_name=filename,
@@ -82,6 +82,6 @@ def extract_incoming_a2a_files(message: Message) -> list[IncomingA2aFile]:
         elif part_has_url(part):
             result.append(_payload_from_url(part))
         else:
-            raise ValueError(f"Part без raw/url: {part.WhichOneof('content')!r}")
+            raise ValueError(f"Part has no raw/url: {part.WhichOneof('content')!r}")
 
     return result

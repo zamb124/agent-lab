@@ -14,6 +14,7 @@
 
 import { CoreEvents, assertEventType } from '../contract.js';
 import { getActivePlatformNamespaceName } from '../../utils/platform-namespace.js';
+import { formatPlatformError } from '../../utils/platform-error-message.js';
 import { Centrifuge, UnauthorizedError } from '../../../assets/js/centrifuge/centrifuge.esm.min.js';
 
 const BASE_DELAY_MS = 600;
@@ -152,10 +153,15 @@ function _matchPending(frame) {
         _pending.delete(causationId);
         clearTimeout(entry.timeoutHandle);
         const failurePayload = frame.payload && typeof frame.payload === 'object' ? frame.payload : {};
-        const message = typeof failurePayload.error_detail === 'string'
-            ? failurePayload.error_detail
-            : (typeof failurePayload.message === 'string' ? failurePayload.message : 'WS command failed');
-        const code = typeof failurePayload.error_code === 'string' ? failurePayload.error_code : 'ws_command_failed';
+        const code = typeof failurePayload.error_code === 'string' && failurePayload.error_code.length > 0
+            ? failurePayload.error_code
+            : 'unknown';
+        const errorParams = failurePayload.error_params
+            && typeof failurePayload.error_params === 'object'
+            && !Array.isArray(failurePayload.error_params)
+            ? failurePayload.error_params
+            : null;
+        const message = formatPlatformError(code, errorParams);
         entry.reject(new WsTransportError(message, code));
         return true;
     }

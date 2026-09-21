@@ -64,7 +64,10 @@ async def init_company_resources(
     company_subdomain = subdomain.strip() if subdomain.strip() else None
 
     logger.info(
-        f"{action} ресурсов для компании: {company_id} ({company_display_name})"
+        "company.resources.action",
+        action=action,
+        company_id=company_id,
+        company_display_name=company_display_name,
     )
 
     # Установить контекст компании
@@ -109,34 +112,34 @@ async def init_company_resources(
         container.tool_repository,
         flow_access_service=container.flow_access_service,
     )
-        logger.info(f"Загружено {len(loaded_tools)} tools для {company_id}")
+        logger.info("flows.company_init.tools_loaded", company_id=company_id, count=len(loaded_tools))
 
         try:
             runtime_container = as_flow_runtime_container(container)
             seed_stats = await upsert_allowlist_seed_entries_only(container=runtime_container)
             logger.info(
-                "MCP allowlist seed для %s: upserted=%s verified=%s verify_failed=%s",
-                company_id,
-                seed_stats.upserted,
-                seed_stats.verified,
-                seed_stats.verify_failed,
+                "flows.mcp.allowlist.seed.upserted.verified",
+                company_id=company_id,
+                upserted=seed_stats.upserted,
+                verified=seed_stats.verified,
+                verify_failed=seed_stats.verify_failed,
             )
             _ = await ensure_default_mcp_servers_for_company(container=runtime_container)
             catalog_stats = await provision_mcp_catalog_for_company(container=runtime_container)
             synced = await sync_auto_mcp_servers_for_company(container=runtime_container)
             logger.info(
-                "MCP синхронизация для %s: catalog_added=%s catalog_updated=%s servers=%s tools=%s",
-                company_id,
-                catalog_stats.added,
-                catalog_stats.updated,
-                synced["servers"],
-                synced["tools"],
+                "flows.mcp.catalog_added.catalog_updated.servers.tools",
+                company_id=company_id,
+                catalog_added=catalog_stats.added,
+                catalog_updated=catalog_stats.updated,
+                servers=synced['servers'],
+                tools=synced['tools'],
             )
         except Exception as mcp_err:
             logger.error(
-                "MCP синхронизация при init_company_resources failed (%s): %s",
-                company_id,
-                mcp_err,
+                "flows.mcp.init_company_resources.failed",
+                company_id=company_id,
+                mcp_err=mcp_err,
                 exc_info=True,
             )
             raise
@@ -214,12 +217,12 @@ async def init_company_resources(
         stats["tools"] = len(loaded_tools)
 
         logger.info(
-            "%s завершено для %s: flows=%s, tools=%s, nodes=%s",
-            action,
-            company_id,
-            stats["flows"],
-            stats["tools"],
-            stats["nodes"],
+            "flows.tools.nodes",
+            action=action,
+            company_id=company_id,
+            flows=stats['flows'],
+            tools=stats['tools'],
+            nodes=stats['nodes'],
         )
 
         return {
@@ -230,8 +233,11 @@ async def init_company_resources(
 
     except Exception as e:
         logger.error(
-            f"Ошибка {action.lower()} для {company_id}: {e}",
-            exc_info=True
+            "company.resources.failed",
+            action=action.lower(),
+            company_id=company_id,
+            error=str(e),
+            exc_info=True,
         )
         raise
     finally:

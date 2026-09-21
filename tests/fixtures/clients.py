@@ -625,6 +625,28 @@ async def frontend_client_http(frontend_service):
 
 
 @pytest_asyncio.fixture
+async def secrets_client_http(secrets_service):
+    """HTTP клиент Secrets API (реальный Granian :9022)."""
+    _ = secrets_service
+    async with AsyncClient(
+        base_url="http://localhost:9022",
+        timeout=_E2E_HTTP_TIMEOUT_SECONDS,
+    ) as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def scheduler_client_http(scheduler_service):
+    """HTTP клиент Scheduler API (реальный Granian :9006)."""
+    _ = scheduler_service
+    async with AsyncClient(
+        base_url="http://localhost:9006",
+        timeout=_E2E_HTTP_TIMEOUT_SECONDS,
+    ) as client:
+        yield client
+
+
+@pytest_asyncio.fixture
 async def search_client_http(search_service):
     """HTTP клиент Search API (реальный Granian :9010)."""
     _ = search_service

@@ -100,13 +100,13 @@ async def _rag_index_status_by_file_id(
         return {}
     context = get_context()
     if context is None:
-        raise ValueError("Нет контекста запроса")
+        raise ValueError("Request context is missing")
     if context.active_company is None:
-        raise ValueError("Нет активной компании")
+        raise ValueError("No active company")
     company_id = context.active_company.company_id
     workspace_namespace = context.active_namespace.strip()
     if workspace_namespace == "":
-        raise ValueError("active_namespace обязателен")
+        raise ValueError("active_namespace is required")
 
     catalog_ids = {row.catalog_id for row in rows}
     enabled_catalog_ids: set[str] = set()

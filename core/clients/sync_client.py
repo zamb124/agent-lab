@@ -132,7 +132,7 @@ class SyncClient:
                 channel_id=channel_id, limit=limit, before=before, after=after
             )
         if args.before is not None and args.after is not None:
-            raise ValueError("before и after взаимоисключающи")
+            raise ValueError("before and after are mutually exclusive")
         params: dict[str, str] = {"limit": str(args.limit)}
         if args.before is not None:
             params["before"] = args.before
@@ -390,7 +390,7 @@ class SyncClient:
         if args.is_private is not None:
             body["is_private"] = args.is_private
         if not body:
-            raise ValueError("Нужен name и/или is_private")
+            raise ValueError("name and/or is_private is required")
         response = await self._http.patch(
             "sync",
             f"{_API}/channels/{quote(args.channel_id, safe='')}",

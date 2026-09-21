@@ -93,7 +93,7 @@ def resolve_ios_transcode_source(
 
 def _transcode_sync(data: bytes, ffmpeg: str, source_suffix: str) -> bytes:
     if len(data) == 0:
-        raise ValueError("Пустые данные для перекодирования аудио.")
+        raise ValueError("Empty data for audio transcoding.")
     suffix = source_suffix if source_suffix.startswith(".") else f".{source_suffix}"
     if suffix == ".":
         suffix = ".webm"
@@ -129,13 +129,13 @@ def _transcode_sync(data: bytes, ffmpeg: str, source_suffix: str) -> bytes:
         if result.returncode != 0:
             stderr = (result.stderr or "").strip()
             raise AudioTranscodeError(
-                f"ffmpeg не смог перекодировать аудио для iOS: {stderr[:1200]}"
+                f"ffmpeg failed to transcode audio for iOS: {stderr[:1200]}"
             )
         if not dst.is_file():
-            raise AudioTranscodeError("ffmpeg не создал выходной файл .m4a.")
+            raise AudioTranscodeError("ffmpeg did not create the .m4a output file.")
         out = dst.read_bytes()
         if len(out) == 0:
-            raise AudioTranscodeError("Перекодированное аудио пустое.")
+            raise AudioTranscodeError("Transcoded audio is empty.")
         return out
 
 
@@ -150,6 +150,6 @@ async def transcode_audio_bytes_to_m4a_aac(data: bytes, source_suffix: str) -> b
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg is None:
         raise AudioTranscodeError(
-            "ffmpeg не найден в PATH: нельзя перекодировать голосовое для iOS."
+            "ffmpeg was not found in PATH: cannot transcode voice audio for iOS."
         )
     return await asyncio.to_thread(_transcode_sync, data, ffmpeg, source_suffix)

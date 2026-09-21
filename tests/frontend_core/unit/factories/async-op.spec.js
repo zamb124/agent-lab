@@ -185,7 +185,7 @@ describe('createAsyncOp: effect', () => {
         expect(types).toContain(op.events.SUCCEEDED);
         expect(types).toContain(CoreEvents.UI_TOAST_SHOW);
         const succeeded = dispatched.find((d) => d.type === op.events.SUCCEEDED);
-        expect(succeeded.payload).toEqual({ result: { id: 7 } });
+        expect(succeeded.payload).toEqual({ result: { id: 7 }, request: { id: 7 } });
         const toast = dispatched.find((d) => d.type === CoreEvents.UI_TOAST_SHOW);
         expect(toast.payload).toMatchObject({ type: 'success', i18n_key: 'svc:ok' });
     });

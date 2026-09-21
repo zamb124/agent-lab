@@ -56,7 +56,7 @@ class OperatorMessageRequest(StrictBaseModel):
         clean = self.text.strip()
         file_ids = [fid.strip() for fid in self.file_ids if fid.strip()]
         if clean == "" and len(file_ids) == 0:
-            raise ValueError("Нужен text или file_ids")
+            raise ValueError("text or file_ids is required")
         if clean == self.text and file_ids == self.file_ids:
             return self
         return self.model_copy(update={"text": clean, "file_ids": file_ids})

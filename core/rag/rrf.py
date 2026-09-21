@@ -17,7 +17,7 @@ def reciprocal_rank_fusion(
     Возвращает пары (id, rrf_score) по убыванию score.
     """
     if k <= 0:
-        raise ValueError("k для RRF должен быть > 0")
+        raise ValueError('k for RRF must be > 0')
     scores: dict[str, float] = {}
     for ranked in ranked_id_lists:
         for rank, doc_id in enumerate(ranked, start=1):

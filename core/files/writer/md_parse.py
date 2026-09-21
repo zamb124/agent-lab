@@ -90,7 +90,7 @@ def parse_gfm_table(raw: str) -> list[list[str]]:
             continue
         rows.append(cells)
     if not rows:
-        raise FileWriteError("Не удалось разобрать markdown-таблицу (нет строк данных)")
+        raise FileWriteError("Failed to parse markdown table (no data rows)")
     return rows
 
 

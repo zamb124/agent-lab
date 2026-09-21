@@ -25,7 +25,6 @@ from apps.wiki.models.api import (
 from apps.wiki.models.domain import WikiPageSummary
 from apps.wiki.realtime.operations import (
     WikiChildrenPayload,
-    WikiEmptyPayload,
     WikiMarkdownImportPagePayload,
     WikiPageContentUpdatePayload,
     WikiPageIdPayload,
@@ -52,6 +51,7 @@ from apps.wiki.realtime.operations import (
 )
 from core.context import require_context
 from core.pagination import ListResponse
+from core.websocket import EmptyPayload
 
 router = APIRouter(prefix="/pages", tags=["wiki-pages"])
 
@@ -59,14 +59,14 @@ router = APIRouter(prefix="/pages", tags=["wiki-pages"])
 @router.get("", response_model=WikiTreeResponse)
 async def list_tree(container: ContainerDep) -> WikiTreeResponse:
     return await op_pages_list(
-        WikiEmptyPayload(), user=require_context().user, container=container
+        EmptyPayload(), user=require_context().user, container=container
     )
 
 
 @router.get("/deleted", response_model=WikiTreeResponse)
 async def list_deleted(container: ContainerDep) -> WikiTreeResponse:
     return await op_pages_deleted_list(
-        WikiEmptyPayload(), user=require_context().user, container=container
+        EmptyPayload(), user=require_context().user, container=container
     )
 
 

@@ -34,7 +34,6 @@ from apps.crm.realtime.operations import (
     CrmAttachmentsAttachPayload,
     CrmAttachmentsRemovePayload,
     CrmCompanyInitPayload,
-    CrmEmptyPayload,
     CrmEntitiesAggregatePayload,
     CrmEntitiesInfluenceGraphPayload,
     CrmEntitiesRelatedPayload,
@@ -90,6 +89,7 @@ from apps.crm.realtime.operations import (
     op_entities_create,
     op_entities_daily_summary,
     op_entities_exclusive_related,
+    op_entities_export,
     op_entities_influence_graph,
     op_entities_item,
     op_entities_mentions_search,
@@ -158,8 +158,9 @@ from apps.crm.realtime.operations import (
     op_templates_type_upsert,
     op_templates_update,
 )
+from apps.crm.services.entity_export import CrmEntitiesExportPayload
 from core.logging import get_logger
-from core.websocket import Operation, RegisteredOperation, register_service_operations
+from core.websocket import EmptyPayload, Operation, RegisteredOperation, register_service_operations
 
 logger = get_logger(__name__)
 
@@ -195,7 +196,7 @@ CRM_OPERATIONS: dict[str, RegisteredOperation[CRMContainer]] = {
         payload_model=CrmTemplateIdPayload, fn=op_templates_remove
     ),
     "crm/templates/schema_options_requested": Operation(
-        payload_model=CrmEmptyPayload, fn=op_templates_schema_options
+        payload_model=EmptyPayload, fn=op_templates_schema_options
     ),
     "crm/templates/type_upsert_requested": Operation(
         payload_model=CrmTemplateTypeUpsertPayload, fn=op_templates_type_upsert
@@ -266,6 +267,9 @@ CRM_OPERATIONS: dict[str, RegisteredOperation[CRMContainer]] = {
     "crm/entities/aggregate_requested": Operation(
         payload_model=CrmEntitiesAggregatePayload, fn=op_entities_aggregate
     ),
+    "crm/entities/export_requested": Operation(
+        payload_model=CrmEntitiesExportPayload, fn=op_entities_export
+    ),
     "crm/entities/cards_bulk_requested": Operation(
         payload_model=BulkCardsRequest, fn=op_entities_cards_bulk
     ),
@@ -288,7 +292,7 @@ CRM_OPERATIONS: dict[str, RegisteredOperation[CRMContainer]] = {
         payload_model=StartNoteAnalyzeRequest, fn=op_notes_analyze
     ),
     "crm/entities/person_self_requested": Operation(
-        payload_model=CrmEmptyPayload, fn=op_entities_person_self
+        payload_model=EmptyPayload, fn=op_entities_person_self
     ),
     "crm/entities/timeline_bounds_requested": Operation(
         payload_model=CrmEntitiesTimelineBoundsPayload, fn=op_entities_timeline_bounds
@@ -431,7 +435,4 @@ CRM_OPERATIONS: dict[str, RegisteredOperation[CRMContainer]] = {
 
 def register_crm_ws_commands() -> None:
     register_service_operations(CRM_OPERATIONS, get_crm_container)
-    logger.info(
-        "CRM WS command-handlers зарегистрированы (%d операций)",
-        len(CRM_OPERATIONS),
-    )
+    logger.info("crm.ws.command.handlers", CRM_OPERATIONS_count=len(CRM_OPERATIONS))

@@ -102,8 +102,8 @@ class HandoffOrchestratorService:
         if flow_config is None:
             raise ValueError(
                 f"target flow not found: {body.target_flow_id} "
-                + "(dependency flow не установлен в компании; для bundle-агентов — "
-                + "reload-from-bundle родителя с depends_on_flow_ids)"
+                + "(dependency flow is not installed in the company; for bundle agents — "
+                + "reload-from-bundle of the parent with depends_on_flow_ids)"
             )
         return body.model_copy(update={"target_name": flow_config.name})
 

@@ -12,7 +12,7 @@ from core.mail.models import (
     MailboxBindingPatchPayload,
     MailProvider,
 )
-from core.mail.service import MailService, to_public_binding
+from core.mail.service import MailService
 from tests.core.mail.fakes import RecordingMailServerPort
 
 
@@ -53,8 +53,6 @@ async def test_bind_mailbox_sets_deterministic_calendar_color(
         company_id=company_id,
     )
     assert binding.calendar_color == default_calendar_color(email)
-    public = to_public_binding(binding)
-    assert public.calendar_color == binding.calendar_color
 
 
 @pytest.mark.asyncio

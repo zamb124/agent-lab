@@ -250,8 +250,8 @@ def create_llm_transport_client(
             for value in (api_key, base_url, folder_id)
         ):
             raise ValueError(
-                "humanitec_llm: api_key/base_url/folder_id не задаются — это виртуальный "
-                + "провайдер платформы"
+                "humanitec_llm: api_key/base_url/folder_id are not set — this is a virtual "
+                + "platform provider"
             )
         pool_configured = _platform_default_pool_is_configured(settings)
         authored_fallback = _first_non_humanitec_fallback(fallback_models)
@@ -280,8 +280,8 @@ def create_llm_transport_client(
             )
         elif authored_fallback is None:
             raise ValueError(
-                "humanitec_llm недоступен: включите llm.platform_free_pool и настройте "
-                + "credentials хотя бы одного free-pool провайдера из core.ai.providers"
+                "humanitec_llm is unavailable: enable llm.platform_free_pool and configure "
+                + "credentials for at least one free-pool provider from core.ai.providers"
             )
         else:
             primary_candidate = _resolve_llm_call_config(
@@ -439,7 +439,7 @@ def setup_mock_responses(
     _ = create_llm_transport_client(model_name)
     mock_llm = get_global_mock_llm(model_name)
     if mock_llm is None:
-        raise RuntimeError(f"Mock LLM не зарегистрирован: {model_name}")
+        raise RuntimeError(f"Mock LLM is not registered: {model_name}")
 
     mock_llm.reset()
     _ = mock_llm.configure(

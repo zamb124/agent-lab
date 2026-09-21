@@ -46,7 +46,7 @@ async def enqueue(
     kick-only брокер очереди лениво.
     """
     if taskiq_task_id is not None and not taskiq_task_id.strip():
-        raise ValueError("enqueue: taskiq_task_id пустой")
+        raise ValueError('enqueue: taskiq_task_id is empty')
     spec = get_task_spec(task)
     broker = resolve_broker_for_task(spec)
     labels = build_log_labels(

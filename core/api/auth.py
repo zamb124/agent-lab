@@ -151,7 +151,7 @@ async def login_demo(
     if not result.success or not result.session or not result.token or not result.user:
         raise HTTPException(
             status_code=401,
-            detail=result.error_message or "Неверные учётные данные",
+            detail=result.error_message or 'Invalid credentials',
         )
 
     target_host = request.headers.get("host", "")
@@ -229,12 +229,12 @@ async def start_auth(
     try:
         provider = AuthProvider(provider_name)
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"Неподдерживаемый провайдер: {provider_name}")
+        raise HTTPException(status_code=400, detail=f"Unsupported provider: {provider_name}")
 
     if provider == AuthProvider.DEMO:
         raise HTTPException(
             status_code=400,
-            detail="Для демо-входа используйте POST /login/demo с полями email и password",
+            detail='For demo login use POST /login/demo with email and password fields',
         )
 
     # Сохраняем оригинальный хост для редиректа после авторизации
@@ -260,7 +260,7 @@ async def start_auth(
 
         redirect_uri = f"{protocol}://{base_host}{callback_path}"
 
-    logger.info(f"start_auth: original_host={original_host}, redirect_uri={redirect_uri}")
+    logger.info("auth.start", original_host=original_host, redirect_uri=redirect_uri)
 
     try:
         auth_url = await auth_service.start_auth(
@@ -271,10 +271,10 @@ async def start_auth(
         )
         return {"auth_url": auth_url, "provider": provider_name}
     except ValueError as e:
-        logger.error(f"Ошибка начала авторизации {provider_name}: {e}", exc_info=True)
+        logger.error("auth.start_failed", provider=provider_name, error=str(e), exc_info=True)
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Ошибка начала авторизации {provider_name}: {e}", exc_info=True)
+        logger.error("auth.start_failed", provider=provider_name, error=str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -291,16 +291,16 @@ async def _complete_oauth_callback(
     settings = get_settings()
 
     if error:
-        logger.error(f"Ошибка авторизации от {provider_name}: {error}")
-        raise HTTPException(status_code=400, detail=f"Ошибка авторизации: {error}")
+        logger.error("auth.callback_provider_error", provider=provider_name, error=error)
+        raise HTTPException(status_code=400, detail=f"Authorization error: {error}")
 
     if not code or not state:
-        raise HTTPException(status_code=400, detail="Отсутствуют обязательные параметры")
+        raise HTTPException(status_code=400, detail='Required parameters are missing')
 
     try:
         provider = AuthProvider(provider_name)
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"Неподдерживаемый провайдер: {provider_name}")
+        raise HTTPException(status_code=400, detail=f"Unsupported provider: {provider_name}")
 
     auth_state = await auth_service.get_auth_state(state)
     if not auth_state:
@@ -319,13 +319,13 @@ async def _complete_oauth_callback(
                 },
             )
             return RedirectResponse(url=redirect_url)
-        raise HTTPException(status_code=400, detail="Недействительный state")
+        raise HTTPException(status_code=400, detail='Invalid state')
 
     original_host = auth_state.original_host
     redirect_uri = auth_state.redirect_uri
     return_path = auth_state.return_path
 
-    logger.info(f"auth_callback: redirect_uri={redirect_uri}, original_host={original_host}")
+    logger.info("auth.callback", redirect_uri=redirect_uri, original_host=original_host)
 
     auth_request = AuthRequest(
         provider=provider,
@@ -337,13 +337,13 @@ async def _complete_oauth_callback(
 
     result = await auth_service.complete_auth(auth_request)
 
-    logger.info(f"Результат авторизации: success={result.success}, error={result.error_message}")
+    logger.info("auth.callback_result", success=result.success, error=result.error_message)
 
     if not result.success:
-        logger.error(f"Ошибка завершения авторизации: {result.error_message}")
+        logger.error("auth.complete_failed", error=result.error_message)
         raise HTTPException(status_code=400, detail=result.error_message)
     if result.user is None or result.session is None or result.token is None:
-        raise HTTPException(status_code=500, detail="Некорректный результат авторизации")
+        raise HTTPException(status_code=500, detail='Invalid authorization result')
     user = result.user
     session = result.session
     token = result.token
@@ -351,7 +351,7 @@ async def _complete_oauth_callback(
     target_host = original_host or request.headers.get("host", "")
     if return_path:
         if not return_path.startswith("/"):
-            raise HTTPException(status_code=400, detail="Некорректный return_path")
+            raise HTTPException(status_code=400, detail='Invalid return_path')
         redirect_url = build_url(target_host, return_path)
     elif not user.companies or len(user.companies) == 0:
         redirect_url = build_url(target_host, "/select-company?action=create")
@@ -379,7 +379,11 @@ async def _complete_oauth_callback(
     cookie_domain = get_cookie_domain(target_host)
 
     logger.info(
-        f"Устанавливаем cookies: session_id={session.session_id}, auth_token={token[:8]}..., domain={cookie_domain}, secure={is_production}"
+        "auth.cookies.set",
+        session_id=session.session_id,
+        token_prefix=token[:8],
+        domain=cookie_domain,
+        secure=is_production,
     )
 
     cookie_max_age = TokenService.SESSION_EXPIRES
@@ -402,7 +406,7 @@ async def _complete_oauth_callback(
         max_age=cookie_max_age,
     )
 
-    logger.info(f"Успешная авторизация пользователя {user.user_id}")
+    logger.info("auth.completed", user_id=user.user_id)
     return response
 
 
@@ -528,7 +532,7 @@ async def switch_company(
         raise HTTPException(status_code=404, detail="User not found")
 
     if payload.company_id not in user.companies:
-        raise HTTPException(status_code=403, detail="Нет доступа к выбранной компании")
+        raise HTTPException(status_code=403, detail='No access to the selected company')
 
     user.active_company_id = payload.company_id
     _ = await auth_service.save_user(user)

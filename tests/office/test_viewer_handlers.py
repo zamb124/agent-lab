@@ -2,50 +2,22 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-
 import pytest
-from fastapi import HTTPException
-from starlette.requests import Request
 
 from apps.office.services.viewer_context import ViewerOpenContext
 from apps.office.services.viewer_handlers._urls import download_url_for_context
 from apps.office.services.viewer_handlers.binary_handler import BinaryViewerHandler
 from apps.office.services.viewer_handlers.image_handler import ImageViewerHandler
 from apps.office.services.viewer_handlers.text_handler import TextViewerHandler
-from apps.office.services.viewer_service import DocumentViewerService, browser_public_base_url
+from apps.office.services.viewer_service import DocumentViewerService
 from core.documents.viewer.resolver import (
     resolve_file_category_for_upload,
     resolve_viewer_handler_id,
 )
 from core.documents.viewer.text_presentation import resolve_text_presentation
+from core.errors.boundary import PlatformUnavailableError
 from core.files.models import FileRecord
 from core.files.types import FileCategory
-
-
-def _request(
-    *,
-    scheme: str = "http",
-    server: tuple[str, int] = ("system.lvh.me", 8008),
-    headers: Mapping[str, str] | None = None,
-) -> Request:
-    raw_headers = [
-        (key.lower().encode("latin-1"), value.encode("latin-1"))
-        for key, value in (headers or {}).items()
-    ]
-    if not any(key == b"host" for key, _ in raw_headers):
-        host = server[0] if server[1] in (80, 443) else f"{server[0]}:{server[1]}"
-        raw_headers.append((b"host", host.encode("latin-1")))
-    return Request(
-        {
-            "type": "http",
-            "method": "GET",
-            "scheme": scheme,
-            "server": server,
-            "path": "/documents/api/v1/documents/b1/editor-config",
-            "headers": raw_headers,
-        }
-    )
 
 
 def _sample_file_record(**overrides: object) -> FileRecord:
@@ -67,13 +39,7 @@ def _sample_file_record(**overrides: object) -> FileRecord:
     return FileRecord(**base)
 
 
-def test_browser_public_base_url_uses_request_host() -> None:
-    request = _request()
-    assert browser_public_base_url(request) == "http://system.lvh.me:8008"
-
-
 def test_download_url_for_context_uses_browser_host_not_callback() -> None:
-    request = _request()
     file_record = _sample_file_record()
     ctx = ViewerOpenContext(
         handler_id="data_table",
@@ -91,7 +57,7 @@ def test_download_url_for_context_uses_browser_host_not_callback() -> None:
         document_server_public_url="http://localhost:8002",
         jwt_secret="test-onlyoffice-jwt-secret",
         download_token_ttl_seconds=3600,
-        browser_public_base_url=browser_public_base_url(request),
+        browser_public_base_url="http://system.lvh.me:8008",
         browser_document_server_url="http://system.lvh.me:8008",
     )
     download_url = download_url_for_context(ctx)
@@ -102,7 +68,6 @@ def test_download_url_for_context_uses_browser_host_not_callback() -> None:
 
 @pytest.mark.asyncio
 async def test_text_handler_urls_use_browser_base_not_docker_internal() -> None:
-    request = _request()
     file_record = _sample_file_record()
     ctx = ViewerOpenContext(
         handler_id="text",
@@ -120,7 +85,7 @@ async def test_text_handler_urls_use_browser_base_not_docker_internal() -> None:
         document_server_public_url="http://localhost:8002",
         jwt_secret="test-onlyoffice-jwt-secret",
         download_token_ttl_seconds=3600,
-        browser_public_base_url=browser_public_base_url(request),
+        browser_public_base_url="http://system.lvh.me:8008",
         browser_document_server_url="http://system.lvh.me:8008",
     )
     config = await TextViewerHandler().build_open_config(ctx)
@@ -161,7 +126,6 @@ def test_resolve_text_presentation(
 
 @pytest.mark.asyncio
 async def test_text_handler_html_presentation_preview_default() -> None:
-    request = _request()
     file_record = _sample_file_record(
         file_id="f-html",
         original_name="deck.html",
@@ -184,7 +148,7 @@ async def test_text_handler_html_presentation_preview_default() -> None:
         document_server_public_url="http://localhost:8002",
         jwt_secret="test-onlyoffice-jwt-secret",
         download_token_ttl_seconds=3600,
-        browser_public_base_url=browser_public_base_url(request),
+        browser_public_base_url="http://system.lvh.me:8008",
         browser_document_server_url="http://system.lvh.me:8008",
     )
     config = await TextViewerHandler().build_open_config(ctx)
@@ -195,7 +159,6 @@ async def test_text_handler_html_presentation_preview_default() -> None:
 
 @pytest.mark.asyncio
 async def test_text_handler_markdown_presentation_preview_default() -> None:
-    request = _request()
     file_record = _sample_file_record(
         file_id="f-md",
         original_name="notes.md",
@@ -218,7 +181,7 @@ async def test_text_handler_markdown_presentation_preview_default() -> None:
         document_server_public_url="http://localhost:8002",
         jwt_secret="test-onlyoffice-jwt-secret",
         download_token_ttl_seconds=3600,
-        browser_public_base_url=browser_public_base_url(request),
+        browser_public_base_url="http://system.lvh.me:8008",
         browser_document_server_url="http://system.lvh.me:8008",
     )
     config = await TextViewerHandler().build_open_config(ctx)
@@ -355,13 +318,12 @@ def test_binary_handler_capabilities() -> None:
     assert caps.preview is False
 
 
-def test_viewer_service_resolve_handler_id_http_on_missing_integration() -> None:
+def test_viewer_service_resolve_handler_id_unavailable_on_missing_integration() -> None:
     service = DocumentViewerService()
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(PlatformUnavailableError, match="office_integration_not_configured"):
         service.resolve_handler_id(
             file_category=FileCategory.OFFICE_DOC.value,
             original_name="doc.docx",
             content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             integration_ok=False,
         )
-    assert exc_info.value.status_code == 503

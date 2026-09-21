@@ -50,12 +50,12 @@ def _pick_state_file(
             if item.file_id == fid:
                 return item
         raise ValueError(
-            f"Файл не найден. Доступные: {[file_ref.original_name for file_ref in files]}"
+            f"File not found. Available: {[file_ref.original_name for file_ref in files]}"
         )
     found = find_file(files, file_name)
     if found is None:
         raise ValueError(
-            f"Файл не найден. Доступные: {[file_ref.original_name for file_ref in files]}"
+            f"File not found. Available: {[file_ref.original_name for file_ref in files]}"
         )
     return found
 
@@ -82,7 +82,7 @@ async def _bind_from_state(
 ) -> tuple[FileRef, JsonObject, str]:
     item = _pick_state_file(list(state.files), file_id=file_id, file_name=file_name)
     if item.file_id is None:
-        raise ValueError("У файла нет file_id; интерактивное редактирование недоступно.")
+        raise ValueError("File has no file_id; interactive editing is unavailable.")
     namespace = resolve_namespace_or_raise()
     office_document = await DocumentsClient().from_file(
         file_id=item.file_id,

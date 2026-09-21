@@ -67,7 +67,7 @@ class AgentSkillService:
         saved_ok = await self._repository.set(payload)
         if not saved_ok:
             raise RuntimeError(f"Failed to persist AgentSkill: {payload.agent_skill_id}")
-        logger.info("agent_skill.created agent_skill_id=%s", payload.agent_skill_id)
+        logger.info("flows.agent_skill", agent_skill_id=payload.agent_skill_id)
         return payload
 
     async def update(self, payload: AgentSkillUpdatePayload) -> AgentSkill:
@@ -89,14 +89,14 @@ class AgentSkillService:
         saved_ok = await self._repository.set(skill)
         if not saved_ok:
             raise RuntimeError(f"Failed to persist AgentSkill: {skill.agent_skill_id}")
-        logger.info("agent_skill.updated agent_skill_id=%s", skill.agent_skill_id)
+        logger.info("flows.agent_skill", agent_skill_id=skill.agent_skill_id)
         return skill
 
     async def delete(self, agent_skill_id: str) -> None:
         deleted = await self._repository.delete(agent_skill_id)
         if not deleted:
             raise LookupError(f"AgentSkill not found: {agent_skill_id}")
-        logger.info("agent_skill.deleted agent_skill_id=%s", agent_skill_id)
+        logger.info("flows.agent_skill", agent_skill_id=agent_skill_id)
 
     async def resolve_index(self, agent_skill_ids: list[str]) -> list[AgentSkillIndexEntry]:
         entries: list[AgentSkillIndexEntry] = []
@@ -130,7 +130,7 @@ class AgentSkillService:
         saved_ok = await self._repository.set(parsed)
         if not saved_ok:
             raise RuntimeError(f"Failed to persist AgentSkill: {parsed.agent_skill_id}")
-        logger.info("agent_skill.imported agent_skill_id=%s", parsed.agent_skill_id)
+        logger.info("flows.agent_skill", agent_skill_id=parsed.agent_skill_id)
         return parsed
 
     async def _validate_depends_on_exist(self, depends_on: list[str]) -> None:

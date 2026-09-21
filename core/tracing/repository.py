@@ -48,7 +48,7 @@ def _json_text_eq(key: str, value: str) -> ColumnElement[bool]:
 
 def _encode_service_list_cursor(start_time: datetime, span_id: str) -> str:
     if start_time.tzinfo is None:
-        raise ValueError("start_time обязан быть с timezone")
+        raise ValueError('start_time must have a timezone')
     payload = {"t": start_time.isoformat(), "s": span_id}
     raw = json.dumps(payload, separators=(",", ":")).encode()
     return base64.urlsafe_b64encode(raw).decode().rstrip("=")
@@ -60,10 +60,10 @@ def _decode_service_list_cursor(cursor: str) -> tuple[datetime, str]:
     payload = parse_json_object(raw.decode(), "cursor")
     raw_time = payload.get("t")
     if not isinstance(raw_time, str):
-        raise ValueError("cursor.t должен быть строкой")
+        raise ValueError('cursor.t must be a string')
     raw_span_id = payload.get("s")
     if not isinstance(raw_span_id, str):
-        raise ValueError("cursor.s должен быть строкой")
+        raise ValueError('cursor.s must be a string')
     t = datetime.fromisoformat(raw_time)
     if t.tzinfo is None:
         t = t.replace(tzinfo=timezone.utc)
@@ -131,7 +131,7 @@ def _optional_string_attribute(attributes: JsonObject, key: str, span_id: str) -
     if value is None:
         return None
     if not isinstance(value, str):
-        raise ValueError(f"span {span_id}: {key} должен быть строкой")
+        raise ValueError(f"span {span_id}: {key} must be a string")
     return value
 
 
@@ -140,7 +140,7 @@ def _optional_bool_attribute(attributes: JsonObject, key: str, span_id: str) -> 
     if value is None:
         return None
     if not isinstance(value, bool):
-        raise ValueError(f"span {span_id}: {key} должен быть boolean")
+        raise ValueError(f"span {span_id}: {key} must be a boolean")
     return value
 
 
@@ -150,7 +150,7 @@ def _span_user_groups(value: JsonArray | None, span_id: str) -> list[str] | None
     groups: list[str] = []
     for index, group in enumerate(value):
         if not isinstance(group, str):
-            raise ValueError(f"span {span_id}: user_groups[{index}] должен быть строкой")
+            raise ValueError(f"span {span_id}: user_groups[{index}] must be a string")
         groups.append(group)
     return groups
 
@@ -160,7 +160,7 @@ def _span_event_attributes(event_payload: JsonObject, span_id: str, index: int) 
     if raw_attributes is None:
         return {}
     if not isinstance(raw_attributes, dict):
-        raise ValueError(f"span {span_id}: events[{index}].attributes должен быть JSON object")
+        raise ValueError(f"span {span_id}: events[{index}].attributes must be a JSON object")
     return require_json_object(raw_attributes, f"spans[{span_id}].events[{index}].attributes")
 
 
@@ -170,14 +170,14 @@ def _span_events(value: JsonArray | None, span_id: str) -> list[TraceSpanEvent]:
     events: list[TraceSpanEvent] = []
     for index, event in enumerate(value):
         if not isinstance(event, dict):
-            raise ValueError(f"span {span_id}: events[{index}] должен быть JSON object")
+            raise ValueError(f"span {span_id}: events[{index}] must be a JSON object")
         event_payload = require_json_object(event, f"spans[{span_id}].events[{index}]")
         raw_name = event_payload.get("name")
         if not isinstance(raw_name, str):
-            raise ValueError(f"span {span_id}: events[{index}].name должен быть строкой")
+            raise ValueError(f"span {span_id}: events[{index}].name must be a string")
         raw_timestamp = event_payload.get("timestamp")
         if raw_timestamp is not None and not isinstance(raw_timestamp, str):
-            raise ValueError(f"span {span_id}: events[{index}].timestamp должен быть строкой или null")
+            raise ValueError(f"span {span_id}: events[{index}].timestamp must be a string or null")
         events.append(
             TraceSpanEvent(
                 name=raw_name,
@@ -203,7 +203,7 @@ class SpanRepository:
             attrs[trace_attr.ATTR_RESOURCE_ID] = span.resource_id
 
         if not span.service_name:
-            raise ValueError("span_data['service_name'] обязателен для сохранения span")
+            raise ValueError("span_data['service_name'] is required to persist the span")
 
         async with self._storage.get_session() as session:
             stmt = (
@@ -264,7 +264,7 @@ class SpanRepository:
         Сортировка: start_time DESC, span_id DESC. Курсор — непрозрачная строка из ответа.
         """
         if limit < 1:
-            raise ValueError("limit должен быть >= 1")
+            raise ValueError('limit must be >= 1')
 
         async with self._storage.get_session() as session:
             stmt = select(Spans).where(Spans.service_name == service_name)
@@ -280,7 +280,7 @@ class SpanRepository:
                 try:
                     cursor_time, cursor_span_id = _decode_service_list_cursor(cursor)
                 except (json.JSONDecodeError, KeyError, ValueError) as e:
-                    raise ValueError(f"Некорректный cursor: {e}") from e
+                    raise ValueError(f"Invalid cursor: {e}") from e
                 stmt = stmt.where(
                     or_(
                         Spans.start_time < cursor_time,
@@ -478,9 +478,9 @@ class SpanRepository:
         cursor: str | None = None,
     ) -> tuple[list[TraceSpanRecord], str | None]:
         if limit < 1:
-            raise ValueError("limit должен быть >= 1")
+            raise ValueError('limit must be >= 1')
         if limit > ADMIN_SPANS_MAX_LIMIT:
-            raise ValueError(f"limit не больше {ADMIN_SPANS_MAX_LIMIT}")
+            raise ValueError(f"limit must not exceed {ADMIN_SPANS_MAX_LIMIT}")
 
         company_frag = _admin_optional_ilike_param("company_id_query", company_id_query)
         user_frag = _admin_optional_ilike_param("user_id_query", user_id_query)
@@ -523,7 +523,7 @@ class SpanRepository:
                 try:
                     cursor_time, cursor_span_id = _decode_service_list_cursor(cursor)
                 except (json.JSONDecodeError, KeyError, ValueError) as e:
-                    raise ValueError(f"Некорректный cursor: {e}") from e
+                    raise ValueError(f"Invalid cursor: {e}") from e
                 stmt = stmt.where(
                     or_(
                         Spans.start_time < cursor_time,
@@ -556,9 +556,9 @@ class SpanRepository:
         за полуинтервал [from_time, to_time), по возрастанию start_time (для джобы списания).
         """
         if limit < 1:
-            raise ValueError("limit должен быть >= 1")
+            raise ValueError('limit must be >= 1')
         if from_time.tzinfo is None or to_time.tzinfo is None:
-            raise ValueError("from_time и to_time обязаны иметь timezone")
+            raise ValueError('from_time and to_time must have a timezone')
 
         res_txt = _span_attribute_text(trace_attr.ATTR_BILLING_RESOURCE_NAME)
         pend_txt = _span_attribute_text(trace_attr.ATTR_BILLING_PENDING_SETTLEMENT)
@@ -588,7 +588,7 @@ class SpanRepository:
         self, *, q: str | None = None, limit: int = ADMIN_FACETS_MAX_LIMIT
     ) -> list[str]:
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
-            raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
+            raise ValueError(f"limit must be between 1 and {ADMIN_FACETS_MAX_LIMIT}")
         frag = facet_query_fragment(q)
         async with self._storage.get_session() as session:
             stmt = select(Spans.company_id).where(Spans.company_id.isnot(None))
@@ -604,7 +604,7 @@ class SpanRepository:
         с каталогом компаний (поиск по name/subdomain, не только по id в трейсах).
         """
         if max_ids < 1 or max_ids > 50_000:
-            raise ValueError("max_ids должен быть от 1 до 50000")
+            raise ValueError('max_ids must be between 1 and 50000')
         async with self._storage.get_session() as session:
             stmt = (
                 select(Spans.company_id)
@@ -625,7 +625,7 @@ class SpanRepository:
         limit: int = ADMIN_FACETS_MAX_LIMIT,
     ) -> list[str]:
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
-            raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
+            raise ValueError(f"limit must be between 1 and {ADMIN_FACETS_MAX_LIMIT}")
         frag = facet_query_fragment(q)
         scope_co = _admin_facet_scope_company(company_id)
         scope_ns = _admin_facet_scope_namespace(namespace)
@@ -653,7 +653,7 @@ class SpanRepository:
         для пересечения с каталогом пользователей (поиск по email/имени).
         """
         if max_ids < 1 or max_ids > 50_000:
-            raise ValueError("max_ids должен быть от 1 до 50000")
+            raise ValueError('max_ids must be between 1 and 50000')
         scope_co = _admin_facet_scope_company(company_id)
         scope_ns = _admin_facet_scope_namespace(namespace)
         async with self._storage.get_session() as session:
@@ -675,7 +675,7 @@ class SpanRepository:
         limit: int = ADMIN_FACETS_MAX_LIMIT,
     ) -> list[str]:
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
-            raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
+            raise ValueError(f"limit must be between 1 and {ADMIN_FACETS_MAX_LIMIT}")
         frag = facet_query_fragment(q)
         scope_co = _admin_facet_scope_company(company_id)
         scope_ns = _admin_facet_scope_namespace(namespace)
@@ -700,7 +700,7 @@ class SpanRepository:
         limit: int = ADMIN_FACETS_MAX_LIMIT,
     ) -> list[str]:
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
-            raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
+            raise ValueError(f"limit must be between 1 and {ADMIN_FACETS_MAX_LIMIT}")
         frag = facet_query_fragment(q)
         scope_co = _admin_facet_scope_company(company_id)
         scope_ns = _admin_facet_scope_namespace(namespace)
@@ -724,7 +724,7 @@ class SpanRepository:
         limit: int = ADMIN_FACETS_MAX_LIMIT,
     ) -> list[str]:
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
-            raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
+            raise ValueError(f"limit must be between 1 and {ADMIN_FACETS_MAX_LIMIT}")
         frag = facet_query_fragment(q)
         scope_co = _admin_facet_scope_company(company_id)
         async with self._storage.get_session() as session:
@@ -746,7 +746,7 @@ class SpanRepository:
         limit: int = ADMIN_FACETS_MAX_LIMIT,
     ) -> list[str]:
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
-            raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
+            raise ValueError(f"limit must be between 1 and {ADMIN_FACETS_MAX_LIMIT}")
         frag = facet_query_fragment(q)
         scope_co = _admin_facet_scope_company(company_id)
         scope_ns = _admin_facet_scope_namespace(namespace)

@@ -808,7 +808,7 @@ class GuestFarmService:
     ) -> JsonObject:
         lease = await self._leases.get(flow_id, node_id)
         if lease is None:
-            raise PlatformNotFoundError("guest lease not found")
+            raise PlatformNotFoundError("guest lease not found", error_code="guest_lease_not_found")
         slot = self._slots.get(lease.guest_lease_id)
         if slot is None:
             raise RuntimeError("guest slot is not running")
@@ -933,7 +933,7 @@ class GuestFarmService:
             raise ValueError("GetTask id is required")
         raw = await self._leases.get_task(task_id.strip())
         if raw is None:
-            raise PlatformNotFoundError("task not found")
+            raise PlatformNotFoundError("task not found", error_code="guest_task_not_found")
         task = parse_json_object(raw, "guest.task")
         return {"jsonrpc": "2.0", "id": rpc.get("id"), "result": task}
 

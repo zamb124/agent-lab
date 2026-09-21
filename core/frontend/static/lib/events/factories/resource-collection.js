@@ -69,6 +69,7 @@ const INITIAL_SLICE = freeze({
     lastError: freeze({}),
     createInFlight: false,
     createLockEventId: null,
+    lastListQuery: null,
 });
 
 export function createResourceCollection(options) {
@@ -283,11 +284,13 @@ export function createResourceCollection(options) {
 
     function _baseReducer(state, event) {
         switch (event.type) {
-            case events.LIST_REQUESTED:
+            case events.LIST_REQUESTED: {
+                const lastListQuery = freeze({ payload: event.payload === undefined ? null : event.payload });
                 if (listPreserveItemsOnRefresh && state.items.length > 0) {
-                    return freeze({ ...state, refreshing: true, error: null });
+                    return freeze({ ...state, refreshing: true, error: null, lastListQuery });
                 }
-                return freeze({ ...state, loading: true, refreshing: false, error: null });
+                return freeze({ ...state, loading: true, refreshing: false, error: null, lastListQuery });
+            }
             case events.LIST_LOADED: {
                 if (!event.payload || !Array.isArray(event.payload.items)) {
                     throw new Error(`createResourceCollection(${name}): LIST_LOADED payload.items required (array)`);

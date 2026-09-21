@@ -173,7 +173,7 @@ def assert_flow_ui_publishable(document: FlowUIDocument, limits: FlowUILimits) -
         first = problems[0]
         location = ", ".join(part for part in (first.page_id, first.block_id) if part is not None)
         raise ValueError(
-            f"Flow UI: {first.message} ({location or 'document'}); всего проблем: {len(problems)}"
+            f"Flow UI: {first.message} ({location or 'document'}); total problems: {len(problems)}"
         )
 
 

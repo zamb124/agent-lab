@@ -80,7 +80,7 @@ class SearchChannelsDefaults(BaseModel):
     @model_validator(mode="after")
     def at_least_one_channel(self) -> SearchChannelsDefaults:
         if not self.semantic and not self.lexical:
-            raise ValueError("Нужен хотя бы один канал: semantic или lexical")
+            raise ValueError('At least one channel is required: semantic or lexical')
         return self
 
 

@@ -76,9 +76,9 @@ class _UplinkDump:
 
     def __init__(self, *, dump_dir: str, max_bytes: int, session_id: str) -> None:
         if dump_dir == "":
-            raise ValueError("_UplinkDump: dump_dir не может быть пустым.")
+            raise ValueError("_UplinkDump: dump_dir must not be empty.")
         if max_bytes <= 0:
-            raise ValueError("_UplinkDump: max_bytes должен быть > 0.")
+            raise ValueError("_UplinkDump: max_bytes must be > 0.")
         self._dump_dir: str = dump_dir
         self._max_bytes: int = max_bytes
         self._session_id: str = session_id

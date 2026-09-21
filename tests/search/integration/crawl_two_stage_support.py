@@ -131,15 +131,17 @@ async def run_layer2_enrich(
     crawl_job_id: str,
     crawl_profile_id: str,
 ) -> None:
-    from apps.search.services.system_context import build_search_system_context
     from core.context import clear_context, set_context
+    from core.identity.system_bootstrap import build_system_admin_job_context
 
     trace_id = f"crawl:enrich:{crawl_url_id}"
     set_context(
-        await build_search_system_context(
-            trace_id=trace_id,
+        await build_system_admin_job_context(
             company_repository=search_container.company_repository,
             user_repository=search_container.user_repository,
+            trace_id=trace_id,
+            session_id=f"search:{trace_id}",
+            channel="search",
         )
     )
     try:

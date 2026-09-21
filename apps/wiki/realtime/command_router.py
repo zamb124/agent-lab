@@ -16,7 +16,6 @@ from apps.wiki.realtime.operations import (
     WikiCommentIdPayload,
     WikiCommentResolvePayload,
     WikiCompanyVisiblePayload,
-    WikiEmptyPayload,
     WikiMarkdownImportPagePayload,
     WikiMemberRemovePayload,
     WikiMemberUpsertPayload,
@@ -43,6 +42,7 @@ from apps.wiki.realtime.operations import (
     op_pages_list,
     op_pages_markdown,
     op_pages_markdown_create,
+    op_pages_markdown_file,
     op_pages_markdown_import,
     op_pages_markdown_parse,
     op_pages_member_add,
@@ -60,14 +60,14 @@ from apps.wiki.realtime.operations import (
 )
 from core.logging import get_logger
 from core.namespace.operations import NamespacesListPayload, op_namespaces_list
-from core.websocket import Operation, RegisteredOperation, register_service_operations
+from core.websocket import EmptyPayload, Operation, RegisteredOperation, register_service_operations
 
 logger = get_logger(__name__)
 
 WIKI_OPERATIONS: dict[str, RegisteredOperation[WikiContainer]] = {
-    "wiki/pages/list_requested": Operation(payload_model=WikiEmptyPayload, fn=op_pages_list),
+    "wiki/pages/list_requested": Operation(payload_model=EmptyPayload, fn=op_pages_list),
     "wiki/pages/deleted_list_requested": Operation(
-        payload_model=WikiEmptyPayload, fn=op_pages_deleted_list
+        payload_model=EmptyPayload, fn=op_pages_deleted_list
     ),
     "wiki/pages/item_requested": Operation(payload_model=WikiPageIdPayload, fn=op_pages_get),
     "wiki/pages/create_requested": Operation(
@@ -93,6 +93,9 @@ WIKI_OPERATIONS: dict[str, RegisteredOperation[WikiContainer]] = {
     ),
     "wiki/pages/markdown_requested": Operation(
         payload_model=WikiPageIdPayload, fn=op_pages_markdown
+    ),
+    "wiki/pages/markdown_file_requested": Operation(
+        payload_model=WikiPageIdPayload, fn=op_pages_markdown_file
     ),
     "wiki/pages/markdown_parse_requested": Operation(
         payload_model=WikiMarkdownParseRequest, fn=op_pages_markdown_parse
@@ -154,7 +157,4 @@ WIKI_OPERATIONS: dict[str, RegisteredOperation[WikiContainer]] = {
 
 def register_wiki_ws_commands() -> None:
     register_service_operations(WIKI_OPERATIONS, get_wiki_container)
-    logger.info(
-        "Wiki WS command-handlers зарегистрированы (%d операций)",
-        len(WIKI_OPERATIONS),
-    )
+    logger.info("wiki.ws.command.handlers", WIKI_OPERATIONS_count=len(WIKI_OPERATIONS))

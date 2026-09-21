@@ -1,5 +1,5 @@
 """
-DocxTemplater — одна ссылка на файл (FileRef): dict из state.files, FileRecord или FileResponse.
+DocxTemplater — одна ссылка на файл (FileRef): dict из state.files или FileRecord.
 
 - ``await fill(file_ref, context, *, strict=..., date_iso=...)`` → bytes;
 - ``await fill_and_create(..., strict=..., date_iso=..., public=...)`` → FileRecord.
@@ -54,7 +54,7 @@ class DocxTemplater:
         name = (output_original_name or "").strip()
         if not name.lower().endswith(".docx"):
             raise FileWriteError(
-                "output_original_name должен заканчиваться на .docx"
+                "output_original_name must end with .docx"
             )
 
         rendered = await self.fill(

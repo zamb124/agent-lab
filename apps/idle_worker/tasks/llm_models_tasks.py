@@ -40,7 +40,7 @@ async def sync_llm_models_task(
     try:
         result = await container.llm_models_service.sync_all_providers()
         total_synced = sum(result.values())
-        logger.info("LLM models sync completed: %s total=%s", result, total_synced)
+        logger.info("idle.llm.models.sync.completed.total", result=result, total=total_synced)
         return {"providers": result, "total": total_synced}
     finally:
         clear_context()

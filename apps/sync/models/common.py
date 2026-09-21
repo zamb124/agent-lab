@@ -1,9 +1,8 @@
-"""Общие Pydantic-модели для Sync API (идентификаторы, пагинация)."""
+"""Общие Pydantic-модели для Sync API."""
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Generic, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -26,21 +25,4 @@ class UserBrief(BaseModel):
     avatar_url: str | None = Field(
         default=None,
         description="URL аватара пользователя.",
-    )
-
-
-ItemT = TypeVar("ItemT")
-
-
-class PaginationResponse(BaseModel, Generic[ItemT]):
-    """Обёртка ответа с пагинацией."""
-
-    items: list[ItemT] = Field(description="Элементы текущей страницы.")
-    next_cursor: str | None = Field(
-        default=None,
-        description="Курсор для следующей страницы, если есть.",
-    )
-    prev_cursor: str | None = Field(
-        default=None,
-        description="Курсор для предыдущей страницы, если есть.",
     )

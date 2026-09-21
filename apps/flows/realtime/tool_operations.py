@@ -28,8 +28,8 @@ from apps.flows.src.models.tool_reference import (
     ToolsListPayload,
     ToolsTagGroupsPayload,
     ToolsToolIdPayload,
-    ToolTagGroupResponse,
 )
+from apps.flows.src.models.tool_tag_group import ToolTagGroup
 from apps.flows.src.services.agent_toolkit_service import (
     get_toolkit_ids_for_flow,
     get_toolkit_ids_for_tool,
@@ -533,25 +533,16 @@ async def op_flows_tools_tag_groups(
     *,
     user: User,
     container: FlowContainer,
-) -> OffsetPage[ToolTagGroupResponse]:
+) -> OffsetPage[ToolTagGroup]:
     _ = user
     _ = await require_company_member(container)
     groups = await container.tool_tag_group_service.list_groups(
         limit=payload.limit, offset=payload.offset
     )
-    items = [
-        ToolTagGroupResponse(
-            tag=group.tag,
-            description_ru=group.description_ru,
-            description_en=group.description_en,
-            updated_at=group.updated_at.isoformat(),
-            content_hash=group.content_hash,
-        )
-        for group in groups
-    ]
+    items = list(groups)
     page_len = len(items)
     total = payload.offset + page_len if page_len < payload.limit else payload.offset + page_len + 1
-    return OffsetPage[ToolTagGroupResponse](
+    return OffsetPage[ToolTagGroup](
         items=items,
         total=total,
         limit=payload.limit,

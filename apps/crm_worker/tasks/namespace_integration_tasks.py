@@ -58,19 +58,19 @@ async def run_namespace_integration_job(
     repo = container.task_repository
     row = await repo.get_for_worker(task_id, company_id)
     if row is None:
-        raise ValueError(f"Задача не найдена: {task_id}")
+        raise ValueError(f"Task not found: {task_id}")
     if row.task_type != "namespace_integration_job":
         raise ValueError(
-            f"Ожидался тип namespace_integration_job, получен {row.task_type}"
+            f"Expected type namespace_integration_job, got {row.task_type}"
         )
 
     data = row.data
     provider_raw = data.get("provider_id")
     job_raw = data.get("job")
     if not isinstance(provider_raw, str) or not provider_raw.strip():
-        raise ValueError("В data задачи нет provider_id")
+        raise ValueError("provider_id is missing from task data")
     if job_raw not in ("entities", "custom_fields"):
-        raise ValueError(f"В data задачи неизвестный job: {job_raw}")
+        raise ValueError(f"Unknown job in task data: {job_raw}")
     provider_id = provider_raw.strip()
     job = str(job_raw)
 
@@ -194,10 +194,10 @@ async def run_namespace_integration_job(
         if after_exc is not None and after_exc.status == "cancelled":
             return {"status": "cancelled", "task_id": task_id}
         logger.exception(
-            "namespace_integration_job failed task_id=%s provider=%s job=%s",
-            task_id,
-            provider_id,
-            job,
+            "crm.namespace_integration_job",
+            task_id=task_id,
+            provider=provider_id,
+            job=job,
         )
         await repo.patch_progress(
             task_id,

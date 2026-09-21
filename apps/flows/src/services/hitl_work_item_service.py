@@ -81,7 +81,7 @@ class HitlWorkItemService:
         """Создаёт WorkItem operator-handoff. Возвращает (correlation_id, work_item_id)."""
         ctx = get_context()
         if ctx is None or ctx.active_company is None:
-            raise ValueError("HitlWorkItemService.register_handoff: нужен Context с active_company")
+            raise ValueError("HitlWorkItemService.register_handoff: Context with active_company is required")
         company_id = ctx.active_company.company_id
         slug = assignee_queue_slug.strip()
         queue = await self._work_items.get_queue_by_slug(company_id, slug)
@@ -183,11 +183,11 @@ class HitlWorkItemService:
         end_user_id = self._require_str(binding, "end_user_id")
         context_data_raw = binding.get("context_data_snapshot")
         if not isinstance(context_data_raw, dict):
-            raise ValueError("binding.context_data_snapshot отсутствует, resume невозможен")
+            raise ValueError("binding.context_data_snapshot is missing, resume is impossible")
         context_data: JsonObject = context_data_raw
         channel = context_data.get("channel")
         if not isinstance(channel, str) or not channel:
-            raise ValueError("context_data_snapshot не содержит строковый channel")
+            raise ValueError("context_data_snapshot does not contain a string channel")
 
         a2a_task_id = binding.get("a2a_task_id")
         tid = a2a_task_id if isinstance(a2a_task_id, str) else ""
@@ -212,7 +212,7 @@ class HitlWorkItemService:
             resolved_company_id = company_id
             if resolved_company_id is None:
                 if resume_context.active_company is None:
-                    raise ValueError("resume_from_completion: company_id отсутствует")
+                    raise ValueError("resume_from_completion: company_id is missing")
                 resolved_company_id = resume_context.active_company.company_id
 
             # Closing reply → durable messages + Redis stream до resume (live resubscribe).
@@ -282,5 +282,5 @@ class HitlWorkItemService:
     def _require_str(binding: JsonObject, key: str) -> str:
         value = binding.get(key)
         if not isinstance(value, str) or not value:
-            raise ValueError(f"binding.{key} обязателен для resume")
+            raise ValueError(f"binding.{key} is required for resume")
         return value

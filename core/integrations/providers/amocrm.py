@@ -14,19 +14,19 @@ def normalize_amocrm_subdomain_query(value: str) -> str:
     """
     s = value.strip()
     if not s:
-        raise ValueError("Поддомен Amo пустой")
+        raise ValueError('Amo subdomain is empty')
     if "://" in s:
         parsed = urlparse(s)
         host = (parsed.hostname or "").strip().lower()
     else:
         host = s.split("/")[0].strip().lower()
     if not host:
-        raise ValueError("Не удалось разобрать хост поддомена Amo")
+        raise ValueError('Failed to parse Amo subdomain host')
     for suffix in (".amocrm.ru", ".kommo.com", ".amocrm.com"):
         if host.endswith(suffix) and len(host) > len(suffix):
             sub = host[: -len(suffix)].strip(".")
             if not sub:
-                raise ValueError("Пустая метка поддомена Amo")
+                raise ValueError('Amo subdomain label is empty')
             return sub
     if "." in host:
         return host.split(".")[0]
@@ -36,7 +36,7 @@ def normalize_amocrm_subdomain_query(value: str) -> str:
 def interpolate_subdomain_in_url(url: str, subdomain: str) -> str:
     if "{subdomain}" in url:
         if not subdomain.strip():
-            raise ValueError("amocrm: пустой subdomain для URL с {subdomain}")
+            raise ValueError('amocrm: empty subdomain for URL with {subdomain}')
         return url.replace("{subdomain}", subdomain.strip().strip("/"))
     return url
 

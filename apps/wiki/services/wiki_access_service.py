@@ -204,7 +204,7 @@ class WikiAccessService:
         company_visible: bool,
     ) -> None:
         if company_visible and members:
-            raise ValueError("members запрещены при company_visible=true")
+            raise ValueError("members are forbidden when company_visible=true")
         await self.clear_members(wiki_page_id)
         if not members:
             return
@@ -243,7 +243,7 @@ class WikiAccessService:
         seen: set[str] = set()
         while current is not None:
             if current in seen:
-                raise ValueError(f"Цикл в дереве wiki на странице {current}")
+                raise ValueError(f"Cycle in wiki tree at page {current}")
             seen.add(current)
             if company_visible_by_id.get(current) is False:
                 return current

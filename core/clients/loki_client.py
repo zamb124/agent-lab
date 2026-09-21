@@ -158,7 +158,7 @@ class LokiClient:
 
     def __init__(self, base_url: str, timeout: float = 15.0) -> None:
         if not base_url:
-            raise ValueError("LokiClient: base_url обязателен")
+            raise ValueError("LokiClient: base_url is required")
         self._base_url: str = base_url.rstrip("/")
         self._timeout: float = timeout
 
@@ -184,11 +184,11 @@ class LokiClient:
             async with httpx.AsyncClient(timeout=self._timeout) as client:
                 resp = await client.get(url, params=params)
         except httpx.RequestError as exc:
-            raise LokiClientError(f"Loki недоступен (сеть или таймаут): {exc}") from exc
+            raise LokiClientError(f"Loki is unavailable (network or timeout): {exc}") from exc
 
         if resp.status_code != 200:
             raise LokiClientError(
-                f"Loki query_range вернул {resp.status_code}: {resp.text[:300]}"
+                f"Loki query_range returned {resp.status_code}: {resp.text[:300]}"
             )
         try:
             body = parse_json_object(resp.text, "loki.query_range response")
@@ -196,7 +196,7 @@ class LokiClient:
         except ValueError as exc:
             snippet = (resp.text or "")[:300]
             raise LokiClientError(
-                f"Loki query_range ответ не JSON/LogQL payload (HTTP {resp.status_code}): {snippet}"
+                f"Loki query_range response is not a JSON/LogQL payload (HTTP {resp.status_code}): {snippet}"
             ) from exc
 
     async def query_by_trace_id(
@@ -208,7 +208,7 @@ class LokiClient:
     ) -> list[LokiLogEntry]:
         """Возвращает записи логов с указанным trace_id (платформенные сервисы, см. селектор)."""
         if not trace_id:
-            raise ValueError("LokiClient.query_by_trace_id: trace_id обязателен")
+            raise ValueError("LokiClient.query_by_trace_id: trace_id is required")
         return await self._query_range(
             _build_trace_query(trace_id), time_from, time_to, limit
         )
@@ -222,7 +222,7 @@ class LokiClient:
     ) -> list[LokiLogEntry]:
         """Возвращает записи логов с указанным session_id из flows/flows_worker."""
         if not session_id:
-            raise ValueError("LokiClient.query_by_session_id: session_id обязателен")
+            raise ValueError("LokiClient.query_by_session_id: session_id is required")
         return await self._query_range(
             _build_session_query(session_id), time_from, time_to, limit
         )
@@ -236,7 +236,7 @@ class LokiClient:
     ) -> list[LokiLogEntry]:
         """Возвращает записи логов с указанным request_id из flows/flows_worker."""
         if not request_id:
-            raise ValueError("LokiClient.query_by_request_id: request_id обязателен")
+            raise ValueError("LokiClient.query_by_request_id: request_id is required")
         return await self._query_range(
             _build_request_id_query(request_id), time_from, time_to, limit
         )
@@ -250,7 +250,7 @@ class LokiClient:
     ) -> list[LokiLogEntry]:
         """Возвращает записи логов с указанным span_id из flows/flows_worker."""
         if not span_id:
-            raise ValueError("LokiClient.query_by_span_id: span_id обязателен")
+            raise ValueError("LokiClient.query_by_span_id: span_id is required")
         return await self._query_range(
             _build_span_id_query(span_id), time_from, time_to, limit
         )
@@ -264,7 +264,7 @@ class LokiClient:
     ) -> list[LokiLogEntry]:
         """Возвращает записи логов с указанным user_id из flows/flows_worker."""
         if not user_id:
-            raise ValueError("LokiClient.query_by_user_id: user_id обязателен")
+            raise ValueError("LokiClient.query_by_user_id: user_id is required")
         return await self._query_range(
             _build_user_id_query(user_id), time_from, time_to, limit
         )

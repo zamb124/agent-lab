@@ -81,7 +81,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
         # Сохраняем актуальный конфиг в flows
         _ = await super().set(entity)
 
-        logger.info(f"Flow '{flow_id}' saved as version {new_version}")
+        logger.info("flows.repo.saved", flow_id=flow_id, version=new_version)
         return True
 
     @override
@@ -192,7 +192,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
                 try:
                     result[entity_id] = _flow_config_from_storage_json(all_data[final_key])
                 except (ValueError, ValidationError) as e:
-                    logger.warning("Failed to parse flow %s: %s", entity_id, e)
+                    logger.warning("flows.failed.parse.flow", entity_id=entity_id, e=e)
         return result
 
     @override
@@ -210,7 +210,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
                 cfg = _flow_config_from_storage_json(value)
                 items.append(cfg)
             except (ValueError, ValidationError) as e:
-                logger.warning(f"Failed to parse flow from key {key}: {e}")
+                logger.warning("flows.repo.parse_failed", key=key, error=str(e))
                 continue
 
         return items
@@ -236,7 +236,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
                 try:
                     items.append(FlowListIndexItem.model_validate(row))
                 except ValidationError as e:
-                    logger.warning("Failed to parse flow list index: %s", e)
+                    logger.warning("flows.failed.parse.flow.list.index", e=e)
                     continue
             if len(rows) < self._LIST_INDEX_PAGE:
                 return items
@@ -272,7 +272,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
             try:
                 items.append(FlowToolPickerItem.model_validate(row))
             except ValidationError as e:
-                logger.warning(f"Failed to parse flow picker item: {e}")
+                logger.warning("flows.repo.picker_parse_failed", error=str(e))
                 continue
 
         return items
@@ -289,7 +289,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
         versions = await self.list_versions(flow_id)
 
         if not current and not versions:
-            logger.info(f"Flow '{flow_id}' not found, nothing to delete")
+            logger.info("flows.repo.delete_missing", flow_id=flow_id)
             return False
 
         if current:
@@ -302,7 +302,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
             final_version_key = self._build_final_key(version_key)
             _ = await self._storage.delete_with_table(final_version_key, self._get_versions_table())
 
-        logger.info(f"Flow '{flow_id}' deleted with {len(versions)} versions")
+        logger.info("flows.repo.deleted", flow_id=flow_id, version_count=len(versions))
         return True
 
     async def rollback_to_version(self, flow_id: str, version: str) -> bool:
@@ -320,5 +320,5 @@ class FlowRepository(BaseRepository[FlowConfig]):
         final_key = self._build_final_key(key)
         _ = await self._storage.set_with_table(final_key, data, self._get_table_name())
 
-        logger.info(f"Flow '{flow_id}' rolled back to version {version}")
+        logger.info("flows.repo.rolled_back", flow_id=flow_id, version=version)
         return True

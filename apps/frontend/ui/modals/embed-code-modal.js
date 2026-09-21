@@ -106,7 +106,7 @@ export class FrontendEmbedCodeModal extends PlatformModal {
         this.title = this.t('embed_code_modal.header');
         if (changed.has('open') && this.open && this.embedId && !this._loaded) {
             this._loaded = true;
-            this._code.run({ embed_id: this.embedId });
+            this._code.run({ embed_id: this.embedId, public_origin: window.location.origin });
         }
         if (changed.has('embedId')) {
             this._loaded = false;

@@ -59,7 +59,7 @@ async def bootstrap_openfga(
             name=_STORE_NAME,
             api_token=resolved_token,
         )
-        logger.info("OpenFGA store created store_id=%s", resolved_store_id)
+        logger.info("authz.openfga.store.created.store_id", store_id=resolved_store_id)
 
     schema_version, type_definitions = load_model_payload()
     model_id = await write_authorization_model(
@@ -69,11 +69,7 @@ async def bootstrap_openfga(
         schema_version=schema_version,
         type_definitions=type_definitions,
     )
-    logger.info(
-        "OpenFGA authorization model written store_id=%s authorization_model_id=%s",
-        resolved_store_id,
-        model_id,
-    )
+    logger.info("authz.openfga.authorization.model.written.store_id", store_id=resolved_store_id, authorization_model_id=model_id)
     return resolved_store_id, model_id
 
 

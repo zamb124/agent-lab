@@ -487,7 +487,7 @@ class Flow:
 
                 for node_id in current_nodes:
                     node_type = self._node_type_from_config(self.nodes[node_id])
-                    logger.debug(f"Flow {self.flow_id}: executing node '{node_id}' (type={node_type})")
+                    logger.debug("flows.runtime.node_executing", flow_id=self.flow_id, node_id=node_id, node_type=node_type)
 
                 superstep_base_state = self._clone_state(state)
                 schedule_specs = [
@@ -662,7 +662,10 @@ class Flow:
                     if interrupts:
                         node_id, interrupt, interrupted_state = interrupts[0]
                         logger.info(
-                            f"Flow {self.flow_id}: interrupt at '{node_id}': {interrupt.question}"
+                            "flow.interrupt",
+                            flow_id=self.flow_id,
+                            node_id=node_id,
+                            question=interrupt.question,
                         )
                         state = self._merge_results(
                             superstep_base_state,
@@ -723,7 +726,7 @@ class Flow:
                     await emitter.flush_ui(self.interface)
                 except FlowInterrupt as e:
                     node_id = current_nodes[0]
-                    logger.info(f"Flow {self.flow_id}: interrupt at '{node_id}': {e.question}")
+                    logger.info("flows.runtime.interrupt", flow_id=self.flow_id, node_id=node_id, question=e.question)
                     state = self._clone_state(superstep_base_state)
                     InterruptManager.apply_interrupt(
                         state,
@@ -751,7 +754,7 @@ class Flow:
 
                 # Проверка interrupt
                 if state.interrupt:
-                    logger.info(f"Flow {self.flow_id}: interrupted")
+                    logger.info("flows.runtime.interrupted", flow_id=self.flow_id)
                     state.current_nodes = current_nodes
                     _ = await self._checkpoint_state(
                         state,
@@ -772,7 +775,7 @@ class Flow:
 
                     if not next_nodes:
                         await self._raise_if_premature_completion(current_nodes, state)
-                        logger.debug(f"Flow {self.flow_id}: completed")
+                        logger.debug("flows.runtime.completed", flow_id=self.flow_id)
                         state.current_nodes = []
                         _ = await self._checkpoint_state_events(
                             [
@@ -1025,11 +1028,11 @@ class Flow:
         Возвращает:
             True если breakpoint сработал и выполнение остановлено
         """
-        logger.info(f"Flow {self.flow_id}: _check_breakpoint node='{node_id}', breakpoint_hit='{state.breakpoint_hit}', breakpoints={state.breakpoints}")
+        logger.info("flows.runtime.breakpoint_check", flow_id=self.flow_id, node_id=node_id, breakpoint_hit=state.breakpoint_hit, breakpoints=state.breakpoints)
 
         # Если мы продолжаем после breakpoint на этой же ноде - пропускаем проверку
         if state.breakpoint_hit == node_id:
-            logger.debug(f"Flow {self.flow_id}: resuming after breakpoint at '{node_id}'")
+            logger.debug("flows.runtime.breakpoint_resume", flow_id=self.flow_id, node_id=node_id)
             state.breakpoint_hit = None
             state.breakpoint_state = None
             return False
@@ -1039,7 +1042,7 @@ class Flow:
         if not breakpoints.get(node_id):
             return False
 
-        logger.info(f"Flow {self.flow_id}: breakpoint hit at node '{node_id}'")
+        logger.info("flows.runtime.breakpoint_hit", flow_id=self.flow_id, node_id=node_id)
 
         # Создаем projection snapshot
         state_snapshot = parse_json_object(
@@ -1276,7 +1279,7 @@ class Flow:
                     f"Failed to mark code condition activity as failed: {activity_id!r}"
                 ) from exc
             raise ValueError(
-                f"Code-условие ребра: ошибка выполнения language={language!r}: {exc}"
+                f"Edge code condition: execution error language={language!r}: {exc}"
             ) from exc
         condition_result = bool(result)
         completed_ok = await runtime.record_activity_completed(

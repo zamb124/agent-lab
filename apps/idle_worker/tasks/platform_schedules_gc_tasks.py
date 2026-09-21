@@ -36,11 +36,7 @@ async def platform_schedules_gc_tick(
     finally:
         await broker_redis.close()
 
-    logger.info(
-        "platform_schedules_gc_tick done: scanned=%s deleted=%s",
-        result.scanned_keys,
-        result.deleted_orphans,
-    )
+    logger.info("idle.platform_schedules_gc_tick", scanned=result.scanned_keys, deleted=result.deleted_orphans)
     return {
         "scanned_keys": result.scanned_keys,
         "deleted_orphans": result.deleted_orphans,

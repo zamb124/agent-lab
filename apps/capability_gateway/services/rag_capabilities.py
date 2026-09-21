@@ -158,7 +158,7 @@ def _merge_collection_id(metadata: RAGMetadata | None, collection_id: str) -> RA
     merged: RAGMetadata = dict(metadata) if metadata is not None else {}
     existing = merged.get("collection_id")
     if existing is not None and existing != collection_id:
-        raise ValueError("metadata.collection_id не совпадает с аргументом collection_id")
+        raise ValueError("metadata.collection_id does not match the collection_id argument")
     merged["collection_id"] = collection_id
     return merged
 
@@ -169,7 +169,7 @@ def _merge_collection_filter(
     merged: RAGMetadataFilter = dict(filters) if filters is not None else {}
     existing = merged.get("collection_id")
     if existing is not None and existing != collection_id:
-        raise ValueError("filters.collection_id не совпадает с аргументом collection_id")
+        raise ValueError("filters.collection_id does not match the collection_id argument")
     merged["collection_id"] = collection_id
     return merged
 

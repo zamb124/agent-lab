@@ -12,7 +12,6 @@ from core.ai.company_settings import CapabilityLiteral
 from core.ai.llm_config import LLMCallConfig
 from core.billing.settlement_rules import SettlementRulesDocument
 from core.config.models import LegalConfig, PublicSiteConfig
-from core.models.payment_models import TransactionResponse
 from core.tracing.models import TraceSpanRecord
 from core.types import JsonObject
 
@@ -162,7 +161,7 @@ class LeadCreateBody(BaseModel):
     @model_validator(mode="after")
     def require_email_or_phone(self) -> Self:
         if self.email is None and self.phone is None:
-            raise ValueError("Укажите email или телефон")
+            raise ValueError("Provide email or phone")
         return self
 
 
@@ -402,12 +401,6 @@ class BillingPlanChangeResponse(BaseModel):
     message: str
 
 
-class PaymentHistoryResponse(BaseModel):
-    """История транзакций пополнения баланса."""
-
-    payments: list[TransactionResponse]
-
-
 class PlatformTracingFacetItem(BaseModel):
     """Одна подсказка с id для фильтра и человекочитаемой подписью."""
 
@@ -493,12 +486,6 @@ class PlatformBillingPricesResponse(BaseModel):
     static_base: dict[str, dict[str, float]]
     effective: dict[str, dict[str, float]]
     storage_override: dict[str, dict[str, float]] | None = None
-
-
-class PlatformBillingUsageReportResponse(BaseModel):
-    """Строки usage из shared БД для админки."""
-
-    items: list[JsonObject]
 
 
 class PlatformBillingSettlementRulesResponse(BaseModel):

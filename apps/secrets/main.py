@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from apps.secrets.api import get_api_router
 from apps.secrets.config import SecretsSettings
 from apps.secrets.container import SecretsContainer, get_secrets_container
+from apps.secrets.realtime.command_router import register_secrets_ws_commands
 from core.app import create_service_app
 from core.config import get_settings
 from core.logging import get_logger
@@ -21,7 +22,8 @@ async def on_startup(
     app: FastAPI, container: SecretsContainer, settings: SecretsSettings
 ) -> None:
     _ = app, container, settings
-    logger.info("Secrets Service: запущен")
+    register_secrets_ws_commands()
+    logger.info("secrets.service")
 
 
 app = create_service_app(

@@ -85,15 +85,15 @@ def _resolve_str_var(value: str, state: ExecutionState | None) -> str:
         return value
     if state is None:
         raise VariableResolutionError(
-            f"Нельзя резолвить '{value}' без ExecutionState (extra_request_headers)"
+            f"Cannot resolve '{value}' without ExecutionState (extra_request_headers)"
         )
     resolved = VarResolver.resolve_ref(value, state.variables or {})
     if not isinstance(resolved, str):
         raise VariableResolutionError(
-            f"Переменная '{value}' для HTTP-заголовка должна резолвиться в строку"
+            f"Variable '{value}' for an HTTP header must resolve to a string"
         )
     if not resolved:
-        raise VariableResolutionError(f"Переменная '{value}' резолвится в пустую строку")
+        raise VariableResolutionError(f"Variable '{value}' resolves to an empty string")
     return resolved
 
 

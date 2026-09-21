@@ -39,7 +39,7 @@ class GoogleWorkspaceClient:
 
         ctx = get_context()
         if ctx is None or ctx.active_company is None:
-            raise ValueError("Контекст с активной компанией обязателен для Google Workspace auth")
+            raise ValueError("Context with an active company is required for Google Workspace auth")
 
         company_id = ctx.active_company.company_id
         user_id = ctx.user.user_id
@@ -53,10 +53,7 @@ class GoogleWorkspaceClient:
             service=GOOGLE_OAUTH_SERVICE_CANONICAL,
         )
         if workspace_cred is not None and workspace_cred.token_type != TOKEN_TYPE_SERVICE_ACCOUNT:
-            logger.debug(
-                "Google Workspace: user workspace credential, user=%s",
-                user_id,
-            )
+            logger.debug("flows.google.workspace.user.workspace.credential", user=user_id)
             return GoogleAuthMaterial(access_token=workspace_cred.access_token)
 
         for prior_service in GOOGLE_OAUTH_SERVICE_PRIOR_KEYS:
@@ -67,11 +64,7 @@ class GoogleWorkspaceClient:
                 service=prior_service,
             )
             if prior_cred is not None and prior_cred.token_type != TOKEN_TYPE_SERVICE_ACCOUNT:
-                logger.debug(
-                    "Google Workspace: prior credential service=%s user=%s",
-                    prior_service,
-                    user_id,
-                )
+                logger.debug("flows.google.workspace.prior.credential.service", service=prior_service, user=user_id)
                 return GoogleAuthMaterial(access_token=prior_cred.access_token)
 
         company_material = await (
@@ -80,7 +73,7 @@ class GoogleWorkspaceClient:
             )
         )
         if company_material is not None:
-            logger.debug("Google Workspace: company SA credential, company=%s", company_id)
+            logger.debug("flows.google.workspace.company.sa.credential", company=company_id)
             return company_material
 
         scopes = scopes_for_google_service(GOOGLE_OAUTH_SERVICE_CANONICAL)
@@ -106,10 +99,7 @@ class GoogleWorkspaceClient:
             company_id=company_id,
             flow_context=flow_context,
         )
-        logger.info(
-            "Google Workspace: no credential, raising OAuthInterrupt for user=%s",
-            user_id,
-        )
+        logger.info("flows.google.workspace.credential.raising.oauthinterrupt", user=user_id)
         raise FlowInterrupt(
             body=OAuthInterrupt(
                 question="oauth_required.google.workspace",

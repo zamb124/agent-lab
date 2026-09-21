@@ -118,10 +118,10 @@ async def notify_user(user_id: str, notification: Notification) -> None:
     payload = _notification_payload(notification)
     await publish_event_to_user(user_id, event_type, payload)
     logger.info(
-        "Notification published: user=%s service=%s kind=%s",
-        user_id,
-        notification.service,
-        notification.type.value,
+        "websocket.notification.published.user.service.kind",
+        user=user_id,
+        service=notification.service,
+        kind=notification.type.value,
     )
 
 
@@ -138,8 +138,8 @@ async def notify_company(company_id: str, notification: Notification) -> None:
     payload = _notification_payload(notification)
     await publish_event_to_company(company_id, event_type, payload)
     logger.info(
-        "Notification published: company=%s service=%s kind=%s",
-        company_id,
-        notification.service,
-        notification.type.value,
+        "websocket.notification.published.company.service.kind",
+        company=company_id,
+        service=notification.service,
+        kind=notification.type.value,
     )

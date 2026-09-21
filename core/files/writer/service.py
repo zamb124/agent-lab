@@ -121,11 +121,11 @@ class FileWriter:
         opts = self._opts(options)
         name = (original_name or "").strip()
         if not name:
-            raise FileWriteError("Параметр original_name обязателен (имя файла с расширением)")
+            raise FileWriteError("original_name is required (file name with an extension)")
         ext = Path(name).suffix.lower()
         if not ext:
             raise FileWriteError(
-                f"В original_name нужно расширение целевого файла, получено: {original_name!r}"
+                f"original_name must include the target file extension, got: {original_name!r}"
             )
 
         mode = content_mode
@@ -149,7 +149,7 @@ class FileWriter:
         if resolved == "markdown":
             text, _ = normalize_str_content(content, opts.text_encoding)
             return self._build_markdown_pipeline(text, ext, opts)
-        raise FileWriteError(f"Неизвестный content_mode: {content_mode!r}")
+        raise FileWriteError(f"Unknown content_mode: {content_mode!r}")
 
     async def _persist_upload(
         self,
@@ -251,7 +251,7 @@ class FileWriter:
             try:
                 raw_b = base64.b64decode(compact, validate=True)
             except (ValueError, binascii.Error) as exc:
-                raise FileWriteError("Невалидная base64-строка") from exc
+                raise FileWriteError("Invalid base64 string") from exc
         mime = _mime_for_extension(ext)
         return FileWriteResult(
             data=raw_b,
@@ -326,8 +326,8 @@ class FileWriter:
                 checksum_sha256_hex=compute_content_checksum_sha256(data),
             )
         raise FileWriteError(
-            f"Конвертация markdown в формат {ext!r} не поддерживается. "
-            + "Доступно: .html, .pdf, .docx, .xlsx, .md, .txt"
+            f"Markdown conversion to format {ext!r} is not supported. "
+            + "Available: .html, .pdf, .docx, .xlsx, .md, .txt"
         )
 
     def _md_to_html_bytes(self, md_text: str, opts: WriteOptions) -> bytes:
@@ -462,7 +462,7 @@ def _mime_for_extension(ext: str) -> str:
         return mime
     if ext_to_category(ext) is not None:
         return ext_to_mime(ext)
-    raise FileWriteError(f"Не удалось сопоставить MIME тип расширению {ext!r}")
+    raise FileWriteError(f"Failed to map MIME type for extension {ext!r}")
 
 
 def _escape_reportlab_text(text: str) -> str:

@@ -31,7 +31,7 @@ def get_schedule_source(redis_url: str) -> ListRedisScheduleSource:
             url=redis_url,
             prefix="platform_schedules",
         )
-        logger.info(f"ListRedisScheduleSource создан: {redis_url}")
+        logger.info("scheduler.source.created", redis_url=redis_url)
 
     return _schedule_source
 

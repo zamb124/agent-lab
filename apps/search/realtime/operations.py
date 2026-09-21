@@ -77,15 +77,11 @@ from core.search.models import (
 )
 from core.tasks import enqueue
 from core.types import JsonObject
-from core.websocket import raise_invalid, raise_not_found
+from core.websocket import EmptyPayload, raise_invalid, raise_not_found
 
 # ---------------------------------------------------------------------------
 # payloads
 # ---------------------------------------------------------------------------
-
-
-class SearchEmptyPayload(StrictBaseModel):
-    pass
 
 
 class SearchPagePayload(StrictBaseModel):
@@ -553,7 +549,7 @@ async def op_query_serp_click(payload: SerpClickEvent, *, user: User, container:
 
 
 async def op_query_providers_snapshot(
-    payload: SearchEmptyPayload, *, user: User, container: SearchContainer
+    payload: EmptyPayload, *, user: User, container: SearchContainer
 ) -> SearchProvidersSnapshot:
     _ = payload, user
     config = get_search_settings().search
@@ -582,7 +578,7 @@ _PROVIDER_IDS: tuple[SearchProviderId, ...] = ("tinyfish", "linkup", "serper", "
 async def _load_company(company_id: str, container: SearchContainer) -> Company:
     company = await container.company_repository.get(company_id)
     if company is None:
-        raise PlatformNotFoundError(f"Компания {company_id} не найдена")
+        raise PlatformNotFoundError(f"Company {company_id} not found", error_code='not_found')
     return company
 
 
@@ -590,7 +586,7 @@ def _company_settings(company: Company) -> CompanySearchProviders:
     try:
         return CompanySearchProviders.from_metadata(company.metadata)
     except (ValueError, ValidationError) as exc:
-        raise ValueError(f"company.metadata.search_providers повреждён: {exc}") from exc
+        raise ValueError(f"company.metadata.search_providers is corrupt: {exc}") from exc
 
 
 async def _save_company_settings(
@@ -659,7 +655,7 @@ def _api_key_encrypted(payload: SearchProviderUpdatePayload, existing: CompanySe
     if existing.credential_source == "company" and existing.api_key_encrypted is not None:
         return existing.api_key_encrypted
     raise ValueError(
-        f"API key обязателен для provider {payload.provider_id} при credential_source='company'"
+        f"API key is required for provider {payload.provider_id} when credential_source='company'"
     )
 
 
@@ -694,7 +690,7 @@ def _provider_override(
 
 
 async def op_providers_list(
-    payload: SearchEmptyPayload, *, user: User, container: SearchContainer
+    payload: EmptyPayload, *, user: User, container: SearchContainer
 ) -> CompanySearchProvidersResponse:
     _ = payload, user
     scope = await require_company_admin(container.authz_service)

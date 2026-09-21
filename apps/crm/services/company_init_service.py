@@ -109,7 +109,7 @@ class CompanyInitService:
     async def _initialize_company_locked(
         self, company_id: str, *, reseed: bool
     ) -> dict[str, int | bool]:
-        logger.info(f"Initializing company: {company_id}")
+        logger.info("crm.company_init.started", company_id=company_id)
 
         entity_types_created = await self._init_entity_types(company_id, reseed=reseed)
         relationship_types_created = await self._init_relationship_types(company_id, reseed=reseed)
@@ -215,10 +215,10 @@ class CompanyInitService:
                 if not is_unique_violation(exc):
                     raise
                 logger.info(
-                    "EntityType %r уже создан параллельным worker для company=%r namespace=%r, пропуск",
-                    template["type_id"],
-                    company_id,
-                    init_namespace,
+                    "crm.entitytype.worker.company.namespace",
+                    type_id=template['type_id'],
+                    company=company_id,
+                    namespace=init_namespace,
                 )
 
         return created_count
@@ -274,11 +274,7 @@ class CompanyInitService:
             except IntegrityError as exc:
                 if not is_unique_violation(exc):
                     raise
-                logger.info(
-                    "RelationshipType %r уже создан параллельным worker для company=%r, пропуск",
-                    template["type_id"],
-                    company_id,
-                )
+                logger.info("crm.relationshiptype.worker.company", type_id=template['type_id'], company=company_id)
 
         return created_count
 
@@ -323,17 +319,13 @@ class CompanyInitService:
                 except IntegrityError as exc:
                     if not is_unique_violation(exc):
                         raise
-                    logger.info(
-                        "NamespaceTemplate %r уже создан параллельным worker для company=%r, пропуск",
-                        seed["template_id"],
-                        company_id,
-                    )
+                    logger.info("crm.namespacetemplate.worker.company", template_id=seed['template_id'], company=company_id)
                     existing = await self._namespace_template_repo.get_by_template_id(
                         seed["template_id"], company_id=company_id
                     )
                     if existing is None:
                         raise RuntimeError(
-                            f"NamespaceTemplate {seed['template_id']!r} не найден после IntegrityError для company={company_id!r}"
+                            f"NamespaceTemplate {seed['template_id']!r} not found after IntegrityError for company={company_id!r}"
                         )
 
             for item in seed["types"]:
@@ -421,11 +413,7 @@ class CompanyInitService:
         except IntegrityError as exc:
             if not is_unique_violation(exc):
                 raise
-            logger.info(
-                "CRM entity %r уже создан параллельным worker для company=%r, пропуск",
-                entity.entity_id,
-                company_id,
-            )
+            logger.info("crm.entity.worker.company", entity_id=entity.entity_id, company=company_id)
             raced = await self._entity_repo.find_by_attribute(
                 entity_type=COMPANY_ENTITY_TYPE,
                 attribute_key=PLATFORM_COMPANY_ID_ATTR,
@@ -441,7 +429,7 @@ class CompanyInitService:
         except Exception:
             _ = await self._entity_repo.delete(entity.entity_id)
             raise
-        logger.info(f"Created company entity {entity.entity_id} for company {company_id}")
+        logger.info("crm.company_init.company_entity", entity_id=entity.entity_id, company_id=company_id)
         return entity.entity_id
 
     async def _ensure_default_namespace_record(self, company_id: str) -> None:
@@ -511,11 +499,7 @@ class CompanyInitService:
         except IntegrityError as exc:
             if not is_unique_violation(exc):
                 raise
-            logger.info(
-                "Namespace entity %r уже создан параллельным worker для company=%r, пропуск",
-                entity.entity_id,
-                company_id,
-            )
+            logger.info("crm.namespace.entity.worker.company", entity_id=entity.entity_id, company=company_id)
             raced = await self._entity_repo.find_by_attribute(
                 entity_type=NAMESPACE_ENTITY_TYPE,
                 attribute_key=PLATFORM_NAMESPACE_ATTR,
@@ -545,13 +529,9 @@ class CompanyInitService:
         except IntegrityError as exc:
             if not is_unique_violation(exc):
                 raise
-            logger.info(
-                "Relationship %r уже создан параллельным worker для company=%r, пропуск",
-                rel.relationship_id,
-                company_id,
-            )
+            logger.info("crm.relationship.worker.company", relationship_id=rel.relationship_id, company=company_id)
 
-        logger.info(f"Created namespace entity {entity.entity_id} for namespace {namespace_name}")
+        logger.info("crm.company_init.namespace_entity", entity_id=entity.entity_id, namespace=namespace_name)
         return entity.entity_id
 
     async def ensure_namespace_entity(self, company_id: str, namespace_name: str) -> str:
@@ -572,10 +552,7 @@ class CompanyInitService:
         except IntegrityError as exc:
             if not is_unique_violation(exc):
                 raise
-            logger.info(
-                "CompanyMapping для company=%r уже создан параллельным worker, пропуск",
-                company_id,
-            )
+            logger.info("crm.companymapping.company.worker", company=company_id)
 
     async def _ensure_default_organization_entity(self, company_id: str, *, reseed: bool) -> None:
         """Организация по умолчанию для графа CRM и company_mapping (is_owner)."""
@@ -614,11 +591,7 @@ class CompanyInitService:
         except IntegrityError as exc:
             if not is_unique_violation(exc):
                 raise
-            logger.info(
-                "Organization entity %r уже создан параллельным worker для company=%r, пропуск",
-                entity.entity_id,
-                company_id,
-            )
+            logger.info("crm.organization.entity.worker.company", entity_id=entity.entity_id, company=company_id)
             entities, _, _ = await self._entity_repo.list_by_cursor(
                 entity_type="organization",
                 namespace="default",
@@ -639,7 +612,9 @@ class CompanyInitService:
             raise
         await self._ensure_company_mapping(company_id, entity.entity_id)
         logger.info(
-            f"Created default organization entity {entity.entity_id} for company {company_id}"
+            "crm.company.default_organization_created",
+            entity_id=entity.entity_id,
+            company_id=company_id,
         )
 
 

@@ -79,8 +79,6 @@ from core.capabilities import (
     CapabilityNamespaceDocumentation,
     CapabilitySchemaFieldDocumentation,
     CapabilitySdkMethodDocumentation,
-    JsonObject,
-    JsonValue,
     PlatformEffect,
     PlatformEffectEnvelope,
     PlatformEffectOrigin,
@@ -94,7 +92,7 @@ from core.clients.speech_override import SpeechOverride, SpeechProviderName, Spe
 from core.clients.speech_provider_catalog import STT_TTS_PROVIDER_IDS, VOICE_RESPONSE_FORMAT_IDS
 from core.files.audio_probe import probe_audio_duration_seconds_from_upload
 from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
-from core.files.models import FileResponse
+from core.files.file_ref import stored_file_ref
 from core.files.reader import FileReader, FileReadError
 from core.files.reader.models import ReadFileArgs, ReadLane
 from core.files.registry import default_retention_for_source
@@ -108,7 +106,13 @@ from core.models.context_models import Context
 from core.models.identity_models import Company
 from core.text_transforms import TextTransformService
 from core.tracing.operation_span import traced_operation
-from core.types import OtelAttributeValue, require_json_object, require_json_value
+from core.types import (
+    JsonObject,
+    JsonValue,
+    OtelAttributeValue,
+    require_json_object,
+    require_json_value,
+)
 
 
 @dataclass(frozen=True)
@@ -196,7 +200,7 @@ def _trace_event_attribute_value(key: str, value: JsonValue) -> OtelAttributeVal
             return [item for item in value if isinstance(item, int) and not isinstance(item, bool)]
         if all(isinstance(item, float) for item in value):
             return [item for item in value if isinstance(item, float)]
-    raise ValueError(f"trace.event attributes.{key} должен быть OTel AttributeValue")
+    raise ValueError(f"trace.event attributes.{key} must be an OTel AttributeValue")
 
 
 def _object_schema(description: str) -> JsonObject:
@@ -1812,8 +1816,8 @@ class CapabilityRegistry:
             except FileWriteError as exc:
                 raise ValueError(str(exc)) from exc
 
-        response = FileResponse.from_record(record)
-        return require_json_object(response.model_dump(mode="json"), "files.create.response")
+        file_item = stored_file_ref(record)
+        return require_json_object(file_item.model_dump(mode="json"), "files.create.response")
 
     async def _files_get_bytes(self, request: CapabilityCallRequest) -> JsonObject:
         self._reject_positional_args(request)
@@ -1841,7 +1845,7 @@ class CapabilityRegistry:
         if record is None:
             raise ValueError(f"File not found: {file_id}")
         return require_json_object(
-            FileResponse.from_record(record).model_dump(mode="json"),
+            stored_file_ref(record).model_dump(mode="json"),
             "files.get_metadata.response",
         )
 

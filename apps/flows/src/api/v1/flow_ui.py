@@ -9,13 +9,13 @@ from apps.flows.realtime.flow_ui_operations import (
     op_flows_flow_ui_schema,
     op_flows_flow_ui_templates,
 )
-from apps.flows.realtime.operations import FlowsEmptyPayload
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.flow_ui_assist import FlowUIAssistRequest, FlowUIAssistResult
 from core.context import require_context
 from core.flow_ui.templates import FlowUITemplate, FlowUITemplatesPayload
 from core.pagination import OffsetPage
 from core.types import JsonObject
+from core.websocket import EmptyPayload
 
 router = APIRouter(prefix="/flow-ui", tags=["flows", "flow-ui"])
 
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/flow-ui", tags=["flows", "flow-ui"])
 @router.get("/schema")
 async def get_flow_ui_schema(container: ContainerDep) -> JsonObject:
     return await op_flows_flow_ui_schema(
-        FlowsEmptyPayload(),
+        EmptyPayload(),
         user=require_context().user,
         container=container,
     )

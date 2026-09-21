@@ -25,7 +25,7 @@ _FLOW_ENQUEUE_TS_TTL_SECONDS = 3600
 
 def _enqueue_key(task_id: str) -> str:
     if task_id == "":
-        raise ValueError("task_id обязателен для flow timing")
+        raise ValueError("task_id is required for flow timing")
     return f"{_FLOW_ENQUEUE_TS_PREFIX}{task_id}"
 
 
@@ -39,7 +39,7 @@ async def record_flow_task_enqueued(
     key = _enqueue_key(task_id)
     stored = await redis_client.set(key, str(enqueued_at), ttl=_FLOW_ENQUEUE_TS_TTL_SECONDS)
     if not stored:
-        raise RuntimeError(f"Не удалось записать flow enqueue timestamp: task_id={task_id!r}")
+        raise RuntimeError(f"Failed to write flow enqueue timestamp: task_id={task_id!r}")
     _logger.info(
         EVENT_FLOW_TASK_ENQUEUED,
         **{
@@ -66,7 +66,7 @@ async def maybe_record_flow_first_content_chunk(
     try:
         enqueued_at = float(raw_enqueued_at)
     except ValueError as exc:
-        raise ValueError(f"Некорректный flow enqueue timestamp для task_id={task_id!r}") from exc
+        raise ValueError(f"Invalid flow enqueue timestamp for task_id={task_id!r}") from exc
     first_chunk_ms = round((time.time() - enqueued_at) * 1000.0, 3)
     _logger.info(
         EVENT_FLOW_FIRST_CONTENT_CHUNK,
@@ -86,7 +86,7 @@ async def maybe_record_flow_terminal(
     terminal_state: str,
 ) -> None:
     if terminal_state == "":
-        raise ValueError("terminal_state обязателен для flow terminal timing")
+        raise ValueError("terminal_state is required for flow terminal timing")
     key = _enqueue_key(task_id)
     raw_enqueued_at = await redis_client.getdel(key)
     if raw_enqueued_at is None:
@@ -94,7 +94,7 @@ async def maybe_record_flow_terminal(
     try:
         enqueued_at = float(raw_enqueued_at)
     except ValueError as exc:
-        raise ValueError(f"Некорректный flow enqueue timestamp для task_id={task_id!r}") from exc
+        raise ValueError(f"Invalid flow enqueue timestamp for task_id={task_id!r}") from exc
     terminal_ms = round((time.time() - enqueued_at) * 1000.0, 3)
     _logger.info(
         EVENT_FLOW_TERMINAL,

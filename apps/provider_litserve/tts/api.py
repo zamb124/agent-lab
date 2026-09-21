@@ -66,11 +66,11 @@ class TTSLitAPI(ls.LitAPI):
         self._engine.setup(d)
         info = self._engine.warmup_pipeline(None)
         logger.info(
-            "tts_litapi.worker_warmup api_model_id=%s hf_model_id=%s cached_before=%s load_seconds=%s",
-            info.api_model_id,
-            info.hf_model_id,
-            info.cached_before,
-            info.load_seconds,
+            "provider_litserve.tts_litapi",
+            api_model_id=info.api_model_id,
+            hf_model_id=info.hf_model_id,
+            cached_before=info.cached_before,
+            load_seconds=info.load_seconds,
         )
 
     def decode_request(self, request: Request, **kwargs: JsonValue) -> TTSSynthesisInput:

@@ -108,7 +108,7 @@ async def maybe_start_speech_to_chat_poll(
         return
     ch = await channels.get(channel_id)
     if ch is None:
-        raise ValueError(f"Канал {channel_id} не найден.")
+        raise ValueError(f"Channel {channel_id} not found.")
     if not ch.speech_to_chat_enabled:
         return
     _ = await enqueue(
@@ -129,10 +129,10 @@ def normalize_s3_egress_endpoint(endpoint_url: str | None) -> str | None:
     if parsed.scheme == "":
         return trimmed
     if parsed.netloc == "":
-        raise ValueError(f"Некорректный endpoint_url для S3 egress: {endpoint_url}")
+        raise ValueError(f"Invalid endpoint_url for S3 egress: {endpoint_url}")
     hostname = parsed.hostname
     if hostname is None or hostname == "":
-        raise ValueError(f"Некорректный hostname в endpoint_url для S3 egress: {endpoint_url}")
+        raise ValueError(f"Invalid hostname in endpoint_url for S3 egress: {endpoint_url}")
     if hostname == "localhost" or hostname == "127.0.0.1":
         hostname = "host.docker.internal"
     if parsed.port is None:
@@ -161,27 +161,27 @@ async def stop_and_finalize_recording(
 ) -> CallRecordingRead:
     if recording.provider_job_id is None or recording.provider_job_id == "":
         raise ValueError(
-            f"У записи {recording.recording_id} отсутствует provider_job_id, невозможно остановить egress."
+            f"Recording {recording.recording_id} has no provider_job_id; cannot stop egress."
         )
     settings = get_settings()
     if settings.recording_max_duration_seconds <= 0:
-        raise ValueError("recording_max_duration_seconds должен быть больше 0.")
+        raise ValueError("recording_max_duration_seconds must be greater than 0.")
     if recording.started_at is not None:
         max_end_at = recording.started_at + timedelta(seconds=settings.recording_max_duration_seconds)
         logger.info(
-            "call.recording.stop duration check: call_id=%s recording_id=%s started_at=%s max_end_at=%s now=%s",
-            call.call_id,
-            recording.recording_id,
-            recording.started_at.isoformat(),
-            max_end_at.isoformat(),
-            datetime.now(UTC).isoformat(),
+            "call.recording.stop",
+            call_id=call.call_id,
+            recording_id=recording.recording_id,
+            started_at=recording.started_at.isoformat(),
+            max_end_at=max_end_at.isoformat(),
+            now=datetime.now(UTC).isoformat(),
         )
     livekit_client = build_livekit_recording_client()
     logger.info(
-        "call.recording.stop egress stop: call_id=%s recording_id=%s egress_id=%s",
-        call.call_id,
-        recording.recording_id,
-        recording.provider_job_id,
+        "call.recording.stop",
+        call_id=call.call_id,
+        recording_id=recording.recording_id,
+        egress_id=recording.provider_job_id,
     )
     try:
         _ = await livekit_client.stop_egress(
@@ -192,12 +192,12 @@ async def stop_and_finalize_recording(
     except TwirpError as exc:
         if exc.code in (TwirpErrorCode.NOT_FOUND, TwirpErrorCode.FAILED_PRECONDITION):
             logger.warning(
-                "call.recording.stop egress already finished: call_id=%s recording_id=%s egress_id=%s code=%s message=%s",
-                call.call_id,
-                recording.recording_id,
-                recording.provider_job_id,
-                exc.code,
-                str(exc),
+                "call.recording.stop",
+                call_id=call.call_id,
+                recording_id=recording.recording_id,
+                egress_id=recording.provider_job_id,
+                code=exc.code,
+                message=str(exc),
             )
         else:
             raise
@@ -208,7 +208,7 @@ async def stop_and_finalize_recording(
     )
     updated_recording = await call_recordings.get(recording.recording_id)
     if updated_recording is None:
-        raise RuntimeError("Запись пропала после обновления.")
+        raise RuntimeError("Recording disappeared after update.")
     if call.livekit_room_name is not None and call.livekit_room_name != "":
         if recording.started_by_user_id is None:
             raise RuntimeError("Recording started_by_user_id is required for egress billing trace")
@@ -256,7 +256,7 @@ async def _enqueue_channel_message_notifications(
 ) -> None:
     entity = await channels.get(channel_id)
     if entity is None:
-        raise ValueError(f"Канал {channel_id} не найден.")
+        raise ValueError(f"Channel {channel_id} not found.")
     preview = _notification_preview_from_message(message)
     is_direct = entity.type == ChannelType.DIRECT.value
     if is_direct:
@@ -319,9 +319,9 @@ async def _normalize_message_create_mentions(
         ordered = list(dict.fromkeys(raw))
         for uid in ordered:
             if uid not in member_ids:
-                raise ValueError(f"Упоминание: пользователь {uid} не участник канала.")
+                raise ValueError(f"Mention: user {uid} is not a channel member.")
             if uid == actor_user_id:
-                raise ValueError("Нельзя упоминать себя.")
+                raise ValueError("Cannot mention yourself.")
         return ordered
 
     sorted_items = sorted(enumerate(body.contents), key=lambda t: t[1].order)
@@ -352,7 +352,7 @@ async def _normalize_message_create_mentions(
             )
         d = c.data
         if not isinstance(d, TextPlainContent):
-            raise ValueError("text/plain: ожидается TextPlainContent.")
+            raise ValueError("text/plain: expected TextPlainContent.")
         new_tp = TextPlainContent(body=d.body, mentions=None, origin=d.origin)
         new_contents: list[MessageContentModel] = []
         for i, x in enumerate(body.contents):
@@ -374,7 +374,7 @@ async def _normalize_message_create_mentions(
         c = body.contents[first_text_idx]
         d = c.data
         if not isinstance(d, TextPlainContent):
-            raise ValueError("text/plain: ожидается TextPlainContent.")
+            raise ValueError("text/plain: expected TextPlainContent.")
         if d.mentions is None or len(d.mentions) == 0:
             return body
         mids = validate_mention_ids(list(d.mentions))
@@ -394,12 +394,12 @@ async def _normalize_message_create_mentions(
         )
 
     if first_text_idx is None:
-        raise ValueError("Упоминания требуют текстовый блок text/plain.")
+        raise ValueError("Mentions require a text/plain block.")
     mids = validate_mention_ids(list(raw_mentions))
     c = body.contents[first_text_idx]
     d = c.data
     if not isinstance(d, TextPlainContent):
-        raise ValueError("text/plain: ожидается TextPlainContent.")
+        raise ValueError("text/plain: expected TextPlainContent.")
     new_tp = TextPlainContent(body=d.body, mentions=mids, origin=d.origin)
     new_contents = []
     for i, x in enumerate(body.contents):
@@ -433,14 +433,14 @@ def set_audio_transcription_state(
 ) -> list[MessageContentModel]:
     audio_index = _find_first_audio_content_index(contents)
     if audio_index is None:
-        raise ValueError("В сообщении нет аудиоконтента file/audio.")
+        raise ValueError("Message has no file/audio content.")
     next_contents: list[MessageContentModel] = []
     for index, block in enumerate(contents):
         if index != audio_index:
             next_contents.append(block)
             continue
         if not isinstance(block.data, AudioAttachmentContent):
-            raise ValueError("file/audio: ожидается AudioAttachmentContent.")
+            raise ValueError("file/audio: expected AudioAttachmentContent.")
         next_audio = AudioAttachmentContent(
             file_id=block.data.file_id,
             original_name=block.data.original_name,
@@ -476,14 +476,14 @@ def set_video_transcription_state(
 ) -> list[MessageContentModel]:
     video_index = _find_first_video_content_index(contents)
     if video_index is None:
-        raise ValueError("В сообщении нет видеоконтента file/video.")
+        raise ValueError("Message has no file/video content.")
     next_contents: list[MessageContentModel] = []
     for index, block in enumerate(contents):
         if index != video_index:
             next_contents.append(block)
             continue
         if not isinstance(block.data, VideoAttachmentContent):
-            raise ValueError("file/video: ожидается VideoAttachmentContent.")
+            raise ValueError("file/video: expected VideoAttachmentContent.")
         next_video = VideoAttachmentContent(
             file_id=block.data.file_id,
             original_name=block.data.original_name,
@@ -505,7 +505,7 @@ def _contents_include_speech_to_chat_audio(contents: list[MessageContentModel]) 
         if block.type != MessageContentType.FILE_AUDIO:
             continue
         if not isinstance(block.data, AudioAttachmentContent):
-            raise ValueError("file/audio: ожидается AudioAttachmentContent.")
+            raise ValueError("file/audio: expected AudioAttachmentContent.")
         if block.data.source_speech_to_chat:
             return True
     return False
@@ -522,43 +522,43 @@ async def _ensure_actor_may_send_to_channel(
 ) -> None:
     if _contents_include_speech_to_chat_audio(body.contents):
         if body.call_id is None:
-            raise PermissionError("speech-to-chat: нужен call_id в сообщении.")
+            raise PermissionError("speech-to-chat: call_id is required on the message.")
         if calls is None:
-            raise RuntimeError("CallRepository обязателен для speech-to-chat.")
+            raise RuntimeError("CallRepository is required for speech-to-chat.")
         call = await calls.get_call(body.call_id, company_id)
         if call.channel_id != channel_id:
-            raise ValueError("call_id не относится к этому каналу.")
+            raise ValueError("call_id does not belong to this channel.")
         return
 
     # guest:* — не OpenFGA user id (`user:guest:...` invalid); доступ только через call.
     if actor_user_id.startswith("guest:"):
         if body.call_id is None:
-            raise PermissionError("Гостю нужен call_id в сообщении.")
+            raise PermissionError("Guest message requires call_id.")
         if calls is None:
-            raise RuntimeError("CallRepository обязателен для сообщений гостя.")
+            raise RuntimeError("CallRepository is required for guest messages.")
         call = await calls.get_call(body.call_id, company_id)
         if call.channel_id != channel_id:
-            raise ValueError("call_id не относится к этому каналу.")
+            raise ValueError("call_id does not belong to this channel.")
         if call.status not in ("ringing", "active"):
-            raise PermissionError("Звонок не активен.")
+            raise PermissionError("Call is not active.")
         participants = await calls.list_participants(body.call_id)
         mine = next((p for p in participants if p.user_id == actor_user_id), None)
         if mine is None or mine.status != "joined":
-            raise PermissionError("Гость не в этом звонке.")
+            raise PermissionError("Guest is not in this call.")
         return
 
     is_member = await authz.can_view(
         AuthzObject.sync_channel(channel_id), user_id=actor_user_id
     )
     if not is_member:
-        raise PermissionError(f"Пользователь не состоит в канале {channel_id}.")
+        raise PermissionError(f"User is not a member of channel {channel_id}.")
     if body.call_id is None:
         return
     if calls is None:
-        raise RuntimeError("CallRepository обязателен при call_id в сообщении.")
+        raise RuntimeError("CallRepository is required when the message has call_id.")
     call = await calls.get_call(body.call_id, company_id)
     if call.channel_id != channel_id:
-        raise ValueError("call_id не относится к этому каналу.")
+        raise ValueError("call_id does not belong to this channel.")
 
 
 async def _user_brief(user_repository: UserRepository | None, user_id: str) -> UserBrief:
@@ -618,23 +618,24 @@ async def update_channel(
 ) -> ChannelRead:
     data = body.model_dump(exclude_unset=True)
     if not data:
-        raise WsCommandError("ws_invalid_payload", "Нет полей для обновления канала.")
+        raise WsCommandError("ws_invalid_payload", "No fields to update on the channel.", error_code='ws_invalid_payload')
     if not await authz.can_view(
         AuthzObject.sync_channel(channel_id), user_id=actor_user_id
     ):
-        raise WsCommandError("forbidden", f"Пользователь не состоит в канале {channel_id}.")
+        raise WsCommandError("forbidden", f"User is not a member of channel {channel_id}.", error_code='forbidden')
     if not await authz.can_admin(
         AuthzObject.sync_channel(channel_id), user_id=actor_user_id
     ):
         raise WsCommandError(
             "forbidden",
-            "Изменение настроек канала доступно только ролям owner и admin.",
-        )
+            "Channel settings can be changed only by owner and admin roles.",
+                  error_code='forbidden',
+              )
     entity = await channels.get(channel_id)
     if entity is None:
-        raise WsCommandError("not_found", f"Канал {channel_id} не найден.")
+        raise WsCommandError("not_found", f"Channel {channel_id} not found.", error_code='not_found')
     if entity.company_id != company_id:
-        raise WsCommandError("forbidden", "Канал принадлежит другой компании.")
+        raise WsCommandError("forbidden", "Channel belongs to another company.", error_code='forbidden')
     if "name" in data:
         entity.name = data["name"]
     if "is_private" in data:
@@ -694,25 +695,25 @@ async def create_channel(
     """
     if body.type == ChannelType.TOPIC:
         if body.namespace is None or body.namespace == "":
-            raise ValueError("Для topic обязателен namespace.")
+            raise ValueError("topic requires namespace.")
         if body.name is None:
-            raise ValueError("Для topic обязателен name.")
+            raise ValueError("topic requires name.")
 
     if body.type == ChannelType.DIRECT:
         mids = body.member_ids
         if mids is None or len(mids) != 1:
-            raise ValueError("Для direct в member_ids должен быть ровно один собеседник.")
+            raise ValueError("direct requires exactly one peer in member_ids.")
         if mids[0] == actor_user_id:
-            raise ValueError("Нельзя создать личный канал с самим собой.")
+            raise ValueError("Cannot create a direct channel with yourself.")
 
     if body.type == ChannelType.CALENDAR_MEETING:
         if body.name is None or body.name.strip() == "":
-            raise ValueError("Для calendar_meeting обязателен name (заголовок встречи).")
+            raise ValueError("calendar_meeting requires name (meeting title).")
 
     namespace = body.namespace if body.namespace else "default"
     ns_entity = await namespaces.ensure_exists(namespace)
     if ns_entity.company_id != company_id:
-        raise PermissionError(f"Namespace '{namespace}' принадлежит другой компании.")
+        raise PermissionError(f"Namespace '{namespace}' belongs to another company.")
     sync_defaults = ns_entity.sync_settings
     transcribe_voice = bool(sync_defaults.transcribe_voice_messages) if sync_defaults else False
     speech_to_chat = bool(sync_defaults.speech_to_chat_enabled) if sync_defaults else False
@@ -724,7 +725,7 @@ async def create_channel(
     if body.type == ChannelType.DIRECT:
         direct_member_ids = body.member_ids
         if direct_member_ids is None:
-            raise ValueError("Для direct в member_ids должен быть ровно один собеседник.")
+            raise ValueError("direct requires exactly one peer in member_ids.")
         peer_id = direct_member_ids[0]
         existing = await _find_existing_direct_for_pair(
             user_a=actor_user_id,
@@ -862,7 +863,7 @@ async def send_message_with_side_effects(
     )
     channel_entity = await container.channel_repository.get(channel_id)
     if channel_entity is None:
-        raise WsCommandError("not_found", f"Канал {channel_id} не найден.")
+        raise WsCommandError("not_found", f"Channel {channel_id} not found.", error_code='not_found')
     created_event = event_message_created(
         message,
         company_id=company_id,
@@ -898,8 +899,9 @@ async def send_message_with_side_effects(
                 )
                 if proc_entity is None:
                     raise WsCommandError(
-                        "internal", "Сообщение пропало после запуска авто-транскрипции."
-                    )
+                        "internal", "Message disappeared after auto-transcription start.",
+                              error_code='internal',
+                          )
                 message = await message_read_from_db(
                     proc_entity, container.message_repository, container.user_repository
                 )
@@ -933,7 +935,7 @@ async def create_thread(
 ) -> ThreadRead:
     root = await messages.get(body.root_message_id)
     if root is None:
-        raise ValueError("root_message_id не найден.")
+        raise ValueError("root_message_id not found.")
 
     thread_id = uuid4().hex
     entity = SyncThread(

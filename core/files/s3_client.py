@@ -72,11 +72,11 @@ class S3Client:
             bucket_config_key: Ключ из settings.s3.buckets для FileRecord.s3_bucket (только из фабрики)
         """
         if not bucket_name:
-            raise ValueError("bucket_name не может быть пустым")
+            raise ValueError("bucket_name cannot be empty")
         if not access_key_id:
-            raise ValueError("access_key_id не может быть пустым")
+            raise ValueError("access_key_id cannot be empty")
         if not secret_access_key:
-            raise ValueError("secret_access_key не может быть пустым")
+            raise ValueError("secret_access_key cannot be empty")
 
         self.bucket_name: str = bucket_name
         self.bucket_config_key: str | None = bucket_config_key
@@ -97,7 +97,7 @@ class S3Client:
         raw = self.bucket_config_key
         if raw is None or not str(raw).strip():
             raise ValueError(
-                "S3Client без bucket_config_key: используйте S3ClientFactory.create_client_for_bucket"
+                "S3Client without bucket_config_key: use S3ClientFactory.create_client_for_bucket"
             )
         return str(raw).strip()
 
@@ -191,7 +191,7 @@ class S3Client:
                     raise
                 try:
                     await client.create_bucket(Bucket=bucket)
-                    logger.info("S3 MinIO: создан bucket %s", bucket)
+                    logger.info("files.s3.minio.bucket", bucket=bucket)
                 except ClientError as create_exc:
                     ccode = create_exc.response["Error"]["Code"]
                     if ccode not in ("BucketAlreadyOwnedByYou", "BucketAlreadyExists"):
@@ -246,7 +246,7 @@ class S3Client:
         """
         target_bucket = self.bucket_name if bucket is None else bucket
         if target_bucket == "":
-            raise ValueError("Bucket не указан")
+            raise ValueError("Bucket is not specified")
 
         await self._ensure_minio_bucket_exists(target_bucket)
         client = await self._get_client()
@@ -256,7 +256,7 @@ class S3Client:
             extra_args["Metadata"] = metadata
         if content_type is not None:
             if content_type == "":
-                raise ValueError("content_type не может быть пустым")
+                raise ValueError("content_type cannot be empty")
             extra_args["ContentType"] = content_type
         if public:
             extra_args["ACL"] = "public-read"
@@ -268,7 +268,7 @@ class S3Client:
             ExtraArgs=extra_args if extra_args else None,
         )
 
-        logger.info(f"Файл загружен в S3: {target_bucket}/{key}")
+        logger.info("s3.file_uploaded", bucket=target_bucket, key=key)
         return True
 
     async def upload_bytes(
@@ -296,7 +296,7 @@ class S3Client:
         """
         target_bucket = self.bucket_name if bucket is None else bucket
         if target_bucket == "":
-            raise ValueError("Bucket не указан")
+            raise ValueError("Bucket is not specified")
 
         await self._ensure_minio_bucket_exists(target_bucket)
         client = await self._get_client()
@@ -310,14 +310,14 @@ class S3Client:
             put_object_request["Metadata"] = metadata
         if content_type is not None:
             if content_type == "":
-                raise ValueError("content_type не может быть пустым")
+                raise ValueError("content_type cannot be empty")
             put_object_request["ContentType"] = content_type
         if public:
             put_object_request["ACL"] = "public-read"
 
         await client.put_object(**put_object_request)
 
-        logger.info(f"Данные загружены в S3: {target_bucket}/{key} ({len(data)} байт)")
+        logger.info("s3.data_uploaded", bucket=target_bucket, key=key, bytes=len(data))
         return True
 
     async def create_multipart_upload(
@@ -330,9 +330,9 @@ class S3Client:
     ) -> str:
         target_bucket = self.bucket_name if bucket is None else bucket
         if target_bucket == "":
-            raise ValueError("Bucket не указан")
+            raise ValueError("Bucket is not specified")
         if content_type == "":
-            raise ValueError("content_type не может быть пустым")
+            raise ValueError("content_type cannot be empty")
         await self._ensure_minio_bucket_exists(target_bucket)
         client = await self._get_client()
         params: aioboto3.S3CreateMultipartUploadRequest = {
@@ -345,7 +345,7 @@ class S3Client:
         response = await client.create_multipart_upload(**params)
         upload_id = response["UploadId"]
         if upload_id == "":
-            raise RuntimeError("S3 create_multipart_upload не вернул UploadId")
+            raise RuntimeError("S3 create_multipart_upload did not return UploadId")
         return upload_id
 
     async def upload_part(
@@ -359,13 +359,13 @@ class S3Client:
     ) -> str:
         target_bucket = self.bucket_name if bucket is None else bucket
         if target_bucket == "":
-            raise ValueError("Bucket не указан")
+            raise ValueError("Bucket is not specified")
         if upload_id == "":
-            raise ValueError("upload_id обязателен")
+            raise ValueError("upload_id is required")
         if part_number < 1:
             raise ValueError("part_number must be >= 1")
         if len(data) == 0:
-            raise ValueError("пустая часть multipart upload")
+            raise ValueError("multipart upload part is empty")
         client = await self._get_client()
         response = await client.upload_part(
             Bucket=target_bucket,
@@ -376,7 +376,7 @@ class S3Client:
         )
         etag = response["ETag"]
         if etag == "":
-            raise RuntimeError("S3 upload_part не вернул ETag")
+            raise RuntimeError("S3 upload_part did not return ETag")
         return etag
 
     async def complete_multipart_upload(
@@ -389,11 +389,11 @@ class S3Client:
     ) -> None:
         target_bucket = self.bucket_name if bucket is None else bucket
         if target_bucket == "":
-            raise ValueError("Bucket не указан")
+            raise ValueError("Bucket is not specified")
         if upload_id == "":
-            raise ValueError("upload_id обязателен")
+            raise ValueError("upload_id is required")
         if len(parts) == 0:
-            raise ValueError("multipart complete требует хотя бы одну часть")
+            raise ValueError("multipart complete requires at least one part")
         client = await self._get_client()
         sorted_parts = sorted(parts, key=lambda item: item[0])
         await client.complete_multipart_upload(
@@ -417,9 +417,9 @@ class S3Client:
     ) -> None:
         target_bucket = self.bucket_name if bucket is None else bucket
         if target_bucket == "":
-            raise ValueError("Bucket не указан")
+            raise ValueError("Bucket is not specified")
         if upload_id == "":
-            raise ValueError("upload_id обязателен")
+            raise ValueError("upload_id is required")
         client = await self._get_client()
         await client.abort_multipart_upload(
             Bucket=target_bucket,
@@ -446,13 +446,13 @@ class S3Client:
         """
         target_bucket = self.bucket_name if bucket is None else bucket
         if target_bucket == "":
-            raise ValueError("Bucket не указан")
+            raise ValueError("Bucket is not specified")
 
         client = await self._get_client()
 
         await client.download_file(target_bucket, key, str(file_path))
 
-        logger.info(f"Файл скачан из S3: {target_bucket}/{key} -> {file_path}")
+        logger.info("s3.file_downloaded", bucket=target_bucket, key=key, path=str(file_path))
         return True
 
     async def download_bytes(
@@ -472,14 +472,14 @@ class S3Client:
         """
         target_bucket = self.bucket_name if bucket is None else bucket
         if target_bucket == "":
-            raise ValueError("Bucket не указан")
+            raise ValueError("Bucket is not specified")
 
         client = await self._get_client()
 
         response = await client.get_object(Bucket=target_bucket, Key=key)
         data = await response["Body"].read()
 
-        logger.info(f"Данные скачаны из S3: {target_bucket}/{key} ({len(data)} байт)")
+        logger.info("s3.data_downloaded", bucket=target_bucket, key=key, bytes=len(data))
         return data
 
     async def open_object_body(
@@ -490,7 +490,7 @@ class S3Client:
     ) -> aioboto3.S3ObjectBody:
         target_bucket = self.bucket_name if bucket is None else bucket
         if target_bucket == "":
-            raise ValueError("Bucket не указан")
+            raise ValueError("Bucket is not specified")
 
         client = await self._get_client()
         if byte_range is None:
@@ -516,13 +516,13 @@ class S3Client:
         """
         target_bucket = self.bucket_name if bucket is None else bucket
         if target_bucket == "":
-            raise ValueError("Bucket не указан")
+            raise ValueError("Bucket is not specified")
 
         client = await self._get_client()
 
         await client.delete_object(Bucket=target_bucket, Key=key)
 
-        logger.info(f"Файл удален из S3: {target_bucket}/{key}")
+        logger.info("s3.file_deleted", bucket=target_bucket, key=key)
         return True
 
     async def file_exists(
@@ -542,7 +542,7 @@ class S3Client:
         """
         target_bucket = self.bucket_name if bucket is None else bucket
         if target_bucket == "":
-            raise ValueError("Bucket не указан")
+            raise ValueError("Bucket is not specified")
 
         client = await self._get_client()
 
@@ -566,7 +566,7 @@ class S3Client:
         """
         target_bucket = self.bucket_name if bucket is None else bucket
         if target_bucket == "":
-            raise ValueError("Bucket не указан")
+            raise ValueError("Bucket is not specified")
 
         client = await self._get_client()
 
@@ -599,7 +599,7 @@ class S3Client:
         """
         target_bucket = self.bucket_name if bucket is None else bucket
         if target_bucket == "":
-            raise ValueError("Bucket не указан")
+            raise ValueError("Bucket is not specified")
 
         client = await self._get_client()
 
@@ -629,7 +629,7 @@ class S3Client:
         """
         target_bucket = self.bucket_name if bucket is None else bucket
         if target_bucket == "":
-            raise ValueError("Bucket не указан")
+            raise ValueError("Bucket is not specified")
 
         if self.endpoint_url:
             return f"{self.endpoint_url}/{target_bucket}/{key}"
@@ -656,7 +656,7 @@ class S3Client:
         """
         target_bucket = self.bucket_name if bucket is None else bucket
         if target_bucket == "":
-            raise ValueError("Bucket не указан")
+            raise ValueError("Bucket is not specified")
 
         client = await self._get_client()
 
@@ -710,7 +710,7 @@ class S3Client:
         target_source_bucket = self.bucket_name if source_bucket is None else source_bucket
         target_dest_bucket = self.bucket_name if dest_bucket is None else dest_bucket
         if target_source_bucket == "" or target_dest_bucket == "":
-            raise ValueError("Bucket не указан")
+            raise ValueError("Bucket is not specified")
 
         client = await self._get_client()
 
@@ -722,7 +722,11 @@ class S3Client:
         )
 
         logger.info(
-            f"Объект скопирован: {target_source_bucket}/{source_key} -> {target_dest_bucket}/{dest_key}"
+            "s3.object_copied",
+            source_bucket=target_source_bucket,
+            source_key=source_key,
+            dest_bucket=target_dest_bucket,
+            dest_key=dest_key,
         )
         return True
 
@@ -747,7 +751,7 @@ class S3Client:
         """
         target_bucket = self.bucket_name if bucket is None else bucket
         if target_bucket == "":
-            raise ValueError("Bucket не указан")
+            raise ValueError("Bucket is not specified")
 
         client = await self._get_client()
 
@@ -782,13 +786,13 @@ class S3ClientFactory:
             Настроенный S3Client
         """
         if not bucket_config.enabled:
-            raise ValueError(f"Bucket {bucket_config_key} отключен в конфигурации")
+            raise ValueError(f"Bucket {bucket_config_key} is disabled in configuration")
 
         if not bucket_config.access_key_id:
-            raise ValueError(f"access_key_id не настроен для bucket {bucket_config_key}")
+            raise ValueError(f"access_key_id is not configured for bucket {bucket_config_key}")
 
         if not bucket_config.secret_access_key:
-            raise ValueError(f"secret_access_key не настроен для bucket {bucket_config_key}")
+            raise ValueError(f"secret_access_key is not configured for bucket {bucket_config_key}")
 
         ensure_sigv4_clock_aligned_with_endpoint(bucket_config.endpoint_url)
 
@@ -816,10 +820,10 @@ class S3ClientFactory:
         settings = get_settings()
 
         if not settings.s3.enabled:
-            raise ValueError("S3 отключен в конфигурации")
+            raise ValueError("S3 is disabled in configuration")
 
         if bucket_name not in settings.s3.buckets:
-            raise ValueError(f"Bucket {bucket_name} не найден в конфигурации")
+            raise ValueError(f"Bucket {bucket_name} was not found in configuration")
 
         bucket_config = settings.s3.buckets[bucket_name]
         real_bucket_name = bucket_config.bucket_name
@@ -842,10 +846,10 @@ class S3ClientFactory:
         settings = get_settings()
 
         if not settings.s3.enabled:
-            raise ValueError("S3 отключен в конфигурации")
+            raise ValueError("S3 is disabled in configuration")
 
         if not settings.s3.default_bucket:
-            raise ValueError("Дефолтный bucket не настроен")
+            raise ValueError("Default bucket is not configured")
 
         return S3ClientFactory.create_client_for_bucket(settings.s3.default_bucket)
 
@@ -888,12 +892,12 @@ def build_s3_key_from_context(relative_path: str) -> str:
     """
     context = get_context()
     if context is None:
-        raise ValueError("Контекст не найден для построения S3 ключа")
+        raise ValueError("Context is not set for building an S3 key")
     if not context.active_company:
-        raise ValueError("Компания не найдена в контексте для построения S3 ключа")
+        raise ValueError("Company is not set in context for building an S3 key")
 
     company_slug = context.active_company.subdomain or context.active_company.company_id
     if not company_slug:
-        raise ValueError(f"Company subdomain и company_id пусты: {context.active_company}")
+        raise ValueError(f"Company subdomain and company_id are empty: {context.active_company}")
 
     return build_s3_key_for_company(company_slug, relative_path)

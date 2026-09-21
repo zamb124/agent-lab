@@ -6,7 +6,6 @@ from collections.abc import Awaitable
 from typing import Never, TypeVar
 
 from apps.flows.realtime.operations import (
-    FlowsEmptyPayload,
     require_company_member,
 )
 from apps.flows.src.container import FlowContainer
@@ -93,6 +92,7 @@ from core.pagination import ListResponse
 from core.tasks import enqueue
 from core.tracing.context import get_current_trace_context
 from core.websocket import (
+    EmptyPayload,
     raise_invalid,
     raise_not_found,
 )
@@ -167,7 +167,7 @@ async def _enqueue_run_from_cycle(
 
 
 async def op_flows_evaluation_evaluator_catalog(
-    payload: FlowsEmptyPayload,
+    payload: EmptyPayload,
     *,
     user: User,
     container: FlowContainer,

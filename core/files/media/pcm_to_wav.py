@@ -8,12 +8,12 @@ import wave
 
 def pcm_s16le_mono_to_wav(pcm_bytes: bytes, *, sample_rate: int) -> bytes:
     if sample_rate <= 0:
-        raise ValueError("pcm_s16le_mono_to_wav: sample_rate должен быть > 0.")
+        raise ValueError("pcm_s16le_mono_to_wav: sample_rate must be > 0.")
     if not pcm_bytes:
-        raise ValueError("pcm_s16le_mono_to_wav: pcm_bytes не может быть пустым.")
+        raise ValueError("pcm_s16le_mono_to_wav: pcm_bytes cannot be empty.")
     if len(pcm_bytes) % 2 != 0:
         raise ValueError(
-            "pcm_s16le_mono_to_wav: ожидается целое число int16-сэмплов (чётная длина байт)."
+            "pcm_s16le_mono_to_wav: expected a whole number of int16 samples (even byte length)."
         )
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:

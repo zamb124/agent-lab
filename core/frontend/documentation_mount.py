@@ -28,13 +28,7 @@ def mount_documentation_static(
     """
     dist = repo_root / DOCUMENTATION_DIST
     if not dist.is_dir():
-        logger.warning(
-            (
-                "Каталог %s/ не найден (make doc: zensical.ru.toml + zensical.en.toml), "
-                "URL /documentation будет доступен после сборки документации"
-            ),
-            DOCUMENTATION_DIST,
-        )
+        logger.warning("frontend.make.doc.zensical.ru.toml", DOCUMENTATION_DIST=DOCUMENTATION_DIST)
 
     async def redirect_documentation_trailing_slash() -> RedirectResponse:
         return RedirectResponse(url="/documentation/", status_code=307)
@@ -50,12 +44,12 @@ def mount_documentation_static(
         StaticFiles(directory=str(dist), html=True, check_dir=False),
         name="documentation-static",
     )
-    logger.info("Документация: GET /documentation/ -> %s", dist)
+    logger.info("frontend.documentation", dist=dist)
 
     if gateway_prefix:
         prefix = gateway_prefix.strip().strip("/")
         if not prefix:
-            raise ValueError("gateway_prefix не может быть пустым")
+            raise ValueError('gateway_prefix cannot be empty')
 
         gw_base = f"/{prefix}/documentation"
 
@@ -73,4 +67,4 @@ def mount_documentation_static(
             StaticFiles(directory=str(dist), html=True, check_dir=False),
             name=f"documentation-static-{prefix}-prefix",
         )
-        logger.info("Документация: GET %s/ -> %s", gw_base, dist)
+        logger.info("frontend.event", gw_base=gw_base, dist=dist)

@@ -176,10 +176,10 @@ class CrawlReportService:
             message = str(exc)
             if message.startswith("HTTP 404") or message.startswith("HTTP 501"):
                 logger.warning(
-                    "crawl url detail: indexed content unavailable namespace=%s document_id=%s error=%s",
-                    rag_namespace_id,
-                    document_id,
-                    message,
+                    "search.crawl.url.detail.indexed.content",
+                    namespace=rag_namespace_id,
+                    document_id=document_id,
+                    error=message,
                 )
                 return None
             raise

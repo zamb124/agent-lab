@@ -86,7 +86,7 @@ def _normalize_origin(raw: str) -> str:
         return ""
     parsed = urlparse(value)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise HTTPException(status_code=400, detail="origin должен быть HTTP(S) origin")
+        raise HTTPException(status_code=400, detail="origin must be an HTTP(S) origin")
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
@@ -160,10 +160,10 @@ def _platform_user_roles(user: User) -> list[str]:
         return list(system_roles)
     active_company_id = user.active_company_id.strip()
     if active_company_id == "":
-        raise HTTPException(status_code=403, detail="Активная компания пользователя не задана")
+        raise HTTPException(status_code=403, detail="User active company is not set")
     active_roles = user.companies.get(active_company_id)
     if active_roles is None or len(active_roles) == 0:
-        raise HTTPException(status_code=403, detail="Роли пользователя не найдены")
+        raise HTTPException(status_code=403, detail="User roles not found")
     return list(active_roles)
 
 
@@ -174,23 +174,23 @@ async def issue_public_search_session(
     container: ContainerDep,
 ) -> PublicSearchSessionResponse:
     if body.mode not in PUBLIC_SEARCH_SPEC_BY_MODE:
-        raise HTTPException(status_code=400, detail="Неподдерживаемый режим поиска")
+        raise HTTPException(status_code=400, detail="Unsupported search mode")
 
     configs = await ensure_public_search_embed_configs(container)
     config = configs[body.mode]
 
     referer = request.headers.get("referer", "")
     if not _referer_path_allowed(referer):
-        raise HTTPException(status_code=403, detail="Поиск доступен только с публичной страницы поиска")
+        raise HTTPException(status_code=403, detail="Search is available only from the public search page")
 
     origin = _normalize_origin(body.origin)
     referer_origin = _origin_from_referer(referer)
     if origin == "" and referer_origin != "":
         origin = referer_origin
     if origin != "" and referer_origin != "" and origin != referer_origin:
-        raise HTTPException(status_code=403, detail="origin не совпадает со страницей поиска")
+        raise HTTPException(status_code=403, detail="origin does not match the search page")
     if origin == "":
-        raise HTTPException(status_code=403, detail="origin обязателен для публичной сессии поиска")
+        raise HTTPException(status_code=403, detail="origin is required for a public search session")
 
     platform_user = await _resolve_platform_authenticated_user(request, container)
     if platform_user is None and body.consume_search_quota:
@@ -205,20 +205,20 @@ async def issue_public_search_session(
 
     mapping = await container.embed_mapping_repository.get(config.embed_id)
     if mapping is None or mapping.company_id != SYSTEM_COMPANY_ID:
-        raise HTTPException(status_code=404, detail="Виджет не найден")
+        raise HTTPException(status_code=404, detail="Widget not found")
 
     persisted_config = await container.embed_config_repository.get_for_company_identifier(
         SYSTEM_COMPANY_SUBDOMAIN,
         config.embed_id,
     )
     if persisted_config is None:
-        raise HTTPException(status_code=404, detail="Конфигурация не найдена")
+        raise HTTPException(status_code=404, detail="Configuration not found")
     if persisted_config.status != EmbedStatus.ACTIVE:
-        raise HTTPException(status_code=403, detail="Виджет отключён")
+        raise HTTPException(status_code=403, detail="Widget is disabled")
     if persisted_config.flow_id != PUBLIC_SEARCH_FLOW_ID:
-        raise HTTPException(status_code=500, detail="Конфигурация поиска повреждена")
+        raise HTTPException(status_code=500, detail="Search configuration is corrupt")
     if persisted_config.branch_id != config.branch_id:
-        raise HTTPException(status_code=500, detail="Конфигурация ветки поиска повреждена")
+        raise HTTPException(status_code=500, detail="Search branch configuration is corrupt")
 
     embed_session_id = new_embed_session_id()
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=body.expires_in_seconds)
@@ -290,18 +290,18 @@ def _validate_public_search_guest() -> None:
         return
     ctx = get_context()
     if ctx is None:
-        raise HTTPException(status_code=401, detail="Требуется публичная search-сессия")
+        raise HTTPException(status_code=401, detail="Public search session is required")
     issued_by = ctx.user.attributes.get("issued_by")
     if issued_by != PUBLIC_SEARCH_SESSION_ISSUER:
         auth_token = ctx.auth_token
         if auth_token is None or auth_token.strip() == "":
-            raise HTTPException(status_code=403, detail="Недопустимый тип сессии для SERP")
+            raise HTTPException(status_code=403, detail="Invalid session type for SERP")
         token_data = get_token_service().validate_token(auth_token)
         if token_data is None:
-            raise HTTPException(status_code=401, detail="Требуется публичная search-сессия")
+            raise HTTPException(status_code=401, detail="Public search session is required")
         token_issued_by = token_data.metadata.get("issued_by")
         if token_issued_by != PUBLIC_SEARCH_SESSION_ISSUER:
-            raise HTTPException(status_code=403, detail="Недопустимый тип сессии для SERP")
+            raise HTTPException(status_code=403, detail="Invalid session type for SERP")
 
 
 @router.post("/serp/more", response_model=MetaSearchResponse)

@@ -26,13 +26,13 @@ async def download_certificate(container: ContainerDep):
     cert_path = Path("/app/ssl/platform.crt")
 
     if not cert_path.exists():
-        logger.warning(f"SSL сертификат не найден: {cert_path}")
+        logger.warning("flows.ssl.cert_missing", path=str(cert_path))
         raise HTTPException(
             status_code=404,
-            detail="SSL сертификат не найден. Обратитесь к администратору."
+            detail="SSL certificate not found. Contact the administrator."
         )
 
-    logger.info("Запрос на скачивание SSL сертификата")
+    logger.info("flows.ssl")
 
     return FileResponse(
         cert_path,

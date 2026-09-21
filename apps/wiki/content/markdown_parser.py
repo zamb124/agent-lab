@@ -245,7 +245,7 @@ class _TreeBuilder:
 
     def close(self, finalize: _BlockFinalizer) -> None:
         if not self._stack:
-            raise WikiMarkdownError("Непарный закрывающий токен markdown")
+            raise WikiMarkdownError("Unmatched closing markdown token")
         node, children = self._stack.pop()
         finished = finalize(
             ProseMirrorNode(type=node.type, attrs=node.attrs, content=children),
@@ -261,7 +261,7 @@ class _TreeBuilder:
 
     def result(self) -> list[ProseMirrorNode]:
         if self._stack:
-            raise WikiMarkdownError("Незакрытый блок markdown")
+            raise WikiMarkdownError("Unclosed markdown block")
         return self._root
 
 
@@ -296,7 +296,7 @@ class _MarkdownReader:
         scheme = mark.attrs.get("scheme")
         target = mark.attrs.get("target")
         if not isinstance(scheme, str) or not isinstance(target, str) or not target:
-            raise WikiMarkdownError("Упоминание без цели")
+            raise WikiMarkdownError("Mention has no target")
         nodes.append(
             ProseMirrorNode(
                 type="platform_mention",

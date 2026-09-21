@@ -30,12 +30,12 @@ class CompanyVoiceProviderRepository:
 
     def __init__(self, db_url: str) -> None:
         if db_url == "":
-            raise ValueError("CompanyVoiceProviderRepository: db_url не может быть пустым.")
+            raise ValueError('CompanyVoiceProviderRepository: db_url cannot be empty.')
         self._db_url: str = db_url
 
     async def get(self, *, company_id: str, kind: VoiceKind) -> CompanyVoiceProvider | None:
         if company_id == "":
-            raise ValueError("company_id не может быть пустым.")
+            raise ValueError('company_id cannot be empty.')
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
             result = await session.execute(
@@ -48,7 +48,7 @@ class CompanyVoiceProviderRepository:
 
     async def list_by_company(self, *, company_id: str) -> list[CompanyVoiceProvider]:
         if company_id == "":
-            raise ValueError("company_id не может быть пустым.")
+            raise ValueError('company_id cannot be empty.')
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
             result = await session.execute(
@@ -73,9 +73,9 @@ class CompanyVoiceProviderRepository:
         secrets: SecretsPatchValue = UNSET_SECRETS,
     ) -> CompanyVoiceProvider:
         if company_id == "":
-            raise ValueError("company_id не может быть пустым.")
+            raise ValueError('company_id cannot be empty.')
         if provider == "":
-            raise ValueError("provider не может быть пустым.")
+            raise ValueError('provider cannot be empty.')
         now = datetime.now(timezone.utc)
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
@@ -156,7 +156,7 @@ class CompanyVoiceProviderRepository:
 
     async def delete(self, *, company_id: str, kind: VoiceKind) -> bool:
         if company_id == "":
-            raise ValueError("company_id не может быть пустым.")
+            raise ValueError('company_id cannot be empty.')
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
             result = await session.execute(

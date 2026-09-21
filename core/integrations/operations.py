@@ -17,37 +17,37 @@ from core.integrations.models import (
     CredentialInfo,
     IntegrationCredentialRefPayload,
     IntegrationDeletedResponse,
-    IntegrationEmptyPayload,
     IntegrationProvider,
 )
 from core.models.identity_models import User
 from core.pagination import ListResponse
-from core.websocket import WsCommandError
+from core.websocket import EmptyPayload, WsCommandError
 
 
 def raise_integration(exc: Exception) -> Never:
     if isinstance(exc, CompanyIntegrationPermissionError | CompanyIntegrationReadOnlyError):
-        raise WsCommandError("forbidden", str(exc)) from exc
+        raise WsCommandError("forbidden", str(exc), error_code='forbidden') from exc
     if isinstance(exc, CompanyIntegrationConfigError):
-        raise WsCommandError("ws_invalid_payload", str(exc)) from exc
+        raise WsCommandError("ws_invalid_payload", str(exc), error_code='ws_invalid_payload') from exc
     raise exc
 
 
 def _require_ref(payload: IntegrationCredentialRefPayload) -> tuple[IntegrationProvider, str]:
     if payload.provider == "":
-        raise WsCommandError("ws_invalid_payload", "provider required")
+        raise WsCommandError("ws_invalid_payload", "provider required", error_code='ws_invalid_payload')
     if payload.service == "":
-        raise WsCommandError("ws_invalid_payload", "service required")
+        raise WsCommandError("ws_invalid_payload", "service required", error_code='ws_invalid_payload')
     try:
         return IntegrationProvider(payload.provider), payload.service
     except ValueError:
         raise WsCommandError(
-            "ws_invalid_payload", f"Unknown provider: {payload.provider}"
-        ) from None
+            "ws_invalid_payload", f"Unknown provider: {payload.provider}",
+                  error_code='ws_invalid_payload',
+              ) from None
 
 
 async def op_integrations_credentials_list(
-    payload: IntegrationEmptyPayload,
+    payload: EmptyPayload,
     *,
     user: User,
     container: BaseContainer,
@@ -85,12 +85,12 @@ async def op_integrations_credentials_remove(
         service=service,
     )
     if not deleted:
-        raise WsCommandError("not_found", "Credential not found")
+        raise WsCommandError("not_found", "Credential not found", error_code='not_found')
     return IntegrationDeletedResponse(deleted=True)
 
 
 async def op_integrations_workspace_company_get(
-    payload: IntegrationEmptyPayload,
+    payload: EmptyPayload,
     *,
     user: User,
     container: BaseContainer,
@@ -126,7 +126,7 @@ async def op_integrations_workspace_company_put(
 
 
 async def op_integrations_workspace_company_delete(
-    payload: IntegrationEmptyPayload,
+    payload: EmptyPayload,
     *,
     user: User,
     container: BaseContainer,
@@ -144,5 +144,5 @@ async def op_integrations_workspace_company_delete(
     ) as exc:
         raise_integration(exc)
     if not deleted:
-        raise WsCommandError("not_found", "Company credential not found")
+        raise WsCommandError("not_found", "Company credential not found", error_code='not_found')
     return IntegrationDeletedResponse(deleted=True)

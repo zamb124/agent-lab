@@ -58,7 +58,7 @@ class InterruptManager:
         )
 
         parent_state.nested_states[nested_id] = saved
-        logger.debug(f"save_nested_state: {nested_id}, messages: {len(saved.messages)}")
+        logger.debug("flows.interrupt.nested_saved", nested_id=nested_id, message_count=len(saved.messages))
 
     @staticmethod
     def load_nested_state(
@@ -78,7 +78,7 @@ class InterruptManager:
 
         if saved is None:
             raise ValueError(
-                f"load_nested_state: нет снимка nested_states для nested_id={nested_id!r}"
+                f"load_nested_state: no nested_states snapshot for nested_id={nested_id!r}"
             )
         if isinstance(saved, dict):
             saved = NestedStateData.model_validate(saved)
@@ -94,7 +94,7 @@ class InterruptManager:
             nested_states=dict(saved.nested_states),
         )
 
-        logger.debug(f"load_nested_state: {nested_id}, messages: {len(result.messages)}")
+        logger.debug("flows.interrupt.nested_loaded", nested_id=nested_id, message_count=len(result.messages))
         return result
 
     @staticmethod
@@ -165,7 +165,7 @@ class InterruptManager:
     ) -> None:
         """Дополняет system после run (канал передаёт актуальные task_id/context_id)."""
         if state.interrupt is None:
-            raise ValueError("enrich_system_from_channel: interrupt отсутствует")
+            raise ValueError("enrich_system_from_channel: interrupt is missing")
         ir = state.interrupt
         new_system = ir.system.model_copy(
             update={"context_id": context_id, "task_id": task_id}
@@ -227,7 +227,7 @@ class InterruptManager:
         if parent_state.interrupt_path:
             nested_state.interrupt_path = parent_state.interrupt_path[1:]
 
-        logger.info(f"Подготовлен resume для {nested_id}, ответ: {user_answer[:50]}...")
+        logger.info("flows.interrupt.resume_prepared", nested_id=nested_id, answer_preview=user_answer[:50])
         return nested_state
 
     @staticmethod

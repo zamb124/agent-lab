@@ -47,7 +47,7 @@ _SAFE_IDENT: Final[re.Pattern[str]] = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 def _require_safe_ident(name: str, context: str) -> None:
     if not _SAFE_IDENT.match(name):
-        raise ValueError(f"{context}: недопустимый идентификатор PostgreSQL: {name!r}")
+        raise ValueError(f"{context}: invalid PostgreSQL identifier: {name!r}")
 
 async def ensure_postgres_service_databases_async(
     *,
@@ -70,24 +70,24 @@ async def ensure_postgres_service_databases_async(
     if reference_shared_url is not None:
         shared_str = reference_shared_url.strip()
         if not shared_str:
-            raise ValueError("ensure_postgres_service_databases: reference_shared_url пуст")
+            raise ValueError('ensure_postgres_service_databases: reference_shared_url is empty')
     else:
         settings = get_settings()
         shared_url = settings.database.shared_url
         if not shared_url or not shared_url.strip():
             raise ValueError(
-                "ensure_postgres_service_databases: задайте database.shared_url (DATABASE__SHARED_URL)"
+                'ensure_postgres_service_databases: set database.shared_url (DATABASE__SHARED_URL)'
             )
         shared_str = shared_url.strip()
 
     base = make_url(shared_str)
     shared_db_name = base.database
     if not shared_db_name:
-        raise ValueError("ensure_postgres_service_databases: в database.shared_url не указано имя базы (путь после /)")
+        raise ValueError('ensure_postgres_service_databases: database.shared_url has no database name (path after /)')
 
     role = base.username
     if not role:
-        raise ValueError("ensure_postgres_service_databases: в database.shared_url нет имени пользователя")
+        raise ValueError('ensure_postgres_service_databases: database.shared_url has no username')
 
     _require_safe_ident(role, "ensure_postgres_service_databases (роль из URL)")
     for db_name in databases:
@@ -96,7 +96,7 @@ async def ensure_postgres_service_databases_async(
     for ext_db in vector_dbs:
         if ext_db not in databases:
             raise ValueError(
-                f"postgres.vector_extensions содержит {ext_db!r}, которого нет в postgres.databases"
+                f"postgres.vector_extensions contains {ext_db!r} that is missing from postgres.databases"
             )
         _require_safe_ident(ext_db, "ensure_postgres_service_databases (vector_extensions)")
 
@@ -116,7 +116,7 @@ async def ensure_postgres_service_databases_async(
                 if chk.first() is None:
                     _ = await conn.execute(text(f"CREATE DATABASE {db_name}"))
                     created_databases.append(db_name)
-                    logger.info("Создана отсутствующая БД PostgreSQL: %s", db_name)
+                    logger.info("db.postgresql", db_name=db_name)
 
             for db_name in databases:
                 _ = await conn.execute(
@@ -149,12 +149,12 @@ async def ensure_postgres_service_databases_async(
                     _ = await db_conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         except InvalidPasswordError as e:
             raise RuntimeError(
-                f"{_PG_AUTH_HINT}\nБаза для extensions: {db_name}. {_pg_target_debug(db_url)}"
+                f"{_PG_AUTH_HINT}\nBase for extensions: {db_name}. {_pg_target_debug(db_url)}"
             ) from e
         except OperationalError as e:
             if isinstance(e.orig, InvalidPasswordError):
                 raise RuntimeError(
-                    f"{_PG_AUTH_HINT}\nБаза для extensions: {db_name}. {_pg_target_debug(db_url)}"
+                    f"{_PG_AUTH_HINT}\nBase for extensions: {db_name}. {_pg_target_debug(db_url)}"
                 ) from e
             raise
         finally:

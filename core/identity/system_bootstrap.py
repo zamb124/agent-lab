@@ -35,7 +35,7 @@ async def ensure_system_company_exists(
             members={},
         )
         _ = await company_repository.set(company)
-        logger.info("Bootstrap created system company")
+        logger.info("identity.bootstrap.created.system.company")
 
     company_needs_update = False
     if company.subdomain != SYSTEM_COMPANY_SUBDOMAIN:
@@ -44,7 +44,7 @@ async def ensure_system_company_exists(
 
     if company_needs_update:
         _ = await company_repository.set(company)
-        logger.info("Bootstrap updated system company subdomain to %s", SYSTEM_COMPANY_SUBDOMAIN)
+        logger.info("identity.bootstrap.updated.system.company.subdomain", SYSTEM_COMPANY_SUBDOMAIN=SYSTEM_COMPANY_SUBDOMAIN)
 
     _ = await subdomain_repository.set_mapping(SYSTEM_COMPANY_SUBDOMAIN, SYSTEM_COMPANY_ID)
     return company
@@ -87,6 +87,7 @@ async def build_system_admin_job_context(
     user_repository: UserRepository,
     trace_id: str,
     session_id: str,
+    channel: str = "system",
 ) -> Context:
     """``Context`` + JWT системного админа для scheduler-тиков и фоновых задач платформы."""
     company, user = await load_system_admin_membership(
@@ -99,7 +100,7 @@ async def build_system_admin_job_context(
         host="system",
         trace_id=trace_id,
         session_id=session_id,
-        channel="system",
+        channel=channel,
     )
 
 
@@ -119,10 +120,7 @@ async def ensure_system_admin_membership(
 
     matched_users = await _users_for_admin_email(user_repository, user_email)
     if not matched_users:
-        logger.warning(
-            "Bootstrap skipped admin grant: user with email %s not found",
-            user_email,
-        )
+        logger.warning("identity.bootstrap.skipped.admin.grant.user", user_email=user_email)
         return system_company, None
 
     target_user = matched_users[0]
@@ -151,10 +149,6 @@ async def ensure_system_admin_membership(
             user_id=target_user.user_id,
             roles=system_company.members[target_user.user_id],
         )
-        logger.info(
-            "Bootstrap updated: granted admin role for %s in company %s",
-            user_email,
-            system_company.company_id,
-        )
+        logger.info("identity.bootstrap.updated.granted.admin.role", user_email=user_email, company_id=system_company.company_id)
 
     return system_company, target_user

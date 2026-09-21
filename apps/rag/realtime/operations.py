@@ -57,6 +57,7 @@ from core.rag.ttl import ensure_ttl_seconds_in_metadata
 from core.tasks import enqueue
 from core.tracing.operation_span import traced_operation
 from core.websocket import (
+    EmptyPayload,
     WsCommandError,
     raise_forbidden,
     raise_invalid,
@@ -64,10 +65,6 @@ from core.websocket import (
 )
 
 logger = get_logger(__name__)
-
-
-class RagEmptyPayload(StrictBaseModel):
-    pass
 
 
 class RagNamespaceCreatePayload(NamespaceCreateRequest):
@@ -168,7 +165,7 @@ async def op_namespaces_create(
         )
     except ValueError as exc:
         raise_invalid(exc)
-    logger.info("Создан namespace: %s для компании %s", payload.name, company_id)
+    logger.info("rag.namespace", name=payload.name, company_id=company_id)
     return namespace
 
 
@@ -184,9 +181,9 @@ async def op_namespaces_remove(
     provider_deleted = await rag_provider.delete_namespace(payload.name)
     ns_from_repo = await container.namespace_service.get(payload.name)
     if not provider_deleted and ns_from_repo is None:
-        raise WsCommandError("not_found", "Namespace not found")
+        raise WsCommandError("not_found", "Namespace not found", error_code='not_found')
     _ = await container.namespace_service.delete(payload.name)
-    logger.info("Удален namespace: %s для компании %s", payload.name, company_id)
+    logger.info("rag.namespace", name=payload.name, company_id=company_id)
     return NamespaceDeleteResponse(success=True, name=payload.name)
 
 
@@ -329,14 +326,14 @@ async def op_documents_index_file(
         raise_invalid(exc)
     file_id = payload.file_id.strip()
     if file_id == "":
-        raise WsCommandError("ws_invalid_payload", "file_id обязателен")
+        raise WsCommandError("ws_invalid_payload", "file_id is required", error_code='ws_invalid_payload')
     context = require_context()
     company_id = require_active_company().company_id
     file_record = await container.file_repository.get(file_id)
     if file_record is None:
-        raise WsCommandError("not_found", "Файл не найден")
+        raise WsCommandError("not_found", "File not found", error_code='not_found')
     if file_record.company_id != company_id:
-        raise WsCommandError("forbidden", "Файл не принадлежит компании")
+        raise WsCommandError("forbidden", "File does not belong to the company", error_code='forbidden')
     if payload.document_name is None or payload.document_name == "":
         document_name = file_record.original_name
     else:
@@ -383,7 +380,7 @@ async def op_documents_remove(
     rag_provider, _provider_name = _resolve_provider(payload.provider)
     success = await rag_provider.delete_document(payload.namespace_id, payload.document_id)
     if not success and status is None and file_record is None:
-        raise WsCommandError("not_found", "Document not found")
+        raise WsCommandError("not_found", "Document not found", error_code='not_found')
     return RagDocumentDeleteResult(success=True, document_id=payload.document_id)
 
 
@@ -402,7 +399,7 @@ async def op_documents_index_remove(
     rag_provider, _provider_name = _resolve_provider(payload.provider)
     success = await rag_provider.delete_document(payload.namespace_id, payload.document_id)
     if not success and status is None:
-        raise WsCommandError("not_found", "Document index not found")
+        raise WsCommandError("not_found", "Document index not found", error_code='not_found')
     return RagDocumentDeleteResult(success=True, document_id=payload.document_id)
 
 
@@ -418,9 +415,9 @@ async def op_documents_content(
     try:
         content = await rag_provider.get_document_content(payload.namespace_id, payload.document_id)
     except ValueError as exc:
-        raise WsCommandError("internal", str(exc)) from exc
+        raise WsCommandError("internal", str(exc), error_code='internal') from exc
     if content is None:
-        raise WsCommandError("not_found", "Document content not found")
+        raise WsCommandError("not_found", "Document content not found", error_code='not_found')
     return content
 
 
@@ -434,7 +431,7 @@ async def op_documents_status(
     _ = await _company_view(container)
     status = await container.document_status_repository.get_by_document_id(payload.document_id)
     if status is None:
-        raise WsCommandError("not_found", "Document status not found")
+        raise WsCommandError("not_found", "Document status not found", error_code='not_found')
     return status
 
 
@@ -451,13 +448,13 @@ async def op_documents_statuses(
     for raw_id in payload.document_ids:
         document_id = raw_id.strip()
         if document_id == "":
-            raise WsCommandError("ws_invalid_payload", "document_ids не должен содержать пустые значения")
+            raise WsCommandError("ws_invalid_payload", "document_ids must not contain empty values", error_code='ws_invalid_payload')
         if document_id in seen:
             continue
         seen.add(document_id)
         normalized_ids.append(document_id)
     if not normalized_ids:
-        raise WsCommandError("ws_invalid_payload", "document_ids обязателен")
+        raise WsCommandError("ws_invalid_payload", "document_ids is required", error_code='ws_invalid_payload')
     found = await container.document_status_repository.get_by_document_ids(normalized_ids)
     statuses: dict[str, DocumentProcessingStatus | None] = {
         document_id: found.get(document_id) for document_id in normalized_ids
@@ -466,7 +463,7 @@ async def op_documents_statuses(
 
 
 async def op_search_defaults(
-    payload: RagEmptyPayload,
+    payload: EmptyPayload,
     *,
     user: User,
     container: RAGContainer,
@@ -528,7 +525,7 @@ async def op_search_namespace(
             )
             span.set_attribute("platform.rag.result_count", len(results))
     except AIRerankerClientError as exc:
-        raise WsCommandError("internal", str(exc.detail)) from exc
+        raise WsCommandError("internal", str(exc.detail), error_code='internal') from exc
     return SearchResponse(
         results=results,
         query=payload.query,
@@ -545,7 +542,7 @@ async def op_search_global(
 ) -> GlobalSearchResponse:
     _ = user
     if not payload.namespace_ids:
-        raise WsCommandError("ws_invalid_payload", "No namespaces provided")
+        raise WsCommandError("ws_invalid_payload", "No namespaces provided", error_code='ws_invalid_payload')
     for namespace_id in payload.namespace_ids:
         await _namespace(container, namespace_id)
     if payload.filters is not None:
@@ -580,12 +577,12 @@ async def op_search_global(
             score_cache=container.rerank_score_cache,
         )
     except AIRerankerClientError as exc:
-        raise WsCommandError("internal", str(exc.detail)) from exc
+        raise WsCommandError("internal", str(exc.detail), error_code='internal') from exc
     return GlobalSearchResponse(results=results, query=payload.query, provider=provider_name)
 
 
 async def op_providers_list(
-    payload: RagEmptyPayload,
+    payload: EmptyPayload,
     *,
     user: User,
     container: RAGContainer,
@@ -593,7 +590,7 @@ async def op_providers_list(
     _ = payload, user, container
     settings = get_rag_settings()
     if not settings.rag.enabled:
-        raise WsCommandError("internal", "RAG is disabled")
+        raise WsCommandError("internal", "RAG is disabled", error_code='internal')
     providers: list[ProviderInfo] = []
     for name, config in settings.rag.providers.items():
         if config.enabled:

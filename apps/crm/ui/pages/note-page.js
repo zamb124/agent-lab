@@ -242,14 +242,6 @@ export class CRMNotePage extends CRMNamespacePage {
         this.useEvent(CRM_TASK_UPDATED, () => {
             this.requestUpdate();
         });
-        this.useEvent(CoreEvents.WS_CONNECTED, () => {
-            if (typeof this.noteId !== 'string' || this.noteId.length === 0 || this._isDraftId(this.noteId)) {
-                return;
-            }
-            if (this._isAnalyzingNow()) {
-                this._loadAnalyzeTasks();
-            }
-        });
 
         this.useEvent(this._markdownFormatOp.op.events.FAILED, () => {
             this._clearMarkdownFormatUiTimeout();

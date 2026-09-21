@@ -46,7 +46,7 @@ _CRAWL_SESSION_CREATE: JsonObject = {
 def _normalize_ref(raw_ref: str) -> str:
     value = raw_ref.strip()
     if value == "":
-        raise ValueError("Пустой ref")
+        raise ValueError("Empty ref")
     if value.startswith("@"):
         return value
     return f"@{value}"
@@ -61,7 +61,7 @@ def _pick_search_ref(snapshot_text: str) -> str:
         if match is None:
             continue
         return _normalize_ref(match.group(1))
-    raise ValueError("Не найден ref поля поиска в snapshot.text")
+    raise ValueError("Search field ref not found in snapshot.text")
 
 
 def _extract_links(
@@ -105,7 +105,7 @@ async def _mcp_json(
 ) -> JsonObject:
     cleaned_server_id = server_id.strip()
     if cleaned_server_id == "":
-        raise ValueError("server_id обязателен")
+        raise ValueError("server_id is required")
     config = await require_current_container().mcp_server_repository.get(cleaned_server_id)
     if config is None:
         raise ValueError(f"MCP server not found: {cleaned_server_id}")
@@ -116,13 +116,13 @@ async def _mcp_json(
     )
     result = await client.call_tool(tool_name, arguments)
     if result.is_error:
-        raise ValueError(f"MCP {tool_name} вернул is_error=true")
+        raise ValueError(f"MCP {tool_name} returned is_error=true")
     if len(result.content) == 0:
-        raise ValueError(f"MCP {tool_name} вернул пустой content")
+        raise ValueError(f"MCP {tool_name} returned empty content")
     first = result.content[0]
     text = first.get("text")
     if not isinstance(text, str) or text.strip() == "":
-        raise ValueError(f"MCP {tool_name}: пустой text")
+        raise ValueError(f"MCP {tool_name}: empty text")
     return parse_json_object(text, f"MCP {tool_name}.text")
 
 
@@ -157,9 +157,9 @@ class DuckDuckGoBrowserSearch(Search):
         blocked_hosts: tuple[str, ...] = ("duckduckgo.com",),
     ) -> None:
         if server_id.strip() == "":
-            raise ValueError("server_id обязателен")
+            raise ValueError("server_id is required")
         if per_query_limit < 1:
-            raise ValueError("per_query_limit должен быть >= 1")
+            raise ValueError("per_query_limit must be >= 1")
         self._server_id: str = server_id.strip()
         self._per_query_limit: int = per_query_limit
         self._blocked_hosts: tuple[str, ...] = blocked_hosts
@@ -167,7 +167,7 @@ class DuckDuckGoBrowserSearch(Search):
     @override
     async def links(self, state: ExecutionState, query: str) -> list[str]:
         if query.strip() == "":
-            raise ValueError("query обязателен")
+            raise ValueError("query is required")
         return await self._duckduckgo_one_query(state, query.strip())
 
     async def links_many(self, state: ExecutionState, queries: list[str]) -> list[str]:
@@ -179,7 +179,7 @@ class DuckDuckGoBrowserSearch(Search):
                 continue
             coroutines.append(self._duckduckgo_one_query(state, q))
         if len(coroutines) == 0:
-            raise ValueError("queries: нет непустых запросов")
+            raise ValueError("queries: no non-empty queries")
         batches = await asyncio.gather(*coroutines)
         out: list[str] = []
         seen: set[str] = set()
@@ -298,11 +298,11 @@ class BrowserSnapshotDescribe(Describe):
         file_reader: FileReader | None = None,
     ) -> None:
         if server_id.strip() == "":
-            raise ValueError("server_id обязателен")
+            raise ValueError("server_id is required")
         if navigation_timeout_ms < 1:
-            raise ValueError("navigation_timeout_ms должен быть >= 1")
+            raise ValueError("navigation_timeout_ms must be >= 1")
         if ingest_source.strip() == "":
-            raise ValueError("ingest_source обязателен")
+            raise ValueError("ingest_source is required")
         self._server_id: str = server_id.strip()
         self._navigation_timeout_ms: int = navigation_timeout_ms
         self._ingest_source: str = ingest_source.strip()
@@ -365,10 +365,10 @@ class BrowserSnapshotDescribe(Describe):
             file_id=file_id,
         )
         if len(extract.pages) == 0:
-            raise ValueError("FileReader: нет страниц в результате")
+            raise ValueError("FileReader: no pages in the result")
         text = str(extract.pages[0].text).strip()
         if text == "":
-            raise ValueError("FileReader: пустой markdown")
+            raise ValueError("FileReader: empty markdown")
         return file_id, s3_path, source_url, text
 
     async def page_snapshot(self, state: ExecutionState, url: str) -> dict[str, str]:
@@ -378,7 +378,7 @@ class BrowserSnapshotDescribe(Describe):
         Ключи: ``url``, ``file_id``, ``s3_path``, ``text``.
         """
         if url.strip() == "":
-            raise ValueError("url обязателен")
+            raise ValueError("url is required")
         page_url = url.strip()
         file_id, s3_path, source_url, text = await self._save_html_read_markdown(state, page_url)
         return {
@@ -391,6 +391,6 @@ class BrowserSnapshotDescribe(Describe):
     @override
     async def page_markdown(self, state: ExecutionState, url: str) -> str:
         if url.strip() == "":
-            raise ValueError("url обязателен")
+            raise ValueError("url is required")
         _file_id, _s3_path, _src, text = await self._save_html_read_markdown(state, url.strip())
         return text

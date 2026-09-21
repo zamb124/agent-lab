@@ -56,10 +56,10 @@ async def subscribe(request: Request, body: SubscribeRequest) -> SubscribeRespon
     )
 
     logger.info(
-        "Push subscription upsert: user=%s transport=%s platform=%s",
-        user_id,
-        body.transport,
-        body.platform,
+        "push.subscription.upsert.user.transport",
+        user=user_id,
+        transport=body.transport,
+        platform=body.platform,
     )
     return SubscribeResponse(success=True, subscription_id=subscription.id)
 
@@ -79,7 +79,7 @@ async def unsubscribe(
     )
 
     if deleted:
-        logger.info(f"Push subscription deleted for user {user_id}")
+        logger.info("push.subscription.deleted", user_id=user_id)
 
     return PushSuccessResponse(success=True)
 
@@ -121,10 +121,10 @@ async def test_send_push(
     sent_ok = before - expired_count
 
     logger.info(
-        "Test push delivered for user %s (sent_ok=%s expired=%s)",
-        user_id,
-        sent_ok,
-        expired_count,
+        "test.push.delivered.user.sent_ok",
+        user_id=user_id,
+        sent_ok=sent_ok,
+        expired=expired_count,
     )
 
     return TestPushResponse(

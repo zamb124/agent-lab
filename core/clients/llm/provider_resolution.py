@@ -87,10 +87,10 @@ def _yandex_openai_root(settings: BaseSettings) -> str:
 def _yandex_auth_headers(*, api_key: str, folder_id: str) -> dict[str, str]:
     resolved_folder_id = folder_id.strip()
     if not resolved_folder_id:
-        raise ValueError("Yandex LLM: folder_id пуст")
+        raise ValueError("Yandex LLM: folder_id is empty")
     resolved_api_key = api_key.strip()
     if not resolved_api_key:
-        raise ValueError("Yandex LLM: api_key пуст")
+        raise ValueError("Yandex LLM: api_key is empty")
     return {
         "Authorization": f"Api-Key {resolved_api_key}",
         "x-folder-id": resolved_folder_id,
@@ -163,7 +163,7 @@ def _is_humanitec_llm_provider(provider: str | None) -> bool:
 
 def _ensure_known_provider(provider: str) -> None:
     if provider not in LLM_ROUTING_PROVIDER_SLUGS:
-        raise ValueError(f"Неизвестный LLM провайдер: {provider}")
+        raise ValueError(f"Unknown LLM provider: {provider}")
 
 
 def _get_default_base_url(provider: str, settings: BaseSettings) -> str:
@@ -177,10 +177,10 @@ def _get_default_base_url(provider: str, settings: BaseSettings) -> str:
             return configured_base_url.strip().rstrip("/")
         return LLM_PROVIDER_DEFAULT_BASE_URLS[provider]
     if provider == "custom_openai_compatible":
-        raise ValueError("custom_openai_compatible LLM требует явный base_url")
+        raise ValueError("custom_openai_compatible LLM requires an explicit base_url")
     if provider == PROVIDER_LITSERVE:
         return settings.provider_litserve.resolve_openai_v1_base_url()
-    raise ValueError(f"Неизвестный LLM провайдер: {provider}")
+    raise ValueError(f"Unknown LLM provider: {provider}")
 
 
 def _github_default_headers(settings: BaseSettings) -> dict[str, str]:
@@ -222,9 +222,9 @@ def _configured_openai_compatible_provider(
 ) -> _OpenAICompatibleProviderConfig:
     provider_config = _configured_provider_config(settings, provider)
     if provider_config is None:
-        raise ValueError(f"{_provider_display_name(provider)} конфиг не задан")
+        raise ValueError(f"{_provider_display_name(provider)} config is not set")
     if not collect_provider_api_keys(provider_config):
-        raise ValueError(f"{_provider_display_name(provider)} API key не настроен")
+        raise ValueError(f"{_provider_display_name(provider)} API key is not configured")
     return provider_config
 
 
@@ -256,7 +256,7 @@ def _resolve_llm_call_config(
 ) -> LLMCallConfig:
     """Разрешает один LLM config в конкретную runtime-попытку."""
     if not config.model or not str(config.model).strip():
-        raise ValueError("LLM model обязателен")
+        raise ValueError("LLM model is required")
 
     explicit_api_key = _resolve_var(config.api_key, state)
     explicit_base_url = _resolve_var(config.base_url, state)
@@ -275,7 +275,7 @@ def _resolve_llm_call_config(
         or settings.llm.provider
     )
     if not resolved_provider:
-        raise ValueError("LLM provider обязателен")
+        raise ValueError("LLM provider is required")
     _ensure_known_provider(resolved_provider)
 
     resolved_api_key = (
@@ -309,7 +309,7 @@ def _resolve_llm_call_config(
     if resolved_api_key:
         if resolved_provider == "custom_openai_compatible" and not resolved_base_url:
             raise ValueError(
-                "custom_openai_compatible: base_url обязателен (URL OpenAI-совместимого endpoint компании)"
+                "custom_openai_compatible: base_url is required (company OpenAI-compatible endpoint URL)"
             )
         if resolved_provider == "openrouter" and settings.llm.openrouter:
             default_headers = {
@@ -329,8 +329,8 @@ def _resolve_llm_call_config(
             folder_id = override_folder_id or platform_folder_id
             if not folder_id:
                 raise ValueError(
-                    "Yandex LLM: задайте folder_id в переопределении ноды/ресурса "
-                    + "или llm.yandex.folder_id"
+                    "Yandex LLM: set folder_id in the node/resource override "
+                    + "or llm.yandex.folder_id"
                 )
             default_headers = _yandex_auth_headers(
                 api_key=resolved_api_key,
@@ -374,7 +374,7 @@ def _resolve_llm_call_config(
         elif resolved_provider == "yandex":
             yandex_config = cast(YandexLLMProviderConfig, provider_config)
             if not yandex_config.folder_id or not str(yandex_config.folder_id).strip():
-                raise ValueError("Yandex LLM folder_id не настроен")
+                raise ValueError("Yandex LLM folder_id is not configured")
             folder_id = str(yandex_config.folder_id).strip()
             candidate_model = normalize_yandex_resource_model_uri(candidate_model, folder_id)
             default_headers = _yandex_auth_headers(
@@ -383,8 +383,8 @@ def _resolve_llm_call_config(
             )
     elif resolved_provider == "custom_openai_compatible":
         raise ValueError(
-            "custom_openai_compatible LLM требует явный api_key и base_url; "
-            + "вызывайте через core.ai.resolver/core.ai.runtime"
+            "custom_openai_compatible LLM requires explicit api_key and base_url; "
+            + "call it through core.ai.resolver/core.ai.runtime"
         )
 
     if provider_config is not None:

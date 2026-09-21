@@ -116,8 +116,7 @@ from core.flow_ui.protocol import (
     FLOW_UI_OUTPUT_MEDIA_TYPES,
     FlowUIActionMessage,
 )
-from core.logging import bind_log_context, get_logger
-from core.logging.attributes import LOG_SESSION_AGENT
+from core.logging import bind_session_agent, get_logger
 from core.models.flow_ui_share import FlowUIShareGrant
 from core.state import ChildWorkflowLink, ExecutionState, ExecutionTaskState
 from core.state.interrupt import HandoffInterrupt, HandoffMode, OperatorTaskInterrupt
@@ -532,7 +531,7 @@ class BaseChannel(ABC):
                     and state.interrupt.correlation_id is not None
                 ):
                     raise ValueError(
-                        "Ожидается ответ оператора: пользователь не может резюмировать HITL single_reply"
+                        "Operator reply is expected: the user cannot resume HITL single_reply"
                     )
                 elif isinstance(state.interrupt.body, HandoffInterrupt):
                     routing = self.container.handoff_orchestrator_service.resolve_active_handoff_child(
@@ -562,7 +561,7 @@ class BaseChannel(ABC):
                 self.flow_id, pinned_version
             )
             if flow_config is None:
-                raise ValueError(f"Flow не найден: {self.flow_id}")
+                raise ValueError(f"Flow not found: {self.flow_id}")
             content = validate_flow_ui_action(
                 ui_action,
                 flow_config.interface_for_branch(branch_id),
@@ -700,8 +699,10 @@ class BaseChannel(ABC):
         broker_url = get_settings().tasks.broker_url
         logger.info("flow.create_task.broker", broker_url=broker_url)
         logger.debug(
-            f"[create_task] Kicking task_id={params.task_id} flow_id={target.flow_id} "
-            + f"session_id={target.session_id}"
+            "flow.create_task.kick",
+            task_id=params.task_id,
+            flow_id=target.flow_id,
+            session_id=target.session_id,
         )
 
         async def _kick_flow_task() -> None:
@@ -743,7 +744,7 @@ class BaseChannel(ABC):
             task_id=params.task_id,
             flow_id=target.flow_id,
         )
-        logger.debug(f"[create_task] Task kicked to TaskIQ: task_id={params.task_id}")
+        logger.debug("flows.channel.task_enqueued", task_id=params.task_id)
 
     # === Основной метод выполнения задачи ===
 
@@ -834,7 +835,7 @@ class BaseChannel(ABC):
 
         # Устанавливаем в ContextVar для доступа из других компонентов
         _ = set_context(ctx)
-        bind_log_context(**{LOG_SESSION_AGENT: params.session_id})
+        bind_session_agent(params.session_id)
 
         # Загружаем state для определения task_id, resume и закреплённой версии flow
         container = self.container
@@ -848,7 +849,9 @@ class BaseChannel(ABC):
             params.context_id = params.session_id or effective_task_id
 
         logger.debug(
-            f"[process_task] Starting task_id={effective_task_id} (from params: {params.task_id})"
+            "flow.process_task.start",
+            task_id=effective_task_id,
+            params_task_id=params.task_id,
         )
 
         # Получаем breakpoints из metadata
@@ -890,17 +893,17 @@ class BaseChannel(ABC):
                 branch_id=params.branch_id,
                 initiator_user_id=initiator_user_id,
             )
-            logger.info(f"[state] Created workflow projection for session {params.session_id}")
+            logger.info("flows.channel.workflow_projection_created", session_id=params.session_id)
         else:
             messages_count = len(state.messages)
             logger.info(
-                "[state] Loaded state for session %s: messages=%s, current_nodes=%s, interrupt=%s, breakpoint_hit=%s, terminal_task_state=%s",
-                params.session_id,
-                messages_count,
-                state.current_nodes,
-                bool(state.interrupt),
-                state.breakpoint_hit,
-                state.terminal_task_state,
+                "flows.state.loaded.state.session.messages",
+                session_id=params.session_id,
+                messages=messages_count,
+                current_nodes=state.current_nodes,
+                interrupt=bool(state.interrupt),
+                breakpoint_hit=state.breakpoint_hit,
+                terminal_task_state=state.terminal_task_state,
             )
             # При breakpoint resume НЕ перезаписываем content - используем оригинальный
             if not state.breakpoint_hit:
@@ -921,7 +924,7 @@ class BaseChannel(ABC):
             self.flow_id, params.branch_id, config_version=pinned_version
         )
         if runtime_flow is None:
-            raise ValueError(f"Flow не найден: {self.flow_id}")
+            raise ValueError(f"Flow not found: {self.flow_id}")
         # Значения input-блоков становятся полями state до durable commit хода:
         # ledger хранит ввод пользователя целиком, а не только текст.
         ui_action_files: list[FileRef] = []
@@ -943,7 +946,7 @@ class BaseChannel(ABC):
             company_id=company_id,
         )
 
-        logger.debug(f"[process_task] Emitter created for stream:{effective_task_id}")
+        logger.debug("flows.channel.emitter_created", task_id=effective_task_id)
         heartbeat_task = run_with_log_context(
             self._run_stream_heartbeat(emitter),
             name=f"flows.stream_heartbeat.{effective_task_id}",
@@ -1114,7 +1117,7 @@ class BaseChannel(ABC):
             try:
                 state = await runtime_flow.run(state)
             except FlowCancelled:
-                logger.info(f"Flow cancelled: task_id={effective_task_id}")
+                logger.info("flows.channel.flow_cancelled", task_id=effective_task_id)
                 await self._save_terminal_state(params.session_id, state, "canceled")
                 await emitter.emit_cancelled()
                 return FlowTaskResult(response="", task_state="canceled")
@@ -1126,7 +1129,7 @@ class BaseChannel(ABC):
 
             if state.breakpoint_hit:
                 node_id = state.breakpoint_hit
-                logger.info(f"Breakpoint hit at node '{node_id}'")
+                logger.info("flows.channel.breakpoint_hit", node_id=node_id)
 
                 breakpoint_node = runtime_flow.nodes.get(node_id)
                 raw_node_type = (
@@ -1200,11 +1203,11 @@ class BaseChannel(ABC):
             messages_count = len(state.messages)
 
             logger.info(
-                "[state] Terminal state saved for session %s: messages=%s, current_nodes=%s, interrupt=%s",
-                params.session_id,
-                messages_count,
-                state.current_nodes,
-                bool(state.interrupt),
+                "flows.state.terminal.state.saved.session",
+                session_id=params.session_id,
+                messages=messages_count,
+                current_nodes=state.current_nodes,
+                interrupt=bool(state.interrupt),
             )
             task_state: ExecutionTaskState = "input-required" if state.interrupt else "completed"
             if state.terminal_task_state == "handback":
@@ -1217,7 +1220,7 @@ class BaseChannel(ABC):
             )
 
         except BillingBalanceBlockedError as e:
-            logger.error(f"Billing balance blocked: {e}")
+            logger.error("flows.channel.billing_blocked", error=str(e))
             await self._save_terminal_state(
                 params.session_id,
                 state,
@@ -1229,7 +1232,7 @@ class BaseChannel(ABC):
             raise
 
         except Exception as e:
-            logger.error(f"Error in process_task: {e}")
+            logger.error("flows.channel.process_task_failed", error=str(e))
             await self._save_terminal_state(
                 params.session_id,
                 state,
@@ -1258,19 +1261,11 @@ class BaseChannel(ABC):
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
-                    logger.warning(
-                        "flow.stream_heartbeat.emit_failed task_id=%s error=%s",
-                        emitter.state.task_id,
-                        exc,
-                    )
+                    logger.warning("flow.stream_heartbeat.emit_failed", task_id=emitter.state.task_id, error=exc)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            logger.warning(
-                "flow.stream_heartbeat.stopped task_id=%s error=%s",
-                emitter.state.task_id,
-                exc,
-            )
+            logger.warning("flow.stream_heartbeat.stopped", task_id=emitter.state.task_id, error=exc)
 
     async def _send_push_notification(
         self,
@@ -1836,7 +1831,10 @@ class BaseChannelHandler(ABC):
             )
 
         logger.info(
-            f"Channel {self.channel_type.value}: executing {action} to {params.get('recipient', 'unknown')}"
+            "flow.channel.output_execute",
+            channel=self.channel_type.value,
+            action=action,
+            recipient=params.get("recipient"),
         )
 
         return result

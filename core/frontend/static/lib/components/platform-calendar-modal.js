@@ -2351,17 +2351,12 @@ export class PlatformCalendarModal extends PlatformModal {
         this.useEvent(CALENDAR_EVENTS.EVENT_CREATED, () => {
             this._saving = false;
             this._resetEventFormAfterSave();
-            this._reload();
         });
         this.useEvent(CALENDAR_EVENTS.EVENT_UPDATED, () => {
             this._saving = false;
             this._resetEventFormAfterSave();
-            this._reload();
         });
-        this.useEvent(CALENDAR_EVENTS.EVENT_DELETED, () => {
-            this._resetEventFormAfterSave();
-            this._reload();
-        });
+        this.useEvent(CALENDAR_EVENTS.EVENT_DELETED, () => this._resetEventFormAfterSave());
         this.useEvent(CALENDAR_EVENTS.SYNC_COMPLETED, () => { this._syncing = false; });
         this.useEvent(CALENDAR_EVENTS.INTEGRATION_CONNECTED, () => { this._saving = false; });
         this.useEvent(FILES_EVENTS.UPLOAD_COMPLETED, (e) => this._onFileUploadCompleted(e));

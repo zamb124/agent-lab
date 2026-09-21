@@ -91,6 +91,7 @@ COMMON_TEST_ENV: dict[str, str] = {
     "SERVER__CODE_RUNNER_CSHARP_SERVICE_URL": "http://localhost:9020",
     "SERVER__WORKTRACKER_SERVICE_URL": "http://localhost:9021",
     "SERVER__SECRETS_SERVICE_URL": "http://localhost:9022",
+    "SERVER__SCHEDULER_SERVICE_URL": "http://localhost:9006",
     "SERVER__OFFICE_SERVICE_URL": "http://localhost:9008",
     "OFFICE__JWT_SECRET": TEST_OFFICE_JWT_SECRET,
     "OFFICE__DOCUMENT_SERVER_PUBLIC_URL": "http://localhost:18088",
@@ -332,6 +333,12 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
         name="worktracker",
         app_path="apps.worktracker.main:app",
         port=9021,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
+    ),
+    GranianService(
+        name="scheduler",
+        app_path="apps.scheduler.main:app",
+        port=9006,
         readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
     ),
     GranianService(

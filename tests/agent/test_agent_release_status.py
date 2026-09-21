@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import pytest
-from fastapi import HTTPException
-
 from apps.agent.models import AgentReleaseAssetChecksum
 from apps.agent.service import (
     _github_api_headers,
     _resolve_asset_url_from_release,
     build_agent_release_status_from_github_payload,
 )
+from core.errors.boundary import PlatformNotFoundError
 from core.types import JsonObject
 
 
@@ -154,9 +153,9 @@ def test_resolve_asset_url_missing_platform() -> None:
             },
         ],
     }
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(PlatformNotFoundError) as exc_info:
         _ = _resolve_asset_url_from_release(payload, "macos-arm64")
-    assert exc_info.value.status_code == 404
+    assert exc_info.value.error_code == "release_asset_not_found"
 
 
 def test_github_api_headers_include_bearer_token(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -30,10 +30,10 @@ from __future__ import annotations
 import os
 
 from core.config import is_testing
-from core.logging import get_log_context
+from core.logging.attributes import LOG_TEST_SCOPE
+from core.logging.context import get_log_context
 
 TEST_SCOPE_HEADER = "X-Test-Scope"
-LOG_TEST_SCOPE = "test_scope"
 TEST_SCOPE_DEFAULT_ENV = "TEST_SCOPE_DEFAULT"
 TEST_SCOPE_STATIC_E2E = "test_e2e_static"
 MOCK_LLM_SIDE_EFFECT_CRM_SUMMARY = "crm_summary"
@@ -58,11 +58,11 @@ def side_effect_test_scope(test_scope: str, kind: str) -> str:
     scope = test_scope.strip()
     effect_kind = kind.strip()
     if not scope:
-        raise ValueError("side_effect_test_scope: test_scope не должен быть пустым")
+        raise ValueError('side_effect_test_scope: test_scope must not be empty')
     if not effect_kind:
-        raise ValueError("side_effect_test_scope: kind не должен быть пустым")
+        raise ValueError('side_effect_test_scope: kind must not be empty')
     if ":" in effect_kind:
-        raise ValueError("side_effect_test_scope: kind не должен содержать ':'")
+        raise ValueError("side_effect_test_scope: kind must not contain ':'")
     return f"{scope}:{effect_kind}"
 
 

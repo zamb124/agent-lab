@@ -148,7 +148,7 @@ def test_regex_groups():
 
 
 def test_regex_invalid_raises():
-    with pytest.raises(ValueError, match="невалидный regex"):
+    with pytest.raises(ValueError, match="invalid regex"):
         _compile([_rule("regex", r"[invalid", "x")])
 
 

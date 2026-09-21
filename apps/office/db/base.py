@@ -37,7 +37,7 @@ class OfficeDatabase:
                 settings = get_settings()
                 db_url = settings.database.office_url
                 if not db_url:
-                    raise ValueError("database.office_url не задан")
+                    raise ValueError("database.office_url is not set")
             cls._instance = cls(db_url)
         return cls._instance
 

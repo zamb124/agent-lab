@@ -116,7 +116,7 @@ async def set_push_config(params: TaskPushNotificationConfig) -> TaskPushNotific
         config_ids.append(config_id)
         _ = await redis.set(configs_key, _config_id_list_to_json(config_ids), ttl=REDIS_TTL)
 
-    logger.info(f"Push config saved: task={task_id}, config={config_id}")
+    logger.info("push.config.saved", task_id=task_id, config_id=config_id)
     return stored_config
 
 
@@ -205,7 +205,7 @@ async def delete_push_config(params: DeleteTaskPushNotificationConfigRequest) ->
             config_ids.remove(config_id)
             _ = await redis.set(configs_key, _config_id_list_to_json(config_ids), ttl=REDIS_TTL)
 
-    logger.info(f"Push config deleted: task={task_id}, config={config_id}")
+    logger.info("push.config.deleted", task_id=task_id, config_id=config_id)
 
 
 async def send_webhook(
@@ -228,7 +228,7 @@ async def send_webhook(
         if response.status_code >= 400:
             raise RuntimeError(f"Webhook {url} returned {response.status_code}")
 
-        logger.info(f"Push notification sent to {url}")
+        logger.info("push.notification.sent", url=url)
         return {"success": True, "status_code": response.status_code}
 
 

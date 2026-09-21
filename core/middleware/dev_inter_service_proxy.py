@@ -241,7 +241,7 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
         base = upstream_base.rstrip("/")
         parsed = urlparse(base)
         if not parsed.netloc:
-            raise RuntimeError(f"Некорректный upstream base: {upstream_base!r}")
+            raise RuntimeError(f"Invalid upstream base: {upstream_base!r}")
 
         query = request.url.query
         upstream = f"{base}{path}"
@@ -382,7 +382,7 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
             ds_base = ds_config.strip().rstrip("/")
             parsed_ds = urlparse(ds_base)
             if not parsed_ds.netloc:
-                raise RuntimeError(f"Некорректный server.document_server_dev_upstream_url: {ds_base!r}")
+                raise RuntimeError(f"Invalid server.document_server_dev_upstream_url: {ds_base!r}")
             client_host = host.strip()
             public_origin = _public_origin_from_host(request.url.scheme, client_host)
             return await self._forward_http(
@@ -407,7 +407,7 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
         base = settings.server.get_service_url(url_key).rstrip("/")
         parsed = urlparse(base)
         if not parsed.netloc:
-            raise RuntimeError(f"Некорректный URL сервиса {url_key} (path {target}): {base!r}")
+            raise RuntimeError(f"Invalid service URL {url_key} (path {target}): {base!r}")
 
         upstream_host = host.strip()
 
@@ -483,7 +483,7 @@ class DevInterServiceWsProxyMiddleware:
             base = ds_config.strip().rstrip("/")
             parsed_base = urlparse(base)
             if not parsed_base.netloc:
-                raise RuntimeError(f"Некорректный WebSocket upstream для path {path}: {base!r}")
+                raise RuntimeError(f"Invalid WebSocket upstream for path {path}: {base!r}")
             client_host = host.strip() or parsed_base.netloc
             rewrite_origin_from = f"{parsed_base.scheme}://{parsed_base.netloc}"
             scheme = scope.get("scheme")
@@ -506,7 +506,7 @@ class DevInterServiceWsProxyMiddleware:
             base = settings.server.get_service_url(url_key).rstrip("/")
         parsed = urlparse(base)
         if not parsed.netloc:
-            raise RuntimeError(f"Некорректный WebSocket upstream для path {path}: {base!r}")
+            raise RuntimeError(f"Invalid WebSocket upstream for path {path}: {base!r}")
 
         ws_scheme = "wss" if parsed.scheme == "https" else "ws"
         query_string = scope.get("query_string")

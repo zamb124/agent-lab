@@ -13,7 +13,6 @@ from apps.flows.realtime.agent_skill_operations import (
     op_flows_agent_skills_remove,
     op_flows_agent_skills_update,
 )
-from apps.flows.realtime.operations import FlowsEmptyPayload
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.agent_skill import (
     AgentSkill,
@@ -27,6 +26,7 @@ from apps.flows.src.models.agent_skill import (
 )
 from core.context import require_context
 from core.pagination import OffsetPage
+from core.websocket import EmptyPayload
 
 router = APIRouter(tags=["agent-skills"])
 
@@ -73,7 +73,7 @@ async def ensure_agent_skills_seed(
     container: ContainerDep,
 ) -> AgentSkillEnsureSeedResponse:
     return await op_flows_agent_skills_ensure_seed(
-        FlowsEmptyPayload(),
+        EmptyPayload(),
         user=require_context().user,
         container=container,
     )

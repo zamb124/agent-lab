@@ -18,19 +18,19 @@ def _key(import_id: str) -> str:
 def _redis_client() -> RedisClient:
     url = get_settings().database.redis_url
     if not url:
-        raise ValueError("database.redis_url не задан")
+        raise ValueError("database.redis_url is not set")
     return RedisClient(url)
 
 
 async def store_pending_import_text(import_id: str, text: str) -> None:
     if not import_id or not import_id.strip():
-        raise ValueError("import_id обязателен")
+        raise ValueError("import_id is required")
     client = _redis_client()
     await client.connect()
     try:
         ok = await client.setex(_key(import_id), TTL_SECONDS, text)
         if not ok:
-            raise RuntimeError("Redis SETEX вернул ложь")
+            raise RuntimeError("Redis SETEX returned false")
     finally:
         await client.close()
 
@@ -43,7 +43,7 @@ async def get_pending_import_text(import_id: str) -> str:
     finally:
         await client.close()
     if raw is None:
-        raise ValueError(f"Текст импорта в Redis не найден: {import_id}")
+        raise ValueError(f"Import text not found in Redis: {import_id}")
     return raw
 
 

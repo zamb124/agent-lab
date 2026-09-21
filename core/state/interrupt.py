@@ -161,7 +161,7 @@ class InterruptData(StrictBaseModel):
         if isinstance(data, InterruptData):
             return data
         if not isinstance(data, dict):
-            raise ValueError(f"InterruptData: ожидается dict, получено {type(data)}")
+            raise ValueError(f"InterruptData: expected dict, got {type(data)}")
         if "body" not in data or "system" not in data:
             raise ValueError("InterruptData requires body and system")
         return cast(object, data)

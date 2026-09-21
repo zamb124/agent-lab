@@ -238,7 +238,7 @@ async def transfer_call_admin(
     container: ContainerDep, call_id: str, body: CallsAdminTransferPayload
 ) -> CallRead:
     if body.call_id != call_id:
-        raise WsCommandError("ws_invalid_payload", "call_id mismatch")
+        raise WsCommandError("ws_invalid_payload", "call_id mismatch", error_code='ws_invalid_payload')
     user = require_context().user
     return await op_calls_admin_transfer(body, user=user, container=container)
 
@@ -248,6 +248,6 @@ async def signal_call(
     container: ContainerDep, call_id: str, body: CallsSignalPayload
 ) -> None:
     if body.call_id != call_id:
-        raise WsCommandError("ws_invalid_payload", "call_id mismatch")
+        raise WsCommandError("ws_invalid_payload", "call_id mismatch", error_code='ws_invalid_payload')
     user = require_context().user
     await op_calls_signal(body, user=user, container=container)

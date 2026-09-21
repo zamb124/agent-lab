@@ -124,11 +124,7 @@ def _extract_attachment(part: Message) -> MailAttachment:
     try:
         payload = part.get_payload(decode=True)
     except Exception as exc:
-        logger.warning(
-            "mail MIME attachment payload decode failed filename=%s error=%s",
-            filename,
-            exc,
-        )
+        logger.warning("mail.mime.attachment.payload.decode", filename=filename, error=exc)
         return MailAttachment(
             filename=filename,
             content_type=content_type,
@@ -184,10 +180,7 @@ def _walk_body_and_attachments(
                 try:
                     attachments.append(_extract_attachment(part))
                 except Exception as exc:
-                    logger.warning(
-                        "mail MIME attachment extract failed error=%s",
-                        exc,
-                    )
+                    logger.warning("mail.mime.attachment.extract.failed", error=exc)
                     attachments.append(
                         MailAttachment(
                             filename="attachment",
@@ -234,11 +227,7 @@ def parse_inbound_rfc822(uid: str, raw_bytes: bytes) -> InboundMailMessage:
         try:
             parsed = email.message_from_bytes(raw_bytes, policy=email.policy.compat32)
         except Exception as exc:
-            logger.warning(
-                "mail MIME parse failed completely uid=%s error=%s",
-                uid,
-                exc,
-            )
+            logger.warning("mail.mime.parse.failed.completely", uid=uid, error=exc)
             return InboundMailMessage(
                 uid=uid,
                 message_id=None,
@@ -252,11 +241,7 @@ def parse_inbound_rfc822(uid: str, raw_bytes: bytes) -> InboundMailMessage:
     try:
         body_text, body_html, attachments = _walk_body_and_attachments(parsed)
     except Exception as exc:
-        logger.warning(
-            "mail MIME walk failed uid=%s error=%s — returning headers only",
-            uid,
-            exc,
-        )
+        logger.warning("mail.mime.walk.failed.uid", uid=uid, error=exc)
         body_text = None
         body_html = None
         attachments = []

@@ -64,7 +64,7 @@ def onlyoffice_document_type_and_file_type(filename: str) -> tuple[str, str]:
     """
     ext = Path(filename).suffix.lower().lstrip(".")
     if not ext:
-        raise ValueError("У файла нет расширения")
+        raise ValueError("File has no extension")
     if ext in _ONLYOFFICE_WORD_EXTS:
         return "word", ext
     if ext in _ONLYOFFICE_CELL_EXTS:
@@ -72,8 +72,8 @@ def onlyoffice_document_type_and_file_type(filename: str) -> tuple[str, str]:
     if ext in _ONLYOFFICE_SLIDE_EXTS:
         return "slide", ext
     raise ValueError(
-        f"Неподдерживаемое расширение для OnlyOffice: .{ext} "
-        + "(ожидаются doc/docx/pdf/xls/xlsx/ppt/pptx и odt/ods/odp/rtf/txt/csv)"
+        f"Unsupported extension for OnlyOffice: .{ext} "
+        + "(expected doc/docx/pdf/xls/xlsx/ppt/pptx and odt/ods/odp/rtf/txt/csv)"
     )
 
 
@@ -91,8 +91,8 @@ def onlyoffice_document_type_for_upload(filename: str, content_type: str | None)
     if mapped is not None:
         return mapped
     raise ValueError(
-        f"Неподдерживаемый тип файла: не удалось определить по имени «{raw}» "
-        + f"и MIME «{ct or 'нет'}»"
+        f"Unsupported file type: could not determine from name «{raw}» "
+        + f"and MIME «{ct or 'none'}»"
     )
 
 

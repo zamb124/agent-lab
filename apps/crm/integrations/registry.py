@@ -29,14 +29,14 @@ class IntegrationRegistry:
     def _register(self, connector: NamespaceIntegrationConnector) -> None:
         icon = _integration_svg_path(connector.provider_id)
         if not icon.is_file():
-            raise ValueError(f"Для интеграции «{connector.provider_id}» нужен SVG в CRM UI: {icon}")
+            raise ValueError(f"Integration «{connector.provider_id}» requires an SVG in CRM UI: {icon}")
         self._by_id[connector.provider_id] = connector
         self._by_provider[connector.integration_provider] = connector
 
     def get(self, provider_id: str) -> NamespaceIntegrationConnector:
         connector = self._by_id.get(provider_id)
         if connector is None:
-            raise KeyError(f"Неизвестный провайдер интеграции: {provider_id}")
+            raise KeyError(f"Unknown integration provider: {provider_id}")
         return connector
 
     def known_provider_ids(self) -> list[str]:
@@ -45,7 +45,7 @@ class IntegrationRegistry:
     async def dispatch_credential_saved(self, credential: IntegrationCredential) -> None:
         connector = self._by_provider.get(credential.provider)
         if connector is None:
-            raise KeyError(f"Нет коннектора для provider {credential.provider}")
+            raise KeyError(f"No connector for provider {credential.provider}")
         await connector.on_credential_saved(credential)
 
     async def build_manifest(

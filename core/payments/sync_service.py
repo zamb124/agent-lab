@@ -64,7 +64,7 @@ class PaymentSyncService:
         return stats
 
     async def sync_all_companies(self) -> PaymentSyncAllCompaniesStats:
-        logger.info("Начало глобальной синхронизации транзакций")
+        logger.info("payments.event")
         stats, company_ids = await self._sync_prefix("payment:")
         total_stats = PaymentSyncAllCompaniesStats(
             companies_checked=len(company_ids),
@@ -74,13 +74,13 @@ class PaymentSyncService:
         )
         if total_stats.total_updated > 0 or total_stats.total_pending > 0:
             logger.info(
-                "Глобальная синхронизация завершена: компаний=%s, pending=%s, обновлено=%s",
-                total_stats.companies_checked,
-                total_stats.total_pending,
-                total_stats.total_updated,
+                "payments.pending",
+                companies_checked=total_stats.companies_checked,
+                pending=total_stats.total_pending,
+                total_updated=total_stats.total_updated,
             )
         else:
-            logger.debug("Синхронизация: живых pending нет")
+            logger.debug("payments.pending")
         return total_stats
 
     async def _sync_prefix(self, prefix: str) -> tuple[PaymentSyncStats, set[str]]:
@@ -143,7 +143,7 @@ class PaymentSyncService:
         for provider_type, transactions in by_provider.items():
             provider = _provider_for(provider_type)
             if provider is None:
-                logger.warning("Провайдер %s не найден", provider_type.value)
+                logger.warning("payments.event", value=provider_type.value)
                 if expire_if_unresolved:
                     for txn in transactions:
                         if await self._payment_service.expire_unpaid_pending(txn):
@@ -173,7 +173,7 @@ class PaymentSyncService:
                 transaction_id = op.transaction_id
                 transaction = await self._payment_service.get_transaction(transaction_id)
                 if transaction is None:
-                    logger.warning("Транзакция %s не найдена при синхронизации", transaction_id)
+                    logger.warning("payments.event", transaction_id=transaction_id)
                     continue
                 applied = await self._payment_service.apply_sync_operation(transaction, op)
                 resolved_ids.add(transaction_id)
@@ -194,12 +194,12 @@ class PaymentSyncService:
                         updated += 1
 
         logger.info(
-            "Синхронизация пакета: pending=%s, проверено=%s, найдено=%s, обновлено=%s, expire=%s",
-            len(pending_transactions),
-            checked,
-            found,
-            updated,
-            expire_if_unresolved,
+            "payments.pending.expire",
+            pending=len(pending_transactions),
+            checked=checked,
+            found=found,
+            updated=updated,
+            expire=expire_if_unresolved,
         )
         return PaymentSyncStats(
             total_pending=len(pending_transactions),

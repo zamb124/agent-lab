@@ -30,7 +30,7 @@ def build_platform_correlation_logql(*, trace_id: str | None, request_id: str) -
     """
     rid = sanitize_logql_value(request_id)
     if not rid:
-        raise ValueError("build_platform_correlation_logql: request_id обязателен")
+        raise ValueError('build_platform_correlation_logql: request_id is required')
 
     tid = sanitize_logql_value(trace_id) if trace_id is not None and trace_id.strip() else ""
     if tid:
@@ -46,13 +46,13 @@ def build_grafana_explore_loki_url(
     logql: str,
 ) -> str:
     if not grafana_public_url.strip():
-        raise ValueError("build_grafana_explore_loki_url: grafana_public_url обязателен")
+        raise ValueError('build_grafana_explore_loki_url: grafana_public_url is required')
     if not datasource_uid.strip():
-        raise ValueError("build_grafana_explore_loki_url: datasource_uid обязателен")
+        raise ValueError('build_grafana_explore_loki_url: datasource_uid is required')
     if not org_id.strip():
-        raise ValueError("build_grafana_explore_loki_url: org_id обязателен")
+        raise ValueError('build_grafana_explore_loki_url: org_id is required')
     if not logql.strip():
-        raise ValueError("build_grafana_explore_loki_url: logql обязателен")
+        raise ValueError('build_grafana_explore_loki_url: logql is required')
 
     base = grafana_public_url.strip().rstrip("/")
     uid = datasource_uid.strip()

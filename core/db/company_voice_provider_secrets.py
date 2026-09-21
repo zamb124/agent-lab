@@ -39,7 +39,7 @@ def merge_secrets(
     """
     for k in patch or {}:
         if k not in allowed_keys:
-            raise ValueError(f"Неизвестный ключ secrets для провайдера: {k!r}")
+            raise ValueError(f"Unknown secrets key for provider: {k!r}")
     base: dict[str, str] = {}
     if existing:
         for k, v in existing.items():

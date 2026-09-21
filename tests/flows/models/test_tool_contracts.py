@@ -6,7 +6,6 @@ import pytest
 from pydantic import ValidationError
 
 from apps.flows.src.models.tool_contracts import (
-    ToolBinding,
     ToolDefinition,
     ToolErrorBody,
     ToolGrantClaims,
@@ -52,25 +51,6 @@ def test_tool_definition_roundtrip() -> None:
     definition = _sample_definition()
     restored = ToolDefinition.model_validate(definition.model_dump(mode="json"))
     assert restored == definition
-
-
-def test_tool_binding_roundtrip() -> None:
-    binding = ToolBinding(
-        binding_id="support.add_note",
-        definition_id="crm.note.create",
-        definition_version=1,
-        flow_id="support",
-        node_id="support_agent",
-        llm_name="add_customer_note",
-        title="Add note",
-        description="Adds a note for the current customer.",
-        parameter_bindings={"entity_id": {"source": "state", "path": "variables.customer_id"}},
-        model_schema_projection={"type": "object", "properties": {"note_text": {"type": "string"}}},
-        result_projection=["note_id"],
-        confirmation_override="approval",
-    )
-    restored = ToolBinding.model_validate(binding.model_dump(mode="json"))
-    assert restored == binding
 
 
 def test_tool_revision_roundtrip() -> None:

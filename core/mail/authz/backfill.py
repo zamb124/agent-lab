@@ -66,11 +66,7 @@ async def backfill_mail_authz(*, limit: int | None = None) -> tuple[int, int]:
         )
         owners_written += 1
 
-    logger.info(
-        "mail authz backfill company=%s owners=%s",
-        company_written,
-        owners_written,
-    )
+    logger.info("mail.authz.backfill.company.owners", company=company_written, owners=owners_written)
     return company_written, owners_written
 
 

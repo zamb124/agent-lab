@@ -107,7 +107,7 @@ def _optional_json_string(attributes: JsonObject, key: str) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str):
-        raise ValueError(f"{key} должен быть строкой")
+        raise ValueError(f"{key} must be a string")
     return value
 
 
@@ -743,7 +743,7 @@ class PlatformTracer:
             )
         if settlement_quantity_rub is not None:
             if settlement_quantity_rub < 1:
-                raise ValueError("settlement_quantity_rub должна быть >= 1")
+                raise ValueError('settlement_quantity_rub must be >= 1')
             span.set_attribute(attr.ATTR_BILLING_SETTLEMENT_QUANTITY_RUB, settlement_quantity_rub)
 
         model_attribute = _span_attribute(span, attr.ATTR_LLM_MODEL)
@@ -892,7 +892,7 @@ class PlatformTracer:
         }
         snapshot_str = json.dumps(snapshot, ensure_ascii=False, default=str)[:4000]
         span.set_attribute(attr.ATTR_STATE_SNAPSHOT, snapshot_str)
-        logger.debug(f"Recorded state snapshot: {len(snapshot)} fields, {len(snapshot_str)} chars")
+        logger.debug("trace.state_snapshot", field_count=len(snapshot), chars=len(snapshot_str))
 
     @asynccontextmanager
     async def interrupt_span(

@@ -66,7 +66,7 @@ async def test_e2e_tunnel_revoke_blocks_reconnect(
         unique_id=unique_id,
     )
     revoke_response = await agent_frontend_http_client.delete(f"{AGENT_API_PREFIX}/devices/{device_id}")
-    assert revoke_response.status_code == 204
+    assert revoke_response.status_code == 200, revoke_response.text
     ws_uri = f"ws://127.0.0.1:9004/frontend/api/agent/tunnel?token={device_token}"
     close_code = await expect_tunnel_rejected(ws_uri, expected_codes={4401, 4403})
     assert close_code in {4401, 4403}
@@ -329,7 +329,7 @@ async def test_e2e_tunnel_revoke_disconnects_open_session(
             f"{AGENT_API_PREFIX}/devices/{device_id}",
             timeout=30.0,
         )
-        assert revoke_response.status_code == 204
+        assert revoke_response.status_code == 200, revoke_response.text
         await websocket.send(json.dumps({"type": "ping"}))
         with pytest.raises(
             (

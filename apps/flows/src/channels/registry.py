@@ -47,7 +47,7 @@ class ChannelRegistry:
             handler_class: Класс handler'а
         """
         self._handlers[channel_type] = handler_class
-        logger.debug(f"Channel handler registered: {channel_type.value}")
+        logger.debug("flows.channel.registered", channel_type=channel_type.value)
 
     def get(
         self,
@@ -118,7 +118,7 @@ def create_default_channel_registry() -> ChannelRegistry:
     registry.register(ChannelType.EMAIL, EmailChannelHandler)
     registry.register(ChannelType.SMS, SmsChannelHandler)
 
-    logger.info(f"Channel registry created with {len(registry)} handlers")
+    logger.info("flows.channel.registry_created", count=len(registry))
 
     return registry
 

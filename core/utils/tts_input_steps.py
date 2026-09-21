@@ -86,7 +86,7 @@ def apply_tts_input_steps(text: str, steps: Sequence[str]) -> str:
         try:
             fn = TTS_INPUT_STEP_REGISTRY[step]
         except KeyError as exc:
-            raise ValueError(f"Неизвестный tts_input_steps: {step!r}") from exc
+            raise ValueError(f"Unknown tts_input_steps: {step!r}") from exc
         out = fn(out)
     return out
 

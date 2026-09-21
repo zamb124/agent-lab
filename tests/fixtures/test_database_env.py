@@ -48,6 +48,7 @@ _TEST_SERVICE_ENV: dict[str, str] = {
     "SERVER__CODE_RUNNER_CSHARP_SERVICE_URL": "http://localhost:9020",
     "SERVER__WORKTRACKER_SERVICE_URL": "http://localhost:9021",
     "SERVER__SECRETS_SERVICE_URL": "http://localhost:9022",
+    "SERVER__SCHEDULER_SERVICE_URL": "http://localhost:9006",
     "SERVER__SEARCH_SERVICE_URL": "http://localhost:9010",
     "SERVER__WIKI_SERVICE_URL": "http://localhost:9023",
     "SERVER__GUEST_RUNTIME_SERVICE_URL": "http://localhost:9024",

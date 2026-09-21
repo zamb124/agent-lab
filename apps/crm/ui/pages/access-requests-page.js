@@ -294,8 +294,6 @@ export class CRMAccessRequestsPage extends PlatformPage {
     connectedCallback() {
         super.connectedCallback();
         this._reload();
-
-        this.useEvent(this._updateOp.op.events.SUCCEEDED, () => this._reload());
     }
 
     _reload() {

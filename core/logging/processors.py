@@ -114,7 +114,7 @@ def truncate_strings(max_length: int) -> LogProcessor:
     """Ограничить длину строковых значений; обрезанные помечаются `_truncated`."""
 
     if max_length <= 0:
-        raise ValueError("max_length должен быть положительным")
+        raise ValueError('max_length must be positive')
 
     def processor(_logger: LogProcessorLogger, _method: str, event_dict: LogEvent) -> LogEvent:
         truncated_keys: list[str] = []
@@ -170,7 +170,7 @@ def sample_info_logs(rate: float, sampled_loggers: list[str]) -> LogProcessor:
         return _passthrough
 
     if rate < 0.0:
-        raise ValueError("sample_rate_info должен быть >= 0")
+        raise ValueError('sample_rate_info must be >= 0')
 
     sampled_prefixes = tuple(sampled_loggers)
 

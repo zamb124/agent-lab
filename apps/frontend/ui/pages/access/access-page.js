@@ -251,7 +251,7 @@ export class FrontendAccessPage extends PlatformPage {
 
     constructor() {
         super();
-        this._members = this.useResource('frontend/team_members', { autoload: true });
+        this._members = this.useResource('frontend/team', { autoload: true });
         this._ui = this.useSlice('frontend/authz_explorer_ui');
         this._byUser = this.useOp('frontend/authz_explorer_by_user');
         this._byObject = this.useOp('frontend/authz_explorer_by_object');

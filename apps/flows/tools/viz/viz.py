@@ -15,8 +15,7 @@ from apps.flows.src.state.state_utils import find_file
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.clients.files_client import FilesClient
-from core.files.file_ref import FileRef
-from core.files.models import FileResponse
+from core.files.file_ref import FileRef, stored_file_ref
 from core.files.writer import FileWriteError, FileWriter
 from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
@@ -57,14 +56,14 @@ def _build_viz_document(
         document_spec = dict(spec)
     elif resolved_engine == VizEngine.MERMAID:
         if source is None or source.strip() == "":
-            raise ValueError("для mermaid нужен source или spec.source")
+            raise ValueError("mermaid requires source or spec.source")
         document_spec = {"source": source}
     elif resolved_engine == VizEngine.ECHARTS:
         if option is None:
-            raise ValueError("для echarts нужен option или spec.option")
+            raise ValueError("echarts requires option or spec.option")
         document_spec = {"option": option}
     else:
-        raise ValueError(f"неизвестный engine={resolved_engine.value}")
+        raise ValueError(f"unknown engine={resolved_engine.value}")
     return VizDocument(
         kind=kind,
         engine=resolved_engine,
@@ -99,7 +98,7 @@ def _pick_state_file(
     return find_file(files, file_name)
 
 
-async def _write_viz_file(document: VizDocument, original_name: str) -> FileResponse:
+async def _write_viz_file(document: VizDocument, original_name: str) -> FileRef:
     payload = json.dumps(document.model_dump(mode="json"), ensure_ascii=False, indent=2)
     writer = FileWriter()
     try:
@@ -111,7 +110,7 @@ async def _write_viz_file(document: VizDocument, original_name: str) -> FileResp
         )
     except FileWriteError as exc:
         raise ValueError(str(exc)) from exc
-    return FileResponse.from_record(record)
+    return stored_file_ref(record)
 
 
 def _svg_export_markup(document: VizDocument) -> str:
@@ -169,7 +168,7 @@ class CreateVizArgs(BaseModel):
     @model_validator(mode="after")
     def _require_payload(self) -> "CreateVizArgs":
         if self.spec is None and self.source is None and self.option is None:
-            raise ValueError("нужен spec, source или option")
+            raise ValueError("spec, source or option is required")
         return self
 
 
@@ -185,7 +184,7 @@ class UpdateVizArgs(BaseModel):
     @model_validator(mode="after")
     def _require_patch(self) -> "UpdateVizArgs":
         if self.title is None and self.source is None and self.option is None and self.spec is None:
-            raise ValueError("нужен хотя бы один patch: title/source/option/spec")
+            raise ValueError("at least one patch is required: title/source/option/spec")
         return self
 
 
@@ -245,8 +244,7 @@ async def create_viz(
     name = original_name.strip() if original_name and original_name.strip() else _slug_filename(document.title)
     if not name.lower().endswith(VIZ_EXTENSION):
         name = f"{name}{VIZ_EXTENSION}"
-    response = await _write_viz_file(document, name)
-    file_item = FileRef.from_response(response)
+    file_item = await _write_viz_file(document, name)
     upsert_state_file(state, file_item)
     _ = show_files(state, [file_item])
     return {
@@ -279,7 +277,7 @@ async def update_viz(
 ) -> JsonDict:
     item = _pick_state_file(list(state.files), file_id=file_id, file_name=None)
     if item is None or not item.file_id:
-        raise ValueError(f"Файл file_id={file_id} не найден в state.files")
+        raise ValueError(f"File file_id={file_id} not found in state.files")
     raw_bytes = await FilesClient().get_bytes(item.file_id)
     current = parse_viz_document_bytes(raw_bytes)
     next_title = title.strip() if title and title.strip() else current.title
@@ -297,8 +295,9 @@ async def update_viz(
         title=next_title,
         spec=require_json_object(next_spec, "viz.spec"),
     )
-    response = await _write_viz_file(document, item.original_name or _slug_filename(document.title))
-    file_item = FileRef.from_response(response)
+    file_item = await _write_viz_file(
+        document, item.original_name or _slug_filename(document.title)
+    )
     upsert_state_file(state, file_item)
     _ = show_files(state, [file_item])
     return {
@@ -329,7 +328,7 @@ async def export_viz(
     item = _pick_state_file(list(state.files), file_id=file_id, file_name=None)
     target_id = item.file_id if item is not None and item.file_id else file_id.strip()
     if not target_id:
-        raise ValueError("file_id обязателен")
+        raise ValueError("file_id is required")
     raw_bytes = await FilesClient().get_bytes(target_id)
     document = parse_viz_document_bytes(raw_bytes)
     base_name = _slug_filename(document.title).removesuffix(VIZ_EXTENSION)
@@ -348,8 +347,7 @@ async def export_viz(
         content_mode=content_mode,
         public=True,
     )
-    response = FileResponse.from_record(record)
-    file_item = FileRef.from_response(response)
+    file_item = stored_file_ref(record)
     upsert_state_file(state, file_item)
     _ = show_files(state, [file_item])
     return {
@@ -380,7 +378,7 @@ async def viz_open_file(
     item = _pick_state_file(list(state.files), file_id=file_id, file_name=file_name)
     if item is None or not item.file_id:
         raise ValueError(
-            f"Файл не найден. Доступные: {[file_ref.original_name for file_ref in state.files]}"
+            f"File not found. Available: {[file_ref.original_name for file_ref in state.files]}"
         )
     raw_bytes = await FilesClient().get_bytes(item.file_id)
     document = parse_viz_document_bytes(raw_bytes)

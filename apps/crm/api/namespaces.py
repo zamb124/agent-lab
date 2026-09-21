@@ -19,7 +19,6 @@ from apps.crm.models.api import (
     NamespaceUpdateRequest,
 )
 from apps.crm.realtime.operations import (
-    CrmEmptyPayload,
     CrmNamespaceNamePayload,
     CrmNamespaceUpdatePayload,
     CrmOffsetPagePayload,
@@ -42,6 +41,7 @@ from apps.crm.realtime.operations import (
 )
 from core.context import require_context
 from core.pagination import OffsetPage
+from core.websocket import EmptyPayload
 
 router = APIRouter(prefix="/namespaces", tags=["CRM Namespaces"])
 
@@ -77,7 +77,7 @@ async def get_template_schema_options(
     container: ContainerDep,
 ) -> NamespaceTemplateSchemaOptionsResponse:
     return await op_templates_schema_options(
-        CrmEmptyPayload(),
+        EmptyPayload(),
         user=require_context().user,
         container=container,
     )

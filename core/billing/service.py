@@ -50,6 +50,8 @@ STORAGE_SETTLEMENT_RULES_JSON = "billing:settlement_rules_json"
 BALANCE_BLOCK_OPERATION_LLM = "llm"
 BALANCE_BLOCK_OPERATION_EMBEDDING = "embedding"
 BALANCE_BLOCK_OPERATION_VISION = "vision"
+BALANCE_BLOCK_OPERATION_IMAGE = "image"
+BALANCE_BLOCK_OPERATION_SPEECH = "speech"
 BALANCE_BLOCK_OPERATION_LIVEKIT_ROOM = "livekit_room"
 BALANCE_BLOCK_OPERATION_LIVEKIT_EGRESS = "livekit_egress"
 BALANCE_BLOCK_OPERATION_SEARCH = "search"
@@ -62,6 +64,8 @@ _BALANCE_BLOCK_OPERATION_I18N_KEYS: dict[str, str] = {
     BALANCE_BLOCK_OPERATION_LLM: "billing.notifications.blocked_operation.llm",
     BALANCE_BLOCK_OPERATION_EMBEDDING: "billing.notifications.blocked_operation.embedding",
     BALANCE_BLOCK_OPERATION_VISION: "billing.notifications.blocked_operation.vision",
+    BALANCE_BLOCK_OPERATION_IMAGE: "billing.notifications.blocked_operation.image",
+    BALANCE_BLOCK_OPERATION_SPEECH: "billing.notifications.blocked_operation.speech",
     BALANCE_BLOCK_OPERATION_LIVEKIT_ROOM: "billing.notifications.blocked_operation.livekit_room",
     BALANCE_BLOCK_OPERATION_LIVEKIT_EGRESS: "billing.notifications.blocked_operation.livekit_egress",
     BALANCE_BLOCK_OPERATION_SEARCH: "billing.notifications.blocked_operation.search",
@@ -93,10 +97,10 @@ def _merge_resource_base_price_override(
 
 def _json_price_to_float(value: JsonValue, field_name: str) -> float:
     if isinstance(value, bool):
-        raise ValueError(f"{field_name} должен быть числом")
+        raise ValueError(f"{field_name} must be a number")
     if isinstance(value, int | float | str):
         return float(value)
-    raise ValueError(f"{field_name} должен быть числом")
+    raise ValueError(f"{field_name} must be a number")
 
 
 class UsageStatsBucket(TypedDict):
@@ -136,12 +140,12 @@ class BillingService:
 
         if tariff_prices is None:
             raise ValueError(
-                "tariff_prices обязателен: передавайте из settings.billing.tariff_prices"
+                'tariff_prices is required: pass from settings.billing.tariff_prices'
             )
         self._tariff_prices: dict[TariffPlan, dict[str, dict[str, float]]] = tariff_prices
 
         if resource_base_prices is None:
-            raise ValueError("resource_base_prices обязателен (передавайте из settings.billing.resource_base_prices)")
+            raise ValueError('resource_base_prices is required (pass from settings.billing.resource_base_prices)')
         self._resource_base_prices_static: dict[str, dict[str, float]] = copy.deepcopy(resource_base_prices)
         _ = self._resource_base_prices_static.pop("tool", None)
 
@@ -175,23 +179,23 @@ class BillingService:
             return
         cid = (company_id or "").strip()
         if not cid:
-            raise ValueError("company_id обязателен для проверки баланса")
+            raise ValueError('company_id is required for the balance check')
         uid = (user_id or "").strip()
         if not uid:
-            raise ValueError("user_id обязателен для проверки баланса и уведомления")
+            raise ValueError('user_id is required for balance check and notification')
         if operation_code not in _BALANCE_BLOCK_OPERATION_I18N_KEYS:
             raise ValueError(
-                f"Неизвестный operation_code для биллинга: {operation_code!r}. " +
-                f"Допустимо: {sorted(_BALANCE_BLOCK_OPERATION_I18N_KEYS.keys())}"
+                f"Unknown billing operation_code: {operation_code!r}. " +
+                f"Allowed: {sorted(_BALANCE_BLOCK_OPERATION_I18N_KEYS.keys())}"
             )
         svc = (notification_service or "").strip()
         if not svc:
-            raise ValueError("notification_service не может быть пустым")
+            raise ValueError('notification_service cannot be empty')
         if cid in self._balance_enforcement_exempt_company_ids:
             return
         company = await self._company_repository.get(cid)
         if company is None:
-            raise ValueError(f"Компания {cid} не найдена")
+            raise ValueError(f"Company {cid} not found")
         if company.balance <= 0:
             ctx = get_context()
             lang = ctx.language if ctx is not None else Language.RU
@@ -241,7 +245,7 @@ class BillingService:
         """
         cid = (company_id or "").strip()
         if not cid:
-            raise ValueError("company_id обязателен для company_may_incur_billable_operation_charge")
+            raise ValueError('company_id is required for company_may_incur_billable_operation_charge')
         if not self._balance_enforcement_enabled:
             return True
         if cid in self._balance_enforcement_exempt_company_ids:
@@ -359,7 +363,7 @@ class BillingService:
         (чтение без записи в компанию).
         """
         if not company_id:
-            raise ValueError("company_id обязателен для правил settlement")
+            raise ValueError('company_id is required for settlement rules')
         if self._shared_storage is None:
             return default_settlement_rules_document()
 
@@ -396,9 +400,9 @@ class BillingService:
         document: SettlementRulesDocument,
     ) -> None:
         if not company_id:
-            raise ValueError("company_id обязателен")
+            raise ValueError('company_id is required')
         if self._shared_storage is None:
-            raise RuntimeError("shared_storage не настроен: сохранение правил settlement невозможно")
+            raise RuntimeError('shared_storage is not configured: cannot persist settlement rules')
         key = company_settlement_rules_storage_key(company_id)
         _ = await self._shared_storage.set(
             key,
@@ -432,7 +436,7 @@ class BillingService:
 
         actual_company = await self._company_repository.get(company.company_id)
         if not actual_company:
-            raise ValueError(f"Компания {company.company_id} не найдена в БД")
+            raise ValueError(f"Company {company.company_id} not found in the database")
 
         is_company = cost_origin == COST_ORIGIN_COMPANY
         effective_cost = 0.0 if is_company else cost
@@ -453,10 +457,10 @@ class BillingService:
         )
 
         logger.info(
-            "Сохраняем запись использования: usage_id=%s, стоимость=%s₽, cost_origin=%s",
-            usage_record.usage_id,
-            effective_cost,
-            cost_origin,
+            "billing.usage_id.cost_origin",
+            usage_id=usage_record.usage_id,
+            effective_cost=effective_cost,
+            cost_origin=cost_origin,
         )
 
         _ = await self._usage_repository.set(usage_record)
@@ -467,22 +471,18 @@ class BillingService:
             actual_company.balance -= effective_cost
             actual_company.current_month_spent += effective_cost
             logger.info(
-                "Обновляем компанию %s: баланс %.2f → %.2f, потрачено %.2f → %.2f",
-                actual_company.company_id,
-                balance_before,
-                actual_company.balance,
-                spent_before,
-                actual_company.current_month_spent,
+                "billing.event",
+                company_id=actual_company.company_id,
+                balance_before=balance_before,
+                balance=actual_company.balance,
+                spent_before=spent_before,
+                current_month_spent=actual_company.current_month_spent,
             )
             _ = await self._company_repository.set(actual_company)
             company.balance = actual_company.balance
             company.current_month_spent = actual_company.current_month_spent
         else:
-            logger.info(
-                "cost_origin=company: ресурс %s, баланс не списан (запись %s — для аналитики)",
-                resource_name,
-                usage_record.usage_id,
-            )
+            logger.info("billing.cost_origin", resource_name=resource_name, usage_id=usage_record.usage_id)
 
         return usage_record.usage_id
 
@@ -501,19 +501,19 @@ class BillingService:
 
         company_id = span.company_id
         if not company_id:
-            raise ValueError(f"span {span_id}: нет company_id в колонке span")
+            raise ValueError(f"span {span_id}: span column has no company_id")
 
         uid = span.user_id
         if not uid:
-            raise ValueError(f"span {span_id}: нет user_id в колонке span")
+            raise ValueError(f"span {span_id}: span column has no user_id")
 
         user = await self._user_repository.get(uid)
         if user is None:
-            raise ValueError(f"span {span_id}: пользователь {uid} не найден")
+            raise ValueError(f"span {span_id}: user {uid} not found")
 
         company = await self._company_repository.get(company_id)
         if company is None:
-            raise ValueError(f"span {span_id}: компания {company_id} не найдена")
+            raise ValueError(f"span {span_id}: company {company_id} not found")
 
         usage_type = rule.usage_type
         quantity = quantity_from_span(rule.quantity_from, span)
@@ -566,11 +566,7 @@ class BillingService:
 
         matched = resolve_matched_rules(rules_doc, span)
         if not matched:
-            logger.warning(
-                "settlement: ни одно правило не матчит span_id=%s operation_name=%s",
-                span.span_id,
-                span.operation_name,
-            )
+            logger.warning("billing.settlement.span_id.operation_name", span_id=span.span_id, operation_name=span.operation_name)
             return 0
 
         count = 0
@@ -588,7 +584,7 @@ class BillingService:
 
     async def _unit_cost_for_company(self, company: Company, resource_name: str) -> float:
         if ":" not in resource_name:
-            raise ValueError(f"Неверный формат resource_name: {resource_name}. Ожидается 'category:resource'")
+            raise ValueError(f"Invalid resource_name format: {resource_name}. Expected 'category:resource'")
 
         category, resource = resource_name.split(":", 1)
         if category == "tool":
@@ -616,7 +612,12 @@ class BillingService:
     async def get_resource_cost_for_company(self, company: Company, resource_name: str) -> float:
         """Получает стоимость единицы ресурса с учётом базового прайса (global + company) и тарифа."""
         unit = await self._unit_cost_for_company(company, resource_name)
-        logger.debug("Цена %s для %s: %s₽", resource_name, company.company_id, unit)
+        logger.debug(
+            "billing.event",
+            resource_name=resource_name,
+            company_id=company.company_id,
+            unit=unit,
+        )
         return unit
 
     async def get_company_usage_stats(self, company_id: str) -> CompanyUsageStats:
@@ -625,7 +626,7 @@ class BillingService:
         current_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
         if not self._usage_repository:
-            raise RuntimeError("UsageRepository не настроен. Невозможно получить статистику.")
+            raise RuntimeError('UsageRepository is not configured. Cannot load statistics.')
 
         all_usage_records = await self._usage_repository.list(limit=10000)
 
@@ -675,9 +676,9 @@ class BillingService:
 
         company = await self._company_repository.get(company_id)
         if not company:
-            raise ValueError(f"Компания {company_id} не найдена")
+            raise ValueError(f"Company {company_id} not found")
         company.current_month_spent = 0.0
         company.billing_period_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
         _ = await self._company_repository.set(company)
-        logger.info(f"Сброшен месячный биллинг для компании {company_id}")
+        logger.info("billing.monthly_reset", company_id=company_id)

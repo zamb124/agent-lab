@@ -37,7 +37,7 @@ Download URL на `FileRecord` — `/{creating-service-segment}/api/v1/files/dow
 |---|---|
 | `POST` | `/uploads` — init (`spec`, `original_name`, `content_type`, `file_size`) → `{ upload_id, file_id, chunk_size_bytes }` |
 | `PUT` | `/uploads/{upload_id}/parts/{part_number}` — raw body чанка (лимит = `chunk_size_bytes`, не весь файл) |
-| `POST` | `/uploads/{upload_id}/complete` → `FileResponse` |
+| `POST` | `/uploads/{upload_id}/complete` → `FileRef` |
 | `DELETE` | `/uploads/{upload_id}` — abort |
 
 Под капотом: S3 multipart. Сессия в Redis. Даже 1-байтный файл идёт через chunked session (одна part).
@@ -54,7 +54,7 @@ Landing `/search`: browser File → chunked `POST/PUT /frontend/api/v1/files/upl
 
 `<platform-markdown-editor>` attach → `uploadPlatformFile` → `{ file_id, url, … }`. Send `POST .../api/mail/messages/send` принимает `attachments[].file_id` (не `content`/`content_base64`). Worker `send_message` резолвит байты через `read_stored_file_by_id` для SMTP.
 
-Mail inbound: materialize на **sync persist** (`MailService._materialize_attachments` → `FilesService.create` + `MailAttachmentFileIndex`); public `MailAttachmentPublic` отдаёт только `file_id` (без `content_base64`). UI download — `url` \| `file_id` + `openFileViewer`.
+Mail inbound: materialize на **sync persist** (`MailService._materialize_attachments` → `FilesService.create` + `MailAttachmentFileIndex`); `MailAttachment.content` — `Field(exclude=True)`, API отдаёт `file_id`. UI download — `url` \| `file_id` + `openFileViewer`.
 
 Доменные операции после upload принимают только `file_id`:
 

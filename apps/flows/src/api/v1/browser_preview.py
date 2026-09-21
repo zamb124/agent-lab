@@ -1,4 +1,5 @@
-"""Интерактивный browser preview gateway для tool chips в чате."""
+"""Browser preview для tool chips в чате: REST-зеркала `flows/browser_preview/*` и протокольные
+хендлеры байтов (screenshot) и HTML (viewer в iframe)."""
 
 from __future__ import annotations
 
@@ -9,40 +10,52 @@ from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, Response
 
 from apps.flows.config import FLOWS_PUBLIC_API_PREFIX, get_settings
+from apps.flows.realtime.browser_preview_operations import (
+    BrowserPreviewClickPayload,
+    BrowserPreviewKeyPayload,
+    BrowserPreviewSessionPayload,
+    BrowserPreviewTakeoverPayload,
+    BrowserPreviewTaskPayload,
+    BrowserPreviewTextPayload,
+    op_flows_browser_preview_active_session,
+    op_flows_browser_preview_click,
+    op_flows_browser_preview_key,
+    op_flows_browser_preview_status,
+    op_flows_browser_preview_takeover,
+    op_flows_browser_preview_takeover_release,
+    op_flows_browser_preview_text,
+)
+from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.services.browser_preview import (
     BrowserPreviewActiveSessionResponse,
     BrowserPreviewTokenClaims,
-    build_browser_preview_urls,
-    get_active_browser_session_for_task,
     verify_browser_preview_token,
-    verify_browser_preview_token_for_task,
 )
 from core.clients.browser.control_types import (
     ControlHumanTakeoverBody,
+    ControlHumanTakeoverResponse,
+    ControlOkResponse,
     ControlPointerClickBody,
+    ControlPointerClickResponse,
     ControlPointerKeyBody,
     ControlPointerTextBody,
     ControlSessionStatusResponse,
 )
+from core.context import require_context
 from core.http import ProxyStrategy, get_httpx_client
-from core.types import JsonObject, parse_json_object, require_json_object
+from core.types import parse_json_object
 
 router = APIRouter(tags=["browser-preview"])
+
+_NO_STORE = {"Cache-Control": "no-store, max-age=0"}
 
 
 def _verify_token_or_403(*, token: str, session_id: str) -> BrowserPreviewTokenClaims:
     try:
         return verify_browser_preview_token(token=token, session_id=session_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-
-
-def _verify_task_token_or_403(*, token: str, task_id: str) -> BrowserPreviewTokenClaims:
-    try:
-        return verify_browser_preview_token_for_task(token=token, task_id=task_id)
     except ValueError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
@@ -80,25 +93,6 @@ async def _browser_get(
         raise HTTPException(status_code=502, detail=_http_error_detail(exc)) from exc
 
 
-async def _browser_post(
-    session_id: str,
-    suffix: str,
-    *,
-    json_body: JsonObject,
-    timeout: float = 8.0,
-) -> httpx.Response:
-    try:
-        async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.DIRECT_ONLY) as client:
-            response = await client.post(
-                _browser_control_url(session_id, suffix),
-                json=json_body,
-            )
-            _ = await response.aread()
-            return response
-    except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502, detail=_http_error_detail(exc)) from exc
-
-
 def _response_detail(response: httpx.Response) -> str:
     text = response.text
     if text:
@@ -125,45 +119,32 @@ def _raise_upstream_error(response: httpx.Response) -> None:
     raise HTTPException(status_code=response.status_code, detail=_response_detail(response))
 
 
-@router.get("/sessions/{session_id}/status")
+@router.get("/sessions/{session_id}/status", response_model=ControlSessionStatusResponse)
 async def browser_preview_status(
     session_id: str,
     token: Annotated[str, Query()],
-) -> JSONResponse:
-    _ = _verify_token_or_403(token=token, session_id=session_id)
-    response = await _browser_get(session_id, "status", timeout=5.0)
-    _raise_upstream_error(response)
-    try:
-        status = ControlSessionStatusResponse.model_validate_json(response.text)
-    except ValueError as exc:
-        raise HTTPException(status_code=502, detail="browser status returned invalid json") from exc
-    return JSONResponse(
-        content=require_json_object(status.model_dump(mode="json"), "browser status response"),
-        headers={"Cache-Control": "no-store, max-age=0"},
+    container: ContainerDep,
+) -> Response:
+    status = await op_flows_browser_preview_status(
+        BrowserPreviewSessionPayload(session_id=session_id, token=token),
+        user=require_context().user,
+        container=container,
     )
+    return Response(content=status.model_dump_json(), media_type="application/json", headers=_NO_STORE)
 
 
-@router.get("/tasks/{task_id}/active-session")
+@router.get("/tasks/{task_id}/active-session", response_model=BrowserPreviewActiveSessionResponse)
 async def browser_preview_active_session(
     task_id: str,
     token: Annotated[str, Query()],
-) -> JSONResponse:
-    _ = _verify_task_token_or_403(token=token, task_id=task_id)
-    active_session_id = await get_active_browser_session_for_task(task_id)
-    if active_session_id is None:
-        payload = BrowserPreviewActiveSessionResponse(session_id=None)
-    else:
-        urls = build_browser_preview_urls(session_id=active_session_id, task_id=task_id)
-        payload = BrowserPreviewActiveSessionResponse(
-            session_id=active_session_id,
-            viewer_url=urls["viewer_url"],
-            screenshot_url=urls["screenshot_url"],
-            status_url=urls["status_url"],
-        )
-    return JSONResponse(
-        content=require_json_object(payload.model_dump(mode="json"), "browser active session response"),
-        headers={"Cache-Control": "no-store, max-age=0"},
+    container: ContainerDep,
+) -> Response:
+    active = await op_flows_browser_preview_active_session(
+        BrowserPreviewTaskPayload(task_id=task_id, token=token),
+        user=require_context().user,
+        container=container,
     )
+    return Response(content=active.model_dump_json(), media_type="application/json", headers=_NO_STORE)
 
 
 @router.get("/sessions/{session_id}/screenshot")
@@ -198,123 +179,87 @@ async def browser_preview_screenshot(
     )
 
 
-@router.post("/sessions/{session_id}/click")
+@router.post("/sessions/{session_id}/click", response_model=ControlPointerClickResponse)
 async def browser_preview_click(
     session_id: str,
     body: ControlPointerClickBody,
     token: Annotated[str, Query()],
-) -> JSONResponse:
-    _ = _verify_token_or_403(token=token, session_id=session_id)
-    response = await _browser_post(
-        session_id,
-        "pointer/click",
-        json_body=require_json_object(body.model_dump(mode="json"), "browser pointer click body"),
-        timeout=10.0,
+    container: ContainerDep,
+) -> Response:
+    clicked = await op_flows_browser_preview_click(
+        BrowserPreviewClickPayload(
+            session_id=session_id,
+            token=token,
+            x=body.x,
+            y=body.y,
+            image_width=body.image_width,
+            image_height=body.image_height,
+            button=body.button,
+            click_count=body.click_count,
+        ),
+        user=require_context().user,
+        container=container,
     )
-    _raise_upstream_error(response)
-    try:
-        payload = parse_json_object(response.text, "browser pointer click response")
-    except ValueError as exc:
-        raise HTTPException(status_code=502, detail="browser click returned invalid json") from exc
-    return JSONResponse(
-        content=payload,
-        headers={"Cache-Control": "no-store, max-age=0"},
-    )
+    return Response(content=clicked.model_dump_json(), media_type="application/json", headers=_NO_STORE)
 
 
-@router.post("/sessions/{session_id}/takeover")
+@router.post("/sessions/{session_id}/takeover", response_model=ControlHumanTakeoverResponse)
 async def browser_preview_takeover(
     session_id: str,
     body: ControlHumanTakeoverBody,
     token: Annotated[str, Query()],
-) -> JSONResponse:
-    _ = _verify_token_or_403(token=token, session_id=session_id)
-    response = await _browser_post(
-        session_id,
-        "human-takeover",
-        json_body=require_json_object(body.model_dump(mode="json"), "browser human takeover body"),
-        timeout=5.0,
+    container: ContainerDep,
+) -> Response:
+    takeover = await op_flows_browser_preview_takeover(
+        BrowserPreviewTakeoverPayload(session_id=session_id, token=token, owner=body.owner),
+        user=require_context().user,
+        container=container,
     )
-    _raise_upstream_error(response)
-    try:
-        payload = parse_json_object(response.text, "browser human takeover response")
-    except ValueError as exc:
-        raise HTTPException(status_code=502, detail="browser takeover returned invalid json") from exc
-    return JSONResponse(
-        content=payload,
-        headers={"Cache-Control": "no-store, max-age=0"},
-    )
+    return Response(content=takeover.model_dump_json(), media_type="application/json", headers=_NO_STORE)
 
 
-@router.post("/sessions/{session_id}/takeover/release")
+@router.post("/sessions/{session_id}/takeover/release", response_model=ControlHumanTakeoverResponse)
 async def browser_preview_takeover_release(
     session_id: str,
     token: Annotated[str, Query()],
-) -> JSONResponse:
-    _ = _verify_token_or_403(token=token, session_id=session_id)
-    response = await _browser_post(
-        session_id,
-        "human-takeover/release",
-        json_body={},
-        timeout=5.0,
+    container: ContainerDep,
+) -> Response:
+    released = await op_flows_browser_preview_takeover_release(
+        BrowserPreviewSessionPayload(session_id=session_id, token=token),
+        user=require_context().user,
+        container=container,
     )
-    _raise_upstream_error(response)
-    try:
-        payload = parse_json_object(response.text, "browser human takeover release response")
-    except ValueError as exc:
-        raise HTTPException(status_code=502, detail="browser takeover release returned invalid json") from exc
-    return JSONResponse(
-        content=payload,
-        headers={"Cache-Control": "no-store, max-age=0"},
-    )
+    return Response(content=released.model_dump_json(), media_type="application/json", headers=_NO_STORE)
 
 
-@router.post("/sessions/{session_id}/key")
+@router.post("/sessions/{session_id}/key", response_model=ControlOkResponse)
 async def browser_preview_key(
     session_id: str,
     body: ControlPointerKeyBody,
     token: Annotated[str, Query()],
-) -> JSONResponse:
-    _ = _verify_token_or_403(token=token, session_id=session_id)
-    response = await _browser_post(
-        session_id,
-        "pointer/key",
-        json_body=require_json_object(body.model_dump(mode="json"), "browser pointer key body"),
-        timeout=5.0,
+    container: ContainerDep,
+) -> Response:
+    pressed = await op_flows_browser_preview_key(
+        BrowserPreviewKeyPayload(session_id=session_id, token=token, key=body.key),
+        user=require_context().user,
+        container=container,
     )
-    _raise_upstream_error(response)
-    try:
-        payload = parse_json_object(response.text, "browser pointer key response")
-    except ValueError as exc:
-        raise HTTPException(status_code=502, detail="browser key returned invalid json") from exc
-    return JSONResponse(
-        content=payload,
-        headers={"Cache-Control": "no-store, max-age=0"},
-    )
+    return Response(content=pressed.model_dump_json(), media_type="application/json", headers=_NO_STORE)
 
 
-@router.post("/sessions/{session_id}/text")
+@router.post("/sessions/{session_id}/text", response_model=ControlOkResponse)
 async def browser_preview_text(
     session_id: str,
     body: ControlPointerTextBody,
     token: Annotated[str, Query()],
-) -> JSONResponse:
-    _ = _verify_token_or_403(token=token, session_id=session_id)
-    response = await _browser_post(
-        session_id,
-        "pointer/text",
-        json_body=require_json_object(body.model_dump(mode="json"), "browser pointer text body"),
-        timeout=5.0,
+    container: ContainerDep,
+) -> Response:
+    typed = await op_flows_browser_preview_text(
+        BrowserPreviewTextPayload(session_id=session_id, token=token, text=body.text),
+        user=require_context().user,
+        container=container,
     )
-    _raise_upstream_error(response)
-    try:
-        payload = parse_json_object(response.text, "browser pointer text response")
-    except ValueError as exc:
-        raise HTTPException(status_code=502, detail="browser text returned invalid json") from exc
-    return JSONResponse(
-        content=payload,
-        headers={"Cache-Control": "no-store, max-age=0"},
-    )
+    return Response(content=typed.model_dump_json(), media_type="application/json", headers=_NO_STORE)
 
 
 @router.get("/sessions/{session_id}/viewer", response_class=HTMLResponse)

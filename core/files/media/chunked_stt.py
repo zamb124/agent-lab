@@ -57,13 +57,13 @@ def normalize_audio_to_mp3_for_stt(
 ) -> tuple[bytes, str]:
     """Одна дорожка → MP3 теми же параметрами, что и сегменты `split_audio_for_stt_chunks`."""
     if not audio_bytes:
-        raise ValueError("audio_bytes не может быть пустым.")
+        raise ValueError("audio_bytes cannot be empty.")
     if chunk_bitrate_kbps <= 0:
-        raise ValueError("chunk_bitrate_kbps должен быть больше 0.")
+        raise ValueError("chunk_bitrate_kbps must be greater than 0.")
     if chunk_sample_rate_hz <= 0:
-        raise ValueError("chunk_sample_rate_hz должен быть больше 0.")
+        raise ValueError("chunk_sample_rate_hz must be greater than 0.")
     if chunk_channels <= 0:
-        raise ValueError("chunk_channels должен быть больше 0.")
+        raise ValueError("chunk_channels must be greater than 0.")
 
     input_extension = _audio_input_extension(file_name=file_name, content_type=content_type)
     file_stem = Path(file_name).stem
@@ -107,15 +107,15 @@ def normalize_audio_to_mp3_for_stt(
             raise RuntimeError(message)
         mp3_bytes = out_path.read_bytes()
         if len(mp3_bytes) == 0:
-            raise ValueError("Нормализация STT дала пустой MP3.")
+            raise ValueError("STT normalization produced an empty MP3.")
         return mp3_bytes, out_file_name
 
 
 def _audio_input_extension(file_name: str, content_type: str) -> str:
     if file_name == "":
-        raise ValueError("file_name не может быть пустым.")
+        raise ValueError("file_name cannot be empty.")
     if content_type == "":
-        raise ValueError("content_type не может быть пустым.")
+        raise ValueError("content_type cannot be empty.")
     suffix = Path(file_name).suffix.lower().lstrip(".")
     if suffix != "":
         return suffix
@@ -178,17 +178,17 @@ def split_audio_for_stt_chunks(
         Список кортежей (file_name, bytes, content_type) по одному на чанк.
     """
     if not audio_bytes:
-        raise ValueError("audio_bytes не может быть пустым.")
+        raise ValueError("audio_bytes cannot be empty.")
     if max_upload_bytes <= 0:
-        raise ValueError("max_upload_bytes должен быть больше 0.")
+        raise ValueError("max_upload_bytes must be greater than 0.")
     if chunk_duration_seconds <= 0:
-        raise ValueError("chunk_duration_seconds должен быть больше 0.")
+        raise ValueError("chunk_duration_seconds must be greater than 0.")
     if chunk_bitrate_kbps <= 0:
-        raise ValueError("chunk_bitrate_kbps должен быть больше 0.")
+        raise ValueError("chunk_bitrate_kbps must be greater than 0.")
     if chunk_sample_rate_hz <= 0:
-        raise ValueError("chunk_sample_rate_hz должен быть больше 0.")
+        raise ValueError("chunk_sample_rate_hz must be greater than 0.")
     if chunk_channels <= 0:
-        raise ValueError("chunk_channels должен быть больше 0.")
+        raise ValueError("chunk_channels must be greater than 0.")
 
     input_extension = _audio_input_extension(file_name=file_name, content_type=content_type)
     file_stem = Path(file_name).stem
@@ -238,11 +238,11 @@ def split_audio_for_stt_chunks(
             raise RuntimeError(message)
         segment_files = sorted(Path(work_dir).glob("segment-*.mp3"))
         if len(segment_files) == 0:
-            raise RuntimeError("ffmpeg не сформировал ни одного STT чанка.")
+            raise RuntimeError("ffmpeg produced no STT chunks.")
         for chunk_index, segment_file in enumerate(segment_files, start=1):
             chunk_bytes = segment_file.read_bytes()
             if len(chunk_bytes) == 0:
-                raise ValueError(f"STT chunk #{chunk_index} получился пустым.")
+                raise ValueError(f"STT chunk #{chunk_index} is empty.")
             if len(chunk_bytes) > max_upload_bytes:
                 message = (
                     "STT chunk превышает допустимый размер upload. "
@@ -253,7 +253,7 @@ def split_audio_for_stt_chunks(
             chunk_file_name = f"{file_stem}-part-{chunk_index:04d}.mp3"
             chunks.append((chunk_file_name, chunk_bytes, "audio/mpeg"))
     if len(chunks) == 0:
-        raise ValueError("Не удалось сформировать чанки для STT.")
+        raise ValueError("Failed to build STT chunks.")
     return chunks
 
 
@@ -287,7 +287,7 @@ async def transcribe_audio_with_chunking(
         Кортеж (полный текст, идентификатор провайдера из последнего ответа STT).
     """
     if company_id == "":
-        raise ValueError("company_id обязателен для transcribe_audio_with_chunking.")
+        raise ValueError("company_id is required for transcribe_audio_with_chunking.")
 
     job_start = time.perf_counter()
     settings = get_settings()
@@ -352,21 +352,19 @@ async def transcribe_audio_with_chunking(
                     if exc.response.status_code != 413:
                         raise
                     logger.warning(
-                        "STT normalized single request returned 413; switching to chunked mode: "
-                        + "job_id=%s file=%s bytes=%s",
-                        job_id,
-                        file_name,
-                        len(audio_bytes),
+                        "files.stt.normalized.single.request.returned",
+                        job_id=job_id,
+                        file=file_name,
+                        bytes=len(audio_bytes),
                     )
                 except ValueError as exc:
                     if not is_stt_format_not_recognized_error(exc):
                         raise
                     logger.warning(
-                        "STT normalized single request returned format error; switching to chunked mode: "
-                        + "job_id=%s file=%s error=%s",
-                        job_id,
-                        file_name,
-                        str(exc),
+                        "files.stt.normalized.single.request.returned",
+                        job_id=job_id,
+                        file=file_name,
+                        error=str(exc),
                     )
         else:
             try:
@@ -381,21 +379,20 @@ async def transcribe_audio_with_chunking(
                 if exc.response.status_code != 413:
                     raise
                 logger.warning(
-                    "STT single request returned 413; switching to chunked mode: job_id=%s file=%s bytes=%s",
-                    job_id,
-                    file_name,
-                    len(audio_bytes),
+                    "files.stt.single.request.returned.switching",
+                    job_id=job_id,
+                    file=file_name,
+                    bytes=len(audio_bytes),
                 )
             except ValueError as exc:
                 if not is_stt_format_not_recognized_error(exc):
                     raise
                 logger.warning(
-                    "STT single request returned format error; switching to chunked mode: "
-                    + "job_id=%s file=%s content_type=%s error=%s",
-                    job_id,
-                    file_name,
-                    content_type,
-                    str(exc),
+                    "files.stt.single.request.returned.format",
+                    job_id=job_id,
+                    file=file_name,
+                    content_type=content_type,
+                    error=str(exc),
                 )
 
     chunks = await asyncio.to_thread(
@@ -426,7 +423,7 @@ async def transcribe_audio_with_chunking(
         if chunk_text != "":
             chunk_texts.append(chunk_text)
     if last_provider == "":
-        raise ValueError("STT не вернул идентификатор провайдера (last_provider пуст).")
+        raise ValueError("STT did not return a provider id (last_provider is empty).")
     full_text = "\n".join(chunk_texts)
     log_voice_stt_response(
         provider=last_provider,

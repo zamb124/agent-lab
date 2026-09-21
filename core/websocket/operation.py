@@ -8,6 +8,8 @@ from typing import Generic, Never, Protocol, TypeVar
 
 from pydantic import BaseModel
 
+from core.errors.boundary import PlatformBoundaryError
+from core.models.base import StrictBaseModel
 from core.models.identity_models import User
 from core.types import JsonObject, JsonValue
 from core.websocket.command_router import (
@@ -55,9 +57,12 @@ WS_COMMAND_ERROR_HTTP_STATUS: dict[str, int] = {
     "ws_unknown_type": 404,
     "ws_handler_not_found": 404,
     "not_found": 404,
+    "unauthorized": 401,
     "forbidden": 403,
     "conflict": 409,
+    "gone": 410,
     "rate_limited": 429,
+    "method_not_allowed": 405,
     "unavailable": 503,
     "upstream": 502,
     "ws_invalid_result": 500,
@@ -67,36 +72,100 @@ WS_COMMAND_ERROR_HTTP_STATUS: dict[str, int] = {
 
 def ws_command_error_status(error: WsCommandError) -> int:
     if error.code not in WS_COMMAND_ERROR_HTTP_STATUS:
-        raise ValueError(f"неизвестный WsCommandError.code: {error.code}")
+        raise ValueError(f"unknown WsCommandError.code: {error.code}")
     return WS_COMMAND_ERROR_HTTP_STATUS[error.code]
 
 
-def raise_forbidden(exc: Exception) -> Never:
-    raise WsCommandError("forbidden", str(exc)) from exc
+def _command_error(
+    transport_code: str,
+    exc: Exception,
+    detail: str | None,
+    *,
+    error_code: str | None,
+    error_params: JsonObject | None,
+) -> WsCommandError:
+    message = detail if detail is not None else str(exc)
+    if isinstance(exc, PlatformBoundaryError):
+        resolved_code = error_code if error_code is not None else exc.error_code
+        resolved_params = error_params if error_params is not None else exc.error_params
+    else:
+        resolved_code = error_code if error_code is not None else transport_code
+        resolved_params = error_params if error_params is not None else {}
+    return WsCommandError(
+        transport_code,
+        message,
+        error_code=resolved_code,
+        error_params=resolved_params,
+    )
 
 
-def raise_not_found(exc: Exception, detail: str | None = None) -> Never:
-    raise WsCommandError("not_found", detail if detail is not None else str(exc)) from exc
+def raise_forbidden(
+    exc: Exception,
+    *,
+    error_code: str | None = None,
+    error_params: JsonObject | None = None,
+) -> Never:
+    raise _command_error("forbidden", exc, None, error_code=error_code, error_params=error_params) from exc
 
 
-def raise_invalid(exc: Exception) -> Never:
-    raise WsCommandError("ws_invalid_payload", str(exc)) from exc
+def raise_not_found(
+    exc: Exception,
+    detail: str | None = None,
+    *,
+    error_code: str | None = None,
+    error_params: JsonObject | None = None,
+) -> Never:
+    raise _command_error("not_found", exc, detail, error_code=error_code, error_params=error_params) from exc
 
 
-def raise_conflict(exc: Exception, detail: str | None = None) -> Never:
-    raise WsCommandError("conflict", detail if detail is not None else str(exc)) from exc
+def raise_invalid(
+    exc: Exception,
+    *,
+    error_code: str | None = None,
+    error_params: JsonObject | None = None,
+) -> Never:
+    raise _command_error("ws_invalid_payload", exc, None, error_code=error_code, error_params=error_params) from exc
 
 
-def raise_internal(exc: Exception) -> Never:
-    raise WsCommandError("internal", str(exc)) from exc
+def raise_conflict(
+    exc: Exception,
+    detail: str | None = None,
+    *,
+    error_code: str | None = None,
+    error_params: JsonObject | None = None,
+) -> Never:
+    raise _command_error("conflict", exc, detail, error_code=error_code, error_params=error_params) from exc
 
 
-def raise_upstream(exc: Exception) -> Never:
-    raise WsCommandError("upstream", str(exc)) from exc
+def raise_internal(
+    exc: Exception,
+    *,
+    error_code: str | None = None,
+    error_params: JsonObject | None = None,
+) -> Never:
+    raise _command_error("internal", exc, None, error_code=error_code, error_params=error_params) from exc
 
 
-def raise_unavailable(exc: Exception) -> Never:
-    raise WsCommandError("unavailable", str(exc)) from exc
+def raise_upstream(
+    exc: Exception,
+    *,
+    error_code: str | None = None,
+    error_params: JsonObject | None = None,
+) -> Never:
+    raise _command_error("upstream", exc, None, error_code=error_code, error_params=error_params) from exc
+
+
+def raise_unavailable(
+    exc: Exception,
+    *,
+    error_code: str | None = None,
+    error_params: JsonObject | None = None,
+) -> Never:
+    raise _command_error("unavailable", exc, None, error_code=error_code, error_params=error_params) from exc
+
+
+class EmptyPayload(StrictBaseModel):
+    """Команда без аргументов: WS `payload: null|{}` и REST без тела/query."""
 
 
 @dataclass(frozen=True)

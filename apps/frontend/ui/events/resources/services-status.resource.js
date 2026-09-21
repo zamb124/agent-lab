@@ -1,7 +1,6 @@
 /**
- * Ресурс статуса сервисов — health всех микросервисов платформы.
- *
- * API: GET /frontend/api/services/status → { services: [{id, name, healthy, ...}] }
+ * Публичная витрина health микросервисов — anonymous `GET /frontend/api/services/status`
+ * (`OffsetPage[ServiceStatus]`), доступна и до сессии, поэтому HTTP, не команда.
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
@@ -14,5 +13,6 @@ export const servicesStatusLoadOp = createAsyncOp({
     request: async () => await httpRequest({
         method: 'GET',
         url: '/frontend/api/services/status',
+        query: { limit: 100, offset: 0 },
     }),
 });

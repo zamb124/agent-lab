@@ -65,7 +65,7 @@ class FileRetentionBackfillService:
             _ = await self._repository.set(patched)
             updated += 1
         if updated:
-            logger.info("file retention backfill batch", updated_count=updated)
+            logger.info("files.file.retention.backfill.batch", updated_count=updated)
         return RetentionBackfillBatchResult(
             scanned=len(records),
             updated=updated,

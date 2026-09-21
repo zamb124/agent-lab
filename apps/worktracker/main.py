@@ -30,7 +30,7 @@ async def on_startup(
 ) -> None:
     _ = app, container, settings
     register_worktracker_ws_commands()
-    logger.info("Worktracker Service: command-router op_* зарегистрирован")
+    logger.info("worktracker.service.command.router.op_")
 
 
 app = create_service_app(

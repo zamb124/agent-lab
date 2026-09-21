@@ -85,7 +85,7 @@ class SyncContainer(BaseContainer):
 def _create_sync_container() -> SyncContainer:
     settings = get_settings()
     if not settings.database.sync_url:
-        raise ValueError("database.sync_url не задан")
+        raise ValueError("database.sync_url is not set")
     return SyncContainer(
         db_url=settings.database.sync_url,
         shared_db_url=settings.database.shared_url,

@@ -403,12 +403,6 @@ export class CRMNamespaceTasksPage extends CRMNamespacePage {
     connectedCallback() {
         super.connectedCallback();
         this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => this._loadTasks());
-        this.useEvent(CoreEvents.WS_CONNECTED, () => {
-            const items = this._tasks.items;
-            if (items.some((row) => row && ACTIVE_STATUSES.has(row.status))) {
-                this._loadTasks();
-            }
-        });
         this._loadTasks();
     }
 

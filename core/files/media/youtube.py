@@ -50,14 +50,14 @@ def _download_audio_sync(url: str, output_dir: str) -> tuple[bytes, str, str]:
     if len(mp3_files) == 0:
         all_files = list(Path(output_dir).iterdir())
         if len(all_files) == 0:
-            raise RuntimeError(f"yt-dlp не скачал ни одного файла: {url}")
+            raise RuntimeError(f"yt-dlp did not download any files: {url}")
         target = all_files[0]
     else:
         target = mp3_files[0]
 
     audio_bytes = target.read_bytes()
     if len(audio_bytes) == 0:
-        raise ValueError(f"Скачанный аудиофайл пуст: {url}")
+        raise ValueError(f"Downloaded audio file is empty: {url}")
 
     safe_title = re.sub(r'[^\w\s\-.]', '_', title)[:80]
     file_name = f"{safe_title}.mp3"
@@ -76,7 +76,7 @@ async def download_audio_from_url(*, url: str) -> tuple[bytes, str, str]:
         (audio_bytes, file_name, mime_type)
     """
     if url == "" or url.strip() == "":
-        raise ValueError("URL не может быть пустым.")
+        raise ValueError("URL cannot be empty.")
 
     if not is_youtube_url(url) and not _looks_like_video_platform_url(url):
         return await _download_direct_media(url)
@@ -110,7 +110,7 @@ async def _download_direct_media(url: str) -> tuple[bytes, str, str]:
     _ = response.raise_for_status()
     data = response.content
     if len(data) == 0:
-        raise ValueError(f"Скачанный файл пуст: {url}")
+        raise ValueError(f"Downloaded file is empty: {url}")
     content_type = (
         response.headers["content-type"]
         if "content-type" in response.headers

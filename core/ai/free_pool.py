@@ -157,7 +157,7 @@ def compute_platform_free_record_scores(
         catalog_record = catalog_by_key.get((record.provider, record.id))
         if catalog_record is None:
             raise ValueError(
-                f"free-pool record {record.provider}:{record.id} отсутствует в каталоге"
+                f"free-pool record {record.provider}:{record.id} is missing from the catalog"
             )
         computed = compute_platform_model_score(
             catalog_record,
@@ -289,7 +289,7 @@ async def fetch_artificial_analysis_indices(
 ) -> dict[str, ArtificialAnalysisIndices]:
     registry = create_model_catalog_adapter_registry(settings)
     if not registry.has("openrouter"):
-        raise ValueError("openrouter adapter отсутствует в registry")
+        raise ValueError('openrouter adapter is missing from the registry')
     adapter = registry.get("openrouter")
     if not adapter.is_configured():
         return {}
@@ -419,7 +419,7 @@ def parse_platform_free_models(raw_cache_payload: str | None) -> list[PlatformFr
             raise ValueError(f"platform.free_models.cache.models[{idx}].score must be numeric")
         free_reason = _json_str(item.get("free_reason"))
         if free_reason is None:
-            raise ValueError(f"platform.free_models.cache.models[{idx}].free_reason обязателен")
+            raise ValueError(f"platform.free_models.cache.models[{idx}].free_reason is required")
         records.append(
             PlatformFreeModelRecord(
                 provider=provider,
@@ -512,7 +512,7 @@ async def _write_platform_free_models_cache(
 ) -> None:
     if not records:
         raise RuntimeError(
-            "platform free-models: пустой records — Redis cache не затирается"
+            'platform free-models: empty records — Redis cache is not overwritten'
         )
     redis_ok = await redis_client.set(
         PLATFORM_FREE_MODELS_CACHE_KEY,
@@ -520,7 +520,7 @@ async def _write_platform_free_models_cache(
         ttl=settings.llm.platform_free_pool.cache_ttl_seconds,
     )
     if not redis_ok:
-        raise RuntimeError("не удалось записать platform free-models cache в Redis")
+        raise RuntimeError('failed to write platform free-models cache to Redis')
 
 
 def _cache_result_payload(

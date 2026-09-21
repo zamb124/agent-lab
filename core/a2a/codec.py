@@ -339,7 +339,7 @@ def messages_from_json_list(items: Sequence[object]) -> list[Message]:
             payload = require_json_object(cast(JsonObject, item), "Message")
             result.append(message_from_json_dict(payload))
         else:
-            raise ValueError(f"Ожидается Message или dict, получен {type(item)}")
+            raise ValueError(f"Expected Message or dict, got {type(item)}")
     return result
 
 

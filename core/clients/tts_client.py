@@ -62,7 +62,7 @@ def _sanitize_tts_voice_id(voice: str | None) -> str | None:
         return None
     cleaned = sanitize_text_for_speech_backend(voice)
     if cleaned == "":
-        raise ValueError("TTS: пустой voice после нормализации Unicode.")
+        raise ValueError("TTS: empty voice after Unicode normalization.")
     return cleaned
 
 
@@ -160,15 +160,15 @@ class LitserveTTSClient(BaseTTSClient):
         timeout: float,
     ) -> None:
         if base_url == "":
-            raise ValueError("TTS litserve base_url не может быть пустым.")
+            raise ValueError("TTS litserve base_url cannot be empty.")
         if model == "":
-            raise ValueError("TTS litserve model не может быть пустым.")
+            raise ValueError("TTS litserve model cannot be empty.")
         if default_response_format == "":
-            raise ValueError("TTS litserve response_format не может быть пустым.")
+            raise ValueError("TTS litserve response_format cannot be empty.")
         if default_sample_rate <= 0:
-            raise ValueError("TTS litserve sample_rate должен быть больше 0.")
+            raise ValueError("TTS litserve sample_rate must be greater than 0.")
         if timeout <= 0:
-            raise ValueError("TTS litserve timeout должен быть больше 0.")
+            raise ValueError("TTS litserve timeout must be greater than 0.")
 
         self._base_url: str = base_url.rstrip("/")
         self._model: str = model
@@ -188,14 +188,14 @@ class LitserveTTSClient(BaseTTSClient):
     ) -> TTSResult:
         text = sanitize_text_for_speech_backend(text)
         if text == "":
-            raise ValueError("TTS litserve: пустой text.")
+            raise ValueError("TTS litserve: text is empty.")
         chosen_voice = _sanitize_tts_voice_id(voice or self._default_voice)
         chosen_format = response_format or self._default_format
         chosen_sample_rate = sample_rate or self._default_sample_rate
         if chosen_format not in _MIME_BY_FORMAT:
             allowed_formats = ", ".join(sorted(_MIME_BY_FORMAT))
             raise ValueError(
-                f"TTS litserve: неизвестный response_format={chosen_format!r} (допустимые: {allowed_formats})"
+                f"TTS litserve: unknown response_format={chosen_format!r} (allowed: {allowed_formats})"
             )
 
         url = f"{self._base_url}/v1/audio/speech"
@@ -214,12 +214,12 @@ class LitserveTTSClient(BaseTTSClient):
         if response.is_error:
             detail = _tts_upstream_error_summary(response)
             logger.warning(
-                "litserve_tts.http_error status=%s url=%s detail=%s content_type=%s body_len=%s",
-                response.status_code,
-                url,
-                detail,
-                response.headers.get("content-type"),
-                len(response.content),
+                "clients.litserve_tts",
+                status=response.status_code,
+                url=url,
+                detail=detail,
+                content_type=response.headers.get('content-type'),
+                body_len=len(response.content),
             )
             raise TTSLitserveHttpError(
                 status_code=response.status_code,
@@ -253,19 +253,19 @@ class CloudRuTTSClient(BaseTTSClient):
         timeout: float,
     ) -> None:
         if api_key == "":
-            raise ValueError("TTS cloud_ru api_key не может быть пустым.")
+            raise ValueError("TTS cloud_ru api_key cannot be empty.")
         if base_url == "":
-            raise ValueError("TTS cloud_ru base_url не может быть пустым.")
+            raise ValueError("TTS cloud_ru base_url cannot be empty.")
         if model == "":
-            raise ValueError("TTS cloud_ru model не может быть пустым.")
+            raise ValueError("TTS cloud_ru model cannot be empty.")
         if default_voice == "":
-            raise ValueError("TTS cloud_ru voice не может быть пустым.")
+            raise ValueError("TTS cloud_ru voice cannot be empty.")
         if default_response_format == "":
-            raise ValueError("TTS cloud_ru response_format не может быть пустым.")
+            raise ValueError("TTS cloud_ru response_format cannot be empty.")
         if default_sample_rate <= 0:
-            raise ValueError("TTS cloud_ru sample_rate должен быть больше 0.")
+            raise ValueError("TTS cloud_ru sample_rate must be greater than 0.")
         if timeout <= 0:
-            raise ValueError("TTS cloud_ru timeout должен быть больше 0.")
+            raise ValueError("TTS cloud_ru timeout must be greater than 0.")
 
         self._api_key: str = api_key
         self._base_url: str = base_url
@@ -286,15 +286,15 @@ class CloudRuTTSClient(BaseTTSClient):
     ) -> TTSResult:
         text = sanitize_text_for_speech_backend(text)
         if text == "":
-            raise ValueError("TTS cloud_ru: пустой text.")
+            raise ValueError("TTS cloud_ru: text is empty.")
         chosen_voice = _sanitize_tts_voice_id(voice or self._default_voice)
         if chosen_voice is None:
-            raise ValueError("TTS cloud_ru: voice не задан.")
+            raise ValueError("TTS cloud_ru: voice is not set.")
         chosen_format = response_format or self._default_format
         chosen_sample_rate = sample_rate or self._default_sample_rate
         if chosen_format not in _MIME_BY_FORMAT:
             raise ValueError(
-                f"TTS cloud_ru: неизвестный response_format={chosen_format!r}"
+                f"TTS cloud_ru: unknown response_format={chosen_format!r}"
             )
 
         payload: JsonObject = {
@@ -337,9 +337,9 @@ class YandexTTSClient(BaseTTSClient):
         sample_rate: int | None = None,
     ) -> TTSResult:
         raise NotImplementedError(
-            "TTS yandex: HTTP-клиент Yandex SpeechKit ещё не реализован "
-            + "(нужны ключи `voice.tts.yandex.api_key` и `folder_id`). "
-            + "Используйте provider=`litserve` или `cloud_ru`."
+            "TTS yandex: Yandex SpeechKit HTTP client is not implemented "
+            + "(requires `voice.tts.yandex.api_key` and `folder_id`). "
+            + "Use provider=`litserve` or `cloud_ru`."
         )
 
 
@@ -363,9 +363,9 @@ class SberTTSClient(BaseTTSClient):
         sample_rate: int | None = None,
     ) -> TTSResult:
         raise NotImplementedError(
-            "TTS sber: HTTP-клиент Sber SmartSpeech ещё не реализован "
-            + "(нужны ключи `voice.tts.sber.client_id` и `client_secret`). "
-            + "Используйте provider=`litserve` или `cloud_ru`."
+            "TTS sber: Sber SmartSpeech HTTP client is not implemented "
+            + "(requires `voice.tts.sber.client_id` and `client_secret`). "
+            + "Use provider=`litserve` or `cloud_ru`."
         )
 
 
@@ -383,7 +383,7 @@ class MockTTSClient(BaseTTSClient):
     ) -> TTSResult:
         text = sanitize_text_for_speech_backend(text)
         if text == "":
-            raise ValueError("TTS mock: пустой text.")
+            raise ValueError("TTS mock: text is empty.")
         chosen_format = response_format or "wav"
         chosen_sample_rate = sample_rate or 8000
         resolved_voice = _sanitize_tts_voice_id(voice)
@@ -488,7 +488,7 @@ class TTSClientFactory:
         для выбранного провайдера.
         """
         if provider_name == "":
-            raise ValueError("TTS provider не задан после tier-резолва.")
+            raise ValueError("TTS provider is not set after tier resolve.")
 
         sec = secrets or {}
 
@@ -496,12 +496,12 @@ class TTSClientFactory:
             backend = cfg.litserve
             if not backend.enabled:
                 raise ValueError(
-                    "TTS провайдер `litserve` выключен в `voice.tts.litserve.enabled`."
+                    "TTS provider `litserve` is disabled in `voice.tts.litserve.enabled`."
                 )
             chosen_model = model or cfg.default_model
             if not chosen_model:
                 raise ValueError(
-                    "TTS litserve: model не задан ни в override, ни в "
+                    "TTS litserve: model is set neither in override nor in "
                     + "`voice.tts.default_model`."
                 )
             return LitserveTTSClient(
@@ -524,10 +524,10 @@ class TTSClientFactory:
                 merged = merged.model_copy(update=patch_cr)
             if not merged.enabled:
                 raise ValueError(
-                    "TTS провайдер `cloud_ru` выключен в `voice.tts.cloud_ru.enabled`."
+                    "TTS provider `cloud_ru` is disabled in `voice.tts.cloud_ru.enabled`."
                 )
             if not merged.api_key:
-                raise ValueError("TTS cloud_ru api_key не настроен.")
+                raise ValueError("TTS cloud_ru api_key is not configured.")
             return CloudRuTTSClient(
                 api_key=merged.api_key,
                 base_url=merged.base_url,
@@ -564,7 +564,7 @@ class TTSClientFactory:
         if provider_name == "mock":
             return MockTTSClient()
 
-        raise ValueError(f"Неизвестный TTS провайдер: {provider_name!r}")
+        raise ValueError(f"Unknown TTS provider: {provider_name!r}")
 
 
 __all__ = [

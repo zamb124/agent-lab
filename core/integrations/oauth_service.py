@@ -107,7 +107,7 @@ class OAuthService:
         token_url = auth_provider.token_url
         if "{subdomain}" in auth_url or "{subdomain}" in token_url:
             if not amocrm_subdomain or not str(amocrm_subdomain).strip():
-                raise ValueError("OAuth amocrm: amocrm_subdomain обязателен (поддомен аккаунта amo).")
+                raise ValueError('OAuth amocrm: amocrm_subdomain is required (amo account subdomain).')
             auth_url = interpolate_subdomain_in_url(auth_url, str(amocrm_subdomain))
             token_url = interpolate_subdomain_in_url(token_url, str(amocrm_subdomain))
 
@@ -198,7 +198,7 @@ class OAuthService:
                 )
             if not is_allowed_integration_return_origin(ro, pub_ref):
                 raise ValueError(
-                    "return_origin не из разрешённого platform brand apex или dev-кластера"
+                    'return_origin is not an allowed platform brand apex or dev cluster'
                 )
             state_payload["post_auth_redirect_origin"] = ro
         if oauth_ui_locale == "ru" or oauth_ui_locale == "en":
@@ -230,8 +230,11 @@ class OAuthService:
                 }
             )
         logger.info(
-            "OAuth auth URL built: provider=%s service=%s user=%s company=%s",
-            provider.value, service, user_id, company_id,
+            "integrations.oauth.auth.url.built.provider",
+            provider=provider.value,
+            service=service,
+            user=user_id,
+            company=company_id,
         )
         return f"{oauth_config.auth_url}?{query}"
 
@@ -350,9 +353,11 @@ class OAuthService:
                 )
             if token_response.status_code >= 400:
                 logger.error(
-                    "OAuth token exchange failed: provider=%s service=%s status=%d body=%s",
-                    provider_str, service, token_response.status_code,
-                    token_response.text[:500],
+                    "integrations.oauth.token.exchange.failed.provider",
+                    provider=provider_str,
+                    service=service,
+                    status=token_response.status_code,
+                    body=token_response.text[:500],
                 )
             _ = token_response.raise_for_status()
             token_payload = parse_json_object(token_response.content, "oauth.token.response")
@@ -376,7 +381,7 @@ class OAuthService:
         metadata: JsonObject = {}
         if provider == IntegrationProvider.AMOCRM:
             if not amocrm_subdomain:
-                raise ValueError("OAuth amocrm: в state отсутствует amocrm_subdomain")
+                raise ValueError('OAuth amocrm: state is missing amocrm_subdomain')
             metadata["amocrm_subdomain"] = amocrm_subdomain
 
         credential = IntegrationCredential(
@@ -413,8 +418,11 @@ class OAuthService:
 
         await self._repository.upsert(credential)
         logger.info(
-            "OAuth credential saved: provider=%s service=%s user=%s company=%s",
-            provider.value, service, user_id, company_id,
+            "integrations.oauth.credential.saved.provider.service",
+            provider=provider.value,
+            service=service,
+            user=user_id,
+            company=company_id,
         )
         if _oauth_credential_saved_hook is not None:
             await _oauth_credential_saved_hook(credential)
@@ -441,9 +449,10 @@ class OAuthService:
         """
         if not credential.refresh_token:
             logger.warning(
-                "OAuth refresh impossible (no refresh_token), deleting credential: "
-                + "provider=%s service=%s user=%s",
-                credential.provider, credential.service, credential.user_id,
+                "integrations.oauth.refresh.impossible.refresh_token.deleting",
+                provider=credential.provider,
+                service=credential.service,
+                user=credential.user_id,
             )
             _ = await self._repository.delete_by_user_provider_service(
                 company_id=credential.company_id,
@@ -460,7 +469,7 @@ class OAuthService:
         if credential.provider == IntegrationProvider.AMOCRM:
             sub_raw = credential.metadata.get("amocrm_subdomain")
             if not isinstance(sub_raw, str) or not sub_raw.strip():
-                raise RuntimeError("amocrm: в credential.metadata нет amocrm_subdomain")
+                raise RuntimeError('amocrm: credential.metadata has no amocrm_subdomain')
             amocrm_sub = sub_raw.strip()
 
         oauth_config = self.get_provider_config(
@@ -500,10 +509,11 @@ class OAuthService:
 
             if oauth_error == "invalid_grant":
                 logger.warning(
-                    "OAuth refresh invalid_grant, deleting credential: "
-                    + "provider=%s service=%s user=%s desc=%s",
-                    credential.provider, credential.service, credential.user_id,
-                    oauth_error_desc,
+                    "integrations.oauth.refresh.invalid_grant.deleting.credential",
+                    provider=credential.provider,
+                    service=credential.service,
+                    user=credential.user_id,
+                    desc=oauth_error_desc,
                 )
                 _ = await self._repository.delete_by_user_provider_service(
                     company_id=credential.company_id,
@@ -581,8 +591,10 @@ class OAuthService:
         if credential.is_expired() or self._is_about_to_expire(credential):
             credential = await self.refresh_token(credential)
             logger.info(
-                "OAuth token auto-refreshed: provider=%s service=%s user=%s",
-                provider, service, user_id,
+                "integrations.oauth.token.auto.refreshed.provider",
+                provider=provider,
+                service=service,
+                user=user_id,
             )
 
         return credential

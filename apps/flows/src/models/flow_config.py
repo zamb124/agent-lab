@@ -40,20 +40,20 @@ Permission = str | list[str] | None
 
 def _parse_flow_config_int(value: object, field_name: str) -> int:
     if isinstance(value, bool):
-        raise ValueError(f"{field_name}: ожидается целое число, получено bool")
+        raise ValueError(f"{field_name}: expected integer, got bool")
     if isinstance(value, int):
         return value
     if isinstance(value, str):
         stripped = value.strip()
         if not stripped:
-            raise ValueError(f"{field_name}: ожидается целое число, получена пустая строка")
+            raise ValueError(f"{field_name}: expected integer, got an empty string")
         try:
             return int(stripped, 10)
         except ValueError as exc:
             raise ValueError(
-                f"{field_name}: ожидается целое число, получено {value!r}"
+                f"{field_name}: expected integer, got {value!r}"
             ) from exc
-    raise ValueError(f"{field_name}: ожидается целое число, получено {type(value).__name__}")
+    raise ValueError(f"{field_name}: expected integer, got {type(value).__name__}")
 
 
 class FlowType(str, Enum):
@@ -284,11 +284,11 @@ class FlowEmployeeConfig(StrictBaseModel):
             return self
         clean_roles = [role.strip() for role in self.roles if role.strip()]
         if not clean_roles:
-            raise ValueError("FlowEmployeeConfig: enabled требует непустой roles")
+            raise ValueError("FlowEmployeeConfig: enabled requires a non-empty roles")
         clean_curators = [uid.strip() for uid in self.curator_user_ids if uid.strip()]
         if not clean_curators:
             raise ValueError(
-                "FlowEmployeeConfig: enabled требует минимум одного curator_user_ids"
+                "FlowEmployeeConfig: enabled requires at least one curator_user_ids"
             )
         return self
 
@@ -401,10 +401,10 @@ class FlowConfig(StrictBaseModel):
             return None
         iv = _parse_flow_config_int(v, "timeout")
         if iv < 1:
-            raise ValueError(f"timeout: ожидается >= 1, получено {iv}")
+            raise ValueError(f"timeout: expected >= 1, got {iv}")
         cap = get_flow_execution_wall_time_cap_seconds()
         if iv > cap:
-            raise ValueError(f"timeout: максимум {cap}с (flow_execution_wall_time_cap_seconds), получено {iv}")
+            raise ValueError(f"timeout: maximum {cap}s (flow_execution_wall_time_cap_seconds), got {iv}")
         return iv
 
     # Опциональные/технические поля

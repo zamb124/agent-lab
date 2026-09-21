@@ -107,8 +107,9 @@ Production — Helm `deploy/helm/agent-lab/values.yaml::workers.<name>.{replicas
 
 ## Scheduler control-plane
 
-- API расписаний — `apps/scheduler` (`/scheduler/api/v1/schedules*`), метаданные в shared БД (`scheduler_tasks`) с `company_id`.
-- Кросс-сервисный доступ — только `core/clients/scheduler_client.py`.
+- Команды расписаний — `SCHEDULER_OPERATIONS` (`apps/scheduler/realtime/`): `scheduler/schedule_tasks/{list,item,create,pause,resume,cancel,run_now,redis_snapshot}_requested`; REST-зеркало `/scheduler/api/v1/schedules*`; метаданные в shared БД (`scheduler_tasks`) с `company_id`. UI-фабрики — `core/frontend/static/lib/events/resources/scheduler-schedules.resource.js` (`transport: 'ws'`), исходы pause/resume/cancel/run-now мержатся в коллекцию.
+- Кросс-сервисный доступ из бэкенда — только `core/clients/scheduler_client.py` (REST-зеркало).
+- В тестовом стеке HTTP-процесс scheduler — `:9006` (`scripts/test_stack.py`); identity WS=REST — `tests/realtime/test_scheduler_commands.py`.
 - Точка входа процесса: `apps/scheduler/scheduler.py` → `wire_all()` → `require_scheduled_tasks_registered()` → `apps.scheduler.dispatch.create_scheduler(settings.tasks.broker_url)`.
 - Redis schedules (`platform_schedules`) и TaskIQ streams — один URL: `settings.tasks.broker_url` (не `database.redis_url`).
 - Канон создания scheduler — только `apps/scheduler/dispatch.py::create_scheduler` (не `core.tasks.broker`).

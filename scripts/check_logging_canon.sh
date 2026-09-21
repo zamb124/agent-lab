@@ -108,17 +108,10 @@ if rg -nq 'asyncio\.create_task\s*\(' "${CREATE_TASK_GLOBS[@]}"; then
     rg -n 'asyncio\.create_task\s*\(' "${CREATE_TASK_GLOBS[@]}" >&2 || true
 fi
 
-# 8. Контроль logger.* с f-строкой как первым аргументом: миграция на kwargs
-#    идёт инкрементально, поэтому фиксируем верхнюю границу — новые случаи не
-#    добавляются. Снижайте F_LIMIT по мере вычистки кодовой базы.
+# 8. logger.* с f-строкой как первым аргументом запрещён: только event-id + kwargs.
 if rg -nq "logger\.[a-z_]+\(\s*f['\"]" "${PY_GLOBS[@]}"; then
-    F_COUNT=$(rg -c "logger\.[a-z_]+\(\s*f['\"]" "${PY_GLOBS[@]}" 2>/dev/null | awk -F: '{s+=$2} END {print s+0}')
-    F_LIMIT=330
-    if [ "$F_COUNT" -gt "$F_LIMIT" ]; then
-        fail "logger.* с f-строкой превышает лимит ($F_COUNT > $F_LIMIT) — переводите на kwargs: logger.info('event.id', key=value, ...)"
-    else
-        echo "check_logging_canon: warn — logger.* с f-строкой: $F_COUNT (лимит $F_LIMIT)" >&2
-    fi
+    fail "logger.* с f-строкой запрещён — logger.info('event.id', key=value, ...)"
+    rg -n "logger\.[a-z_]+\(\s*f['\"]" "${PY_GLOBS[@]}" >&2 || true
 fi
 
 # 9. Запрет уровневого middleware кроме AccessLogMiddleware: вход в request-скоуп
@@ -194,6 +187,13 @@ if rg -n '\bcreate_broker\s*\(' --type py apps core | rg -v -E "$CREATE_BROKER_A
     fi
 fi
 rm -f /tmp/taskiq_kiq_hits.txt /tmp/taskiq_find_hits.txt /tmp/taskiq_kicker_hits.txt /tmp/taskiq_broker_hits.txt
+
+# 12. bind_log_context в apps/ запрещён: только хелперы core.logging
+#     (bind_session_agent / bind_test_scope). Платформенный bind остаётся в core/.
+if rg -nq 'bind_log_context\s*\(' --type py apps; then
+    fail "bind_log_context в apps запрещён — используйте bind_session_agent / bind_test_scope из core.logging"
+    rg -n 'bind_log_context\s*\(' --type py apps >&2 || true
+fi
 
 if [ "$ERR" -ne 0 ]; then
     echo "check_logging_canon: FAIL" >&2

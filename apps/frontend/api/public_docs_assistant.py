@@ -58,7 +58,7 @@ def _normalize_origin(raw: str) -> str:
         return ""
     parsed = urlparse(value)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise HTTPException(status_code=400, detail="origin должен быть HTTP(S) origin")
+        raise HTTPException(status_code=400, detail="origin must be an HTTP(S) origin")
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
@@ -84,20 +84,20 @@ async def issue_public_docs_assistant_session(
 ) -> PublicDocsAssistantSessionResponse:
     embed_id = body.embed_id.strip()
     if embed_id != DOCS_ASSISTANT_EMBED_ID:
-        raise HTTPException(status_code=404, detail="Виджет не найден")
+        raise HTTPException(status_code=404, detail="Widget not found")
 
     referer = request.headers.get("referer", "")
     if not _referer_path_allowed(referer):
-        raise HTTPException(status_code=403, detail="Виджет доступен только из документации")
+        raise HTTPException(status_code=403, detail="Widget is available only from documentation")
 
     origin = _normalize_origin(body.origin or request.headers.get("origin", ""))
     referer_origin = _origin_from_referer(referer)
     if not origin and referer_origin:
         origin = referer_origin
     if origin and referer_origin and origin != referer_origin:
-        raise HTTPException(status_code=403, detail="origin не совпадает с документацией")
+        raise HTTPException(status_code=403, detail="origin does not match documentation")
     if not origin:
-        raise HTTPException(status_code=403, detail="origin обязателен для публичной сессии документации")
+        raise HTTPException(status_code=403, detail="origin is required for a public documentation session")
 
     await enforce_public_session_issue_rate_limit(
         redis_client=container.redis_client,
@@ -107,18 +107,18 @@ async def issue_public_docs_assistant_session(
 
     mapping = await container.embed_mapping_repository.get(embed_id)
     if mapping is None or mapping.company_id != SYSTEM_COMPANY_ID:
-        raise HTTPException(status_code=404, detail="Виджет не найден")
+        raise HTTPException(status_code=404, detail="Widget not found")
 
     config = await container.embed_config_repository.get_for_company_identifier(
         SYSTEM_COMPANY_SUBDOMAIN,
         embed_id,
     )
     if config is None:
-        raise HTTPException(status_code=404, detail="Конфигурация не найдена")
+        raise HTTPException(status_code=404, detail="Configuration not found")
     if config.status != EmbedStatus.ACTIVE:
-        raise HTTPException(status_code=403, detail="Виджет отключён")
+        raise HTTPException(status_code=403, detail="Widget is disabled")
     if config.flow_id != DOCS_ASSISTANT_FLOW_ID or config.branch_id != DOCS_ASSISTANT_BRANCH_ID:
-        raise HTTPException(status_code=500, detail="Конфигурация виджета повреждена")
+        raise HTTPException(status_code=500, detail="Widget configuration is corrupt")
 
     guest_id = f"docs_guest_{uuid.uuid4().hex}"
     embed_session_id = new_embed_session_id()

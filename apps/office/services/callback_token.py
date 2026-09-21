@@ -24,7 +24,7 @@ def encode_callback_context_token(
     ttl_seconds: int,
 ) -> str:
     if viewer_scope == "catalog" and (namespace is None or namespace == ""):
-        raise ValueError("namespace обязателен для catalog callback-токена")
+        raise ValueError("namespace is required for a catalog callback token")
     now = int(time.time())
     payload = require_json_object(
         OnlyOfficeCallbackContextClaims(
@@ -46,4 +46,4 @@ def decode_callback_context_token(token: str, secret: str) -> OnlyOfficeCallback
     try:
         return OnlyOfficeCallbackContextClaims.model_validate(data)
     except ValueError as exc:
-        raise OnlyOfficeJwtError("Некорректный callback-токен") from exc
+        raise OnlyOfficeJwtError("Invalid callback token") from exc

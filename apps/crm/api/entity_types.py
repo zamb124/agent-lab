@@ -87,7 +87,8 @@ async def update_public_fields(
         raise WsCommandError(
             "ws_invalid_payload",
             "type_id in path must match payload.type_id",
-        )
+                  error_code='ws_invalid_payload',
+              )
     return await op_entity_types_public_fields(
         payload,
         user=require_context().user,

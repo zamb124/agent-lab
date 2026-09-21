@@ -97,13 +97,13 @@ async def enforce_public_session_issue_rate_limit(
         )
     except Exception:
         logger.exception("public_session_rate_limit_unavailable", scope=scope)
-        raise HTTPException(status_code=503, detail="Публичные сессии временно недоступны")
+        raise HTTPException(status_code=503, detail="Public sessions are temporarily unavailable")
 
     if isinstance(raw, bool) or not isinstance(raw, (int, float, str)):
         logger.error("public_session_rate_limit_bad_reply", scope=scope, raw=raw)
-        raise HTTPException(status_code=503, detail="Публичные сессии временно недоступны")
+        raise HTTPException(status_code=503, detail="Public sessions are temporarily unavailable")
     if int(raw) < 0:
-        raise HTTPException(status_code=429, detail="Слишком много публичных сессий. Попробуйте позже")
+        raise HTTPException(status_code=429, detail="Too many public sessions. Try again later")
 
 
 async def enforce_public_search_run_quota(
@@ -128,10 +128,10 @@ async def enforce_public_search_run_quota(
         )
     except Exception:
         logger.exception("public_search_run_quota_unavailable")
-        raise HTTPException(status_code=503, detail="Публичные сессии временно недоступны")
+        raise HTTPException(status_code=503, detail="Public sessions are temporarily unavailable")
 
     if isinstance(raw, bool) or not isinstance(raw, (int, float, str)):
         logger.error("public_search_run_quota_bad_reply", raw=raw)
-        raise HTTPException(status_code=503, detail="Публичные сессии временно недоступны")
+        raise HTTPException(status_code=503, detail="Public sessions are temporarily unavailable")
     if int(raw) == 0:
         raise HTTPException(status_code=429, detail=PUBLIC_SEARCH_QUOTA_EXHAUSTED_DETAIL)

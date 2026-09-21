@@ -620,7 +620,7 @@ export class FrontendSettingsPage extends PlatformPage {
         }
         if (!this._aiLoaded) {
             this._aiLoaded = true;
-            this._aiLoad.run();
+            this._aiLoad.run({ public_host: window.location.host });
         }
         if (!this._searchLoaded) {
             this._searchLoaded = true;
@@ -1110,7 +1110,7 @@ export class FrontendSettingsPage extends PlatformPage {
                                                         <glass-button
                                                             variant="danger"
                                                             size="sm"
-                                                            @click=${() => this._customDelete.run({ id: p.id })}
+                                                            @click=${() => this._customDelete.run({ provider_id: p.id })}
                                                         >${this.t('settings_page.ai_providers.delete_custom')}</glass-button>
                                                     `
                                                   : ''}

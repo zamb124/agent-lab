@@ -132,7 +132,7 @@ class CalendarIntegration(StrictBaseModel):
     user_id: str
     provider: CalendarProvider
     mailbox_binding_id: str | None = None
-    credentials: CalendarIntegrationCredentials
+    credentials: CalendarIntegrationCredentials = Field(exclude=True)
     settings: CalendarIntegrationSettings = Field(default_factory=CalendarIntegrationSettings)
     created_at: datetime
     updated_at: datetime

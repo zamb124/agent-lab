@@ -64,15 +64,15 @@ async def issue_embed_page_session(
     embed_id = body.embed_id.strip()
     origin = _normalize_origin(body.origin)
     if not origin:
-        raise HTTPException(status_code=400, detail="origin обязателен")
+        raise HTTPException(status_code=400, detail="origin is required")
 
     mapping = await container.embed_mapping_repository.get(embed_id)
     if mapping is None:
-        raise HTTPException(status_code=404, detail="Виджет не найден")
+        raise HTTPException(status_code=404, detail="Widget not found")
 
     company = await container.company_repository.get(mapping.company_id)
     if company is None:
-        raise HTTPException(status_code=404, detail="Виджет не найден")
+        raise HTTPException(status_code=404, detail="Widget not found")
 
     company_identifier = (company.subdomain or "").strip() or company.company_id
     config = await container.embed_config_repository.get_for_company_identifier(
@@ -80,23 +80,23 @@ async def issue_embed_page_session(
         embed_id,
     )
     if config is None:
-        raise HTTPException(status_code=404, detail="Конфигурация не найдена")
+        raise HTTPException(status_code=404, detail="Configuration not found")
     if config.preview_share_link:
-        raise HTTPException(status_code=404, detail="Конфигурация не найдена")
+        raise HTTPException(status_code=404, detail="Configuration not found")
     if config.status != EmbedStatus.ACTIVE:
-        raise HTTPException(status_code=403, detail="Виджет отключён")
+        raise HTTPException(status_code=403, detail="Widget is disabled")
 
     if config.presentation != "page":
         raise HTTPException(
             status_code=403,
-            detail="Полноэкранная страница доступна только при presentation=page",
+            detail="Fullscreen page is available only when presentation=page",
         )
 
     page_origin = f"{request.url.scheme}://{request.url.netloc}"
     if origin != page_origin:
         raise HTTPException(
             status_code=403,
-            detail="origin должен совпадать с first-party host страницы",
+            detail="origin must match the first-party host of the page",
         )
 
     await enforce_public_session_issue_rate_limit(

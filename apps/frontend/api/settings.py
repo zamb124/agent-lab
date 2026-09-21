@@ -1,56 +1,27 @@
-"""API для базовых настроек компании.
+"""REST-зеркало команд `frontend/company_settings/*`."""
 
-AI-провайдеры (capabilities + custom OpenAI-compatible) — отдельный роутер
-[`apps/frontend/api/ai_providers.py`](apps/frontend/api/ai_providers.py).
-"""
-
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.models import (
     CompanySettingsResponse,
     CompanySettingsUpdate,
-    CompanySettingsUpdatedCompany,
     CompanySettingsUpdateResponse,
 )
+from apps.frontend.realtime.company_operations import (
+    op_company_settings_get,
+    op_company_settings_update,
+)
 from core.context import require_context
-from core.logging import get_logger
-from core.models.identity_models import Company, User
+from core.websocket import EmptyPayload
 
-logger = get_logger(__name__)
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 
-def _require_settings_principal() -> tuple[User, Company]:
-    context = require_context()
-    company = context.active_company
-    if company is None:
-        raise HTTPException(status_code=400, detail="Компания не выбрана")
-    return context.user, company
-
-
-async def _require_settings_admin(container: ContainerDep) -> tuple[User, Company]:
-    user, company = _require_settings_principal()
-    await container.authz_service.require_company_admin(
-        company_id=company.company_id,
-        user_id=user.user_id,
-    )
-    return user, company
-
-
 @router.get("/company", response_model=CompanySettingsResponse)
-async def get_company_settings() -> CompanySettingsResponse:
-    _, company = _require_settings_principal()
-    return CompanySettingsResponse(
-        company_id=company.company_id,
-        name=company.name,
-        subdomain=company.subdomain,
-        owner_user_id=company.owner_user_id,
-        status=company.status,
-        monthly_budget=company.monthly_budget,
-        tariff_plan=company.tariff_plan.value,
-        created_at=company.created_at.isoformat(),
-        metadata=company.metadata,
+async def get_company_settings(container: ContainerDep) -> CompanySettingsResponse:
+    return await op_company_settings_get(
+        EmptyPayload(), user=require_context().user, container=container
     )
 
 
@@ -59,33 +30,4 @@ async def update_company_settings(
     update: CompanySettingsUpdate,
     container: ContainerDep,
 ) -> CompanySettingsUpdateResponse:
-    _, company = await _require_settings_admin(container)
-    updated = False
-
-    if update.name is not None:
-        company.name = update.name
-        updated = True
-
-    if update.monthly_budget is not None:
-        if update.monthly_budget < 0:
-            raise HTTPException(status_code=400, detail="Месячный лимит не может быть отрицательным")
-        company.monthly_budget = update.monthly_budget
-        updated = True
-
-    if update.metadata is not None:
-        company.metadata.update(update.metadata)
-        updated = True
-
-    if updated:
-        company_repo = container.company_repository
-        _ = await company_repo.set(company)
-        logger.info("Обновлены настройки компании %s", company.company_id)
-
-    return CompanySettingsUpdateResponse(
-        message="Настройки обновлены",
-        company=CompanySettingsUpdatedCompany(
-            name=company.name,
-            monthly_budget=company.monthly_budget,
-            metadata=company.metadata,
-        ),
-    )
+    return await op_company_settings_update(update, user=require_context().user, container=container)

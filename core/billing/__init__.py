@@ -15,10 +15,12 @@ from .exceptions import BillingBalanceBlockedError
 from .service import (
     BALANCE_BLOCK_OPERATION_EMBEDDING,
     BALANCE_BLOCK_OPERATION_GUEST_RUNTIME,
+    BALANCE_BLOCK_OPERATION_IMAGE,
     BALANCE_BLOCK_OPERATION_LIVEKIT_EGRESS,
     BALANCE_BLOCK_OPERATION_LIVEKIT_ROOM,
     BALANCE_BLOCK_OPERATION_LLM,
     BALANCE_BLOCK_OPERATION_SEARCH,
+    BALANCE_BLOCK_OPERATION_SPEECH,
     BALANCE_BLOCK_OPERATION_VISION,
     BillingService,
 )
@@ -47,7 +49,7 @@ def get_billing_service() -> BillingService:
     """
     if _billing_service is None:
         raise RuntimeError(
-            "BillingService не инициализирован. Вызовите set_billing_service() при старте сервиса."
+            'BillingService is not initialized. Call set_billing_service() at service startup.'
         )
     return _billing_service
 
@@ -55,10 +57,12 @@ def get_billing_service() -> BillingService:
 __all__ = [
     "BALANCE_BLOCK_OPERATION_EMBEDDING",
     "BALANCE_BLOCK_OPERATION_GUEST_RUNTIME",
+    "BALANCE_BLOCK_OPERATION_IMAGE",
     "BALANCE_BLOCK_OPERATION_LIVEKIT_EGRESS",
     "BALANCE_BLOCK_OPERATION_LIVEKIT_ROOM",
     "BALANCE_BLOCK_OPERATION_LLM",
     "BALANCE_BLOCK_OPERATION_SEARCH",
+    "BALANCE_BLOCK_OPERATION_SPEECH",
     "BALANCE_BLOCK_OPERATION_VISION",
     "BillingBalanceBlockedError",
     "BillingService",

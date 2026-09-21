@@ -11,6 +11,10 @@ from openpyxl import Workbook
 
 from core.data_tables.import_tabular import parse_tabular_bytes
 from core.data_tables.models import DATA_TABLE_CONTENT_TYPE
+from tests.files.chunked_upload_helpers import (
+    chunked_upload_file,
+    platform_auxiliary_upload_spec_json,
+)
 from tests.fixtures.s3 import require_s3_configured
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.timeout(120)]
@@ -89,6 +93,30 @@ async def _patch_row(
         headers=auth_headers_system,
         json={"values": values},
     )
+
+
+async def _export_bytes(
+    client: AsyncClient,
+    headers: dict[str, str],
+    file_id: str,
+    table_name: str,
+    *,
+    source_format: str,
+) -> tuple[Response, bytes]:
+    """Экспорт отдаёт ephemeral FileRecord; байты — по его `download_url` через Files API."""
+    exported = await client.get(
+        f"/documents/api/v1/data-tables/{file_id}/tables/{table_name}/export",
+        headers=headers,
+        params={"source_format": source_format},
+    )
+    assert exported.status_code == 200, exported.text
+    record = exported.json()
+    assert record["original_name"] == f"{table_name}.{source_format}"
+    download_url = record["download_url"]
+    assert isinstance(download_url, str) and download_url
+    downloaded = await client.get(download_url, headers=headers)
+    assert downloaded.status_code == 200, downloaded.text
+    return downloaded, downloaded.content
 
 
 def _assert_user_export(payload: bytes, *, source_format: str, columns: list[str]) -> None:
@@ -325,15 +353,11 @@ async def test_data_table_excel_string_patch_delete_and_export(
     assert values["flag"] is False
     assert values["meta"] == {"b": 2}
 
-    csv_response = await office_client.get(
-        f"/documents/api/v1/data-tables/{file_id}/tables/typed/export",
-        headers=auth_headers_system,
-        params={"format": "csv"},
+    csv_response, csv_bytes = await _export_bytes(
+        office_client, auth_headers_system, file_id, "typed", source_format="csv"
     )
-    assert csv_response.status_code == 200, csv_response.text
     assert csv_response.headers["content-type"].startswith("text/csv")
-    assert "attachment; filename=\"typed.csv\"" in csv_response.headers["content-disposition"]
-    csv_columns, csv_rows = parse_tabular_bytes(csv_response.content, source_format="csv")
+    csv_columns, csv_rows = parse_tabular_bytes(csv_bytes, source_format="csv")
     assert [column.name for column in csv_columns] == [
         "title",
         "score",
@@ -346,17 +370,11 @@ async def test_data_table_excel_string_patch_delete_and_export(
     assert csv_rows[0]["title"] == "Ada"
     assert csv_rows[0]["flag"] == "false"
 
-    xlsx_response = await office_client.get(
-        f"/documents/api/v1/data-tables/{file_id}/tables/typed/export",
-        headers=auth_headers_system,
-        params={"format": "xlsx"},
+    xlsx_response, xlsx_bytes = await _export_bytes(
+        office_client, auth_headers_system, file_id, "typed", source_format="xlsx"
     )
-    assert xlsx_response.status_code == 200, xlsx_response.text
     assert "spreadsheetml.sheet" in xlsx_response.headers["content-type"]
-    assert "attachment; filename=\"typed.xlsx\"" in xlsx_response.headers["content-disposition"]
-    xlsx_columns, xlsx_rows = parse_tabular_bytes(
-        xlsx_response.content, source_format="xlsx"
-    )
+    xlsx_columns, xlsx_rows = parse_tabular_bytes(xlsx_bytes, source_format="xlsx")
     assert [column.name for column in xlsx_columns] == [
         "title",
         "score",
@@ -682,37 +700,23 @@ async def test_data_table_schema_import_paging_and_export_isolation(
     }
     assert titles == {"alpha_one", "alpha_two", "alpha_three"}
 
-    csv_response = await office_client.get(
-        f"/documents/api/v1/data-tables/{file_id}/tables/alpha/export",
-        headers=auth_headers_system,
-        params={"format": "csv"},
+    csv_response, csv_export = await _export_bytes(
+        office_client, auth_headers_system, file_id, "alpha", source_format="csv"
     )
-    assert csv_response.status_code == 200, csv_response.text
     assert csv_response.headers["content-type"].startswith("text/csv")
-    assert 'filename="alpha.csv"' in csv_response.headers["content-disposition"]
-    assert csv_response.content.startswith(b"\xef\xbb\xbf")
-    _assert_user_export(
-        csv_response.content, source_format="csv", columns=["title", "note"]
-    )
-    csv_text = csv_response.content.decode("utf-8-sig")
+    assert csv_export.startswith(b"\xef\xbb\xbf")
+    _assert_user_export(csv_export, source_format="csv", columns=["title", "note"])
+    csv_text = csv_export.decode("utf-8-sig")
     assert "beta_secret" not in csv_text
     assert "row_id" not in csv_text.splitlines()[0]
 
-    xlsx_response = await office_client.get(
-        f"/documents/api/v1/data-tables/{file_id}/tables/alpha/export",
-        headers=auth_headers_system,
-        params={"format": "xlsx"},
+    xlsx_response, xlsx_export = await _export_bytes(
+        office_client, auth_headers_system, file_id, "alpha", source_format="xlsx"
     )
-    assert xlsx_response.status_code == 200, xlsx_response.text
     assert "spreadsheetml.sheet" in xlsx_response.headers["content-type"]
-    assert 'filename="alpha.xlsx"' in xlsx_response.headers["content-disposition"]
-    assert xlsx_response.content.startswith(b"PK")
-    _assert_user_export(
-        xlsx_response.content, source_format="xlsx", columns=["title", "note"]
-    )
-    _exported_columns, xlsx_rows = parse_tabular_bytes(
-        xlsx_response.content, source_format="xlsx"
-    )
+    assert xlsx_export.startswith(b"PK")
+    _assert_user_export(xlsx_export, source_format="xlsx", columns=["title", "note"])
+    _exported_columns, xlsx_rows = parse_tabular_bytes(xlsx_export, source_format="xlsx")
     assert [column.name for column in _exported_columns] == ["title", "note"]
     assert {row["title"] for row in xlsx_rows} == {
         "alpha_one",
@@ -724,16 +728,29 @@ async def test_data_table_schema_import_paging_and_export_isolation(
     sqlite_rejected = await office_client.get(
         f"/documents/api/v1/data-tables/{file_id}/tables/alpha/export",
         headers=auth_headers_system,
-        params={"format": "sqlite"},
+        params={"source_format": "sqlite"},
     )
     assert sqlite_rejected.status_code == 422, sqlite_rejected.text
 
     csv_bytes = "city,pop\nParis,10\nLyon,8\n".encode("utf-8-sig")
+    csv_upload = await chunked_upload_file(
+        office_client,
+        auth_headers_system,
+        content=csv_bytes,
+        original_name="cities.csv",
+        content_type="text/csv",
+        spec_json=platform_auxiliary_upload_spec_json(is_public=False),
+        files_api_prefix="/documents/api/v1/files",
+    )
+    assert csv_upload.status_code == 200, csv_upload.text
     import_csv = await office_client.post(
         f"/documents/api/v1/data-tables/{file_id}/import",
         headers=auth_headers_system,
-        params={"table_name": "imported", "source_format": "csv"},
-        files={"upload": ("cities.csv", csv_bytes, "text/csv")},
+        json={
+            "table_name": "imported",
+            "source_format": "csv",
+            "upload_file_id": csv_upload.json()["file_id"],
+        },
     )
     assert import_csv.status_code == 200, import_csv.text
     imported_names = {table["name"] for table in import_csv.json()["tables"]}
@@ -753,16 +770,23 @@ async def test_data_table_schema_import_paging_and_export_isolation(
     _ = sheet.append(["west", "w1"])
     xlsx_buffer = BytesIO()
     workbook.save(xlsx_buffer)
+    xlsx_upload = await chunked_upload_file(
+        office_client,
+        auth_headers_system,
+        content=xlsx_buffer.getvalue(),
+        original_name="regions.xlsx",
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        spec_json=platform_auxiliary_upload_spec_json(is_public=False),
+        files_api_prefix="/documents/api/v1/files",
+    )
+    assert xlsx_upload.status_code == 200, xlsx_upload.text
     import_xlsx = await office_client.post(
         f"/documents/api/v1/data-tables/{file_id}/import",
         headers=auth_headers_system,
-        params={"table_name": "fromxlsx", "source_format": "xlsx"},
-        files={
-            "upload": (
-                "regions.xlsx",
-                xlsx_buffer.getvalue(),
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
+        json={
+            "table_name": "fromxlsx",
+            "source_format": "xlsx",
+            "upload_file_id": xlsx_upload.json()["file_id"],
         },
     )
     assert import_xlsx.status_code == 200, import_xlsx.text

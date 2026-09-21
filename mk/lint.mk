@@ -58,6 +58,8 @@ _lint-py:
 	uv run python scripts/check_repo_hygiene.py
 	@echo "=== lint: ratchet counts ==="
 	uv run python scripts/check_ratchet_counts.py
+	@echo "=== lint: backend error i18n ==="
+	uv run python scripts/check_backend_error_i18n.py
 
 	@echo "=== lint: mcp branding bundle ==="
 	uv run python scripts/check_mcp_branding_bundle.py

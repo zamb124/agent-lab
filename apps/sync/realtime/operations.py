@@ -88,7 +88,7 @@ from apps.sync.models.channels import (
     ChannelRead,
     ChannelUpdate,
 )
-from apps.sync.models.common import PaginationResponse, UserBrief
+from apps.sync.models.common import UserBrief
 from apps.sync.models.company_members import CompanyMemberRead
 from apps.sync.models.git import (
     GitProvider,
@@ -148,10 +148,11 @@ from core.calls.turn import generate_turn_credentials
 from core.config import BaseSettings, get_settings
 from core.events import publish_events
 from core.events.contract import PlatformEvent
+from core.files.file_ref import FileRef, stored_file_ref
 from core.files.models import AudioTranscriptionStatus, FileRecord
 from core.logging import get_logger
 from core.models.identity_models import User
-from core.pagination import ListResponse, OffsetPage
+from core.pagination import CursorPage, ListResponse, OffsetPage
 from core.platform_brand.resolver import resolve_context_host, resolve_livekit_public_url
 from core.request_scope import require_company
 from core.tasks import enqueue
@@ -178,17 +179,17 @@ def _decode_message_cursor(cursor: str) -> tuple[datetime, str]:
         raw = base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
         payload = parse_json_object(raw, "message cursor")
     except (ValueError, UnicodeDecodeError) as exc:
-        raise WsCommandError("ws_invalid_cursor", "cursor must be base64url(JSON)") from exc
+        raise WsCommandError("ws_invalid_cursor", "cursor must be base64url(JSON)", error_code='ws_invalid_cursor') from exc
     sent_at_raw = payload.get("sent_at")
     message_id = payload.get("message_id")
     if not isinstance(sent_at_raw, str) or not sent_at_raw:
-        raise WsCommandError("ws_invalid_cursor", "cursor.sent_at required")
+        raise WsCommandError("ws_invalid_cursor", "cursor.sent_at required", error_code='ws_invalid_cursor')
     if not isinstance(message_id, str) or not message_id:
-        raise WsCommandError("ws_invalid_cursor", "cursor.message_id required")
+        raise WsCommandError("ws_invalid_cursor", "cursor.message_id required", error_code='ws_invalid_cursor')
     try:
         sent_at = datetime.fromisoformat(sent_at_raw)
     except ValueError as exc:
-        raise WsCommandError("ws_invalid_cursor", "cursor.sent_at must be ISO datetime") from exc
+        raise WsCommandError("ws_invalid_cursor", "cursor.sent_at must be ISO datetime", error_code='ws_invalid_cursor') from exc
     return sent_at, message_id
 
 
@@ -402,8 +403,9 @@ async def op_channels_mark_read(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError(
-            "forbidden", f"Пользователь не состоит в канале {payload.channel_id}."
-        )
+            "forbidden", f"User is not a member of channel {payload.channel_id}.",
+                  error_code='forbidden',
+              )
     max_at = await container.message_repository.max_root_lane_sent_at(
         payload.channel_id, company_id=company_id
     )
@@ -439,19 +441,20 @@ async def op_channels_typing(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError(
-            "forbidden", f"Пользователь не состоит в канале {payload.channel_id}."
-        )
+            "forbidden", f"User is not a member of channel {payload.channel_id}.",
+                  error_code='forbidden',
+              )
     if payload.thread_id is not None and payload.thread_id != "":
         thread = await container.thread_repository.get(payload.thread_id)
         if thread is None:
-            raise WsCommandError("not_found", f"Тред {payload.thread_id} не найден.")
+            raise WsCommandError("not_found", f"Thread {payload.thread_id} not found.", error_code='not_found')
         if thread.company_id != company_id:
-            raise WsCommandError("forbidden", "Тред не принадлежит компании.")
+            raise WsCommandError("forbidden", "Thread does not belong to the company.", error_code='forbidden')
         if thread.channel_id != payload.channel_id:
-            raise WsCommandError("forbidden", "Тред не принадлежит указанному каналу.")
+            raise WsCommandError("forbidden", "Thread does not belong to the given channel.", error_code='forbidden')
     user_obj = await container.user_repository.get(user.user_id)
     if user_obj is None:
-        raise WsCommandError("not_found", f"Пользователь {user.user_id} не найден.")
+        raise WsCommandError("not_found", f"User {user.user_id} not found.", error_code='not_found')
     user_brief = UserBrief(
         user_id=user.user_id, display_name=user_obj.name, avatar_url=user_obj.avatar_url
     )
@@ -482,11 +485,11 @@ async def op_channels_notification_settings_update(
     company_id = require_company().company_id
     ch = await container.channel_repository.get(payload.channel_id)
     if ch is None or ch.company_id != company_id:
-        raise WsCommandError("not_found", "Канал не найден.")
+        raise WsCommandError("not_found", "Channel not found.", error_code='not_found')
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
-        raise WsCommandError("forbidden", "Нет доступа к каналу.")
+        raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
     await container.channel_repository.set_member_notifications_muted(
         payload.channel_id,
         user.user_id,
@@ -507,11 +510,11 @@ async def op_channels_add_member(
     company_id = require_company().company_id
     ch = await container.channel_repository.get(payload.channel_id)
     if ch is None or ch.company_id != company_id:
-        raise WsCommandError("not_found", "Канал не найден.")
+        raise WsCommandError("not_found", "Channel not found.", error_code='not_found')
     if not await container.authz_service.can_admin(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
-        raise WsCommandError("forbidden", "Нет прав управлять участниками канала.")
+        raise WsCommandError("forbidden", "No permission to manage channel members.", error_code='forbidden')
     await container.channel_repository.ensure_member_row(
         payload.channel_id,
         payload.user_id,
@@ -555,11 +558,11 @@ async def op_channels_list_members(
     company_id = require_company().company_id
     ch = await container.channel_repository.get(payload.channel_id)
     if ch is None or ch.company_id != company_id:
-        raise WsCommandError("not_found", "Канал не найден.")
+        raise WsCommandError("not_found", "Channel not found.", error_code='not_found')
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
-        raise WsCommandError("forbidden", "Нет доступа к каналу.")
+        raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
     rows = await container.channel_access_service.list_member_rows(payload.channel_id)
     return ListResponse[ChannelMemberRead](
         items=[ChannelMemberRead(user_id=uid, role=role) for uid, role in rows]
@@ -624,7 +627,7 @@ async def op_threads_item(
     _ = require_company()
     thread = await container.thread_repository.get(payload.thread_id)
     if thread is None:
-        raise WsCommandError("not_found", f"Thread {payload.thread_id!r} not found.")
+        raise WsCommandError("not_found", f"Thread {payload.thread_id!r} not found.", error_code='not_found')
     return ThreadRow(
         thread_id=thread.thread_id,
         channel_id=thread.channel_id,
@@ -751,13 +754,14 @@ async def op_messages_list(
     *,
     user: User,
     container: SyncContainer,
-) -> PaginationResponse[MessageRead]:
+) -> CursorPage[MessageRead]:
     _ = user
     company_id = require_company().company_id
     if payload.before is not None and payload.after is not None:
         raise WsCommandError(
-            "ws_invalid_payload", "before and after are mutually exclusive"
-        )
+            "ws_invalid_payload", "before and after are mutually exclusive",
+                  error_code='ws_invalid_payload',
+              )
 
     before_sent_at: datetime | None = None
     before_message_id: str | None = None
@@ -779,7 +783,9 @@ async def op_messages_list(
     )
     rows = window.rows
     if not rows:
-        return PaginationResponse[MessageRead](items=[], next_cursor=None, prev_cursor=None)
+        return CursorPage[MessageRead](
+            items=[], next_cursor=None, prev_cursor=None, has_more=False,
+        )
 
     user_ids = list({m.sender_user_id for m in rows})
     users_by_id = await container.user_repository.get_many(user_ids)
@@ -803,8 +809,11 @@ async def op_messages_list(
         if window.has_more_newer
         else None
     )
-    return PaginationResponse[MessageRead](
-        items=items, next_cursor=next_cursor, prev_cursor=prev_cursor
+    return CursorPage[MessageRead](
+        items=items,
+        next_cursor=next_cursor,
+        prev_cursor=prev_cursor,
+        has_more=window.has_more_older,
     )
 
 
@@ -825,15 +834,16 @@ async def op_messages_list_thread(
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
-        raise WsCommandError("forbidden", "Not a channel member")
+        raise WsCommandError("forbidden", "Not a channel member", error_code='forbidden')
     thread = await container.thread_repository.get(payload.thread_id)
     if thread is None:
-        raise WsCommandError("not_found", f"Thread {payload.thread_id!r} not found.")
+        raise WsCommandError("not_found", f"Thread {payload.thread_id!r} not found.", error_code='not_found')
     if thread.channel_id != payload.channel_id:
         raise WsCommandError(
             "ws_invalid_payload",
             "thread_id does not belong to channel_id",
-        )
+                  error_code='ws_invalid_payload',
+              )
     rows = await container.message_repository.list_by_thread(
         thread_id=payload.thread_id,
         limit=payload.limit,
@@ -912,23 +922,23 @@ async def op_messages_edit(
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
-        raise WsCommandError("forbidden", "Нет доступа к каналу.")
+        raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
     m = await container.message_repository.get_by_id_for_company(payload.message_id, company_id)
     if m is None:
-        raise WsCommandError("not_found", "Сообщение не найдено.")
+        raise WsCommandError("not_found", "Message not found.", error_code='not_found')
     if m.channel_id != payload.channel_id:
-        raise WsCommandError("forbidden", "Несовпадение канала.")
+        raise WsCommandError("forbidden", "Channel mismatch.", error_code='forbidden')
     if m.deleted_at is not None:
-        raise WsCommandError("forbidden", "Сообщение удалено.")
+        raise WsCommandError("forbidden", "Message is deleted.", error_code='forbidden')
     if m.sender_user_id != user.user_id:
-        raise WsCommandError("forbidden", "Редактировать может только автор.")
+        raise WsCommandError("forbidden", "Only the author can edit.", error_code='forbidden')
     edited_at = datetime.now(tz=UTC)
     await container.message_repository.replace_message_contents(
         payload.message_id, payload.body.contents, edited_at
     )
     m2 = await container.message_repository.get_by_id_for_company(payload.message_id, company_id)
     if m2 is None:
-        raise WsCommandError("internal", "Сообщение пропало после редактирования.")
+        raise WsCommandError("internal", "Message disappeared after edit.", error_code='internal')
     read = await message_read_from_db(
         m2, container.message_repository, container.user_repository
     )
@@ -955,18 +965,18 @@ async def op_messages_delete(
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
-        raise WsCommandError("forbidden", "Нет доступа к каналу.")
+        raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
     m = await container.message_repository.get_by_id_for_company(payload.message_id, company_id)
     if m is None:
-        raise WsCommandError("not_found", "Сообщение не найдено.")
+        raise WsCommandError("not_found", "Message not found.", error_code='not_found')
     if m.channel_id != payload.channel_id:
-        raise WsCommandError("forbidden", "Несовпадение канала.")
+        raise WsCommandError("forbidden", "Channel mismatch.", error_code='forbidden')
     if m.sender_user_id != user.user_id and not await container.authz_service.check(
         AuthzSubject.user(user.user_id),
         AuthzRelation.OWNER,
         AuthzObject.sync_channel(payload.channel_id),
     ):
-        raise WsCommandError("forbidden", "Недостаточно прав на удаление.")
+        raise WsCommandError("forbidden", "Insufficient permission to delete.", error_code='forbidden')
     now = datetime.now(tz=UTC)
     await container.message_repository.soft_delete_message(payload.message_id, now)
     ch = await container.channel_repository.get(payload.channel_id)
@@ -1011,18 +1021,18 @@ async def op_messages_forward(
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(payload.from_channel_id), user_id=user.user_id
     ):
-        raise WsCommandError("forbidden", "Нет доступа к исходному каналу.")
+        raise WsCommandError("forbidden", "No access to the source channel.", error_code='forbidden')
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(payload.to_channel_id), user_id=user.user_id
     ):
-        raise WsCommandError("forbidden", "Нет доступа к целевому каналу.")
+        raise WsCommandError("forbidden", "No access to the target channel.", error_code='forbidden')
     m = await container.message_repository.get_by_id_for_company(payload.message_id, company_id)
     if m is None:
-        raise WsCommandError("not_found", "Сообщение не найдено.")
+        raise WsCommandError("not_found", "Message not found.", error_code='not_found')
     if m.channel_id != payload.from_channel_id:
-        raise WsCommandError("forbidden", "Несовпадение канала.")
+        raise WsCommandError("forbidden", "Channel mismatch.", error_code='forbidden')
     if m.deleted_at is not None:
-        raise WsCommandError("forbidden", "Нельзя переслать удалённое сообщение.")
+        raise WsCommandError("forbidden", "Cannot forward a deleted message.", error_code='forbidden')
     contents = await container.message_repository.list_contents(m.message_id)
     body = MessageCreate(
         thread_id=payload.thread_id,
@@ -1031,7 +1041,7 @@ async def op_messages_forward(
     )
     src_ch = await container.channel_repository.get(payload.from_channel_id)
     if src_ch is None:
-        raise WsCommandError("not_found", "Исходный канал не найден.")
+        raise WsCommandError("not_found", "Source channel not found.", error_code='not_found')
     raw_name = src_ch.name
     fwd_label = (
         raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() != "" else None
@@ -1051,7 +1061,7 @@ async def op_messages_forward(
     )
     dst_ch = await container.channel_repository.get(payload.to_channel_id)
     if dst_ch is None:
-        raise WsCommandError("not_found", "Целевой канал не найден.")
+        raise WsCommandError("not_found", "Target channel not found.", error_code='not_found')
     await publish_events(
         [
             event_message_created(
@@ -1094,20 +1104,20 @@ async def op_messages_react(
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
-        raise WsCommandError("forbidden", "Нет доступа к каналу.")
+        raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
     m = await container.message_repository.get_by_id_for_company(payload.message_id, company_id)
     if m is None:
-        raise WsCommandError("not_found", "Сообщение не найдено.")
+        raise WsCommandError("not_found", "Message not found.", error_code='not_found')
     if m.channel_id != payload.channel_id:
-        raise WsCommandError("forbidden", "Несовпадение канала.")
+        raise WsCommandError("forbidden", "Channel mismatch.", error_code='forbidden')
     if m.deleted_at is not None:
-        raise WsCommandError("forbidden", "Сообщение удалено.")
+        raise WsCommandError("forbidden", "Message is deleted.", error_code='forbidden')
     now = datetime.now(tz=UTC)
     new_reactions = _apply_reaction_json(m.reactions, user.user_id, payload.emoji, now)
     await container.message_repository.set_message_reactions(payload.message_id, new_reactions)
     m2 = await container.message_repository.get_by_id_for_company(payload.message_id, company_id)
     if m2 is None:
-        raise WsCommandError("internal", "Сообщение пропало после реакции.")
+        raise WsCommandError("internal", "Message disappeared after reaction.", error_code='internal')
     read = await message_read_from_db(
         m2, container.message_repository, container.user_repository
     )
@@ -1141,23 +1151,23 @@ async def op_messages_pin(
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
-        raise WsCommandError("forbidden", "Нет доступа к каналу.")
+        raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
     if not await container.authz_service.check(
         AuthzSubject.user(user.user_id),
         AuthzRelation.OWNER,
         AuthzObject.sync_channel(payload.channel_id),
     ):
-        raise WsCommandError("forbidden", "Закреплять может только владелец канала.")
+        raise WsCommandError("forbidden", "Only the channel owner can pin.", error_code='forbidden')
     m = await container.message_repository.get_by_id_for_company(payload.message_id, company_id)
     if m is None:
-        raise WsCommandError("not_found", "Сообщение не найдено.")
+        raise WsCommandError("not_found", "Message not found.", error_code='not_found')
     if m.channel_id != payload.channel_id:
-        raise WsCommandError("forbidden", "Несовпадение канала.")
+        raise WsCommandError("forbidden", "Channel mismatch.", error_code='forbidden')
     if m.deleted_at is not None:
-        raise WsCommandError("forbidden", "Нельзя закрепить удалённое сообщение.")
+        raise WsCommandError("forbidden", "Cannot pin a deleted message.", error_code='forbidden')
     ch = await container.channel_repository.get(payload.channel_id)
     if ch is None:
-        raise WsCommandError("not_found", "Канал не найден.")
+        raise WsCommandError("not_found", "Channel not found.", error_code='not_found')
     pids = list(ch.pinned_message_ids)
     if payload.action == "add":
         if payload.message_id not in pids:
@@ -1169,7 +1179,7 @@ async def op_messages_pin(
     )
     ch2 = await container.channel_repository.get(payload.channel_id)
     if ch2 is None:
-        raise WsCommandError("internal", "Канал пропал после обновления.")
+        raise WsCommandError("internal", "Channel disappeared after update.", error_code='internal')
     cr = channel_read_entity(ch2)
     recipients = await channel_recipient_user_ids(
         container.channel_access_service, payload.channel_id
@@ -1194,16 +1204,16 @@ async def op_messages_transcribe_audio(
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
-        raise WsCommandError("forbidden", "Нет доступа к каналу.")
+        raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
     source = await container.message_repository.get_by_id_for_company(
         payload.message_id, company_id
     )
     if source is None:
-        raise WsCommandError("not_found", "Сообщение не найдено.")
+        raise WsCommandError("not_found", "Message not found.", error_code='not_found')
     if source.channel_id != payload.channel_id:
-        raise WsCommandError("forbidden", "Несовпадение канала.")
+        raise WsCommandError("forbidden", "Channel mismatch.", error_code='forbidden')
     if source.deleted_at is not None:
-        raise WsCommandError("forbidden", "Сообщение удалено.")
+        raise WsCommandError("forbidden", "Message is deleted.", error_code='forbidden')
     source_contents = await container.message_repository.list_contents(payload.message_id)
     try:
         processing_contents = set_audio_transcription_state(
@@ -1213,7 +1223,7 @@ async def op_messages_transcribe_audio(
             transcription_error=None,
         )
     except ValueError as exc:
-        raise WsCommandError("ws_invalid_payload", str(exc)) from exc
+        raise WsCommandError("ws_invalid_payload", str(exc), error_code='ws_invalid_payload') from exc
     edited_at = datetime.now(tz=UTC)
     await container.message_repository.replace_message_contents(
         payload.message_id, processing_contents, edited_at
@@ -1222,7 +1232,7 @@ async def op_messages_transcribe_audio(
         payload.message_id, company_id
     )
     if updated_entity is None:
-        raise WsCommandError("internal", "Сообщение пропало после запуска расшифровки.")
+        raise WsCommandError("internal", "Message disappeared after transcription start.", error_code='internal')
     updated_read = await message_read_from_db(
         updated_entity, container.message_repository, container.user_repository
     )
@@ -1257,16 +1267,16 @@ async def op_messages_transcribe_video(
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
-        raise WsCommandError("forbidden", "Нет доступа к каналу.")
+        raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
     source = await container.message_repository.get_by_id_for_company(
         payload.message_id, company_id
     )
     if source is None:
-        raise WsCommandError("not_found", "Сообщение не найдено.")
+        raise WsCommandError("not_found", "Message not found.", error_code='not_found')
     if source.channel_id != payload.channel_id:
-        raise WsCommandError("forbidden", "Несовпадение канала.")
+        raise WsCommandError("forbidden", "Channel mismatch.", error_code='forbidden')
     if source.deleted_at is not None:
-        raise WsCommandError("forbidden", "Сообщение удалено.")
+        raise WsCommandError("forbidden", "Message is deleted.", error_code='forbidden')
     source_contents = await container.message_repository.list_contents(payload.message_id)
     try:
         processing_contents = set_video_transcription_state(
@@ -1276,7 +1286,7 @@ async def op_messages_transcribe_video(
             transcription_error=None,
         )
     except ValueError as exc:
-        raise WsCommandError("ws_invalid_payload", str(exc)) from exc
+        raise WsCommandError("ws_invalid_payload", str(exc), error_code='ws_invalid_payload') from exc
     edited_at = datetime.now(tz=UTC)
     await container.message_repository.replace_message_contents(
         payload.message_id, processing_contents, edited_at
@@ -1285,7 +1295,7 @@ async def op_messages_transcribe_video(
         payload.message_id, company_id
     )
     if updated_entity is None:
-        raise WsCommandError("internal", "Сообщение пропало после запуска расшифровки.")
+        raise WsCommandError("internal", "Message disappeared after transcription start.", error_code='internal')
     updated_read = await message_read_from_db(
         updated_entity, container.message_repository, container.user_repository
     )
@@ -1320,10 +1330,10 @@ async def op_messages_transcribe_call(
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
-        raise WsCommandError("forbidden", "Нет доступа к каналу.")
+        raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
     call = await container.call_repository.get_call(payload.call_id, company_id)
     if call.channel_id != payload.channel_id:
-        raise WsCommandError("forbidden", "call_id не относится к этому каналу.")
+        raise WsCommandError("forbidden", "call_id does not belong to this channel.", error_code='forbidden')
     _ = await enqueue(
         SYNC_AGGREGATE_CALL_TRANSCRIPT,
         channel_id=payload.channel_id,
@@ -1373,7 +1383,7 @@ async def op_git_resources_get(
     _ = require_company()
     ref = await container.git_resource_ref_repository.get(payload.git_ref_id)
     if ref is None:
-        raise WsCommandError("not_found", "Git resource not found")
+        raise WsCommandError("not_found", "Git resource not found", error_code='not_found')
     return GitResourceRefRead(
         git_ref_id=ref.git_ref_id,
         provider=GitProvider(ref.provider),
@@ -1465,7 +1475,7 @@ async def op_calls_invite(
             user_repository=container.user_repository,
         )
     except PermissionError as exc:
-        raise WsCommandError("forbidden", str(exc)) from exc
+        raise WsCommandError("forbidden", str(exc), error_code='forbidden') from exc
     member_rows = await container.channel_access_service.list_member_rows(out.channel_id)
     member_ids = [uid for uid, _role in member_rows]
     started_read = await _post_call_boundary_message_op(
@@ -1478,7 +1488,7 @@ async def op_calls_invite(
     )
     invite_channel = await container.channel_repository.get(out.channel_id)
     if invite_channel is None:
-        raise WsCommandError("not_found", f"Канал {out.channel_id} не найден.")
+        raise WsCommandError("not_found", f"Channel {out.channel_id} not found.", error_code='not_found')
     evs.append(
         event_message_created(
             started_read,
@@ -1518,7 +1528,7 @@ async def op_calls_accept(
             channel_access=container.channel_access_service,
         )
     except ValueError as exc:
-        raise WsCommandError("conflict", str(exc)) from exc
+        raise WsCommandError("conflict", str(exc), error_code='conflict') from exc
     if became_active:
         await maybe_start_speech_to_chat_poll(
             call_id=out.call_id,
@@ -1547,7 +1557,7 @@ async def op_calls_decline(
             channel_access=container.channel_access_service,
         )
     except ValueError as exc:
-        raise WsCommandError("conflict", str(exc)) from exc
+        raise WsCommandError("conflict", str(exc), error_code='conflict') from exc
     await publish_events(evs)
     return out
 
@@ -1589,7 +1599,7 @@ async def op_calls_hangup(
             channel_access=container.channel_access_service,
         )
     except ValueError as exc:
-        raise WsCommandError("conflict", str(exc)) from exc
+        raise WsCommandError("conflict", str(exc), error_code='conflict') from exc
     if auto_stopped_recording_event is not None:
         evs.append(auto_stopped_recording_event)
     if fully_ended:
@@ -1606,7 +1616,7 @@ async def op_calls_hangup(
         )
         hangup_channel = await container.channel_repository.get(out.channel_id)
         if hangup_channel is None:
-            raise WsCommandError("not_found", f"Канал {out.channel_id} не найден.")
+            raise WsCommandError("not_found", f"Channel {out.channel_id} not found.", error_code='not_found')
         evs.append(
             event_message_created(
                 boundary_read,
@@ -1628,55 +1638,59 @@ async def op_calls_recording_start(
     company_id = require_company().company_id
     call = await container.call_repository.get_call(payload.call_id, company_id)
     if call.status == "ended":
-        raise WsCommandError("forbidden", "Нельзя включить запись завершённого звонка.")
+        raise WsCommandError("forbidden", "Cannot start recording for an ended call.", error_code='forbidden')
     if call.created_by_user_id != user.user_id:
-        raise WsCommandError("forbidden", "Только админ встречи может включать запись.")
+        raise WsCommandError("forbidden", "Only the meeting admin can start recording.", error_code='forbidden')
     if call.livekit_room_name is None or call.livekit_room_name == "":
         raise WsCommandError(
-            "forbidden", f"У звонка {call.call_id} отсутствует livekit_room_name."
-        )
+            "forbidden", f"Call {call.call_id} has no livekit_room_name.",
+                  error_code='forbidden',
+              )
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(call.channel_id), user_id=user.user_id
     ):
-        raise WsCommandError("forbidden", "Нет доступа к звонку.")
+        raise WsCommandError("forbidden", "No access to the call.", error_code='forbidden')
     active = await container.call_recording_repository.get_active_for_call(
         payload.call_id, company_id
     )
     if active is not None:
-        raise WsCommandError("forbidden", "Запись уже запущена.")
+        raise WsCommandError("forbidden", "Recording is already running.", error_code='forbidden')
 
     channel_entity = await container.channel_repository.get(call.channel_id)
     if channel_entity is None:
-        raise WsCommandError("not_found", f"Канал {call.channel_id} не найден.")
+        raise WsCommandError("not_found", f"Channel {call.channel_id} not found.", error_code='not_found')
     settings = get_settings()
     if settings.recording_max_duration_seconds <= 0:
-        raise WsCommandError("internal", "recording_max_duration_seconds должен быть больше 0.")
+        raise WsCommandError("internal", "recording_max_duration_seconds must be greater than 0.", error_code='internal')
     if not settings.s3.enabled:
-        raise WsCommandError("internal", "S3 отключен: запись звонка в S3 недоступна.")
+        raise WsCommandError("internal", "S3 is disabled: call recording to S3 is unavailable.", error_code='internal')
     default_bucket_key = settings.s3.default_bucket
     if default_bucket_key == "":
-        raise WsCommandError("internal", "s3.default_bucket не настроен.")
+        raise WsCommandError("internal", "s3.default_bucket is not set.", error_code='internal')
     if default_bucket_key not in settings.s3.buckets:
-        raise WsCommandError("internal", f"S3 bucket '{default_bucket_key}' не найден.")
+        raise WsCommandError("internal", f"S3 bucket '{default_bucket_key}' not found.", error_code='internal')
     bucket_config = settings.s3.buckets[default_bucket_key]
     if not bucket_config.enabled:
-        raise WsCommandError("internal", f"S3 bucket '{default_bucket_key}' выключен.")
+        raise WsCommandError("internal", f"S3 bucket '{default_bucket_key}' is disabled.", error_code='internal')
     if not bucket_config.access_key_id:
         raise WsCommandError(
-            "internal", f"S3 access_key_id не настроен для bucket '{default_bucket_key}'."
-        )
+            "internal", f"S3 access_key_id is not set for bucket '{default_bucket_key}'.",
+                  error_code='internal',
+              )
     if not bucket_config.secret_access_key:
         raise WsCommandError(
             "internal",
-            f"S3 secret_access_key не настроен для bucket '{default_bucket_key}'.",
-        )
+            f"S3 secret_access_key is not set for bucket '{default_bucket_key}'.",
+                  error_code='internal',
+              )
     if not bucket_config.region_name:
         raise WsCommandError(
-            "internal", f"S3 region_name не настроен для bucket '{default_bucket_key}'."
-        )
+            "internal", f"S3 region_name is not set for bucket '{default_bucket_key}'.",
+                  error_code='internal',
+              )
     real_bucket_name = bucket_config.bucket_name or default_bucket_key
     if real_bucket_name == "":
-        raise WsCommandError("internal", "Имя S3 bucket для egress не может быть пустым.")
+        raise WsCommandError("internal", "S3 bucket name for egress must not be empty.", error_code='internal')
     recording_id = uuid4().hex
     egress_filepath = (
         f"sync-recordings/{company_id}/{call.call_id}/{recording_id}.mp4"
@@ -1699,12 +1713,12 @@ async def op_calls_recording_start(
     )
     provider_job_id = read_livekit_egress_id(egress_info)
     logger.info(
-        "call.recording.start: call_id=%s recording_id=%s room=%s egress_id=%s audio_only=%s",
-        call.call_id,
-        recording_id,
-        call.livekit_room_name,
-        provider_job_id,
-        call.call_type == "audio",
+        "call.recording.start",
+        call_id=call.call_id,
+        recording_id=recording_id,
+        room=call.livekit_room_name,
+        egress_id=provider_job_id,
+        audio_only=call.call_type == 'audio',
     )
     recording = SyncCallRecording(
         recording_id=recording_id,
@@ -1743,19 +1757,20 @@ async def op_calls_recording_stop(
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(call.channel_id), user_id=user.user_id
     ):
-        raise WsCommandError("forbidden", "Нет доступа к звонку.")
+        raise WsCommandError("forbidden", "No access to the call.", error_code='forbidden')
     active = await container.call_recording_repository.get_active_for_call(
         payload.call_id, company_id
     )
     if active is None:
-        raise WsCommandError("not_found", "Активная запись не найдена.")
+        raise WsCommandError("not_found", "Active recording not found.", error_code='not_found')
     is_meeting_admin = call.created_by_user_id == user.user_id
     is_recording_starter = active.started_by_user_id == user.user_id
     if not is_meeting_admin and not is_recording_starter:
         raise WsCommandError(
             "forbidden",
-            "Останавливать запись может только админ встречи или пользователь, который её запустил.",
-        )
+            "Only the meeting admin or the user who started recording can stop it.",
+                  error_code='forbidden',
+              )
     out = await stop_and_finalize_recording(
         call=call,
         recording=active,
@@ -1786,28 +1801,30 @@ async def op_calls_admin_transfer(
     call = await container.call_repository.get_call(payload.call_id, company_id)
     if call.created_by_user_id != user.user_id:
         raise WsCommandError(
-            "forbidden", "Только текущий админ встречи может передавать админку."
-        )
+            "forbidden", "Only the current meeting admin can transfer admin.",
+                  error_code='forbidden',
+              )
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(call.channel_id), user_id=user.user_id
     ):
-        raise WsCommandError("forbidden", "Нет доступа к звонку.")
+        raise WsCommandError("forbidden", "No access to the call.", error_code='forbidden')
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(call.channel_id), user_id=payload.target_user_id
     ):
-        raise WsCommandError("forbidden", "Новый админ не является участником канала.")
+        raise WsCommandError("forbidden", "New admin is not a channel member.", error_code='forbidden')
     if payload.target_user_id.startswith("guest:"):
-        raise WsCommandError("forbidden", "Нельзя назначить гостя админом встречи.")
+        raise WsCommandError("forbidden", "Cannot assign a guest as meeting admin.", error_code='forbidden')
     participants = await container.call_repository.list_participants(call.call_id)
     target_participant = next(
         (item for item in participants if item.user_id == payload.target_user_id), None
     )
     if target_participant is None:
-        raise WsCommandError("not_found", "Новый админ не найден среди участников звонка.")
+        raise WsCommandError("not_found", "New admin is not among call participants.", error_code='not_found')
     if target_participant.status != "joined":
         raise WsCommandError(
-            "forbidden", "Новый админ должен быть активным участником звонка."
-        )
+            "forbidden", "New admin must be an active call participant.",
+                  error_code='forbidden',
+              )
     await container.call_repository.set_call_admin(call.call_id, payload.target_user_id)
     updated_call = await container.call_repository.get_call(call.call_id, company_id)
     updated_participants = await container.call_repository.list_participants(call.call_id)
@@ -1993,7 +2010,7 @@ async def op_calls_get(
     try:
         call = await container.call_repository.get_call(payload.call_id, company_id)
     except ValueError as exc:
-        raise WsCommandError("not_found", str(exc)) from exc
+        raise WsCommandError("not_found", str(exc), error_code='not_found') from exc
     participants = await container.call_repository.list_participants(payload.call_id)
     return call_read_from_entities(call, participants)
 
@@ -2009,7 +2026,7 @@ async def op_calls_recordings_list(
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(call.channel_id), user_id=user.user_id
     ):
-        raise WsCommandError("forbidden", "Нет доступа к звонку.")
+        raise WsCommandError("forbidden", "No access to the call.", error_code='forbidden')
     rows = await container.call_recording_repository.list_for_call(payload.call_id, company_id)
     return ListResponse[CallRecordingRead](items=[call_recording_read(r) for r in rows])
 
@@ -2025,21 +2042,24 @@ async def op_calls_token(
     try:
         call = await container.call_repository.get_call(payload.call_id, company_id)
     except ValueError as exc:
-        raise WsCommandError("not_found", str(exc)) from exc
+        raise WsCommandError("not_found", str(exc), error_code='not_found') from exc
     if call.mode != "sfu":
         raise WsCommandError(
-            "forbidden", f"Звонок {payload.call_id} не является SFU-звонком."
-        )
+            "forbidden", f"Call {payload.call_id} is not an SFU call.",
+                  error_code='forbidden',
+              )
     if not call.livekit_room_name:
         raise WsCommandError(
-            "forbidden", f"У звонка {payload.call_id} нет LiveKit комнаты."
-        )
+            "forbidden", f"Call {payload.call_id} has no LiveKit room.",
+                  error_code='forbidden',
+              )
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(call.channel_id), user_id=user.user_id
     ):
         raise WsCommandError(
-            "forbidden", f"Нет доступа к каналу звонка {payload.call_id}."
-        )
+            "forbidden", f"No access to call channel {payload.call_id}.",
+                  error_code='forbidden',
+              )
     token = _livekit_client(settings).generate_token(
         room_name=call.livekit_room_name, identity=user.user_id
     )
@@ -2141,14 +2161,16 @@ async def op_calls_links_create(
             raise WsCommandError(
                 "ws_invalid_payload",
                 message,
-            )
+                      error_code='ws_invalid_payload',
+                  )
         dup = await container.call_repository.get_link_by_calendar_event(
             company_id, body.calendar_event_id
         )
         if dup is not None:
             raise WsCommandError(
-                "conflict", "Для этого события календаря уже создана ссылка."
-            )
+                "conflict", "A link already exists for this calendar event.",
+                      error_code='conflict',
+                  )
         channel_id = uuid4().hex
         ch = SyncChannel(
             channel_id=channel_id,
@@ -2191,44 +2213,49 @@ async def op_calls_links_create(
         if body.channel_id is None:
             raise WsCommandError(
                 "ws_invalid_payload",
-                "channel_id обязателен для ссылки без calendar_event_id.",
-            )
+                "channel_id is required for a link without calendar_event_id.",
+                      error_code='ws_invalid_payload',
+                  )
         channel_id = body.channel_id
         if not await container.authz_service.can_view(
             AuthzObject.sync_channel(channel_id), user_id=actor_id
         ):
-            raise WsCommandError("forbidden", "Нет доступа к каналу.")
+            raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
         expires_at = datetime.now(UTC) + timedelta(hours=ttl_hours)
         if body.call_id:
             try:
                 existing = await container.call_repository.get_call(body.call_id, company_id)
             except ValueError as exc:
-                raise WsCommandError("not_found", str(exc)) from exc
+                raise WsCommandError("not_found", str(exc), error_code='not_found') from exc
             if existing.channel_id != channel_id:
                 raise WsCommandError(
-                    "ws_invalid_payload", "Звонок относится к другому каналу."
-                )
+                    "ws_invalid_payload", "Call belongs to another channel.",
+                          error_code='ws_invalid_payload',
+                      )
             if existing.status not in ("ringing", "active"):
                 raise WsCommandError(
                     "forbidden",
-                    "Ссылка на конференцию доступна только для активного или входящего звонка.",
-                )
+                    "Conference link is available only for an active or incoming call.",
+                          error_code='forbidden',
+                      )
             if existing.mode != "sfu":
                 raise WsCommandError(
-                    "forbidden", "Гостевая ссылка поддерживается только для SFU-звонков."
-                )
+                    "forbidden", "Guest link is supported only for SFU calls.",
+                          error_code='forbidden',
+                      )
             if not existing.livekit_room_name:
-                raise WsCommandError("forbidden", "У звонка нет LiveKit-комнаты.")
+                raise WsCommandError("forbidden", "Call has no LiveKit room.", error_code='forbidden')
             attached_call_id = existing.call_id
         else:
             ch = await container.channel_repository.get(channel_id)
             if ch is None:
-                raise WsCommandError("not_found", "Канал не найден.")
+                raise WsCommandError("not_found", "Channel not found.", error_code='not_found')
             if ch.type == CHANNEL_TYPE_CALENDAR_MEETING:
                 raise WsCommandError(
                     "ws_invalid_payload",
-                    "Постоянная ссылка на канал календарной встречи не создаётся через channel_id.",
-                )
+                    "A persistent link for a calendar meeting channel is not created via channel_id.",
+                          error_code='ws_invalid_payload',
+                      )
             existing_p = await container.call_repository.get_persistent_channel_link(
                 company_id, channel_id
             )
@@ -2258,7 +2285,7 @@ async def op_calls_links_create(
                         existing_p.link_token, company_id
                     )
                     if not deleted:
-                        raise WsCommandError("internal", "Не удалось заменить постоянную ссылку.")
+                        raise WsCommandError("internal", "Failed to replace the persistent link.", error_code='internal')
             is_persistent_channel_link = True
 
     link_token = uuid4().hex
@@ -2305,19 +2332,20 @@ async def op_calls_links_update(
     )
     if link.calendar_event_id is None:
         raise WsCommandError(
-            "forbidden", "Патч поддерживается только для календарных ссылок."
-        )
+            "forbidden", "Patch is supported only for calendar links.",
+                  error_code='forbidden',
+              )
     if not await container.authz_service.can_view(
         AuthzObject.sync_channel(link.channel_id), user_id=user.user_id
     ):
-        raise WsCommandError("forbidden", "Нет доступа к ссылке.")
+        raise WsCommandError("forbidden", "No access to the link.", error_code='forbidden')
 
     new_start = body.scheduled_start_at if body.scheduled_start_at is not None else link.scheduled_start_at
     new_end = body.scheduled_end_at if body.scheduled_end_at is not None else link.scheduled_end_at
     if new_start is None or new_end is None:
-        raise WsCommandError("ws_invalid_payload", "У ссылки должны быть границы расписания.")
+        raise WsCommandError("ws_invalid_payload", "Link must have schedule bounds.", error_code='ws_invalid_payload')
     if new_start >= new_end:
-        raise WsCommandError("ws_invalid_payload", "Некорректный интервал встречи.")
+        raise WsCommandError("ws_invalid_payload", "Invalid meeting interval.", error_code='ws_invalid_payload')
 
     new_title = body.scheduled_title if body.scheduled_title is not None else link.title
     now = datetime.now(UTC)
@@ -2334,10 +2362,10 @@ async def op_calls_links_update(
     if body.scheduled_title is not None:
         ch = await container.channel_repository.get(link.channel_id)
         if ch is None or ch.company_id != company_id:
-            raise WsCommandError("not_found", "Канал ссылки не найден.")
+            raise WsCommandError("not_found", "Link channel not found.", error_code='not_found')
         name = body.scheduled_title.strip()
         if name == "":
-            raise WsCommandError("ws_invalid_payload", "scheduled_title не может быть пустым.")
+            raise WsCommandError("ws_invalid_payload", "scheduled_title must not be empty.", error_code='ws_invalid_payload')
         ch.name = name
         _ = await container.channel_repository.update(ch)
     if body.calendar_member_user_ids is not None:
@@ -2375,17 +2403,18 @@ async def op_calls_links_remove(
     link = await container.call_repository.get_link_for_company(payload.link_token, company_id)
     if link.calendar_event_id is None:
         raise WsCommandError(
-            "forbidden", "Удаление через этот контракт только для календарных ссылок."
-        )
+            "forbidden", "Delete via this contract is only for calendar links.",
+                  error_code='forbidden',
+              )
     can_admin = await container.authz_service.can_admin(
         AuthzObject.sync_channel(link.channel_id), user_id=user.user_id
     )
     if link.created_by_user_id != user.user_id and not can_admin:
-        raise WsCommandError("forbidden", "Нет прав удалить эту ссылку.")
+        raise WsCommandError("forbidden", "No permission to delete this link.", error_code='forbidden')
     channel_id = link.channel_id
     deleted = await container.call_repository.delete_link(payload.link_token, company_id)
     if not deleted:
-        raise WsCommandError("not_found", "Ссылка не найдена.")
+        raise WsCommandError("not_found", "Link not found.", error_code='not_found')
     _ = await container.short_link_service.delete_sync_by_link_token(payload.link_token)
     ch = await container.channel_repository.get(channel_id)
     if ch is not None and ch.company_id == company_id and ch.type == CHANNEL_TYPE_CALENDAR_MEETING:
@@ -2404,7 +2433,7 @@ async def op_calls_join_info(
     try:
         link = await container.call_repository.get_link(payload.link_token)
     except ValueError as exc:
-        raise WsCommandError("not_found", str(exc)) from exc
+        raise WsCommandError("not_found", str(exc), error_code='not_found') from exc
 
     channel = await container.channel_repository.get(link.channel_id)
     channel_name = channel.name if channel else None
@@ -2438,7 +2467,7 @@ async def op_calls_join_accept(
     try:
         link = await container.call_repository.get_link(payload.link_token)
     except ValueError as exc:
-        raise WsCommandError("not_found", str(exc)) from exc
+        raise WsCommandError("not_found", str(exc), error_code='not_found') from exc
 
     is_authenticated = user.user_id not in ("anonymous", "")
 
@@ -2449,8 +2478,9 @@ async def op_calls_join_accept(
         if payload.body is None or not payload.body.guest_name.strip():
             raise WsCommandError(
                 "ws_invalid_payload",
-                "Для гостевого входа необходимо указать guest_name.",
-            )
+                "guest_name is required for guest join.",
+                      error_code='ws_invalid_payload',
+                  )
         safe_name = payload.body.guest_name.strip().replace(":", "_")
         participant_identity = f"guest:{uuid4().hex[:8]}:{safe_name}"
 
@@ -2461,8 +2491,9 @@ async def op_calls_join_accept(
             if not livekit_room:
                 raise WsCommandError(
                     "internal",
-                    "У завершённого звонка нет LiveKit комнаты.",
-                )
+                    "Ended call has no LiveKit room.",
+                          error_code='internal',
+                      )
             await _livekit_client(settings).create_room(
                 livekit_room,
                 company_id=link.company_id,
@@ -2506,7 +2537,7 @@ async def op_calls_join_accept(
         await container.call_repository.attach_call_to_link(payload.link_token, call.call_id)
 
     if not call.livekit_room_name:
-        raise WsCommandError("internal", "У звонка нет LiveKit комнаты.")
+        raise WsCommandError("internal", "Call has no LiveKit room.", error_code='internal')
 
     token = _livekit_client(settings).generate_token(
         room_name=call.livekit_room_name, identity=participant_identity
@@ -2550,7 +2581,7 @@ async def op_company_members_list(
     company_id = require_company().company_id
     company = await container.company_repository.get(company_id)
     if company is None:
-        raise WsCommandError("not_found", "Компания не найдена.")
+        raise WsCommandError("not_found", "Company not found.", error_code='not_found')
 
     all_member_uids = [uid for uid in company.members if uid != user.user_id]
     total = len(all_member_uids)
@@ -2559,7 +2590,7 @@ async def op_company_members_list(
     settings = get_settings()
     redis_url = settings.database.redis_url
     if not redis_url:
-        raise WsCommandError("internal", "database.redis_url не задан.")
+        raise WsCommandError("internal", "database.redis_url is not set.", error_code='internal')
 
     presence_map, users_by_id = await asyncio.gather(
         batch_peer_presence(redis_url, member_uids),
@@ -2573,8 +2604,9 @@ async def op_company_members_list(
         if member_user is None:
             raise WsCommandError(
                 "internal",
-                f"Участник {uid} указан в компании, но пользователь не найден.",
-            )
+                f"Member {uid} is listed in the company, but the user was not found.",
+                      error_code='internal',
+                  )
         roles = list(roles_raw)
         pr = presence_map[uid]
         items.append(
@@ -2602,9 +2634,9 @@ async def op_company_shared_channels_list(
     company_id = require_company().company_id
     company = await container.company_repository.get(company_id)
     if company is None:
-        raise WsCommandError("not_found", "Компания не найдена.")
+        raise WsCommandError("not_found", "Company not found.", error_code='not_found')
     if payload.peer_user_id not in company.members:
-        raise WsCommandError("not_found", "Пользователь не в компании.")
+        raise WsCommandError("not_found", "User is not in the company.", error_code='not_found')
 
     if payload.peer_user_id == user.user_id:
         candidates = await container.channel_repository.list_for_user(
@@ -2665,33 +2697,19 @@ class FilesUploadCompletedPayload(BaseModel):
     file_id: str = Field(min_length=1)
 
 
-class FilesUploadCompletedResult(BaseModel):
-    file_id: str
-    original_name: str
-    content_type: str
-    file_size: int
-
-
 async def op_files_upload_completed(
     payload: FilesUploadCompletedPayload,
     *,
     user: User,
     container: SyncContainer,
-) -> FilesUploadCompletedResult:
+) -> FileRef:
     """Подтверждение метаданных файла после chunked REST upload.
 
     Бинарный поток идёт через `POST /sync/api/v1/files/uploads*` (chunked),
-    а через WS клиент шлёт этот фрейм с `file_id`, чтобы получить
-    каноничный `FilesUploadCompletedResult` для дальнейшей вставки в
-    `MessagesSendPayload.body.contents`.
+    а через WS клиент шлёт этот фрейм с `file_id` и получает `FileRef`.
     """
     _ = user
     record: FileRecord | None = await container.file_repository.get(payload.file_id)
     if record is None:
-        raise WsCommandError("not_found", f"Файл {payload.file_id!r} не найден.")
-    return FilesUploadCompletedResult(
-        file_id=record.file_id,
-        original_name=record.original_name,
-        content_type=record.content_type,
-        file_size=record.file_size,
-    )
+        raise WsCommandError("not_found", f"File {payload.file_id!r} not found.", error_code='not_found')
+    return stored_file_ref(record)

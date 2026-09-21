@@ -45,25 +45,6 @@ class ToolDefinition(StrictBaseModel):
     provenance: JsonObject | None = None
 
 
-class ToolBinding(StrictBaseModel):
-    """Flow/node scoped editable projection over a pinned ToolDefinition."""
-
-    binding_id: str = Field(..., min_length=1)
-    definition_id: str = Field(..., min_length=1)
-    definition_version: int = Field(..., ge=1)
-    flow_id: str = Field(..., min_length=1)
-    node_id: str = Field(..., min_length=1)
-    llm_name: str = Field(..., min_length=1)
-    title: str = Field(..., min_length=1)
-    description: str = ""
-    parameter_bindings: JsonObject = Field(default_factory=dict)
-    model_schema_projection: JsonObject = Field(default_factory=dict)
-    result_projection: list[str] = Field(default_factory=list)
-    confirmation_override: ConfirmationFloor | None = None
-    budgets: JsonObject | None = None
-    enabled: bool = True
-
-
 class ToolRevision(StrictBaseModel):
     """Immutable executor artifact revision (user code, MCP pin, flow pin)."""
 

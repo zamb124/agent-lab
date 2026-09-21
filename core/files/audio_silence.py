@@ -13,7 +13,7 @@ from pathlib import Path
 def parse_volumedetect_max_volume_db(stderr_text: str) -> float:
     m = re.search(r"max_volume:\s*([-\d.]+)\s*dB", stderr_text)
     if m is None:
-        raise ValueError("В stderr ffmpeg (volumedetect) не найдено поле max_volume.")
+        raise ValueError("ffmpeg stderr (volumedetect) has no max_volume field.")
     return float(m.group(1))
 
 
@@ -26,7 +26,7 @@ def _suffix_for_ffmpeg(source_suffix: str) -> str:
 
 def _volumedetect_sync(data: bytes, source_suffix: str, ffmpeg: str) -> float:
     if len(data) == 0:
-        raise ValueError("Пустые данные для volumedetect.")
+        raise ValueError("Empty data for volumedetect.")
     suf = _suffix_for_ffmpeg(source_suffix)
     with tempfile.TemporaryDirectory(prefix="platform-volumedetect-") as td:
         src = Path(td) / f"in{suf}"
@@ -50,14 +50,14 @@ def _volumedetect_sync(data: bytes, source_suffix: str, ffmpeg: str) -> float:
         )
         if result.returncode != 0:
             stderr = (result.stderr or "").strip()
-            raise ValueError(f"volumedetect: ffmpeg завершился с ошибкой: {stderr[:800]}")
+            raise ValueError(f"volumedetect: ffmpeg failed: {stderr[:800]}")
         return parse_volumedetect_max_volume_db(result.stderr or "")
 
 
 async def volumedetect_max_volume_db_from_bytes(data: bytes, source_suffix: str) -> float:
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg is None:
-        raise ValueError("ffmpeg не найден в PATH.")
+        raise ValueError("ffmpeg was not found in PATH.")
     return await asyncio.to_thread(_volumedetect_sync, data, source_suffix, ffmpeg)
 
 
@@ -80,7 +80,7 @@ def _trim_edges_sync(
     min_silence_sec: float,
 ) -> bytes:
     if len(data) == 0:
-        raise ValueError("Пустые данные для обрезки тишины.")
+        raise ValueError("Empty data for silence trimming.")
     suf = _suffix_for_ffmpeg(source_suffix)
     ext = suf.lower()
     with tempfile.TemporaryDirectory(prefix="platform-trim-silence-") as td:
@@ -125,12 +125,12 @@ def _trim_edges_sync(
         )
         if result.returncode != 0:
             stderr = (result.stderr or "").strip()
-            raise ValueError(f"silenceremove: ffmpeg завершился с ошибкой: {stderr[:1200]}")
+            raise ValueError(f"silenceremove: ffmpeg failed: {stderr[:1200]}")
         if not dst.is_file():
-            raise ValueError("silenceremove: выходной файл не создан.")
+            raise ValueError("silenceremove: output file was not created.")
         out = dst.read_bytes()
         if len(out) == 0:
-            raise ValueError("silenceremove: выход пустой.")
+            raise ValueError("silenceremove: output is empty.")
         return out
 
 
@@ -143,7 +143,7 @@ async def trim_leading_trailing_silence_from_bytes(
 ) -> bytes:
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg is None:
-        raise ValueError("ffmpeg не найден в PATH.")
+        raise ValueError("ffmpeg was not found in PATH.")
     return await asyncio.to_thread(
         _trim_edges_sync,
         data,

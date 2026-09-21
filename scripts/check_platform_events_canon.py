@@ -431,69 +431,133 @@ def _extract_arrow_or_fn_handler(text: str, use_event_match_end: int) -> str | N
     return None
 
 
+USE_EVENT_ANY_RE = re.compile(r"this\.useEvent\s*\(")
+# Триггеры смены области данных: страница обязана перезагрузить другой набор.
+SCOPE_CHANGE_EVENT_RE = re.compile(
+    r"^(?:CoreEvents\.)?(?:UI_NAMESPACE_CHANGED|UI_[A-Z_]*RELOAD_REQUESTED|ROUTER_[A-Z_]+|I18N_[A-Z_]+"
+    r"|THEME_[A-Z_]+|COMPANIES_[A-Z_]+|AUTH_USER_LOADED|AUTH_COMPANY_SWITCHED)$"
+)
+RELOAD_IN_HANDLER_RE = re.compile(
+    r"(?:\.load\s*\(|(?<!location)\.reload\s*\(|\.loadMore\s*\(|\.dispatch\s*\(\s*[A-Za-z_.]*(?:LOAD_REQUESTED|LIST_REQUESTED)\b)"
+)
+RUN_TARGET_RE = re.compile(r"this\.(_[A-Za-z0-9]+)\.run\s*\(")
+LOADER_METHOD_PREFIXES = ("_load", "_reload", "_refresh", "_fetch")
+MUTATION_WORD_RE = re.compile(
+    r"(create|update|remove|delete|merge|move|claim|complete|cancel|assign|upload|revoke|save|patch"
+    r"|set|toggle|enable|disable|rebuild|restore|import|start|stop|apply|rotate|promote|bind|attach"
+    r"|detach|reset|approve|decline|publish|archive|duplicate|copy|rename|send|resend|sync|generate"
+    r"|analyze|format|repair|invite|accept|reject|join|leave|mark|pin|unpin|lock|unlock|review)",
+    re.IGNORECASE,
+)
+READ_OUTCOME_EVENT_RE = re.compile(r"/(?:[a-z_]*loaded|[a-z_]*failed)$|[._][A-Z_]*(?:LOADED|FAILED)$")
+COMMAND_OUTCOME_EVENT_RE = re.compile(
+    r"(?:/(?:succeeded|failed|loaded|list_loaded|item_loaded|item_failed|item_removed)$"
+    r"|\.events\.(?:SUCCEEDED|FAILED|LOADED|LIST_LOADED|ITEM_LOADED|ITEM_FAILED"
+    r"|CREATED|UPDATED|REMOVED|CREATE_FAILED|UPDATE_FAILED|REMOVE_FAILED)$)"
+)
+
+
+def _is_read_outcome(type_label: str) -> bool:
+    """Исход чтения (list/item/search/…): цепочка зависимых загрузок — не перезагрузка."""
+    if READ_OUTCOME_EVENT_RE.search(type_label):
+        return True
+    if not COMMAND_OUTCOME_EVENT_RE.search(type_label):
+        return False
+    return MUTATION_WORD_RE.search(type_label) is None
+
+
+def _push_reload_roots() -> list[Path]:
+    roots: list[Path] = []
+    for svc_dir in sorted((ROOT / "apps").iterdir()):
+        ui_dir = svc_dir / "ui"
+        if not ui_dir.is_dir():
+            continue
+        for kind in ("pages", "modals", "components"):
+            if (ui_dir / kind).is_dir():
+                roots.append(ui_dir / kind)
+    roots.append(ROOT / "core" / "frontend" / "static" / "lib" / "components")
+    return roots
+
+
+def _use_event_type_label(type_src: str) -> str:
+    stripped = type_src.strip()
+    literal = re.fullmatch(r"['\"]([^'\"]+)['\"]", stripped)
+    if literal:
+        return literal.group(1)
+    return stripped
+
+
+def _handler_reaches_reload(handler_src: str, method_bodies: dict[str, str]) -> bool:
+    """`.load()` — перезагрузка всегда; `.run()` — если цель читающий op; неизвестный `_load*()` — тоже."""
+
+    def _hits(src: str) -> bool:
+        if RELOAD_IN_HANDLER_RE.search(src):
+            return True
+        return any(MUTATION_WORD_RE.search(m.group(1)) is None for m in RUN_TARGET_RE.finditer(src))
+
+    if _hits(handler_src):
+        return True
+    visited: set[str] = set()
+    stack: list[str] = [m.group(1) for m in re.finditer(r"this\.(_[A-Za-z0-9]+)\s*\(", handler_src)]
+    while stack:
+        name = stack.pop()
+        if name in visited:
+            continue
+        visited.add(name)
+        body = method_bodies.get(name)
+        if body is None:
+            if name.startswith(LOADER_METHOD_PREFIXES):
+                return True
+            continue
+        if _hits(body):
+            return True
+        stack.extend(m.group(1) for m in re.finditer(r"this\.(_[A-Za-z0-9]+)\s*\(", body))
+    return False
+
+
 def _check_push_reload(errors: list[str]) -> None:
-    ui_roots = [
-        ROOT / "apps" / svc / "ui" / kind
-        for svc in (
-            "crm",
-            "flows",
-            "sync",
-            "rag",
-            "office",
-            "worktracker",
-            "frontend",
-            "voice",
-            "search",
-        )
-        for kind in ("pages", "modals", "components")
-    ]
-    for root in ui_roots:
+    """Событие → перезагрузка запрещено: push и SUCCEEDED-исходы мержатся в фабрике.
+
+    Ловит `this.useEvent(<type>, handler)` для push-типов, `CoreEvents.WS_CONNECTED` и исходов
+    мутаций (`*_update/succeeded`, `.events.CREATED|UPDATED|REMOVED`, …), где handler доходит
+    до `.load()/.reload()`, `.run()` читающего op или неизвестного `_load*()`. Исходы чтения
+    (`/loaded`, `*_list/succeeded`, `*_bounds/succeeded`, …) — цепочка зависимых загрузок, не
+    перезагрузка; `.run()` мутирующего op (`_namespaceUpdateOp.run`) — бизнес-цепочка.
+    Исключение — смена области данных (`UI_NAMESPACE_CHANGED`, `*_RELOAD_REQUESTED`,
+    `ROUTER_*`, `I18N_*`, `THEME_*`, `COMPANIES_*`, `AUTH_USER_LOADED`, `AUTH_COMPANY_SWITCHED`):
+    другой пользователь/компания/пространство — другой набор данных, это новая загрузка.
+    `WS_CONNECTED` сюда не входит: досинхронизацию после обрыва делает фабрика
+    (`extraEffect` + `reloadLastList`/`rerunLastRequest`).
+    """
+    for root in _push_reload_roots():
         if not root.exists():
             continue
-        for path in root.rglob("*.js"):
+        for path in sorted(root.rglob("*.js")):
             text = path.read_text(encoding="utf-8", errors="ignore")
             rel = str(path.relative_to(ROOT)).replace("\\", "/")
             method_bodies = _extract_method_bodies(text)
-            for match in USE_EVENT_STRING_RE.finditer(text):
-                event_type = match.group(1)
-                if LOCAL_COMMAND_REPLY_RE.search(event_type):
-                    continue
-                if event_type.startswith("core/") or event_type.startswith("platform/"):
-                    continue
-                # CoreEvents.WS_CONNECTED etc via string rare; allow reconnect loads
-                if event_type in (
-                    "platform/ws/connected",
-                    "core/ws/connected",
-                ):
-                    continue
-                # Find useEvent( open paren
-                open_paren = text.rfind("(", 0, match.start() + len("this.useEvent"))
-                # match starts at this.useEvent — find '(' after useEvent
+            for match in USE_EVENT_ANY_RE.finditer(text):
                 open_paren = text.find("(", match.start())
-                if open_paren < 0:
-                    continue
                 close_paren = _matching_paren_end(text, open_paren)
                 if close_paren < 0:
                     continue
-                call_src = text[open_paren : close_paren + 1]
-                # Handler is second arg
-                # useEvent('type', handler) — after first comma
+                call_src = text[open_paren + 1 : close_paren]
                 first_comma = call_src.find(",")
                 if first_comma < 0:
                     continue
+                type_label = _use_event_type_label(call_src[:first_comma])
+                if SCOPE_CHANGE_EVENT_RE.match(type_label):
+                    continue
+                if _is_read_outcome(type_label):
+                    continue
                 handler_src = call_src[first_comma + 1 :]
-                # Resolve this._onFoo references
-                resolved = handler_src
-                for ref in re.finditer(r"this\.(_[A-Za-z0-9]+)\b", handler_src):
-                    name = ref.group(1)
-                    body = method_bodies.get(name)
-                    if body is not None:
-                        resolved += "\n" + body
-                if _handler_reaches_http(resolved, method_bodies):
-                    errors.append(
-                        f"{rel}: push useEvent({event_type!r}) → load/reload "
-                        f"(merge in factory extraReducer/extraEffect)"
-                    )
+                if not _handler_reaches_reload(handler_src, method_bodies):
+                    continue
+                line = text.count("\n", 0, match.start()) + 1
+                errors.append(
+                    f"{rel}:{line}: useEvent({type_label}) → load/reload "
+                    f"(merge in factory extraReducer)"
+                )
 
 
 def _is_a2a_allowlisted(rel: str) -> bool:

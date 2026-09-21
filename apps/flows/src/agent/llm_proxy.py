@@ -50,12 +50,12 @@ from core.ai.providers import (
 )
 from core.ai.requirements import AISelection
 from core.ai.resolver import COST_ORIGIN_PLATFORM, resolve_ai_model
-from core.ai.runtime import create_llm_client_from_ai_model, should_use_platform_default_free_pool
-from core.billing import get_billing_service
+from core.ai.runtime import create_llm_client_from_ai_model
 from core.billing.exceptions import BillingBalanceBlockedError
-from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
+from core.clients.llm.client import LLMClient
 from core.clients.llm.context_layer import openai_messages_to_a2a_messages
 from core.clients.llm.messages import LLMToolCall
+from core.clients.llm.mock import MockLLM
 from core.clients.llm.openai_api_codec import (
     build_chat_completion,
     build_chat_completion_chunk,
@@ -67,8 +67,7 @@ from core.clients.llm.openai_api_codec import (
     sse_done_line,
 )
 from core.clients.nano_banana import NanoBananaClient
-from core.config import get_settings
-from core.context import get_context, require_context
+from core.context import require_context
 from core.files.models import FileRecord
 from core.files.s3_client import S3ClientFactory
 from core.logging import get_logger
@@ -77,7 +76,6 @@ from core.office.ai_settings import (
     LARA_MODEL_PREFIX,
     parse_lara_branch_model_id,
 )
-from core.tracing.tracer import get_tracer
 from core.types import (
     JsonArray,
     JsonObject,
@@ -86,6 +84,8 @@ from core.types import (
     require_json_array,
     require_json_object,
 )
+from core.websocket import WsCommandError, command_failure_payload
+from core.websocket.operation import ws_command_error_status
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["agent-llm-proxy"])
@@ -199,9 +199,29 @@ async def _llm_proxy_http_exception_handler(
     )
 
 
+async def _llm_proxy_ws_command_error_handler(
+    request: Request,
+    exc: Exception,
+) -> StarletteResponse:
+    if not isinstance(exc, WsCommandError):
+        raise exc
+    status_code = ws_command_error_status(exc)
+    if not request.url.path.startswith(_LLM_PROXY_PATH_PREFIX):
+        return JSONResponse(status_code=status_code, content=command_failure_payload(exc))
+    return JSONResponse(
+        status_code=status_code,
+        content=openai_error_body(
+            message=exc.detail,
+            error_type=_openai_error_type_for_status(status_code),
+            code=exc.error_code,
+        ),
+    )
+
+
 # OpenAI/OR error envelope ``{"error":{message,type,code}}`` для LLM proxy surface —
 # внешняя wire-спека, подключается через `create_service_app(extra_exception_handlers=...)`.
 LLM_PROXY_EXCEPTION_HANDLERS: tuple[tuple[type[Exception], ExceptionHandler], ...] = (
+    (WsCommandError, _llm_proxy_ws_command_error_handler),
     (HTTPException, _llm_proxy_http_exception_handler),
 )
 
@@ -244,32 +264,33 @@ def _resolve_agent_llm_model(requested_model: str) -> ResolvedAIModel:
             include_platform_default=False,
         )
         if resolved is None:
-            raise HTTPException(
-                status_code=503,
-                detail="humanitec_llm недоступен для компании",
+            raise WsCommandError(
+                "unavailable",
+                "humanitec_llm is unavailable for the company",
+                error_code="humanitec_llm_unavailable",
             )
         return resolved
 
     if requested_model == IMAGE_AUTO_MODEL_ID:
-        raise HTTPException(
-            status_code=400,
-            detail="model 'image-auto' доступен только через /images/generations",
+        raise WsCommandError(
+            "ws_invalid_payload",
+            "model 'image-auto' is only available via /images/generations",
+            error_code="image_auto_wrong_endpoint",
         )
 
     if parse_lara_branch_model_id(requested_model) is not None:
-        raise HTTPException(
-            status_code=400,
-            detail="lara:<branch> обрабатывается отдельным A2A bridge",
+        raise WsCommandError(
+            "ws_invalid_payload",
+            "lara:<branch> is handled by a separate A2A bridge",
+            error_code="lara_model_wrong_path",
         )
 
     parsed_ref = split_humanitec_llms_model_ref(requested_model)
     if parsed_ref is None:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "model должен быть 'auto', 'lara:<branch>', 'image-auto' "
-                + "или '<provider>:<model_id>'"
-            ),
+        raise WsCommandError(
+            "ws_invalid_payload",
+            "model must be 'auto', 'lara:<branch>', 'image-auto' or '<provider>:<model_id>'",
+            error_code="agent_llm_model_invalid",
         )
     provider, model_id = parsed_ref
     resolved = resolve_ai_model(
@@ -278,9 +299,11 @@ def _resolve_agent_llm_model(requested_model: str) -> ResolvedAIModel:
         include_platform_default=False,
     )
     if resolved is None:
-        raise HTTPException(
-            status_code=503,
-            detail=f"LLM модель {requested_model!r} недоступна для компании",
+        raise WsCommandError(
+            "unavailable",
+            f"LLM model {requested_model!r} is unavailable for the company",
+            error_code="agent_llm_model_unavailable",
+            error_params={"model": requested_model},
         )
     return resolved
 
@@ -328,9 +351,10 @@ async def _read_agent_llm_model_ids(container: ContainerDep) -> list[str]:
                 append_model_id(option_value)
 
     if not model_ids:
-        raise HTTPException(
-            status_code=503,
-            detail="agent LLM model catalog недоступен",
+        raise WsCommandError(
+            "unavailable",
+            "agent LLM model catalog is unavailable",
+            error_code="agent_llm_catalog_unavailable",
         )
     return model_ids
 
@@ -338,48 +362,51 @@ async def _read_agent_llm_model_ids(container: ContainerDep) -> list[str]:
 def _validate_requested_agent_model(requested_model: str, allowed_model_ids: set[str]) -> str:
     normalized = requested_model.strip()
     if not normalized:
-        raise HTTPException(status_code=400, detail="model обязателен")
+        raise WsCommandError(
+            "ws_invalid_payload",
+            "model is required",
+            error_code="agent_llm_model_required",
+        )
     if normalized.startswith(LARA_MODEL_PREFIX) and parse_lara_branch_model_id(normalized) is None:
-        raise HTTPException(status_code=400, detail="lara:<branch_id> требует непустой branch_id")
+        raise WsCommandError(
+            "ws_invalid_payload",
+            "lara:<branch_id> requires a non-empty branch_id",
+            error_code="lara_branch_id_required",
+        )
     if normalized not in allowed_model_ids:
-        raise HTTPException(
-            status_code=400,
-            detail=f"model {normalized!r} недоступен для LLM proxy",
+        raise WsCommandError(
+            "ws_invalid_payload",
+            f"model {normalized!r} is not available for LLM proxy",
+            error_code="agent_llm_model_not_allowed",
+            error_params={"model": normalized},
         )
     return normalized
 
 
-async def _prepare_agent_llm_billing(*, resolved: ResolvedAIModel) -> bool:
-    if resolved.model is None:
-        raise HTTPException(status_code=503, detail="LLM model не разрешён")
-    if resolved.cost_origin == COST_ORIGIN_PLATFORM and should_use_platform_default_free_pool(
-        model=resolved.model,
-        provider=resolved.provider,
-        api_key=resolved.api_key,
-        base_url=resolved.base_url,
-        folder_id=resolved.folder_id,
-        settings=get_settings(),
-    ):
-        actx = get_context()
-        if actx is None or actx.active_company is None:
-            raise HTTPException(status_code=500, detail="Context с active_company обязателен")
-        return await get_billing_service().company_may_incur_billable_operation_charge(
-            actx.active_company.company_id
-        )
-
-    actx = get_context()
-    if actx is None or actx.active_company is None:
-        raise HTTPException(status_code=500, detail="Context с active_company обязателен")
-    if not str(actx.user.user_id).strip():
-        raise HTTPException(status_code=500, detail="Context с user обязателен")
-    await get_billing_service().require_balance_for_billable_operation(
-        actx.active_company.company_id,
-        str(actx.user.user_id).strip(),
-        operation_code=BALANCE_BLOCK_OPERATION_LLM,
-        notification_service="flows",
-        cost_origin=resolved.cost_origin,
+async def _prepare_agent_llm_client(
+    *,
+    body: AgentOpenAIChatCompletionsRequest,
+    resolved: ResolvedAIModel,
+) -> LLMClient | MockLLM:
+    llm = create_llm_client_from_ai_model(
+        resolved,
+        max_tokens=body.max_tokens,
+        temperature=body.temperature,
+        top_p=body.top_p,
+        frequency_penalty=body.frequency_penalty,
+        presence_penalty=body.presence_penalty,
+        seed=body.seed,
     )
-    return True
+    if isinstance(llm, LLMClient):
+        try:
+            _ = await llm.prepare_billing()
+        except BillingBalanceBlockedError as exc:
+            raise WsCommandError(
+                "forbidden",
+                str(exc),
+                error_code="billing_balance_blocked",
+            ) from exc
+    return llm
 
 
 def _agent_messages_to_openai_json(messages: list[AgentOpenAIChatMessage]) -> list[JsonObject]:
@@ -470,15 +497,15 @@ class _AgentLlmCallState:
 
 def _require_agent_error_provider(provider: str | None) -> str:
     if provider is None or not provider.strip():
-        raise ValueError("agent llm_proxy: provider обязателен для классификации ошибки")
+        raise ValueError("agent llm_proxy: provider is required for error classification")
     return provider
 
 
-def _agent_error_provider(state: _AgentLlmCallState, resolved: ResolvedAIModel) -> str:
+def _agent_error_provider(state: _AgentLlmCallState, fallback_provider: str | None) -> str:
     runtime_provider = state.resolved_llm_provider
     if runtime_provider is not None and runtime_provider.strip():
         return runtime_provider
-    return _require_agent_error_provider(resolved.provider)
+    return _require_agent_error_provider(fallback_provider)
 
 
 def _agent_pool_exhausted(exc: Exception) -> bool:
@@ -540,97 +567,58 @@ def _apply_status_metadata(state: _AgentLlmCallState, metadata: JsonObject) -> N
 async def _iter_agent_llm_content_deltas(
     *,
     body: AgentOpenAIChatCompletionsRequest,
-    resolved: ResolvedAIModel,
-    allow_platform_paid_fallback: bool,
+    llm: LLMClient | MockLLM,
 ) -> AsyncIterator[str | _AgentLlmCallState]:
     """
     Единый путь LLMClient.stream: yield content deltas, финальный yield — состояние вызова.
 
     Platform LLM context layer не включается (``llm_context=None``) — Goose/OO passthrough.
     """
-    llm = create_llm_client_from_ai_model(
-        resolved,
-        max_tokens=body.max_tokens,
-        temperature=body.temperature,
-        allow_platform_paid_fallback=allow_platform_paid_fallback,
-        top_p=body.top_p,
-        frequency_penalty=body.frequency_penalty,
-        presence_penalty=body.presence_penalty,
-        seed=body.seed,
-    )
     openai_messages = _agent_messages_to_openai_json(body.messages)
     a2a_messages = openai_messages_to_a2a_messages(openai_messages)
     tools_schema = _tools_schema(body.tools)
     extra_body = _stream_extra_body(body)
-
-    tracer = get_tracer()
-    llm_provider = llm.llm_provider
-    llm_start = time.time()
     state = _AgentLlmCallState()
 
-    async with tracer.llm_call_span(
-        body.model,
-        len(a2a_messages),
-        len(tools_schema) if tools_schema else 0,
-        llm_provider=llm_provider,
-    ) as llm_span:
-        tracer.record_llm_request(llm_span, openai_messages, tools_schema, None)
-
-        try:
-            async for event in llm.stream(
-                a2a_messages,
-                tools=tools_schema,
-                max_tokens=body.max_tokens,
-                temperature=body.temperature,
-                top_p=body.top_p,
-                frequency_penalty=body.frequency_penalty,
-                presence_penalty=body.presence_penalty,
-                seed=body.seed,
-                response_format=body.response_format,
-                extra_body=extra_body,
-                llm_context=None,
-            ):
-                if isinstance(event, TaskArtifactUpdateEvent):
-                    if event.HasField("artifact") and event.artifact.parts:
-                        artifact_name = event.artifact.name
-                        for part in event.artifact.parts:
-                            if not part_has_text(part):
-                                continue
-                            if artifact_name == "reasoning":
-                                continue
-                            text = get_part_text(part)
-                            if text:
-                                state.content_parts.append(text)
-                                yield text
-                if isinstance(event, TaskStatusUpdateEvent) and event.HasField("status"):
-                    if event.status.HasField("message") and event.status.message.HasField(
-                        "metadata"
-                    ):
-                        metadata = mapping_from_struct(event.status.message.metadata)
-                        _apply_status_metadata(state, metadata)
-        except Exception as exc:
-            state.stream_error = exc
-            logger.warning(
-                "agent.llm_proxy.stream_failed",
-                requested_model=body.model,
-                error=str(exc),
-                error_type=type(exc).__name__,
-            )
-
-        tool_calls_json = state.tool_calls_json()
-        llm_duration = (time.time() - llm_start) * 1000
-        tracer.record_llm_response(
-            llm_span,
-            input_tokens=state.input_tokens,
-            output_tokens=state.output_tokens,
-            has_tool_calls=bool(tool_calls_json),
-            duration_ms=llm_duration,
-            response_content=state.content,
-            tool_calls=tool_calls_json,
-            llm_provider=state.resolved_llm_provider or llm_provider,
-            llm_model=state.resolved_llm_model,
-            candidate_source=state.resolved_llm_source,
-            cost_origin=resolved.cost_origin,
+    try:
+        async for event in llm.stream(
+            a2a_messages,
+            tools=tools_schema,
+            max_tokens=body.max_tokens,
+            temperature=body.temperature,
+            top_p=body.top_p,
+            frequency_penalty=body.frequency_penalty,
+            presence_penalty=body.presence_penalty,
+            seed=body.seed,
+            response_format=body.response_format,
+            extra_body=extra_body,
+            llm_context=None,
+        ):
+            if isinstance(event, TaskArtifactUpdateEvent):
+                if event.HasField("artifact") and event.artifact.parts:
+                    artifact_name = event.artifact.name
+                    for part in event.artifact.parts:
+                        if not part_has_text(part):
+                            continue
+                        if artifact_name == "reasoning":
+                            continue
+                        text = get_part_text(part)
+                        if text:
+                            state.content_parts.append(text)
+                            yield text
+            if isinstance(event, TaskStatusUpdateEvent) and event.HasField("status"):
+                if event.status.HasField("message") and event.status.message.HasField(
+                    "metadata"
+                ):
+                    metadata = mapping_from_struct(event.status.message.metadata)
+                    _apply_status_metadata(state, metadata)
+    except Exception as exc:
+        state.stream_error = exc
+        logger.warning(
+            "agent.llm_proxy.stream_failed",
+            requested_model=body.model,
+            error=str(exc),
+            error_type=type(exc).__name__,
         )
 
     yield state
@@ -639,14 +627,12 @@ async def _iter_agent_llm_content_deltas(
 async def _run_agent_llm_call(
     *,
     body: AgentOpenAIChatCompletionsRequest,
-    resolved: ResolvedAIModel,
-    allow_platform_paid_fallback: bool,
+    llm: LLMClient | MockLLM,
 ) -> tuple[str, list[JsonObject] | None, int, int, str | None, str | None, str | None]:
     state: _AgentLlmCallState | None = None
     async for item in _iter_agent_llm_content_deltas(
         body=body,
-        resolved=resolved,
-        allow_platform_paid_fallback=allow_platform_paid_fallback,
+        llm=llm,
     ):
         if isinstance(item, _AgentLlmCallState):
             state = item
@@ -668,8 +654,7 @@ async def _run_agent_llm_call(
 async def _stream_agent_llm_sse(
     *,
     body: AgentOpenAIChatCompletionsRequest,
-    resolved: ResolvedAIModel,
-    allow_platform_paid_fallback: bool,
+    llm: LLMClient | MockLLM,
     response_model_id: str,
 ) -> AsyncIterator[bytes]:
     completion_id = new_chat_completion_id()
@@ -684,8 +669,7 @@ async def _stream_agent_llm_sse(
     state: _AgentLlmCallState | None = None
     async for item in _iter_agent_llm_content_deltas(
         body=body,
-        resolved=resolved,
-        allow_platform_paid_fallback=allow_platform_paid_fallback,
+        llm=llm,
     ):
         if isinstance(item, str):
             yield sse_data_line(
@@ -714,7 +698,7 @@ async def _stream_agent_llm_sse(
                     "content": _agent_llm_error_message(
                         state.stream_error,
                         response_model_id,
-                        provider=_agent_error_provider(state, resolved),
+                        provider=_agent_error_provider(state, llm.llm_provider),
                     ),
                 },
             )
@@ -747,7 +731,11 @@ async def _stream_agent_llm_sse(
             usage=_build_usage_payload(
                 input_tokens=state.input_tokens,
                 output_tokens=state.output_tokens,
-                cost_origin=resolved.cost_origin,
+                cost_origin=(
+                    llm.billing.cost_origin
+                    if isinstance(llm, LLMClient)
+                    else COST_ORIGIN_PLATFORM
+                ),
             ),
         )
     )
@@ -790,7 +778,12 @@ async def _stream_lara_sse(*, model_id: str, content: str) -> AsyncIterator[byte
 async def _file_id_to_b64_json(container: ContainerDep, file_id: str) -> str:
     file_payload = await container.shared_storage.get(f"file:{file_id}")
     if file_payload is None:
-        raise HTTPException(status_code=502, detail=f"сгенерированный файл {file_id} не найден")
+        raise WsCommandError(
+            "upstream",
+            f"generated file {file_id} not found",
+            error_code="generated_file_not_found",
+            error_params={"file_id": file_id},
+        )
     file_record = FileRecord.model_validate_json(file_payload)
     s3_client = S3ClientFactory.create_client_for_bucket(file_record.s3_bucket)
     try:
@@ -798,7 +791,12 @@ async def _file_id_to_b64_json(container: ContainerDep, file_id: str) -> str:
     finally:
         await s3_client.close()
     if not file_bytes:
-        raise HTTPException(status_code=502, detail=f"пустой файл {file_id}")
+        raise WsCommandError(
+            "upstream",
+            f"file {file_id} is empty",
+            error_code="generated_file_empty",
+            error_params={"file_id": file_id},
+        )
     return base64.b64encode(file_bytes).decode("ascii")
 
 
@@ -810,9 +808,10 @@ def _proxy_target_path(target: str) -> str:
     marker = "/agent/llm/v1/"
     idx = path.find(marker)
     if idx < 0:
-        raise HTTPException(
-            status_code=400,
-            detail="proxy target должен указывать на /flows/api/v1/agent/llm/v1/…",
+        raise WsCommandError(
+            "ws_invalid_payload",
+            "proxy target must point to /flows/api/v1/agent/llm/v1/…",
+            error_code="llm_proxy_target_invalid",
         )
     return path[idx + len(marker) :].strip("/")
 
@@ -820,7 +819,11 @@ def _proxy_target_path(target: str) -> str:
 def _validate_chat_request_n(body: AgentOpenAIChatCompletionsRequest) -> None:
     if body.n is None or body.n == 1:
         return
-    raise HTTPException(status_code=400, detail="n > 1 не поддерживается LLM proxy")
+    raise WsCommandError(
+        "ws_invalid_payload",
+        "n > 1 is not supported by LLM proxy",
+        error_code="llm_proxy_n_unsupported",
+    )
 
 
 async def _dispatch_chat_completions(
@@ -830,7 +833,11 @@ async def _dispatch_chat_completions(
     auth: LlmProxyAuthResult,
 ) -> JSONResponse | StreamingResponse:
     if not body.messages:
-        raise HTTPException(status_code=400, detail="messages обязателен")
+        raise WsCommandError(
+            "ws_invalid_payload",
+            "messages is required",
+            error_code="llm_proxy_messages_required",
+        )
     _validate_chat_request_n(body)
 
     model_ids = await _read_agent_llm_model_ids(container)
@@ -873,18 +880,14 @@ async def _dispatch_chat_completions(
         )
 
     resolved = _resolve_agent_llm_model(requested_model)
-    try:
-        allow_platform_paid_fallback = await _prepare_agent_llm_billing(resolved=resolved)
-    except BillingBalanceBlockedError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    llm = await _prepare_agent_llm_client(body=body, resolved=resolved)
 
     response_model_id = requested_model
     if body.stream:
         return StreamingResponse(
             _stream_agent_llm_sse(
                 body=body,
-                resolved=resolved,
-                allow_platform_paid_fallback=allow_platform_paid_fallback,
+                llm=llm,
                 response_model_id=response_model_id,
             ),
             media_type="text/event-stream",
@@ -901,8 +904,7 @@ async def _dispatch_chat_completions(
             _source,
         ) = await _run_agent_llm_call(
             body=body,
-            resolved=resolved,
-            allow_platform_paid_fallback=allow_platform_paid_fallback,
+            llm=llm,
         )
     except Exception as exc:
         logger.warning(
@@ -913,9 +915,10 @@ async def _dispatch_chat_completions(
         )
         error_provider = _require_agent_error_provider(resolved.provider)
         status_code = 429 if _is_rate_limit_error(exc, provider=error_provider) else 502
-        raise HTTPException(
-            status_code=status_code,
-            detail=_agent_llm_error_message(exc, response_model_id, provider=error_provider),
+        raise WsCommandError(
+            "rate_limited" if status_code == 429 else "upstream",
+            _agent_llm_error_message(exc, response_model_id, provider=error_provider),
+            error_code="llm_proxy_rate_limited" if status_code == 429 else "llm_proxy_upstream",
         ) from exc
     finish_reason = "tool_calls" if tool_calls_json else "stop"
     return JSONResponse(
@@ -943,25 +946,48 @@ async def _dispatch_images_generations(
     _ = body.size
     model_id = body.model.strip() if body.model.strip() else IMAGE_AUTO_MODEL_ID
     if model_id != IMAGE_AUTO_MODEL_ID:
-        raise HTTPException(
-            status_code=400,
-            detail=f"images/generations поддерживает только model={IMAGE_AUTO_MODEL_ID!r}",
+        raise WsCommandError(
+            "ws_invalid_payload",
+            f"images/generations supports only model={IMAGE_AUTO_MODEL_ID!r}",
+            error_code="image_gen_model_invalid",
         )
     num_images = body.n if body.n is not None else 1
     if num_images < 1 or num_images > 4:
-        raise HTTPException(status_code=400, detail="n должен быть в диапазоне 1..4")
+        raise WsCommandError(
+            "ws_invalid_payload",
+            "n must be in range 1..4",
+            error_code="image_gen_n_invalid",
+        )
 
     resolved = resolve_ai_model(AICapability.IMAGE_GEN, include_platform_default=True)
     if resolved is None:
-        raise HTTPException(status_code=503, detail="image_gen недоступен для компании")
+        raise WsCommandError(
+            "unavailable",
+            "image_gen is unavailable for the company",
+            error_code="image_gen_unavailable",
+        )
 
     client = NanoBananaClient(storage=container.shared_storage)
     try:
         file_ids = await client.generate_images(prompt=body.prompt, num_images=num_images)
+    except BillingBalanceBlockedError as exc:
+        raise WsCommandError(
+            "forbidden",
+            str(exc),
+            error_code="billing_balance_blocked",
+        ) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise WsCommandError(
+            "unavailable",
+            str(exc),
+            error_code="image_gen_unavailable",
+        ) from exc
     if not file_ids:
-        raise HTTPException(status_code=502, detail="image_gen не вернул файлы")
+        raise WsCommandError(
+            "upstream",
+            "image_gen returned no files",
+            error_code="image_gen_empty",
+        )
 
     response_format = body.response_format if body.response_format is not None else "b64_json"
     data_items: list[JsonObject] = []
@@ -1038,7 +1064,12 @@ async def agent_llm_onlyoffice_proxy(
     _ = require_context()
     method = envelope.method.strip().upper()
     if method not in {"GET", "POST"}:
-        raise HTTPException(status_code=400, detail=f"proxy method {method!r} не поддерживается")
+        raise WsCommandError(
+            "ws_invalid_payload",
+            f"proxy method {method!r} is not supported",
+            error_code="llm_proxy_method_unsupported",
+            error_params={"method": method},
+        )
 
     relative = _proxy_target_path(envelope.target)
     logger.info(
@@ -1050,7 +1081,11 @@ async def agent_llm_onlyoffice_proxy(
 
     if relative == "models":
         if method != "GET":
-            raise HTTPException(status_code=405, detail="models только GET")
+            raise WsCommandError(
+                "method_not_allowed",
+                "models accepts GET only",
+                error_code="llm_proxy_models_get_only",
+            )
         model_ids = await _read_agent_llm_model_ids(container)
         created_at = int(time.time())
         return JSONResponse(
@@ -1071,27 +1106,45 @@ async def agent_llm_onlyoffice_proxy(
             try:
                 payload = parse_json_object(raw_data, "onlyoffice.proxy.data")
             except ValueError as exc:
-                raise HTTPException(
-                    status_code=400,
-                    detail="proxy.data должен быть JSON object",
+                raise WsCommandError(
+                    "ws_invalid_payload",
+                    "proxy.data must be a JSON object",
+                    error_code="llm_proxy_data_invalid",
                 ) from exc
     elif isinstance(raw_data, dict):
         payload = require_json_object(raw_data, "onlyoffice.proxy.data")
     elif raw_data is None:
         payload = {}
     else:
-        raise HTTPException(status_code=400, detail="proxy.data должен быть JSON object или string")
+        raise WsCommandError(
+            "ws_invalid_payload",
+            "proxy.data must be a JSON object or string",
+            error_code="llm_proxy_data_invalid",
+        )
 
     if relative == "chat/completions":
         if method != "POST":
-            raise HTTPException(status_code=405, detail="chat/completions только POST")
+            raise WsCommandError(
+                "method_not_allowed",
+                "chat/completions accepts POST only",
+                error_code="llm_proxy_chat_post_only",
+            )
         body = AgentOpenAIChatCompletionsRequest.model_validate(payload)
         return await _dispatch_chat_completions(body=body, container=container, auth=auth)
 
     if relative == "images/generations":
         if method != "POST":
-            raise HTTPException(status_code=405, detail="images/generations только POST")
+            raise WsCommandError(
+                "method_not_allowed",
+                "images/generations accepts POST only",
+                error_code="llm_proxy_images_post_only",
+            )
         images_body = AgentOpenAIImagesGenerationsRequest.model_validate(payload)
         return await _dispatch_images_generations(body=images_body, container=container)
 
-    raise HTTPException(status_code=404, detail=f"proxy target path {relative!r} не найден")
+    raise WsCommandError(
+        "not_found",
+        f"proxy target path {relative!r} not found",
+        error_code="llm_proxy_target_not_found",
+        error_params={"path": relative},
+    )

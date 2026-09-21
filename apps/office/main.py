@@ -26,7 +26,7 @@ logger = get_logger(__name__)
 async def on_startup(app: FastAPI, container: OfficeContainer, settings: OfficeSettings) -> None:
     _ = app, container, settings
     register_office_ws_commands()
-    logger.info("Documents: command-router op_* зарегистрирован")
+    logger.info("office.documents.command.router.op_")
 
 
 def _api_routers():

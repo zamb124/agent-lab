@@ -131,9 +131,9 @@ async def provision_mcp_catalog_for_company(
             except Exception as exc:
                 sync_failed += 1
                 logger.warning(
-                    "MCP catalog sync failed on add: catalog_id=%s error=%s",
-                    entry.catalog_id,
-                    exc,
+                    "flows.mcp.catalog.sync.failed.add",
+                    catalog_id=entry.catalog_id,
+                    error=exc,
                     exc_info=True,
                 )
             continue
@@ -177,9 +177,9 @@ async def provision_mcp_catalog_for_company(
         except Exception as exc:
             sync_failed += 1
             logger.warning(
-                "MCP catalog sync failed on update: catalog_id=%s error=%s",
-                entry.catalog_id,
-                exc,
+                "flows.mcp.catalog.sync.failed.update",
+                catalog_id=entry.catalog_id,
+                error=exc,
                 exc_info=True,
             )
 
@@ -234,9 +234,9 @@ async def resync_catalog_tools_for_company(
         except Exception as exc:
             sync_failed += 1
             logger.warning(
-                "MCP catalog resync failed: server_id=%s error=%s",
-                server.server_id,
-                exc,
+                "flows.mcp.catalog.resync.failed.server_id",
+                server_id=server.server_id,
+                error=exc,
                 exc_info=True,
             )
     return sync_ok, sync_failed

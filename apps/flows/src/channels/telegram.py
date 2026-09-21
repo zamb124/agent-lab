@@ -180,13 +180,14 @@ class TelegramChannelHandler(BaseChannelHandler):
 
         if not result.get("ok"):
             logger.error(
-                f"Telegram sendMessage failed: {result.get('description')}"
+                "telegram.send_message_failed",
+                description=result.get("description"),
             )
             raise RuntimeError(
                 f"Telegram API error: {result.get('description', 'Unknown error')}"
             )
 
-        logger.info(f"Telegram message sent to {recipient}")
+        logger.info("flows.telegram.message_sent", recipient=recipient)
         return result
 
     async def send_message_draft(
@@ -231,10 +232,7 @@ class TelegramChannelHandler(BaseChannelHandler):
             await response.aclose()
 
         if not result.get("ok"):
-            logger.error(
-                "Telegram sendMessageDraft failed: %s",
-                result.get("description"),
-            )
+            logger.error("flows.telegram.sendmessagedraft.failed", value_0=result.get('description'))
             raise RuntimeError(
                 f"Telegram API error: {result.get('description', 'Unknown error')}"
             )
@@ -327,12 +325,12 @@ class TelegramChannelHandler(BaseChannelHandler):
             await response.aclose()
 
         if not result.get("ok"):
-            logger.error(f"Telegram sendPhoto failed: {result.get('description')}")
+            logger.error("flows.telegram.photo_failed", description=result.get("description"))
             raise RuntimeError(
                 f"Telegram API error: {result.get('description', 'Unknown error')}"
             )
 
-        logger.info(f"Telegram photo sent to {recipient}")
+        logger.info("flows.telegram.photo_sent", recipient=recipient)
         return result
 
     @override
@@ -390,13 +388,14 @@ class TelegramChannelHandler(BaseChannelHandler):
 
         if not result.get("ok"):
             logger.error(
-                f"Telegram sendDocument failed: {result.get('description')}"
+                "telegram.send_document_failed",
+                description=result.get("description"),
             )
             raise RuntimeError(
                 f"Telegram API error: {result.get('description', 'Unknown error')}"
             )
 
-        logger.info(f"Telegram document sent to {recipient}")
+        logger.info("flows.telegram.document_sent", recipient=recipient)
         return result
 
     async def reply(

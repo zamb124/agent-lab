@@ -2,7 +2,7 @@
  * Страница команды — участники компании, роли, ссылки-приглашения.
  *
  * Поток данных:
- *   - ресурс frontend/team_members → list/update/remove
+ *   - ресурс frontend/team → list/update/remove
  *   - op       frontend/team_invite  → генерация invite-ссылки на роль (silent);
  *     ссылки в slice `links: { [role]: link }` для кэша кнопки «Приглашение».
  *
@@ -191,7 +191,7 @@ export class FrontendTeamPage extends PlatformPage {
 
     constructor() {
         super();
-        this._members = this.useResource('frontend/team_members', { autoload: true });
+        this._members = this.useResource('frontend/team', { autoload: true });
         this._invite = this.useOp('frontend/team_invite');
         this._selectedRole = 'developer';
         this._filterRole = null;
@@ -205,11 +205,11 @@ export class FrontendTeamPage extends PlatformPage {
         let link = typeof cached === 'string' && cached.length > 0 ? cached : '';
         if (link === '') {
             const result = await this._invite.run({ role });
-            if (!result || typeof result.link !== 'string' || result.link.length === 0) {
+            if (!result || typeof result.invite_url !== 'string' || result.invite_url.length === 0) {
                 this.toast('team_page.err_invite', { type: 'error' });
                 return;
             }
-            link = result.link;
+            link = result.invite_url;
         }
         this.copyToClipboard(link, {
             success_i18n_key: 'team_page.toast_invite_copied',

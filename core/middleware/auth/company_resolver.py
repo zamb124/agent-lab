@@ -142,27 +142,25 @@ class CompanyResolver:
             if settings.server.env != "production":
                 company = await self._cached_company(override_company_id)
                 if company:
-                    logger.debug("Anonymous: компания из X-Company-Id (dev)")
+                    logger.debug("middleware.anonymous.x.company.id.dev")
                     return company
-                logger.warning("Anonymous: X-Company-Id указывает на несуществующую компанию")
+                logger.warning("middleware.anonymous.x.company.id")
 
         subdomain = self._extract_subdomain(host)
         if not subdomain:
-            logger.debug("Anonymous: нет субдомена в Host")
+            logger.debug("middleware.anonymous.host")
             return None
 
         company_id = await self._cached_subdomain_to_company_id(subdomain)
         if not company_id:
-            logger.debug(
-                "Anonymous: субдомен в Host без записи в subdomain_repo — контекст без компании"
-            )
+            logger.debug("middleware.anonymous.host.subdomain_repo")
             return None
 
         company = await self._cached_company(company_id)
         if company:
-            logger.debug(f"Anonymous: компания из субдомена {subdomain}")
+            logger.debug("auth.company.anonymous_subdomain", subdomain=subdomain)
             return company
-        logger.debug("Anonymous: company_id в реестре, запись company не найдена")
+        logger.debug("middleware.anonymous.company_id.company")
         return None
 
     async def _assert_subdomain_company_membership(
@@ -178,18 +176,21 @@ class CompanyResolver:
             return
         if request.method == "POST" and request.url.path in _INVITE_ACCEPT_PATHS:
             logger.info(
-                "Принятие инвайта: %s ещё не участник %s, проверку membership пропускаем (path=%s)",
-                token_data.user_id,
-                company_id,
-                request.url.path,
+                "middleware.membership.path",
+                user_id=token_data.user_id,
+                company_id=company_id,
+                path=request.url.path,
             )
             return
         logger.warning(
-            f"Пользователь {token_data.user_id} не имеет доступа к компании {company_id} (субдомен: {subdomain})"
+            "auth.company.membership_denied",
+            user_id=token_data.user_id,
+            company_id=company_id,
+            subdomain=subdomain,
         )
         raise HTTPException(
             status_code=403,
-            detail=f"У вас нет доступа к компании {subdomain}",
+            detail=f"You do not have access to company {subdomain}",
         )
 
     def _x_company_id_must_match_company_subdomain(
@@ -200,11 +201,13 @@ class CompanyResolver:
             return
         if override != subdomain_company_id:
             logger.warning(
-                f"X-Company-Id ({override}) не совпадает с компанией субдомена ({subdomain_company_id})"
+                "auth.company.x_company_id_mismatch",
+                override_company_id=override,
+                subdomain_company_id=subdomain_company_id,
             )
             raise HTTPException(
                 status_code=403,
-                detail="X-Company-Id не соответствует хосту субдомена",
+                detail='X-Company-Id does not match the subdomain host',
             )
 
     async def _resolve_company_from_host(
@@ -225,7 +228,7 @@ class CompanyResolver:
                 )
                 company = await self._cached_company(company_id)
                 if company:
-                    logger.debug(f"Компания из субдомена {subdomain}: {company_id}")
+                    logger.debug("auth.company.from_subdomain", subdomain=subdomain, company_id=company_id)
                     return company
                 raise HTTPException(
                     status_code=404, detail=f"Company not found for subdomain: {subdomain}"
@@ -243,7 +246,7 @@ class CompanyResolver:
             )
 
         if context_type == "frontend":
-            logger.info(f"Frontend company context без субдомена (host={host}) -> None")
+            logger.info("auth.company.frontend_no_subdomain", host=host)
             return None
 
         override_company_id = request.headers.get("X-Company-Id")
@@ -251,9 +254,9 @@ class CompanyResolver:
             if settings.server.env != "production":
                 company = await self._cached_company(override_company_id)
                 if company:
-                    logger.debug(f"Компания из X-Company-Id (dev): {override_company_id}")
+                    logger.debug("auth.company.from_header_dev", company_id=override_company_id)
                     return company
-                logger.warning(f"Компания {override_company_id} из X-Company-Id не найдена")
+                logger.warning("auth.company.header_not_found", company_id=override_company_id)
 
             elif token_data and token_data.user_id:
                 if not await self._cached_user_has_company(
@@ -263,26 +266,28 @@ class CompanyResolver:
                         await self.container.user_repository.get(token_data.user_id)
                     )
                     if not user_exists:
-                        logger.warning(f"Пользователь {token_data.user_id} не найден")
-                        raise HTTPException(status_code=403, detail="Пользователь не найден")
+                        logger.warning("auth.company.user_not_found", user_id=token_data.user_id)
+                        raise HTTPException(status_code=403, detail='User not found')
                     logger.warning(
-                        f"Пользователь {token_data.user_id} не имеет доступа к компании {override_company_id}"
+                        "auth.company.header_membership_denied",
+                        user_id=token_data.user_id,
+                        company_id=override_company_id,
                     )
                     raise HTTPException(
                         status_code=403,
-                        detail=f"У вас нет доступа к компании {override_company_id}",
+                        detail=f"You do not have access to company {override_company_id}",
                     )
 
                 company = await self._cached_company(override_company_id)
                 if company:
-                    logger.debug(f"Компания из X-Company-Id: {override_company_id}")
+                    logger.debug("auth.company.from_header", company_id=override_company_id)
                     return company
-                logger.warning(f"Компания {override_company_id} из X-Company-Id не найдена")
+                logger.warning("auth.company.header_not_found", company_id=override_company_id)
 
         if token_data and token_data.company_id:
             company = await self._cached_company(token_data.company_id)
             if company:
-                logger.debug(f"Компания из токена: {token_data.company_id}")
+                logger.debug("auth.company.from_token", company_id=token_data.company_id)
                 return company
             raise HTTPException(
                 status_code=403, detail=f"Company {token_data.company_id} not found"
@@ -318,12 +323,12 @@ def build_service_base_url(request: Request, *, include_default_port: bool = Fal
     forwarded_proto = (request.headers.get("x-forwarded-proto") or "").split(",", 1)[0].strip().lower()
     scheme = forwarded_proto if forwarded_proto in ("http", "https") else (request.url.scheme or "").strip().lower()
     if scheme not in ("http", "https"):
-        raise ValueError(f"build_service_base_url: ожидалась схема http или https, получено {scheme!r}")
+        raise ValueError(f"build_service_base_url: expected http or https scheme, got {scheme!r}")
 
     forwarded_host = (request.headers.get("x-forwarded-host") or "").strip()
     host = forwarded_host or (request.headers.get("host") or "").strip() or (request.url.netloc or "").strip()
     if not host:
-        raise ValueError("build_service_base_url: host не определён (нет X-Forwarded-Host, Host header, netloc)")
+        raise ValueError('build_service_base_url: host is not defined (no X-Forwarded-Host, Host header, netloc)')
 
     if include_default_port and ":" not in host:
         if request.url.port:

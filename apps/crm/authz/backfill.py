@@ -59,7 +59,7 @@ async def _backfill_entities(*, limit: int | None) -> int:
             ]
         )
         written += 1
-    logger.info("crm entity backfill complete entities=%s", written)
+    logger.info("crm.entity.backfill.complete.entities", entities=written)
     return written
 
 

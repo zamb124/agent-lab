@@ -65,7 +65,7 @@ def require_request_trace_id(request: Request) -> str:
     trace_id = getattr(request.state, "trace_id", None)
     if not isinstance(trace_id, str) or not trace_id.strip():
         raise RuntimeError(
-            "request.state.trace_id отсутствует. AccessLogMiddleware должен быть внешним слоем."
+            'request.state.trace_id is missing. AccessLogMiddleware must be the outer layer.'
         )
     return trace_id
 
@@ -85,7 +85,7 @@ def get_request_company_id(request: Request) -> str | None:
     if company is None:
         return None
     if not isinstance(company, Company):
-        raise RuntimeError("request.state.company имеет неожиданный тип")
+        raise RuntimeError('request.state.company has an unexpected type')
     return company.company_id
 
 
@@ -94,7 +94,7 @@ def get_request_token_data(request: Request) -> TokenData | None:
     if token_data is None:
         return None
     if not isinstance(token_data, TokenData):
-        raise RuntimeError("request.state.token_data имеет неожиданный тип")
+        raise RuntimeError('request.state.token_data has an unexpected type')
     return token_data
 
 
@@ -113,7 +113,7 @@ def read_session_token_override(request: Request) -> TokenData | None:
     if session_token_data is None:
         return None
     if not isinstance(session_token_data, TokenData):
-        raise RuntimeError("request.state.session_token_data имеет неожиданный тип")
+        raise RuntimeError('request.state.session_token_data has an unexpected type')
     return session_token_data
 
 

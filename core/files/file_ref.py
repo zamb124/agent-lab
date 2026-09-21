@@ -8,11 +8,13 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from typing import Literal, TypeAlias
 
 from pydantic import Field, model_validator
 
-from core.files.models import FileRecord, FileResponse
+from core.files.models import FileRecord
+from core.files.urls import files_download_url
 from core.models import StrictBaseModel
 from core.types import JsonObject, require_json_object
 
@@ -53,46 +55,14 @@ class FileRef(StrictBaseModel):
     file_size: int = Field(ge=0)
     checksum: str | None = Field(default=None, min_length=1)
     is_public: bool | None = None
+    created_at: datetime | None = None
     capabilities: FileCapabilities = Field(default_factory=FileCapabilities)
-
-    @model_validator(mode="before")
-    @classmethod
-    def accept_file_storage_models(cls, value: object) -> object:
-        if isinstance(value, FileRecord):
-            return {
-                "file_id": value.file_id,
-                "original_name": value.original_name,
-                "url": value.url,
-                "content_type": value.content_type,
-                "file_size": value.file_size,
-                "checksum": value.checksum,
-                "is_public": value.is_public,
-            }
-        if isinstance(value, FileResponse):
-            return {
-                "file_id": value.file_id,
-                "original_name": value.original_name,
-                "url": value.url,
-                "content_type": value.content_type,
-                "file_size": value.file_size,
-                "checksum": value.checksum,
-                "is_public": value.is_public,
-            }
-        return value
 
     @model_validator(mode="after")
     def require_resolvable_source(self) -> "FileRef":
         if self.file_id is None and self.url is None:
-            raise ValueError("FileRef должен содержать file_id или url")
+            raise ValueError("FileRef must contain file_id or url")
         return self
-
-    @classmethod
-    def from_record(cls, record: FileRecord) -> "FileRef":
-        return cls.model_validate(record)
-
-    @classmethod
-    def from_response(cls, response: FileResponse) -> "FileRef":
-        return cls.model_validate(response)
 
     def to_json_object(self) -> JsonObject:
         return require_json_object(
@@ -118,7 +88,25 @@ def format_a2a_files_content(files_data: list[FileRef]) -> str:
     return "".join(parts)
 
 
-FileRefSource: TypeAlias = FileRef | FileRecord | FileResponse | JsonObject
+def stored_file_ref(record: FileRecord, *, route_segment: str | None = None) -> FileRef:
+    """Публичный FileRef из записи хранилища. s3_* в ответ не входят."""
+    if record.download_url:
+        url = record.download_url
+    else:
+        url = files_download_url(record.file_id, route_segment=route_segment)
+    return FileRef(
+        file_id=record.file_id,
+        original_name=record.original_name,
+        url=url,
+        content_type=record.content_type,
+        file_size=record.file_size,
+        checksum=record.checksum,
+        is_public=record.is_public,
+        created_at=record.created_at,
+    )
+
+
+FileRefSource: TypeAlias = FileRef | FileRecord | JsonObject
 
 __all__ = [
     "DOWNLOAD_FILE_ID_RE",
@@ -128,4 +116,5 @@ __all__ = [
     "FileRefSource",
     "file_id_from_download_url",
     "format_a2a_files_content",
+    "stored_file_ref",
 ]

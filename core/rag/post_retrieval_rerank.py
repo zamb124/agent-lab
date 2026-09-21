@@ -125,7 +125,7 @@ def _runtime_cost_origin(value: CostOrigin) -> AICostOrigin:
 def _ai_rerank_enabled(resolved: ResolvedAIModel) -> bool:
     raw = resolved.metadata.get("enabled")
     if not isinstance(raw, bool):
-        raise ValueError("ResolvedAIModel[rerank].metadata.enabled должен быть bool")
+        raise ValueError('ResolvedAIModel[rerank].metadata.enabled must be bool')
     return raw
 
 
@@ -210,12 +210,12 @@ async def apply_rerank_after_retrieve(
     if provider_name != "pgvector":
         raise AIRerankerClientError(
             status_code=422,
-            detail="rerank поддерживается только для провайдера pgvector",
+            detail='rerank is supported only for the pgvector provider',
         )
     if not url:
         raise AIRerankerClientError(
             status_code=422,
-            detail="rerank включён, но URL реранкера не задан (профиль или rag.reranker.base_url)",
+            detail='rerank is enabled but reranker URL is not set (profile or rag.reranker.base_url)',
         )
     pool = list(results)
     if max_candidates is not None:
@@ -323,7 +323,7 @@ async def _rerank_pool_scores(
             ordered_scores.append(fresh_scores_by_index[index])
         else:
             if chunk_id is None:
-                raise RuntimeError("rerank pool scoring: элемент без chunk_id не покрыт batch-скорингом")
+                raise RuntimeError('rerank pool scoring: item without chunk_id is not covered by batch scoring')
             ordered_scores.append(cached_scores[chunk_id])
     return ordered_scores
 

@@ -88,7 +88,7 @@ class MockControlConfig(StrictBaseModel):
         for entity_id, queue in value.items():
             if not queue:
                 raise ValueError(
-                    f"mock entity {entity_id!r}: очередь ответов не может быть пустой"
+                    f"mock entity {entity_id!r}: response queue cannot be empty"
                 )
         return value
 
@@ -122,7 +122,7 @@ async def assert_mock_permission(
     """Проверяет право на mock через OpenFGA group membership. Без permission_groups mock запрещён."""
     if not permission_groups:
         raise MockControlPermissionError(
-            "mock.permission_groups обязателен: mock доступен только привилегированным группам"
+            "mock.permission_groups is required: mock is available only to privileged groups"
         )
     subject = AuthzSubject.user(user_id)
     for group_name in permission_groups:
@@ -139,7 +139,7 @@ async def assert_mock_permission(
         if allowed:
             return
     raise MockControlPermissionError(
-        "Пользователь не входит ни в одну из mock.permission_groups: "
+        "User is not a member of any mock.permission_groups: "
         + ", ".join(sorted(permission_groups))
     )
 
@@ -261,7 +261,7 @@ async def resolve_llm_node_mock(
     if manifest.has_global_llm:
         return build_node_mock_llm(redis_client, session_id, "llm", MOCK_GLOBAL_LLM_ID)
     raise MockControlError(
-        f"mock включён, но для llm-ноды {node_id!r} нет ни nodes[{node_id!r}], ни общей llm-очереди"
+        f"mock is enabled, but llm node {node_id!r} has neither nodes[{node_id!r}] nor the shared llm queue"
     )
 
 
@@ -285,7 +285,7 @@ async def resolve_tool_mock_result(
         redis_client, _queue_key(session_id, "tool", tool_name)
     )
     if item is None:
-        raise MockControlError(f"mock очередь tool {tool_name!r} исчерпана")
+        raise MockControlError(f"mock tool queue {tool_name!r} is exhausted")
     return mock_item_to_text(item)
 
 
@@ -311,7 +311,7 @@ async def resolve_entity_node_mock_result(
         redis_client, _queue_key(session_id, queue_kind, entity_id)
     )
     if item is None:
-        raise MockControlError(f"mock очередь {queue_kind} {entity_id!r} исчерпана")
+        raise MockControlError(f"mock queue {queue_kind} {entity_id!r} is exhausted")
     return mock_item_to_node_result(item)
 
 

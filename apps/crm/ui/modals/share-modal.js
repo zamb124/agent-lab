@@ -392,17 +392,13 @@ export class CRMShareModal extends PlatformModal {
             throw new Error('CRMShareModal: prop "entityId" required');
         }
 
-        this.useEvent(this._grantCreateOp.op.events.SUCCEEDED, () => {
-            this._resetForm();
-            this._reloadGrants();
-        });
+        this.useEvent(this._grantCreateOp.op.events.SUCCEEDED, () => this._resetForm());
         this.useEvent(this._grantCreateOp.op.events.FAILED, (event) => {
             const message = event && event.payload && typeof event.payload.message === 'string'
                 ? event.payload.message
                 : this.t('share_modal.submit_failed');
             this._submitFailedMessage = message;
         });
-        this.useEvent(this._grantRevokeOp.op.events.SUCCEEDED, () => this._reloadGrants());
 
         this._entities.get(this.entityId);
         this._reloadGrants();

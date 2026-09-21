@@ -39,7 +39,7 @@ from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS
 from core.context import get_context
 from core.files.create_spec import FileSourceKind
 from core.files.default_storage import get_default_storage
-from core.files.file_ref import FileRef
+from core.files.file_ref import stored_file_ref
 from core.files.models import FileRecord
 from core.files.reader import FileReader, ReadOptions
 from core.files.registry import default_retention_for_source
@@ -122,7 +122,7 @@ class FlowsLoader:
     def load_registry_yaml(self) -> None:
         """Загружает ``registry.yaml`` в ``_registry`` и ``_defaults`` (секция ``defaults``)."""
         if not self.registry_path.exists():
-            logger.warning("Registry не найден: %s", self.registry_path)
+            logger.warning("flows.loader.registry_missing", path=str(self.registry_path))
             self._registry = {}
             self._bundle_registry = FlowBundleRegistry()
             self._defaults = {}
@@ -142,7 +142,7 @@ class FlowsLoader:
         self._target_company_id = "system"
 
         if not self.registry_path.exists():
-            logger.warning(f"Registry не найден: {self.registry_path}")
+            logger.warning("flows.loader.registry_missing", path=str(self.registry_path))
             return [], []
 
         self.load_registry_yaml()
@@ -150,8 +150,9 @@ class FlowsLoader:
         bundle_ids = self._expand_bundle_ids_with_dependencies(registry_bundle_ids)
 
         logger.info(
-            f"Загрузка {len(bundle_ids)} flow из registry в БД "
-            + f"({len(registry_bundle_ids)} bundle, с учётом depends_on_flow_ids)"
+            "flows.loader.registry_load_started",
+            bundle_count=len(bundle_ids),
+            registry_bundle_count=len(registry_bundle_ids),
         )
 
         # Фаза 1: все nodes.json в кеш (для кросс-ссылок при инлайне tools)
@@ -169,15 +170,17 @@ class FlowsLoader:
                 else:
                     failed_bundle_ids.append(bundle_id)
             except Exception as e:
-                logger.error(f"Ошибка загрузки bundle {bundle_id}: {e}", exc_info=True)
+                logger.error("flows.loader.bundle_load_failed", bundle_id=bundle_id, error=str(e), exc_info=True)
                 failed_bundle_ids.append(bundle_id)
 
-        logger.info(f"Загружено {len(loaded_flow_ids)} flow в БД: {loaded_flow_ids}")
+        logger.info("flows.loader.flows_loaded", count=len(loaded_flow_ids), flow_ids=loaded_flow_ids)
         if failed_bundle_ids:
             logger.warning(
-                f"Не удалось загрузить {len(failed_bundle_ids)} bundle: {failed_bundle_ids}"
+                "flows.loader.bundles_failed",
+                count=len(failed_bundle_ids),
+                bundle_ids=failed_bundle_ids,
             )
-        logger.info(f"Загружено {len(self._loaded_nodes)} nodes в БД")
+        logger.info("flows.loader.nodes_loaded", count=len(self._loaded_nodes))
         return loaded_flow_ids, self._loaded_nodes
 
     async def preload_nodes_to_cache(self, bundle_id: str) -> None:
@@ -214,8 +217,8 @@ class FlowsLoader:
                 continue
             if not tool_ref.code:
                 raise ValueError(
-                    f"Tool '{tool_ref.tool_id}' в БД не имеет code. "
-                    + "Пользовательские code tools должны иметь inline code для isolated runner."
+                    f"Tool '{tool_ref.tool_id}' in the database has no code. "
+                    + "Custom code tools must have inline code for the isolated runner."
                 )
             self._tools_cache[ref_id] = tool_ref
 
@@ -226,8 +229,9 @@ class FlowsLoader:
         ]
         if not still_missing:
             logger.info(
-                "Резолвнуто %s tool refs для инлайнинга (nodes: 0)",
-                len(resolved_tools),
+                "flows.loader.tool_refs_resolved",
+                tool_count=len(resolved_tools),
+                node_count=0,
             )
             return
 
@@ -236,9 +240,9 @@ class FlowsLoader:
             self._nodes_cache[ref_id] = node_config
 
         logger.info(
-            "Резолвнуто %s tool refs и %s nodes для инлайнинга",
-            len(resolved_tools),
-            len(resolved_nodes),
+            "flows.loader.tool_refs_resolved",
+            tool_count=len(resolved_tools),
+            node_count=len(resolved_nodes),
         )
 
     def _collect_reference_ids_from_tool(self, tool: JsonValue) -> set[str]:
@@ -330,7 +334,7 @@ class FlowsLoader:
                 _ = await self.flow_repository.set(previous)
             raise
 
-        logger.info(f"  {bundle_id}: {flow_config.name}")
+        logger.info("flows.loader.bundle_saved", bundle_id=bundle_id, name=flow_config.name)
         return flow_config.flow_id
 
     async def build_flow_bundle_config(self, bundle_id: str) -> FlowConfig | None:
@@ -338,7 +342,7 @@ class FlowsLoader:
         bundle_dir = self.bundles_dir / bundle_id
         config_path = bundle_dir / "flow.json"
         if not config_path.exists():
-            logger.warning(f"flow.json не найден: {bundle_dir}")
+            logger.warning("flows.loader.flow_json_missing", bundle_dir=str(bundle_dir))
             return None
 
         if not self._defaults and self.registry_path.exists():
@@ -377,17 +381,17 @@ class FlowsLoader:
         store_card_image_url = await self._resolve_store_card_image_url(raw_config, bundle_dir)
         raw_flow_id = raw_config.get("flow_id")
         if not isinstance(raw_flow_id, str) or not raw_flow_id.strip():
-            raise ValueError("flow.json: поле flow_id обязательно и должно быть непустой строкой")
+            raise ValueError("flow.json: flow_id is required and must be a non-empty string")
         raw_name = raw_config.get("name")
         if not isinstance(raw_name, str) or not raw_name.strip():
-            raise ValueError("flow.json: поле name обязательно и должно быть непустой строкой")
+            raise ValueError("flow.json: name is required and must be a non-empty string")
         raw_entry = raw_config.get("entry")
         if not isinstance(raw_entry, str) or not raw_entry.strip():
-            raise ValueError("flow.json: поле entry обязательно и должно быть непустой строкой")
+            raise ValueError("flow.json: entry is required and must be a non-empty string")
 
         raw_hidden = raw_config.get("hidden", False)
         if not isinstance(raw_hidden, bool):
-            raise ValueError("flow.json: поле hidden должно быть boolean")
+            raise ValueError("flow.json: hidden must be boolean")
 
         depends_on_flow_ids = self._read_bundle_depends_on_flow_ids(bundle_dir)
 
@@ -470,11 +474,11 @@ class FlowsLoader:
 
         for raw_node in nodes_list:
             if not isinstance(raw_node, dict):
-                logger.warning(f"Нода должна быть объектом в {nodes_path}")
+                logger.warning("flows.loader.node_not_object", nodes_path=str(nodes_path))
                 continue
             node_id = raw_node.get("id")
             if not isinstance(node_id, str) or not node_id.strip():
-                logger.warning(f"Нода без id в {nodes_path}")
+                logger.warning("flows.loader.node_missing_id", nodes_path=str(nodes_path))
                 continue
 
             # Инлайним промпт из файла
@@ -532,7 +536,7 @@ class FlowsLoader:
             # Добавляем в кеш для инлайнинга в flows
             self._nodes_cache[node_id] = node_config
             self._loaded_nodes.append(node_id)
-            logger.info(f"    node: {node_id}")
+            logger.info("flows.loader.node_saved", node_id=node_id)
 
     def _resolve_target_company_id(self) -> str:
         context = get_context()
@@ -540,7 +544,7 @@ class FlowsLoader:
             return context.active_company.company_id
         if self._target_company_id:
             return self._target_company_id
-        raise ValueError("Не удалось определить company_id для материализации файлов bundle")
+        raise ValueError("Failed to determine company_id for bundle file materialization")
 
     async def _upload_flow_asset_file(
         self,
@@ -596,7 +600,7 @@ class FlowsLoader:
                 return local_from_http
             return url_str
 
-        raise ValueError(f"Node '{node_id}': files[{index}] должен содержать url")
+        raise ValueError(f"Node '{node_id}': files[{index}] must contain url")
 
     async def _materialize_node_files(
         self,
@@ -607,7 +611,7 @@ class FlowsLoader:
         if not files:
             return node
         if not isinstance(files, list):
-            raise ValueError(f"Node '{node_id}': files должен быть списком")
+            raise ValueError(f"Node '{node_id}': files must be a list")
 
         company_id = self._resolve_target_company_id()
         reader = FileReader()
@@ -615,17 +619,17 @@ class FlowsLoader:
         materialized: JsonArray = []
         for index, entry in enumerate(files):
             if not isinstance(entry, dict):
-                raise ValueError(f"Node '{node_id}': files[{index}] должен быть объектом")
+                raise ValueError(f"Node '{node_id}': files[{index}] must be an object")
             file_entry = entry
             original_name_value = file_entry.get("original_name")
             if not isinstance(original_name_value, str) or not original_name_value.strip():
                 raise ValueError(
-                    f"Node '{node_id}': files[{index}].original_name должен быть непустой строкой"
+                    f"Node '{node_id}': files[{index}].original_name must be a non-empty string"
                 )
             content_type = file_entry.get("content_type")
             if not isinstance(content_type, str) or not content_type.strip():
                 raise ValueError(
-                    f"Node '{node_id}': files[{index}].content_type должен быть непустой строкой"
+                    f"Node '{node_id}': files[{index}].content_type must be a non-empty string"
                 )
 
             source = self._resolve_file_source(file_entry, node_id, index)
@@ -640,7 +644,7 @@ class FlowsLoader:
                 company_id=company_id,
                 is_public=False,
             )
-            item = FileRef.from_record(record)
+            item = stored_file_ref(record)
             materialized.append(item.to_json_object())
 
         node["files"] = materialized
@@ -707,7 +711,7 @@ class FlowsLoader:
         После обработки prompt содержит текст.
         """
         if "prompt_file" in node:
-            raise ValueError("node.prompt_file запрещен; используйте node.prompt")
+            raise ValueError("node.prompt_file is forbidden; use node.prompt")
 
         prompt = node.get("prompt")
         if not prompt or not isinstance(prompt, str):
@@ -826,9 +830,9 @@ class FlowsLoader:
             node["code"] = source
             del node["function"]
 
-            logger.debug(f"Node '{node_id}': инлайнен код из {function_path}")
+            logger.debug("flows.loader.node_code_inlined", node_id=node_id, function_path=function_path)
         except Exception as e:
-            logger.error(f"Node '{node_id}': не удалось загрузить код из {function_path}: {e}")
+            logger.error("flows.loader.node_code_load_failed", node_id=node_id, function_path=function_path, error=str(e))
 
     async def _load_branches_with_prompts(
         self, bundle_dir: Path, config: JsonObject
@@ -836,11 +840,11 @@ class FlowsLoader:
         """Загружает ветки (branches) и встраивает промпты для нод в каждой ветке."""
         raw_branches = config.get("branches")
         if raw_branches is None:
-            raise ValueError("flow.json: обязательно поле branches (объект веток)")
+            raise ValueError("flow.json: branches field is required (object of branches)")
         if not raw_branches:
             return {}
         if not isinstance(raw_branches, dict):
-            raise ValueError("flow.json: поле branches должно быть объектом")
+            raise ValueError("flow.json: branches must be an object")
 
         branches: dict[str, JsonObject] = {}
         for branch_id, branch_payload in raw_branches.items():
@@ -920,7 +924,7 @@ class FlowsLoader:
                             node_config["description"] = tool_ref.description
                         if tool_ref.parameters_schema and not node_config.get("parameters_schema"):
                             node_config["parameters_schema"] = tool_ref.parameters_schema
-                        logger.debug(f"Node '{node_id}': инлайнен код tool '{tool_id}'")
+                        logger.debug("flows.loader.tool_code_inlined", node_id=node_id, tool_id=tool_id)
                     else:
                         raise ValueError(
                             f"Node '{node_id}' type=tool references tool_id='{tool_id}' which was not found in tools_cache"
@@ -949,7 +953,7 @@ class FlowsLoader:
             depth: Глубина рекурсии (защита от бесконечной рекурсии)
         """
         if depth > 10:
-            raise ValueError(f"{context}: превышена глубина рекурсии инлайнинга")
+            raise ValueError(f"{context}: inlining recursion depth exceeded")
 
         inlined: JsonArray = []
         for tool in tools:
@@ -972,7 +976,7 @@ class FlowsLoader:
                 result = require_json_object(
                     tool_ref.model_dump(mode="json", exclude_none=True), f"{context}.tool"
                 )
-                logger.debug(f"{context}: резолвнут tool ref '{tool}'")
+                logger.debug("flows.loader.tool_ref_resolved", context=context, tool_id=tool)
                 return result
 
             # Если не нашли как tool - ищем в nodes_cache (node используется как tool)
@@ -980,7 +984,7 @@ class FlowsLoader:
             if node_config:
                 return self._inline_node_as_tool(node_config, context, depth)
 
-            raise ValueError(f"{context}: ID '{tool}' не найден ни в tools_cache ни в nodes_cache")
+            raise ValueError(f"{context}: ID '{tool}' not found in tools_cache or nodes_cache")
 
         elif isinstance(tool, dict):
             tool_payload = tool
@@ -996,16 +1000,16 @@ class FlowsLoader:
             # Полностью определённые inline tools (не требуют поиска в кэшах)
             if exec_kind == "flow":
                 flow_ref = FlowToolReference.model_validate(tool_payload)
-                logger.debug(f"{context}: inline flow tool '{flow_ref.tool_id}'")
+                logger.debug("flows.loader.inline_flow_tool", context=context, tool_id=flow_ref.tool_id)
                 return require_json_object(
                     flow_ref.model_dump(mode="json", exclude_none=True),
                     f"{context}.flow_tool",
                 )
             if exec_kind in _INLINE_SELF_CONTAINED_TOOL_TYPES:
-                logger.debug(f"{context}: inline tool '{tool_id}' с type='{exec_kind}'")
+                logger.debug("flows.loader.inline_tool", context=context, tool_id=tool_id, exec_kind=exec_kind)
                 return tool_payload
             if code_mode == CodeMode.MCP_TOOL.value:
-                logger.debug(f"{context}: inline MCP tool '{tool_id}'")
+                logger.debug("flows.loader.inline_mcp_tool", context=context, tool_id=tool_id)
                 return tool_payload
 
             if isinstance(tool_id, str) and tool_id and not tool_payload.get("code"):
@@ -1020,7 +1024,7 @@ class FlowsLoader:
                     for key, value in tool_payload.items():
                         if value is not None and value != {} and value != []:
                             merged[key] = value
-                    logger.debug(f"{context}: резолвнут tool ref '{tool_id}'")
+                    logger.debug("flows.loader.tool_ref_resolved", context=context, tool_id=tool_id)
                     return merged
 
                 # Если не нашли как tool - ищем в nodes_cache (node как tool)
@@ -1029,17 +1033,17 @@ class FlowsLoader:
                     return self._inline_node_as_tool(node_config, context, depth)
 
                 raise ValueError(
-                    f"{context}: tool '{tool_id}' не найден ни в tools_cache ни в nodes_cache"
+                    f"{context}: tool '{tool_id}' not found in tools_cache or nodes_cache"
                 )
 
             if not tool_payload.get("code") and not tool_payload.get("prompt"):
                 raise ValueError(
-                    f"{context}: inline tool требует 'type', 'code' или 'prompt': {tool_payload}"
+                    f"{context}: inline tool requires 'type', 'code' or 'prompt': {tool_payload}"
                 )
 
             return tool_payload
 
-        raise ValueError(f"{context}: неизвестный формат tool: {type(tool)}")
+        raise ValueError(f"{context}: unknown tool format: {type(tool)}")
 
     def _inline_llm_node_tool(
         self, node_config: JsonObject, context: str, depth: int
@@ -1064,7 +1068,7 @@ class FlowsLoader:
             # Валидируем уникальность reason/exit tools
             self._validate_llm_node_tools(node_id, inlined_tools)
 
-        logger.debug(f"{context}: инлайнен llm_node '{node_id}' (depth={depth})")
+        logger.debug("flows.loader.llm_node_inlined", context=context, node_id=node_id, depth=depth)
         return result
 
     def _inline_node_as_tool(self, node_config: NodeConfig, context: str, depth: int) -> JsonObject:
@@ -1118,7 +1122,7 @@ class FlowsLoader:
             if node_config.type == "llm_node":
                 self._validate_llm_node_tools(node_config.node_id, inlined_tools)
 
-        logger.debug(f"{context}: инлайнен node '{node_config.node_id}' as tool")
+        logger.debug("flows.loader.node_as_tool_inlined", context=context, node_id=node_config.node_id)
         return result
 
     def _get_node_from_cache(self, node_id: str) -> NodeConfig | None:
@@ -1143,13 +1147,13 @@ class FlowsLoader:
         if len(reason_tools) > 1:
             names = [t.get("tool_id") or t.get("name") for t in reason_tools]
             raise ValueError(
-                f"Node '{node_id}': только 1 reasoning tool разрешён, найдено {len(reason_tools)}: {names}"
+                f"Node '{node_id}': only 1 reasoning tool is allowed, found {len(reason_tools)}: {names}"
             )
 
         if len(exit_tools) > 1:
             names = [t.get("tool_id") or t.get("name") for t in exit_tools]
             raise ValueError(
-                f"Node '{node_id}': только 1 exit tool разрешён, найдено {len(exit_tools)}: {names}"
+                f"Node '{node_id}': only 1 exit tool is allowed, found {len(exit_tools)}: {names}"
             )
 
     def _inline_tools_in_branches(self, branches: dict[str, JsonObject]) -> dict[str, JsonObject]:
@@ -1190,7 +1194,7 @@ class FlowsLoader:
         self._target_company_id = company_id
 
         if not self.registry_path.exists():
-            logger.warning(f"Registry не найден: {self.registry_path}")
+            logger.warning("flows.loader.registry_missing", path=str(self.registry_path))
             return {"flows": 0, "tools": 0, "nodes": 0}
 
         self.load_registry_yaml()
@@ -1206,9 +1210,11 @@ class FlowsLoader:
         expanded_bundle_ids = self._expand_bundle_ids_with_dependencies(bundles_to_load)
 
         logger.info(
-            f"Загрузка {len(expanded_bundle_ids)} flow для company:{company_id} "
-            + f"({len(bundles_to_load)} bundle, с учётом depends_on_flow_ids; "
-            + f"фильтр public: {should_filter})"
+            "flows.loader.company_load_started",
+            company_id=company_id,
+            bundle_count=len(expanded_bundle_ids),
+            registry_bundle_count=len(bundles_to_load),
+            filter_public=should_filter,
         )
 
         for bundle_id in expanded_bundle_ids:
@@ -1224,13 +1230,15 @@ class FlowsLoader:
                 else:
                     failed_bundle_ids.append(bundle_id)
             except Exception as e:
-                logger.error(f"Ошибка загрузки bundle {bundle_id}: {e}", exc_info=True)
+                logger.error("flows.loader.bundle_load_failed", bundle_id=bundle_id, error=str(e), exc_info=True)
                 failed_bundle_ids.append(bundle_id)
 
-        logger.info(f"Загружено {len(loaded_flow_ids)} flow в company:{company_id}")
+        logger.info("flows.loader.company_flows_loaded", company_id=company_id, count=len(loaded_flow_ids))
         if failed_bundle_ids:
             logger.warning(
-                f"Не удалось загрузить {len(failed_bundle_ids)} bundle: {failed_bundle_ids}"
+                "flows.loader.bundles_failed",
+                count=len(failed_bundle_ids),
+                bundle_ids=failed_bundle_ids,
             )
 
         # Возвращаем статистику
@@ -1305,14 +1313,14 @@ class FlowsLoader:
         config_path = bundle_dir / "flow.json"
         if not config_path.exists():
             raise ValueError(
-                f"Каталог bundle '{bundle_id}' не найден или в нём нет flow.json: {bundle_dir}"
+                f"Bundle directory '{bundle_id}' not found or has no flow.json: {bundle_dir}"
             )
         for companion_id in self._read_bundle_depends_on_flow_ids(bundle_dir):
             await self._reload_bundle_chain(companion_id, seen=seen)
         await self.preload_nodes_to_cache(bundle_id)
         loaded_flow_id = await self._load_flow_bundle(bundle_id)
         if not loaded_flow_id:
-            raise ValueError(f"Не удалось загрузить bundle '{bundle_id}' в БД")
+            raise ValueError(f"Failed to load bundle '{bundle_id}' into the database")
 
     async def reload_flow_bundle(self, bundle_id: str) -> str:
         """
@@ -1322,11 +1330,11 @@ class FlowsLoader:
         """
         context = get_context()
         if not context or not context.active_company or not context.active_company.company_id:
-            raise ValueError("reload_flow_bundle требует active_company в контексте")
+            raise ValueError("reload_flow_bundle requires active_company in the context")
         self._target_company_id = context.active_company.company_id
 
         if not self.registry_path.exists():
-            raise ValueError(f"Registry не найден: {self.registry_path}")
+            raise ValueError(f"Registry not found: {self.registry_path}")
 
         self.load_registry_yaml()
 
@@ -1449,7 +1457,7 @@ async def load_tools_to_db(
         )
         loaded.append(tool_id)
         loaded_ids.add(tool_id)
-        logger.info(f"  {tool_id}: FunctionTool")
+        logger.info("flows.loader.function_tool_saved", tool_id=tool_id)
 
-    logger.info(f"Загружено {len(loaded)} tools в БД")
+    logger.info("flows.loader.tools_loaded", count=len(loaded))
     return loaded

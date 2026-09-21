@@ -13,6 +13,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Literal
+from urllib.parse import unquote
 
 import pytest
 from httpx import AsyncClient, Response
@@ -58,6 +59,8 @@ class RestMirror:
     method: str
     url: str
     strategy: PayloadStrategy
+    text_body: bool = False
+    """REST отдаёт файл (text/markdown + Content-Disposition), WS — `{body, file_name}`."""
 
 
 @dataclass(frozen=True)
@@ -454,6 +457,12 @@ _CASES: dict[str, OpCase] = {
         True,
         "normalized",
     ),
+    "wiki/pages/markdown_file_requested": OpCase(
+        RestMirror("GET", f"{_API}/pages/{{wiki_page_id}}/markdown/file", "none", text_body=True),
+        _setup_markdown,
+        True,
+        "normalized",
+    ),
     "wiki/pages/markdown_parse_requested": OpCase(
         RestMirror("POST", f"{_API}/pages/markdown/parse", "body_minus_path"),
         _setup_markdown_parse,
@@ -659,6 +668,11 @@ async def _rest_command(
         json=json_body,
         params=query,
     )
+    if rest.text_body:
+        assert response.status_code == 200, f"REST {rest.method} {url}: {response.text}"
+        disposition = response.headers["content-disposition"]
+        encoded_name = disposition.split("filename*=UTF-8''", 1)[1]
+        return {"body": response.text, "file_name": unquote(encoded_name)}
     return await _expect_json(
         response,
         ok=(200, 201, 204),

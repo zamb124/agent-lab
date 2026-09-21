@@ -35,7 +35,7 @@ class BinaryViewerHandler:
         normalized = content_type.split(";", 1)[0].strip()
         download_url = download_url_for_context(ctx)
         if download_url is None:
-            raise ValueError("download_url обязателен для binary viewer")
+            raise ValueError("download_url is required for binary viewer")
         caps = self.capabilities(file_record=ctx.file_record, integration_configured=True)
         return DocumentOpenConfigResponse(
             handler="binary",

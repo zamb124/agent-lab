@@ -101,7 +101,7 @@ class WorkItemService:
     async def get(self, company_id: str, work_item_id: str) -> WorkItem:
         item = await self._repo.get_work_item(company_id, work_item_id)
         if item is None:
-            raise ValueError(f"WorkItem {work_item_id!r} не найден")
+            raise ValueError(f"WorkItem {work_item_id!r} not found")
         return item
 
     async def list(
@@ -377,7 +377,7 @@ class WorkItemService:
         item = await self.get(company_id, work_item_id)
         if item.state in TERMINAL_WORK_ITEM_STATES:
             raise ValueError(
-                f"WorkItem {work_item_id!r} в терминальном состоянии {item.state.value!r}"
+                f"WorkItem {work_item_id!r} is in terminal state {item.state.value!r}"
             )
         item.assignment = assignment
         item.updated_at = utcnow()
@@ -397,7 +397,7 @@ class WorkItemService:
         item = await self.get(company_id, work_item_id)
         if item.state in TERMINAL_WORK_ITEM_STATES:
             raise ValueError(
-                f"WorkItem {work_item_id!r} в терминальном состоянии {item.state.value!r}"
+                f"WorkItem {work_item_id!r} is in terminal state {item.state.value!r}"
             )
         target_state = state
         if board_column_id is not None:
@@ -421,16 +421,16 @@ class WorkItemService:
     ) -> WorkItem:
         item = await self.get(company_id, work_item_id)
         if not isinstance(item.assignment, QueueAssignment):
-            raise ValueError("claim доступен только для задач с очередью")
+            raise ValueError('claim is available only for queued tasks')
         if (
             item.assignment.claimed_by_user_id is not None
             and item.assignment.claimed_by_user_id != user_id
         ):
-            raise ValueError("Задача уже взята другим участником очереди")
+            raise ValueError('Task is already claimed by another queue member')
         if not await self._authz.can_view(
             AuthzObject.work_queue(item.assignment.work_queue_id), user_id=user_id
         ):
-            raise PermissionError("Нет доступа к очереди этой задачи")
+            raise PermissionError('No access to this task queue')
         item.assignment = QueueAssignment(
             work_queue_id=item.assignment.work_queue_id,
             claimed_by_user_id=user_id,
@@ -451,7 +451,7 @@ class WorkItemService:
         terminal_state: WorkItemState = WorkItemState.DONE,
     ) -> WorkItemCompletion:
         if terminal_state not in TERMINAL_WORK_ITEM_STATES:
-            raise ValueError(f"{terminal_state.value!r} не терминальное состояние")
+            raise ValueError(f"{terminal_state.value!r} is not a terminal state")
         item = await self.get(company_id, work_item_id)
         if item.state in TERMINAL_WORK_ITEM_STATES:
             return WorkItemCompletion(item, newly_terminal=False)
@@ -562,9 +562,9 @@ class WorkItemService:
     ) -> WorkQueue:
         existing = await self._repo.get_queue_by_slug(company_id, slug)
         if existing is not None:
-            raise ValueError(f"Очередь со slug {slug!r} уже существует")
+            raise ValueError(f"Queue with slug {slug!r} already exists")
         if creator is not None and not isinstance(creator, UserActor):
-            raise ValueError("owner очереди должен быть UserActor")
+            raise ValueError('queue owner must be UserActor')
         if isinstance(creator, UserActor):
             owner_user_id = creator.user_id
         else:
@@ -585,7 +585,7 @@ class WorkItemService:
         except IntegrityError as exc:
             raced = await self._repo.get_queue_by_slug(company_id, slug)
             if raced is not None:
-                raise ValueError(f"Очередь со slug {slug!r} уже существует") from exc
+                raise ValueError(f"Queue with slug {slug!r} already exists") from exc
             raise
         try:
             await self._queue_access.sync_queue_created(
@@ -611,7 +611,7 @@ class WorkItemService:
         )
         queue = await self._repo.get_queue(company_id, work_queue_id)
         if queue is None:
-            raise ValueError(f"Очередь {work_queue_id!r} не найдена")
+            raise ValueError(f"Queue {work_queue_id!r} not found")
         await self._queue_access.sync_queue_deleted(work_queue_id)
         await self._repo.delete_queue(company_id, work_queue_id)
 
@@ -629,7 +629,7 @@ class WorkItemService:
         )
         queue = await self._repo.get_queue(company_id, work_queue_id)
         if queue is None:
-            raise ValueError(f"Очередь {work_queue_id!r} не найдена")
+            raise ValueError(f"Queue {work_queue_id!r} not found")
         if name is not None:
             queue.name = name
         if description is not None:
@@ -640,7 +640,7 @@ class WorkItemService:
     async def get_queue_by_slug(self, company_id: str, slug: str) -> WorkQueue:
         queue = await self._repo.get_queue_by_slug(company_id, slug)
         if queue is None:
-            raise ValueError(f"Очередь со slug {slug!r} не найдена")
+            raise ValueError(f"Queue with slug {slug!r} not found")
         return queue
 
     async def list_queues(self, company_id: str, *, user_id: str) -> list[WorkQueue]:
@@ -662,7 +662,7 @@ class WorkItemService:
     ) -> WorkQueueMember:
         _ = company_id
         if not isinstance(member, UserActor):
-            raise ValueError("участник очереди должен быть UserActor")
+            raise ValueError('queue member must be UserActor')
         if actor_user_id is not None:
             await self._authz.require_can_admin(
                 AuthzObject.work_queue(work_queue_id), user_id=actor_user_id
@@ -680,7 +680,7 @@ class WorkItemService:
         actor_user_id: str,
     ) -> bool:
         if not isinstance(member, UserActor):
-            raise ValueError("участник очереди должен быть UserActor")
+            raise ValueError('queue member must be UserActor')
         await self._authz.require_can_admin(
             AuthzObject.work_queue(work_queue_id), user_id=actor_user_id
         )
@@ -767,7 +767,7 @@ class WorkItemService:
     async def get_board(self, company_id: str, board_id: str) -> Board:
         board = await self._repo.get_board(company_id, board_id)
         if board is None:
-            raise ValueError(f"Доска {board_id!r} не найдена")
+            raise ValueError(f"Board {board_id!r} not found")
         return board
 
     async def list_boards(self, company_id: str, *, namespace: str | None = None) -> list[Board]:
@@ -832,7 +832,7 @@ class WorkItemService:
         self, company_id: str, board_id: str | None, board_column_id: str
     ) -> BoardColumn:
         if board_id is None:
-            raise ValueError("Задача без доски не может иметь колонку")
+            raise ValueError('A task without a board cannot have a column')
         board = await self.get_board(company_id, board_id)
         return self._find_column(board, board_column_id)
 
@@ -842,14 +842,14 @@ class WorkItemService:
             if column.board_column_id == board_column_id:
                 return column
         raise ValueError(
-            f"Колонка {board_column_id!r} отсутствует на доске {board.board_id!r}"
+            f"Column {board_column_id!r} is missing on board {board.board_id!r}"
         )
 
     @staticmethod
     def _assert_transition(current: WorkItemState) -> None:
         if current in TERMINAL_WORK_ITEM_STATES:
             raise ValueError(
-                f"Переход из терминального состояния {current.value!r} запрещён"
+                f"Transition from terminal state {current.value!r} is forbidden"
             )
 
     async def _after_assignment_change(self, item: WorkItem) -> None:

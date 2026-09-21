@@ -44,16 +44,16 @@ async def _embedding_context_for_rag_worker(
     uid = str(user_id).strip()
     ns = str(namespace_id).strip()
     if not cid:
-        raise ValueError("company_id обязателен для контекста эмбеддингов в RAG worker")
+        raise ValueError("company_id is required for the embeddings context in RAG worker")
     if not uid:
-        raise ValueError("user_id обязателен для контекста эмбеддингов в RAG worker")
+        raise ValueError("user_id is required for the embeddings context in RAG worker")
     if not ns:
-        raise ValueError("namespace_id обязателен для контекста эмбеддингов в RAG worker")
+        raise ValueError("namespace_id is required for the embeddings context in RAG worker")
 
     container = get_rag_container()
     company = await container.company_repository.get(cid)
     if company is None:
-        raise ValueError(f"RAG worker: компания {cid!r} не найдена")
+        raise ValueError(f"RAG worker: company {cid!r} not found")
     return Context(
         user=User(user_id=uid, name="RAG worker"),
         active_company=company,
@@ -76,12 +76,12 @@ async def index_rag_document_s3_task(
     """
     document_id_value = metadata.get("document_id")
     if not isinstance(document_id_value, str) or not document_id_value.strip():
-        raise ValueError("metadata.document_id обязателен")
+        raise ValueError("metadata.document_id is required")
     document_id = document_id_value.strip()
 
     meta_company = metadata.get("company_id")
     if not meta_company or str(meta_company).strip() != str(company_id).strip():
-        raise ValueError("metadata.company_id должен совпадать с аргументом company_id задачи.")
+        raise ValueError("metadata.company_id must match the task company_id argument.")
 
     container = get_rag_container()
     status_repo = container.document_status_repository
@@ -89,9 +89,9 @@ async def index_rag_document_s3_task(
     trace_company_id = metadata.get("company_id")
     trace_user_id = metadata.get("uploaded_by_user_id")
     if not trace_company_id or str(trace_company_id).strip() == "":
-        raise ValueError("metadata.company_id обязателен для rag.worker.index.upload_s3.")
+        raise ValueError("metadata.company_id is required for rag.worker.index.upload_s3.")
     if not trace_user_id or str(trace_user_id).strip() == "":
-        raise ValueError("metadata.uploaded_by_user_id обязателен для rag.worker.index.upload_s3.")
+        raise ValueError("metadata.uploaded_by_user_id is required for rag.worker.index.upload_s3.")
 
     _ = set_context(
         await _embedding_context_for_rag_worker(
@@ -138,10 +138,10 @@ async def index_rag_document_s3_task(
 
             if not is_rag_indexable_file_category(resolved_category):
                 logger.info(
-                    "RAG Worker: skip non-indexable document_id=%s document_name=%s file_category=%s",
-                    document_id,
-                    document_name,
-                    resolved_category,
+                    "rag.worker.skip.non.indexable",
+                    document_id=document_id,
+                    document_name=document_name,
+                    file_category=resolved_category,
                 )
                 _ = await status_repo.record_indexing_done(document_id, 0)
                 await publish_rag_document_status_updated(
@@ -192,7 +192,7 @@ async def index_rag_document_s3_task(
 
             raw_chunks = document.metadata.get("total_chunks")
             if not isinstance(raw_chunks, int) or isinstance(raw_chunks, bool):
-                raise ValueError("RAG document metadata.total_chunks должен быть целым числом")
+                raise ValueError("RAG document metadata.total_chunks must be an integer")
             chunks = raw_chunks
             runtime = document.metadata.get("indexing_runtime")
             _ = await status_repo.record_indexing_done(
@@ -213,11 +213,7 @@ async def index_rag_document_s3_task(
                 chunks_count=chunks,
             )
 
-            logger.info(
-                "RAG Worker: документ %s проиндексирован, document_id=%s",
-                document_name,
-                document.document_id,
-            )
+            logger.info("rag.worker.document_id", document_name=document_name, document_id=document.document_id)
 
             return {
                 "document_id": document.document_id,
@@ -246,11 +242,11 @@ async def delete_document_task(
     Возвращает:
         Результат удаления
     """
-    logger.info(f"RAG Worker: удаление документа {document_id} из namespace {namespace_id}")
+    logger.info("rag.worker.document_delete_started", document_id=document_id, namespace_id=namespace_id)
     container = get_rag_container()
 
     if company_id.strip() == "" or user_id.strip() == "":
-        raise ValueError("company_id и user_id обязательны для rag.worker.index.delete.")
+        raise ValueError("company_id and user_id are required for rag.worker.index.delete.")
 
     async with traced_operation(
         "rag.worker.index.delete",
@@ -268,9 +264,9 @@ async def delete_document_task(
         success = await provider.delete_document(namespace_id, document_id)
 
         if success:
-            logger.info(f"RAG Worker: документ {document_id} удален")
+            logger.info("rag.worker.document_deleted", document_id=document_id)
         else:
-            logger.warning(f"RAG Worker: не удалось удалить документ {document_id}")
+            logger.warning("rag.worker.document_delete_failed", document_id=document_id)
 
         return {
             "document_id": document_id,

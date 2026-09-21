@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from fastapi import HTTPException
-
 from apps.frontend.services.authz_explorer_hydrate import (
     AuthzExplorerHydrator,
     AuthzHydratedObject,
@@ -30,6 +28,8 @@ from core.authz.types import (
     AuthzRelation,
     AuthzSubjectKind,
 )
+from core.errors.boundary import PlatformNotFoundError
+from core.websocket import WsCommandError
 
 EXPLORER_OBJECT_TYPES: tuple[AuthzObjectType, ...] = (
     AuthzObjectType.WIKI_PAGE,
@@ -90,7 +90,11 @@ class AuthzExplorerService:
         self, *, user_id: str, company_id: str
     ) -> AuthzExplorerByUserResponse:
         if user_id.strip() == "":
-            raise HTTPException(status_code=400, detail="user_id is required")
+            raise WsCommandError(
+                "ws_invalid_payload",
+                "user_id is required",
+                error_code="user_id_required",
+            )
         user_subject = AuthzSubject.user(user_id)
         group_subjects = await self._user_group_subjects(user_id)
         rows: list[AuthzGrantRow] = []
@@ -138,15 +142,26 @@ class AuthzExplorerService:
         company_id: str,
     ) -> AuthzExplorerByObjectResponse:
         if object_type not in EXPLORER_OBJECT_TYPES:
-            raise HTTPException(status_code=400, detail="object_type is not supported")
+            raise WsCommandError(
+                "ws_invalid_payload",
+                "object_type is not supported",
+                error_code="object_type_unsupported",
+            )
         if object_key.strip() == "":
-            raise HTTPException(status_code=400, detail="object_key is required")
+            raise WsCommandError(
+                "ws_invalid_payload",
+                "object_key is required",
+                error_code="object_key_required",
+            )
         obj = AuthzObject(object_type, object_key)
         hydrated = await self._hydrator.hydrate(
             object_type, object_key, company_id=company_id
         )
         if not await self._object_in_company(obj, hydrated, company_id):
-            raise HTTPException(status_code=404, detail="object not found in company")
+            raise PlatformNotFoundError(
+                "object not found in company",
+                error_code="authz_object_not_found",
+            )
         tuples = await self._authz.list_tuples(obj, consistency=_CONSISTENCY)
         rows: list[AuthzGrantRow] = []
         company_visible = False
@@ -188,17 +203,32 @@ class AuthzExplorerService:
         company_id: str,
     ) -> AuthzExplorerWhyResponse:
         if user_id.strip() == "":
-            raise HTTPException(status_code=400, detail="user_id is required")
+            raise WsCommandError(
+                "ws_invalid_payload",
+                "user_id is required",
+                error_code="user_id_required",
+            )
         if object_key.strip() == "":
-            raise HTTPException(status_code=400, detail="object_key is required")
+            raise WsCommandError(
+                "ws_invalid_payload",
+                "object_key is required",
+                error_code="object_key_required",
+            )
         if object_type not in EXPLORER_OBJECT_TYPES:
-            raise HTTPException(status_code=400, detail="object_type is not supported")
+            raise WsCommandError(
+                "ws_invalid_payload",
+                "object_type is not supported",
+                error_code="object_type_unsupported",
+            )
         obj = AuthzObject(object_type, object_key)
         hydrated = await self._hydrator.hydrate(
             object_type, object_key, company_id=company_id
         )
         if not await self._object_in_company(obj, hydrated, company_id):
-            raise HTTPException(status_code=404, detail="object not found in company")
+            raise PlatformNotFoundError(
+                "object not found in company",
+                error_code="authz_object_not_found",
+            )
         allowed = await self._authz.can_view(obj, user_id=user_id)
         tuples = await self._authz.list_tuples(obj, consistency=_CONSISTENCY)
         group_keys = {
@@ -246,7 +276,11 @@ class AuthzExplorerService:
         object_type: AuthzObjectType | None,
     ) -> list[AuthzExplorerObjectHit]:
         if object_type is not None and object_type not in EXPLORER_OBJECT_TYPES:
-            raise HTTPException(status_code=400, detail="object_type is not supported")
+            raise WsCommandError(
+                "ws_invalid_payload",
+                "object_type is not supported",
+                error_code="object_type_unsupported",
+            )
         return await self._hydrator.search_objects(
             company_id=company_id,
             query=query,
@@ -263,19 +297,38 @@ class AuthzExplorerService:
         relation = AuthzRelation(request.relation)
         subject_kind = AuthzSubjectKind(request.subject_kind)
         if object_type not in EXPLORER_OBJECT_TYPES:
-            raise HTTPException(status_code=400, detail="object_type is not supported")
+            raise WsCommandError(
+                "ws_invalid_payload",
+                "object_type is not supported",
+                error_code="object_type_unsupported",
+            )
         if relation not in _DISPLAY_RELATIONS:
-            raise HTTPException(status_code=400, detail="relation cannot be revoked")
+            raise WsCommandError(
+                "ws_invalid_payload",
+                "relation cannot be revoked",
+                error_code="relation_not_revocable",
+            )
         if subject_kind not in _REVOKE_SUBJECTS:
-            raise HTTPException(status_code=400, detail="subject cannot be revoked")
+            raise WsCommandError(
+                "ws_invalid_payload",
+                "subject cannot be revoked",
+                error_code="subject_not_revocable",
+            )
         if request.object_key.strip() == "" or request.subject_id.strip() == "":
-            raise HTTPException(status_code=400, detail="object_key and subject_id are required")
+            raise WsCommandError(
+                "ws_invalid_payload",
+                "object_key and subject_id are required",
+                error_code="revoke_ids_required",
+            )
         hydrated = await self._hydrator.hydrate(
             object_type, request.object_key, company_id=company_id
         )
         obj = AuthzObject(object_type, request.object_key)
         if not await self._object_in_company(obj, hydrated, company_id):
-            raise HTTPException(status_code=404, detail="object not found in company")
+            raise PlatformNotFoundError(
+                "object not found in company",
+                error_code="authz_object_not_found",
+            )
         subject = _subject_from_row(subject_kind, request.subject_id)
         existing = await self._authz.list_tuples(
             obj,
@@ -284,7 +337,10 @@ class AuthzExplorerService:
             consistency=_CONSISTENCY,
         )
         if len(existing) == 0:
-            raise HTTPException(status_code=404, detail="grant tuple not found")
+            raise PlatformNotFoundError(
+                "grant tuple not found",
+                error_code="authz_grant_not_found",
+            )
         await self._authz.delete(
             [
                 AuthzTuple(
@@ -412,7 +468,11 @@ def _subject_from_row(kind: AuthzSubjectKind, subject_id: str) -> AuthzSubject:
         return AuthzSubject.user(subject_id)
     if resolved is AuthzSubjectKind.GROUP:
         return AuthzSubject(AuthzSubjectKind.GROUP, subject_id)
-    raise HTTPException(status_code=400, detail="subject_kind cannot be revoked")
+    raise WsCommandError(
+        "ws_invalid_payload",
+        "subject_kind cannot be revoked",
+        error_code="subject_kind_not_revocable",
+    )
 
 
 def _summary(rows: Sequence[AuthzGrantRow], *, company_visible: bool) -> AuthzExplorerSummary:

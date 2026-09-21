@@ -66,7 +66,7 @@ class SettlementRuleMatch(BaseModel):
                 try:
                     _ = re.compile(pattern)
                 except re.error as e:
-                    raise ValueError(f"невалидный regex {label}: {e}") from e
+                    raise ValueError(f"invalid regex {label}: {e}") from e
         return self
 
 
@@ -93,7 +93,7 @@ class SettlementRule(BaseModel):
     @classmethod
     def resource_name_format(cls, v: str) -> str:
         if ":" not in v:
-            raise ValueError(f"resource_name ожидается как category:resource, получено {v!r}")
+            raise ValueError(f"resource_name expected as category:resource, got {v!r}")
         return v
 
     def resolve_resource_name(self, span: BillingSettlementSpan) -> str:
@@ -103,7 +103,7 @@ class SettlementRule(BaseModel):
         rule_category = self.resource_name.split(":", 1)[0]
         if span_resource.split(":", 1)[0] != rule_category:
             raise ValueError(
-                f"span {span.span_id}: resource_name {span_resource!r} вне категории правила {self.rule_id!r} ({rule_category})"
+                f"span {span.span_id}: resource_name {span_resource!r} is outside the rule category {self.rule_id!r} ({rule_category})"
             )
         return span_resource
 
@@ -119,7 +119,7 @@ class SettlementRulesDocument(BaseModel):
 def parse_settlement_rules_json(raw: str) -> SettlementRulesDocument:
     parsed = parse_json_value(raw, "settlement rules")
     if not isinstance(parsed, dict):
-        raise ValueError("settlement rules: корень должен быть объектом")
+        raise ValueError('settlement rules: root must be an object')
     data = require_json_object(parsed, "settlement rules")
     return SettlementRulesDocument.model_validate(data)
 
@@ -138,7 +138,7 @@ def _regex_matches(pattern: str | None, value: JsonValue) -> bool:
     try:
         return re.search(pattern, str(value)) is not None
     except re.error as e:
-        raise ValueError(f"невалидный regex {pattern!r}: {e}") from e
+        raise ValueError(f"invalid regex {pattern!r}: {e}") from e
 
 
 def rule_matches_span(rule: SettlementRule, span: BillingSettlementSpan) -> bool:
@@ -203,30 +203,30 @@ def quantity_from_span(quantity_from: str, span: BillingSettlementSpan) -> int:
         rest = quantity_from[len("const:") :].strip()
         q = int(rest)
         if q < 0:
-            raise ValueError(f"const quantity должна быть >= 0: {quantity_from!r}")
+            raise ValueError(f"const quantity must be >= 0: {quantity_from!r}")
         return q
     if quantity_from.startswith("attr:"):
         key = quantity_from[len("attr:") :].strip()
         if not key:
-            raise ValueError(f"пустой ключ атрибута в {quantity_from!r}")
+            raise ValueError(f"empty attribute key in {quantity_from!r}")
         if key not in span.attributes:
-            raise ValueError(f"атрибут {key!r} отсутствует для quantity_from")
+            raise ValueError(f"attribute {key!r} is missing for quantity_from")
         q = _json_value_to_int(span.attributes[key], f"атрибут {key!r}")
         if q < 0:
-            raise ValueError(f"quantity из атрибута {key!r} должна быть >= 0")
+            raise ValueError(f"quantity from attribute {key!r} must be >= 0")
         return q
-    raise ValueError(f"неизвестный формат quantity_from: {quantity_from!r}")
+    raise ValueError(f"unknown quantity_from format: {quantity_from!r}")
 
 
 def _json_value_to_int(value: JsonValue, label: str) -> int:
     if isinstance(value, bool):
-        raise ValueError(f"{label} должен быть целым числом")
+        raise ValueError(f"{label} must be an integer")
     if isinstance(value, int):
         return value
     if isinstance(value, float):
         if not value.is_integer():
-            raise ValueError(f"{label} должен быть целым числом")
+            raise ValueError(f"{label} must be an integer")
         return int(value)
     if isinstance(value, str):
         return int(value)
-    raise ValueError(f"{label} должен быть целым числом")
+    raise ValueError(f"{label} must be an integer")

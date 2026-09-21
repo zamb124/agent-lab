@@ -93,7 +93,7 @@ async def test_e2e_multipod_revoke_disconnects_ws(
             f"{AGENT_API_PREFIX}/devices/{device_id}",
             timeout=30.0,
         )
-        assert revoke_response.status_code == 204
+        assert revoke_response.status_code == 200, revoke_response.text
         await websocket.send(json.dumps({"type": "ping"}))
         with pytest.raises(
             (

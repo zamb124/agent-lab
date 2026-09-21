@@ -34,7 +34,7 @@ def require_platform_public_base_url(*, host: str | None = None) -> str:
     settings = get_settings()
     base = settings.server.platform_public_base_url
     if base is None or str(base).strip() == "":
-        raise ValueError("server.platform_public_base_url не задан: нужен для коротких ссылок")
+        raise ValueError('server.platform_public_base_url is not set: required for short links')
     return str(base).strip().rstrip("/")
 
 
@@ -76,7 +76,7 @@ class ShortLinkService:
             if ok:
                 return self.public_short_url(code, host=host)
 
-        raise RuntimeError("Не удалось выделить уникальный код короткой ссылки")
+        raise RuntimeError('Failed to allocate a unique short-link code')
 
     async def mint_company_invite(
         self,
@@ -98,7 +98,7 @@ class ShortLinkService:
             if ok:
                 return self.public_short_url(code, host=host)
 
-        raise RuntimeError("Не удалось выделить уникальный код короткой ссылки")
+        raise RuntimeError('Failed to allocate a unique short-link code')
 
     async def mint_flow_preview_embed(self, handoff_id: str, expires_at: datetime) -> str:
         payload = FlowPreviewEmbedPayload(handoff_id=handoff_id)
@@ -114,7 +114,7 @@ class ShortLinkService:
             if ok:
                 return self.public_short_url(code)
 
-        raise RuntimeError("Не удалось выделить уникальный код короткой ссылки")
+        raise RuntimeError('Failed to allocate a unique short-link code')
 
     async def mint_flow_ui_session_share(
         self,
@@ -134,7 +134,7 @@ class ShortLinkService:
             )
             if ok:
                 return self.public_short_url(code, host=host)
-        raise RuntimeError("Не удалось выделить уникальный код live-session ссылки")
+        raise RuntimeError('Failed to allocate a unique live-session link code')
 
     async def resolve_absolute_redirect_url(
         self,

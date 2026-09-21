@@ -188,7 +188,8 @@ async def test_trigger(
         raise WsCommandError(
             "ws_invalid_payload",
             "flow_id or trigger_id in path must match payload",
-        )
+                  error_code='ws_invalid_payload',
+              )
     return await op_flows_triggers_test(
         payload,
         user=require_context().user,
@@ -244,13 +245,13 @@ async def telegram_webhook(
             )
 
     if not flow_config:
-        logger.warning(f"Telegram webhook: flow not found: {flow_id}")
+        logger.warning("flows.telegram.webhook_flow_missing", flow_id=flow_id)
         raise HTTPException(status_code=404, detail="Flow not found")
 
     trigger = flow_config.triggers.get(trigger_id)
 
     if not trigger:
-        logger.warning(f"Telegram webhook: trigger not found: {trigger_id}")
+        logger.warning("flows.telegram.webhook_trigger_missing", trigger_id=trigger_id)
         raise HTTPException(status_code=404, detail="Trigger not found")
 
     if trigger.type != TriggerType.TELEGRAM:
@@ -262,10 +263,7 @@ async def telegram_webhook(
     )
 
     if not trigger.config.get("_secret_token"):
-        logger.warning(
-            "Telegram webhook: trigger %s has no _secret_token (register or reregister)",
-            trigger_id,
-        )
+        logger.warning("flows.telegram.webhook.trigger.secret_token.register", trigger_id=trigger_id)
         raise HTTPException(
             status_code=403,
             detail=(
@@ -279,21 +277,21 @@ async def telegram_webhook(
             detail="Missing X-Telegram-Bot-Api-Secret-Token",
         )
     if not telegram_handler.verify_secret_token(trigger, x_telegram_bot_api_secret_token):
-        logger.warning("Telegram webhook: invalid secret token: %s", trigger_id)
+        logger.warning("flows.telegram.webhook.invalid.secret.token", trigger_id=trigger_id)
         raise HTTPException(status_code=403, detail="Invalid secret token")
 
     try:
         update = TelegramUpdate.model_validate_json(await request.body())
     except ValidationError as e:
-        logger.error(f"Telegram webhook: failed to parse JSON: {e}")
+        logger.error("flows.telegram.webhook_json_failed", error=str(e))
         raise HTTPException(status_code=400, detail="Invalid JSON") from e
     payload = update.to_payload()
 
     logger.info(
-        "Telegram webhook received: flow_id=%s, trigger=%s, update_id=%s",
-        flow_id,
-        trigger_id,
-        update.update_id,
+        "flows.telegram.webhook.received.flow_id.trigger",
+        flow_id=flow_id,
+        trigger=trigger_id,
+        update_id=update.update_id,
     )
 
     # Обрабатываем
@@ -304,10 +302,10 @@ async def telegram_webhook(
             raise RuntimeError("Telegram trigger result.task_id must be a string")
         return {"status": "ok", "task_id": task_id}
     except TriggerValidationError as e:
-        logger.warning(f"Telegram webhook validation error: {e}")
+        logger.warning("flows.telegram.webhook_invalid", error=str(e))
         return {"status": "skipped", "reason": str(e)}
     except Exception as e:
-        logger.error(f"Telegram webhook error: {e}")
+        logger.error("flows.telegram.webhook_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -407,11 +405,11 @@ async def generic_webhook(
         if len(body_keys) > 24:
             body_keys = body_keys[:24] + ["..."]
     logger.info(
-        "Webhook received: flow_id=%s, trigger=%s, body_key_count=%s, top_keys=%s",
-        flow_id,
-        trigger_id,
-        len(body_keys),
-        body_keys,
+        "flows.webhook.received.flow_id.trigger.body_key_count",
+        flow_id=flow_id,
+        trigger=trigger_id,
+        body_key_count=len(body_keys),
+        top_keys=body_keys,
     )
 
     webhook_handler = WebhookTriggerHandler(
@@ -421,7 +419,7 @@ async def generic_webhook(
     try:
         result = await webhook_handler.handle(flow_id, trigger_id, payload)
     except Exception as e:
-        logger.error(f"Webhook trigger error: {e}")
+        logger.error("flows.trigger.webhook_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e)) from e
 
     task_id = result.get("task_id")

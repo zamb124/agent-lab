@@ -26,9 +26,9 @@ def generate_turn_credentials(
     - credential = base64(HMAC-SHA1(secret, username))
     """
     if not turn_host:
-        raise ValueError("turn_host не задан в конфигурации")
+        raise ValueError('turn_host is not set in configuration')
     if not turn_secret:
-        raise ValueError("turn_secret не задан в конфигурации")
+        raise ValueError('turn_secret is not set in configuration')
 
     expires = int(time.time()) + ttl
     username = f"{expires}:{user_id}"

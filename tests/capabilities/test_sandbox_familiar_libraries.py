@@ -15,11 +15,11 @@ from core.capabilities import (
     CodeExecutionKind,
     CodeExecutionRequest,
     CodeValidationRequest,
-    JsonObject,
     execution_token_exp,
     issue_execution_token,
     locked_down_code_sandbox_policy,
 )
+from core.types import JsonObject
 from tests.capabilities.capability_language_helpers import fetch_manifest
 
 pytestmark = pytest.mark.timeout(180)

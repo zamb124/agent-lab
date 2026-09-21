@@ -76,7 +76,7 @@ class ShortLinkRepository:
         async with factory() as session:
             row = await session.get(PlatformShortLink, code)
             if row is None:
-                raise ValueError(f"Короткая ссылка {code} не найдена")
+                raise ValueError(f"Short link {code} not found")
             row.expires_at = expires_at
             await session.commit()
 

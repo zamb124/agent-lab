@@ -71,7 +71,7 @@ def _payment_provider_type(provider_name: str) -> PaymentProviderType:
         return PaymentProviderType.TINKOFF
     if provider_name == "grant":
         return PaymentProviderType.GRANT
-    raise ValueError(f"Неизвестный провайдер: {provider_name}")
+    raise ValueError(f"Unknown provider: {provider_name}")
 
 
 def _transaction_key(transaction: Transaction) -> str:
@@ -399,7 +399,7 @@ class PaymentService:
             )
             data = await self._storage.get(key, force_global=True)
             if data is not None:
-                logger.debug(f"Транзакция найдена по ключу: {key}")
+                logger.debug("payments.transaction.found", key=key)
                 return Transaction.model_validate_json(data)
 
         return None
@@ -502,11 +502,11 @@ class PaymentService:
     async def _save_transaction(self, transaction: Transaction) -> None:
         key = _transaction_key(transaction)
 
-        logger.debug(f"Сохраняем транзакцию по ключу: {key}")
+        logger.debug("payments.transaction.save", key=key)
 
         success = await self._storage.set(key, transaction.model_dump_json(), force_global=True)
 
-        logger.debug(f"Результат сохранения транзакции: {success}")
+        logger.debug("payments.transaction.saved", success=success)
 
         logger.debug("payments.transaction_saved", redis_key=key)
 

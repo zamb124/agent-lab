@@ -100,7 +100,7 @@ class AccessRequestService:
         # Получаем entity
         entity = await self._entity_repo.get(entity_id)
         if not entity:
-            raise PlatformNotFoundError("Entity not found")
+            raise PlatformNotFoundError("Entity not found", error_code='not_found')
 
         # Создаем запрос
         access_request = AccessRequest(
@@ -121,7 +121,9 @@ class AccessRequestService:
 
         access_request = await self._access_request_repo.create(access_request)
         logger.info(
-            f"Access request created: {access_request.access_request_id} for entity {entity_id}"
+            "crm.access_request.created",
+            access_request_id=access_request.access_request_id,
+            entity_id=entity_id,
         )
 
         await self._notify_can_share_holders(
@@ -142,16 +144,16 @@ class AccessRequestService:
 
         access_request = await self._access_request_repo.get(access_request_id)
         if not access_request:
-            raise PlatformNotFoundError("Request not found")
+            raise PlatformNotFoundError("Request not found", error_code='not_found')
 
         await self._require_can_share_entity(access_request.resource_id, owner_user_id)
 
         if access_request.status != "pending":
-            raise PlatformConflictError(f"Request already {access_request.status}")
+            raise PlatformConflictError(f"Request already {access_request.status}", error_code='conflict')
 
         original = await self._entity_repo.get(access_request.resource_id)
         if not original:
-            raise PlatformNotFoundError("Original entity not found")
+            raise PlatformNotFoundError("Original entity not found", error_code='not_found')
 
         # Копируем entity
         if access_request.include_dependencies:
@@ -177,7 +179,9 @@ class AccessRequestService:
         access_request = await self._access_request_repo.update(access_request)
 
         logger.info(
-            f"Access request {access_request_id} approved, created entity {copy.entity_id}"
+            "crm.access_request.approved",
+            access_request_id=access_request_id,
+            entity_id=copy.entity_id,
         )
 
         # Уведомление запросившему об одобрении
@@ -256,7 +260,7 @@ class AccessRequestService:
         except Exception:
             _ = await self._entity_repo.delete(copy.entity_id)
             raise
-        logger.info(f"Shallow copy created: {copy.entity_id} from {original.entity_id}")
+        logger.info("crm.access.copy_created", entity_id=copy.entity_id, source_entity_id=original.entity_id)
 
         return copy
 
@@ -345,7 +349,10 @@ class AccessRequestService:
             new_rel = await self._relationship_repo.create(new_rel)
 
         logger.info(
-            f"Deep copy created: {copy.entity_id} from {original.entity_id} (depth={_current_depth})"
+            "crm.entity.deep_copy_created",
+            entity_id=copy.entity_id,
+            source_entity_id=original.entity_id,
+            depth=_current_depth,
         )
 
         return copy
@@ -360,7 +367,7 @@ class AccessRequestService:
 
         access_request = await self._access_request_repo.get(access_request_id)
         if not access_request:
-            raise PlatformNotFoundError("Request not found")
+            raise PlatformNotFoundError("Request not found", error_code='not_found')
 
         await self._require_can_share_entity(access_request.resource_id, owner_user_id)
 
@@ -368,12 +375,12 @@ class AccessRequestService:
         access_request.updated_at = datetime.now(UTC)
         access_request = await self._access_request_repo.update(access_request)
 
-        logger.info(f"Access request {access_request_id} rejected by {owner_user_id}")
+        logger.info("crm.access.rejected", access_request_id=access_request_id, owner_user_id=owner_user_id)
 
         # Уведомление запросившему об отклонении
         entity = await self._entity_repo.get(access_request.resource_id)
         if entity is None:
-            raise PlatformNotFoundError("Original entity not found")
+            raise PlatformNotFoundError("Original entity not found", error_code='not_found')
         entity_name = entity.name
 
         await notify_user(

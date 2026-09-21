@@ -9,10 +9,7 @@ from core.ai.providers import PROVIDER_LITSERVE
 from core.models import StrictBaseModel
 from core.models.identity_models import SYSTEM_COMPANY_ID, User
 from core.request_scope import require_company
-
-
-class FrontendEmptyPayload(StrictBaseModel):
-    pass
+from core.websocket import EmptyPayload
 
 
 class DashboardStats(StrictBaseModel):
@@ -26,7 +23,7 @@ class DashboardStats(StrictBaseModel):
 
 
 async def op_dashboard_stats(
-    payload: FrontendEmptyPayload, *, user: User, container: FrontendContainer
+    payload: EmptyPayload, *, user: User, container: FrontendContainer
 ) -> DashboardStats:
     _ = payload, user
     scope = require_company()

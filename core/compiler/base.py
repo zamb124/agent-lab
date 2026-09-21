@@ -220,7 +220,7 @@ class GraphCompiler:
         """
         if entry not in nodes:
             raise InvalidGraphError(
-                message=f"Entry нода '{entry}' не найдена в графе",
+                message=f"Entry node '{entry}' not found in the graph",
                 payload={"entry": entry, "available_nodes": list(nodes.keys())},
             )
 
@@ -238,13 +238,13 @@ class GraphCompiler:
         for edge in edges:
             if edge.from_node not in nodes:
                 raise InvalidGraphError(
-                    message=f"from_node '{edge.from_node}' не найдена в графе",
+                    message=f"from_node '{edge.from_node}' not found in the graph",
                     payload={"from_node": edge.from_node, "available_nodes": list(nodes.keys())},
                 )
 
             if edge.to_node is not None and edge.to_node not in nodes:
                 raise InvalidGraphError(
-                    message=f"to_node '{edge.to_node}' не найдена в графе",
+                    message=f"to_node '{edge.to_node}' not found in the graph",
                     payload={"to_node": edge.to_node, "available_nodes": list(nodes.keys())},
                 )
 
@@ -333,7 +333,9 @@ class GraphCompiler:
         if unreachable:
             unreachable_nodes = ", ".join(sorted(unreachable))
             logger.warning(
-                f"Ноды не достижимы через edges от entry '{entry}': {unreachable_nodes}."
+                "compiler.unreachable_nodes",
+                entry=entry,
+                unreachable_nodes=unreachable_nodes,
             )
 
     def _calculate_checksum(

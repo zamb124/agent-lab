@@ -650,7 +650,7 @@ def _ensure_namespace_template_seeds_contain_core_note_task(
             parent_spec = system_by_id.get(parent_id)
             if parent_spec is None:
                 raise ValueError(
-                    f"namespace template seed {seed['template_id']!r}: parent_type_id={parent_id!r} ссылается на тип, отсутствующий и в seed, и в SYSTEM_ENTITY_TYPE_TEMPLATES"
+                    f"namespace template seed {seed['template_id']!r}: parent_type_id={parent_id!r} references a type missing from both seed and SYSTEM_ENTITY_TYPE_TEMPLATES"
                 )
             types_list.append(_namespace_template_row_from_system_spec(parent_spec))
             present.add(parent_id)

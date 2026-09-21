@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Sequence
-from datetime import datetime, timezone
 from typing import Literal
 
 from a2a.types import Message
@@ -29,49 +28,13 @@ from core.types import JsonObject
 RuntimeMemoryCompaction = Literal["raw", "llm_summary"]
 
 
-class RuntimeMemoryEpisodePayload(StrictBaseModel):
-    """Детерминированный payload эпизода памяти в durable activity input."""
-
-    memory_id: str = Field(..., min_length=1)
-    content: str = Field(..., min_length=1)
-    scope: LLMContextMemoryScope
-    session_id: str | None = None
-    flow_id: str | None = None
-    branch_id: str | None = None
-    node_id: str | None = None
-    user_id: str | None = None
-    title: str | None = None
-    source: str = Field(..., min_length=1)
-    metadata: JsonObject = Field(default_factory=dict)
-
-    @classmethod
-    def from_episode(cls, episode: LLMContextMemoryEpisode) -> "RuntimeMemoryEpisodePayload":
-        return cls.model_validate(episode.model_dump(mode="python", exclude={"created_at"}))
-
-    def to_episode(self) -> LLMContextMemoryEpisode:
-        return LLMContextMemoryEpisode(
-            memory_id=self.memory_id,
-            content=self.content,
-            scope=self.scope,
-            session_id=self.session_id,
-            flow_id=self.flow_id,
-            branch_id=self.branch_id,
-            node_id=self.node_id,
-            user_id=self.user_id,
-            title=self.title,
-            source=self.source,
-            metadata=self.metadata,
-            created_at=datetime.now(timezone.utc),
-        )
-
-
 class RuntimeMemoryCloseDecision(StrictBaseModel):
     """Чистое решение о закрытии текущего окна LLM context memory."""
 
     cursor_key: str = Field(..., min_length=1)
     cursor: int = Field(..., ge=0)
     next_cursor: int = Field(..., ge=0)
-    episode: RuntimeMemoryEpisodePayload | None
+    episode: LLMContextMemoryEpisode | None
     compaction: RuntimeMemoryCompaction
 
 
@@ -85,7 +48,7 @@ class RuntimeMemoryWriteCommand(StrictBaseModel):
     cursor_key: str = Field(..., min_length=1)
     cursor: int = Field(..., ge=0)
     next_cursor: int = Field(..., ge=0)
-    episode: RuntimeMemoryEpisodePayload
+    episode: LLMContextMemoryEpisode
     compaction: RuntimeMemoryCompaction
 
 
@@ -161,7 +124,7 @@ def build_state_messages_memory_close_decision(
         cursor_key=key,
         cursor=cursor,
         next_cursor=next_cursor,
-        episode=RuntimeMemoryEpisodePayload.from_episode(episode) if episode is not None else None,
+        episode=episode,
         compaction=compaction,
     )
 
@@ -173,7 +136,7 @@ async def write_runtime_memory_episode(
     summarize_episode: Callable[[str], Awaitable[str]] | None,
 ) -> RuntimeMemoryWriteResult:
     """Выполняет одну типизированную memory write-команду. Журналирование activity — у вызывающего."""
-    episode = command.episode.to_episode()
+    episode = command.episode
     if command.compaction == "llm_summary":
         if summarize_episode is None:
             raise RuntimeError("llm_summary memory command requires summarize_episode")
@@ -251,7 +214,6 @@ def prune_state_messages_to_memory_cursor_for_runtime(state: ExecutionState) -> 
 
 __all__ = [
     "RuntimeMemoryCloseDecision",
-    "RuntimeMemoryEpisodePayload",
     "RuntimeMemoryWriteCommand",
     "RuntimeMemoryWriteResult",
     "apply_runtime_memory_cursor_advance",

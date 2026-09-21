@@ -24,19 +24,19 @@ def validate_cron_for_timezone(cron: str, timezone_name: str) -> None:
     """Падает ValueError если выражение cron несовместимо с croniter в данной таймзоне."""
     raw = cron.strip()
     if not raw:
-        raise ValueError("cron не может быть пустым")
+        raise ValueError("cron must not be empty")
     tz_name = timezone_name.strip()
     if not tz_name:
-        raise ValueError("timezone не может быть пустым")
+        raise ValueError("timezone must not be empty")
     try:
         zi = ZoneInfo(tz_name)
     except ZoneInfoNotFoundError as exc:
-        raise ValueError(f"Неизвестная timezone: {timezone_name}") from exc
+        raise ValueError(f"Unknown timezone: {timezone_name}") from exc
     base = datetime.now(zi)
     try:
         _ = croniter(raw, base)
     except CroniterBadCronError as exc:
-        raise ValueError(f"Некорректное выражение cron: {exc}") from exc
+        raise ValueError(f"Invalid cron expression: {exc}") from exc
 
 
 class IntegrationAutoSyncService:
@@ -72,10 +72,10 @@ class IntegrationAutoSyncService:
             )
             if cred is None:
                 raise ValueError(
-                    "Интеграция не подключена для выбранного пользователя OAuth: подключите AmoCRM"
+                    "Integration is not connected for the selected OAuth user: connect AmoCRM"
                 )
             return
-        raise ValueError(f"Автосинхронизация для провайдера «{provider_id}» не настроена")
+        raise ValueError(f"Autosync for provider «{provider_id}» is not configured")
 
     async def apply_integration_auto_sync(
         self,
@@ -91,9 +91,9 @@ class IntegrationAutoSyncService:
         ns_raw = namespace_name.strip()
         pid = provider_id.strip()
         if not ns_raw:
-            raise ValueError("namespace_name обязателен")
+            raise ValueError("namespace_name is required")
         if not pid:
-            raise ValueError("provider_id обязателен")
+            raise ValueError("provider_id is required")
 
         _ = self._integration_registry.get(pid)
 
@@ -121,9 +121,9 @@ class IntegrationAutoSyncService:
 
         cron_raw = auto_sync_cron if isinstance(auto_sync_cron, str) else ""
         if not cron_raw.strip():
-            raise ValueError("При включённом автосинке поле cron обязательно")
+            raise ValueError("cron is required when autosync is enabled")
         if auto_sync_timezone is None or not auto_sync_timezone.strip():
-            raise ValueError("При включённом автосинке timezone обязателен")
+            raise ValueError("timezone is required when autosync is enabled")
         cron = cron_raw.strip()
         tz = auto_sync_timezone.strip()
         validate_cron_for_timezone(cron, tz)
@@ -134,7 +134,7 @@ class IntegrationAutoSyncService:
         else:
             oauth_user = acting_user_id.strip()
         if not oauth_user:
-            raise ValueError("Не удалось определить пользователя OAuth для автосинка")
+            raise ValueError("Failed to resolve the OAuth user for autosync")
 
         await self._assert_token_for_integration(
             company_id=company_id,
@@ -207,9 +207,9 @@ class IntegrationAutoSyncService:
         ns_raw = namespace_name.strip()
         pid = provider_id.strip()
         if not ns_raw:
-            raise ValueError("namespace_name обязателен")
+            raise ValueError("namespace_name is required")
         if not pid:
-            raise ValueError("provider_id обязателен")
+            raise ValueError("provider_id is required")
 
         _ = self._integration_registry.get(pid)
 

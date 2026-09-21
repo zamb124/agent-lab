@@ -49,7 +49,7 @@ def retry_after_ttl_seconds(response: httpx.Response) -> int | None:
         return None
     stripped = raw.strip()
     if not stripped:
-        raise ValueError("Retry-After header пустой")
+        raise ValueError("Retry-After header is empty")
     if stripped.isdigit():
         return max(1, int(stripped))
     parsed = parsedate_to_datetime(stripped)
@@ -121,13 +121,13 @@ async def set_candidate_cooldown(
         raise ValueError("candidate cooldown ttl must be a positive number of seconds")
     provider = candidate.provider
     if provider is None or not provider.strip():
-        raise ValueError("candidate cooldown: provider обязателен")
+        raise ValueError("candidate cooldown: provider is required")
     record = classify_ai_provider_error(provider, error, api_key=candidate.api_key)
     redis = _redis()
     key = cooldown_redis_key(candidate)
     wrote = await redis.set(key, record.model_dump_json(), ttl=ttl_seconds)
     if not wrote:
-        raise RedisOperationError(f"не удалось записать LLM candidate cooldown {key}")
+        raise RedisOperationError(f"failed to write LLM candidate cooldown {key}")
 
 
 __all__ = [

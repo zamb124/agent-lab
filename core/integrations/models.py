@@ -53,10 +53,6 @@ class CredentialInfo(StrictBaseModel):
     created_at: datetime
 
 
-class IntegrationEmptyPayload(StrictBaseModel):
-    pass
-
-
 class IntegrationCredentialRefPayload(StrictBaseModel):
     provider: str = ""
     service: str = ""

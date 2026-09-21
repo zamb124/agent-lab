@@ -23,14 +23,14 @@ def validate_node_files_list(
     try:
         file_items = require_json_array(files, f"nodes.{node_id}.files")
     except ValueError as exc:
-        raise ValueError(f"Нода '{node_id}': files должен быть списком") from exc
+        raise ValueError(f"Node '{node_id}': files must be a list") from exc
     for idx, raw_item in enumerate(file_items):
         item = require_json_object(raw_item, f"nodes.{node_id}.files[{idx}]")
         try:
             _ = FileRef.model_validate(item)
         except ValueError as exc:
             raise ValueError(
-                f"Нода '{node_id}': files[{idx}] не является FileRef: {exc}"
+                f"Node '{node_id}': files[{idx}] is not a FileRef: {exc}"
             ) from exc
 
 

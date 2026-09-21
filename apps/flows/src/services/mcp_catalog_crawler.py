@@ -555,12 +555,12 @@ async def crawl_mcp_registry(*, container: FlowRuntimeContainer) -> MCPCatalogCr
         deprecated += 1
 
     logger.info(
-        "MCP catalog crawl done: fetched=%s upserted=%s deprecated=%s verified=%s verify_failed=%s",
-        fetched,
-        upserted,
-        deprecated,
-        verified,
-        verify_failed,
+        "flows.mcp.catalog.crawl.done.fetched",
+        fetched=fetched,
+        upserted=upserted,
+        deprecated=deprecated,
+        verified=verified,
+        verify_failed=verify_failed,
     )
     return MCPCatalogCrawlStats(
         fetched=fetched,

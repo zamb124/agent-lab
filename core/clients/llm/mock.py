@@ -57,14 +57,14 @@ MockLLMQueuedResponse: TypeAlias = str | JsonObject
 def mock_llm_responses_key(test_scope: str) -> str:
     """Ключ Redis очереди mock-ответов для конкретного test scope."""
     if not test_scope.strip():
-        raise ValueError("mock_llm_responses_key: test_scope не должен быть пустым")
+        raise ValueError("mock_llm_responses_key: test_scope must not be empty")
     return f"mock_llm:responses:{test_scope.strip()}"
 
 
 def mock_llm_capture_key(test_scope: str) -> str:
     """Ключ Redis журнала вызовов MockLLM для конкретного test scope."""
     if not test_scope.strip():
-        raise ValueError("mock_llm_capture_key: test_scope не должен быть пустым")
+        raise ValueError("mock_llm_capture_key: test_scope must not be empty")
     return f"mock_llm:capture:{test_scope.strip()}"
 
 
@@ -213,7 +213,7 @@ class MockLLM:
         недобор ответов в тесте.
         """
         if not self._redis_client:
-            raise RuntimeError("_pop_single_redis_key вызван без Redis-клиента")
+            raise RuntimeError("_pop_single_redis_key called without a Redis client")
         try:
             redis_response_payload = await self._redis_client.eval(
                 _MOCK_LLM_REDIS_POP_SCRIPT, 1, key
@@ -822,8 +822,8 @@ class MockLLM:
             )
             if not text_for_json.strip():
                 raise ValueError(
-                    "LLM structured output: пустой ответ (нет текста вне reasoning-артефакта и "
-                    + "нет текста в финальном статусе задачи)"
+                    "LLM structured output: empty response (no text outside the reasoning artifact and "
+                    + "no text in the final task status)"
                 )
             structured_payload = parse_json_value(text_for_json, "mock_llm.structured_output")
             return response_model.model_validate(structured_payload)
@@ -965,7 +965,7 @@ async def start_mock_llm_capture(redis_client: RedisClient, scope: str) -> str:
     MockLLM пишет журнал для любого вызова с активным test scope.
     """
     if not scope:
-        raise ValueError("start_mock_llm_capture: scope не должен быть пустым")
+        raise ValueError("start_mock_llm_capture: scope must not be empty")
     list_key = mock_llm_capture_key(scope)
     _ = await redis_client.delete(list_key)
     return list_key

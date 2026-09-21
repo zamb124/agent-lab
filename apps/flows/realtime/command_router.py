@@ -12,11 +12,27 @@ from apps.flows.realtime.agent_skill_operations import (
     op_flows_agent_skills_update,
 )
 from apps.flows.realtime.agent_toolkit_operations import (
+    op_flows_agent_toolkits_catalog_list,
     op_flows_agent_toolkits_create,
     op_flows_agent_toolkits_item,
     op_flows_agent_toolkits_list,
     op_flows_agent_toolkits_remove,
     op_flows_agent_toolkits_update,
+)
+from apps.flows.realtime.browser_preview_operations import (
+    BrowserPreviewClickPayload,
+    BrowserPreviewKeyPayload,
+    BrowserPreviewSessionPayload,
+    BrowserPreviewTakeoverPayload,
+    BrowserPreviewTaskPayload,
+    BrowserPreviewTextPayload,
+    op_flows_browser_preview_active_session,
+    op_flows_browser_preview_click,
+    op_flows_browser_preview_key,
+    op_flows_browser_preview_status,
+    op_flows_browser_preview_takeover,
+    op_flows_browser_preview_takeover_release,
+    op_flows_browser_preview_text,
 )
 from apps.flows.realtime.code_agent_operations import (
     op_flows_code_agent_copy_tree,
@@ -188,7 +204,6 @@ from apps.flows.realtime.observability_operations import (
 from apps.flows.realtime.operations import (
     FlowDataflowInspectRequest,
     FlowsBranchIdPayload,
-    FlowsEmptyPayload,
     FlowsFlowIdPayload,
     FlowsFlowVersionPayload,
     FlowsListPayload,
@@ -242,6 +257,12 @@ from apps.flows.realtime.tool_operations import (
     op_flows_tools_remove,
     op_flows_tools_tag_groups,
 )
+from apps.flows.realtime.tool_runtime_operations import (
+    ToolRuntimeCallPayload,
+    ToolRuntimeManifestPayload,
+    op_flows_tool_runtime_call,
+    op_flows_tool_runtime_manifest,
+)
 from apps.flows.realtime.trigger_operations import (
     op_flows_platform_events_catalog,
     op_flows_triggers_create,
@@ -263,6 +284,7 @@ from apps.flows.src.models.agent_skill import (
     AgentSkillUpdatePayload,
 )
 from apps.flows.src.models.agent_toolkit import (
+    AgentToolkitCatalogListPayload,
     AgentToolkitCreateRequest,
     AgentToolkitIdPayload,
     AgentToolkitUpdatePayload,
@@ -416,7 +438,6 @@ from core.guest_runtime.models import (
 from core.integrations.company_credentials import GoogleWorkspaceCompanyCredentialPut
 from core.integrations.models import (
     IntegrationCredentialRefPayload,
-    IntegrationEmptyPayload,
 )
 from core.integrations.operations import (
     op_integrations_credentials_list,
@@ -435,7 +456,7 @@ from core.models.voice_providers_catalog import (
     VoiceProvidersCatalogPayload,
     op_voice_providers_catalog,
 )
-from core.websocket import Operation, RegisteredOperation, register_service_operations
+from core.websocket import EmptyPayload, Operation, RegisteredOperation, register_service_operations
 
 logger = get_logger(__name__)
 
@@ -446,7 +467,7 @@ FLOWS_OPERATIONS: dict[str, RegisteredOperation[FlowContainer]] = {
     "flows/flows/update_requested": Operation(payload_model=FlowCreateRequest, fn=op_flows_update),
     "flows/flows/remove_requested": Operation(payload_model=FlowsFlowIdPayload, fn=op_flows_remove),
     "flows/flows/store_bundles_requested": Operation(
-        payload_model=FlowsEmptyPayload, fn=op_flows_store_bundles
+        payload_model=EmptyPayload, fn=op_flows_store_bundles
     ),
     "flows/flows/validate_requested": Operation(
         payload_model=FlowValidateRequest, fn=op_flows_validate
@@ -488,16 +509,16 @@ FLOWS_OPERATIONS: dict[str, RegisteredOperation[FlowContainer]] = {
         payload_model=FlowDataflowInspectRequest, fn=op_flows_dataflow_inspect
     ),
     "flows/metadata/node_types_requested": Operation(
-        payload_model=FlowsEmptyPayload, fn=op_flows_node_types
+        payload_model=EmptyPayload, fn=op_flows_node_types
     ),
     "flows/metadata/resource_types_requested": Operation(
-        payload_model=FlowsEmptyPayload, fn=op_flows_resource_types
+        payload_model=EmptyPayload, fn=op_flows_resource_types
     ),
     "flows/metadata/exception_absorb_allow_names_requested": Operation(
-        payload_model=FlowsEmptyPayload, fn=op_flows_exception_absorb_allow_names
+        payload_model=EmptyPayload, fn=op_flows_exception_absorb_allow_names
     ),
     "flows/metadata/execution_limits_requested": Operation(
-        payload_model=FlowsEmptyPayload, fn=op_flows_execution_limits
+        payload_model=EmptyPayload, fn=op_flows_execution_limits
     ),
     "flows/tools/list_requested": Operation(payload_model=ToolsListPayload, fn=op_flows_tools_list),
     "flows/tools/item_requested": Operation(
@@ -546,7 +567,7 @@ FLOWS_OPERATIONS: dict[str, RegisteredOperation[FlowContainer]] = {
         payload_model=TriggerTestRequest, fn=op_flows_triggers_test
     ),
     "flows/platform_events/catalog_requested": Operation(
-        payload_model=FlowsEmptyPayload, fn=op_flows_platform_events_catalog
+        payload_model=EmptyPayload, fn=op_flows_platform_events_catalog
     ),
     "flows/code/documentation_requested": Operation(
         payload_model=CodeDocumentationPayload, fn=op_flows_code_documentation
@@ -603,13 +624,13 @@ FLOWS_OPERATIONS: dict[str, RegisteredOperation[FlowContainer]] = {
         payload_model=DatasourceSqlCallArgs, fn=op_flows_datasources_execute
     ),
     "flows/datasources/connectors_list_requested": Operation(
-        payload_model=FlowsEmptyPayload, fn=op_flows_datasources_connectors_list
+        payload_model=EmptyPayload, fn=op_flows_datasources_connectors_list
     ),
     "flows/datasources/connectors_upsert_requested": Operation(
         payload_model=DatasourceConnectorUpsert, fn=op_flows_datasources_connectors_upsert
     ),
     "flows/flow_ui/schema_requested": Operation(
-        payload_model=FlowsEmptyPayload, fn=op_flows_flow_ui_schema
+        payload_model=EmptyPayload, fn=op_flows_flow_ui_schema
     ),
     "flows/flow_ui/templates_requested": Operation(
         payload_model=FlowUITemplatesPayload, fn=op_flows_flow_ui_templates
@@ -709,10 +730,40 @@ FLOWS_OPERATIONS: dict[str, RegisteredOperation[FlowContainer]] = {
         payload_model=AgentSkillImportRequest, fn=op_flows_agent_skills_import
     ),
     "flows/agent_skills/ensure_seed_requested": Operation(
-        payload_model=FlowsEmptyPayload, fn=op_flows_agent_skills_ensure_seed
+        payload_model=EmptyPayload, fn=op_flows_agent_skills_ensure_seed
     ),
     "flows/agent_toolkits/list_requested": Operation(
-        payload_model=FlowsEmptyPayload, fn=op_flows_agent_toolkits_list
+        payload_model=EmptyPayload, fn=op_flows_agent_toolkits_list
+    ),
+    "flows/agent_toolkits/catalog_list_requested": Operation(
+        payload_model=AgentToolkitCatalogListPayload, fn=op_flows_agent_toolkits_catalog_list
+    ),
+    "flows/tool_runtime/manifest_requested": Operation(
+        payload_model=ToolRuntimeManifestPayload, fn=op_flows_tool_runtime_manifest
+    ),
+    "flows/tool_runtime/call_requested": Operation(
+        payload_model=ToolRuntimeCallPayload, fn=op_flows_tool_runtime_call
+    ),
+    "flows/browser_preview/status_requested": Operation(
+        payload_model=BrowserPreviewSessionPayload, fn=op_flows_browser_preview_status
+    ),
+    "flows/browser_preview/active_session_requested": Operation(
+        payload_model=BrowserPreviewTaskPayload, fn=op_flows_browser_preview_active_session
+    ),
+    "flows/browser_preview/click_requested": Operation(
+        payload_model=BrowserPreviewClickPayload, fn=op_flows_browser_preview_click
+    ),
+    "flows/browser_preview/key_requested": Operation(
+        payload_model=BrowserPreviewKeyPayload, fn=op_flows_browser_preview_key
+    ),
+    "flows/browser_preview/text_requested": Operation(
+        payload_model=BrowserPreviewTextPayload, fn=op_flows_browser_preview_text
+    ),
+    "flows/browser_preview/takeover_requested": Operation(
+        payload_model=BrowserPreviewTakeoverPayload, fn=op_flows_browser_preview_takeover
+    ),
+    "flows/browser_preview/takeover_release_requested": Operation(
+        payload_model=BrowserPreviewSessionPayload, fn=op_flows_browser_preview_takeover_release
     ),
     "flows/agent_toolkits/item_requested": Operation(
         payload_model=AgentToolkitIdPayload, fn=op_flows_agent_toolkits_item
@@ -788,7 +839,7 @@ FLOWS_OPERATIONS: dict[str, RegisteredOperation[FlowContainer]] = {
         payload_model=NodeIdPayload, fn=op_flows_nodes_catalog_remove
     ),
     "flows/evaluation/evaluator_catalog_requested": Operation(
-        payload_model=FlowsEmptyPayload, fn=op_flows_evaluation_evaluator_catalog
+        payload_model=EmptyPayload, fn=op_flows_evaluation_evaluator_catalog
     ),
     "flows/evaluation/suites_list_requested": Operation(
         payload_model=EvaluationFlowIdPayload, fn=op_flows_evaluation_suites_list
@@ -1064,14 +1115,14 @@ FLOWS_OPERATIONS: dict[str, RegisteredOperation[FlowContainer]] = {
         fn=op_flows_company_init,
     ),
     "flows/integrations/credentials_list_requested": Operation(
-        payload_model=IntegrationEmptyPayload, fn=op_integrations_credentials_list
+        payload_model=EmptyPayload, fn=op_integrations_credentials_list
     ),
     "flows/integrations/credentials_remove_requested": Operation(
         payload_model=IntegrationCredentialRefPayload,
         fn=op_integrations_credentials_remove,
     ),
     "flows/integrations/workspace_company_get_requested": Operation(
-        payload_model=IntegrationEmptyPayload,
+        payload_model=EmptyPayload,
         fn=op_integrations_workspace_company_get,
     ),
     "flows/integrations/workspace_company_put_requested": Operation(
@@ -1079,7 +1130,7 @@ FLOWS_OPERATIONS: dict[str, RegisteredOperation[FlowContainer]] = {
         fn=op_integrations_workspace_company_put,
     ),
     "flows/integrations/workspace_company_delete_requested": Operation(
-        payload_model=IntegrationEmptyPayload,
+        payload_model=EmptyPayload,
         fn=op_integrations_workspace_company_delete,
     ),
 }
@@ -1087,7 +1138,4 @@ FLOWS_OPERATIONS: dict[str, RegisteredOperation[FlowContainer]] = {
 
 def register_flows_ws_commands() -> None:
     register_service_operations(FLOWS_OPERATIONS, get_container)
-    logger.info(
-        "Flows WS command-handlers зарегистрированы (%d операций)",
-        len(FLOWS_OPERATIONS),
-    )
+    logger.info("flows.ws.command.handlers", FLOWS_OPERATIONS_count=len(FLOWS_OPERATIONS))

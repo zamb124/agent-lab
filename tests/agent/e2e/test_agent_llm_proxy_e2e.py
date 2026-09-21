@@ -172,7 +172,7 @@ async def test_e2e_llm_proxy_revoked_device_returns_401(
     revoke_response = await agent_frontend_http_client.delete(
         f"{AGENT_API_PREFIX}/devices/{device_id}",
     )
-    assert revoke_response.status_code == 204
+    assert revoke_response.status_code == 200, revoke_response.text
     response = await flows_client_http.get(
         LLM_MODELS_PATH,
         headers={"Authorization": f"Bearer {device_token}"},

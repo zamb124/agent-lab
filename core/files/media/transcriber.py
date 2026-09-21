@@ -42,7 +42,7 @@ class MediaTranscriber:
         stt_client: BaseSTTClient | None = None,
     ) -> None:
         if company_id == "":
-            raise ValueError("MediaTranscriber: company_id не может быть пустым.")
+            raise ValueError("MediaTranscriber: company_id cannot be empty.")
         self._company_id: str = company_id
         self._speech_override: SpeechOverride | None = speech_override
         self._stt_client: BaseSTTClient | None = stt_client
@@ -72,11 +72,11 @@ class MediaTranscriber:
             language: язык (None — из tier-резолва / media_transcriber.default_language)
         """
         if not audio_bytes:
-            raise ValueError("audio_bytes не может быть пустым.")
+            raise ValueError("audio_bytes cannot be empty.")
         if file_name == "":
-            raise ValueError("file_name не может быть пустым.")
+            raise ValueError("file_name cannot be empty.")
         if content_type == "":
-            raise ValueError("content_type не может быть пустым.")
+            raise ValueError("content_type cannot be empty.")
 
         stt_client = await self._get_stt_client()
         text, provider = await transcribe_audio_with_chunking(
@@ -110,9 +110,9 @@ class MediaTranscriber:
             language: язык (None — из tier-резолва)
         """
         if not video_bytes:
-            raise ValueError("video_bytes не может быть пустым.")
+            raise ValueError("video_bytes cannot be empty.")
         if file_name == "":
-            raise ValueError("file_name не может быть пустым.")
+            raise ValueError("file_name cannot be empty.")
 
         audio_bytes, audio_file_name = await asyncio.to_thread(
             extract_audio_from_video,
@@ -139,7 +139,7 @@ class MediaTranscriber:
             language: язык (None — из tier-резолва)
         """
         if not url or url.strip() == "":
-            raise ValueError("url не может быть пустым.")
+            raise ValueError("url cannot be empty.")
 
         audio_bytes, audio_file_name, downloaded_content_type = await download_audio_from_url(
             url=url.strip()

@@ -57,7 +57,7 @@ class AgentSkillRepository(BaseRepository[AgentSkill]):
             try:
                 entities.append(parse_stored_agent_skill(data))
             except Exception as e:
-                logger.error(f"Ошибка парсинга {key}: {e}")
+                logger.error("flows.skill.parse_failed", key=key, error=str(e))
                 continue
         return entities
 
@@ -75,6 +75,6 @@ class AgentSkillRepository(BaseRepository[AgentSkill]):
                 try:
                     result[entity_id] = parse_stored_agent_skill(all_data[final_key])
                 except Exception as e:
-                    logger.error(f"Ошибка парсинга {entity_id}: {e}")
+                    logger.error("flows.skill.entity_parse_failed", entity_id=entity_id, error=str(e))
                     continue
         return result

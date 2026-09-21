@@ -49,11 +49,7 @@ async def backfill_user_groups(*, limit: int | None = None) -> int:
         deleted = await delete_unscoped_group_tuples(authz, sorted(unscoped_names))
     finally:
         await authz.close()
-    logger.info(
-        "group backfill complete users_synced=%s unscoped_tuples_deleted=%s",
-        written,
-        deleted,
-    )
+    logger.info("authz.group.backfill.complete.users_synced.unscoped_tuples_deleted", users_synced=written, unscoped_tuples_deleted=deleted)
     return written
 
 

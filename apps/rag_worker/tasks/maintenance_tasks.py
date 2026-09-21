@@ -45,13 +45,13 @@ async def cleanup_namespace_task(namespace_id: str) -> RAGCleanupNamespaceTaskRe
     Возвращает:
         Результат очистки
     """
-    logger.info(f"RAG Worker: очистка namespace {namespace_id}")
+    logger.info("rag.worker.namespace_clear_started", namespace_id=namespace_id)
 
     provider = get_rag_container().rag_provider
 
     success = await provider.delete_namespace(namespace_id)
 
-    logger.info(f"RAG Worker: namespace {namespace_id} очищен")
+    logger.info("rag.worker.namespace_cleared", namespace_id=namespace_id)
 
     return {
         "namespace": namespace_id,
@@ -70,7 +70,7 @@ async def list_documents_task(namespace_id: str) -> list[RAGListedDocumentTaskIt
     Возвращает:
         Список документов с метаданными
     """
-    logger.info(f"RAG Worker: получение списка документов в namespace {namespace_id}")
+    logger.info("rag.worker.documents_list", namespace_id=namespace_id)
 
     provider = get_rag_container().rag_provider
     documents = await provider.list_documents(namespace_id)
@@ -111,16 +111,16 @@ async def reindex_document_task(
     """
     context = Context.from_dict(context_data)
     if not context.active_company:
-        raise ValueError("context_data: active_company обязателен")
+        raise ValueError("context_data: active_company is required")
     _ = set_context(context)
     try:
         company_id = context.active_company.company_id
 
         logger.info(
-            "RAG Worker: переиндексация документа %s в namespace %s (company_id=%s)",
-            document_id,
-            namespace_id,
-            company_id,
+            "rag.worker.namespace.company_id",
+            document_id=document_id,
+            namespace_id=namespace_id,
+            company_id=company_id,
         )
 
         provider = get_rag_container().rag_provider
@@ -141,7 +141,9 @@ async def reindex_document_task(
             upload_profile=binding,
         )
         logger.info(
-            f"RAG Worker: документ {document_name} переиндексирован, document_id={last_document.document_id}"
+            "rag.document.reindexed",
+            document_name=document_name,
+            document_id=last_document.document_id,
         )
 
         return {
@@ -250,7 +252,7 @@ async def rag_cleanup_orphan_company_chunks_tick(
     """
     _ = company_id
     if not schedule_task_id or not schedule_task_id.strip():
-        raise ValueError("rag_cleanup_orphan_company_chunks_tick: schedule_task_id обязателен")
+        raise ValueError("rag_cleanup_orphan_company_chunks_tick: schedule_task_id is required")
     settings = get_settings()
     cfg = settings.rag.ttl
     if not cfg.orphan_cleanup_enabled:

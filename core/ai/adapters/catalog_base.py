@@ -524,7 +524,7 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
                 retry_delay = 0.0
             await asyncio.sleep(min(max(retry_delay, 1.0 + attempt_index), 5.0))
         if response is None:
-            raise AIProviderAdapterError(f"{self.provider} models response не получен")
+            raise AIProviderAdapterError(f"{self.provider} models response was not received")
         try:
             _ = response.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -549,13 +549,13 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
             return f"{configured_base_url.strip().rstrip('/')}/models"
         default_models_url = LLM_PROVIDER_DEFAULT_MODELS_URLS.get(self.provider)
         if default_models_url is None:
-            raise ValueError(f"{self.provider} models_url не настроен")
+            raise ValueError(f"{self.provider} models_url is not configured")
         return default_models_url
 
     def provider_model_list_headers(self) -> dict[str, str]:
         cfg = self._configured_llm_provider()
         if cfg is None:
-            raise ValueError(f"{self.provider} provider config не настроен")
+            raise ValueError(f"{self.provider} provider config is not configured")
         api_key = first_provider_api_key(cfg)
         headers = {"Content-Type": "application/json"}
         if self.provider == "yandex":
@@ -613,7 +613,7 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
             return self._provider_litserve_model_list_headers()
         cfg = self._configured_llm_provider()
         if cfg is None:
-            raise ValueError(f"{self.provider} provider config не настроен")
+            raise ValueError(f"{self.provider} provider config is not configured")
         if self.provider == "google":
             api_key = first_provider_api_key(cfg)
             return {

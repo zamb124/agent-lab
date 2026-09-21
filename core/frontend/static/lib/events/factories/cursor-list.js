@@ -14,12 +14,17 @@
  *   - restMirror: { method: 'GET', path } — обязательный платформенный
  *     инвариант REST-зеркала.
  *   - transport: 'http' | 'ws' (default 'http'). Для 'ws' обязателен
- *     wsTimeoutMs (положительное число).
+ *     wsTimeoutMs (положительное число). WS-payload команды — тот же плоский
+ *     query, что уходит в REST-зеркало (`{ ...buildQuery(filters), limit, cursor? }`);
+ *     `append` — клиентский флаг и на бэкенд не передаётся.
+ *   - commandType: '<scope>/<entity>/<verb>_requested' — тип WS-команды
+ *     (default `${name}/load_requested`); reply-типы выводятся как
+ *     `<commandType без _requested>_succeeded` / `_failed`.
  *   - statusMap: { 403: 'forbidden', 503: 'unavailable', ... } — опционально;
  *     каждый код → имя терминального события (генерируется как
- *     `${name}/list_${terminalKey}`). Для transport='ws' статусы передаются
- *     в payload `*_failed` как `error_code: 'http_<status>'` или равные
- *     ws-кодам — фабрика мапит по тому же statusMap.
+ *     `${name}/${terminalKey}`). Для transport='ws' `*_failed` несёт
+ *     `error_code` (`forbidden`, `unavailable`, ...) — фабрика мапит его на
+ *     тот же терминальный ключ.
  *   - errorToastKey: опционально; если задан — на FAILED показываем toast.
  *   - extraReducer(state, event, events) — после базового reducer (push merge).
  *   - extraEffect(event, ctx, events) — до базового effect; return true = handled.
@@ -45,6 +50,37 @@ import {
     transportRequest,
 } from './_transport.js';
 
+const _REQUESTED_SUFFIX = '_requested';
+
+// Соответствие HTTP-статусов REST-зеркала кодам `error_code` WS `*_failed`
+// (`WS_COMMAND_ERROR_HTTP_STATUS` в core/websocket/operation.py).
+const _WS_CODE_BY_HTTP_STATUS = freeze({
+    400: 'ws_invalid_payload',
+    403: 'forbidden',
+    404: 'not_found',
+    409: 'conflict',
+    500: 'internal',
+    502: 'upstream',
+    503: 'unavailable',
+});
+
+function _normalizeCommandType(value, name, transport) {
+    if (value === undefined || value === null) {
+        return buildEventType(name, 'load_requested');
+    }
+    if (transport !== 'ws') {
+        throw new Error(`createCursorList(${name}): commandType is allowed only with transport='ws'`);
+    }
+    if (typeof value !== 'string' || !value.endsWith(_REQUESTED_SUFFIX)) {
+        throw new Error(`createCursorList(${name}): commandType must be a string ending with "_requested"`);
+    }
+    return value;
+}
+
+function _deriveReplyType(commandType, replySuffix) {
+    return commandType.slice(0, -_REQUESTED_SUFFIX.length) + replySuffix;
+}
+
 export function createCursorList(options) {
     if (!options || typeof options !== 'object') {
         throw new Error('createCursorList: options object required');
@@ -59,6 +95,7 @@ export function createCursorList(options) {
     }
     const transport = normalizeTransport(options.transport, `createCursorList(${name})`);
     const wsTimeoutMs = normalizeWsTimeout(options.wsTimeoutMs, transport, `createCursorList(${name})`);
+    const commandType = _normalizeCommandType(options.commandType, name, transport);
     const httpMethod = typeof options.httpMethod === 'string' ? options.httpMethod.toUpperCase() : 'GET';
     if (httpMethod !== 'GET' && httpMethod !== 'POST') {
         throw new Error(`createCursorList(${name}): httpMethod must be 'GET' or 'POST'`);
@@ -91,11 +128,14 @@ export function createCursorList(options) {
         FILTERS_RESET:     buildEventType(name, 'filters_reset'),
     };
     const terminalEvents = {};
+    const wsCodeTerminalKeys = {};
     for (const [code, key] of Object.entries(statusMap)) {
         if (typeof key !== 'string' || key.length === 0) {
             throw new Error(`createCursorList(${name}): statusMap[${code}] must be non-empty string`);
         }
         terminalEvents[key.toUpperCase()] = buildEventType(name, `${key}`);
+        const wsCode = _WS_CODE_BY_HTTP_STATUS[code];
+        if (wsCode) wsCodeTerminalKeys[wsCode] = key;
     }
     const events = freeze({ ...baseEvents, ...terminalEvents });
 
@@ -257,12 +297,12 @@ export function createCursorList(options) {
             const data = transport === 'ws'
                 ? await transportRequest({
                     transport: 'ws',
-                    commandType: events.LOAD_REQUESTED,
-                    payload: { filters, cursor, limit, append },
+                    commandType,
+                    payload: params,
                     wsTimeoutMs,
                     causationEventId: event.id,
-                    expectedSucceeded: append ? events.PAGE_LOADED : events.LOADED,
-                    expectedFailed: events.FAILED,
+                    expectedSucceeded: _deriveReplyType(commandType, '_succeeded'),
+                    expectedFailed: _deriveReplyType(commandType, '_failed'),
                 })
                 : httpMethod === 'POST'
                     ? await httpRequest({ method: 'POST', url: baseUrl, body: params })
@@ -282,7 +322,9 @@ export function createCursorList(options) {
         } catch (err) {
             if (!(err instanceof HttpError) && !(err instanceof WsTransportError)) throw err;
             const httpStatus = err instanceof HttpError ? err.status : null;
-            const terminalKey = httpStatus !== null ? statusMap[httpStatus] : null;
+            const terminalKey = httpStatus !== null
+                ? statusMap[httpStatus]
+                : (err instanceof WsTransportError ? wsCodeTerminalKeys[err.code] : null);
             if (terminalKey) {
                 ctx.dispatch(events[terminalKey.toUpperCase()], null, { causation_id: event.id, source: _transportSource() });
                 return;
@@ -309,6 +351,7 @@ export function createCursorList(options) {
         baseUrl,
         transport,
         restMirror,
+        commandType,
         pageSize,
         events,
         reducer,

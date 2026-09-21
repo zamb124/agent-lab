@@ -1,5 +1,5 @@
 """
-Байты шаблона .docx из FileRef (state.files, FileRecord, FileResponse).
+Байты шаблона .docx из FileRef (state.files или FileRecord).
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from core.files.reader.service import FileReader
 async def read_template_bytes_from_file_ref(ref: FileRef) -> bytes:
     if not ref.original_name.lower().endswith(".docx"):
         raise DocxTemplateSourceError(
-            f"Шаблон должен быть файлом .docx, получено имя: {ref.original_name!r}"
+            f"Template must be a .docx file, got name: {ref.original_name!r}"
         )
 
     reader = FileReader()
@@ -21,7 +21,7 @@ async def read_template_bytes_from_file_ref(ref: FileRef) -> bytes:
     raw, resolved_name = await reader.raw_from_file_ref(ref, opts)
     if not resolved_name.lower().endswith(".docx"):
         raise DocxTemplateSourceError(
-            f"Шаблон должен быть файлом .docx, после разрешения источника: {resolved_name!r}"
+            f"Template must be a .docx file after resolving the source: {resolved_name!r}"
         )
     return raw
 

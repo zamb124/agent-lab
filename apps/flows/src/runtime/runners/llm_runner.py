@@ -60,7 +60,6 @@ from apps.flows.src.runtime.exception_policy import (
     should_absorb_exception,
 )
 from apps.flows.src.runtime.exceptions import FlowInterrupt
-from apps.flows.src.runtime.llm_config_params import split_llm_config_for_client
 from apps.flows.src.runtime.llm_context_memory import (
     RuntimeMemoryWriteCommand,
     RuntimeMemoryWriteResult,
@@ -79,20 +78,13 @@ from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming import BaseEmitter, Emitter
 from apps.flows.src.tools.base import BaseTool, OpenAIToolSchema, ToolArguments, sanitize_tool_name
 from core.a2a import (
-    coerce_usage_token_count,
     get_part_text,
     mapping_from_struct,
     message_from_json_dict,
     message_to_json_dict,
     part_has_text,
 )
-from core.ai.resolver import COST_ORIGIN_COMPANY
-from core.ai.runtime import (
-    create_llm_client_from_call_config,
-    should_use_platform_default_free_pool,
-)
-from core.billing import get_cbr_usd_to_rub_rate
-from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
+from core.ai.runtime import create_llm_client_from_call_config
 from core.clients.llm import (
     LLMClient,
     LLMStreamIdleTimeoutError,
@@ -105,8 +97,6 @@ from core.clients.llm.mock_control import (
     resolve_llm_node_mock,
     resolve_tool_mock_result,
 )
-from core.config import get_settings
-from core.config.testing import is_testing
 from core.context import get_context
 from core.errors import FlowExecutionError, ToolExecutionError
 from core.llm_context import (
@@ -723,8 +713,12 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         sid = self._source_node_id()
 
         logger.info(
-            f"Resume: type={call_type}, id={call_id}, tool_call_id={tool_call_id}, "
-            + f"path_len={len(interrupt_path)}, answer={user_answer[:50]}..."
+            "llm.resume",
+            call_type=call_type,
+            call_id=call_id,
+            tool_call_id=tool_call_id,
+            path_len=len(interrupt_path),
+            answer_preview=user_answer[:50],
         )
 
         if call_type == NodeType.LLM_NODE.value:
@@ -813,9 +807,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
         actx = get_context()
         if actx is None or actx.active_company is None:
-            raise ValueError("Контекст с active_company обязателен для LLM-ноды")
+            raise ValueError("Context with active_company is required for the LLM node")
         if not str(actx.user.user_id).strip():
-            raise ValueError("Контекст с user обязателен для LLM-ноды (биллинг и уведомления)")
+            raise ValueError("Context with user is required for the LLM node (billing and notifications)")
         container = self.container
         # Mock Control: своя очередь ответов для этой llm-ноды (или общая llm).
         # None — mock не активен; при активном mock без очереди для ноды resolver
@@ -823,53 +817,6 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         mock_llm_client = await resolve_llm_node_mock(
             container.redis_client, state.session_id, self._source_node_id()
         )
-        allow_platform_paid_fallback = True
-        byok_override = effective_llm.cost_origin == COST_ORIGIN_COMPANY
-        (
-            billing_model,
-            _billing_temp,
-            billing_provider,
-            billing_api_key,
-            billing_base_url,
-            _billing_max_tok,
-            billing_folder_id,
-            _billing_fallback_models,
-        ) = split_llm_config_for_client(llm_config)
-        uses_platform_free_pool = should_use_platform_default_free_pool(
-            model=billing_model,
-            provider=billing_provider,
-            api_key=billing_api_key,
-            base_url=billing_base_url,
-            folder_id=billing_folder_id,
-            settings=get_settings(),
-        )
-        mock_llm_call = (
-            is_testing()
-            or mock_llm_client is not None
-            or str(billing_model or "").startswith("mock-")
-            or str(billing_provider or "") == "mock"
-        )
-        if not byok_override and not mock_llm_call:
-            if uses_platform_free_pool:
-                allow_platform_paid_fallback = (
-                    await container.billing_service.company_may_incur_billable_operation_charge(
-                        actx.active_company.company_id
-                    )
-                )
-                if not allow_platform_paid_fallback:
-                    logger.info(
-                        "llm.default_free_pool_paid_fallback_disabled",
-                        company_id=actx.active_company.company_id,
-                        node_id=self.node_config.node_id if self.node_config else None,
-                    )
-            else:
-                await container.billing_service.require_balance_for_billable_operation(
-                    actx.active_company.company_id,
-                    str(actx.user.user_id).strip(),
-                    operation_code=BALANCE_BLOCK_OPERATION_LLM,
-                    notification_service="flows",
-                )
-
         # Определяем режим: structured_output или tools
         structured_output = self.node_config.structured_output if self.node_config else False
         output_schema = self.node_config.output_schema if self.node_config else None
@@ -890,7 +837,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             schema_properties = output_schema.get("properties")
             schema_keys = list(schema_properties.keys()) if isinstance(schema_properties, dict) else []
             logger.info(
-                f"[llm_node:{llm_node_label}] Structured Output режим, schema keys: {schema_keys}"
+                "llm.structured_output",
+                node=llm_node_label,
+                schema_keys=schema_keys,
             )
         else:
             tools_schema = self._build_tools_schema()
@@ -919,7 +868,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     if tools_schema is not None:
                         tools_schema = self._build_tools_schema()
 
-                    logger.debug(f"[llm_node:{llm_node_label}] ReAct iteration {iteration} (streaming)")
+                    logger.debug("flows.llm.react_iteration", llm_node=llm_node_label, iteration=iteration)
 
                     messages = self._messages_for_llm_context(state)
 
@@ -931,33 +880,29 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                         tool_calls: list[LLMToolCall] | None = None
                         had_reasoning_event = False
                         llm_start = time.time()
-                        input_tokens = 0
-                        output_tokens = 0
-                        provider_reported_cost: float | None = None
-                        provider_upstream_inference_cost: float | None = None
-                        settlement_quantity_rub: int | None = None
                         resolved_llm_model: str | None = None
                         resolved_llm_provider: str | None = None
                         resolved_llm_source: str | None = None
-                        resolved_ttft_ms: float | None = None
-                        resolved_output_tps: float | None = None
-                        llm_context_trace: JsonObject | None = None
 
                         llm, max_tok = self._resolve_llm_client(
                             state,
                             effective_llm=effective_llm,
-                            allow_platform_paid_fallback=allow_platform_paid_fallback,
                             mock_llm_client=mock_llm_client,
                         )
                         llm_provider = llm.llm_provider
-                        billing_res = effective_llm.billing_resource_name
 
-                        async with tracer.llm_call_span(
-                            model,
-                            len(llm_messages),
-                            len(tools_schema) if tools_schema else 0,
+                        async with traced_operation(
+                            "flows.llm_node.call",
+                            event_type="llm.call",
+                            operation_category="llm",
+                            resource_type="llm",
                             trace_ctx=trace_ctx,
-                            llm_provider=llm_provider,
+                            extra_attributes={
+                                "llm.model": model,
+                                "llm.provider": llm_provider,
+                                "llm.message_count": len(llm_messages),
+                                "llm.tool_count": len(tools_schema) if tools_schema else 0,
+                            },
                         ) as llm_span:
                             llm_messages_for_trace = self._messages_to_dict(llm_messages)
                             tracer.record_llm_request(llm_span, llm_messages_for_trace, tools_schema, response_format)
@@ -1009,38 +954,6 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                             md_source = md.get("source")
                                             if isinstance(md_source, str) and md_source.strip():
                                                 resolved_llm_source = md_source.strip()
-                                            md_ttft = md.get("ttft_ms")
-                                            if isinstance(md_ttft, (int, float)) and not isinstance(md_ttft, bool):
-                                                resolved_ttft_ms = float(md_ttft)
-                                            md_output_tps = md.get("output_tokens_per_second")
-                                            if isinstance(md_output_tps, (int, float)) and not isinstance(
-                                                md_output_tps,
-                                                bool,
-                                            ):
-                                                resolved_output_tps = float(md_output_tps)
-                                            context_raw = md.get("llm_context")
-                                            if isinstance(context_raw, dict):
-                                                llm_context_trace = require_json_object(
-                                                    context_raw,
-                                                    "llm.event.metadata.llm_context",
-                                                )
-                                            usage_raw = md.get("usage")
-                                            if isinstance(usage_raw, dict):
-                                                usage = require_json_object(usage_raw, "llm.event.metadata.usage")
-                                                input_tokens = coerce_usage_token_count(
-                                                    usage.get("input_tokens", 0),
-                                                    "usage.input_tokens",
-                                                )
-                                                output_tokens = coerce_usage_token_count(
-                                                    usage.get("output_tokens", 0),
-                                                    "usage.output_tokens",
-                                                )
-                                                prc = usage.get("provider_reported_cost")
-                                                if isinstance(prc, (int, float)):
-                                                    provider_reported_cost = float(prc)
-                                                puc = usage.get("provider_upstream_inference_cost")
-                                                if isinstance(puc, (int, float)):
-                                                    provider_upstream_inference_cost = float(puc)
                             except FlowCancelled:
                                 self._append_interrupted_stream_assistant(
                                     state,
@@ -1051,19 +964,6 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 )
                                 raise
 
-                            if (
-                                (resolved_llm_provider or llm_provider) == "openrouter"
-                                and provider_reported_cost is not None
-                                and provider_reported_cost > 0
-                            ):
-                                rate = get_cbr_usd_to_rub_rate(
-                                    fallback=get_settings().billing.usd_to_rub_rate
-                                )
-                                rub = int(round(provider_reported_cost * rate))
-                                if rub >= 1:
-                                    settlement_quantity_rub = rub
-
-                            llm_duration = (time.time() - llm_start) * 1000
                             if resolved_llm_model:
                                 logger.info(
                                     "llm.call_resolved",
@@ -1071,36 +971,12 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                     provider=resolved_llm_provider or llm_provider,
                                     model=resolved_llm_model,
                                     source=resolved_llm_source,
+                                    duration_ms=round((time.time() - llm_start) * 1000),
                                 )
-                            tracer.record_llm_response(
-                                llm_span,
-                                input_tokens=input_tokens,
-                                output_tokens=output_tokens,
-                                has_tool_calls=bool(tool_calls),
-                                duration_ms=llm_duration,
-                                response_content=content,
-                                tool_calls=[
-                                    require_json_object(
-                                        tool_call.model_dump(mode="json", exclude_none=True),
-                                        "llm.tool_call",
-                                    )
-                                    for tool_call in tool_calls
-                                ] if tool_calls else None,
-                                llm_provider=resolved_llm_provider or llm_provider,
-                                llm_model=resolved_llm_model,
-                                candidate_source=resolved_llm_source,
-                                provider_reported_cost=provider_reported_cost,
-                                provider_upstream_inference_cost=provider_upstream_inference_cost,
-                                settlement_quantity_rub=settlement_quantity_rub,
-                                billing_resource_name=billing_res,
-                                llm_context=llm_context_trace,
-                                ttft_ms=resolved_ttft_ms,
-                                output_tokens_per_second=resolved_output_tps,
-                            )
 
                         if tool_calls:
                             tool_names = [tc.name for tc in tool_calls]
-                            logger.info(f"[llm_node:{llm_node_label}] Вызов tools: {tool_names}")
+                            logger.info("flows.llm.tools_requested", llm_node=llm_node_label, tool_names=tool_names)
 
                             exit_call = self._find_exit_tool_call(tool_calls, exit_tool_name)
 
@@ -1111,7 +987,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 final_response = str(result) if not isinstance(result, str) else result
 
                                 logger.info(
-                                    f"[llm_node:{llm_node_label}] Exit tool '{exit_tool_name}' вызван, завершение"
+                                    "llm.exit_tool",
+                                    node=llm_node_label,
+                                    exit_tool_name=exit_tool_name,
                                 )
 
                                 state.messages.append(
@@ -1212,7 +1090,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                             except FlowInterrupt as e:
                                 interrupted_tc = e.tool_call or tool_calls[0]
                                 logger.info(
-                                    f"[llm_node:{llm_node_label}] Interrupt: tool={interrupted_tc.name}"
+                                    "llm.interrupt",
+                                    node=llm_node_label,
+                                    tool=interrupted_tc.name,
                                 )
 
                                 async with tracer.interrupt_span(
@@ -1258,10 +1138,12 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                         else []
                                     )
                                     logger.info(
-                                        f"[llm_node:{llm_node_label}] Structured Output получен: {parsed_output_keys or type(parsed_output)}"
+                                        "flows.llm.structured_output_received",
+                                        llm_node=llm_node_label,
+                                        output_keys=parsed_output_keys or type(parsed_output).__name__,
                                     )
                                 except json.JSONDecodeError as e:
-                                    logger.error(f"[llm_node:{llm_node_label}] Ошибка парсинга structured output: {e}")
+                                    logger.error("flows.llm.structured_output_parse_failed", llm_node=llm_node_label, error=str(e))
                                     final_response = content
 
                                 state.messages.append(
@@ -1276,7 +1158,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                             if loop_mode == ReactLoopMode.AUTO:
                                 final_response = content
                                 logger.info(
-                                    f"[llm_node:{llm_node_label}] Финальный ответ: {final_response[:100]}..."
+                                    "llm.final_response",
+                                    node=llm_node_label,
+                                    preview=final_response[:100],
                                 )
                                 if not _assistant_message_already_in_task(
                                     state.messages, final_response, task_id
@@ -1297,7 +1181,8 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 if not strict:
                                     final_response = content
                                     logger.info(
-                                        f"[llm_node:{llm_node_label}] EXPLICIT non-strict: текст принят как ответ"
+                                        "llm.explicit_text_accepted",
+                                        node=llm_node_label,
                                     )
                                     if not _assistant_message_already_in_task(
                                         state.messages, final_response, task_id
@@ -1316,8 +1201,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                     break
 
                                 logger.warning(
-                                    f"[llm_node:{llm_node_label}] EXPLICIT strict: LLM вернул текст без "
-                                    + f"exit_tool '{exit_tool_name}', добавляем reminder"
+                                    "llm.explicit_missing_exit_tool",
+                                    node=llm_node_label,
+                                    exit_tool_name=exit_tool_name,
                                 )
                                 state.messages.append(
                                     new_assistant_message(content, sid, None, context_id=context_id, task_id=task_id)
@@ -1395,7 +1281,6 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         state: ExecutionState,
         *,
         effective_llm: EffectiveLLMConfig,
-        allow_platform_paid_fallback: bool = True,
         mock_llm_client: MockLLM | None = None,
     ) -> tuple[LLMClient | MockLLM, int | None]:
         llm_config = effective_llm.config
@@ -1406,7 +1291,8 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             llm_config,
             state=state,
             fallback_models=llm_config.fallback_models,
-            allow_platform_paid_fallback=allow_platform_paid_fallback,
+            cost_origin=effective_llm.cost_origin,
+            billing_resource_name=effective_llm.billing_resource_name,
         )
         return llm, max_tok
 
@@ -1530,19 +1416,19 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     raise RuntimeError(f"Failed to mark LLM activity as failed: {activity_id!r}")
                 if attempt <= self.MAX_STREAM_IDLE_RETRIES:
                     logger.warning(
-                        "LLM stream idle timeout (attempt %d/%d), retrying: "
-                        + "idle=%.1fs, chunks=%d",
-                        attempt,
-                        self.MAX_STREAM_IDLE_RETRIES + 1,
-                        e.idle_seconds,
-                        e.chunks_received,
+                        "llm.stream.idle_timeout_retry",
+                        attempt=attempt,
+                        max_attempts=self.MAX_STREAM_IDLE_RETRIES + 1,
+                        idle_seconds=e.idle_seconds,
+                        chunks_received=e.chunks_received,
                     )
                     continue
                 # Все retry исчерпаны
                 logger.error(
-                    "LLM stream idle timeout after %d attempts, giving up: "
-                    + "idle=%.1fs, chunks=%d",
-                    attempt, e.idle_seconds, e.chunks_received,
+                    "llm.stream.idle_timeout_exhausted",
+                    attempt=attempt,
+                    idle_seconds=e.idle_seconds,
+                    chunks_received=e.chunks_received,
                 )
                 raise
 
@@ -1632,7 +1518,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                         }
                     )
                     continue
-                logger.error(f"Tool {tool_name} failed: {result}")
+                logger.error("flows.llm.tool_failed", tool_name=tool_name, result=result)
                 deferred_error = deferred_error or ToolExecutionError(tool_name, result)
                 continue
 
@@ -1814,7 +1700,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 state.model_dump(mode="python", exclude_none=False)
             )
 
-            logger.info(f"Выполняю tool: {tool_name}")
+            logger.info("flows.llm.tool_executing", tool_name=tool_name)
             try:
                 reasoning_count_before = len(state.reasoning_history)
                 # Mock Control: если tool замокан, берём следующий ответ из его
@@ -1881,7 +1767,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             except Exception as e:
                 tool_duration = (time.time() - tool_start) * 1000
                 tracer.record_tool_result(tool_span, None, tool_duration, error=str(e))
-                logger.error(f"Tool {tool_name} failed: {e}")
+                logger.error("flows.llm.tool_error", tool_name=tool_name, error=str(e))
                 completed = await runtime.record_activity_completed(
                     activity_id=activity_id,
                     error=str(e),

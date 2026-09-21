@@ -484,7 +484,7 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
                     },
                 )
             except A2AApplicationError as e:
-                logger.warning(f"A2A application error for {method}: {e}")
+                logger.warning("flows.ws.a2a_error", method=method, error=str(e))
                 await _send_json(
                     websocket,
                     {
@@ -494,7 +494,7 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
                     },
                 )
             except PermissionDenied as e:
-                logger.warning(f"Permission denied for {method}: {e}")
+                logger.warning("flows.ws.permission_denied", method=method, error=str(e))
                 await _send_json(
                     websocket,
                     {
@@ -504,7 +504,7 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
                     },
                 )
             except Exception as e:
-                logger.exception(f"Error handling WebSocket method {method}: {e}")
+                logger.exception("flows.ws.method_failed", method=method, error=str(e))
                 await _send_json(
                     websocket,
                     {

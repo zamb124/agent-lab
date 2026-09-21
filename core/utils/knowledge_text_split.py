@@ -17,7 +17,7 @@ MAX_CHUNK_MAX_CHARS = 500_000
 def validate_chunk_max_chars(value: int) -> int:
     if value < MIN_CHUNK_MAX_CHARS or value > MAX_CHUNK_MAX_CHARS:
         raise ValueError(
-            f"chunk_max_chars должен быть в [{MIN_CHUNK_MAX_CHARS}, {MAX_CHUNK_MAX_CHARS}], получено {value}"
+            f"chunk_max_chars must be in [{MIN_CHUNK_MAX_CHARS}, {MAX_CHUNK_MAX_CHARS}], got {value}"
         )
     return value
 
@@ -30,12 +30,12 @@ def split_knowledge_text(
 ) -> list[str]:
     if len(text) > MAX_IMPORT_TEXT_CHARS:
         raise ValueError(
-            f"Текст импорта превышает лимит {MAX_IMPORT_TEXT_CHARS} символов: {len(text)}"
+            f"Import text exceeds the limit {MAX_IMPORT_TEXT_CHARS} characters: {len(text)}"
         )
     chunk_max_chars = validate_chunk_max_chars(chunk_max_chars)
 
     if text.strip() == "":
-        raise ValueError("Текст импорта пуст")
+        raise ValueError('Import text is empty')
 
     if split_by_headings:
         parts = _split_by_markdown_headings(text)

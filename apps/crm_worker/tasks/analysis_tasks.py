@@ -237,7 +237,7 @@ async def process_note_task(
         raise ValueError(err_msg) from exc
     except Exception as exc:
         err_msg = str(exc)
-        logger.exception("note_analyze failed task_id=%s note_id=%s", task_id, note_id)
+        logger.exception("crm.note_analyze", task_id=task_id, note_id=note_id)
         await repo.patch_progress(
             task_id, company_id,
             status="failed", stage="failed", progress_pct=100,

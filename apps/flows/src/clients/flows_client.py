@@ -46,10 +46,10 @@ def resolve_flow_node_scope(
         return nodes
     branch_payload = flow_data.branches.get(resolved_branch)
     if branch_payload is None:
-        raise ValueError(f"Ветка '{resolved_branch}' не найдена во flow '{flow_data.flow_id}'")
+        raise ValueError(f"Branch '{resolved_branch}' not found in flow '{flow_data.flow_id}'")
     nodes = branch_payload.nodes
     if nodes is None:
-        raise ValueError(f"У ветки '{resolved_branch}' нет объекта nodes")
+        raise ValueError(f"Branch '{resolved_branch}' has no nodes object")
     return nodes
 
 
@@ -68,7 +68,7 @@ def flow_branch_entry(flow_data: FlowConfig, resolved_branch: str) -> str | None
         return flow_data.entry
     branch_payload = flow_data.branches.get(resolved_branch)
     if branch_payload is None:
-        raise ValueError(f"Ветка '{resolved_branch}' не найдена во flow '{flow_data.flow_id}'")
+        raise ValueError(f"Branch '{resolved_branch}' not found in flow '{flow_data.flow_id}'")
     return branch_payload.entry
 
 

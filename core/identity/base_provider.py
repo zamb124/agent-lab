@@ -86,11 +86,11 @@ class BaseAuthProvider(ABC):
             Tuple[new_access_token, new_refresh_token]
         """
         if not refresh_token:
-            raise ValueError("Refresh token не предоставлен")
+            raise ValueError('Refresh token was not provided')
         if not self.client_id:
-            raise ValueError(f"client_id не настроен для {self.provider_name.value}")
+            raise ValueError(f"client_id is not configured for {self.provider_name.value}")
         if not self.client_secret:
-            raise ValueError(f"client_secret не настроен для {self.provider_name.value}")
+            raise ValueError(f"client_secret is not configured for {self.provider_name.value}")
 
         data = {
             "grant_type": "refresh_token",
@@ -107,7 +107,7 @@ class BaseAuthProvider(ABC):
 
         access_token = token_data.get("access_token")
         if not isinstance(access_token, str) or not access_token:
-            raise ValueError(f"{self.provider_name.value} не вернул access_token при обновлении")
+            raise ValueError(f"{self.provider_name.value} did not return access_token during refresh")
 
         refresh_token_value = token_data.get("refresh_token")
         if refresh_token_value is None:
@@ -116,36 +116,36 @@ class BaseAuthProvider(ABC):
             new_refresh_token = refresh_token_value
         else:
             raise ValueError(
-                f"{self.provider_name.value} вернул refresh_token не строкой при обновлении"
+                f"{self.provider_name.value} returned refresh_token that is not a string during refresh"
             )
 
-        logger.info(f"Токен {self.provider_name.value} обновлен")
+        logger.info("auth.provider.token_refreshed", provider=self.provider_name.value)
         return access_token, new_refresh_token
 
     def validate_config(self) -> bool:
         """Проверяет что конфигурация провайдера корректна"""
         if not self.config.enabled:
-            logger.warning(f"Провайдер {self.provider_name.value} отключен")
+            logger.warning("auth.provider.config_disabled", provider=self.provider_name.value)
             return False
 
         if not self.client_id:
-            logger.warning(f"client_id не настроен для {self.provider_name.value}")
+            logger.warning("auth.provider.missing_client_id", provider=self.provider_name.value)
             return False
 
         if not self.client_secret:
-            logger.warning(f"client_secret не настроен для {self.provider_name.value}")
+            logger.warning("auth.provider.missing_client_secret", provider=self.provider_name.value)
             return False
 
         if not self.auth_url:
-            logger.warning(f"auth_url не настроен для {self.provider_name.value}")
+            logger.warning("auth.provider.missing_auth_url", provider=self.provider_name.value)
             return False
 
         if not self.token_url:
-            logger.warning(f"token_url не настроен для {self.provider_name.value}")
+            logger.warning("auth.provider.missing_token_url", provider=self.provider_name.value)
             return False
 
         if not self.userinfo_url:
-            logger.warning(f"userinfo_url не настроен для {self.provider_name.value}")
+            logger.warning("auth.provider.missing_userinfo_url", provider=self.provider_name.value)
             return False
 
         return True
@@ -153,7 +153,7 @@ class BaseAuthProvider(ABC):
     def _build_auth_params(self, state: str, redirect_uri: str) -> dict[str, str]:
         """Формирует базовые параметры для URL авторизации"""
         if not self.client_id:
-            raise ValueError(f"client_id не настроен для {self.provider_name.value}")
+            raise ValueError(f"client_id is not configured for {self.provider_name.value}")
         return {
             "client_id": self.client_id,
             "redirect_uri": redirect_uri,
@@ -165,9 +165,9 @@ class BaseAuthProvider(ABC):
     def _build_token_data(self, code: str, redirect_uri: str) -> dict[str, str]:
         """Формирует данные для обмена кода на токен"""
         if not self.client_id:
-            raise ValueError(f"client_id не настроен для {self.provider_name.value}")
+            raise ValueError(f"client_id is not configured for {self.provider_name.value}")
         if not self.client_secret:
-            raise ValueError(f"client_secret не настроен для {self.provider_name.value}")
+            raise ValueError(f"client_secret is not configured for {self.provider_name.value}")
         return {
             "grant_type": "authorization_code",
             "code": code,

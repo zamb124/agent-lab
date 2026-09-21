@@ -152,11 +152,7 @@ class ScheduleService:
             description=description,
             cron=cron,
         )
-        logger.info(
-            "Scheduled cron task created via scheduler API: schedule_task_id=%s, cron=%s",
-            task.schedule_task_id,
-            cron,
-        )
+        logger.info("flows.scheduled.cron.task.created.scheduler", schedule_task_id=task.schedule_task_id, cron=cron)
         return task
 
     async def schedule_interval_task(
@@ -197,11 +193,7 @@ class ScheduleService:
             description=description,
             interval_seconds=interval_minutes * 60,
         )
-        logger.info(
-            "Scheduled interval task created via scheduler API: schedule_task_id=%s, interval=%smin",
-            task.schedule_task_id,
-            interval_minutes,
-        )
+        logger.info("flows.scheduled.interval.task.created.scheduler", schedule_task_id=task.schedule_task_id, interval=interval_minutes)
         return task
 
     async def schedule_one_time_task(
@@ -242,11 +234,7 @@ class ScheduleService:
             description=description,
             run_at=run_at,
         )
-        logger.info(
-            "Scheduled one-time task created via scheduler API: schedule_task_id=%s, run_at=%s",
-            task.schedule_task_id,
-            run_at,
-        )
+        logger.info("flows.scheduled.one.time.task.created", schedule_task_id=task.schedule_task_id, run_at=run_at)
         return task
 
     async def list_tasks(
@@ -319,10 +307,7 @@ class ScheduleService:
                 cancelled = await self._scheduler_client.cancel_schedule(schedule_task_id)
         except ValueError:
             return False
-        logger.info(
-            "Task cancelled via scheduler API: schedule_task_id=%s",
-            cancelled.schedule_task_id,
-        )
+        logger.info("flows.task.cancelled.scheduler.api.schedule_task_id", schedule_task_id=cancelled.schedule_task_id)
         return True
 
     async def get_task(self, schedule_task_id: str) -> ScheduledTaskInfo | None:

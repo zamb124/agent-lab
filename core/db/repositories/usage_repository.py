@@ -7,7 +7,7 @@
 from datetime import datetime
 from typing import ClassVar, override
 
-from sqlalchemy import DateTime, select
+from sqlalchemy import ColumnElement, DateTime, func, select
 from sqlalchemy import cast as sql_cast
 
 from core.db.base_repository import BaseRepository
@@ -16,6 +16,7 @@ from core.db.models.platform import Usage
 from core.db.storage import Storage
 from core.logging import get_logger
 from core.models.billing_models import UsageRecord
+from core.pagination import OffsetPage
 from core.tracing.repository import ADMIN_FACETS_MAX_LIMIT, admin_ilike, facet_query_fragment
 
 logger = get_logger(__name__)
@@ -77,39 +78,39 @@ class UsageRepository(BaseRepository[UsageRecord]):
         to_time: datetime | None = None,
         limit: int = 200,
         offset: int = 0,
-    ) -> list[UsageRecord]:
-        """
-        Все компании: выборка из таблицы usage по полям JSON value (только админ API system).
-        """
+    ) -> OffsetPage[UsageRecord]:
+        """Все компании: страница usage по полям JSON value с общим количеством (админ API system)."""
         if limit < 1 or limit > ADMIN_USAGE_MAX_LIMIT:
-            raise ValueError(f"limit должен быть от 1 до {ADMIN_USAGE_MAX_LIMIT}")
+            raise ValueError(f"limit must be between 1 and {ADMIN_USAGE_MAX_LIMIT}")
         if offset < 0:
-            raise ValueError("offset должен быть >= 0")
+            raise ValueError('offset must be >= 0')
 
         usage_timestamp = jsonb_text(Usage.value, "timestamp")
         ts_expr = sql_cast(usage_timestamp, DateTime(timezone=True))
-        stmt = select(Usage)
+        filters: list[ColumnElement[bool]] = [usage_timestamp.isnot(None)]
         if company_id is not None:
-            stmt = stmt.where(jsonb_text(Usage.value, "company_id") == company_id)
+            filters.append(jsonb_text(Usage.value, "company_id") == company_id)
         if usage_type is not None:
-            stmt = stmt.where(jsonb_text(Usage.value, "usage_type") == usage_type)
+            filters.append(jsonb_text(Usage.value, "usage_type") == usage_type)
         if resource_name is not None:
-            stmt = stmt.where(jsonb_text(Usage.value, "resource_name") == resource_name)
+            filters.append(jsonb_text(Usage.value, "resource_name") == resource_name)
         if from_time is not None:
-            stmt = stmt.where(ts_expr >= from_time)
+            filters.append(ts_expr >= from_time)
         if to_time is not None:
-            stmt = stmt.where(ts_expr < to_time)
-        stmt = stmt.where(usage_timestamp.isnot(None))
-        stmt = stmt.order_by(ts_expr.desc()).offset(offset).limit(limit)
+            filters.append(ts_expr < to_time)
+        page_stmt = select(Usage).where(*filters).order_by(ts_expr.desc()).offset(offset).limit(limit)
+        count_stmt = select(func.count()).select_from(Usage).where(*filters)
 
         async with self._storage.get_session() as session:
-            result = await session.execute(stmt)
-            rows = result.scalars().all()
+            rows = (await session.execute(page_stmt)).scalars().all()
+            total = (await session.execute(count_stmt)).scalar_one()
 
-        records: list[UsageRecord] = []
-        for row in rows:
-            records.append(UsageRecord.model_validate(row.value))
-        return records
+        return OffsetPage[UsageRecord](
+            items=[UsageRecord.model_validate(row.value) for row in rows],
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
 
     async def admin_facet_distinct_usage_types(
         self,
@@ -118,7 +119,7 @@ class UsageRepository(BaseRepository[UsageRecord]):
         limit: int = ADMIN_FACETS_MAX_LIMIT,
     ) -> list[str]:
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
-            raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
+            raise ValueError(f"limit must be between 1 and {ADMIN_FACETS_MAX_LIMIT}")
         col = jsonb_text(Usage.value, "usage_type")
         frag = facet_query_fragment(q)
         async with self._storage.get_session() as session:
@@ -136,7 +137,7 @@ class UsageRepository(BaseRepository[UsageRecord]):
         limit: int = ADMIN_FACETS_MAX_LIMIT,
     ) -> list[str]:
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
-            raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
+            raise ValueError(f"limit must be between 1 and {ADMIN_FACETS_MAX_LIMIT}")
         col = jsonb_text(Usage.value, "resource_name")
         frag = facet_query_fragment(q)
         async with self._storage.get_session() as session:

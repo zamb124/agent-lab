@@ -37,11 +37,11 @@ def _payload_str_list(data: JsonObject, key: str) -> list[str]:
     if value is None:
         return []
     if not isinstance(value, list):
-        raise ValueError(f"data.{key} должен быть списком строк")
+        raise ValueError(f"data.{key} must be a list of strings")
     result: list[str] = []
     for item in value:
         if not isinstance(item, str):
-            raise ValueError(f"data.{key} должен быть списком строк")
+            raise ValueError(f"data.{key} must be a list of strings")
         stripped = item.strip()
         if stripped:
             result.append(stripped)
@@ -59,7 +59,7 @@ def _payload_int(data: JsonObject, key: str, *, default: int) -> int:
     if value is None:
         return default
     if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError(f"data.{key} должен быть целым числом")
+        raise ValueError(f"data.{key} must be an integer")
     return value
 
 
@@ -68,7 +68,7 @@ def _payload_bool(data: JsonObject, key: str, *, default: bool) -> bool:
     if value is None:
         return default
     if not isinstance(value, bool):
-        raise ValueError(f"data.{key} должен быть boolean")
+        raise ValueError(f"data.{key} must be a boolean")
     return value
 
 
@@ -123,7 +123,7 @@ async def run_knowledge_import_task(
     repo = container.task_repository
     row = await repo.get_for_worker(task_id, company_id)
     if row is None:
-        raise ValueError(f"Задача не найдена: {task_id}")
+        raise ValueError(f"Task not found: {task_id}")
 
     data: JsonObject = row.data
     used_redis = data.get("source_text_sha256") is not None
@@ -153,7 +153,7 @@ async def run_knowledge_import_task(
             parts.append((await load_text_from_stored_file_id(fid)).strip())
         text = "\n\n---\n\n".join(p for p in parts if p)
         if not text.strip():
-            raise ValueError("Собранный текст импорта пуст")
+            raise ValueError("Collected import text is empty")
 
         await repo.patch_progress(
             task_id,
@@ -231,7 +231,7 @@ async def run_knowledge_import_task(
                 last_chunk_index = idx
                 fresh = await repo.get_for_worker(task_id, company_id)
                 if fresh is None:
-                    raise RuntimeError("Строка задачи исчезла во время выполнения")
+                    raise RuntimeError("Task row disappeared during execution")
                 if fresh.cancel_requested:
                     await repo.patch_progress(
                         task_id,
@@ -307,7 +307,7 @@ async def run_knowledge_import_task(
                     last_chunk_index = idx
                     fresh = await repo.get_for_worker(task_id, company_id)
                     if fresh is None:
-                        raise RuntimeError("Строка задачи исчезла во время выполнения")
+                        raise RuntimeError("Task row disappeared during execution")
                     if fresh.cancel_requested:
                         await repo.patch_progress(
                             task_id,
@@ -410,7 +410,7 @@ async def run_knowledge_import_task(
         }
     except Exception as exc:
         err_text = str(exc)
-        logger.exception("knowledge_import failed task_id=%s", task_id)
+        logger.exception("crm.knowledge_import", task_id=task_id)
         await repo.patch_progress(
             task_id,
             company_id,

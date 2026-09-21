@@ -40,7 +40,7 @@ def _raise_durable(exc: Exception) -> Never:
     if "not found" in message:
         raise_not_found(exc)
     if isinstance(exc, RuntimeError):
-        raise WsCommandError("internal", str(exc)) from exc
+        raise WsCommandError("internal", str(exc), error_code='internal') from exc
     raise_invalid(exc)
 
 
@@ -101,7 +101,7 @@ async def op_flows_sessions_state_update(
         _raise_durable(exc)
     updated_state = await container.workflow_runtime.get_state(session_id)
     if updated_state is None:
-        raise WsCommandError("internal", "Failed to save state")
+        raise WsCommandError("internal", "Failed to save state", error_code='internal')
     return updated_state
 
 

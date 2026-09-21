@@ -74,7 +74,6 @@ from apps.office.realtime.operations import (
     OfficeDocumentShareCreatePayload,
     OfficeDocumentsListPayload,
     OfficeDocumentUpdateCellsPayload,
-    OfficeEmptyPayload,
     OfficeFileIdPayload,
     op_catalogs_access,
     op_catalogs_access_rotate_link,
@@ -95,7 +94,6 @@ from apps.office.realtime.operations import (
     op_catalogs_rag_status,
     op_catalogs_remove,
     op_catalogs_update,
-    op_company_members_list,
     op_documents_access,
     op_documents_access_rotate_link,
     op_documents_access_update,
@@ -128,7 +126,6 @@ from apps.office.realtime.operations import (
     op_namespaces_create,
     op_namespaces_templates,
 )
-from core.api.team import TeamMemberResponse
 from core.context import require_context
 from core.documents.placement import (
     DocsBindResult,
@@ -136,10 +133,12 @@ from core.documents.placement import (
     DocsEnsurePathResult,
     DocsPlacement,
 )
+from core.identity.team_operations import TeamMemberResponse, op_team_members_list
 from core.middleware.auth.company_resolver import build_service_base_url
 from core.models.identity_models import Namespace
 from core.namespace.operations import NamespacesListPayload, op_namespaces_list
 from core.pagination import ListResponse, OffsetPage
+from core.websocket import EmptyPayload
 
 router = APIRouter(tags=["office-commands"])
 
@@ -154,7 +153,7 @@ def _request_origin(http_request: Request) -> str:
 @router.get("/integration/status", response_model=OfficeIntegrationStatusResponse)
 async def integration_status(container: ContainerDep) -> OfficeIntegrationStatusResponse:
     return await op_integration_status(
-        OfficeEmptyPayload(), user=require_context().user, container=container
+        EmptyPayload(), user=require_context().user, container=container
     )
 
 
@@ -176,7 +175,7 @@ async def list_namespace_templates(
     container: ContainerDep,
 ) -> OffsetPage[OfficeNamespaceTemplateItem]:
     return await op_namespaces_templates(
-        OfficeEmptyPayload(), user=require_context().user, container=container
+        EmptyPayload(), user=require_context().user, container=container
     )
 
 
@@ -193,15 +192,15 @@ async def create_namespace(
 async def list_company_members(
     container: ContainerDep,
 ) -> ListResponse[TeamMemberResponse]:
-    return await op_company_members_list(
-        OfficeEmptyPayload(), user=require_context().user, container=container
+    return await op_team_members_list(
+        EmptyPayload(), user=require_context().user, container=container
     )
 
 
 @router.get("/catalogs", response_model=OfficeCatalogListResponse)
 async def list_catalogs(container: ContainerDep) -> OfficeCatalogListResponse:
     return await op_catalogs_list(
-        OfficeEmptyPayload(), user=require_context().user, container=container
+        EmptyPayload(), user=require_context().user, container=container
     )
 
 
@@ -621,7 +620,7 @@ async def delete_document(container: ContainerDep, file_id: str) -> Response:
 @router.get("/documents/deleted", response_model=OfficeDocumentListResponse)
 async def list_deleted_documents(container: ContainerDep) -> OfficeDocumentListResponse:
     return await op_documents_deleted_list(
-        OfficeEmptyPayload(), user=require_context().user, container=container
+        EmptyPayload(), user=require_context().user, container=container
     )
 
 

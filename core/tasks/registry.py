@@ -71,11 +71,11 @@ def declare_task(
     Имя обязано быть snake_case и глобально уникальным (Zero-Guess: конфликт → raise).
     """
     if not _TASK_NAME_RE.match(name):
-        raise ValueError(f"declare_task: имя {name!r} должно быть snake_case (^[a-z][a-z0-9_]*$)")
+        raise ValueError(f"declare_task: name {name!r} must be snake_case (^[a-z][a-z0-9_]*$)")
     if not queue.strip():
-        raise ValueError(f"declare_task: queue обязателен для задачи {name!r}")
+        raise ValueError(f"declare_task: queue is required for task {name!r}")
     if max_retries < 1:
-        raise ValueError(f"declare_task: max_retries >= 1 для задачи {name!r}")
+        raise ValueError(f"declare_task: max_retries >= 1 for task {name!r}")
     spec = TaskSpec(
         name=name,
         queue=queue.strip(),
@@ -86,7 +86,7 @@ def declare_task(
     existing = _TASK_SPECS.get(name)
     if existing is not None:
         if existing != spec:
-            raise ValueError(f"declare_task: {name!r} уже объявлена иначе: {existing} != {spec}")
+            raise ValueError(f"declare_task: {name!r} is already declared differently: {existing} != {spec}")
         return existing
     _TASK_SPECS[name] = spec
     return spec
@@ -95,7 +95,7 @@ def declare_task(
 def register_queue_broker(queue: str, broker: AsyncBroker) -> None:
     """Зарегистрировать брокер очереди для резолва enqueue."""
     if not queue.strip():
-        raise ValueError("register_queue_broker: queue обязателен")
+        raise ValueError('register_queue_broker: queue is required')
     _QUEUE_BROKERS[queue.strip()] = broker
 
 
@@ -108,19 +108,19 @@ def get_task_spec(task: TaskSpec | str) -> TaskSpec:
         registered = _TASK_SPECS.get(task.name)
         if registered is None:
             raise ValueError(
-                f"get_task_spec: TaskSpec {task.name!r} не в реестре "
-                + "(импортируйте declaration-модуль / не собирайте TaskSpec вручную)"
+                f"get_task_spec: TaskSpec {task.name!r} is not in the registry "
+                + '(import the declaration module / do not build TaskSpec by hand)'
             )
         if registered != task:
             raise ValueError(
                 f"get_task_spec: orphan/wrong-queue TaskSpec {task!r}, "
-                + f"в реестре {registered!r}"
+                + f"in registry {registered!r}"
             )
         return registered
     spec = _TASK_SPECS.get(task)
     if spec is None:
         raise ValueError(
-            f"get_task_spec: задача {task!r} не объявлена (импортируйте её declaration-модуль)"
+            f"get_task_spec: task {task!r} is not declared (import its declaration module)"
         )
     return spec
 
@@ -153,7 +153,7 @@ def platform_task(
     broker = _QUEUE_BROKERS.get(task.queue)
     if broker is None:
         msg = f"platform_task: брокер очереди {task.queue!r} не зарегистрирован"
-        raise RuntimeError(f"{msg}; импортируйте брокер-модуль до impl (apps/platform_tasks/wiring)")
+        raise RuntimeError(f"{msg}; import the broker module before impl (apps/platform_tasks/wiring)")
     return broker.task(
         task_name=task.name,
         queue_name=task.queue,

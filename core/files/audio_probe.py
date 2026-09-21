@@ -28,7 +28,7 @@ async def probe_audio_duration_seconds_from_upload(*, data: bytes, file_name: st
     """Длительность контейнерного аудио в секундах (ffprobe); Zero-Guess при ошибке — исключение."""
     raw_name = file_name.strip()
     if raw_name == "":
-        raise ValueError("file_name для ffprobe не может быть пустым.")
+        raise ValueError("file_name for ffprobe cannot be empty.")
     suffix = Path(raw_name).suffix
     effective_suffix = suffix if suffix != "" else ".bin"
     ms = await probe_audio_duration_ms_from_bytes(data, effective_suffix)
@@ -61,17 +61,17 @@ def _parse_duration_from_json(raw: str) -> float:
         if stream_seconds is not None:
             return stream_seconds
     raise ValueError(
-        "ffprobe не вернул длительность ни на уровне format, ни stream. "
+        "ffprobe did not return duration at format or stream level. "
         + f"probe={payload.model_dump(mode='json')!r}"
     )
 
 
 async def probe_audio_duration_ms_from_bytes(data: bytes, source_suffix: str) -> int:
     if len(data) == 0:
-        raise ValueError("Пустые данные для ffprobe.")
+        raise ValueError("Empty data for ffprobe.")
     ffprobe = shutil.which("ffprobe")
     if ffprobe is None:
-        raise ValueError("ffprobe не найден в PATH.")
+        raise ValueError("ffprobe was not found in PATH.")
     suf = source_suffix if source_suffix.startswith(".") else f".{source_suffix}"
     if suf == ".":
         suf = ".bin"
@@ -95,13 +95,13 @@ async def probe_audio_duration_ms_from_bytes(data: bytes, source_suffix: str) ->
             )
             if result.returncode != 0:
                 stderr = (result.stderr or "").strip()
-                raise ValueError(f"ffprobe завершился с ошибкой: {stderr[:800]}")
+                raise ValueError(f"ffprobe failed: {stderr[:800]}")
             raw = (result.stdout or "").strip()
             if raw == "":
-                raise ValueError("ffprobe вернул пустой вывод.")
+                raise ValueError("ffprobe returned empty output.")
             return _parse_duration_from_json(raw)
 
     seconds = await asyncio.to_thread(_run)
     if not (seconds > 0) or seconds != seconds:
-        raise ValueError(f"Некорректная длительность от ffprobe: {seconds!r}")
+        raise ValueError(f"Invalid duration from ffprobe: {seconds!r}")
     return int(round(seconds * 1000))

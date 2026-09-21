@@ -23,6 +23,7 @@ import {
     createResourceCollection,
     createAsyncOp,
     CoreEvents,
+    reloadLastList,
 } from '@platform/lib/events/index.js';
 
 const CRM_TASK_UPDATED = 'crm/task/updated';
@@ -126,6 +127,8 @@ export const taskGetOp = createAsyncOp({
     restMirror: { method: 'GET', path: '/crm/api/v1/tasks/:task_id' },
 });
 
+const ACTIVE_TASK_STATUSES = new Set(['pending', 'running']);
+
 export const tasksResource = createResourceCollection({
     name: 'crm/tasks',
     baseUrl: '/crm/api/v1/tasks',
@@ -174,6 +177,19 @@ export const tasksResource = createResourceCollection({
             throw new Error('crm/tasks extraReducer: payload.task with task_id required');
         }
         return _mergeTaskIntoCollectionState(state, task, 'task_id');
+    },
+    // Пока сокет был оборван, push'и по активным задачам потеряны — досинхронизация
+    // последнего списка делается здесь, а не в страницах.
+    extraEffect: async (event, ctx) => {
+        if (event.type !== CoreEvents.WS_CONNECTED) {
+            return false;
+        }
+        const slice = ctx.getState()[tasksResource.sliceKey];
+        const hasActive = slice.items.some((task) => task && ACTIVE_TASK_STATUSES.has(task.status));
+        if (hasActive) {
+            reloadLastList(ctx, tasksResource);
+        }
+        return false;
     },
 });
 

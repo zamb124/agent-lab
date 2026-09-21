@@ -61,60 +61,22 @@ from core.clients.browser import (
 )
 from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.registry import default_retention_for_source
-from core.integrations.mcp import MCP_PROTOCOL_VERSION, MCPToolDefinition
+from core.integrations.mcp import (
+    MCP_PROTOCOL_VERSION,
+    MCPInitializeResult,
+    MCPJsonRpcError,
+    MCPJsonRpcRequest,
+    MCPJsonRpcResponse,
+    MCPToolCallResult,
+    MCPToolDefinition,
+    MCPToolsListResult,
+)
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 
 router = APIRouter(prefix="/mcp", tags=["browser-mcp"])
 
 AntiBotTier = Literal["white", "gray", "black"]
-
-
-class JsonRpcRequest(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    jsonrpc: Literal["2.0"] = "2.0"
-    id: int | str | None = None
-    method: str
-    params: JsonObject | None = None
-
-
-class JsonRpcError(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    code: int
-    message: str
-    data: JsonObject | None = None
-
-
-class JsonRpcResponse(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    jsonrpc: Literal["2.0"] = "2.0"
-    id: int | str | None
-    result: JsonObject | None = None
-    error: JsonRpcError | None = None
-
-
-class McpInitializeResult(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    protocolVersion: str
-    capabilities: JsonObject
-    serverInfo: JsonObject
-
-
-class McpToolsListResult(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    tools: list[MCPToolDefinition]
-
-
-class McpToolCallResult(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    content: list[JsonObject]
-    isError: bool = False
 
 
 class ToolClickArgs(BaseModel):
@@ -197,7 +159,7 @@ class _AnchorHrefParser(HTMLParser):
 def _ensure_html_name(original_name: str) -> str:
     stripped = original_name.strip()
     if stripped == "":
-        raise ValueError("original_name должен быть непустой строкой")
+        raise ValueError("original_name must be a non-empty string")
     if "." not in stripped:
         return f"{stripped}.html"
     return stripped
@@ -287,12 +249,16 @@ def _tools() -> list[MCPToolDefinition]:
 
 
 def _model_json_object(model: BaseModel) -> JsonObject:
-    return require_json_object(model.model_dump(mode="json"), model.__class__.__name__)
-
-
-def _jsonrpc_payload(response: JsonRpcResponse) -> JsonObject:
     return require_json_object(
-        response.model_dump(mode="json", exclude_none=True), "JsonRpcResponse"
+        model.model_dump(mode="json", by_alias=True, exclude_none=True),
+        model.__class__.__name__,
+    )
+
+
+def _jsonrpc_payload(response: MCPJsonRpcResponse) -> JsonObject:
+    return require_json_object(
+        response.model_dump(mode="json", exclude_none=True),
+        "MCPJsonRpcResponse",
     )
 
 
@@ -300,8 +266,8 @@ def _json_text_content(value: JsonValue) -> list[JsonObject]:
     return [{"type": "text", "text": json.dumps(value, ensure_ascii=False)}]
 
 
-def _error(code: int, message: str, data: JsonObject | None = None) -> JsonRpcError:
-    return JsonRpcError(code=code, message=message, data=data)
+def _error(code: int, message: str, data: JsonObject | None = None) -> MCPJsonRpcError:
+    return MCPJsonRpcError(code=code, message=message, data=data)
 
 
 def _mcp_tool_trace_attributes(*, tool_name: str, arguments: JsonObject) -> dict[str, str]:
@@ -325,7 +291,7 @@ def _parse_interaction_profile(value: object) -> InteractionProfileName:
         return "fast"
     if value == "human":
         return "human"
-    raise ValueError("interaction_profile должен быть одним из: off, fast, human")
+    raise ValueError("interaction_profile must be one of: off, fast, human")
 
 
 def _parse_anti_bot_tier(value: object) -> AntiBotTier:
@@ -335,7 +301,7 @@ def _parse_anti_bot_tier(value: object) -> AntiBotTier:
         return "gray"
     if value == "black":
         return "black"
-    raise ValueError("anti_bot_tier должен быть одним из: white, gray, black")
+    raise ValueError("anti_bot_tier must be one of: white, gray, black")
 
 
 def _optional_str(value: object, *, field: str) -> str | None:
@@ -343,7 +309,7 @@ def _optional_str(value: object, *, field: str) -> str | None:
         return None
     if isinstance(value, str):
         return value
-    raise ValueError(f"{field} должен быть строкой или null")
+    raise ValueError(f"{field} must be a string or null")
 
 
 async def _tool_call(
@@ -351,7 +317,7 @@ async def _tool_call(
     tool_name: str,
     arguments: JsonObject,
     container: BrowserContainer,
-) -> McpToolCallResult:
+) -> MCPToolCallResult:
     runtime = container.browser_runtime
 
     if tool_name == "browser_create_session":
@@ -366,14 +332,14 @@ async def _tool_call(
         page_mode = args.page_mode
         ctx_page_mode = ctx.get("page_mode", page_mode)
         if ctx_page_mode != page_mode:
-            raise ValueError("context.page_mode должен совпадать с page_mode")
+            raise ValueError("context.page_mode must match page_mode")
         profile_name = _parse_interaction_profile(
             ctx.get("interaction_profile", args.interaction_profile)
         )
         _ = get_interaction_profile(profile_name)
         seed_value = ctx.get("interaction_seed", args.interaction_seed)
         if seed_value is not None and not isinstance(seed_value, int):
-            raise ValueError("interaction_seed должен быть целым числом")
+            raise ValueError("interaction_seed must be an integer")
         shared_storage_key = _optional_str(
             ctx.get("shared_storage_key", args.shared_storage_key),
             field="shared_storage_key",
@@ -420,8 +386,8 @@ async def _tool_call(
             ),
             container=container,
         )
-        return McpToolCallResult(
-            content=_json_text_content(_model_json_object(out_model)), isError=False
+        return MCPToolCallResult(
+            content=_json_text_content(_model_json_object(out_model)), is_error=False
         )
 
     if tool_name == "browser_navigate":
@@ -439,9 +405,9 @@ async def _tool_call(
             ),
             container=container,
         )
-        return McpToolCallResult(
+        return MCPToolCallResult(
             content=_json_text_content(require_json_value(out, "browser_navigate result")),
-            isError=False,
+            is_error=False,
         )
 
     if tool_name == "browser_observe":
@@ -451,9 +417,9 @@ async def _tool_call(
             body=ControlObserveBody(include_snapshot_refs=args.include_snapshot_refs),
             container=container,
         )
-        return McpToolCallResult(
+        return MCPToolCallResult(
             content=_json_text_content(require_json_value(payload, "browser_observe result")),
-            isError=False,
+            is_error=False,
         )
 
     if tool_name == "browser_click":
@@ -463,9 +429,9 @@ async def _tool_call(
             body=ControlClickBody(ref=args.ref, timeout_ms=args.timeout_ms),
             container=container,
         )
-        return McpToolCallResult(
+        return MCPToolCallResult(
             content=_json_text_content(require_json_value({"ok": True}, "browser_click result")),
-            isError=False,
+            is_error=False,
         )
 
     if tool_name == "browser_fill":
@@ -480,9 +446,9 @@ async def _tool_call(
             ),
             container=container,
         )
-        return McpToolCallResult(
+        return MCPToolCallResult(
             content=_json_text_content(require_json_value({"ok": True}, "browser_fill result")),
-            isError=False,
+            is_error=False,
         )
 
     if tool_name == "browser_press":
@@ -492,9 +458,9 @@ async def _tool_call(
             body=ControlPressBody(key=args.key),
             container=container,
         )
-        return McpToolCallResult(
+        return MCPToolCallResult(
             content=_json_text_content(require_json_value({"ok": True}, "browser_press result")),
-            isError=False,
+            is_error=False,
         )
 
     if tool_name == "browser_wait":
@@ -508,9 +474,9 @@ async def _tool_call(
             ),
             container=container,
         )
-        return McpToolCallResult(
+        return MCPToolCallResult(
             content=_json_text_content(require_json_value({"ok": True}, "browser_wait result")),
-            isError=False,
+            is_error=False,
         )
 
     if tool_name == "browser_close_session":
@@ -519,9 +485,9 @@ async def _tool_call(
             session_id=args.session_id,
             container=container,
         )
-        return McpToolCallResult(
+        return MCPToolCallResult(
             content=_json_text_content(require_json_value(out, "browser_close_session result")),
-            isError=False,
+            is_error=False,
         )
 
     if tool_name == "browser_save_state":
@@ -531,9 +497,9 @@ async def _tool_call(
             body=ControlSaveStateBody(shared_storage_key=args.shared_storage_key),
             container=container,
         )
-        return McpToolCallResult(
+        return MCPToolCallResult(
             content=_json_text_content(require_json_value(out, "browser_save_state result")),
-            isError=False,
+            is_error=False,
         )
 
     if tool_name == "browser_save_html_to_s3":
@@ -573,11 +539,11 @@ async def _tool_call(
                 "source_url": page.url,
                 "links": links,
             }
-        return McpToolCallResult(
+        return MCPToolCallResult(
             content=_json_text_content(
                 require_json_value(payload, "browser_save_html_to_s3 result")
             ),
-            isError=False,
+            is_error=False,
         )
 
     raise ValueError(f"Tool not found: {tool_name}")
@@ -585,7 +551,7 @@ async def _tool_call(
 
 @router.post("")
 async def mcp_jsonrpc(
-    req: JsonRpcRequest,
+    req: MCPJsonRpcRequest,
     request: Request,
     response: Response,
     container: ContainerDep,
@@ -606,18 +572,18 @@ async def mcp_jsonrpc(
         if not mcp_session_id:
             mcp_session_id = str(uuid.uuid4())
             response.headers["Mcp-Session-Id"] = mcp_session_id
-        res = McpInitializeResult(
-            protocolVersion=MCP_PROTOCOL_VERSION,
+        res = MCPInitializeResult(
+            protocol_version=MCP_PROTOCOL_VERSION,
             capabilities={},
-            serverInfo={"name": "platform-browser-runtime", "version": "1.0.0"},
+            server_info={"name": "platform-browser-runtime", "version": "1.0.0"},
         )
-        return _jsonrpc_payload(JsonRpcResponse(id=req_id, result=_model_json_object(res)))
+        return _jsonrpc_payload(MCPJsonRpcResponse(id=req_id, result=_model_json_object(res)))
 
     protocol_header = request.headers.get("MCP-Protocol-Version")
     if protocol_header != MCP_PROTOCOL_VERSION:
         response.status_code = 400
         err = _error(-32000, "MCP-Protocol-Version header is required")
-        return _jsonrpc_payload(JsonRpcResponse(id=req_id, error=err))
+        return _jsonrpc_payload(MCPJsonRpcResponse(id=req_id, error=err))
 
     if method == "notifications/initialized":
         response.status_code = 202
@@ -625,15 +591,13 @@ async def mcp_jsonrpc(
 
     if method == "tools/list":
         tools = _tools()
-        res = McpToolsListResult(tools=tools)
-        # by_alias=True: на проводе MCP всегда camelCase `inputSchema`, как
-        # того требует спецификация JSON-RPC MCP; внутри платформы поле
-        # называется `parameters_schema`.
+        res = MCPToolsListResult(tools=tools)
         return _jsonrpc_payload(
-            JsonRpcResponse(
+            MCPJsonRpcResponse(
                 id=req_id,
                 result=require_json_object(
-                    res.model_dump(mode="json", by_alias=True), "McpToolsListResult"
+                    res.model_dump(mode="json", by_alias=True, exclude_none=True),
+                    "MCPToolsListResult",
                 ),
             )
         )
@@ -643,12 +607,12 @@ async def mcp_jsonrpc(
         arguments = params.get("arguments")
         if not isinstance(name, str) or not name.strip():
             err = _error(-32602, "tools/call: params.name is required")
-            return _jsonrpc_payload(JsonRpcResponse(id=req_id, error=err))
+            return _jsonrpc_payload(MCPJsonRpcResponse(id=req_id, error=err))
         if arguments is None:
             arguments = {}
         if not isinstance(arguments, dict):
             err = _error(-32602, "tools/call: params.arguments must be object")
-            return _jsonrpc_payload(JsonRpcResponse(id=req_id, error=err))
+            return _jsonrpc_payload(MCPJsonRpcResponse(id=req_id, error=err))
         arguments_obj = require_json_object(arguments, "tools/call.params.arguments")
         try:
             async with traced_operation(
@@ -664,11 +628,11 @@ async def mcp_jsonrpc(
                     arguments=arguments_obj,
                     container=container,
                 )
-                span.set_attribute("platform.mcp.tool_result_is_error", bool(call_res.isError))
+                span.set_attribute("platform.mcp.tool_result_is_error", bool(call_res.is_error))
         except Exception as exc:
             err = _error(-32000, str(exc), data={"tool": name})
-            return _jsonrpc_payload(JsonRpcResponse(id=req_id, error=err))
-        return _jsonrpc_payload(JsonRpcResponse(id=req_id, result=_model_json_object(call_res)))
+            return _jsonrpc_payload(MCPJsonRpcResponse(id=req_id, error=err))
+        return _jsonrpc_payload(MCPJsonRpcResponse(id=req_id, result=_model_json_object(call_res)))
 
     err = _error(-32601, f"Method not found: {method}")
-    return _jsonrpc_payload(JsonRpcResponse(id=req_id, error=err))
+    return _jsonrpc_payload(MCPJsonRpcResponse(id=req_id, error=err))

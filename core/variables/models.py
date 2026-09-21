@@ -155,7 +155,7 @@ class ResolutionContext(StrictBaseModel):
             case ScopeField.CHANNEL:
                 return self.channel
             case ScopeField.VAR:
-                raise ValueError("ScopeField.VAR резолвится через значение другой переменной, не из контекста")
+                raise ValueError('ScopeField.VAR resolves through another variable value, not from context')
 
 
 class ResolvedVariable(StrictBaseModel):

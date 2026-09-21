@@ -36,7 +36,7 @@ async def deliver_offline_push(
 ) -> list[str]:
     settings = get_settings()
     if not settings.database.shared_url:
-        raise ValueError("database.shared_url не задан")
+        raise ValueError('database.shared_url is not set')
 
     push_service = get_web_push_service()
     apns_service = get_apns_push_service()
@@ -91,10 +91,7 @@ async def deliver_offline_push(
             if not delivered and drop:
                 expired_endpoints.append(sub.endpoint)
             elif not delivered:
-                logger.warning(
-                    "APNs: пропуск удаления подписки после временной ошибки endpoint=%s",
-                    sub.endpoint[:32],
-                )
+                logger.warning("push.apns.endpoint", endpoint=sub.endpoint[:32])
 
     if fcm_subs and fcm_service and fcm_service.is_configured:
         for sub in fcm_subs:
@@ -110,15 +107,12 @@ async def deliver_offline_push(
             if not delivered and drop:
                 expired_endpoints.append(sub.endpoint)
             elif not delivered:
-                logger.warning(
-                    "FCM: пропуск удаления подписки после временной ошибки endpoint=%s",
-                    sub.endpoint[:32],
-                )
+                logger.warning("push.fcm.endpoint", endpoint=sub.endpoint[:32])
 
     for endpoint in expired_endpoints:
         _ = await repo.delete_by_endpoint(endpoint)
 
     if expired_endpoints:
-        logger.info("Удалено %s истёкших или невалидных push подписок", len(expired_endpoints))
+        logger.info("push.push", expired_endpoints_count=len(expired_endpoints))
 
     return expired_endpoints

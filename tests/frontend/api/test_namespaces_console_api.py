@@ -153,7 +153,7 @@ async def test_console_create_rejects_reserved_prefixes(
             headers=auth_headers,
             json={"name": name, "description": "nope"},
         )
-        assert response.status_code == 422, response.text
+        assert response.status_code == 400, response.text
 
 
 @pytest.mark.asyncio

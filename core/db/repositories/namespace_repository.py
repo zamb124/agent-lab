@@ -51,5 +51,5 @@ class NamespaceRepository(BaseRepository[Namespace]):
         """Список namespace компании; company_id обязан совпадать с активной."""
         active_company_id = require_active_company().company_id
         if company_id != active_company_id:
-            raise ValueError("company_id не совпадает с активной компанией")
+            raise ValueError('company_id does not match the active company')
         return await self.list(limit=limit, offset=offset)

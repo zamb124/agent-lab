@@ -3,24 +3,103 @@
 CI-gate: REST-хендлер сервиса из COMMAND_WS_SERVICES — тонкое зеркало `op_*`.
 
 Каждый `@router.<method>(...)` в `apps/<svc>/api/**` (и `apps/flows/src/api/**`)
-обязан вызывать `op_<entity>_<verb>` из каталога. Хендлеры без `op_*` —
-протокольные исключения (upload/download байт, A2A, LSP, viewer stream, webhooks)
-и долг из `scripts/rest_handlers_without_op_baseline.json` (ratchet: новый
-хендлер без `op_*` — FAIL, исчезнувший из долга обязан быть удалён из baseline).
+обязан вызывать `op_<entity>_<verb>` из каталога. Без `op_*` допустимы только
+протокольные хендлеры из `PROTOCOL_HANDLERS`: байты/HTML наружу (download, screenshot,
+viewer, certificate), внешние протоколы (A2A JSON-RPC/SSE/WS, MCP JSON-RPC, LSP WS,
+OnlyOffice callback, webhooks) и анонимные публичные страницы wiki/office.
+Новый хендлер без `op_*` — FAIL; протокольный хендлер, которого больше нет, — тоже FAIL.
 """
 
 from __future__ import annotations
 
 import ast
-import json
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 APPS_ROOT = REPO_ROOT / "apps"
-BASELINE_PATH = REPO_ROOT / "scripts" / "rest_handlers_without_op_baseline.json"
-COMMAND_WS_SERVICES: tuple[str, ...] = ("sync", "worktracker", "wiki", "rag", "office", "crm", "flows", "search")
+COMMAND_WS_SERVICES: tuple[str, ...] = (
+    "sync", "worktracker", "wiki", "rag", "office", "crm", "flows", "search", "secrets", "scheduler", "frontend"
+)
 HTTP_METHODS: frozenset[str] = frozenset({"get", "post", "put", "patch", "delete", "websocket", "api_route"})
+
+PROTOCOL_HANDLERS: frozenset[str] = frozenset(
+    {
+        # A2A 1.0: agent card, JSON-RPC (+embed), interface, WS
+        "apps/flows/src/api/a2a.py::get_agent_card",
+        "apps/flows/src/api/a2a.py::get_agent_card_well_known",
+        "apps/flows/src/api/a2a.py::get_embed_interface",
+        "apps/flows/src/api/a2a.py::get_flow_interface",
+        "apps/flows/src/api/a2a.py::json_rpc_embed_handler",
+        "apps/flows/src/api/a2a.py::json_rpc_handler",
+        "apps/flows/src/api/websocket.py::websocket_a2a",
+        "apps/flows/src/api/v1/tasks.py::submit_task",
+        # байты и HTML наружу
+        "apps/flows/src/api/v1/browser_preview.py::browser_preview_screenshot",
+        "apps/flows/src/api/v1/browser_preview.py::browser_preview_viewer",
+        "apps/flows/src/api/v1/certificate.py::download_certificate",
+        "apps/office/api/bff.py::office_download",
+        "apps/office/api/viewer_routes.py::viewer_frame",
+        "apps/office/api/viewer_routes.py::viewer_save",
+        "apps/office/api/viewer_routes.py::viewer_stream",
+        # LSP: bootstrap сессии + JSON-RPC кадры по WS
+        "apps/flows/src/api/v1/code_lsp.py::code_lsp_websocket",
+        "apps/flows/src/api/v1/code_lsp.py::create_code_lsp_session",
+        # обмен share-токена на сессию (pre-WS)
+        "apps/flows/src/api/v1/flow_ui_shares.py::exchange_flow_ui_share",
+        # входящие webhooks и OnlyOffice callback
+        "apps/flows/src/api/v1/triggers.py::generic_webhook",
+        "apps/flows/src/api/v1/triggers.py::telegram_webhook",
+        "apps/office/api/bff.py::onlyoffice_callback",
+        # анонимные публичные ссылки Documents и Wiki
+        "apps/office/api/bff.py::public_catalog_binding_open",
+        "apps/office/api/bff.py::public_catalog_items",
+        "apps/office/api/bff.py::public_open",
+        "apps/office/api/bff.py::public_resolve",
+        "apps/wiki/api/public.py::get_public_page",
+        "apps/wiki/api/public.py::get_public_page_markdown",
+        "apps/wiki/api/public.py::get_public_site_file",
+        "apps/wiki/api/public.py::get_public_site_page",
+        "apps/wiki/api/public.py::get_public_site_page_markdown",
+        "apps/wiki/api/public.py::get_public_site_tree",
+        # MCP JSON-RPC поиска
+        "apps/search/api/mcp.py::mcp_jsonrpc",
+        # frontend: LinnexAgent device protocol (без сессии браузера) и tunnel WS
+        "apps/frontend/api/agent_devices.py::agent_discover",
+        "apps/frontend/api/agent_devices.py::agent_login_page",
+        "apps/frontend/api/agent_devices.py::download_agent",
+        "apps/frontend/api/agent_devices.py::issue_device_token",
+        "apps/frontend/api/agent_devices.py::register_agent_device",
+        "apps/frontend/api/agent_devices.py::register_agent_device_with_auth",
+        "apps/frontend/api/agent_devices.py::serve_local_release_artifact",
+        "apps/frontend/api/agent_tunnel.py::agent_tunnel_websocket",
+        "apps/frontend/api/agent.py::agent_releases_status",
+        "apps/frontend/api/services.py::get_services_status",
+        # frontend: OAuth callback, платёжный webhook, embed-session по API-ключу, инвайты pre-session
+        "apps/frontend/api/auth.py::auth_callback",
+        "apps/frontend/api/payments_webhook.py::payment_webhook",
+        "apps/frontend/api/embed_configs.py::issue_embed_session_token",
+        "apps/frontend/api/invites.py::accept_invite",
+        "apps/frontend/api/invites.py::preview_invite",
+        # frontend: анонимный публичный сайт, лендинг, гостевые сессии и design-system каталог
+        "apps/frontend/api/design_system.py::design_system_preview",
+        "apps/frontend/api/design_system.py::get_design_system_catalog",
+        "apps/frontend/api/leads.py::create_lead",
+        "apps/frontend/api/public_docs_assistant.py::issue_public_docs_assistant_session",
+        "apps/frontend/api/public_embed_page.py::issue_embed_page_session",
+        "apps/frontend/api/public_landing_agents.py::issue_public_landing_session",
+        "apps/frontend/api/public_landing_agents.py::list_public_landing_agents",
+        "apps/frontend/api/public_search.py::issue_public_search_session",
+        "apps/frontend/api/public_search.py::public_search_favicon",
+        "apps/frontend/api/public_search.py::public_search_serp_click",
+        "apps/frontend/api/public_search.py::public_search_serp_more",
+        "apps/frontend/api/public_site.py::get_public_blog_post",
+        "apps/frontend/api/public_site.py::get_site_bundle",
+        "apps/frontend/api/public_site.py::get_startup_card",
+        "apps/frontend/api/public_site.py::list_public_blog_posts",
+        "apps/frontend/api/public_site.py::record_cookie_consent",
+    }
+)
 
 
 def _api_roots(service: str) -> list[Path]:
@@ -63,23 +142,19 @@ def collect_handlers_without_op() -> set[str]:
 
 def main() -> int:
     offenders = collect_handlers_without_op()
-    baseline_raw = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
-    if not isinstance(baseline_raw, list) or not all(isinstance(item, str) for item in baseline_raw):
-        raise SystemExit(f"{BASELINE_PATH}: ожидается JSON-массив строк")
-    baseline = set(baseline_raw)
-    introduced = sorted(offenders - baseline)
-    stale = sorted(baseline - offenders)
+    introduced = sorted(offenders - PROTOCOL_HANDLERS)
+    stale = sorted(PROTOCOL_HANDLERS - offenders)
     if introduced:
         print("check_rest_handlers_call_ops: FAIL — REST-хендлеры без op_* (добавь op_* в каталог сервиса):")
         for item in introduced:
             print(f"  {item}")
     if stale:
-        print("check_rest_handlers_call_ops: FAIL — записи baseline больше не актуальны, удали их:")
+        print("check_rest_handlers_call_ops: FAIL — PROTOCOL_HANDLERS содержит несуществующие хендлеры, удали их:")
         for item in stale:
             print(f"  {item}")
     if introduced or stale:
         return 1
-    print(f"check_rest_handlers_call_ops: OK (долг: {len(baseline)} хендлеров)")
+    print(f"check_rest_handlers_call_ops: OK (протокольных хендлеров: {len(PROTOCOL_HANDLERS)})")
     return 0
 
 

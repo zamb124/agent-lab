@@ -103,13 +103,13 @@ async def mcp_catalog_crawl_task(
             if settings.mcp_branding.seed_after_crawl:
                 branding_stats = await seed_mcp_branding_from_bundle(runtime, force=False)
                 logger.info(
-                    "MCP branding seed after crawl: targets=%s seeded=%s skipped_existing=%s",
-                    branding_stats.targets,
-                    branding_stats.seeded,
-                    branding_stats.skipped_existing,
+                    "flows.mcp.branding.seed.crawl.targets",
+                    targets=branding_stats.targets,
+                    seeded=branding_stats.seeded,
+                    skipped_existing=branding_stats.skipped_existing,
                 )
         except Exception:
-            logger.exception("MCP catalog crawl failed; continuing with provision for existing catalog")
+            logger.exception("flows.mcp.catalog.crawl.failed.continuing")
         provision_result: MCPCatalogProvisionCompaniesTaskResult = {
             "companies": 0,
             "added": 0,
@@ -195,11 +195,7 @@ async def mcp_catalog_provision_companies_task(
         totals["sync_ok"] += stats.sync_ok
         totals["sync_failed"] += stats.sync_failed
 
-    logger.info(
-        "MCP catalog provision companies done: schedule_task_id=%s %s",
-        schedule_task_id,
-        totals,
-    )
+    logger.info("flows.mcp.catalog.provision.companies.done", schedule_task_id=schedule_task_id, totals=totals)
     return totals
 
 
@@ -238,9 +234,5 @@ async def mcp_catalog_resync_tools_task(
         "sync_ok": sync_ok_total,
         "sync_failed": sync_failed_total,
     }
-    logger.info(
-        "MCP catalog resync tools done: schedule_task_id=%s %s",
-        schedule_task_id,
-        result,
-    )
+    logger.info("flows.mcp.catalog.resync.tools.done", schedule_task_id=schedule_task_id, result=result)
     return result

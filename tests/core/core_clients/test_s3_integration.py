@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 
 import pytest
 
+from core.files.file_repository import file_record_storage_json
 from core.files.models import FileRecord, FileStatus
 from core.files.s3_client import S3ClientFactory
 
@@ -334,7 +335,7 @@ class TestS3WithDatabase:
         )
 
         # Сохраняем в БД
-        save_success = await storage.set(file_record.key, file_record.model_dump_json(), force_global=True)
+        save_success = await storage.set(file_record.key, file_record_storage_json(file_record), force_global=True)
         assert save_success
         print(f"✅ Запись о файле сохранена в БД: {file_record.key}")
 
@@ -356,7 +357,7 @@ class TestS3WithDatabase:
 
         # Обновляем статус
         stored_record.status = FileStatus.UPLOADED
-        update_success = await storage.set(stored_record.key, stored_record.model_dump_json(), force_global=True)
+        update_success = await storage.set(stored_record.key, file_record_storage_json(stored_record), force_global=True)
         assert update_success
         print("✅ Статус файла обновлен в БД")
 
@@ -387,7 +388,7 @@ class TestS3WithDatabase:
             status=FileStatus.UPLOADING
         )
 
-        db_save_success = await storage.set(file_record.key, file_record.model_dump_json())
+        db_save_success = await storage.set(file_record.key, file_record_storage_json(file_record))
         assert db_save_success
         print(f"✅ 1. Запись создана в БД: {file_record.key}")
 
@@ -402,13 +403,13 @@ class TestS3WithDatabase:
 
             if not s3_upload_success:
                 file_record.status = FileStatus.FAILED
-                await storage.set(file_record.key, file_record.model_dump_json())
+                await storage.set(file_record.key, file_record_storage_json(file_record))
             assert s3_upload_success, "S3 upload_bytes вернул False в сценарии FileRecord"
             print(f"✅ 2. Файл загружен в S3: {s3_key}")
 
             # 3. Обновляем статус в БД
             file_record.status = FileStatus.UPLOADED
-            db_update_success = await storage.set(file_record.key, file_record.model_dump_json())
+            db_update_success = await storage.set(file_record.key, file_record_storage_json(file_record))
             assert db_update_success
             print("✅ 3. Статус обновлен в БД: UPLOADED")
 
@@ -438,7 +439,7 @@ class TestS3WithDatabase:
             # 8. Очистка: удаляем из S3 и БД
             await client.delete_file(s3_key)
             file_record.status = FileStatus.DELETED
-            await storage.set(file_record.key, file_record.model_dump_json())
+            await storage.set(file_record.key, file_record_storage_json(file_record))
             print("✅ 7. Очистка завершена")
 
             await client.close()

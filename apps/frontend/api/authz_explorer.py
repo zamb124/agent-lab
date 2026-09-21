@@ -1,10 +1,21 @@
-"""Access Explorer API — company admin, явные гранты через AuthzService."""
+"""REST-зеркало команд `frontend/authz_explorer/*`."""
 
 from typing import Annotated
 
 from fastapi import APIRouter, Query
 
 from apps.frontend.dependencies import ContainerDep
+from apps.frontend.realtime.authz_explorer_operations import (
+    AuthzExplorerByObjectPayload,
+    AuthzExplorerByUserPayload,
+    AuthzExplorerObjectsPayload,
+    AuthzExplorerWhyPayload,
+    op_authz_explorer_by_object,
+    op_authz_explorer_by_user,
+    op_authz_explorer_objects,
+    op_authz_explorer_revoke,
+    op_authz_explorer_why,
+)
 from core.authz.explorer import (
     AuthzExplorerByObjectResponse,
     AuthzExplorerByUserResponse,
@@ -14,19 +25,9 @@ from core.authz.explorer import (
     AuthzExplorerWhyResponse,
 )
 from core.authz.types import AuthzObjectType
-from core.context import require_active_company, require_context
+from core.context import require_context
 
 router = APIRouter(prefix="/api/authz/explorer", tags=["authz-explorer"])
-
-
-async def _require_explorer_admin(container: ContainerDep) -> tuple[str, str]:
-    user = require_context().user
-    company = require_active_company()
-    await container.authz_service.require_company_admin(
-        company_id=company.company_id,
-        user_id=user.user_id,
-    )
-    return company.company_id, user.user_id
 
 
 @router.get("/by-user", response_model=AuthzExplorerByUserResponse)
@@ -34,10 +35,8 @@ async def explorer_by_user(
     container: ContainerDep,
     user_id: Annotated[str, Query(min_length=1)],
 ) -> AuthzExplorerByUserResponse:
-    company_id, _actor_user_id = await _require_explorer_admin(container)
-    return await container.authz_explorer_service.by_user(
-        user_id=user_id,
-        company_id=company_id,
+    return await op_authz_explorer_by_user(
+        AuthzExplorerByUserPayload(user_id=user_id), user=require_context().user, container=container
     )
 
 
@@ -47,11 +46,10 @@ async def explorer_by_object(
     object_type: AuthzObjectType,
     object_key: Annotated[str, Query(min_length=1)],
 ) -> AuthzExplorerByObjectResponse:
-    company_id, _actor_user_id = await _require_explorer_admin(container)
-    return await container.authz_explorer_service.by_object(
-        object_type=object_type,
-        object_key=object_key,
-        company_id=company_id,
+    return await op_authz_explorer_by_object(
+        AuthzExplorerByObjectPayload(object_type=object_type, object_key=object_key),
+        user=require_context().user,
+        container=container,
     )
 
 
@@ -62,12 +60,10 @@ async def explorer_why(
     object_type: AuthzObjectType,
     object_key: Annotated[str, Query(min_length=1)],
 ) -> AuthzExplorerWhyResponse:
-    company_id, _actor_user_id = await _require_explorer_admin(container)
-    return await container.authz_explorer_service.why(
-        user_id=user_id,
-        object_type=object_type,
-        object_key=object_key,
-        company_id=company_id,
+    return await op_authz_explorer_why(
+        AuthzExplorerWhyPayload(user_id=user_id, object_type=object_type, object_key=object_key),
+        user=require_context().user,
+        container=container,
     )
 
 
@@ -77,22 +73,13 @@ async def explorer_objects(
     q: Annotated[str, Query()] = "",
     object_type: AuthzObjectType | None = None,
 ) -> AuthzExplorerObjectsResponse:
-    company_id, _actor_user_id = await _require_explorer_admin(container)
-    items = await container.authz_explorer_service.search_objects(
-        company_id=company_id,
-        query=q,
-        object_type=object_type,
+    return await op_authz_explorer_objects(
+        AuthzExplorerObjectsPayload(q=q, object_type=object_type),
+        user=require_context().user,
+        container=container,
     )
-    return AuthzExplorerObjectsResponse(items=items)
 
 
 @router.post("/revoke", response_model=AuthzExplorerRevokeResponse)
-async def explorer_revoke(
-    request: AuthzExplorerRevokeRequest,
-    container: ContainerDep,
-) -> AuthzExplorerRevokeResponse:
-    company_id, _actor_user_id = await _require_explorer_admin(container)
-    return await container.authz_explorer_service.revoke(
-        request,
-        company_id=company_id,
-    )
+async def explorer_revoke(request_body: AuthzExplorerRevokeRequest, container: ContainerDep) -> AuthzExplorerRevokeResponse:
+    return await op_authz_explorer_revoke(request_body, user=require_context().user, container=container)

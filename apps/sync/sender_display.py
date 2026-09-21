@@ -30,7 +30,7 @@ async def sender_brief_for_message(
     if guest_name is not None:
         return UserBrief(user_id=sender_user_id, display_name=guest_name, avatar_url=None)
     if sender_user_id.strip() == "":
-        raise ValueError("sender_user_id пустой.")
+        raise ValueError("sender_user_id is empty.")
     if user_repository is not None:
         u = await user_repository.get(sender_user_id)
         if u is not None:

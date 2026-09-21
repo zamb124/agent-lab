@@ -96,7 +96,6 @@ from .session_config import SessionConfig
 from .tool_contracts import (
     ConfirmationFloor,
     ToolArgumentSource,
-    ToolBinding,
     ToolDefinition,
     ToolEffect,
     ToolErrorBody,
@@ -216,7 +215,6 @@ __all__ = [
     "ConfirmationFloor",
     "ToolExecutorKind",
     "ToolDefinition",
-    "ToolBinding",
     "ToolRevision",
     "ToolGrantClaims",
     "ToolErrorBody",

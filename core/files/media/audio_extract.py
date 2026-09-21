@@ -16,7 +16,7 @@ def extract_audio_from_video(*, video_bytes: bytes, base_name: str) -> tuple[byt
         (audio_bytes, audio_file_name)
     """
     if not video_bytes:
-        raise ValueError("video_bytes не может быть пустым.")
+        raise ValueError("video_bytes cannot be empty.")
     stem = Path(base_name).stem or "recording"
     with tempfile.TemporaryDirectory(prefix="media-video-stt-") as work_dir:
         in_path = Path(work_dir) / "input.mp4"
@@ -54,5 +54,5 @@ def extract_audio_from_video(*, video_bytes: bytes, base_name: str) -> tuple[byt
             raise RuntimeError(message)
         audio_bytes_out = out_path.read_bytes()
         if len(audio_bytes_out) == 0:
-            raise ValueError("Извлечённая аудиодорожка пуста.")
+            raise ValueError("Extracted audio track is empty.")
         return audio_bytes_out, f"{stem}-audio.mp3"

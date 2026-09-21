@@ -80,10 +80,10 @@ async def execute_scheduled_task(
         Результат выполнения
     """
     logger.info(
-        "Executing scheduled task: schedule_task_id=%s, content_type=%s, description=%s",
-        schedule_task_id,
-        content_type,
-        description,
+        "flows.executing.scheduled.task.schedule_task_id.content_type",
+        schedule_task_id=schedule_task_id,
+        content_type=content_type,
+        description=description,
     )
     task_content_type = ContentType(content_type)
 
@@ -152,7 +152,7 @@ async def execute_scheduled_task(
         else:
             raise ValueError(f"Unknown content_type: {content_type}")
 
-        logger.info("Scheduled task executed: schedule_task_id=%s", schedule_task_id)
+        logger.info("flows.scheduled.task.executed.schedule_task_id", schedule_task_id=schedule_task_id)
         scheduler_status = ScheduledTaskStatus.PENDING
         if task_info and task_info.schedule_type == PlatformScheduleType.ONE_TIME:
             scheduler_status = ScheduledTaskStatus.EXECUTED
@@ -166,7 +166,7 @@ async def execute_scheduled_task(
         return result
 
     except Exception as e:
-        logger.error("Scheduled task failed: schedule_task_id=%s, error=%s", schedule_task_id, e)
+        logger.error("flows.scheduled.task.failed.schedule_task_id.error", schedule_task_id=schedule_task_id, error=e)
         _ = await scheduler_repo.update_status(
             company_id=company_id,
             schedule_task_id=schedule_task_id,
@@ -180,9 +180,9 @@ async def execute_scheduled_task(
                 source = get_schedule_source(settings.database.redis_url)
                 await source.startup()
                 _ = await source.delete_schedule(task_info.schedule_id)
-                logger.info(f"Deleted failed schedule from Redis: {task_info.schedule_id}")
+                logger.info("flows.schedule.failed_deleted", schedule_id=task_info.schedule_id)
             except Exception as del_error:
-                logger.warning(f"Failed to delete schedule from Redis: {del_error}")
+                logger.warning("flows.schedule.delete_failed", error=str(del_error))
 
         raise
 

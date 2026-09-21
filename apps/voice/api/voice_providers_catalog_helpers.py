@@ -44,7 +44,7 @@ def allowed_secret_keys(kind: str, provider: str) -> frozenset[str]:
         return frozenset({"api_key", "folder_id"})
     if provider == "sber":
         return frozenset({"client_id", "client_secret", "scope"})
-    raise ValueError(f"Неизвестный provider для secrets: {provider!r}")
+    raise ValueError(f"Unknown provider for secrets: {provider!r}")
 
 
 def needs_model_dropdown(kind: str, provider: str) -> bool:

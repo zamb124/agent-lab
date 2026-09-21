@@ -184,7 +184,7 @@ class CompiledPronunciation:
                     compiled_pat = re.compile(rule.pattern, flags)
                 except re.error as exc:
                     raise ValueError(
-                        f"PronunciationRule id={rule.id!r}: невалидный regex {rule.pattern!r}: {exc}"
+                        f"PronunciationRule id={rule.id!r}: invalid regex {rule.pattern!r}: {exc}"
                     ) from exc
                 regex_rules.append(_CompiledRegexRule(
                     pattern=compiled_pat,

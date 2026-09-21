@@ -14,7 +14,7 @@ from core.types import DocxTemplateContext, DocxTemplateContextValue, JsonObject
 
 def _fail(path: str, msg: str) -> None:
     raise DocxTemplateContextError(
-        f"Контекст шаблона: {msg} (путь: {path})",
+        f"Template context: {msg} (path: {path})",
     )
 
 

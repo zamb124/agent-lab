@@ -29,7 +29,7 @@ class LLMModelScoreRepository:
 
     def __init__(self, db_url: str) -> None:
         if db_url == "":
-            raise ValueError("LLMModelScoreRepository: db_url не может быть пустым.")
+            raise ValueError('LLMModelScoreRepository: db_url cannot be empty.')
         self._db_url: str = db_url
 
     async def list_all(self) -> list[LLMModelScore]:
@@ -164,7 +164,7 @@ class LLMModelScoreRepository:
 def _clean_required(value: str, field_name: str) -> str:
     cleaned = value.strip()
     if cleaned == "":
-        raise ValueError(f"{field_name} не может быть пустым.")
+        raise ValueError(f"{field_name} cannot be empty.")
     return cleaned
 
 
@@ -172,13 +172,13 @@ def _clean_capability(value: AICapability | str) -> str:
     raw = value.value if isinstance(value, AICapability) else str(value)
     cleaned = raw.strip()
     if cleaned == "":
-        raise ValueError("capability не может быть пустым.")
+        raise ValueError('capability cannot be empty.')
     return AICapability(cleaned).value
 
 
 def _validate_editorial_prior(value: float) -> float:
     if value < _EDITORIAL_PRIOR_MIN or value > _EDITORIAL_PRIOR_MAX:
         raise ValueError(
-            f"editorial_prior должен быть в диапазоне {_EDITORIAL_PRIOR_MIN}..{_EDITORIAL_PRIOR_MAX}"
+            f"editorial_prior must be in range {_EDITORIAL_PRIOR_MIN}..{_EDITORIAL_PRIOR_MAX}"
         )
     return float(value)

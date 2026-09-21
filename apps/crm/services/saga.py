@@ -64,16 +64,16 @@ class EntityDeletionSaga:
         try:
             for step in self._steps:
                 if step.execute_fn:
-                    logger.info(f"Executing saga step: {step.name}")
+                    logger.info("crm.saga.step", name=step.name)
                     await step.execute_fn()
 
                 step.executed = True
 
-            logger.info(f"Saga completed successfully ({len(self._steps)} steps)")
+            logger.info("crm.saga.completed", step_count=len(self._steps))
             return True
 
         except Exception as execute_error:
-            logger.error(f"Saga failed at step, compensating: {execute_error}")
+            logger.error("crm.saga.failed", error=str(execute_error))
             try:
                 await self._compensate()
             except SagaCompensationError as compensation_error:
@@ -105,11 +105,13 @@ class EntityDeletionSaga:
         for step in reversed(self._steps):
             if step.executed and step.compensate_fn:
                 try:
-                    logger.info(f"Compensating step: {step.name}")
+                    logger.info("crm.saga.compensate", name=step.name)
                     await step.compensate_fn()
                 except Exception as comp_error:
                     logger.error(
-                        f"Compensation failed for {step.name}: {comp_error}. Manual intervention required!"
+                        "crm.saga.compensation_failed",
+                        name=step.name,
+                        error=str(comp_error),
                     )
                     compensation_failures.append((step.name, comp_error))
         if compensation_failures:

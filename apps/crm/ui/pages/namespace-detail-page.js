@@ -504,9 +504,6 @@ export class CRMNamespaceDetailPage extends PlatformPage {
             if (result && result.name === this.itemId) {
                 this._hydrateFromNamespace(result);
             }
-            this._namespaces.load();
-            this._editabilityOp.run({ name: this.itemId });
-            this._entityTypes.load({ namespace: this.itemId });
         });
         this.useEvent(this._namespaceUpdateOp.op.events.FAILED, () => {
             this._savingMeta = false;
@@ -519,7 +516,6 @@ export class CRMNamespaceDetailPage extends PlatformPage {
             this._typeFormOpen = false;
             this._typeDraft = makeTypeDraft();
             this._editingTypeId = '';
-            this._entityTypes.load({ namespace: this.itemId });
         });
         this.useEvent(this._entityTypeUpdateOp.op.events.FAILED, () => {
             this._savingType = false;

@@ -66,7 +66,7 @@ def _is_custom_ref(value: str) -> bool:
 
 def _custom_ref_id(value: str) -> str:
     if not _is_custom_ref(value):
-        raise ValueError(f"Не custom provider ref: {value!r}")
+        raise ValueError(f"Not a custom provider ref: {value!r}")
     return value[len(CUSTOM_PROVIDER_REF_PREFIX) :].strip()
 
 
@@ -78,17 +78,17 @@ def _validate_provider_ref(
 ) -> str:
     v = value.strip()
     if not v:
-        raise ValueError("provider не может быть пустым")
+        raise ValueError('provider cannot be empty')
     if _is_custom_ref(v):
         if not allow_custom:
-            raise ValueError(f"custom provider не разрешён в этой capability: {v!r}")
+            raise ValueError(f"custom provider is not allowed for this capability: {v!r}")
         slug = v[len(CUSTOM_PROVIDER_REF_PREFIX) :]
         if not slug or not all(c.isalnum() or c in ("-", "_") for c in slug) or len(slug) > 32:
-            raise ValueError(f"custom provider id невалиден: {slug!r} (a-z 0-9 _ -, длина 1..32)")
+            raise ValueError(f"custom provider id is invalid: {slug!r} (a-z 0-9 _ -, length 1..32)")
         return v
     if v not in allowed_platform:
         raise ValueError(
-            f"provider {v!r} не входит в whitelist {sorted(allowed_platform)} и не custom:<id>"
+            f"provider {v!r} is not in whitelist {sorted(allowed_platform)} and is not custom:<id>"
         )
     return v
 
@@ -134,7 +134,7 @@ class CompanyLLMOverride(BaseModel):
         if not s:
             return None
         if not (s.startswith("http://") or s.startswith("https://")):
-            raise ValueError("base_url должен начинаться с http:// или https://")
+            raise ValueError('base_url must start with http:// or https://')
         return s
 
     @model_validator(mode="after")
@@ -146,8 +146,8 @@ class CompanyLLMOverride(BaseModel):
                 or self.extra_request_headers
             ):
                 raise ValueError(
-                    "Для provider=custom:<id> поля api_key_encrypted/base_url/"
-                    + "extra_request_headers не используются — задайте их в custom_providers"
+                    'For provider=custom:<id> fields api_key_encrypted/base_url/'
+                    + 'extra_request_headers are unused — set them on custom_providers'
                 )
         if self.provider == HUMANITEC_LLM_PROVIDER:
             if (
@@ -157,9 +157,9 @@ class CompanyLLMOverride(BaseModel):
                 or self.extra_request_headers
             ):
                 raise ValueError(
-                    "provider=humanitec_llm — виртуальный платформенный провайдер; "
+                    'provider=humanitec_llm is a virtual platform provider; '
                     + "api_key_encrypted/base_url/folder_id/"
-                    + "extra_request_headers не задаются"
+                    + 'extra_request_headers must not be set'
                 )
             if (
                 self.model
@@ -167,20 +167,20 @@ class CompanyLLMOverride(BaseModel):
                 and split_humanitec_llms_model_ref(self.model) is None
             ):
                 raise ValueError(
-                    "provider=humanitec_llm поддерживает model='auto' или "
-                    + "provider-prefixed free-pool модель '<provider>:<model_id>'"
+                    "provider=humanitec_llm supports model='auto' or "
+                    + "provider-prefixed free-pool model '<provider>:<model_id>'"
                 )
         self.fallback_models = validate_fallback_model_configs(self.fallback_models)
         for idx, fallback in enumerate(self.fallback_models or []):
             if fallback.provider is None:
-                raise ValueError(f"fallback_models[{idx}].provider обязателен")
+                raise ValueError(f"fallback_models[{idx}].provider is required")
             if fallback.provider == HUMANITEC_LLM_PROVIDER and (
                 fallback.model != HUMANITEC_LLM_AUTO_MODEL
                 and split_humanitec_llms_model_ref(fallback.model) is None
             ):
                 raise ValueError(
-                    f"fallback_models[{idx}]: provider=humanitec_llm поддерживает "
-                    + "model='auto' или provider-prefixed free-pool модель '<provider>:<model_id>'"
+                    f"fallback_models[{idx}]: provider=humanitec_llm supports "
+                    + "model='auto' or a provider-prefixed free-pool model '<provider>:<model_id>'"
                 )
             _ = _validate_provider_ref(fallback.provider, allow_custom=True)
             secret_fields = {
@@ -194,8 +194,8 @@ class CompanyLLMOverride(BaseModel):
             ]
             if present_secret_fields:
                 raise ValueError(
-                    f"fallback_models[{idx}]: поля {present_secret_fields} запрещены в "
-                    + "company metadata; используйте platform provider без секрета или custom:<id>"
+                    f"fallback_models[{idx}]: fields {present_secret_fields} are forbidden in "
+                    + 'company metadata; use a platform provider without a secret or custom:<id>'
                 )
         return self
 
@@ -226,19 +226,19 @@ class CompanyEmbeddingOverride(BaseModel):
     def _v_model(cls, v: str) -> str:
         s = v.strip()
         if not s:
-            raise ValueError("embedding.model не может быть пустым")
+            raise ValueError('embedding.model cannot be empty')
         return s
 
     @model_validator(mode="after")
     def _v_byok_only_for_platform(self) -> "CompanyEmbeddingOverride":
         if self.provider == HUMANITEC_LLM_PROVIDER:
-            raise ValueError("provider=humanitec_llm не поддерживает embedding")
+            raise ValueError('provider=humanitec_llm does not support embedding')
         if self.mrl_output_dimension is not None and self.mrl_output_dimension > self.dimension:
-            raise ValueError("embedding.mrl_output_dimension не может превышать embedding.dimension")
+            raise ValueError('embedding.mrl_output_dimension cannot exceed embedding.dimension')
         if _is_custom_ref(self.provider):
             if self.api_key_encrypted or self.base_url or self.extra_request_headers:
                 raise ValueError(
-                    "Для embedding provider=custom:<id> поля BYOK не используются"
+                    'BYOK fields are unused for embedding provider=custom:<id>'
                 )
         return self
 
@@ -286,24 +286,24 @@ class CompanyRerankOverride(BaseModel):
         if not s:
             return None
         if not (s.startswith("http://") or s.startswith("https://")):
-            raise ValueError("rerank.base_url должен начинаться с http:// или https://")
+            raise ValueError('rerank.base_url must start with http:// or https://')
         return s
 
     @model_validator(mode="after")
     def _v_consistency(self) -> "CompanyRerankOverride":
         if not self.enabled:
             if self.model or self.api_key_encrypted or self.base_url or self.extra_request_headers:
-                raise ValueError("rerank enabled=false не принимает model/api_key/base_url/headers")
+                raise ValueError('rerank enabled=false does not accept model/api_key/base_url/headers')
             if self.provider is not None:
-                raise ValueError("rerank enabled=false не принимает provider")
+                raise ValueError('rerank enabled=false does not accept provider')
             return self
         if self.provider is None:
-            raise ValueError("rerank.provider обязателен при enabled=true")
+            raise ValueError('rerank.provider is required when enabled=true')
         if not self.model:
-            raise ValueError("rerank.model обязателен для включённого provider")
+            raise ValueError('rerank.model is required for an enabled provider')
         if _is_custom_ref(self.provider):
             if self.api_key_encrypted or self.base_url or self.extra_request_headers:
-                raise ValueError("Для rerank provider=custom:<id> поля BYOK не используются")
+                raise ValueError('BYOK fields are unused for rerank provider=custom:<id>')
         return self
 
 
@@ -327,13 +327,13 @@ class CompanyVoiceOverride(BaseModel):
     def _v_provider(cls, v: str) -> str:
         s = v.strip()
         if not s:
-            raise ValueError("voice provider не может быть пустым")
+            raise ValueError('voice provider cannot be empty')
         # Для voice разрешены платформенные литералы (litserve/cloud_ru/yandex/sber/silero_local/mock)
         # и custom:<id> (только для stt/tts).
         if _is_custom_ref(s):
             return _validate_provider_ref(s, allow_custom=True)
         if not all(c.isalnum() or c in ("-", "_") for c in s) or len(s) > 32:
-            raise ValueError(f"voice provider {v!r} невалиден")
+            raise ValueError(f"voice provider {v!r} is invalid")
         return s
 
 
@@ -357,7 +357,7 @@ class CompanyCustomOpenAICompatibleProvider(BaseModel):
     def _v_id(cls, v: str) -> str:
         s = v.strip()
         if not all(c.isalnum() or c in ("-", "_") for c in s):
-            raise ValueError(f"custom provider id {v!r} невалиден (a-z A-Z 0-9 _ -)")
+            raise ValueError(f"custom provider id {v!r} is invalid (a-z A-Z 0-9 _ -)")
         return s
 
     @field_validator("base_url")
@@ -365,7 +365,7 @@ class CompanyCustomOpenAICompatibleProvider(BaseModel):
     def _v_base_url(cls, v: str) -> str:
         s = v.strip()
         if not (s.startswith("http://") or s.startswith("https://")):
-            raise ValueError("base_url должен начинаться с http:// или https://")
+            raise ValueError('base_url must start with http:// or https://')
         return s
 
     @field_validator("rerank_path")
@@ -377,16 +377,16 @@ class CompanyCustomOpenAICompatibleProvider(BaseModel):
         if not s:
             return None
         if not s.startswith("/"):
-            raise ValueError("rerank_path должен начинаться с /")
+            raise ValueError('rerank_path must start with /')
         return s
 
     @model_validator(mode="after")
     def _v_consistency(self) -> "CompanyCustomOpenAICompatibleProvider":
         if "rerank" in self.capabilities and not self.rerank_path:
-            raise ValueError("capabilities содержит 'rerank', но rerank_path не задан")
+            raise ValueError("capabilities contains 'rerank' but rerank_path is not set")
         for cap in self.model_by_capability.keys():
             if cap not in _CAPABILITY_VALUES:
-                raise ValueError(f"model_by_capability: неизвестная capability {cap!r}")
+                raise ValueError(f"model_by_capability: unknown capability {cap!r}")
         return self
 
 
@@ -415,7 +415,7 @@ class CompanyAIProviders(BaseModel):
         ids = [p.id for p in self.custom_providers]
         if len(ids) != len(set(ids)):
             dups = sorted({i for i in ids if ids.count(i) > 1})
-            raise ValueError(f"custom_providers: дубликаты id {dups}")
+            raise ValueError(f"custom_providers: duplicate ids {dups}")
         custom_index = {p.id: p for p in self.custom_providers}
 
         for cap, ov in (
@@ -453,7 +453,7 @@ class CompanyAIProviders(BaseModel):
                     ov_v.provider, capability=cap, custom_index=custom_index
                 )
         if self.voice_vad is not None and _is_custom_ref(self.voice_vad.provider):
-            raise ValueError("voice_vad: custom провайдеры не поддерживаются")
+            raise ValueError('voice_vad: custom providers are not supported')
 
         return self
 
@@ -470,12 +470,12 @@ class CompanyAIProviders(BaseModel):
         cid = _custom_ref_id(ref)
         if cid not in custom_index:
             raise ValueError(
-                f"capability={capability}: ссылка {ref!r} не найдена в custom_providers"
+                f"capability={capability}: ref {ref!r} not found in custom_providers"
             )
         prov = custom_index[cid]
         if capability not in prov.capabilities:
             raise ValueError(
-                f"capability={capability}: custom_provider {cid!r} не поддерживает её "
+                f"capability={capability}: custom_provider {cid!r} does not support it "
                 + f"(capabilities={prov.capabilities})"
             )
 
@@ -500,7 +500,7 @@ class CompanyAIProviders(BaseModel):
         for p in self.custom_providers:
             if p.id == custom_id:
                 return p
-        raise KeyError(f"custom provider {custom_id!r} не найден")
+        raise KeyError(f"custom provider {custom_id!r} not found")
 
     def get_capability_override(
         self, capability: AICapability

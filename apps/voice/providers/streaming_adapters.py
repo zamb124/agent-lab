@@ -50,7 +50,7 @@ class StreamingSTTProvider(BaseSTTProvider):
         language: str | None = None,
     ) -> None:
         if sample_rate <= 0:
-            raise ValueError("StreamingSTTProvider: sample_rate должен быть > 0.")
+            raise ValueError("StreamingSTTProvider: sample_rate must be > 0.")
         self._stt_client: BaseSTTClient = stt_client
         self._sample_rate: int = sample_rate
         self._language: str | None = language
@@ -99,7 +99,7 @@ class StreamingSTTProvider(BaseSTTProvider):
         """
         if min_buffer_bytes <= 0:
             raise ValueError(
-                "StreamingSTTProvider.peek_transcript: min_buffer_bytes должен быть > 0"
+                "StreamingSTTProvider.peek_transcript: min_buffer_bytes must be > 0"
             )
         if len(self._audio_buffer) < min_buffer_bytes:
             return None
@@ -140,9 +140,9 @@ class StreamingTTSProvider(BaseTTSProvider):
     @override
     async def synthesize(self, text: str) -> bytes:
         if not self._initialized:
-            raise RuntimeError("StreamingTTSProvider не инициализирован (вызовите init).")
+            raise RuntimeError("StreamingTTSProvider is not initialized (call init).")
         if text == "":
-            raise ValueError("StreamingTTSProvider: пустой text.")
+            raise ValueError("StreamingTTSProvider: empty text.")
         result = await self._tts_client.synthesize(text=text)
         return result.audio_bytes
 
@@ -196,28 +196,28 @@ class StreamingVADProvider(BaseVADProvider):
     ) -> None:
         if sample_rate not in (8000, 16000):
             raise ValueError(
-                "StreamingVADProvider: sample_rate должен быть 8000 или 16000."
+                "StreamingVADProvider: sample_rate must be 8000 or 16000."
             )
         if not vad_client.supports_streaming:
             raise ValueError(
                 f"StreamingVADProvider: vad_client {type(vad_client).__name__} "
-                + "не поддерживает streaming (supports_streaming=False); используйте "
-                + "silero_local или mock."
+                + "does not support streaming (supports_streaming=False); use "
+                + "silero_local or mock."
             )
         if not 0.0 <= activation_threshold <= 1.0:
-            raise ValueError("activation_threshold должен быть в [0.0, 1.0].")
+            raise ValueError("activation_threshold must be in [0.0, 1.0].")
         if not 0.0 <= deactivation_threshold <= 1.0:
-            raise ValueError("deactivation_threshold должен быть в [0.0, 1.0].")
+            raise ValueError("deactivation_threshold must be in [0.0, 1.0].")
         if deactivation_threshold > activation_threshold:
             raise ValueError(
-                "deactivation_threshold должен быть ≤ activation_threshold (гистерезис)."
+                "deactivation_threshold must be ≤ activation_threshold (hysteresis)."
             )
         if min_speech_ms < 0:
-            raise ValueError("min_speech_ms должен быть ≥ 0.")
+            raise ValueError("min_speech_ms must be ≥ 0.")
         if min_silence_ms < 0:
-            raise ValueError("min_silence_ms должен быть ≥ 0.")
+            raise ValueError("min_silence_ms must be ≥ 0.")
         if prefix_padding_ms < 0:
-            raise ValueError("prefix_padding_ms должен быть ≥ 0.")
+            raise ValueError("prefix_padding_ms must be ≥ 0.")
 
         self._vad_client: BaseVADClient = vad_client
         self._sample_rate: int = sample_rate
@@ -244,7 +244,7 @@ class StreamingVADProvider(BaseVADProvider):
     async def detect_speech(self, audio_pcm: bytes, sample_rate: int) -> bool:
         if sample_rate != self._sample_rate:
             raise ValueError(
-                f"StreamingVADProvider: ожидается sample_rate={self._sample_rate}, получено {sample_rate}."
+                f"StreamingVADProvider: expected sample_rate={self._sample_rate}, got {sample_rate}."
             )
 
         async with self._lock:

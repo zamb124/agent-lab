@@ -39,7 +39,8 @@ class OutputActionExecutor:
             if action.condition:
                 if not evaluate_output_action_condition(action.condition, state):
                     logger.debug(
-                        f"Output action {action.action} skipped: condition not met"
+                        "trigger.output_action.skipped",
+                        action=action.action,
                     )
                     continue
 
@@ -61,10 +62,10 @@ class OutputActionExecutor:
                     state=state,
                 )
                 ch_label = action.channel.value
-                logger.info(f"Output action {ch_label}:{action.action} executed")
+                logger.info("flows.trigger.output_executed", channel=ch_label, action=action.action)
                 results.append({"action": action.action, "result": result})
             except Exception as e:
-                logger.error(f"Output action {action.action} failed: {e}")
+                logger.error("flows.trigger.output_failed", action=action.action, error=str(e))
                 results.append({"action": action.action, "error": str(e)})
 
         return results

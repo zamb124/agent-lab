@@ -15,12 +15,12 @@ from apps.office.dependencies import ContainerDep
 from apps.office.services.viewer_frame import render_viewer_frame_html
 from apps.office.services.viewer_handlers._urls import viewer_save_url, viewer_stream_url
 from apps.office.services.viewer_handlers.text_handler import TEXT_MAX_EDIT_BYTES
-from apps.office.services.viewer_service import browser_public_base_url
 from core.clients.onlyoffice import OnlyOfficeJwtError
 from core.documents.viewer.jwt import decode_viewer_save_token, decode_viewer_stream_token
 from core.documents.viewer.models import OfficeViewerSaveTokenClaims, OfficeViewerStreamTokenClaims
 from core.files.s3_client import S3ClientFactory
 from core.logging import get_logger
+from core.middleware.auth.company_resolver import build_service_base_url
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["office-viewer"])
@@ -33,30 +33,30 @@ async def viewer_stream(
 ) -> Response:
     integ = get_office_settings().office
     if not integ.jwt_secret.strip():
-        raise HTTPException(status_code=503, detail="office не настроен")
+        raise HTTPException(status_code=503, detail="office is not configured")
     try:
         claims = decode_viewer_stream_token(token, integ.jwt_secret)
     except OnlyOfficeJwtError as exc:
-        raise HTTPException(status_code=401, detail="Недействительный viewer token") from exc
+        raise HTTPException(status_code=401, detail="Invalid viewer token") from exc
     await _authorize_viewer_claims(container, claims)
     meta = await container.files_service.get_optional(claims.file_id)
     if meta is None:
-        raise HTTPException(status_code=404, detail="Файл не найден")
+        raise HTTPException(status_code=404, detail="File not found")
     if meta.company_id != claims.company_id:
-        raise HTTPException(status_code=403, detail="Доступ запрещён")
+        raise HTTPException(status_code=403, detail="Access denied")
     s3 = S3ClientFactory.create_client_for_bucket(meta.s3_bucket)
     try:
         body = await s3.download_bytes(meta.s3_key)
     except ClientError as exc:
         code = exc.response["Error"]["Code"]
         logger.warning(
-            "viewer-stream: S3 error file_id=%s bucket=%s key=%s code=%s",
-            claims.file_id,
-            meta.s3_bucket,
-            meta.s3_key,
-            code,
+            "office.viewer.stream.s3.error.file_id",
+            file_id=claims.file_id,
+            bucket=meta.s3_bucket,
+            key=meta.s3_key,
+            code=code,
         )
-        raise HTTPException(status_code=502, detail=f"S3 не отдал объект: {code}") from exc
+        raise HTTPException(status_code=502, detail=f"S3 did not return the object: {code}") from exc
     finally:
         await s3.close()
     content_type = claims.content_type or meta.content_type or "application/octet-stream"
@@ -78,16 +78,16 @@ async def viewer_frame(
 ) -> HTMLResponse:
     integ = get_office_settings().office
     if not integ.jwt_secret.strip():
-        raise HTTPException(status_code=503, detail="office не настроен")
+        raise HTTPException(status_code=503, detail="office is not configured")
     try:
         claims = decode_viewer_stream_token(token, integ.jwt_secret)
     except OnlyOfficeJwtError as exc:
-        raise HTTPException(status_code=401, detail="Недействительный viewer token") from exc
+        raise HTTPException(status_code=401, detail="Invalid viewer token") from exc
     await _authorize_viewer_claims(container, claims)
     meta = await container.files_service.get_optional(claims.file_id)
     if meta is None:
-        raise HTTPException(status_code=404, detail="Файл не найден")
-    base = browser_public_base_url(request)
+        raise HTTPException(status_code=404, detail="File not found")
+    base = build_service_base_url(request)
     stream_url = viewer_stream_url(
         base_url=base,
         handler=claims.handler,
@@ -128,25 +128,25 @@ async def viewer_save(
 ) -> Response:
     integ = get_office_settings().office
     if not integ.jwt_secret.strip():
-        raise HTTPException(status_code=503, detail="office не настроен")
+        raise HTTPException(status_code=503, detail="office is not configured")
     try:
         claims = decode_viewer_save_token(token, integ.jwt_secret)
     except OnlyOfficeJwtError as exc:
-        raise HTTPException(status_code=401, detail="Недействительный viewer save token") from exc
+        raise HTTPException(status_code=401, detail="Invalid viewer save token") from exc
     await _authorize_viewer_claims(container, claims)
     body = await request.body()
     if len(body) == 0:
-        raise HTTPException(status_code=400, detail="Пустое тело сохранения")
+        raise HTTPException(status_code=400, detail="Empty save body")
     if len(body) > TEXT_MAX_EDIT_BYTES:
         raise HTTPException(
             status_code=413,
-            detail=f"Размер текста превышает лимит {TEXT_MAX_EDIT_BYTES} байт",
+            detail=f"Text size exceeds the limit {TEXT_MAX_EDIT_BYTES} bytes",
         )
     meta = await container.files_service.get_optional(claims.file_id)
     if meta is None:
-        raise HTTPException(status_code=404, detail="Файл не найден")
+        raise HTTPException(status_code=404, detail="File not found")
     if meta.company_id != claims.company_id:
-        raise HTTPException(status_code=403, detail="Доступ запрещён")
+        raise HTTPException(status_code=403, detail="Access denied")
     content_type = meta.content_type or "text/plain"
     normalized_content_type = content_type.split(";", 1)[0].strip()
     digest = hashlib.sha256(body).hexdigest()
@@ -176,13 +176,13 @@ async def _authorize_viewer_claims(
             claims.public_link_token_hash,
         )
         if binding_row is None:
-            raise HTTPException(status_code=403, detail="Доступ запрещён")
+            raise HTTPException(status_code=403, detail="Access denied")
         if binding_row.file_id != claims.file_id:
-            raise HTTPException(status_code=403, detail="Доступ запрещён")
+            raise HTTPException(status_code=403, detail="Access denied")
         if binding_row.company_id != claims.company_id:
-            raise HTTPException(status_code=403, detail="Доступ запрещён")
+            raise HTTPException(status_code=403, detail="Access denied")
         if binding_row.link_permission == "viewer" and isinstance(claims, OfficeViewerSaveTokenClaims):
-            raise HTTPException(status_code=403, detail="Сохранение запрещено")
+            raise HTTPException(status_code=403, detail="Save is forbidden")
         return
 
     if claims.viewer_scope == "catalog":
@@ -191,8 +191,8 @@ async def _authorize_viewer_claims(
             claims.company_id,
         )
         if binding_row is None:
-            raise HTTPException(status_code=403, detail="Доступ запрещён")
+            raise HTTPException(status_code=403, detail="Access denied")
         return
     if claims.viewer_scope == "file":
         return
-    raise HTTPException(status_code=403, detail="Доступ запрещён")
+    raise HTTPException(status_code=403, detail="Access denied")

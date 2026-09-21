@@ -13,6 +13,8 @@ import '@platform/lib/components/platform-json-editor.js';
 import { FrontendSystemAccessModal } from '../../modals/system-access-modal.js';
 import { FrontendBalanceGrantModal } from '../../modals/balance-grant-modal.js';
 
+const COMPANIES_PAGE_SIZE = 50;
+
 const TABS = Object.freeze(['companies', 'prices_rules', 'usage']);
 const BILLING_RULE_ATTR_SUGGESTIONS = Object.freeze([
     'platform.billing.quantity',
@@ -595,7 +597,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         super.updated && super.updated(changed);
         if (this._tab === 'companies' && !this._loadedTabs.has('companies')) {
             this._loadedTabs.add('companies');
-            this._companies.run({ offset: 0, append: false });
+            this._companies.run({ limit: COMPANIES_PAGE_SIZE, offset: 0 });
         }
         if (this._tab === 'prices_rules' && !this._loadedTabs.has('prices_rules')) {
             this._loadedTabs.add('prices_rules');
@@ -603,11 +605,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         }
         if (this._tab === 'usage' && !this._loadedTabs.has('usage')) {
             this._loadedTabs.add('usage');
-            this._usage.run({
-                filters: this._usageFilters,
-                offset: 0,
-                limit: this._usage.state.limit,
-            });
+            this._usage.run(this._usagePayload(0, this._usage.state.limit));
         }
     }
 
@@ -653,11 +651,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
             this._rules.run({ company_id: companyId }),
         ]);
         if (this._tab === 'usage') {
-            this._usage.run({
-                filters: this._usageFilters,
-                offset: 0,
-                limit: this._usage.state.limit,
-            });
+            this._usage.run(this._usagePayload(0, this._usage.state.limit));
         }
     }
 
@@ -854,13 +848,13 @@ export class FrontendBillingAdminPage extends PlatformPage {
                         </div>
                     `}
                 <div class="actions">
-                    <button class="btn" ?disabled=${busy} @click=${() => this._companies.run({ offset: 0, append: false })}>
+                    <button class="btn" ?disabled=${busy} @click=${() => this._companies.run({ limit: COMPANIES_PAGE_SIZE, offset: 0 })}>
                         <platform-icon name="refresh" size="16"></platform-icon>
                         ${this.t('platform_billing_page.reload')}
                     </button>
                     ${hasMore ? html`
                         <button class="btn primary" ?disabled=${busy}
-                            @click=${() => this._companies.run({ offset, append: true })}>
+                            @click=${() => this._companies.run({ limit: COMPANIES_PAGE_SIZE, offset })}>
                             ${this.t('platform_billing_page.companies_load_more')}
                         </button>
                     ` : null}
@@ -1130,7 +1124,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
 
     _saveGlobalPrices() {
         try {
-            this._pricesGlobalSave.run(this._buildCatalog(this._pricesDraft));
+            this._pricesGlobalSave.run({ catalog: this._buildCatalog(this._pricesDraft) });
         } catch (_err) {
             this.toast('platform_billing_page.price_invalid_row', { type: 'error' });
         }
@@ -1140,7 +1134,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         try {
             this._companyPricesSave.run({
                 company_id: this._companyId,
-                body: this._buildCatalog(this._companyPricesDraft),
+                catalog: this._buildCatalog(this._companyPricesDraft),
             });
         } catch (_err) {
             this.toast('platform_billing_page.price_invalid_row', { type: 'error' });
@@ -2016,16 +2010,16 @@ export class FrontendBillingAdminPage extends PlatformPage {
         const draft = typeof this._rulesDraft === 'string' ? this._rulesDraft : '';
         const text = draft.trim();
         if (!text) return;
-        let body;
+        let document;
         try {
-            body = JSON.parse(text);
+            document = JSON.parse(text);
         } catch (_err) {
             this._rulesDraftError = this.t('platform_billing_page.rules_parse_error');
             this.toast('platform_billing_page.rules_parse_error', { type: 'error' });
             return;
         }
         this._rulesDraftError = '';
-        await this._rulesSave.run({ company_id: this._companyId, body });
+        await this._rulesSave.run({ company_id: this._companyId, document });
     }
 
     async _loadRulesDefault() {
@@ -2183,23 +2177,24 @@ export class FrontendBillingAdminPage extends PlatformPage {
         return { rows: items.length, quantity, cost, companies: companies.size };
     }
 
+    _usagePayload(offset, limit) {
+        const payload = { limit, offset };
+        for (const key of ['company_id', 'usage_type', 'resource_name', 'from_time', 'to_time']) {
+            const value = this._usageFilters[key];
+            if (typeof value === 'string' && value !== '') payload[key] = value;
+        }
+        return payload;
+    }
+
     _applySelectedCompanyToUsage() {
         if (!this._companyId) return;
         this._usageFilters = { ...this._usageFilters, company_id: this._companyId };
-        this._usage.run({
-            filters: this._usageFilters,
-            offset: 0,
-            limit: this._usage.state.limit,
-        });
+        this._usage.run(this._usagePayload(0, this._usage.state.limit));
     }
 
     _clearUsageFilters() {
         this._usageFilters = {};
-        this._usage.run({
-            filters: this._usageFilters,
-            offset: 0,
-            limit: this._usage.state.limit,
-        });
+        this._usage.run(this._usagePayload(0, this._usage.state.limit));
     }
 
     _renderUsageSummary(summary) {
@@ -2247,7 +2242,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                 </div>
                 <div class="actions">
                     <button class="btn primary" ?disabled=${this._usage.busy}
-                        @click=${() => this._usage.run({ filters: this._usageFilters, offset: 0, limit })}>
+                        @click=${() => this._usage.run(this._usagePayload(0, limit))}>
                         <platform-icon name="search" size="16"></platform-icon>
                         ${this.t('platform_billing_page.apply')}
                     </button>
@@ -2306,7 +2301,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                             </div>
                             <div class="actions">
                                 <button class="btn" ?disabled=${offset === 0 || this._usage.busy}
-                                    @click=${() => this._usage.run({ filters: this._usageFilters, offset: Math.max(0, offset - limit), limit })}>
+                                    @click=${() => this._usage.run(this._usagePayload(Math.max(0, offset - limit), limit))}>
                                     <platform-icon name="chevron-left" size="16"></platform-icon>
                                     ${this.t('platform_billing_page.usage_prev')}
                                 </button>
@@ -2314,7 +2309,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                                     ${this.t('platform_billing_page.usage_page_info', { from: offset + 1, to: offset + items.length })}
                                 </span>
                                 <button class="btn" ?disabled=${items.length < limit || this._usage.busy}
-                                    @click=${() => this._usage.run({ filters: this._usageFilters, offset: offset + limit, limit })}>
+                                    @click=${() => this._usage.run(this._usagePayload(offset + limit, limit))}>
                                     ${this.t('platform_billing_page.usage_next')}
                                     <platform-icon name="chevron-right" size="16"></platform-icon>
                                 </button>

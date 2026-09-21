@@ -17,7 +17,6 @@ from apps.flows.realtime.datasource_operations import (
     op_flows_datasources_test,
     op_flows_datasources_update,
 )
-from apps.flows.realtime.operations import FlowsEmptyPayload
 from apps.flows.src.dependencies import ContainerDep
 from core.context import require_context
 from core.datasources.models import (
@@ -37,6 +36,7 @@ from core.datasources.models import (
     DatasourceTestResult,
 )
 from core.pagination import ListResponse, OffsetPage
+from core.websocket import EmptyPayload
 
 router = APIRouter(tags=["datasources"])
 
@@ -46,7 +46,7 @@ async def list_datasource_connectors(
     container: ContainerDep,
 ) -> ListResponse[DatasourceConnectorSpec]:
     return await op_flows_datasources_connectors_list(
-        FlowsEmptyPayload(),
+        EmptyPayload(),
         user=require_context().user,
         container=container,
     )

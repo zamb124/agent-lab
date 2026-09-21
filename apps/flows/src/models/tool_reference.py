@@ -304,14 +304,6 @@ class ToolDeletedResponse(StrictBaseModel):
     tool_id: str
 
 
-class ToolTagGroupResponse(StrictBaseModel):
-    tag: str
-    description_ru: str
-    description_en: str
-    updated_at: str
-    content_hash: str
-
-
 class ToolsListPayload(StrictBaseModel):
     limit: int = Field(default=500, ge=1, le=2000)
     offset: int = Field(default=0, ge=0)

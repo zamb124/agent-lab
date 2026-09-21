@@ -6,7 +6,6 @@ from fastapi import APIRouter
 
 from apps.search.dependencies import ContainerDep
 from apps.search.realtime.operations import (
-    SearchEmptyPayload,
     SearchOkResult,
     SearchProviderIdPayload,
     SearchProviderOrderPayload,
@@ -19,13 +18,14 @@ from apps.search.realtime.operations import (
 )
 from core.company_search import CompanySearchProvidersResponse, SearchProviderId
 from core.context import require_context
+from core.websocket import EmptyPayload
 
 router = APIRouter(prefix="/providers/company", tags=["search-providers"])
 
 
 @router.get("", response_model=CompanySearchProvidersResponse)
 async def get_company_search_providers(container: ContainerDep) -> CompanySearchProvidersResponse:
-    return await op_providers_list(SearchEmptyPayload(), user=require_context().user, container=container)
+    return await op_providers_list(EmptyPayload(), user=require_context().user, container=container)
 
 
 @router.put("/order", response_model=SearchOkResult)

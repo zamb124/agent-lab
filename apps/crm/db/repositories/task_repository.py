@@ -34,7 +34,7 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
     def _get_company_id(self) -> str:
         context = get_context()
         if not context or not context.active_company:
-            raise ValueError("Нет активной компании в контексте")
+            raise ValueError("No active company in context")
         return context.active_company.company_id
 
     @staticmethod

@@ -27,11 +27,11 @@ async def file_retention_purge_tick(
     container = get_container()
     result = await container.file_purge_service.purge_expired_batch()
     logger.info(
-        "file_retention_purge_tick done: purged=%s failed=%s schedule_task_id=%s company_id=%s",
-        result.purged_count,
-        len(result.failed_file_ids),
-        schedule_task_id,
-        company_id,
+        "idle.file_retention_purge_tick",
+        purged=result.purged_count,
+        failed=len(result.failed_file_ids),
+        schedule_task_id=schedule_task_id,
+        company_id=company_id,
     )
     return {
         "purged_count": result.purged_count,
@@ -50,12 +50,12 @@ async def file_retention_backfill_tick(
     backfill = FileRetentionBackfillService(file_repository=container.file_repository)
     result = await backfill.backfill_batch(limit=batch_limit)
     logger.info(
-        "file_retention_backfill_tick done: scanned=%s updated=%s skipped=%s schedule_task_id=%s company_id=%s",
-        result.scanned,
-        result.updated,
-        result.skipped,
-        schedule_task_id,
-        company_id,
+        "idle.file_retention_backfill_tick",
+        scanned=result.scanned,
+        updated=result.updated,
+        skipped=result.skipped,
+        schedule_task_id=schedule_task_id,
+        company_id=company_id,
     )
     return {
         "scanned": result.scanned,

@@ -152,7 +152,7 @@ class _LazyProperty(Generic[_LazyT]):
         if cached is _UNSET:
             cached = self._func(cast(Never, instance))
             instance_dict[self._attr_name] = cached
-            logger.debug(f"{self._func.__name__} инициализирован")
+            logger.debug("container.lazy_init", name=self._func.__name__)
         return cast(_LazyT, cached)
 
 
@@ -253,7 +253,7 @@ class BaseContainer:
         """Storage только для platform_tracing (spans), не shared."""
         url = get_settings().database.tracing_url
         if not url:
-            raise ValueError("DATABASE__TRACING_URL не задан в конфигурации")
+            raise ValueError('DATABASE__TRACING_URL is not set in configuration')
         return Storage(db_url=url, get_context_func=get_context)
 
     # === Репозитории (shared БД) ===
@@ -659,7 +659,7 @@ class BaseContainer:
         router = generator.generate_router()
         self._crud_routers[repository_name] = router
 
-        logger.debug(f"CRUD роутер зарегистрирован: {repository_name} -> {prefix}")
+        logger.debug("container.crud_router_registered", repository_name=repository_name, prefix=prefix)
 
     def get_crud_routers(self) -> list[APIRouter]:
         """

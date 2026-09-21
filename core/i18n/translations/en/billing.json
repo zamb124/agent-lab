@@ -83,6 +83,8 @@
             "llm": "LLM generation",
             "embedding": "embeddings",
             "vision": "image processing",
+            "image": "image generation",
+            "speech": "speech recognition and synthesis",
             "livekit_room": "call room",
             "livekit_egress": "call recording",
             "search": "web search",

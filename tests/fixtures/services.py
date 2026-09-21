@@ -193,6 +193,13 @@ def secrets_service(setup_database_before_tests):
 
 
 @pytest.fixture(scope="session")
+def scheduler_service(setup_database_before_tests):
+    """Scheduler control-plane на 9006 (расписания компании)."""
+    _ = setup_database_before_tests
+    require_http_service("scheduler", 9006)
+
+
+@pytest.fixture(scope="session")
 def office_service():
     """Documents/Office на 9008 (OnlyOffice BFF)."""
     require_http_service("office", 9008)

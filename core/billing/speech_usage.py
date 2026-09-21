@@ -12,10 +12,20 @@ from collections.abc import Mapping
 
 import core.tracing.attributes as trace_attributes
 from core.billing.service import COST_ORIGIN_COMPANY
+from core.context import get_context
 from core.models.billing_models import BillingCostOrigin, UsageType
 from core.models.identity_models import Company, User
 from core.tracing.operation_span import traced_operation
 from core.types import OtelAttributeValue
+
+
+def require_speech_billing_subjects() -> tuple[User, Company]:
+    ctx = get_context()
+    if ctx is None or ctx.active_company is None:
+        raise ValueError('speech billing: Context with active_company is required')
+    if not str(ctx.user.user_id).strip():
+        raise ValueError('speech billing: Context with user is required')
+    return ctx.user, ctx.active_company
 
 
 def _speech_attributes(
@@ -41,7 +51,7 @@ async def record_stt_usage_span(
 ) -> None:
     """Span `stt.{provider}`: quantity — секунды аудио, округлённые вверх (минимум 1)."""
     if not provider:
-        raise ValueError("record_stt_usage_span: provider обязателен")
+        raise ValueError('record_stt_usage_span: provider is required')
     if audio_seconds < 0:
         raise ValueError("record_stt_usage_span: audio_seconds < 0")
     resource = "stt:byok" if cost_origin == COST_ORIGIN_COMPANY else f"stt:{provider}"
@@ -76,7 +86,7 @@ async def record_tts_usage_span(
 ) -> None:
     """Span `tts.{provider}`: quantity — символы синтеза (минимум 1)."""
     if not provider:
-        raise ValueError("record_tts_usage_span: provider обязателен")
+        raise ValueError('record_tts_usage_span: provider is required')
     if char_count < 0:
         raise ValueError("record_tts_usage_span: char_count < 0")
     resource = "tts:byok" if cost_origin == COST_ORIGIN_COMPANY else f"tts:{provider}"

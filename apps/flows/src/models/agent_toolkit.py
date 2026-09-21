@@ -69,3 +69,19 @@ class AgentToolkitUpdatePayload(AgentToolkitUpdateRequest):
 class AgentToolkitDeletedResponse(StrictBaseModel):
     status: Literal["deleted"]
     toolkit_id: str
+
+
+class AgentToolkitCatalogListPayload(StrictBaseModel):
+    """Каталог для LinnexAgent: MCP URL строятся под публичный origin фронта вызывающего."""
+
+    frontend_base_url: str = Field(min_length=1)
+    desktop_only: bool = False
+
+
+class AgentToolkitCatalogItem(StrictBaseModel):
+    toolkit_id: str
+    name: str
+    description: str
+    default_enabled: bool
+    position: int
+    mcp_url: str

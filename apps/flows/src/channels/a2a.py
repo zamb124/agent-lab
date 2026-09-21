@@ -57,7 +57,7 @@ from core.a2a import (
 from core.config.testing import is_testing
 from core.context import Context, require_context, set_current_channel
 from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
-from core.files.file_ref import FileRef, file_id_from_download_url
+from core.files.file_ref import FileRef, file_id_from_download_url, stored_file_ref
 from core.files.registry import default_retention_for_source
 from core.flow_ui.action import ui_action_from_message
 from core.flow_ui.projection import assert_fields_outside_redacted
@@ -356,7 +356,7 @@ class A2AChannel(BaseChannel):
     ) -> None:
         _ = buttons, attachments
         if not self.context:
-            logger.warning("Cannot send_to_user: no context available")
+            logger.warning("flows.cannot.send_to_user.context.available")
             return
 
         task_id = self.context.metadata.get("task_id")
@@ -394,7 +394,7 @@ class A2AChannel(BaseChannel):
         item = await self.container.work_item_service.get(company_id, work_item_id)
         ref = build_conversation_ref(item)
         if ref is None:
-            raise ValueError(f"WorkItem {work_item_id!r} без ссылки на разговор сессии")
+            raise ValueError(f"WorkItem {work_item_id!r} without a session conversation reference")
         source_message_id = (
             prepared.message.message_id
             if prepared.message is not None
@@ -408,15 +408,10 @@ class A2AChannel(BaseChannel):
             text=prepared.content,
             source_message_id=source_message_id,
         )
-        logger.info(
-            "[on_message_stream] takeover user-reply appended to session log, "
-            + "task_id=%s, work_item=%s",
-            prepared.task_id,
-            work_item_id,
-        )
+        logger.info("flows.on_message_stream.takeover.user.reply.appended", task_id=prepared.task_id, work_item=work_item_id)
         parked_task_id = ref.a2a_task_id
         if not isinstance(parked_task_id, str) or parked_task_id.strip() == "":
-            raise ValueError(f"WorkItem {work_item_id!r} без a2a_task_id для takeover reply")
+            raise ValueError(f"WorkItem {work_item_id!r} without a2a_task_id for takeover reply")
         parked_state = await self._operator_task_interrupt_state(
             company_id=company_id,
             context_id=ref.context_id,
@@ -450,7 +445,7 @@ class A2AChannel(BaseChannel):
 
         if not self.context or not self.context.active_company:
             raise ValueError(
-                "Загрузка вложений A2A требует active_company в контексте запроса"
+                "A2A attachment upload requires active_company in the request context"
             )
 
         company_id = self.context.active_company.company_id
@@ -458,7 +453,7 @@ class A2AChannel(BaseChannel):
 
         context_id = message.context_id.strip()
         if not context_id:
-            raise ValueError("A2A Part.raw/url требует message.context_id для FLOW_SESSION")
+            raise ValueError("A2A Part.raw/url requires message.context_id for FLOW_SESSION")
         session_id = f"{self.flow_id}:{context_id}"
 
         for inc in incoming:
@@ -466,14 +461,14 @@ class A2AChannel(BaseChannel):
             content_type = inc.content_type
             if data is None:
                 if not inc.uri:
-                    raise ValueError("Part.url без uri")
+                    raise ValueError("Part.url has no uri")
                 linked_file_id = file_id_from_download_url(inc.uri)
                 if linked_file_id:
                     record = await self.container.files_service.get_optional(linked_file_id)
                     if record is None:
-                        raise ValueError(f"Part.url с неизвестным file_id: {linked_file_id}")
+                        raise ValueError(f"Part.url with unknown file_id: {linked_file_id}")
                     if record.company_id != company_id:
-                        raise ValueError("Part.url file_id не принадлежит активной компании")
+                        raise ValueError("Part.url file_id does not belong to the active company")
                     files_data.append(
                         FileRef(
                             file_id=record.file_id,
@@ -492,7 +487,7 @@ class A2AChannel(BaseChannel):
                     content_type = fetched_ct
 
             if not content_type or not content_type.strip():
-                raise ValueError("Part.raw/url content_type (media_type) обязателен для state.files")
+                raise ValueError("Part.raw/url content_type (media_type) is required for state.files")
             spec = FileCreateSpec(
                 source_kind=FileSourceKind.FLOW_SESSION,
                 source_ref=FileSourceRef(
@@ -508,14 +503,14 @@ class A2AChannel(BaseChannel):
                 original_name=inc.original_name,
                 content_type=content_type.strip(),
             )
-            files_data.append(FileRef.from_record(record))
+            files_data.append(stored_file_ref(record))
 
         return files_data, format_a2a_files_content(files_data)
 
     async def _transcribe_incoming_audio(self, files_data: list[FileRef]) -> str:
         if not self.context or not self.context.active_company:
             raise ValueError(
-                "Авто-STT входящих audio-вложений требует active_company в контексте запроса"
+                "Auto-STT of incoming audio attachments requires active_company in the request context"
             )
         return await transcribe_incoming_audio_files(
             container=self.container,
@@ -616,7 +611,7 @@ class A2AChannel(BaseChannel):
         collect_task = asyncio.create_task(collect_with_subscription())
         _ = await ready_event.wait()
 
-        logger.debug(f"[A2A] Subscribed to stream:{prepared.task_id}, kicking task")
+        logger.debug("flows.a2a.stream_subscribed", task_id=prepared.task_id)
         await self.create_task(prepared)
         projected = await self._projected_task(prepared.task_id)
         if _this_send_finished_in_process(prior, projected):
@@ -629,7 +624,7 @@ class A2AChannel(BaseChannel):
             return projected
 
         events = await collect_task
-        logger.debug(f"[A2A] Collected {len(events)} events for task {prepared.task_id}")
+        logger.debug("flows.a2a.events_collected", task_id=prepared.task_id, count=len(events))
         _ = events
         return await self._projected_task(prepared.task_id)
 
@@ -651,9 +646,7 @@ class A2AChannel(BaseChannel):
             return
         share_grant = await self._share_grant_for_context(prepared.context_id)
 
-        logger.info(
-            f"[on_message_stream] Prepared task_id={prepared.task_id}, subscribing to Redis..."
-        )
+        logger.info("flows.a2a.stream_subscribe", task_id=prepared.task_id)
         # A2A 1.0: первый кадр SendStreamingMessage — сам Task, дальше только события с
         # sequence > snapshot. Новый Task: snapshot sequence 0 (SUBMITTED, history с сообщением
         # пользователя, без артефактов). Возобновляемый Task (resume после interrupt): прежняя
@@ -678,9 +671,9 @@ class A2AChannel(BaseChannel):
 
         collect_task = asyncio.create_task(collect_events())
         try:
-            logger.info("[on_message_stream] Waiting for Redis subscription to be ready...")
+            logger.info("flows.on_message_stream.waiting.redis.subscription.ready")
             _ = await ready_event.wait()
-            logger.info("[on_message_stream] Redis subscription ready, creating task...")
+            logger.info("flows.on_message_stream.redis.subscription.ready.creating")
 
             await self.create_task(prepared)
             projected = await self._projected_task(prepared.task_id)
@@ -785,7 +778,7 @@ class A2AChannel(BaseChannel):
         self, params: CancelTaskRequest, context: ChannelRequestContext = None
     ) -> Task | None:
         _ = context
-        logger.info(f"Cancel task: {params.id}")
+        logger.info("flows.a2a.task_cancel", task_id=params.id)
 
         accessible = await self.on_get_task(GetTaskRequest(id=params.id))
         if accessible is None:
@@ -1004,7 +997,7 @@ class A2AChannel(BaseChannel):
         if self._share_grant_id() is not None:
             raise PermissionError("Shared sessions cannot manage push endpoints")
         config = await set_push_config(params)
-        logger.info(f"Set push notification config for task: {params.task_id}")
+        logger.info("flows.a2a.push_config_set", task_id=params.task_id)
         return config
 
     @override
@@ -1017,7 +1010,7 @@ class A2AChannel(BaseChannel):
         if self._share_grant_id() is not None:
             raise PermissionError("Shared sessions cannot manage push endpoints")
         config = await get_push_config(params)
-        logger.info(f"Get push notification config for task: {params.task_id}")
+        logger.info("flows.a2a.push_config_get", task_id=params.task_id)
         return config
 
     @override
@@ -1030,11 +1023,7 @@ class A2AChannel(BaseChannel):
         if self._share_grant_id() is not None:
             raise PermissionError("Shared sessions cannot manage push endpoints")
         result = await list_push_configs(params)
-        logger.info(
-            "List push notification configs for task: %s, found: %s",
-            params.task_id,
-            len(result.configs),
-        )
+        logger.info("flows.list.push.notification.configs.task", task_id=params.task_id, configs_count=len(result.configs))
         return result
 
     @override
@@ -1048,5 +1037,7 @@ class A2AChannel(BaseChannel):
             raise PermissionError("Shared sessions cannot manage push endpoints")
         await delete_push_config(params)
         logger.info(
-            f"Deleted push notification config: {params.id} for task: {params.task_id}"
+            "flows.a2a.push_config_deleted",
+            config_id=params.id,
+            task_id=params.task_id,
         )

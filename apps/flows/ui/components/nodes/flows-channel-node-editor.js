@@ -223,7 +223,8 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         });
         this.useEvent(MAIL_EVENTS.CONNECTION_LOADED, () => this.requestUpdate());
         this.useEvent(MAIL_EVENTS.BINDING_CREATED, () => {
-            this.dispatch(MAIL_EVENTS.BINDINGS_LOAD_REQUESTED, null);
+            this._maybeAutofillMailboxBinding();
+            this.requestUpdate();
         });
     }
 

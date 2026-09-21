@@ -363,7 +363,7 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
         )
         if src is None:
             raise ValueError(
-                f"EntityType {type_id!r} не найден в пространстве {source_namespace!r}"
+                f"EntityType {type_id!r} not found in namespace {source_namespace!r}"
             )
         existing = await self.get_by_type_id(
             type_id,

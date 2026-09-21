@@ -103,7 +103,7 @@ class AmoCRMIntegrationService:
     def _api_base(self, subdomain: str) -> str:
         s = subdomain.strip().strip("/")
         if not s:
-            raise ValueError("Пустой поддомен amo")
+            raise ValueError("Empty amo subdomain")
         return f"https://{s}.amocrm.ru"
 
     async def _get_token(
@@ -120,13 +120,13 @@ class AmoCRMIntegrationService:
             service=self._service_key(namespace_name),
         )
         if cred is None:
-            raise ValueError("Интеграция AmoCRM не подключена для этого пространства")
+            raise ValueError("AmoCRM integration is not connected for this namespace")
         sub_raw = cred.metadata.get("amocrm_subdomain")
         if not isinstance(sub_raw, str) or not sub_raw.strip():
-            raise ValueError("В credential нет amocrm_subdomain")
+            raise ValueError("credential has no amocrm_subdomain")
         access = cred.access_token
         if not access:
-            raise ValueError("Пустой access_token AmoCRM")
+            raise ValueError("Empty AmoCRM access_token")
         return access, sub_raw.strip()
 
     async def _get_json(
@@ -143,7 +143,7 @@ class AmoCRMIntegrationService:
                 },
             )
         if response.status_code == 429:
-            raise RuntimeError("AmoCRM rate limit (429), повторите позже")
+            raise RuntimeError("AmoCRM rate limit (429), retry later")
         _ = response.raise_for_status()
         if response.status_code == 204:
             return {}
@@ -310,19 +310,19 @@ class AmoCRMIntegrationService:
         amo_users_by_id: dict[str, dict[str, str]],
     ) -> str:
         if amo_author_id is None:
-            raise ValueError("AmoCRM: для импорта сущности нужен created_by (id пользователя Amo)")
+            raise ValueError("AmoCRM: entity import requires created_by (Amo user id)")
         key = str(amo_author_id).strip()
         if not key:
-            raise ValueError("AmoCRM: пустой created_by")
+            raise ValueError("AmoCRM: empty created_by")
         snap = amo_users_by_id.get(key)
         if snap is None:
             raise ValueError(
-                f"AmoCRM: пользователь аккаунта id={key} отсутствует в ответе GET /api/v4/users"
+                f"AmoCRM: account user id={key} is missing from GET /api/v4/users response"
             )
         email = snap.get("email", "").strip().lower()
         if not email:
             raise ValueError(
-                f"AmoCRM: у пользователя id={key} нет email в каталоге аккаунта, импорт без автора невозможен"
+                f"AmoCRM: user id={key} has no email in the account catalog; import without an author is not possible"
             )
         display_name = snap.get("name") or None
         if display_name == "":
@@ -504,7 +504,7 @@ class AmoCRMIntegrationService:
             for raw in self._embedded_list(payload, "tasks"):
                 tid = raw.get("id")
                 if tid is None:
-                    raise ValueError("AmoCRM: в задаче нет id")
+                    raise ValueError("AmoCRM: task has no id")
                 amo_parent_type = raw.get("entity_type")
                 amo_parent_id = raw.get("entity_id")
                 if amo_parent_id is None:
@@ -551,11 +551,11 @@ class AmoCRMIntegrationService:
                 tt_raw = raw.get("task_type_id")
                 if tt_raw is not None:
                     if not isinstance(tt_raw, (str, int, float)) or isinstance(tt_raw, bool):
-                        raise ValueError(f"AmoCRM: task_type_id не число для задачи {tid}")
+                        raise ValueError(f"AmoCRM: task_type_id is not a number for task {tid}")
                     try:
                         tt_int = int(tt_raw)
                     except (TypeError, ValueError) as exc:
-                        raise ValueError(f"AmoCRM: task_type_id не число для задачи {tid}") from exc
+                        raise ValueError(f"AmoCRM: task_type_id is not a number for task {tid}") from exc
                     attrs["amo_task_type_id"] = tt_int
                     tname = AMO_STANDARD_TASK_TYPE_NAMES.get(tt_int)
                     if tname is not None:
@@ -696,7 +696,7 @@ class AmoCRMIntegrationService:
     ) -> dict[str, int]:
         ctx = get_context()
         if ctx is None or ctx.active_company is None:
-            raise ValueError("Контекст пользователя обязателен")
+            raise ValueError("User context is required")
         company_id = ctx.active_company.company_id
         user_id = ctx.user.user_id
 
@@ -707,7 +707,7 @@ class AmoCRMIntegrationService:
                 namespace_name=namespace_name,
             )
         except OAuthTokenRefreshError as exc:
-            raise ValueError("Сессия AmoCRM устарела, подключите интеграцию снова") from exc
+            raise ValueError("AmoCRM session expired, reconnect the integration") from exc
 
         base = self._api_base(sub)
         stats: dict[str, int] = {
@@ -741,7 +741,7 @@ class AmoCRMIntegrationService:
         ) -> None:
             rid = raw.get("id")
             if rid is None:
-                raise ValueError("AmoCRM: в элементе нет id")
+                raise ValueError("AmoCRM: item has no id")
             nm = raw.get("name")
             name = str(nm) if isinstance(nm, str) and nm.strip() else f"lead {rid}"
             price = raw.get("price")
@@ -830,7 +830,7 @@ class AmoCRMIntegrationService:
         ) -> None:
             rid = raw.get("id")
             if rid is None:
-                raise ValueError("AmoCRM: в элементе нет id")
+                raise ValueError("AmoCRM: item has no id")
             parts = [raw.get("first_name"), raw.get("last_name")]
             nmp = " ".join(str(p) for p in parts if isinstance(p, str) and p.strip())
             name = nmp if nmp.strip() else f"contact {rid}"
@@ -898,7 +898,7 @@ class AmoCRMIntegrationService:
         ) -> None:
             rid = raw.get("id")
             if rid is None:
-                raise ValueError("AmoCRM: в элементе нет id")
+                raise ValueError("AmoCRM: item has no id")
             nm = raw.get("name")
             name = str(nm) if isinstance(nm, str) and nm.strip() else f"organization {rid}"
             org_attrs: JsonObject = {}
@@ -1065,7 +1065,7 @@ class AmoCRMIntegrationService:
         """
         ctx = get_context()
         if ctx is None or ctx.active_company is None:
-            raise ValueError("Контекст пользователя обязателен")
+            raise ValueError("User context is required")
         company_id = ctx.active_company.company_id
         user_id = ctx.user.user_id
 
@@ -1076,7 +1076,7 @@ class AmoCRMIntegrationService:
                 namespace_name=namespace_name,
             )
         except OAuthTokenRefreshError as exc:
-            raise ValueError("Сессия AmoCRM устарела, подключите интеграцию снова") from exc
+            raise ValueError("AmoCRM session expired, reconnect the integration") from exc
 
         base = self._api_base(sub)
         updated: dict[str, int] = {}

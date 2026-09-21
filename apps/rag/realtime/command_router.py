@@ -8,7 +8,6 @@ from apps.rag.realtime.operations import (
     RagDocumentRefPayload,
     RagDocumentsListPayload,
     RagDocumentStatusPayload,
-    RagEmptyPayload,
     RagGlobalSearchPayload,
     RagIndexFilePayload,
     RagIngestTextPayload,
@@ -32,7 +31,7 @@ from apps.rag.realtime.operations import (
 )
 from core.logging import get_logger
 from core.namespace.operations import NamespacesListPayload, op_namespaces_list
-from core.websocket import Operation, RegisteredOperation, register_service_operations
+from core.websocket import EmptyPayload, Operation, RegisteredOperation, register_service_operations
 
 logger = get_logger(__name__)
 
@@ -71,7 +70,7 @@ RAG_OPERATIONS: dict[str, RegisteredOperation[RAGContainer]] = {
         payload_model=DocumentStatusesBatchRequest, fn=op_documents_statuses
     ),
     "rag/search/defaults_requested": Operation(
-        payload_model=RagEmptyPayload, fn=op_search_defaults
+        payload_model=EmptyPayload, fn=op_search_defaults
     ),
     "rag/search/namespace_requested": Operation(
         payload_model=RagNamespaceSearchPayload, fn=op_search_namespace
@@ -80,14 +79,11 @@ RAG_OPERATIONS: dict[str, RegisteredOperation[RAGContainer]] = {
         payload_model=RagGlobalSearchPayload, fn=op_search_global
     ),
     "rag/providers/list_requested": Operation(
-        payload_model=RagEmptyPayload, fn=op_providers_list
+        payload_model=EmptyPayload, fn=op_providers_list
     ),
 }
 
 
 def register_rag_ws_commands() -> None:
     register_service_operations(RAG_OPERATIONS, get_rag_container)
-    logger.info(
-        "RAG WS command-handlers зарегистрированы (%d операций)",
-        len(RAG_OPERATIONS),
-    )
+    logger.info("rag.ws.command.handlers", RAG_OPERATIONS_count=len(RAG_OPERATIONS))

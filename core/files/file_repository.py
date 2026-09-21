@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import ClassVar, override
 
@@ -12,8 +13,18 @@ from core.db.base_repository import BaseRepository
 from core.db.storage import Storage
 from core.files.models import FileRecord, FileStatus
 from core.logging import get_logger
+from core.types import parse_json_object
 
 logger = get_logger(__name__)
+
+
+def file_record_storage_json(record: FileRecord) -> str:
+    """JSON записи для storage. s3_* исключены из model_dump и дописываются здесь."""
+    payload = parse_json_object(record.model_dump_json(), "FileRecord")
+    payload["s3_key"] = record.s3_key
+    payload["s3_bucket"] = record.s3_bucket
+    payload["s3_endpoint"] = record.s3_endpoint
+    return json.dumps(payload, ensure_ascii=False)
 
 
 class FileRepository(BaseRepository[FileRecord]):
@@ -46,6 +57,18 @@ class FileRepository(BaseRepository[FileRecord]):
     def _extract_entity_id(self, entity: FileRecord) -> str:
         return entity.file_id
 
+    @override
+    async def set(self, entity: FileRecord) -> bool:
+        entity_id = self._extract_entity_id(entity)
+        base_key = self._get_key(entity_id)
+        final_key = self._build_final_key(base_key)
+        table_name = self._get_table_name()
+        return await self._storage.set_with_table(
+            final_key,
+            file_record_storage_json(entity),
+            table_name,
+        )
+
     async def get_by_s3_key(self, provider: str, file_id: str) -> FileRecord | None:
         key = f"s3:{provider}:{file_id}"
         final_key = self._build_final_key(key)
@@ -62,8 +85,11 @@ class FileRepository(BaseRepository[FileRecord]):
         final_key = self._build_final_key(key)
         table_name = self._get_table_name()
 
-        data = file_record.model_dump_json()
-        return await self._storage.set_with_table(final_key, data, table_name)
+        return await self._storage.set_with_table(
+            final_key,
+            file_record_storage_json(file_record),
+            table_name,
+        )
 
     async def list_expired(self, *, before: datetime, limit: int) -> list[FileRecord]:
         table_name = self._get_table_name()

@@ -115,11 +115,7 @@ async def sync_mcp_server_tools(
     server_config.last_sync_at = datetime.now(tz=timezone.utc)
     _ = await container.mcp_server_repository.set(server_config)
 
-    logger.info(
-        "MCP server synced: server_id=%s tools=%s",
-        server_id,
-        len(tool_ids),
-    )
+    logger.info("flows.mcp.server.synced.server_id.tools", server_id=server_id, tools=len(tool_ids))
     return tool_ids, tools
 
 
@@ -150,9 +146,9 @@ async def sync_auto_mcp_servers_for_company(*, container: FlowRuntimeContainer) 
         except Exception as exc:
             failed += 1
             logger.warning(
-                "MCP server auto-sync skipped: server_id=%s error=%s",
-                srv.server_id,
-                exc,
+                "flows.mcp.server.auto.sync.skipped",
+                server_id=srv.server_id,
+                error=exc,
                 exc_info=True,
             )
             continue

@@ -294,10 +294,10 @@ async def on_startup(app: FastAPI, container: FrontendContainer, settings: Front
         )
     await _seed_platform_pronunciation_rules(container)
     n = await container.billing_service.ensure_settlement_rules_materialized_for_all_companies()
-    logger.info("Биллинг: правила settlement проверены/записаны для компаний: %s", n)
+    logger.info("frontend.settlement", n=n)
 
     PaymentProviderFactory.initialize()
-    logger.info("Платежные провайдеры инициализированы")
+    logger.info("frontend.event")
     schedule_docs_assistant_bootstrap(
         app,
         container,
@@ -430,11 +430,11 @@ async def resolve_short_link(request: Request, container: ContainerDep, code: st
         if row_head is not None and row_head.kind == SHORT_LINK_KIND_FLOW_PREVIEW_EMBED:
             now = datetime.now(UTC)
             if row_head.expires_at <= now:
-                raise HTTPException(status_code=404, detail="Ссылка не найдена или истекла")
+                raise HTTPException(status_code=404, detail="Link not found or expired")
             return Response(status_code=200, content=b"")
         target_head = await container.short_link_service.resolve_absolute_redirect_url(trimmed)
         if target_head is None:
-            raise HTTPException(status_code=404, detail="Ссылка не найдена или истекла")
+            raise HTTPException(status_code=404, detail="Link not found or expired")
         return Response(status_code=200, content=b"")
 
     row = await container.short_link_repository.delete_by_code_and_kind_returning(
@@ -443,14 +443,14 @@ async def resolve_short_link(request: Request, container: ContainerDep, code: st
     if row is not None:
         now = datetime.now(UTC)
         if row.expires_at <= now:
-            raise HTTPException(status_code=404, detail="Ссылка не найдена или истекла")
+            raise HTTPException(status_code=404, detail="Link not found or expired")
         payload = FlowPreviewEmbedPayload.model_validate(row.payload)
         loc_path = f"/flow-preview?h={quote(payload.handoff_id, safe='')}"
         return RedirectResponse(url=_short_link_redirect_location(loc_path), status_code=303)
 
     target = await container.short_link_service.resolve_absolute_redirect_url(trimmed)
     if target is None:
-        raise HTTPException(status_code=404, detail="Ссылка не найдена или истекла")
+        raise HTTPException(status_code=404, detail="Link not found or expired")
     return RedirectResponse(url=_short_link_redirect_location(target), status_code=303)
 
 

@@ -91,7 +91,7 @@ def _task_data_optional_str(data: JsonObject, key: str) -> str | None:
 def _task_data_required_str(data: JsonObject, key: str) -> str:
     value = _task_data_optional_str(data, key)
     if value is None or not value.strip():
-        raise ValueError(f"Нет {key} в данных задачи для перезапуска")
+        raise ValueError(f"No {key} in task data for retry")
     return value
 
 
@@ -180,13 +180,13 @@ class TaskService:
     def _get_company_id(self) -> str:
         ctx = get_context()
         if not ctx or not ctx.active_company:
-            raise ValueError("Нет активной компании в контексте")
+            raise ValueError("No active company in context")
         return ctx.active_company.company_id
 
     def _get_user_id(self) -> str:
         ctx = get_context()
         if not ctx or not ctx.user:
-            raise ValueError("Нет пользователя в контексте")
+            raise ValueError("No user in context")
         return ctx.user.user_id
 
     @staticmethod
@@ -243,15 +243,15 @@ class TaskService:
         text_raw = source_text if source_text is not None else ""
         if len(text_raw) > MAX_SOURCE_TEXT_INLINE_CHARS:
             raise ValueError(
-                f"Текст длиннее {MAX_SOURCE_TEXT_INLINE_CHARS} символов: загрузите часть как файлы"
+                f"Text is longer than {MAX_SOURCE_TEXT_INLINE_CHARS} characters: upload part of it as files"
             )
         text_stripped = text_raw.strip()
         has_text = len(text_stripped) > 0
         has_files = len(file_ids) > 0
         if not has_text and not has_files:
-            raise ValueError("Укажите непустой текст или хотя бы один файл")
+            raise ValueError("Provide non-empty text or at least one file")
         if len(file_ids) > MAX_SOURCE_FILES_PER_IMPORT:
-            raise ValueError(f"Не больше {MAX_SOURCE_FILES_PER_IMPORT} файлов за один импорт")
+            raise ValueError(f"No more than {MAX_SOURCE_FILES_PER_IMPORT} files per import")
         _ = validate_chunk_max_chars(chunk_max_chars)
 
         ns = namespace.strip()
@@ -301,7 +301,7 @@ class TaskService:
 
         ctx = get_context()
         if ctx is None:
-            raise ValueError("Для старта импорта нужен контекст запроса")
+            raise ValueError("Request context is required to start import")
         try:
             task = await enqueue(
                 CRM_RUN_KNOWLEDGE_IMPORT,
@@ -354,7 +354,7 @@ class TaskService:
         ns = namespace.strip()
         pid = provider_id.strip()
         if not pid:
-            raise ValueError("provider_id обязателен")
+            raise ValueError("provider_id is required")
         await self._entity_service.ensure_namespace_exists(ns)
         await self._assert_no_active_task(
             "namespace_integration_job",
@@ -377,7 +377,7 @@ class TaskService:
 
         ctx = get_context()
         if ctx is None:
-            raise ValueError("Для старта фоновой задачи интеграции нужен контекст запроса")
+            raise ValueError("Request context is required to start the integration background task")
         try:
             task = await enqueue(
                 CRM_RUN_NAMESPACE_INTEGRATION_JOB,
@@ -429,7 +429,7 @@ class TaskService:
     ) -> CRMTask:
         note = await self._entity_service.get_entity(note_id)
         if note is None:
-            raise ValueError(f"Заметка не найдена: {note_id}")
+            raise ValueError(f"Note not found: {note_id}")
         missing_attachment_ids: list[str] = []
         for attachment_id in note.attachment_ids:
             file_record = await self._file_repository.get(attachment_id)
@@ -438,7 +438,7 @@ class TaskService:
         if missing_attachment_ids:
             missing_str = ", ".join(missing_attachment_ids)
             raise ValueError(
-                f"Запуск анализа невозможен: у заметки есть вложения без метаданных файла в shared storage ({missing_str})."
+                f"Cannot start analysis: the note has attachments without file metadata in shared storage ({missing_str})."
             )
 
         await self._assert_no_active_task("note_analyze", {"note_id": note_id}, namespace)
@@ -465,7 +465,7 @@ class TaskService:
 
         ctx = get_context()
         if ctx is None:
-            raise ValueError("Для старта анализа нужен контекст запроса")
+            raise ValueError("Request context is required to start analysis")
         try:
             task = await enqueue(
                 CRM_PROCESS_NOTE,
@@ -508,9 +508,9 @@ class TaskService:
     async def start_note_analysis_draft_repair(self, *, note_id: str) -> CRMTask:
         note = await self._entity_service.get_entity(note_id)
         if note is None:
-            raise ValueError(f"Заметка не найдена: {note_id}")
+            raise ValueError(f"Note not found: {note_id}")
         if note.entity_type != NOTE_ROOT_ENTITY_TYPE_ID:
-            raise ValueError("Ожидалась заметка (entity_type=note)")
+            raise ValueError("Expected a note (entity_type=note)")
         namespace = resolve_namespace_or_raise(note.namespace)
         await self._assert_no_active_task(
             "note_analysis_draft_repair",
@@ -536,7 +536,7 @@ class TaskService:
 
         ctx = get_context()
         if ctx is None or ctx.auth_token is None:
-            raise ValueError("Для старта починки черновика нужен контекст запроса")
+            raise ValueError("Request context is required to start draft repair")
         auth_token = ctx.auth_token
         try:
             task = await enqueue(
@@ -583,12 +583,12 @@ class TaskService:
     ) -> CRMTask:
         note = await self._entity_service.get_entity(note_id)
         if note is None:
-            raise ValueError("Заметка не найдена")
+            raise ValueError("Note not found")
         if note.entity_type != NOTE_ROOT_ENTITY_TYPE_ID:
-            raise ValueError("Ожидалась заметка (entity_type=note)")
+            raise ValueError("Expected a note (entity_type=note)")
         desc = note.description
         if desc is None or not str(desc).strip():
-            raise ValueError("Текст заметки пуст")
+            raise ValueError("Note text is empty")
         ns = resolve_namespace_or_raise(note.namespace)
         await self._assert_no_active_task(
             "note_markdown_format",
@@ -614,7 +614,7 @@ class TaskService:
 
         ctx = get_context()
         if ctx is None or ctx.auth_token is None:
-            raise ValueError("Для старта форматирования заметки нужен контекст запроса")
+            raise ValueError("Request context is required to start note formatting")
         auth_token = ctx.auth_token
         try:
             task = await enqueue(
@@ -689,11 +689,11 @@ class TaskService:
     async def request_cancel(self, task_id: str) -> CRMTask:
         row = await self._task_repo.get(task_id)
         if row is None:
-            raise ValueError(f"Задача не найдена: {task_id}")
+            raise ValueError(f"Task not found: {task_id}")
         if row.user_id != self._get_user_id():
-            raise ValueError("Отменить может только инициатор задачи")
+            raise ValueError("Only the task initiator can cancel")
         if row.status in ("completed", "failed", "rolled_back", "cancelled"):
-            raise ValueError(f"Задача в статусе {row.status}, отмена недоступна")
+            raise ValueError(f"Task is in status {row.status}, cancel is not available")
 
         if row.cancel_requested and row.status in ("pending", "running"):
             now = datetime.now(UTC)
@@ -709,7 +709,7 @@ class TaskService:
             )
             updated = await self._task_repo.get(task_id)
             if updated is None:
-                raise ValueError(f"Задача не найдена: {task_id}")
+                raise ValueError(f"Task not found: {task_id}")
             await broadcast_crm_task_updated_for_user(user_id=updated.user_id, row=updated)
             return updated
 
@@ -742,11 +742,7 @@ class TaskService:
                 if note_id:
                     company_row = await self._company_repository.get(row.company_id)
                     if company_row is None:
-                        logger.warning(
-                            "crm.reconcile_stale_task.company_missing task_id=%s company_id=%s",
-                            row.task_id,
-                            row.company_id,
-                        )
+                        logger.warning("crm.reconcile_stale_task.company_missing", task_id=row.task_id, company_id=row.company_id)
                     else:
                         context_token = set_context(
                             Context(
@@ -766,25 +762,25 @@ class TaskService:
                         finally:
                             reset_context(context_token)
             await broadcast_crm_task_updated_for_user(user_id=row.user_id, row=row)
-        logger.info("crm.tasks.reconcile_stale_finished reconciled=%s", len(rows))
+        logger.info("crm.tasks.reconcile_stale_finished", reconciled=len(rows))
         return len(rows)
 
     async def rollback_task(self, task_id: str) -> CRMTask:
         row = await self._task_repo.get(task_id)
         if row is None:
-            raise ValueError(f"Задача не найдена: {task_id}")
+            raise ValueError(f"Task not found: {task_id}")
         if row.task_type != "knowledge_import":
-            raise ValueError("Откат доступен только для задач типа knowledge_import")
+            raise ValueError("Rollback is available only for knowledge_import tasks")
         if row.user_id != self._get_user_id():
-            raise ValueError("Откатить может только инициатор задачи")
+            raise ValueError("Only the task initiator can roll back")
         if row.status == "rolled_back":
-            raise ValueError("Задача уже откачена")
+            raise ValueError("Task is already rolled back")
         if row.status == "running":
-            raise ValueError("Дождитесь завершения или отмените задачу перед откатом")
+            raise ValueError("Wait for completion or cancel the task before rollback")
         created_entity_ids = _task_data_str_list(row.data, "created_entity_ids")
         created_relationship_ids = _task_data_str_list(row.data, "created_relationship_ids")
         if not created_entity_ids and not created_relationship_ids:
-            raise ValueError("Нет созданных сущностей или связей для отката")
+            raise ValueError("No created entities or relationships to roll back")
 
         for rid in reversed(created_relationship_ids):
             _ = await self._relationship_repo.delete_by_relationship_id(rid)
@@ -800,7 +796,7 @@ class TaskService:
         )
         row.status = "rolled_back"
         row.completed_at = datetime.now(UTC)
-        logger.info("task rolled_back task_id=%s", task_id)
+        logger.info("crm.task.rolled_back.task_id", task_id=task_id)
         return row
 
     async def get_task_created_entities(self, task_id: str) -> TaskCreatedEntitiesResponse:
@@ -808,17 +804,17 @@ class TaskService:
         if row is None:
             raise LookupError(task_id)
         if row.user_id != self._get_user_id():
-            raise ValueError("Просматривать список может только инициатор задачи")
+            raise ValueError("Only the task initiator can view the list")
         if row.task_type != "knowledge_import":
-            raise ValueError("Список сущностей доступен только для задач knowledge_import")
+            raise ValueError("Entity list is available only for knowledge_import tasks")
         if row.status not in ("completed", "failed", "cancelled"):
             raise ValueError(
-                f"Список созданных сущностей доступен для статусов completed, failed, cancelled; сейчас {row.status}"
+                f"Created-entity list is available for statuses completed, failed, cancelled; current {row.status}"
             )
         raw_ids = _task_data_str_list(row.data, "created_entity_ids")
         rel_n = len(_task_data_str_list(row.data, "created_relationship_ids"))
         if len(raw_ids) == 0 and rel_n == 0:
-            raise ValueError("У задачи нет созданных сущностей или связей")
+            raise ValueError("Task has no created entities or relationships")
 
         entities = await self._entity_service.list_entities_by_ids_ordered(raw_ids)
         found_ids = {e.entity_id for e in entities}
@@ -848,19 +844,19 @@ class TaskService:
         if row is None:
             raise LookupError(task_id)
         if row.user_id != self._get_user_id():
-            raise ValueError("Подтвердить просмотр может только инициатор задачи")
+            raise ValueError("Only the task initiator can confirm review")
         if row.task_type != "knowledge_import":
-            raise ValueError("Ревью доступно только для задач knowledge_import")
+            raise ValueError("Review is available only for knowledge_import tasks")
         if row.data.get("review_completed_at") is not None:
             return row
         if row.status not in ("completed", "failed", "cancelled"):
             raise ValueError(
-                f"Подтверждение доступно для статусов completed, failed, cancelled; сейчас {row.status}"
+                f"Confirmation is available for statuses completed, failed, cancelled; current {row.status}"
             )
         ent_n = len(_task_data_str_list(row.data, "created_entity_ids"))
         rel_n = len(_task_data_str_list(row.data, "created_relationship_ids"))
         if ent_n == 0 and rel_n == 0:
-            raise ValueError("Нет созданных сущностей или связей для подтверждения просмотра")
+            raise ValueError("No created entities or relationships to confirm review")
         now = datetime.now(UTC)
         await self._task_repo.patch_progress(
             task_id,
@@ -898,7 +894,7 @@ class TaskService:
 
         ctx = get_context()
         if ctx is None:
-            raise ValueError("Для старта сводки нужен контекст запроса")
+            raise ValueError("Request context is required to start a summary")
         try:
             task = await enqueue(
                 CRM_REBUILD_DAILY_SUMMARY,
@@ -966,7 +962,7 @@ class TaskService:
 
         ctx = get_context()
         if ctx is None:
-            raise ValueError("Для старта сводки нужен контекст запроса")
+            raise ValueError("Request context is required to start a summary")
         try:
             task = await enqueue(
                 CRM_REBUILD_PERIOD_SUMMARY,
@@ -1015,7 +1011,7 @@ class TaskService:
             raise LookupError(task_id)
         if old.status not in ("failed", "cancelled"):
             raise ValueError(
-                f"Перезапуск доступен только для failed/cancelled, сейчас: {old.status}"
+                f"Retry is available only for failed/cancelled, current: {old.status}"
             )
         match old.task_type:
             case "knowledge_import":
@@ -1033,7 +1029,7 @@ class TaskService:
             case "namespace_integration_job":
                 return await self._retry_namespace_integration_job(old)
             case _:
-                raise ValueError(f"Перезапуск для типа '{old.task_type}' не поддерживается")
+                raise ValueError(f"Retry for type '{old.task_type}' is not supported")
 
     async def _retry_knowledge_import(self, old: CRMTask) -> CRMTask:
         data = old.data
@@ -1052,7 +1048,7 @@ class TaskService:
         note_id = _task_data_required_str(data, "note_id")
         note = await self._entity_service.get_entity(note_id)
         if note is None:
-            raise ValueError(f"Заметка не найдена: {note_id}")
+            raise ValueError(f"Note not found: {note_id}")
         config_payload = data.get("config_payload")
         if config_payload is None:
             config_payload = {}
@@ -1102,9 +1098,9 @@ class TaskService:
         provider_raw = data.get("provider_id")
         job_raw = data.get("job")
         if not isinstance(provider_raw, str) or not provider_raw.strip():
-            raise ValueError("Нет provider_id в данных задачи интеграции")
+            raise ValueError("No provider_id in integration task data")
         if job_raw not in ("entities", "custom_fields"):
-            raise ValueError("Нет корректного job в данных задачи интеграции")
+            raise ValueError("No valid job in integration task data")
         job: NamespaceIntegrationJobKind = job_raw
         return await self.start_namespace_integration_job(
             namespace=old.namespace,

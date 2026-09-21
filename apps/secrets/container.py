@@ -38,7 +38,7 @@ class SecretsContainer(BaseContainer):
 def _create_secrets_container() -> SecretsContainer:
     settings = get_settings()
     if not settings.database.secrets_url:
-        raise ValueError("database.secrets_url не задан")
+        raise ValueError("database.secrets_url is not set")
     return SecretsContainer(
         db_url=settings.database.secrets_url,
         shared_db_url=settings.database.shared_url,

@@ -1,31 +1,29 @@
 /**
- * Ресурсы команды — участники компании и генерация invite-ссылок.
+ * Ресурсы команды — участники компании и генерация invite-ссылок
+ * (команды `frontend/team/*`, `frontend/invites/generate_requested`;
+ * REST-зеркало `apps/frontend/api/team.py`, `invites.py`).
  *
  * Coverage:
  *   - teamMembersResource (createResourceCollection): список участников,
  *     обновление ролей, удаление участника. Создание участника отсутствует —
  *     приглашения идут через `inviteGenerateOp`.
  *   - inviteGenerateOp (createAsyncOp, silent): генерация invite-ссылки;
- *     slice `links: { [role]: link }` кэширует ссылку для повторного копирования.
- *
- * Бэкенд:
- *   GET    /frontend/api/team/members           → { items: TeamMember[] }
- *   PATCH  /frontend/api/team/members/{user_id} → { success, user_id, roles }
- *   DELETE /frontend/api/team/members/{user_id} → { success, message }
- *   POST   /frontend/api/invites/generate       → { invite_url, role, ... }
+ *     slice `links: { [role]: invite_url }` кэширует ссылку для повторного копирования.
  */
 
 import {
     createResourceCollection,
     createAsyncOp,
 } from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
 
 export const teamMembersResource = createResourceCollection({
-    name: 'frontend/team_members',
+    name: 'frontend/team',
     baseUrl: '/frontend/api/team/members',
     idField: 'user_id',
     operations: ['list', 'update', 'remove'],
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    listQuery: () => ({ limit: 200, offset: 0 }),
     toastKeys: {
         update: 'frontend:team_page.toast_role_updated',
         remove: 'frontend:team_page.toast_member_removed',
@@ -35,29 +33,18 @@ export const teamMembersResource = createResourceCollection({
 export const inviteGenerateOp = createAsyncOp({
     name: 'frontend/team_invite',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'frontend/invites/generate_requested',
     restMirror: { method: 'POST', path: '/frontend/api/invites/generate' },
-    request: async ({ payload }) => {
-        const role = payload && payload.role;
-        if (!role) throw new Error('inviteGenerateOp: role required');
-        const response = await httpRequest({
-            method: 'POST',
-            url: '/frontend/api/invites/generate',
-            body: { role },
-        });
-        let link = '';
-        if (typeof response.invite_url === 'string' && response.invite_url.length > 0) link = response.invite_url;
-        else if (typeof response.link === 'string' && response.link.length > 0) link = response.link;
-        else if (typeof response.url === 'string' && response.url.length > 0) link = response.url;
-        if (!link) throw new Error('inviteGenerateOp: server did not return invite link');
-        return { role, link };
-    },
     extraInitial: { links: {} },
     extraReducer: (state, event, events) => {
         if (event.type === events.SUCCEEDED) {
             const result = event.payload && event.payload.result;
-            if (result && result.role && result.link) {
-                return { ...state, links: { ...state.links, [result.role]: result.link } };
+            if (!result || typeof result.role !== 'string' || typeof result.invite_url !== 'string') {
+                throw new Error('inviteGenerateOp: result.role and result.invite_url required');
             }
+            return { ...state, links: { ...state.links, [result.role]: result.invite_url } };
         }
         return state;
     },

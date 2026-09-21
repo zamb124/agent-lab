@@ -66,10 +66,10 @@ class ToolRegistry:
         """Регистрирует tool в процессном реестре (builtin, MCPTool и т.д.)."""
         if isinstance(tool, CodeTool):
             raise ValueError(
-                "CodeTool не регистрируется в ToolRegistry: только materialize → список tools ноды."
+                "CodeTool is not registered in ToolRegistry: materialize only → node tools list."
             )
         self._tools[tool.name] = tool
-        logger.debug(f"Tool зарегистрирован: {tool.name}")
+        logger.debug("flows.tool.registered", tool_name=tool.name)
 
     def get(self, name: str) -> BaseTool | None:
         """Получает tool по имени."""
@@ -102,7 +102,7 @@ class ToolRegistry:
             self.register(tool)
 
         self._initialized = True
-        logger.info(f"Зарегистрировано {len(builtin_tools)} встроенных tools")
+        logger.info("flows.tool.builtins_registered", count=len(builtin_tools))
 
     @staticmethod
     def _is_node_as_tool_payload(config: JsonObject) -> bool:
@@ -209,7 +209,7 @@ class ToolRegistry:
             stored = await container.tool_repository.get(tid)
             if stored is None:
                 raise ValueError(
-                    f"Tool '{tid}': нет inline code в конфиге и нет шаблона в tool_repository"
+                    f"Tool '{tid}': no inline code in config and no template in tool_repository"
                 )
             stored_payload = cast(JsonObject, stored.model_dump(mode="json", exclude_none=True))
             override_payload = cast(
@@ -219,7 +219,7 @@ class ToolRegistry:
             ref = ToolReference.model_validate({**stored_payload, **override_payload})
             has_inline_code = bool(ref.code and ref.code.strip())
             if not has_inline_code:
-                raise ValueError(f"Tool '{tid}': шаблон в tool_repository без непустого поля code")
+                raise ValueError(f"Tool '{tid}': tool_repository template has no non-empty code field")
 
         if has_inline_code:
             return self._create_code_tool_from_config(ref)

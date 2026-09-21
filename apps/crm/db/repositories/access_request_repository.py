@@ -36,7 +36,7 @@ class AccessRequestRepository(BaseCRMRepository[AccessRequest]):
         new_entity_id: str,
     ) -> int:
         if old_entity_id == new_entity_id:
-            raise ValueError("old_entity_id и new_entity_id должны различаться")
+            raise ValueError("old_entity_id and new_entity_id must differ")
         async with self._db.session() as session:
             result = await session.execute(
                 update(AccessRequest)

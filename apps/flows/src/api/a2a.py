@@ -527,12 +527,12 @@ def _validate_embed_session_request(
             return {"code": -32602, "message": "Invalid params: metadata must be object"}
 
     logger.info(
-        "embed_session_validated flow_id=%s branch_id=%s company_id=%s origin=%s issuer=%s",
-        flow_id,
-        _embed_session_branch_from_token_metadata(metadata) or "default",
-        token_data.company_id,
-        request.headers.get("origin", ""),
-        metadata.get("issued_by", "unknown"),
+        "flows.embed_session_validated",
+        flow_id=flow_id,
+        branch_id=_embed_session_branch_from_token_metadata(metadata) or 'default',
+        company_id=token_data.company_id,
+        origin=request.headers.get('origin', ''),
+        issuer=metadata.get('issued_by', 'unknown'),
     )
     return None
 
@@ -969,19 +969,19 @@ async def _json_rpc_handler_internal(
         }
 
     except ValueError as e:
-        logger.warning(f"Invalid params for {method}: {e}")
+        logger.warning("flows.a2a.invalid_params", method=method, error=str(e))
         err = {"code": -32602, "message": str(e)}
         if method in _STREAM_METHODS:
             return _sse_error_response(rpc_id, -32602, str(e))
         return {"jsonrpc": "2.0", "id": rpc_id, "error": err}
     except A2AApplicationError as e:
-        logger.warning(f"A2A application error for {method}: {e}")
+        logger.warning("flows.a2a.application_error", method=method, error=str(e))
         err = e.to_json_rpc_error()
         if method in _STREAM_METHODS:
             return _sse_error_response(rpc_id, int(e.code), e.message)
         return {"jsonrpc": "2.0", "id": rpc_id, "error": err}
     except PermissionDenied as e:
-        logger.warning(f"Permission denied for {method}: {e}")
+        logger.warning("flows.a2a.permission_denied", method=method, error=str(e))
         err = e.error.to_json_rpc_error()
         if method in _STREAM_METHODS:
             err_code = err.get("code", -32000)
@@ -1013,7 +1013,7 @@ async def _json_rpc_handler_internal(
             return _sse_error_response(rpc_id, -32051, str(e))
         return {"jsonrpc": "2.0", "id": rpc_id, "error": projection_error}
     except Exception as e:
-        logger.exception(f"Error handling {method}: {e}")
+        logger.exception("flows.a2a.method_failed", method=method, error=str(e))
         if method in _STREAM_METHODS:
             return _sse_error_response(rpc_id, -32000, str(e))
         return {"jsonrpc": "2.0", "id": rpc_id, "error": {"code": -32000, "message": str(e)}}

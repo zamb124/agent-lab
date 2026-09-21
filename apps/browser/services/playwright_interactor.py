@@ -74,10 +74,10 @@ class PlaywrightBrowserInteractor:
     def _cdp_url(self, endpoint_key: str) -> str:
         urls = self._settings.cdp_urls_by_endpoint
         if endpoint_key not in urls:
-            raise KeyError(f"Нет CDP URL для endpoint_key={endpoint_key}")
+            raise KeyError(f"No CDP URL for endpoint_key={endpoint_key}")
         url = urls[endpoint_key]
         if not url:
-            raise ValueError(f"Пустой CDP URL для endpoint_key={endpoint_key}")
+            raise ValueError(f"Empty CDP URL for endpoint_key={endpoint_key}")
         return url
 
     @staticmethod
@@ -98,19 +98,19 @@ class PlaywrightBrowserInteractor:
         if req.restore_state_key is not None:
             blob = await self._store.get(req.restore_state_key)
             if blob.proxy_policy != req.context_signature.proxy_policy:
-                raise ValueError("restore_state_key не совместим: proxy_policy отличается")
+                raise ValueError("restore_state_key is incompatible: proxy_policy differs")
             if blob.anti_bot_tier != req.context_signature.anti_bot_tier:
-                raise ValueError("restore_state_key не совместим: anti_bot_tier отличается")
+                raise ValueError("restore_state_key is incompatible: anti_bot_tier differs")
             if blob.locale != req.context_signature.locale:
-                raise ValueError("restore_state_key не совместим: locale отличается")
+                raise ValueError("restore_state_key is incompatible: locale differs")
             if blob.timezone_id != req.context_signature.timezone_id:
-                raise ValueError("restore_state_key не совместим: timezone_id отличается")
+                raise ValueError("restore_state_key is incompatible: timezone_id differs")
             if blob.user_agent != req.context_signature.user_agent:
-                raise ValueError("restore_state_key не совместим: user_agent отличается")
+                raise ValueError("restore_state_key is incompatible: user_agent differs")
             if blob.page_mode != req.context_signature.page_mode:
-                raise ValueError("restore_state_key не совместим: page_mode отличается")
+                raise ValueError("restore_state_key is incompatible: page_mode differs")
             if blob.permissions_fingerprint != req.context_signature.permissions_fingerprint:
-                raise ValueError("restore_state_key не совместим: permissions_fingerprint отличается")
+                raise ValueError("restore_state_key is incompatible: permissions_fingerprint differs")
             storage_state = await self._store.storage_state_for_new_context(req.restore_state_key)
         _context, page, cold_start = await self._leases.lease_page(
             browser,
@@ -146,7 +146,7 @@ class PlaywrightBrowserInteractor:
         if wait_policy.startswith(SELECTOR_PREFIX):
             css = wait_policy[len(SELECTOR_PREFIX) :]
             if not css:
-                raise ValueError("wait_policy selector: требуется непустой CSS")
+                raise ValueError("wait_policy selector: non-empty CSS is required")
             response = await page.goto(
                 req.url,
                 wait_until="domcontentloaded",
@@ -167,8 +167,8 @@ class PlaywrightBrowserInteractor:
             )
         else:
             raise ValueError(
-                f"Неизвестный wait_policy: {wait_policy} "
-                + "(ожидались domcontentloaded, networkidle, selector:...)"
+                f"Unknown wait_policy: {wait_policy} "
+                + "(expected domcontentloaded, networkidle, selector:...)"
             )
 
         final_url = page.url
@@ -255,7 +255,7 @@ class PlaywrightBrowserInteractor:
     async def save_state(self, context: BrowserContextHandle, shared_storage_key: str) -> str:
         pages = context.pages
         if len(pages) == 0:
-            raise RuntimeError("Нет страниц в контексте для сохранения состояния")
+            raise RuntimeError("No pages in the context to save state")
         page = pages[0]
         signature: ContextSignature = await self._leases.context_signature_for_context(context)
         return await self._store.capture_from(

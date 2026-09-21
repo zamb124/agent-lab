@@ -59,7 +59,7 @@ async def backfill_datasource_authz(*, limit: int | None = None) -> tuple[int, i
         )
         written += 1
 
-    logger.info("datasource authz backfill connections=%s", written)
+    logger.info("datasources.datasource.authz.backfill.connections", connections=written)
     return written, written
 
 

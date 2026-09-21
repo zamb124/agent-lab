@@ -50,7 +50,7 @@ class PlatformHttpErrorEnvelopeMiddleware(BaseHTTPMiddleware):
     ) -> None:
         super().__init__(app)
         if not service_name.strip():
-            raise ValueError("PlatformHttpErrorEnvelopeMiddleware: service_name обязателен")
+            raise ValueError('PlatformHttpErrorEnvelopeMiddleware: service_name is required')
         self._service_name: str = service_name.strip()
 
     @override

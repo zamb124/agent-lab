@@ -70,7 +70,7 @@ async def transcribe_audio(
     if not audio_bytes:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Файл пуст.",
+            detail="File is empty.",
         )
 
     filename = file.filename or "audio.bin"
@@ -81,7 +81,7 @@ async def transcribe_audio(
     if company is None or company.company_id == "":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Активная компания не определена в контексте запроса.",
+            detail="Active company is not set in the request context.",
         )
     company_id = company.company_id
 

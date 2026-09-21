@@ -130,8 +130,8 @@ async def broadcast_crm_note_event(
         domain_event_payload,
     )
     logger.debug(
-        "CRM note broadcast: action=%s note_id=%s namespace=%s delivery=company",
-        action,
-        note_id,
-        normalized_namespace,
+        "crm.note.broadcast.action.note_id",
+        action=action,
+        note_id=note_id,
+        namespace=normalized_namespace,
     )

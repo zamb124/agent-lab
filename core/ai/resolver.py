@@ -87,7 +87,7 @@ def _runtime_endpoint_url(
     settings = get_settings()
     registry = create_model_catalog_adapter_registry(settings)
     if not registry.has(provider):
-        raise ValueError(f"provider {provider!r} не зарегистрирован в core.ai adapter registry")
+        raise ValueError(f"provider {provider!r} is not registered in the core.ai adapter registry")
     endpoint = registry.get(provider).runtime_endpoint(capability)
     if endpoint.endpoint_url is not None and endpoint.endpoint_url.strip():
         return endpoint.endpoint_url.strip()
@@ -305,7 +305,7 @@ def resolve_ai_model(
         _validate_resolved_requirements(resolved_ai, req)
         return resolved_ai
 
-    raise ValueError(f"resolve_ai_model: неизвестная capability {capability!r}")
+    raise ValueError(f"resolve_ai_model: unknown capability {capability!r}")
 
 
 __all__ = [

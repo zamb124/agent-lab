@@ -21,6 +21,52 @@ from core.integrations.guided_integration_error import (
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.models.identity_models import NamespaceCRMSettings
 
+
+def _missing_canonical_entity_type_error(namespace_name: str, type_id: str) -> GuidedIntegrationError:
+    return GuidedIntegrationError(
+        code="crm_amocrm_missing_canonical_entity_type",
+        title_ru="Не хватает типа сущности для AmoCRM",
+        title_en="Missing entity type for AmoCRM",
+        message_ru=(
+            f"Для интеграции AmoCRM в пространстве «{namespace_name}» нужен тип сущности "
+            f"«{type_id}» в компании. Создайте пространство из шаблона sales "
+            "либо добавьте тип вручную."
+        ),
+        message_en=(
+            f"AmoCRM integration in namespace «{namespace_name}» requires entity type "
+            f"«{type_id}» for this company. Create a namespace from the sales template "
+            "or add the type manually."
+        ),
+        steps_ru=(
+            "В разделе «Пространства» создайте пространство из шаблона sales.",
+            f"Или откройте карточку «{namespace_name}» и добавьте тип «{type_id}» вручную.",
+            "Затем снова подключите AmoCRM в настройках интеграций.",
+        ),
+        steps_en=(
+            "In Namespaces, create a namespace from the sales template.",
+            f"Or open namespace «{namespace_name}» and add type «{type_id}» manually.",
+            "Then connect AmoCRM again in integration settings.",
+        ),
+        links=(
+            GuidedIntegrationLink(
+                href="/crm/namespaces",
+                label_ru="Пространства",
+                label_en="Namespaces",
+            ),
+            GuidedIntegrationLink(
+                href=f"/crm/namespaces/{quote(namespace_name, safe='')}",
+                label_ru=f"Пространство «{namespace_name}»",
+                label_en=f"Namespace «{namespace_name}»",
+            ),
+            GuidedIntegrationLink(
+                href="/crm/settings/templates",
+                label_ru="Шаблоны пространств",
+                label_en="Namespace templates",
+            ),
+        ),
+    )
+
+
 if TYPE_CHECKING:
     from apps.crm.db.repositories.entity_repository import EntityRepository
     from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
@@ -131,7 +177,7 @@ class AmoCRMConnector:
         repo = self._entity_type_repository
         ns = namespace_name.strip()
         if not ns:
-            raise ValueError("namespace_name обязателен")
+            raise ValueError("namespace_name is required")
         for type_id in sorted(amo_canonical_type_ids()):
             existing_type = await repo.get_by_type_id(
                 type_id,
@@ -145,48 +191,7 @@ class AmoCRMConnector:
                     company_id=company_id,
                 )
                 if src_default is None:
-                    raise GuidedIntegrationError(
-                        code="crm_amocrm_missing_canonical_entity_type",
-                        title_ru="Не хватает типа сущности для AmoCRM",
-                        title_en="Missing entity type for AmoCRM",
-                        message_ru=(
-                            f"Для интеграции AmoCRM в пространстве «{ns}» нужен тип сущности "
-                            f"«{type_id}» в компании. Создайте пространство из шаблона sales "
-                            "либо добавьте тип вручную."
-                        ),
-                        message_en=(
-                            f"AmoCRM integration in namespace «{ns}» requires entity type "
-                            f"«{type_id}» for this company. Create a namespace from the sales template "
-                            "or add the type manually."
-                        ),
-                        steps_ru=(
-                            "В разделе «Пространства» создайте пространство из шаблона sales.",
-                            f"Или откройте карточку «{ns}» и добавьте тип «{type_id}» вручную.",
-                            "Затем снова подключите AmoCRM в настройках интеграций.",
-                        ),
-                        steps_en=(
-                            "In Namespaces, create a namespace from the sales template.",
-                            f"Or open namespace «{ns}» and add type «{type_id}» manually.",
-                            "Then connect AmoCRM again in integration settings.",
-                        ),
-                        links=(
-                            GuidedIntegrationLink(
-                                href="/crm/namespaces",
-                                label_ru="Пространства",
-                                label_en="Namespaces",
-                            ),
-                            GuidedIntegrationLink(
-                                href=f"/crm/namespaces/{quote(ns, safe='')}",
-                                label_ru=f"Пространство «{ns}»",
-                                label_en=f"Namespace «{ns}»",
-                            ),
-                            GuidedIntegrationLink(
-                                href="/crm/settings/templates",
-                                label_ru="Шаблоны пространств",
-                                label_en="Namespace templates",
-                            ),
-                        ),
-                    )
+                    raise _missing_canonical_entity_type_error(ns, type_id)
                 _ = await repo.clone_entity_type_between_namespaces(
                     type_id,
                     source_namespace="default",

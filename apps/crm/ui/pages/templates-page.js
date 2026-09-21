@@ -568,31 +568,11 @@ export class CRMTemplatesPage extends PlatformPage {
             this._deletingTemplate = false;
         });
         this.useEvent(this._templates.resource.events.ITEM_LOADED, (event) => {
-            const item = event.payload && event.payload.item;
-            if (!item || item.template_id !== this._selectedTemplateId) {
-                return;
-            }
-            const cs =
-                item.crm_settings !== undefined
-                && item.crm_settings !== null
-                && typeof item.crm_settings === 'object'
-                    ? item.crm_settings
-                    : null;
-            const p = parseNoteVoiceDefaultsFromCrmSettings(cs);
-            this._metaDraft = {
-                name: item.name || '',
-                description: item.description || '',
-                icon: item.icon || 'folder',
-                default_note_voice: p.defaultNoteVoiceMode,
-                show_note_voice_ui: p.showNoteVoiceUi,
-            };
+            this._hydrateMetaDraft(event.payload && event.payload.item);
         });
-        this.useEvent(this._updateMetaOp.op.events.SUCCEEDED, () => {
+        this.useEvent(this._updateMetaOp.op.events.SUCCEEDED, (event) => {
             this._savingMeta = false;
-            if (this._selectedTemplateId) {
-                this._templates.get(this._selectedTemplateId);
-                this._templates.load(null);
-            }
+            this._hydrateMetaDraft(event.payload && event.payload.result);
         });
         this.useEvent(this._updateMetaOp.op.events.FAILED, () => {
             this._savingMeta = false;
@@ -865,6 +845,26 @@ export class CRMTemplatesPage extends PlatformPage {
             return;
         }
         this._toggleTypeNamespace(detail.namespaceName, detail.enabled === true);
+    }
+
+    _hydrateMetaDraft(item) {
+        if (!item || item.template_id !== this._selectedTemplateId) {
+            return;
+        }
+        const cs =
+            item.crm_settings !== undefined
+            && item.crm_settings !== null
+            && typeof item.crm_settings === 'object'
+                ? item.crm_settings
+                : null;
+        const p = parseNoteVoiceDefaultsFromCrmSettings(cs);
+        this._metaDraft = {
+            name: item.name || '',
+            description: item.description || '',
+            icon: item.icon || 'folder',
+            default_note_voice: p.defaultNoteVoiceMode,
+            show_note_voice_ui: p.showNoteVoiceUi,
+        };
     }
 
     _openNewTypeForm() {

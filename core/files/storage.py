@@ -94,7 +94,7 @@ class FileStorage:
         route_segment: str | None = None,
     ) -> FileRecord:
         if len(data) == 0:
-            raise ValueError("Пустой файл.")
+            raise ValueError("File is empty.")
 
         file_id = existing_file_id if existing_file_id else f"file_{uuid.uuid4().hex[:12]}"
         effective_name = _original_name_with_extension(original_name, content_type)
@@ -152,10 +152,10 @@ class FileStorage:
         )
         _ = await self._file_repository.set(file_record)
         logger.info(
-            "file stored: file_id=%s original_name=%s bytes=%s",
-            file_id,
-            effective_name,
-            len(data),
+            "files.file.stored.file_id.original_name.bytes",
+            file_id=file_id,
+            original_name=effective_name,
+            bytes=len(data),
         )
         return file_record
 
@@ -180,7 +180,7 @@ class FileStorage:
     ) -> FileRecord:
         file_id = existing_file_id if existing_file_id else f"file_{uuid.uuid4().hex[:12]}"
         if file_id == "":
-            raise ValueError("existing_file_id не может быть пустым")
+            raise ValueError("existing_file_id cannot be empty")
         s3_client = S3ClientFactory.create_client_for_bucket(s3_bucket)
         try:
             provider_name = s3_client.provider_name

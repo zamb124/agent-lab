@@ -414,7 +414,7 @@ async def test_revoke_blocks_tunnel_reconnect(
     revoke_response = await frontend_client_with_auth.delete(
         f"{AGENT_API_PREFIX}/devices/{device_id}",
     )
-    assert revoke_response.status_code == 204
+    assert revoke_response.status_code == 200, revoke_response.text
 
     class _RejectedWebSocket:
         def __init__(self) -> None:
@@ -614,7 +614,7 @@ async def test_revoke_device(
         revoke_response = await frontend_client_with_auth.delete(
             f"{AGENT_API_PREFIX}/devices/{device_id}",
         )
-        assert revoke_response.status_code == 204
+        assert revoke_response.status_code == 200, revoke_response.text
 
         stored_raw = await frontend_container.shared_storage.get(device_key, force_global=True)
         assert stored_raw is not None

@@ -225,7 +225,7 @@ class TempoClient:
 
     def __init__(self, base_url: str, timeout: float = 15.0) -> None:
         if not base_url:
-            raise ValueError("TempoClient: base_url обязателен")
+            raise ValueError("TempoClient: base_url is required")
         self._base_url: str = base_url.rstrip("/")
         self._timeout: float = timeout
 
@@ -235,7 +235,7 @@ class TempoClient:
         Если трейс не найден — возвращает пустой список.
         """
         if not trace_id:
-            raise ValueError("TempoClient.get_trace: trace_id обязателен")
+            raise ValueError("TempoClient.get_trace: trace_id is required")
         url = f"{self._base_url}/api/traces/{trace_id}"
         try:
             async with httpx.AsyncClient(timeout=self._timeout) as client:
@@ -248,7 +248,7 @@ class TempoClient:
             return []
         if resp.status_code != 200:
             raise TempoClientError(
-                f"Tempo GET /api/traces/{trace_id} вернул {resp.status_code}: {resp.text[:300]}"
+                f"Tempo GET /api/traces/{trace_id} returned {resp.status_code}: {resp.text[:300]}"
             )
         return parse_otlp_trace(parse_json_object(resp.content, "Tempo trace response"))
 
@@ -265,7 +265,7 @@ class TempoClient:
         """
         if not attr_name or not attr_value:
             raise ValueError(
-                "TempoClient.search_trace_ids_by_attribute: attr_name и attr_value обязательны"
+                "TempoClient.search_trace_ids_by_attribute: attr_name and attr_value are required"
             )
         url = f"{self._base_url}/api/search"
         params = {"tags": f"{attr_name}={attr_value}", "limit": limit}
@@ -278,7 +278,7 @@ class TempoClient:
             ) from exc
         if resp.status_code != 200:
             raise TempoClientError(
-                f"Tempo GET /api/search вернул {resp.status_code}: {resp.text[:300]}"
+                f"Tempo GET /api/search returned {resp.status_code}: {resp.text[:300]}"
             )
         body = parse_json_object(resp.content, "Tempo search response")
         raw_traces = body.get("traces", [])

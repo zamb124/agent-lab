@@ -62,10 +62,10 @@ class TriggerExecutor:
         trigger_type = trigger.type.value
 
         logger.info(
-            "Executing flow from trigger: flow_id=%s, trigger=%s, type=%s",
-            flow_id,
-            trigger_id,
-            trigger_type,
+            "flows.executing.flow.trigger.flow_id.trigger",
+            flow_id=flow_id,
+            trigger=trigger_id,
+            type_value=trigger_type,
         )
 
         mapping = {**dict(trigger.input_mapping), **dict(trigger.output_mapping)}
@@ -136,7 +136,7 @@ class TriggerExecutor:
             background_kind="trigger",
         )
 
-        logger.info(f"Trigger execution started: task_id={task_id}")
+        logger.info("flows.trigger.started", task_id=task_id)
 
         return {
             "task_id": task_id,

@@ -135,19 +135,19 @@ class BaseTriggerHandler(ABC):
     def _log_register(self, flow_id: str, trigger_id: str) -> None:
         """Логирует регистрацию триггера."""
         logger.info(
-            "Registering %s trigger: flow_id=%s, trigger=%s",
-            self.trigger_type.value,
-            flow_id,
-            trigger_id,
+            "flows.registering.trigger.flow_id.trigger",
+            value=self.trigger_type.value,
+            flow_id=flow_id,
+            trigger=trigger_id,
         )
 
     def _log_unregister(self, flow_id: str, trigger_id: str) -> None:
         """Логирует снятие триггера."""
         logger.info(
-            "Unregistering %s trigger: flow_id=%s, trigger=%s",
-            self.trigger_type.value,
-            flow_id,
-            trigger_id,
+            "flows.unregistering.trigger.flow_id.trigger",
+            value=self.trigger_type.value,
+            flow_id=flow_id,
+            trigger=trigger_id,
         )
 
 

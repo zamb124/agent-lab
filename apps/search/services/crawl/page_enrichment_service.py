@@ -82,12 +82,12 @@ class CrawlPageEnrichmentService:
         )
         if resolved is None:
             raise ValueError(
-                f"crawl enrichment: LLM route не разрешён provider={provider!r} model={model!r}"
+                f"crawl enrichment: LLM route is not allowed provider={provider!r} model={model!r}"
             )
         if resolved.provider is None or not resolved.provider.strip():
-            raise ValueError("crawl enrichment: resolved provider пуст")
+            raise ValueError("crawl enrichment: resolved provider is empty")
         if resolved.model is None or not resolved.model.strip():
-            raise ValueError("crawl enrichment: resolved model пуст")
+            raise ValueError("crawl enrichment: resolved model is empty")
         return resolved
 
     def _truncate_markdown(self, markdown: str) -> str:
@@ -219,7 +219,7 @@ class CrawlPageEnrichmentService:
             )
             used_model = llm_client.model.strip()
             if not used_model:
-                raise ValueError("crawl enrichment: LLM model пуст после вызова")
+                raise ValueError("crawl enrichment: LLM model is empty after the call")
             enriched_page = CrawlEnrichedPage.from_llm_output(
                 llm_output,
                 enrichment_model=used_model,

@@ -41,7 +41,7 @@ def parse_rerank_body(raw: BaseModel | JsonValue) -> RerankQueryPassagesRequest:
     else:
         raw_payload = raw
     if not isinstance(raw_payload, dict):
-        raise HTTPException(status_code=422, detail="Тело запроса: ожидается JSON-объект")
+        raise HTTPException(status_code=422, detail="Request body: JSON object expected")
     try:
         body = RerankQueryPassagesRequest.model_validate(raw_payload)
     except ValidationError as e:
@@ -64,7 +64,7 @@ class LocalRerankerEngine:
             self._models = {}
             return
         if not device:
-            raise RuntimeError("LitServe: пустой device в setup()")
+            raise RuntimeError("LitServe: empty device in setup()")
         self._device = device
 
     def allowed_model_ids(self) -> frozenset[str]:
@@ -78,11 +78,11 @@ class LocalRerankerEngine:
         bf16 = self._cfg.use_bf16 and cuda
         fp16 = (not bf16) and cuda and self._cfg.use_fp16
         logger.info(
-            "Loading FlagLLMReranker '%s' on '%s' (fp16=%s, bf16=%s)",
-            hf_model_id,
-            self._device,
-            fp16,
-            bf16,
+            "provider_litserve.loading.flagllmreranker.fp16.bf16",
+            hf_model_id=hf_model_id,
+            _device=self._device,
+            fp16=fp16,
+            bf16=bf16,
         )
         model = FlagLLMReranker(
             hf_model_id,

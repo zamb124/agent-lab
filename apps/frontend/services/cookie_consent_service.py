@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import assert_never
 
-from fastapi import HTTPException, Request
+from fastapi import Request
 
 from apps.frontend.cookie_consent import (
     COOKIE_CONSENT_TEXT_VERSION,
@@ -17,8 +17,10 @@ from apps.frontend.cookie_consent import (
 from apps.frontend.models import CookieConsentCreateBody, CookieConsentRecord
 from apps.frontend.services.cookie_consent_repository import CookieConsentRepository
 from core.config.models import PlatformBrandConfig, PublicSiteConfig
+from core.errors.boundary import PlatformConflictError
 from core.logging.context import get_log_context
 from core.utils.domain import extract_base_domain
+from core.websocket import WsCommandError
 
 
 def analytics_configured(marketing: PublicSiteConfig) -> bool:
@@ -32,17 +34,25 @@ def analytics_configured(marketing: PublicSiteConfig) -> bool:
 def _require_request_id() -> str:
     raw = get_log_context().get("request_id")
     if not isinstance(raw, str) or raw.strip() == "":
-        raise HTTPException(status_code=500, detail="request_id is required")
+        raise RuntimeError("request_id is required")
     return raw.strip()
 
 
 def _require_client_ip(request: Request) -> str:
     client = request.client
     if client is None:
-        raise HTTPException(status_code=400, detail="client address required")
+        raise WsCommandError(
+            "ws_invalid_payload",
+            "client address required",
+            error_code="client_address_required",
+        )
     host = client.host.strip()
     if host == "":
-        raise HTTPException(status_code=400, detail="client address required")
+        raise WsCommandError(
+            "ws_invalid_payload",
+            "client address required",
+            error_code="client_address_required",
+        )
     return host
 
 
@@ -64,22 +74,25 @@ def _validate_decision(
     analytics_is_configured: bool,
 ) -> None:
     if not analytics_is_configured and analytics_allowed:
-        raise HTTPException(
-            status_code=422,
-            detail="analytics_allowed must be false when analytics is not configured",
+        raise WsCommandError(
+            "ws_invalid_payload",
+            "analytics_allowed must be false when analytics is not configured",
+            error_code="cookie_analytics_not_configured",
         )
     if decision == "accept_all":
         if analytics_is_configured and not analytics_allowed:
-            raise HTTPException(
-                status_code=422,
-                detail="accept_all requires analytics_allowed when analytics is configured",
+            raise WsCommandError(
+                "ws_invalid_payload",
+                "accept_all requires analytics_allowed when analytics is configured",
+                error_code="cookie_accept_all_requires_analytics",
             )
         return
     if decision == "necessary_only":
         if analytics_allowed:
-            raise HTTPException(
-                status_code=422,
-                detail="necessary_only requires analytics_allowed=false",
+            raise WsCommandError(
+                "ws_invalid_payload",
+                "necessary_only requires analytics_allowed=false",
+                error_code="cookie_necessary_only_analytics",
             )
         return
     if decision == "custom":
@@ -99,13 +112,17 @@ class CookieConsentService:
         brand: PlatformBrandConfig,
     ) -> CookieConsentRecord:
         if body.consent_text_version != COOKIE_CONSENT_TEXT_VERSION:
-            raise HTTPException(
-                status_code=409,
-                detail="consent_text_version does not match current cookie consent text",
+            raise PlatformConflictError(
+                "consent_text_version does not match current cookie consent text",
+                error_code="cookie_consent_text_stale",
             )
         host_header = request.headers.get("host")
         if host_header is None or host_header.strip() == "":
-            raise HTTPException(status_code=400, detail="Host header is required")
+            raise WsCommandError(
+                "ws_invalid_payload",
+                "Host header is required",
+                error_code="host_header_required",
+            )
         brand_host = host_header.strip()
         analytics_is_configured = analytics_configured(brand.public_site)
         _validate_decision(

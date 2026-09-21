@@ -30,10 +30,18 @@ async def _load_identity(
 ) -> tuple[User, Company]:
     user = await container.user_repository.get(user_id)
     if user is None:
-        raise PlatformAccessDeniedError(f"user not found: {user_id}")
+        raise PlatformAccessDeniedError(
+            f"user not found: {user_id}",
+            error_code="user_not_found",
+            error_params={"user_id": user_id},
+        )
     company = await container.company_repository.get(company_id)
     if company is None:
-        raise PlatformAccessDeniedError(f"company not found: {company_id}")
+        raise PlatformAccessDeniedError(
+            f"company not found: {company_id}",
+            error_code="company_not_found",
+            error_params={"company_id": company_id},
+        )
     return user, company
 
 
@@ -121,7 +129,7 @@ async def guest_a2a(
 ) -> JsonObject:
     lease = await container.farm_service.get_lease(flow_id, node_id)
     if lease is None:
-        raise PlatformNotFoundError("guest lease not found")
+        raise PlatformNotFoundError("guest lease not found", error_code="guest_lease_not_found")
     user, company = await _load_identity(
         container, user_id=lease.user_id, company_id=lease.company_id
     )

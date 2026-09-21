@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import suppress
 from typing import (
@@ -24,6 +25,13 @@ from core.a2a.codec import mapping_from_struct, part_has_text, struct_from_mappi
 from core.ai.free_pool import PLATFORM_FREE_MODEL_SOURCE
 from core.ai.llm_config import LLMCallConfig, ReasoningEffort
 from core.ai.provider_error import AI_PROVIDER_IO_ERRORS
+from core.clients.llm.billing import (
+    LLMCallMeter,
+    LLMClientBilling,
+    filter_paid_fallback_candidates,
+    prepare_llm_client_billing,
+    record_llm_client_response,
+)
 from core.clients.llm.candidate_cooldown import (
     candidate_cooldown_ttl_map,
     cooldown_ttl_from_error,
@@ -37,6 +45,7 @@ from core.clients.llm.candidates import (
 )
 from core.clients.llm.context_layer import (
     LLMContextInput,
+    PreparedLLMContextMessages,
     llm_context_trace_metadata,
     merge_provider_cache_hints,
     prepare_messages_for_context_layer,
@@ -58,6 +67,9 @@ from core.clients.llm.messages import (
 from core.clients.llm.provider_resolution import _detect_provider
 from core.clients.llm.structured_output import resolve_structured_output_source_text
 from core.clients.llm.transport import (
+    LLMInvokeTransportResult,
+)
+from core.clients.llm.transport import (
     invoke_once as _transport_invoke_once,
 )
 from core.clients.llm.transport import (
@@ -65,6 +77,7 @@ from core.clients.llm.transport import (
 )
 from core.llm_context import CompiledLLMContext, LLMContextBlock, LLMContextSourceRegistry
 from core.logging import get_logger
+from core.tracing.tracer import get_tracer
 from core.types import (
     JsonArray,
     JsonObject,
@@ -112,6 +125,7 @@ class LLMClient:
         extra_request_headers: dict[str, str] | None = None,
         context_length: int | None = None,
         max_candidates_total: int | None = None,
+        billing: LLMClientBilling | None = None,
     ):
         self.model: str = model
         self.api_key: str = api_key
@@ -165,6 +179,7 @@ class LLMClient:
         self.platform_default_free_pool: bool = platform_default_free_pool
         self.platform_paid_fallback_enabled: bool = platform_paid_fallback_enabled
         self.max_candidates_total: int | None = max_candidates_total
+        self.billing: LLMClientBilling = billing if billing is not None else LLMClientBilling()
 
     def _client_for_candidate(self, candidate: LLMCallConfig) -> "LLMClient":
         if not candidate.model or not candidate.api_key:
@@ -194,6 +209,7 @@ class LLMClient:
             extra_request_headers=candidate.extra_request_headers,
             context_length=candidate.context_length,
             max_candidates_total=self.max_candidates_total,
+            billing=self.billing.copy(),
         )
 
     def _candidate_with_client_defaults(self, candidate: LLMCallConfig) -> LLMCallConfig:
@@ -252,6 +268,7 @@ class LLMClient:
         tools: list[JsonObject] | None,
         response_format: JsonObject | None,
         model_override: str | None = None,
+        paid_fallback_allowed: bool | None = None,
     ) -> list[LLMCallConfig]:
         if model_override is not None:
             model = model_override.strip()
@@ -338,22 +355,31 @@ class LLMClient:
                     free_kept += 1
                 capped_candidates.append(candidate)
             filtered_candidates = capped_candidates
+        allow_paid = (
+            self.platform_paid_fallback_enabled
+            if paid_fallback_allowed is None
+            else paid_fallback_allowed
+        )
+        filtered_candidates = filter_paid_fallback_candidates(
+            filtered_candidates,
+            paid_fallback_allowed=allow_paid,
+        )
         if filtered_candidates:
             return filtered_candidates
         if self.platform_default_free_pool and candidates:
             raise RuntimeError(
-                "LLM default free-pool: нет доступных моделей, совместимых с параметрами запроса "
-                + "(tools/response_format/files) и не находящихся в cooldown; платный fallback "
-                + "недоступен или тоже несовместим"
+                "LLM default free-pool: no available models compatible with request parameters "
+                + "(tools/response_format/files) and not in cooldown; paid fallback "
+                + "is unavailable or also incompatible"
             )
         if (
             not candidates
             and self.platform_default_free_pool
-            and not self.platform_paid_fallback_enabled
+            and not allow_paid
         ):
             raise RuntimeError(
-                "LLM default free-pool: нет доступных бесплатных моделей в Redis; платный "
-                + "fallback отключён из-за неположительного баланса компании"
+                "LLM default free-pool: no available free models in Redis; paid "
+                + "fallback is disabled because the company balance is not positive"
             )
         return candidates[:1]
 
@@ -380,6 +406,14 @@ class LLMClient:
         if overlay:
             merged.update(overlay)
         return merged
+
+    async def prepare_billing(self) -> bool:
+        """Pre-flight баланса. Повторный вызов на том же клиенте идемпотентен."""
+        return await prepare_llm_client_billing(
+            self.billing,
+            platform_default_free_pool=self.platform_default_free_pool,
+            platform_paid_fallback_enabled=self.platform_paid_fallback_enabled,
+        )
 
     async def stream(
         self,
@@ -413,6 +447,7 @@ class LLMClient:
         ``model`` — per-call override: использует provider, credentials
         и base URL этого клиента без изменения ``self.model``.
         """
+        paid_fallback = await self.prepare_billing()
         normalized_messages = _normalize_messages(messages)
         base_openai_messages = _messages_to_openai(normalized_messages)
         candidates = await self._resolve_candidates(
@@ -420,6 +455,7 @@ class LLMClient:
             tools=tools,
             response_format=response_format,
             model_override=model,
+            paid_fallback_allowed=paid_fallback,
         )
         prepared_context = await prepare_messages_for_context_layer(
             normalized_messages,
@@ -431,6 +467,75 @@ class LLMClient:
             output_token_reserve=_max_output_token_reserve(candidates, max_tokens),
         )
         normalized_messages = prepared_context.messages
+        tracer = get_tracer()
+        meter = LLMCallMeter()
+        started = time.perf_counter()
+        async with tracer.llm_call_span(
+            self.model,
+            len(normalized_messages),
+            len(tools) if tools else 0,
+            llm_provider=self.llm_provider,
+        ) as llm_span:
+            tracer.record_llm_request(
+                llm_span,
+                _messages_to_openai(normalized_messages),
+                tools,
+                response_format,
+            )
+            async for event in self._stream_candidates(
+                candidates=candidates,
+                normalized_messages=normalized_messages,
+                prepared_context=prepared_context,
+                tools=tools,
+                response_format=response_format,
+                task_id=task_id,
+                context_id=context_id,
+                temperature=temperature,
+                top_p=top_p,
+                top_k=top_k,
+                max_tokens=max_tokens,
+                frequency_penalty=frequency_penalty,
+                presence_penalty=presence_penalty,
+                seed=seed,
+                reasoning_effort=reasoning_effort,
+                extra_body=extra_body,
+                extra_headers=extra_headers,
+                stream_cancel_poll=stream_cancel_poll,
+                meter=meter,
+            ):
+                yield event
+            record_llm_client_response(
+                tracer=tracer,
+                span=llm_span,
+                meter=meter,
+                duration_ms=(time.perf_counter() - started) * 1000,
+                billing=self.billing,
+                fallback_provider=self.llm_provider,
+            )
+
+    async def _stream_candidates(
+        self,
+        *,
+        candidates: list[LLMCallConfig],
+        normalized_messages: list[Message],
+        prepared_context: PreparedLLMContextMessages,
+        tools: list[JsonObject] | None,
+        response_format: JsonObject | None,
+        task_id: str | None,
+        context_id: str | None,
+        temperature: float | None,
+        top_p: float | None,
+        top_k: int | None,
+        max_tokens: int | None,
+        frequency_penalty: float | None,
+        presence_penalty: float | None,
+        seed: int | None,
+        reasoning_effort: ReasoningEffort | None,
+        extra_body: JsonObject | None,
+        extra_headers: dict[str, str] | None,
+        stream_cancel_poll: Callable[[], Awaitable[bool]] | None,
+        meter: LLMCallMeter,
+    ) -> AsyncGenerator[StreamEvent, None]:
         last_error: BaseException | None = None
         for candidate_index, candidate in enumerate(candidates):
             attempt = self._client_for_candidate(candidate)
@@ -499,17 +604,21 @@ class LLMClient:
                                 source=candidate.source,
                                 attempt=candidate_index + 1,
                             )
-                        yield _attach_llm_context_metadata(
+                        attached = _attach_llm_context_metadata(
                             event,
                             prepared_context.compiled_context,
                             compile_ms=prepared_context.compile_ms,
                         )
+                        meter.observe_stream_event(attached)
+                        yield attached
                     else:
-                        yield _attach_llm_context_metadata(
+                        attached = _attach_llm_context_metadata(
                             await agen.__anext__(),
                             prepared_context.compiled_context,
                             compile_ms=prepared_context.compile_ms,
                         )
+                        meter.observe_stream_event(attached)
+                        yield attached
             except StopAsyncIteration:
                 return
             except AI_PROVIDER_IO_ERRORS as exc:
@@ -544,7 +653,7 @@ class LLMClient:
 
         if last_error is not None:
             raise last_error
-        raise RuntimeError("LLM stream: нет доступных model candidates")
+        raise RuntimeError("LLM stream: no available model candidates")
 
     async def _stream_once(
         self,
@@ -597,11 +706,13 @@ class LLMClient:
         llm_context_blocks: list[LLMContextBlock] | None = None,
         llm_context_source_registry: LLMContextSourceRegistry | None = None,
     ) -> str | JsonObject:
+        paid_fallback = await self.prepare_billing()
         base_openai_messages = _messages_to_openai(messages)
         candidates = await self._resolve_candidates(
             openai_messages=base_openai_messages,
             tools=None,
             response_format={"type": "json_object"} if json_output else None,
+            paid_fallback_allowed=paid_fallback,
         )
         prepared_context = await prepare_messages_for_context_layer(
             messages,
@@ -613,52 +724,82 @@ class LLMClient:
             output_token_reserve=_max_output_token_reserve(candidates, max_tokens),
         )
         prepared_messages = prepared_context.messages
-        last_error: BaseException | None = None
-        for candidate_index, candidate in enumerate(candidates):
-            attempt = self._client_for_candidate(candidate)
-            merged_extra_body = self._merge_optional_dicts(
-                candidate.extra_request_body,
-                extra_body,
+        tracer = get_tracer()
+        meter = LLMCallMeter()
+        started = time.perf_counter()
+        async with tracer.llm_call_span(
+            self.model,
+            len(prepared_messages),
+            0,
+            llm_provider=self.llm_provider,
+        ) as llm_span:
+            tracer.record_llm_request(
+                llm_span,
+                _messages_to_openai(prepared_messages),
+                None,
+                {"type": "json_object"} if json_output else None,
             )
-            merged_extra_body = merge_provider_cache_hints(
-                provider=candidate.provider,
-                model=candidate.model,
-                extra_body=merged_extra_body,
-                provider_hints=(
-                    prepared_context.compiled_context.provider_hints
-                    if prepared_context.compiled_context is not None
-                    else None
-                ),
-            )
-            merged_extra_headers = self._merge_optional_dicts(
-                candidate.extra_request_headers,
-                extra_headers,
-            )
-            try:
-                return await attempt._invoke_once(
-                    prepared_messages,
-                    json_output=json_output,
-                    max_tokens=max_tokens,
-                    extra_body=merged_extra_body,
-                    extra_headers=merged_extra_headers,
+            last_error: BaseException | None = None
+            for candidate_index, candidate in enumerate(candidates):
+                attempt = self._client_for_candidate(candidate)
+                merged_extra_body = self._merge_optional_dicts(
+                    candidate.extra_request_body,
+                    extra_body,
                 )
-            except AI_PROVIDER_IO_ERRORS as exc:
-                last_error = exc
-                await self._cooldown_candidate(candidate, exc)
-                logger.warning(
-                    "llm.invoke_candidate_failed",
+                merged_extra_body = merge_provider_cache_hints(
                     provider=candidate.provider,
                     model=candidate.model,
-                    source=candidate.source,
-                    attempt=candidate_index + 1,
-                    remaining=len(candidates) - candidate_index - 1,
-                    error=str(exc),
-                    error_type=type(exc).__name__,
+                    extra_body=merged_extra_body,
+                    provider_hints=(
+                        prepared_context.compiled_context.provider_hints
+                        if prepared_context.compiled_context is not None
+                        else None
+                    ),
                 )
-                continue
-        if last_error is not None:
-            raise last_error
-        raise RuntimeError("LLM invoke: нет доступных model candidates")
+                merged_extra_headers = self._merge_optional_dicts(
+                    candidate.extra_request_headers,
+                    extra_headers,
+                )
+                try:
+                    transport_result = await attempt._invoke_once(
+                        prepared_messages,
+                        json_output=json_output,
+                        max_tokens=max_tokens,
+                        extra_body=merged_extra_body,
+                        extra_headers=merged_extra_headers,
+                    )
+                except AI_PROVIDER_IO_ERRORS as exc:
+                    last_error = exc
+                    await self._cooldown_candidate(candidate, exc)
+                    logger.warning(
+                        "llm.invoke_candidate_failed",
+                        provider=candidate.provider,
+                        model=candidate.model,
+                        source=candidate.source,
+                        attempt=candidate_index + 1,
+                        remaining=len(candidates) - candidate_index - 1,
+                        error=str(exc),
+                        error_type=type(exc).__name__,
+                    )
+                    continue
+                meter.apply_invoke_usage(transport_result.usage)
+                meter.resolved_model = candidate.model
+                meter.resolved_provider = candidate.provider
+                meter.resolved_source = candidate.source
+                if isinstance(transport_result.content, str):
+                    meter.content_parts.append(transport_result.content)
+                record_llm_client_response(
+                    tracer=tracer,
+                    span=llm_span,
+                    meter=meter,
+                    duration_ms=(time.perf_counter() - started) * 1000,
+                    billing=self.billing,
+                    fallback_provider=self.llm_provider,
+                )
+                return transport_result.content
+            if last_error is not None:
+                raise last_error
+            raise RuntimeError("LLM invoke: no available model candidates")
 
     async def _invoke_once(
         self,
@@ -667,7 +808,7 @@ class LLMClient:
         max_tokens: int | None = None,
         extra_body: JsonObject | None = None,
         extra_headers: dict[str, str] | None = None,
-    ) -> str | JsonObject:
+    ) -> LLMInvokeTransportResult:
         return await _transport_invoke_once(
             self,
             messages=messages,
@@ -868,8 +1009,8 @@ class LLMClient:
             )
             if not text_for_json.strip():
                 raise ValueError(
-                    "LLM structured output: пустой ответ (нет текста вне reasoning-артефакта и нет "
-                    + "текста в финальном статусе задачи)"
+                    "LLM structured output: empty response (no text outside the reasoning artifact and no "
+                    + "text in the final task status)"
                 )
             structured_payload: JsonValue = parse_json_value(
                 text_for_json,
@@ -877,9 +1018,9 @@ class LLMClient:
             )
             if not isinstance(structured_payload, dict):
                 raise ValueError(
-                    "llm.structured_output: ожидается JSON object (dict), "
-                    + f"но получен {type(structured_payload).__name__}. "
-                    + "LLM вернула невалидную структуру вместо объекта по схеме response_format."
+                    "llm.structured_output: JSON object (dict) expected, "
+                    + f"but got {type(structured_payload).__name__}. "
+                    + "LLM returned an invalid structure instead of an object matching response_format."
                 )
             return response_model.model_validate(structured_payload)
 

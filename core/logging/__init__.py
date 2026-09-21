@@ -6,6 +6,7 @@
 - get_logger(__name__) — единственный способ получить логгер
 - setup_logging(service, config) — идемпотентная инициализация процесса
 - bind_log_context / unbind_log_context / clear_log_context — управление contextvars
+- bind_session_agent / bind_test_scope — доменные хелперы bind_log_context
 - LogContextScope — контекстный менеджер для временного биндинга
 
 Контракт лог-записи: см. core.logging.contract.LogRecordPayload.
@@ -14,6 +15,7 @@
 
 from __future__ import annotations
 
+from core.logging.bind import bind_session_agent, bind_test_scope
 from core.logging.context import (
     LogContextScope,
     bind_log_context,
@@ -52,6 +54,8 @@ __all__ = [
     "ScopeToken",
     "SystemLogScope",
     "bind_log_context",
+    "bind_session_agent",
+    "bind_test_scope",
     "clear_log_context",
     "enter_request_scope",
     "exit_request_scope",

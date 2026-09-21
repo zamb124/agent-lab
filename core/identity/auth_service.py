@@ -121,11 +121,11 @@ class AuthService:
                 provider = provider_class(provider_config)
                 if provider.validate_config():
                     self._providers[provider_name] = provider
-                    logger.info(f"Провайдер {provider_name.value} инициализирован")
+                    logger.info("auth.provider.initialized", provider=provider_name.value)
                 else:
-                    logger.warning(f"Провайдер {provider_name.value} некорректно настроен")
+                    logger.warning("auth.provider.misconfigured", provider=provider_name.value)
             else:
-                logger.info(f"Провайдер {provider_name.value} отключен")
+                logger.info("auth.provider.disabled", provider=provider_name.value)
 
     def reinitialize_providers(self) -> None:
         """Переинициализирует провайдеры на основе текущей конфигурации"""
@@ -168,7 +168,7 @@ class AuthService:
         """
         provider = self.get_provider(provider_name)
         if not provider:
-            raise ValueError(f"Провайдер {provider_name.value} недоступен")
+            raise ValueError(f"Provider {provider_name.value} is unavailable")
 
         state = secrets.token_urlsafe(32)
 
@@ -187,9 +187,9 @@ class AuthService:
         else:
             auth_url = provider.get_authorization_url(state, redirect_uri)
 
-        logger.info(f"Начата авторизация через {provider_name.value}")
-        logger.info(f"   redirect_uri: {redirect_uri}, original_host: {original_host}")
-        logger.info(f"   auth_url: {auth_url[:150]}...")
+        logger.info("auth.oauth.started", provider=provider_name.value)
+        logger.info("auth.oauth.redirect", redirect_uri=redirect_uri, original_host=original_host)
+        logger.info("auth.oauth.url", auth_url=auth_url[:150])
         return auth_url
 
     async def complete_auth(self, auth_request: AuthRequest) -> AuthResult:
@@ -206,7 +206,7 @@ class AuthService:
 
         cached_result = await self._storage.get(code_key)
         if cached_result:
-            logger.info("OAuth код уже использован - возвращаем кешированный результат")
+            logger.info("identity.oauth")
             result_cache = AuthCodeCache.model_validate_json(cached_result)
 
             user = await self.get_user(result_cache.user_id)
@@ -297,7 +297,7 @@ class AuthService:
 
         await self._cleanup_auth_state(auth_request.state)
 
-        logger.info(f"Авторизация завершена для пользователя {user_info.email}")
+        logger.info("auth.oauth.completed", email=user_info.email)
 
         return AuthResult(success=True, user=user, session=session, token=jwt_token)
 
@@ -354,7 +354,7 @@ class AuthService:
     async def logout(self, session_id: str) -> bool:
         """Завершает сессию пользователя"""
         await self._delete_session(session_id)
-        logger.info(f"Сессия {session_id} завершена")
+        logger.info("auth.session.ended", session_id=session_id)
         return True
 
     async def _save_auth_state(
@@ -403,25 +403,25 @@ class AuthService:
             user = await self._user_repository.get(user_id)
 
             if not user:
-                logger.error(f"Пользователь {user_id} найден по индексу, но не существует")
-                raise ValueError(f"Пользователь {user_id} не найден")
+                logger.error("auth.user.index_orphaned", user_id=user_id)
+                raise ValueError(f"User {user_id} not found")
 
             user.updated_at = datetime.now(timezone.utc)
             _ = await self._persist_user(user)
 
             await self._update_provider_data(user.user_id, provider, user_info)
 
-            logger.info(f"Обновлен пользователь {user_info.email or user_id}")
+            logger.info("auth.user.updated", email=user_info.email, user_id=user_id)
             return user
         else:
             if not user_info.email:
                 raise ValueError(
-                    f"Провайдер {provider.value} не вернул email; регистрация нового пользователя невозможна"
+                    f"Provider {provider.value} did not return email; cannot register a new user"
                 )
             existing_list = await self._user_repository.find_all_by_email_ci(user_info.email)
             if len(existing_list) > 1:
                 raise ValueError(
-                    f"Несколько пользователей с email {user_info.email}: "
+                    f"Multiple users with email {user_info.email}: "
                     + ", ".join(u.user_id for u in existing_list)
                 )
             if len(existing_list) == 1:
@@ -433,11 +433,7 @@ class AuthService:
                     user.avatar_url = user_info.avatar_url
                 _ = await self._persist_user(user)
                 await self._add_user_provider(user.user_id, provider, user_info)
-                logger.info(
-                    "Провайдер %s привязан к существующему пользователю %s",
-                    provider.value,
-                    user.user_id,
-                )
+                logger.info("identity.event", value=provider.value, user_id=user.user_id)
                 return user
 
             user_id = f"user_{uuid.uuid4().hex[:12]}"
@@ -454,7 +450,7 @@ class AuthService:
             _ = await self._persist_user(user)
             await self._add_user_provider(user_id, provider, user_info)
 
-            logger.info(f"Создан новый пользователь {user_info.email}")
+            logger.info("auth.user.created", email=user_info.email)
             return user
 
     async def _find_user_by_provider_id(self, provider_user_id: str) -> str | None:
@@ -522,13 +518,15 @@ class AuthService:
         existing_user_id = await self._find_user_by_provider_id(user_info.provider_user_id)
         if existing_user_id:
             logger.warning(
-                f"Провайдер {provider}:{user_info.provider_user_id} уже используется другим пользователем"
+                "auth.provider.already_linked",
+                provider=str(provider),
+                provider_user_id=user_info.provider_user_id,
             )
             return False
 
         await self._add_user_provider(user.user_id, provider, user_info)
 
-        logger.info(f"Связан провайдер {provider} с пользователем {user_info.email}")
+        logger.info("auth.provider.linked", provider=str(provider), email=user_info.email)
         return True
 
     async def get_user(self, user_id: str) -> User | None:
@@ -592,7 +590,7 @@ class AuthService:
 
         _ = await self._auth_session_repository.set(session)
 
-        logger.info(f"Создана сессия {session_id} для пользователя {user.user_id}")
+        logger.info("auth.session.created", session_id=session_id, user_id=user.user_id)
         return session
 
     async def get_session(self, session_id: str) -> AuthSession | None:

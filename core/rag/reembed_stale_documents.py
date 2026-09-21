@@ -41,9 +41,9 @@ async def execute_reembed_tick(
     Возвращает унифицированный dict-результат для TaskIQ.
     """
     if not schedule_task_id or not schedule_task_id.strip():
-        raise ValueError("execute_reembed_tick: schedule_task_id обязателен")
+        raise ValueError('execute_reembed_tick: schedule_task_id is required')
     if not channel or not channel.strip():
-        raise ValueError("execute_reembed_tick: channel обязателен")
+        raise ValueError('execute_reembed_tick: channel is required')
 
     settings = get_settings()
     reembed_cfg = settings.rag.ttl
@@ -57,7 +57,7 @@ async def execute_reembed_tick(
 
     provider_raw = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)
     if not isinstance(provider_raw, PgVectorProvider):
-        raise TypeError("execute_reembed_tick требует pgvector RAG provider")
+        raise TypeError('execute_reembed_tick requires the pgvector RAG provider')
     provider = provider_raw
     target_model = provider.embedding_model_name()
     batch_size = reembed_cfg.reembed_batch_size
@@ -103,7 +103,7 @@ async def _run_reembed_round(
 ) -> tuple[int, dict[str, int]]:
     """Один SELECT batch_size кандидатов + группировка по company_id + embed-write."""
     if batch_size <= 0:
-        raise ValueError("_run_reembed_round: batch_size должен быть > 0")
+        raise ValueError('_run_reembed_round: batch_size must be > 0')
 
     rows = await provider.fetch_stale_chunks_for_reembed(
         limit=batch_size,
@@ -169,8 +169,8 @@ async def _run_reembed_round(
             )
             if len(embeddings) != len(slice_pairs):
                 raise ValueError(
-                    f"reembed_stale: размер батча embedding {len(embeddings)} "
-                    + f"не совпадает с числом чанков {len(slice_pairs)}",
+                    f"reembed_stale: embedding batch size {len(embeddings)} "
+                    + f"does not match chunk count {len(slice_pairs)}",
                 )
             doc_emb = [(slice_pairs[i][0], embeddings[i]) for i in range(len(slice_pairs))]
             written = await provider.write_reembed_chunk_embeddings(

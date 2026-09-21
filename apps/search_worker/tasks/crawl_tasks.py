@@ -6,7 +6,6 @@ from datetime import UTC, datetime, timedelta
 
 from apps.search.config import get_search_settings
 from apps.search.container import get_search_container
-from apps.search.services.system_context import build_search_system_context
 from apps.search_worker.tasks.task_names import (
     CRAWL_DISCOVER_DOMAIN,
     CRAWL_ENRICH_URL,
@@ -18,6 +17,7 @@ from apps.search_worker.tasks.task_names import (
 from core.context import clear_context, set_context
 from core.crawl.logging_events import log_crawl_reclaim_completed
 from core.crawl.models import CrawlOrchestratorTickResult, CrawlSeedSource, SeedImportRequest
+from core.identity.system_bootstrap import build_system_admin_job_context
 from core.tasks import enqueue, platform_task
 from core.types import JsonObject, require_json_object
 
@@ -25,10 +25,12 @@ from core.types import JsonObject, require_json_object
 async def _enter_worker_context(*, trace_id: str) -> None:
     container = get_search_container()
     _ = set_context(
-        await build_search_system_context(
-            trace_id=trace_id,
+        await build_system_admin_job_context(
             company_repository=container.company_repository,
             user_repository=container.user_repository,
+            trace_id=trace_id,
+            session_id=f"search:{trace_id}",
+            channel="search",
         )
     )
 

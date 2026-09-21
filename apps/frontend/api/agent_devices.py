@@ -45,7 +45,7 @@ async def download_agent(platform: str, request: Request) -> RedirectResponse:
     if platform not in VALID_PLATFORMS:
         raise HTTPException(
             status_code=400,
-            detail=f"Неподдерживаемая платформа: {platform!r}. Допустимые: {sorted(VALID_PLATFORMS)}",
+            detail=f"Unsupported platform: {platform!r}. Allowed: {sorted(VALID_PLATFORMS)}",
         )
     settings = get_settings().agent
     brand_host = request.headers.get("host")
@@ -70,7 +70,7 @@ async def download_agent(platform: str, request: Request) -> RedirectResponse:
         raise HTTPException(
             status_code=404,
             detail=(
-                f"GitHub release недоступен для {settings.releases.github_owner}/"
+                f"GitHub release is unavailable for {settings.releases.github_owner}/"
                 f"{settings.releases.github_repo}: HTTP {exc.response.status_code}"
             ),
         ) from exc
@@ -89,7 +89,7 @@ async def serve_local_release_artifact(platform: str) -> FileResponse:
     if platform not in VALID_PLATFORMS:
         raise HTTPException(
             status_code=400,
-            detail=f"Неподдерживаемая платформа: {platform!r}. Допустимые: {sorted(VALID_PLATFORMS)}",
+            detail=f"Unsupported platform: {platform!r}. Allowed: {sorted(VALID_PLATFORMS)}",
         )
     if not use_local_release_artifact():
         raise HTTPException(status_code=404, detail="Local release artifacts disabled")
@@ -244,7 +244,7 @@ async def issue_device_token(
     user = context.user
     company = context.active_company
     if company is None:
-        raise HTTPException(status_code=400, detail="Компания не выбрана")
+        raise HTTPException(status_code=400, detail="Company is not selected")
 
     token_service = TokenService()
     token = token_service.create_token(
@@ -268,7 +268,7 @@ async def register_agent_device_with_auth(
     context = require_context()
     company = context.active_company
     if company is None:
-        raise HTTPException(status_code=400, detail="Компания не выбрана")
+        raise HTTPException(status_code=400, detail="Company is not selected")
     return await register_device_with_auth(
         container,
         body,

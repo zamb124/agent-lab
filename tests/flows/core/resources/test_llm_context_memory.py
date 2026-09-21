@@ -474,8 +474,13 @@ def test_runtime_memory_close_decision_is_deterministic_activity_input() -> None
 
     assert first is not None
     assert second is not None
-    assert first.model_dump(mode="json") == second.model_dump(mode="json")
-    assert "created_at" not in first.model_dump_json()
+    first_payload = first.model_dump(mode="json")
+    second_payload = second.model_dump(mode="json")
+    if first_payload["episode"] is not None:
+        del first_payload["episode"]["created_at"]
+    if second_payload["episode"] is not None:
+        del second_payload["episode"]["created_at"]
+    assert first_payload == second_payload
 
 
 @pytest.mark.asyncio

@@ -83,7 +83,7 @@ class VoiceSession:
     def record_pcm_chunk_from_client(self, byte_len: int) -> int:
         """Учесть один бинарный PCM-кадр uplink; возвращает порядковый номер chunk."""
         if byte_len <= 0:
-            raise ValueError("VoiceSession.record_pcm_chunk_from_client: byte_len должен быть > 0.")
+            raise ValueError("VoiceSession.record_pcm_chunk_from_client: byte_len must be > 0.")
         self.add_bytes_received(byte_len)
         self._pcm_chunk_count += 1
         return self._pcm_chunk_count
@@ -109,7 +109,7 @@ class VoiceSession:
     async def enqueue_mic_finalize(self, req: MicFinalizeRequest) -> None:
         """Поставить в очередь обработки uplink запрос на немедленный flush STT-буфера."""
         if req.complete.done():
-            raise ValueError("MicFinalizeRequest.complete уже завершён.")
+            raise ValueError("MicFinalizeRequest.complete is already finished.")
         if not self._active:
             req.complete.set_exception(
                 RuntimeError("VoiceSession: сессия уже не активна.")
@@ -127,7 +127,7 @@ class VoiceSession:
             _ = await asyncio.gather(*self._tasks, return_exceptions=True)
             self._tasks.clear()
         self._clear_queues()
-        logger.info("voice session cancelled: session_id=%s", self.session_id)
+        logger.info("voice.session.cancelled.session_id", session_id=self.session_id)
 
     def _clear_queues(self) -> None:
         _ = self._drain_audio_in_queue(self.audio_in_queue)

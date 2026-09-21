@@ -228,19 +228,19 @@ class HitlConversationService:
     ) -> ConversationTurn:
         item = await self._work_items.get(company_id, work_item_id)
         if not await self._work_items.operator_authorized(item, operator_user_id):
-            raise PermissionError("Нет доступа к разговору этой задачи")
+            raise PermissionError("No access to this task conversation")
         if item.state in TERMINAL_WORK_ITEM_STATES:
-            raise ValueError("Нельзя отправить сообщение в завершённую HITL-задачу")
+            raise ValueError("Cannot send a message to a completed HITL task")
         spec = item.interaction
         if spec is None or spec.mode != WorkItemInteractionMode.TAKEOVER:
-            raise ValueError("Отправка сообщения доступна только в режиме takeover")
+            raise ValueError("Sending a message is available only in takeover mode")
         ref = build_conversation_ref(item)
         if ref is None:
-            raise ValueError(f"WorkItem {work_item_id!r} без ссылки на разговор сессии")
+            raise ValueError(f"WorkItem {work_item_id!r} without a session conversation reference")
         clean = text.strip()
         resolved_file_ids = [fid.strip() for fid in (file_ids or []) if fid.strip()]
         if clean == "" and len(resolved_file_ids) == 0:
-            raise ValueError("Пустое сообщение оператора")
+            raise ValueError("Empty operator message")
 
         message_id = f"hitl-op:{idempotency_key}"
         message = build_operator_message(
@@ -361,19 +361,19 @@ class HitlConversationService:
         item = await self._work_items.get(company_id, work_item_id)
         spec = item.interaction
         if spec is None:
-            raise ValueError(f"WorkItem {work_item_id!r} без interaction spec")
+            raise ValueError(f"WorkItem {work_item_id!r} without interaction spec")
         if spec.mode not in (
             WorkItemInteractionMode.SINGLE_REPLY,
             WorkItemInteractionMode.TAKEOVER,
         ):
             raise ValueError(
-                f"Закрывающий ответ HITL недоступен для mode={spec.mode.value!r}"
+                f"Closing HITL reply is unavailable for mode={spec.mode.value!r}"
             )
         ref = build_conversation_ref(item)
         if ref is None:
-            raise ValueError(f"WorkItem {work_item_id!r} без ссылки на разговор сессии")
+            raise ValueError(f"WorkItem {work_item_id!r} without a session conversation reference")
         if not isinstance(ref.a2a_task_id, str) or not ref.a2a_task_id.strip():
-            raise ValueError(f"WorkItem {work_item_id!r} без a2a_task_id для stream")
+            raise ValueError(f"WorkItem {work_item_id!r} without a2a_task_id for stream")
 
         message_id = f"hitl-op-close:{idempotency_key}"
         message = build_operator_message(

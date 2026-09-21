@@ -28,7 +28,7 @@ logger = get_logger(__name__)
 async def on_startup(app: FastAPI, container: WikiContainer, settings: WikiSettings) -> None:
     _ = app, container, settings
     register_wiki_ws_commands()
-    logger.info("Wiki Service: command-router op_* зарегистрирован")
+    logger.info("wiki.service.command.router.op_")
 
 
 app = create_service_app(

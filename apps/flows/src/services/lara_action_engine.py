@@ -155,11 +155,11 @@ class LaraActionEngine:
         if not is_saved:
             raise RuntimeError("Failed to persist pending action")
         logger.info(
-            "lara_action_previewed action_id=%s pending_action_id=%s capability=%s operation=%s",
-            action_id,
-            pending_action_id,
-            capability,
-            operation,
+            "flows.lara_action_previewed",
+            action_id=action_id,
+            pending_action_id=pending_action_id,
+            capability=capability,
+            operation=operation,
         )
         return action
 
@@ -244,11 +244,7 @@ class LaraActionEngine:
             is_saved = await self._redis.set(key, action.model_dump_json(), ttl=self._ttl_seconds)
             if not is_saved:
                 raise RuntimeError("Failed to persist applied action")
-            logger.info(
-                "lara_action_applied action_id=%s pending_action_id=%s",
-                action.action_id,
-                pending_action_id,
-            )
+            logger.info("flows.lara_action_applied", action_id=action.action_id, pending_action_id=pending_action_id)
             return action
         finally:
             _ = await self._redis.delete(lock_key)
@@ -280,9 +276,9 @@ class LaraActionEngine:
         if not is_saved:
             raise RuntimeError("Failed to persist rejected action")
         logger.info(
-            "lara_action_rejected action_id=%s pending_action_id=%s reason=%s",
-            action.action_id,
-            pending_action_id,
-            action.reject_reason,
+            "flows.lara_action_rejected",
+            action_id=action.action_id,
+            pending_action_id=pending_action_id,
+            reason=action.reject_reason,
         )
         return action

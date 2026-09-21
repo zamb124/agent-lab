@@ -55,7 +55,7 @@ async def backfill_agent_devices(*, limit: int | None = None) -> int:
             written += 1
     finally:
         await authz.close()
-    logger.info("agent device backfill complete devices=%s", written)
+    logger.info("agent.device.backfill.complete.devices", devices=written)
     return written
 
 

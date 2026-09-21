@@ -175,7 +175,7 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
             await session.commit()
 
             count = get_rowcount(result)
-            logger.info(f"Deleted {count} relationships for entity:{entity_id}")
+            logger.info("crm.relationship.deleted_for_entity", entity_id=entity_id, count=count)
             return count
 
     async def get_outgoing(
@@ -249,7 +249,9 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
                     neighbors_map[rel.target_entity_id].append(rel)
 
             logger.debug(
-                f"Loaded neighbors for {len(entity_ids)} entities: {len(relationships)} relationships"
+                "crm.relationship.neighbors_loaded",
+                entity_count=len(entity_ids),
+                relationship_count=len(relationships),
             )
             return neighbors_map
 
@@ -303,7 +305,7 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
             payload = _json.dumps({"ts": last.created_at.isoformat(), "id": last.relationship_id})
             next_cursor = base64.urlsafe_b64encode(payload.encode()).decode()
 
-        logger.debug(f"Loaded {len(relationships)} relationships for graph (limit={limit})")
+        logger.debug("crm.relationship.graph_loaded", count=len(relationships), limit=limit)
         return relationships, next_cursor, has_more
 
     async def rewrite_entity_id(
@@ -317,7 +319,7 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
         Возвращает суммарное число затронутых строк (две операции UPDATE).
         """
         if old_entity_id == new_entity_id:
-            raise ValueError("old_entity_id и new_entity_id должны различаться")
+            raise ValueError("old_entity_id and new_entity_id must differ")
         async with self._db.session() as session:
             res_src = await session.execute(
                 update(Relationship)
@@ -339,11 +341,11 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
             n_src = get_rowcount(res_src)
             n_tgt = get_rowcount(res_tgt)
             logger.info(
-                "Rewrote entity_id %s -> %s: source_rows=%s target_rows=%s",
-                old_entity_id,
-                new_entity_id,
-                n_src,
-                n_tgt,
+                "crm.rewrote.entity_id.source_rows.target_rows",
+                old_entity_id=old_entity_id,
+                new_entity_id=new_entity_id,
+                source_rows=n_src,
+                target_rows=n_tgt,
             )
             return n_src + n_tgt
 
@@ -389,4 +391,4 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
                     if await self.delete_by_relationship_id(r.relationship_id):
                         deleted_count += 1
         if deleted_count > 0:
-            logger.info("Deduplicated %s relationships for entity:%s", deleted_count, entity_id)
+            logger.info("crm.deduplicated.relationships.entity", deleted_count=deleted_count, entity_id=entity_id)

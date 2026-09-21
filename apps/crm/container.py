@@ -191,7 +191,7 @@ class CRMContainer(BaseContainer):
     def worktracker_repository(self) -> WorktrackerRepository:
         settings = get_settings()
         if not settings.database.worktracker_url:
-            raise ValueError("database.worktracker_url обязателен для worktracker_repository")
+            raise ValueError("database.worktracker_url is required for worktracker_repository")
         return WorktrackerRepository(db=WorktrackerDatabase(settings.database.worktracker_url))
 
     @lazy
@@ -335,9 +335,9 @@ class CRMContainer(BaseContainer):
 def _create_crm_container() -> CRMContainer:
     settings = get_crm_settings()
     if not settings.database.crm_url:
-        raise ValueError("database.crm_url не задан")
+        raise ValueError("database.crm_url is not set")
     if not settings.database.shared_url:
-        raise ValueError("database.shared_url не задан")
+        raise ValueError("database.shared_url is not set")
     return CRMContainer(
         db_url=settings.database.crm_url,
         shared_db_url=settings.database.shared_url,

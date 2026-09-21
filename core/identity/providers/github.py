@@ -48,19 +48,19 @@ class GithubProvider(BaseAuthProvider):
         )
 
         if response.status_code != 200:
-            logger.error(f"Ошибка получения токена GitHub: {response.text}")
-            raise ValueError(f"GitHub вернул ошибку: {response.status_code}")
+            logger.error("auth.github.token_failed", body=response.text)
+            raise ValueError(f"GitHub returned an error: {response.status_code}")
 
         token_data = parse_json_object(response.content, "github.token.response")
         access_token = token_data.get("access_token")
         if not isinstance(access_token, str) or not access_token:
-            raise ValueError("GitHub не вернул access_token")
+            raise ValueError('GitHub did not return access_token')
 
         refresh_token = token_data.get("refresh_token")
         if refresh_token is not None and not isinstance(refresh_token, str):
-            raise ValueError("GitHub вернул refresh_token не строкой")
+            raise ValueError('GitHub returned refresh_token that is not a string')
 
-        logger.info("Токен GitHub получен успешно")
+        logger.info("identity.github")
         return access_token, refresh_token
 
     @override
@@ -78,14 +78,14 @@ class GithubProvider(BaseAuthProvider):
         )
 
         if user_response.status_code != 200:
-            logger.error(f"Ошибка получения профиля GitHub: {user_response.text}")
-            raise ValueError(f"Не удалось получить профиль GitHub: {user_response.status_code}")
+            logger.error("auth.github.profile_failed", body=user_response.text)
+            raise ValueError(f"Failed to fetch GitHub profile: {user_response.status_code}")
 
         user_data = parse_json_object(user_response.content, "github.user.response")
 
         email_raw = user_data.get("email")
         if email_raw is not None and not isinstance(email_raw, str):
-            raise ValueError("GitHub вернул email не строкой")
+            raise ValueError('GitHub returned email that is not a string')
         email = email_raw
         if not email:
             emails_response = await request_public_oauth(
@@ -102,39 +102,39 @@ class GithubProvider(BaseAuthProvider):
                     verified = email_object.get("verified")
                     item_email = email_object.get("email")
                     if not isinstance(primary, bool):
-                        raise ValueError("GitHub вернул primary не bool")
+                        raise ValueError('GitHub returned primary that is not bool')
                     if not isinstance(verified, bool):
-                        raise ValueError("GitHub вернул verified не bool")
+                        raise ValueError('GitHub returned verified that is not bool')
                     if item_email is not None and not isinstance(item_email, str):
-                        raise ValueError("GitHub вернул email не строкой")
+                        raise ValueError('GitHub returned email that is not a string')
                     if primary and verified and item_email:
                         email = item_email
                         break
 
         if not email:
-            logger.warning("Не удалось получить email пользователя GitHub")
-            raise ValueError("GitHub не вернул email пользователя")
+            logger.warning("identity.email.github")
+            raise ValueError('GitHub did not return user email')
 
         name_raw = user_data.get("name")
         if name_raw is not None and not isinstance(name_raw, str):
-            raise ValueError("GitHub вернул name не строкой")
+            raise ValueError('GitHub returned name that is not a string')
         name_field = "" if name_raw is None else name_raw
         parts = name_field.split(" ") if name_field else []
         first_name = parts[0] if parts else (email.split("@")[0])
 
         provider_user_id_raw = user_data.get("id")
         if isinstance(provider_user_id_raw, bool):
-            raise ValueError("GitHub вернул id не строкой и не числом")
+            raise ValueError('GitHub returned id that is neither a string nor a number')
         if isinstance(provider_user_id_raw, int):
             provider_user_id = str(provider_user_id_raw)
         elif isinstance(provider_user_id_raw, str) and provider_user_id_raw:
             provider_user_id = provider_user_id_raw
         else:
-            raise ValueError("GitHub не вернул id пользователя")
+            raise ValueError('GitHub did not return user id')
 
         avatar_url = user_data.get("avatar_url")
         if avatar_url is not None and not isinstance(avatar_url, str):
-            raise ValueError("GitHub вернул avatar_url не строкой")
+            raise ValueError('GitHub returned avatar_url that is not a string')
 
         provider_name = name_field.strip() if name_field else first_name.strip()
 

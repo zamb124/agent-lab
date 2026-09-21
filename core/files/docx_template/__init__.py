@@ -1,7 +1,7 @@
 """
 Шаблонизация DOCX (docxtpl / Jinja2 внутри Word).
 
-Источник шаблона — **FileRef**: элемент ``state.files`` (dict), ``FileRecord`` / ``FileResponse``.
+Источник шаблона — **FileRef**: элемент ``state.files`` (dict) или ``FileRecord``.
 
 - ``await DocxTemplater().fill(file_ref, context, *, strict=False, date_iso=True)`` → bytes;
 - ``await fill_and_create(file_ref=..., context=..., output_original_name=..., strict=..., date_iso=..., public=...)`` → ``FileRecord``.

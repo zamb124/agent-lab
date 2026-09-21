@@ -1,18 +1,12 @@
 /**
- * System-only platform LLM model scoring.
- *
- * API:
- *   GET    /frontend/api/platform/llm-model-scores
- *   PUT    /frontend/api/platform/llm-model-scores
- *   DELETE /frontend/api/platform/llm-model-scores/:capability/:provider/:model_id
- *   POST   /frontend/api/platform/llm-model-scores/refresh-cache
- *   POST   /frontend/api/platform/llm-model-scores/probe-providers
+ * System-only platform LLM model scoring — команды `frontend/llm_model_scores/*`
+ * (REST-зеркало `apps/frontend/api/platform_llm_model_scores.py`).
+ * Список валидируется fail-closed в `extraReducer` (`normalizeLlmModelScoreList`) и кладётся в `lastResult`.
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
 
-const BASE = '/frontend/api/platform/llm-model-scores';
+const WS_TIMEOUT_MS = 30_000;
 
 const AVAILABILITY = new Set(['available', 'cooldown', 'disabled', 'not_configured']);
 const ERROR_CLASS = new Set([
@@ -177,31 +171,31 @@ export function normalizeLlmModelScoreList(raw) {
     };
 }
 
+function _normalizedListReducer(state, event, events) {
+    if (event.type === events.SUCCEEDED) {
+        return { ...state, lastResult: normalizeLlmModelScoreList(event.payload && event.payload.result) };
+    }
+    return state;
+}
+
 export const llmModelScoresLoadOp = createAsyncOp({
     name: 'frontend/llm_model_scores_load',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: WS_TIMEOUT_MS,
+    commandType: 'frontend/llm_model_scores/list_requested',
     restMirror: { method: 'GET', path: '/frontend/api/platform/llm-model-scores' },
-    request: async () => normalizeLlmModelScoreList(await httpRequest({
-        method: 'GET',
-        url: BASE,
-    })),
+    extraReducer: _normalizedListReducer,
 });
 
 export const llmModelScoreUpsertOp = createAsyncOp({
     name: 'frontend/llm_model_score_upsert',
     successToastKey: 'frontend:settings_page.model_scoring.toast_saved',
     errorToastKey: 'frontend:settings_page.model_scoring.toast_failed',
+    transport: 'ws',
+    wsTimeoutMs: WS_TIMEOUT_MS,
+    commandType: 'frontend/llm_model_scores/upsert_requested',
     restMirror: { method: 'PUT', path: '/frontend/api/platform/llm-model-scores' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('llm_model_score_upsert: payload required');
-        }
-        return await httpRequest({
-            method: 'PUT',
-            url: BASE,
-            body: payload,
-        });
-    },
     onSuccess: (ctx) => {
         ctx.dispatch(llmModelScoresLoadOp.events.REQUESTED, null, { source: 'local' });
     },
@@ -211,19 +205,10 @@ export const llmModelScoreDeleteOp = createAsyncOp({
     name: 'frontend/llm_model_score_delete',
     successToastKey: 'frontend:settings_page.model_scoring.toast_deleted',
     errorToastKey: 'frontend:settings_page.model_scoring.toast_failed',
-    restMirror: { method: 'DELETE', path: '/frontend/api/platform/llm-model-scores/{capability}/{provider}/{model_id:path}' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('llm_model_score_delete: payload required');
-        }
-        if (!payload.capability || !payload.provider || !payload.model_id) {
-            throw new Error('llm_model_score_delete: capability/provider/model_id required');
-        }
-        return await httpRequest({
-            method: 'DELETE',
-            url: `${BASE}/${encodeURIComponent(payload.capability)}/${encodeURIComponent(payload.provider)}/${encodeURIComponent(payload.model_id)}`,
-        });
-    },
+    transport: 'ws',
+    wsTimeoutMs: WS_TIMEOUT_MS,
+    commandType: 'frontend/llm_model_scores/delete_requested',
+    restMirror: { method: 'DELETE', path: '/frontend/api/platform/llm-model-scores/:capability/:provider/:model_id' },
     onSuccess: (ctx) => {
         ctx.dispatch(llmModelScoresLoadOp.events.REQUESTED, null, { source: 'local' });
     },
@@ -233,12 +218,10 @@ export const llmModelScoresRefreshCacheOp = createAsyncOp({
     name: 'frontend/llm_model_scores_refresh_cache',
     successToastKey: 'frontend:settings_page.model_scoring.toast_cache_refreshed',
     errorToastKey: 'frontend:settings_page.model_scoring.toast_cache_failed',
+    transport: 'ws',
+    wsTimeoutMs: 60_000,
+    commandType: 'frontend/llm_model_scores/refresh_cache_requested',
     restMirror: { method: 'POST', path: '/frontend/api/platform/llm-model-scores/refresh-cache' },
-    request: async () => await httpRequest({
-        method: 'POST',
-        url: `${BASE}/refresh-cache`,
-        body: {},
-    }),
     onSuccess: (ctx) => {
         ctx.dispatch(llmModelScoresLoadOp.events.REQUESTED, null, { source: 'local' });
     },
@@ -248,12 +231,11 @@ export const llmModelScoresProbeProvidersOp = createAsyncOp({
     name: 'frontend/llm_model_scores_probe_providers',
     successToastKey: 'frontend:settings_page.model_scoring.toast_probe_done',
     errorToastKey: 'frontend:settings_page.model_scoring.toast_probe_failed',
+    transport: 'ws',
+    wsTimeoutMs: 60_000,
+    commandType: 'frontend/llm_model_scores/probe_providers_requested',
     restMirror: { method: 'POST', path: '/frontend/api/platform/llm-model-scores/probe-providers' },
-    request: async () => normalizeLlmModelScoreList(await httpRequest({
-        method: 'POST',
-        url: `${BASE}/probe-providers`,
-        body: {},
-    })),
+    extraReducer: _normalizedListReducer,
     onSuccess: (ctx) => {
         ctx.dispatch(llmModelScoresLoadOp.events.REQUESTED, null, { source: 'local' });
     },

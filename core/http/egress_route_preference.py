@@ -62,13 +62,13 @@ async def egress_prefer_proxy_set(normalized_origin: str) -> None:
     key = redis_key_for_origin(normalized_origin)
     ok = await _redis_client().set(key, _PREFER_MARKER, ttl=ttl)
     if not ok:
-        logger.warning("egress_prefer_proxy_set: Redis SET failed for origin=%s", normalized_origin)
+        logger.warning("http.egress_prefer_proxy_set", origin=normalized_origin)
 
 
 async def egress_prefer_proxy_delete(normalized_origin: str) -> None:
     deleted = await _redis_client().delete(redis_key_for_origin(normalized_origin))
     if deleted:
-        logger.debug("egress_prefer_proxy_delete: origin=%s", normalized_origin)
+        logger.debug("http.egress_prefer_proxy_delete", origin=normalized_origin)
 
 
 def _platform_proxy_configured() -> bool:

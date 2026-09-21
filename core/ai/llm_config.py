@@ -72,9 +72,9 @@ class LLMCallConfig(StrictBaseModel):
         out: dict[str, str] = {}
         for key, header_value in headers.items():
             if not key.strip():
-                raise ValueError("extra_request_headers: ключи — непустые строки")
+                raise ValueError('extra_request_headers: keys must be non-empty strings')
             if not isinstance(header_value, str):
-                raise ValueError("extra_request_headers: значения должны быть строками")
+                raise ValueError('extra_request_headers: values must be strings')
             out[key] = header_value
         return out
 
@@ -114,7 +114,7 @@ def validate_fallback_model_configs(
         return None
     for fallback_index, fallback_config in enumerate(configs):
         if fallback_config.model is None or not str(fallback_config.model).strip():
-            raise ValueError(f"fallback_models[{fallback_index}].model обязателен")
+            raise ValueError(f"fallback_models[{fallback_index}].model is required")
     return configs
 
 

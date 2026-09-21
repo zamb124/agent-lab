@@ -65,7 +65,7 @@ async def on_shutdown(app: FastAPI, container: BrowserContainer) -> None:
         logger.info("browser.reaper.stopped")
     stopped = await container.stop_browser_runtime()
     if stopped:
-        logger.info("BrowserRuntimeFacade остановлен")
+        logger.info("browser.browserruntimefacade")
     await container.redis_client.close()
     logger.info("browser.redis.closed")
 

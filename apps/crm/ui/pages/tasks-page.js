@@ -116,7 +116,6 @@ export class CRMTasksPage extends CRMNamespacePage {
         super.connectedCallback();
         this._workItems = this.useResource('worktracker/work_items', { autoload: false });
         this._createOp = this.useOp('crm/activity_task_create');
-        this.useEvent(this._createOp.op.events.SUCCEEDED, () => this._reload());
         this._reload();
     }
 

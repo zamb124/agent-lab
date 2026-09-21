@@ -29,31 +29,31 @@ def resolve_document_ttl_seconds(
     Результат: ``0`` (бессрочно) или положительное целое.
     """
     if default_ttl_seconds < 1:
-        raise ValueError("default_ttl_seconds должен быть >= 1")
+        raise ValueError('default_ttl_seconds must be >= 1')
     if ttl_raw is None:
         return int(default_ttl_seconds)
     if isinstance(ttl_raw, bool):
-        raise ValueError("ttl_seconds не может быть булевым")
+        raise ValueError('ttl_seconds cannot be a boolean')
     if isinstance(ttl_raw, int):
         if ttl_raw < 0:
-            raise ValueError("ttl_seconds не может быть отрицательным")
+            raise ValueError('ttl_seconds cannot be negative')
         return int(ttl_raw)
     if isinstance(ttl_raw, float):
         if not ttl_raw.is_integer():
-            raise ValueError("ttl_seconds должен быть целым числом секунд")
+            raise ValueError('ttl_seconds must be an integer number of seconds')
         v = int(ttl_raw)
         if v < 0:
-            raise ValueError("ttl_seconds не может быть отрицательным")
+            raise ValueError('ttl_seconds cannot be negative')
         return v
     if isinstance(ttl_raw, str):
         s = ttl_raw.strip()
         if not s:
-            raise ValueError("ttl_seconds пустая строка")
+            raise ValueError('ttl_seconds is an empty string')
         parsed = int(s, 10)
         if parsed < 0:
-            raise ValueError("ttl_seconds не может быть отрицательным")
+            raise ValueError('ttl_seconds cannot be negative')
         return parsed
-    raise ValueError("ttl_seconds должен быть целым неотрицательным числом")
+    raise ValueError('ttl_seconds must be a non-negative integer')
 
 
 def ensure_ttl_seconds_in_metadata(

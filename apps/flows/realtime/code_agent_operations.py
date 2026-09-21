@@ -10,6 +10,7 @@ from apps.flows.realtime.operations import (
     require_view_flow,
 )
 from apps.flows.src.container import FlowContainer
+from core.errors.boundary import PlatformNotFoundError
 from core.guest_runtime.models import (
     CodeAgentCopyTreeRequest,
     CodeAgentDeletePayload,
@@ -43,10 +44,10 @@ def raise_code_agent(exc: Exception) -> Never:
         raise_unavailable(exc)
     if isinstance(exc, GuestLeaseCapError | GuestBuildBusyError):
         raise_conflict(exc)
-    if isinstance(exc, LookupError):
+    if isinstance(exc, PlatformNotFoundError | LookupError):
         raise_not_found(exc)
     if isinstance(exc, RuntimeError):
-        raise WsCommandError("internal", str(exc)) from exc
+        raise WsCommandError("internal", str(exc), error_code='internal') from exc
     raise_invalid(exc)
 
 

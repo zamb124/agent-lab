@@ -24,7 +24,7 @@ class IdleWorkerContainer(BaseContainer):
 def _create_idle_worker_container() -> IdleWorkerContainer:
     settings = get_settings()
     if not settings.database.shared_url:
-        raise ValueError("database.shared_url не задан")
+        raise ValueError("database.shared_url is not set")
     return IdleWorkerContainer(
         db_url=settings.database.shared_url,
         shared_db_url=settings.database.shared_url,

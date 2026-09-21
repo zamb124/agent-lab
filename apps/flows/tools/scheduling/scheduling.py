@@ -238,8 +238,8 @@ async def cancel_scheduled_task(
     success = await client.cancel_task(schedule_task_id)
     if not success:
         raise ValueError(
-            f"Не удалось отменить задачу {schedule_task_id}. "
-            + "Возможно она уже выполнена или не существует."
+            f"Failed to cancel task {schedule_task_id}. "
+            + "It may already be completed or may not exist."
         )
 
     state.scheduled_tasks = [

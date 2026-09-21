@@ -30,6 +30,10 @@ from apps.voice.workers.ws_receiver import run_ws_receiver
 from core.ai.runtime import create_voice_tts_streamer
 from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzObject
+from core.billing import get_billing_service
+from core.billing.exceptions import BillingBalanceBlockedError
+from core.billing.service import BALANCE_BLOCK_OPERATION_SPEECH
+from core.billing.speech_usage import require_speech_billing_subjects
 from core.clients.speech_override import (
     SpeechOverride,
     SpeechOverrideProviderName,
@@ -155,6 +159,21 @@ async def voice_session(
         await _require_company_view_when_user_context(container, company_id=company_id)
     except AuthzDenied:
         await websocket.close(code=1008, reason="permission denied")
+        return
+
+    try:
+        user, company = require_speech_billing_subjects()
+        await get_billing_service().require_balance_for_billable_operation(
+            company.company_id,
+            str(user.user_id).strip(),
+            operation_code=BALANCE_BLOCK_OPERATION_SPEECH,
+            notification_service="voice",
+        )
+    except BillingBalanceBlockedError:
+        await websocket.close(code=1008, reason="billing_balance_blocked")
+        return
+    except ValueError:
+        await websocket.close(code=1008, reason="company context required")
         return
 
     logger.info(

@@ -86,7 +86,7 @@ class CatalogRepository:
         if parent_catalog_id is not None:
             parent = await self.get(parent_catalog_id, company_id, namespace)
             if parent is None:
-                raise ValueError("Родительский каталог не найден")
+                raise ValueError("Parent catalog not found")
         catalog_id = uuid.uuid4().hex
         row = OfficeDocumentCatalog(
             catalog_id=catalog_id,
@@ -234,7 +234,7 @@ class CatalogRepository:
     ) -> list[str]:
         root = await self.get(root_catalog_id, company_id, namespace)
         if root is None:
-            raise ValueError("Каталог не найден")
+            raise ValueError("Catalog not found")
         catalog_ids: list[str] = []
         seen: set[str] = set()
         if root.rag_index_enabled:
@@ -361,9 +361,9 @@ class CatalogRepository:
         namespace: str,
     ) -> bool:
         if await self.count_documents(catalog_id) > 0:
-            raise ValueError("В каталоге есть документы")
+            raise ValueError("Catalog contains documents")
         if await self.count_child_catalogs(catalog_id) > 0:
-            raise ValueError("В каталоге есть подкаталоги")
+            raise ValueError("Catalog contains subcatalogs")
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeDocumentCatalog).where(

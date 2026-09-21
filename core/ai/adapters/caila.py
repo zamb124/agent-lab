@@ -45,10 +45,10 @@ class CailaModelCatalogAdapter(OpenAICompatibleModelCatalogAdapter):
     @override
     async def list_models(self, *, probe_embeddings: bool = True) -> list[AIModelRecord]:
         if not self.is_configured():
-            raise ValueError("caila model provider не настроен")
+            raise ValueError('caila model provider is not configured')
         cfg = self._configured_llm_provider()
         if cfg is None:
-            raise ValueError("caila provider config не настроен")
+            raise ValueError('caila provider config is not configured')
         payload = await self._fetch_provider_catalog_payload(
             url=self._provider_models_url(cfg),
             headers=self.provider_model_list_headers(),
@@ -61,7 +61,7 @@ class CailaModelCatalogAdapter(OpenAICompatibleModelCatalogAdapter):
         merged_records = self._merge_model_records(records)
         if probe_embeddings:
             merged_records = await self._probe_embedding_dimensions(merged_records)
-        logger.info("caila: получено %d моделей", len(merged_records))
+        logger.info("ai.caila", merged_records_count=len(merged_records))
         return merged_records
 
     def _extract_caila_model_records(self, items: list[JsonValue]) -> list[AIModelRecord]:

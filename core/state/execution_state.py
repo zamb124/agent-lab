@@ -192,7 +192,7 @@ class NestedStateData(FlexibleBaseModel):
         if v is None or v == []:
             return []
         if not isinstance(v, list):
-            raise ValueError(f"messages: ожидается list, получен {type(v)}")
+            raise ValueError(f"messages: expected list, got {type(v)}")
         return messages_from_json_list(cast(list[object], v))
 
     @field_serializer("messages", when_used="always")
@@ -206,7 +206,7 @@ class NestedStateData(FlexibleBaseModel):
         if v is None or v == []:
             return []
         if not isinstance(v, list):
-            raise ValueError(f"interrupt_path: ожидается list, получен {type(v)}")
+            raise ValueError(f"interrupt_path: expected list, got {type(v)}")
         result: list[InterruptPathItem] = []
         for i, item in enumerate(cast(list[object], v)):
             if isinstance(item, InterruptPathItem):
@@ -215,8 +215,8 @@ class NestedStateData(FlexibleBaseModel):
                 result.append(InterruptPathItem.model_validate(item))
             else:
                 raise ValueError(
-                    f"Неожиданный тип элемента #{i} в interrupt_path: {type(item)}. "
-                    + "Ожидается InterruptPathItem или dict."
+                    f"Unexpected item type #{i} in interrupt_path: {type(item)}. "
+                    + 'Expected InterruptPathItem or dict.'
                 )
         return result
 
@@ -409,7 +409,7 @@ class ExecutionState(FlexibleBaseModel):
         if ":" not in v:
             raise ValueError(
                 f"session_id must be in format 'flow_id:context_id', got: '{v}'. "
-                + "Session ID должен содержать ':' для извлечения flow_id."
+                + "Session ID must contain ':' to extract flow_id."
             )
         flow_id, context_id = v.split(":", 1)
         if not flow_id:
@@ -448,7 +448,7 @@ class ExecutionState(FlexibleBaseModel):
         if v is None or v == []:
             return []
         if not isinstance(v, list):
-            raise ValueError(f"messages: ожидается list, получен {type(v)}")
+            raise ValueError(f"messages: expected list, got {type(v)}")
         return messages_from_json_list(cast(list[object], v))
 
     @field_serializer("messages", when_used="always")
@@ -461,7 +461,7 @@ class ExecutionState(FlexibleBaseModel):
         if v is None or v == []:
             return []
         if not isinstance(v, list):
-            raise ValueError(f"execution_exceptions: ожидается list, получен {type(v)}")
+            raise ValueError(f"execution_exceptions: expected list, got {type(v)}")
         result: list[ExecutionExceptionRecord] = []
         for idx, item in enumerate(cast(list[object], v)):
             if isinstance(item, ExecutionExceptionRecord):
@@ -470,8 +470,8 @@ class ExecutionState(FlexibleBaseModel):
                 result.append(ExecutionExceptionRecord.model_validate(item))
             else:
                 raise ValueError(
-                    f"execution_exceptions[{idx}]: ожидается ExecutionExceptionRecord или dict, "
-                    + f"получен {type(item)}"
+                    f"execution_exceptions[{idx}]: expected ExecutionExceptionRecord or dict, "
+                    + f"got {type(item)}"
                 )
         return result
 
@@ -557,8 +557,8 @@ class ExecutionState(FlexibleBaseModel):
         if isinstance(v, dict):
             return InterruptData.model_validate(cast(object, v))
         raise ValueError(
-            f"Неожиданный тип interrupt: {type(v)}. "
-            + "Ожидается InterruptData или dict."
+            f"Unexpected interrupt type: {type(v)}. "
+            + 'Expected InterruptData or dict.'
         )
 
     @override
@@ -591,7 +591,7 @@ class ExecutionState(FlexibleBaseModel):
         if v is None or v == []:
             return []
         if not isinstance(v, list):
-            raise ValueError(f"interrupt_path: ожидается list, получен {type(v)}")
+            raise ValueError(f"interrupt_path: expected list, got {type(v)}")
         result: list[InterruptPathItem] = []
         for i, item in enumerate(cast(list[object], v)):
             if isinstance(item, InterruptPathItem):
@@ -600,8 +600,8 @@ class ExecutionState(FlexibleBaseModel):
                 result.append(InterruptPathItem.model_validate(item))
             else:
                 raise ValueError(
-                    f"Неожиданный тип элемента #{i} в interrupt_path: {type(item)}. "
-                    + "Ожидается InterruptPathItem или dict."
+                    f"Unexpected item type #{i} in interrupt_path: {type(item)}. "
+                    + 'Expected InterruptPathItem or dict.'
                 )
         return result
 
@@ -659,7 +659,7 @@ class ExecutionState(FlexibleBaseModel):
         if v is None or v == {}:
             return {}
         if not isinstance(v, dict):
-            raise ValueError(f"child_workflows: ожидается dict, получен {type(v)}")
+            raise ValueError(f"child_workflows: expected dict, got {type(v)}")
         result: dict[str, ChildWorkflowLink] = {}
         for key, item in cast(Mapping[object, object], v).items():
             if not isinstance(key, str) or not key:
@@ -670,8 +670,8 @@ class ExecutionState(FlexibleBaseModel):
                 result[key] = ChildWorkflowLink.model_validate(cast(object, item))
             else:
                 raise ValueError(
-                    f"child_workflows[{key!r}]: ожидается ChildWorkflowLink или dict, "
-                    + f"получен {type(item)}"
+                    f"child_workflows[{key!r}]: expected ChildWorkflowLink or dict, "
+                    + f"got {type(item)}"
                 )
         return result
 
@@ -706,7 +706,7 @@ class ExecutionState(FlexibleBaseModel):
         if isinstance(value, dict):
             return AgentPlan.model_validate(value)
         raise ValueError(
-            f"agent_plan: ожидается AgentPlan | dict | None, получен {type(value)}"
+            f"agent_plan: expected AgentPlan | dict | None, got {type(value)}"
         )
 
     # ========================================================================
@@ -781,7 +781,7 @@ class ExecutionState(FlexibleBaseModel):
         if v is None or v == []:
             return []
         if not isinstance(v, list):
-            raise ValueError(f"prompt_history: ожидается list, получен {type(v)}")
+            raise ValueError(f"prompt_history: expected list, got {type(v)}")
         result: list[PromptHistoryItem] = []
         for item in cast(list[object], v):
             if isinstance(item, PromptHistoryItem):
@@ -790,7 +790,7 @@ class ExecutionState(FlexibleBaseModel):
                 result.append(PromptHistoryItem.model_validate(item))
             else:
                 raise ValueError(
-                    f"Ожидается PromptHistoryItem или dict, получен {type(item)}"
+                    f"Expected PromptHistoryItem or dict, got {type(item)}"
                 )
         return result
 

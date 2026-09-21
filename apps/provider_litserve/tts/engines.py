@@ -87,20 +87,20 @@ def parse_tts_body(
     модели), ``response_format`` (``pcm``|``wav``).
     """
     if isinstance(raw, Request):
-        raise HTTPException(status_code=422, detail="TTS: LitServe должен передать подготовленное тело запроса")
+        raise HTTPException(status_code=422, detail="TTS: LitServe must pass a prepared request body")
 
     input_raw = raw.get("input")
     if not isinstance(input_raw, str):
-        raise HTTPException(status_code=422, detail="TTS: input должен быть строкой")
+        raise HTTPException(status_code=422, detail="TTS: input must be a string")
     raw_input = input_raw.strip()
     text = sanitize_text_for_speech_backend(raw_input).strip()
     if not text:
         if raw_input:
             raise HTTPException(
                 status_code=422,
-                detail="TTS: поле input не содержит допустимых символов Unicode после нормализации",
+                detail="TTS: input field has no valid Unicode characters after normalization",
             )
-        raise HTTPException(status_code=422, detail="TTS: поле input обязательно и не должно быть пустым")
+        raise HTTPException(status_code=422, detail="TTS: input field is required and must not be empty")
 
     model_raw = raw.get("model")
     if model_raw is None:
@@ -108,13 +108,13 @@ def parse_tts_body(
     elif isinstance(model_raw, str):
         requested_model = model_raw.strip()
     else:
-        raise HTTPException(status_code=422, detail="TTS: model должен быть строкой")
+        raise HTTPException(status_code=422, detail="TTS: model must be a string")
     if requested_model == "":
         requested_model = default_api_model_id.strip()
     if requested_model == "":
         raise HTTPException(
             status_code=422,
-            detail="TTS: model обязателен (либо явно в payload, либо tts_default_api_model_id в конфиге)",
+            detail="TTS: model is required (explicitly in payload or tts_default_api_model_id in config)",
         )
 
     voice_raw = raw.get("voice")
@@ -125,7 +125,7 @@ def parse_tts_body(
         v = sanitize_text_for_speech_backend(voice_raw.strip()).strip()
         voice_override = _normalize_silero_speaker(v) if v else None
     else:
-        raise HTTPException(status_code=422, detail="TTS: voice должен быть строкой")
+        raise HTTPException(status_code=422, detail="TTS: voice must be a string")
 
     response_format_raw = raw.get("response_format")
     if response_format_raw is None:
@@ -133,9 +133,9 @@ def parse_tts_body(
     elif isinstance(response_format_raw, str):
         response_format = response_format_raw.strip().lower()
     else:
-        raise HTTPException(status_code=422, detail="TTS: response_format должен быть строкой")
+        raise HTTPException(status_code=422, detail="TTS: response_format must be a string")
     if response_format not in ("pcm", "wav"):
-        raise HTTPException(status_code=422, detail="TTS: response_format поддерживает только pcm или wav")
+        raise HTTPException(status_code=422, detail="TTS: response_format supports only pcm or wav")
 
     sample_rate_raw = raw.get("sample_rate")
     if sample_rate_raw is None:
@@ -143,7 +143,7 @@ def parse_tts_body(
     elif isinstance(sample_rate_raw, int) and not isinstance(sample_rate_raw, bool):
         sample_rate_override = sample_rate_raw
     else:
-        raise HTTPException(status_code=422, detail="TTS: sample_rate должен быть целым числом")
+        raise HTTPException(status_code=422, detail="TTS: sample_rate must be an integer")
 
     return TTSSynthesisInput(
         text=text,
@@ -184,7 +184,7 @@ _SILERO_APPLY_TTS_MAX_CHARS = 900
 
 def _split_text_for_silero_apply(text: str, *, max_chars: int) -> list[str]:
     if max_chars < 1:
-        raise ValueError("TTS: max_chars для сегментации должен быть >= 1")
+        raise ValueError("TTS: max_chars for segmentation must be >= 1")
     t = text.strip()
     if not t:
         return []
@@ -271,11 +271,11 @@ class LocalTTSEngine:
             return self._models[key]
 
         logger.info(
-            "Загрузка Silero TTS: api=%s bundle=%s lang=%s device=%s",
-            entry.api_model_id,
-            entry.silero_bundle,
-            entry.silero_language,
-            self._device,
+            "provider_litserve.silero.tts.api.bundle.lang",
+            api=entry.api_model_id,
+            bundle=entry.silero_bundle,
+            lang=entry.silero_language,
+            device=self._device,
         )
         started = time.monotonic()
         model, _example_text = silero_tts(
@@ -284,11 +284,7 @@ class LocalTTSEngine:
             device=self._torch_device(),
         )
         self._models[key] = model
-        logger.info(
-            "Silero TTS %s загружен за %.2fs",
-            entry.api_model_id,
-            time.monotonic() - started,
-        )
+        logger.info("provider_litserve.silero.tts.s", api_model_id=entry.api_model_id, value_1=time.monotonic() - started)
         return model
 
     def warmup_pipeline(self, api_model_id: str | None) -> TTSWarmupInfo:
@@ -300,7 +296,7 @@ class LocalTTSEngine:
         mid = (api_model_id or "").strip() or self._cfg.tts_default_api_model_id.strip()
         if mid == "":
             raise ValueError(
-                "TTS warmup: задайте tts_default_api_model_id и непустой список tts_models в infra"
+                "TTS warmup: set tts_default_api_model_id and a non-empty tts_models list in infra"
             )
         entry = self._resolve_entry(mid)
         key = self._cache_key(entry)
@@ -333,24 +329,24 @@ class LocalTTSEngine:
         )
         if not voice_src:
             raise ValueError(
-                f"TTS: voice не задан (ни в payload, ни в cfg.tts_models[{api_model_id}].voice)"
+                f"TTS: voice is not set (neither in payload nor in cfg.tts_models[{api_model_id}].voice)"
             )
         voice = _normalize_silero_speaker(voice_src)
         if not voice:
-            raise ValueError("TTS: voice пуст после нормализации Unicode")
+            raise ValueError("TTS: voice is empty after Unicode normalization")
         allowed_spk = SILERO_V5_RU_SPEAKERS_BY_BUNDLE[entry.silero_bundle]
         if voice not in allowed_spk:
             opts = ", ".join(sorted(allowed_spk))
             raise ValueError(
-                f"TTS: speaker={voice!r} не из допустимых для silero_bundle={entry.silero_bundle!r}: {opts}"
+                f"TTS: speaker={voice!r} is not allowed for silero_bundle={entry.silero_bundle!r}: {opts}"
             )
         sample_rate = sample_rate_override if sample_rate_override is not None else entry.sample_rate
         if not sample_rate:
             raise ValueError(
-                f"TTS: sample_rate не задан в cfg.tts_models[{api_model_id}].sample_rate"
+                f"TTS: sample_rate is not set in cfg.tts_models[{api_model_id}].sample_rate"
             )
         if sample_rate not in (8000, 24000, 48000):
-            raise ValueError("TTS: для Silero ru v5 допустимы только sample_rate 8000, 24000 или 48000")
+            raise ValueError("TTS: Silero ru v5 allows only sample_rate 8000, 24000 or 48000")
 
         silence_reason: str | None = None
         segment_count = 0
@@ -366,10 +362,10 @@ class LocalTTSEngine:
 
         if silence_reason is not None:
             logger.info(
-                "TTS тишина вместо синтеза: model=%s reason=%s preview=%r",
-                api_model_id,
-                silence_reason,
-                (text[:72] if text else ""),
+                "provider_litserve.tts.model.reason.preview",
+                model=api_model_id,
+                reason=silence_reason,
+                preview=text[:72] if text else '',
             )
             raw_pcm = _pcm16_silence(sample_rate=sample_rate)
         else:
@@ -398,9 +394,7 @@ class LocalTTSEngine:
                         raise ValueError(message) from exc
                     raise
                 except Exception as exc:
-                    logger.exception(
-                        "TTS ошибка синтеза (model=%s): %s", api_model_id, exc
-                    )
+                    logger.exception("provider_litserve.tts.model", model=api_model_id, exc=exc)
                     raise
                 raw_pcm = b"".join(pcm_parts)
 
@@ -410,12 +404,12 @@ class LocalTTSEngine:
             payload = _pcm_to_wav(raw_pcm, sample_rate=sample_rate)
 
         logger.info(
-            "TTS синтез: model=%s chars=%d segments=%d bytes=%d silence_reason=%s",
-            api_model_id,
-            len(text) if text else 0,
-            segment_count,
-            len(payload),
-            silence_reason or "-",
+            "provider_litserve.tts.model.chars.segments.bytes",
+            model=api_model_id,
+            chars=len(text) if text else 0,
+            segments=segment_count,
+            bytes=len(payload),
+            silence_reason=silence_reason or '-',
         )
         return payload
 

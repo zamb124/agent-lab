@@ -1,8 +1,6 @@
 /**
- * Console namespaces — list company_workspace + personal (admin).
- *
- * GET  /frontend/api/namespaces
- * POST /frontend/api/namespaces  (lightweight company_workspace)
+ * Console namespaces — company_workspace + personal (admin):
+ * команды `frontend/namespaces/{list,create}_requested`, REST-зеркало `apps/frontend/api/namespaces.py`.
  */
 
 import { createResourceCollection, createForm } from '@platform/lib/events/index.js';
@@ -12,6 +10,8 @@ export const consoleNamespacesResource = createResourceCollection({
     baseUrl: '/frontend/api/namespaces',
     idField: 'name',
     operations: ['list', 'create'],
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
     listQuery: () => ({ limit: 200, offset: 0 }),
     toastKeys: {
         create: 'frontend:namespaces_page.toast_created',

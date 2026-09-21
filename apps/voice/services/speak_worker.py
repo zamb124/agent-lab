@@ -31,6 +31,8 @@ import time
 
 from apps.voice.services.voice_client_channel import VoiceSynthesisChannel
 from apps.voice.services.voice_session import VoiceSession
+from core.billing.service import COST_ORIGIN_PLATFORM
+from core.billing.speech_usage import record_tts_usage_span, require_speech_billing_subjects
 from core.clients.tts_streaming import BaseTTSStreamer
 from core.clients.voice_chunker import VoiceChunker
 from core.clients.voice_logging import log_voice_tts_response
@@ -58,6 +60,7 @@ async def run_speak_worker(
     chunker = chunker or VoiceChunker()
     utterance_started_at: float | None = None
     ttfa_logged = False
+    utterance_chars = 0
 
     while session.active:
         try:
@@ -72,6 +75,13 @@ async def run_speak_worker(
                 chunker=chunker,
                 channel=channel,
             )
+            if utterance_chars > 0:
+                await _record_session_tts(
+                    session=session,
+                    provider=tts_streamer.provider,
+                    char_count=utterance_chars,
+                )
+            utterance_chars = 0
             utterance_started_at = None
             ttfa_logged = False
             continue
@@ -79,6 +89,7 @@ async def run_speak_worker(
         if text_piece == "":
             continue
 
+        utterance_chars += len(text_piece)
         await _announce_tts_started(session=session, channel=channel)
         if utterance_started_at is None:
             utterance_started_at = time.perf_counter()
@@ -143,6 +154,26 @@ async def _flush_and_synthesize(
         )
     finally:
         await _announce_tts_stopped(session=session, channel=channel)
+
+
+async def _record_session_tts(
+    *,
+    session: VoiceSession,
+    provider: str,
+    char_count: int,
+) -> None:
+    user, company = require_speech_billing_subjects()
+    await record_tts_usage_span(
+        user=user,
+        company=company,
+        provider=provider,
+        char_count=char_count,
+        cost_origin=COST_ORIGIN_PLATFORM,
+        extra_attributes={
+            "endpoint": "voice.session",
+            "session_id": session.session_id,
+        },
+    )
 
 
 async def _announce_tts_started(

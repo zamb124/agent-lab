@@ -28,9 +28,9 @@ class RealtimeContainer(BaseContainer):
 def _create_realtime_container() -> RealtimeContainer:
     settings = get_settings()
     if not settings.database.realtime_url:
-        raise ValueError("database.realtime_url не задан")
+        raise ValueError("database.realtime_url is not set")
     if not settings.database.shared_url:
-        raise ValueError("database.shared_url не задан")
+        raise ValueError("database.shared_url is not set")
     return RealtimeContainer(
         db_url=settings.database.realtime_url,
         shared_db_url=settings.database.shared_url,

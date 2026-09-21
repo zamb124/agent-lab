@@ -27,7 +27,7 @@ async def set_crm_context(
         s = str(namespace).strip()
         if not s:
             raise ValueError(
-                "namespace: пустая строка недопустима, передайте None если контекст без пространства"
+                "namespace: empty string is not allowed, pass None when the context has no workspace"
             )
         normalized_namespace = s
     resolved_user_id = user_id or "crm-worker"

@@ -69,7 +69,7 @@ class AttachmentService:
     def _get_company_id(self) -> str:
         context = get_context()
         if not context or not context.active_company:
-            raise ValueError("Нет активной компании")
+            raise ValueError("No active company")
         return context.active_company.company_id
 
     @staticmethod
@@ -101,7 +101,7 @@ class AttachmentService:
 
         context = get_context()
         if context is None:
-            raise ValueError("Нет контекста запроса")
+            raise ValueError("No request context")
         company_id = self._get_company_id()
 
         entity = await self._entity_repo.get(entity_id)
@@ -151,7 +151,7 @@ class AttachmentService:
                 raw_text = await load_text_from_bytes(file_data, filename)
             except Exception as exc:
                 logger.warning(
-                    "note attachment: text extract failed",
+                    "crm.note.attachment.text.extract.failed",
                     entity_id=entity_id,
                     filename=filename,
                     error=str(exc),
@@ -187,11 +187,11 @@ class AttachmentService:
             )
 
         logger.info(
-            "Attachment added: %s -> %s (type=%s), doc_id=%s",
-            filename,
-            entity_id,
-            entity.full_type,
-            document_id,
+            "crm.attachment.added.type.doc_id",
+            filename=filename,
+            entity_id=entity_id,
+            type_value=entity.full_type,
+            doc_id=document_id,
         )
 
         status = index_response.get("status")
@@ -225,7 +225,7 @@ class AttachmentService:
     ) -> None:
         context = get_context()
         if context is None:
-            raise ValueError("Нет контекста запроса")
+            raise ValueError("No request context")
 
         entity = await self._entity_repo.get(entity_id)
 
@@ -252,7 +252,7 @@ class AttachmentService:
                 authz=self._authz,
             )
 
-        logger.info(f"Attachment removed: {document_id} from {entity_id}")
+        logger.info("crm.attachment.removed", document_id=document_id, entity_id=entity_id)
 
     async def get_attachments(
         self,
@@ -291,7 +291,7 @@ class AttachmentService:
                 response = await self._rag.get_document_processing_status(doc_id)
             except (ServiceClientError, ValueError) as exc:
                 logger.warning(
-                    "Attachment status missing in file storage and rag status endpoint",
+                    "crm.attachment.status.missing.file.storage",
                     entity_id=entity_id,
                     document_id=doc_id,
                     error=str(exc),
@@ -362,5 +362,5 @@ class AttachmentService:
             await self.remove_attachment(entity_id, doc_id)
             deleted_count += 1
 
-        logger.info(f"Deleted {deleted_count} attachments for {entity_id}")
+        logger.info("crm.attachment.deleted_for_entity", entity_id=entity_id, deleted_count=deleted_count)
         return deleted_count

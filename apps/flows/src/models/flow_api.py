@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from apps.flows.src.models.branch_contracts import BranchPayload
 from apps.flows.src.models.flow_config import (
+    BranchConfig,
     Edge,
     ExternalAgentStatus,
     FlowEmployeeConfig,
@@ -22,24 +23,6 @@ from core.flow_ui.document import FlowUIDocument
 from core.flow_ui.templates import default_chat_document
 from core.models.base import StrictBaseModel
 from core.types import JsonObject, JsonValue
-
-
-class BranchResponse(StrictBaseModel):
-    name: str
-    description: str = ""
-    tags: list[str] = Field(default_factory=list)
-    permission: list[str] = Field(default_factory=list)
-    entry: str | None = None
-    nodes: dict[str, JsonObject] | None = None
-    edges: list[Edge] | None = None
-    variables: dict[str, FlowVariableConfig] = Field(default_factory=dict)
-    nodes_mode: str | None = None
-    edges_mode: str | None = None
-    variables_mode: str | None = None
-    resources: dict[str, ResourceReference] = Field(default_factory=dict)
-    resources_mode: str | None = None
-    speech: JsonObject | None = None
-    interface: FlowUIDocument | None = None
 
 
 class FlowCreateRequest(BaseModel):
@@ -83,7 +66,7 @@ class FlowResponse(StrictBaseModel):
     edges: list[Edge] | None = None
     variables: dict[str, FlowVariableConfig] = Field(default_factory=dict)
     tags: list[str] = Field(default_factory=list)
-    branches: dict[str, BranchResponse] = Field(default_factory=dict)
+    branches: dict[str, BranchConfig] = Field(default_factory=dict)
     hidden: bool = False
     has_bundle_update: bool = False
     url: str | None = None

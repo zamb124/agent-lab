@@ -199,7 +199,7 @@ def build_integration_oauth_simple_error_html(
 ) -> str:
     """Минимальная страница для ValueError в complete_oauth без структуры guided."""
     if not message:
-        raise ValueError("build_integration_oauth_simple_error_html: message обязателен")
+        raise ValueError('build_integration_oauth_simple_error_html: message is required')
     title_html = html_module.escape(
         "Connection failed" if locale == "en" else "Ошибка подключения",
     )

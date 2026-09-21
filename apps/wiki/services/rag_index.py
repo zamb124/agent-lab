@@ -188,7 +188,7 @@ class WikiRagIndexService:
         )
         raw_by_namespace = payload.get("results")
         if not isinstance(raw_by_namespace, dict):
-            raise ValueError("RAG global search: results должен быть объектом")
+            raise ValueError("RAG global search: results must be an object")
 
         hits: list[RAGSearchResult] = []
         for raw_results in raw_by_namespace.values():

@@ -27,14 +27,14 @@ class StealthPlan:
 
 def _accept_language_from_locale(locale: str) -> str:
     if not locale:
-        raise ValueError("locale обязателен")
+        raise ValueError("locale is required")
     # Простая форма "en-US,en;q=0.9".
     primary = locale.split(",")[0].strip()
     if not primary:
-        raise ValueError("locale должен быть непустым")
+        raise ValueError("locale must be non-empty")
     base = primary.split("-")[0].strip()
     if not base:
-        raise ValueError("locale должен содержать базовый язык")
+        raise ValueError("locale must contain a base language")
     if primary == base:
         return f"{base},{base};q=0.9"
     return f"{primary},{base};q=0.9"
@@ -42,26 +42,26 @@ def _accept_language_from_locale(locale: str) -> str:
 
 def build_stealth_plan(signature: ContextSignature) -> StealthPlan:
     if not signature.stealth_init_version:
-        raise ValueError("stealth_init_version обязателен")
+        raise ValueError("stealth_init_version is required")
     if not signature.anti_bot_tier:
-        raise ValueError("anti_bot_tier обязателен")
+        raise ValueError("anti_bot_tier is required")
 
     version = signature.stealth_init_version
     tier = signature.anti_bot_tier
 
     if version != "v1":
-        raise ValueError(f"Неизвестная stealth_init_version={version!r}")
+        raise ValueError(f"Unknown stealth_init_version={version!r}")
 
     # Tier намеренно делаем строгим: это вход в анти-бот профиль и должен быть детерминированным.
     # Если нужен новый tier, его следует явно добавить.
     if tier not in ("white", "gray", "black"):
-        raise ValueError(f"Неизвестный anti_bot_tier={tier!r}")
+        raise ValueError(f"Unknown anti_bot_tier={tier!r}")
 
     # Для согласованности с сетью используем языки ровно из locale (без эвристик).
     locale_primary = signature.locale.split(",")[0].strip()
     base_lang = locale_primary.split("-")[0].strip()
     if not locale_primary or not base_lang:
-        raise ValueError("locale должен содержать базовый язык")
+        raise ValueError("locale must contain a base language")
     languages = (locale_primary, base_lang)
     headers = {"Accept-Language": _accept_language_from_locale(signature.locale)}
     return StealthPlan(

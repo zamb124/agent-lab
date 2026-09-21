@@ -10,7 +10,7 @@ import uuid
 
 from core.config import get_settings
 from core.logging import get_log_context
-from core.test_scope import LOG_TEST_SCOPE
+from core.logging.attributes import LOG_TEST_SCOPE
 
 LABEL_REQUEST_ID = "request_id"
 LABEL_TRACE_ID = "trace_id"
@@ -46,7 +46,7 @@ def build_log_labels(
     settings = get_settings()
     effective_service = (service_name or settings.server.name).strip()
     if not effective_service:
-        raise ValueError("build_log_labels: service_name не определён")
+        raise ValueError('build_log_labels: service_name is not set')
 
     request_id = _resolve_id(
         override_request_id,
@@ -82,7 +82,7 @@ def merge_extra_labels(labels: dict[str, str], extra_labels: dict[str, str] | No
         return
     for key, value in extra_labels.items():
         if not value.strip():
-            raise ValueError(f"enqueue: label {key!r} должен быть непустой строкой")
+            raise ValueError(f"enqueue: label {key!r} must be a non-empty string")
         labels[key] = value.strip()
 
 
@@ -94,13 +94,13 @@ def _resolve_id(
 ) -> str:
     if override is not None:
         if not override.strip():
-            raise ValueError("override id должен быть непустой строкой или None")
+            raise ValueError('override id must be a non-empty string or None')
         return override.strip()
     if isinstance(from_ctx, str) and from_ctx.strip():
         return from_ctx.strip()
     if not background_kind or not background_kind.strip():
         raise ValueError(
-            "enqueue: вне request-скоупа обязателен background_kind ('background'/'sched'/'cron')"
+            "enqueue: outside request scope background_kind is required ('background'/'sched'/'cron')"
         )
     return f"{background_kind.strip()}:{uuid.uuid4().hex}"
 

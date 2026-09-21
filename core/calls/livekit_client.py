@@ -43,9 +43,9 @@ def _livekit_traced_attrs(
     cid = company_id.strip()
     uid = user_id.strip()
     if cid == "":
-        raise ValueError("company_id обязателен для трейсируемой операции LiveKit.")
+        raise ValueError('company_id is required for a traced LiveKit operation.')
     if uid == "":
-        raise ValueError("user_id обязателен для трейсируемой операции LiveKit.")
+        raise ValueError('user_id is required for a traced LiveKit operation.')
     return {
         trace_attributes.ATTR_TENANT_COMPANY_ID: cid,
         trace_attributes.ATTR_USER_ID: uid,
@@ -58,9 +58,9 @@ class LiveKitClient:
 
     def __init__(self, *, url: str, api_key: str, api_secret: str) -> None:
         if not api_key:
-            raise ValueError("livekit_api_key не задан в конфигурации")
+            raise ValueError('livekit_api_key is not set in configuration')
         if not api_secret:
-            raise ValueError("livekit_api_secret не задан в конфигурации")
+            raise ValueError('livekit_api_secret is not set in configuration')
         self._url: str = url
         self._api_key: str = api_key
         self._api_secret: str = api_secret
@@ -125,7 +125,7 @@ class LiveKitClient:
     ) -> list[EgressInfo]:
         """Возвращает egress-процессы для комнаты."""
         if room_name == "":
-            raise ValueError("room_name обязателен для list_egress.")
+            raise ValueError('room_name is required for list_egress.')
         request = ListEgressRequest(room_name=room_name)
         if active is not None:
             request.active = active
@@ -152,17 +152,17 @@ class LiveKitClient:
     ) -> EgressInfo:
         """Запускает room egress и пишет файл сразу в S3."""
         if room_name == "":
-            raise ValueError("room_name обязателен для старта egress.")
+            raise ValueError('room_name is required to start egress.')
         if filepath == "":
-            raise ValueError("filepath обязателен для старта egress.")
+            raise ValueError('filepath is required to start egress.')
         if s3_access_key == "":
-            raise ValueError("s3_access_key обязателен для старта egress.")
+            raise ValueError('s3_access_key is required to start egress.')
         if s3_secret_key == "":
-            raise ValueError("s3_secret_key обязателен для старта egress.")
+            raise ValueError('s3_secret_key is required to start egress.')
         if s3_region == "":
-            raise ValueError("s3_region обязателен для старта egress.")
+            raise ValueError('s3_region is required to start egress.')
         if s3_bucket == "":
-            raise ValueError("s3_bucket обязателен для старта egress.")
+            raise ValueError('s3_bucket is required to start egress.')
 
         s3_upload = S3Upload(
             access_key=s3_access_key,
@@ -231,21 +231,21 @@ class LiveKitClient:
     ) -> EgressInfo:
         """Сегментированный egress одного аудиотрека (микрофон) в S3 для «речи в ленту»."""
         if room_name == "":
-            raise ValueError("room_name обязателен для старта track composite egress.")
+            raise ValueError('room_name is required to start track composite egress.')
         if audio_track_id == "":
-            raise ValueError("audio_track_id обязателен для старта track composite egress.")
+            raise ValueError('audio_track_id is required to start track composite egress.')
         if filepath_prefix == "":
-            raise ValueError("filepath_prefix обязателен для старта track composite egress.")
+            raise ValueError('filepath_prefix is required to start track composite egress.')
         if segment_duration_seconds <= 0:
-            raise ValueError("segment_duration_seconds должен быть больше 0.")
+            raise ValueError('segment_duration_seconds must be greater than 0.')
         if s3_access_key == "":
-            raise ValueError("s3_access_key обязателен для старта track composite egress.")
+            raise ValueError('s3_access_key is required to start track composite egress.')
         if s3_secret_key == "":
-            raise ValueError("s3_secret_key обязателен для старта track composite egress.")
+            raise ValueError('s3_secret_key is required to start track composite egress.')
         if s3_region == "":
-            raise ValueError("s3_region обязателен для старта track composite egress.")
+            raise ValueError('s3_region is required to start track composite egress.')
         if s3_bucket == "":
-            raise ValueError("s3_bucket обязателен для старта track composite egress.")
+            raise ValueError('s3_bucket is required to start track composite egress.')
 
         s3_upload = S3Upload(
             access_key=s3_access_key,
@@ -312,7 +312,7 @@ class LiveKitClient:
     ) -> EgressInfo:
         """Останавливает egress-процесс по id."""
         if egress_id == "":
-            raise ValueError("egress_id обязателен для stop_egress.")
+            raise ValueError('egress_id is required for stop_egress.')
         request = StopEgressRequest(egress_id=egress_id)
         async with traced_operation(
             "livekit.egress.stop",

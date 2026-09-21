@@ -64,7 +64,7 @@ class UserRepository(BaseRepository[User]):
         """Все пользователи, у которых в emails есть адрес без учёта регистра."""
         norm = email.strip().lower()
         if not norm:
-            raise ValueError("email для поиска не может быть пустым")
+            raise ValueError('search email cannot be empty')
         async with self._storage.get_session() as session:
             result = await session.execute(
                 select(UsersModel.value)

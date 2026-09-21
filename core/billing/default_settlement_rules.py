@@ -4,12 +4,9 @@
 
 Источники spans с platform.billing.pending_settlement (operation_name при сохранении в БД):
 
-- llm.{model} — core/tracing/tracer.py (record_llm_response на CLIENT span)
+- llm.{model} — core/clients/llm/billing.py (record_llm_response на CLIENT span LLMClient)
 - flows.llm_resource.complete | .chat | .chat_with_tools — apps/flows/src/resources/wrappers/llm_resource.py
-- flows.llm.invoke_task — apps/flows/src/tasks/llm_tasks.py
-- flows.evaluation_lab.llm | .llm_tool — apps/flows/src/evaluation/lab_service.py (quantity — токены, resource_name per-model из атрибута span)
-- rag.embed.batch — core/rag/services/embedding_client.py
-- core.files.reader.image — core/files/reader/service.py
+- rag.embed.batch — core/ai/embedding_client.py
 - livekit.room.session_usage | livekit.egress.composite_usage | livekit.egress.segmented_usage
   — core/calls/livekit_usage_spans.py (поминутное списание после завершения сессии / записи / речи в ленту)
 - livekit.room.create | livekit.egress.room_composite_s3 | livekit.egress.track_composite_segmented

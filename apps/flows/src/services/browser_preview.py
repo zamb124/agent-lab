@@ -38,7 +38,7 @@ def _redis_client() -> RedisClient:
 
 def browser_preview_active_session_key(task_id: str) -> str:
     if not task_id.strip():
-        raise ValueError("task_id обязателен")
+        raise ValueError("task_id is required")
     return f"{_ACTIVE_SESSION_KEY_PREFIX}{task_id.strip()}:active_session"
 
 

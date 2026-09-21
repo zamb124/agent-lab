@@ -154,7 +154,7 @@ def _optional_int(value: JsonValue | None) -> int | None:
     if value is None:
         return None
     if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError("page_index в metadata чанка должен быть int или null")
+        raise ValueError('page_index in chunk metadata must be int or null')
     return value
 
 
@@ -162,7 +162,7 @@ def _optional_label(value: JsonValue | None) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str):
-        raise ValueError("page_label в metadata чанка должен быть str или null")
+        raise ValueError('page_label in chunk metadata must be str or null')
     stripped = value.strip()
     if not stripped:
         return None
@@ -173,11 +173,11 @@ def _heading_trail_from_metadata(value: JsonValue | None) -> list[str]:
     if value is None:
         return []
     if not isinstance(value, list):
-        raise ValueError("heading_trail в metadata чанка должен быть списком строк")
+        raise ValueError('heading_trail in chunk metadata must be a list of strings')
     trail: list[str] = []
     for item in value:
         if not isinstance(item, str):
-            raise ValueError("heading_trail в metadata чанка должен быть списком строк")
+            raise ValueError('heading_trail in chunk metadata must be a list of strings')
         trail.append(item)
     return trail
 
@@ -186,7 +186,7 @@ def _files_from_metadata(value: JsonValue | None) -> list[FileRef]:
     if value is None:
         return []
     if not isinstance(value, list):
-        raise ValueError("files в metadata чанка должен быть списком FileRef")
+        raise ValueError('files in chunk metadata must be a list of FileRef')
     return [FileRef.model_validate(item) for item in value]
 
 
@@ -323,7 +323,7 @@ class PgVectorProvider(BaseRAGProvider):
         if not db_url:
             settings = get_settings()
             if not settings.database.rag_url:
-                raise ValueError("DATABASE__RAG_URL не настроен")
+                raise ValueError('DATABASE__RAG_URL is not configured')
             db_url = settings.database.rag_url
 
         self._engine: AsyncEngine = create_async_engine(
@@ -338,7 +338,7 @@ class PgVectorProvider(BaseRAGProvider):
         )
 
         if embedding_runtime is None:
-            raise ValueError("embedding runtime обязателен для pgvector")
+            raise ValueError('embedding runtime is required for pgvector')
         api_key = _normalize_embedding_api_key(config.embedding_api_key) or None
 
         timeout = config.timeout
@@ -349,9 +349,9 @@ class PgVectorProvider(BaseRAGProvider):
         mrl_output_dimension = embedding_runtime.mrl_output_dimension
 
         if not model:
-            raise ValueError("embedding.model обязателен в конфигурации")
+            raise ValueError('embedding.model is required in configuration')
         if not dimension:
-            raise ValueError("embedding.dimension обязателен в конфигурации")
+            raise ValueError('embedding.dimension is required in configuration')
 
         embedding_extra_headers = dict(embedding_runtime.extra_request_headers or {})
         root_for_yandex_check = (embedding_base_url or "").strip()
@@ -359,7 +359,7 @@ class PgVectorProvider(BaseRAGProvider):
             yc_raw = llm_provider_block(get_settings().llm, "yandex")
             if not isinstance(yc_raw, YandexLLMProviderConfig):
                 raise ValueError(
-                    "Embedding provider/base_url указывает на Yandex: задайте блок llm.yandex "
+                    'Embedding provider/base_url points to Yandex: set the llm.yandex block '
                     + "(api_key, folder_id)."
                 )
             embedding_extra_headers = {
@@ -384,7 +384,7 @@ class PgVectorProvider(BaseRAGProvider):
             deterministic=use_deterministic_embeddings,
         )
         if use_deterministic_embeddings:
-            logger.info("PgVector провайдер: mock embeddings для тестов")
+            logger.info("rag.pgvector.mock.embeddings")
 
         query_instruction = embedding_runtime.query_instruction
         self._query_instruction: str | None = (
@@ -395,7 +395,7 @@ class PgVectorProvider(BaseRAGProvider):
 
         self._file_reader: FileReader = FileReader()
 
-        logger.info(f"PgVector провайдер инициализирован: model={model}, dimension={dimension}")
+        logger.info("rag.pgvector.initialized", model=model, dimension=dimension)
 
     @property
     @override
@@ -497,7 +497,7 @@ class PgVectorProvider(BaseRAGProvider):
             await session.commit()
             deleted = get_rowcount(result)
 
-        logger.info(f"Удален namespace {namespace_id}: {deleted} записей")
+        logger.info("rag.pgvector.namespace_deleted", namespace_id=namespace_id, deleted=deleted)
         return deleted > 0
 
     # — Загрузка документов —
@@ -553,7 +553,7 @@ class PgVectorProvider(BaseRAGProvider):
         doc_metadata = dict(metadata) if metadata is not None else {}
         bucket_key = doc_metadata.get("s3_bucket")
         if bucket_key is not None and not isinstance(bucket_key, str):
-            raise ValueError("metadata.s3_bucket должен быть строкой")
+            raise ValueError('metadata.s3_bucket must be a string')
         file_data, bucket_name, original_filename = await self._download_file_from_s3(
             s3_key, bucket_config_key=bucket_key
         )
@@ -577,7 +577,7 @@ class PgVectorProvider(BaseRAGProvider):
         if extract.source_checksum:
             doc_metadata["source_checksum"] = extract.source_checksum
 
-        logger.info(f"Документ из S3 индексируется через FileReader: {s3_key}")
+        logger.info("rag.pgvector.s3_index_started", s3_key=s3_key)
         return await self._upload_file_extract_internal(
             namespace_id=namespace_id,
             extract=extract,
@@ -635,7 +635,7 @@ class PgVectorProvider(BaseRAGProvider):
             metadata["index_profile_config"] = index_profile_config
 
         if index_profile_config is not None and not isinstance(index_profile_config, dict):
-            raise ValueError("index_profile_config должен быть объектом")
+            raise ValueError('index_profile_config must be an object')
         if index_profile_config is None:
             profile = get_settings().rag.document_indexing
         else:
@@ -650,7 +650,7 @@ class PgVectorProvider(BaseRAGProvider):
         )
         if not rag_chunks:
             raise ValueError(
-                f"После FileReader нет текста для индексации (пустые страницы). file={document_name}"
+                f"No text to index after FileReader (empty pages). file={document_name}"
             )
         chunks = [chunk.content for chunk in rag_chunks]
         indexing_runtime: RAGMetadata = dict(
@@ -671,7 +671,10 @@ class PgVectorProvider(BaseRAGProvider):
             )
         except Exception as exc:
             logger.warning(
-                f"Embedding unavailable for '{document_name}' in '{namespace_id}': {exc}. Storing chunks without embeddings — reembed task will retry."
+                "rag.pgvector.embedding_unavailable",
+                document_name=document_name,
+                namespace_id=namespace_id,
+                error=str(exc),
             )
             embeddings = [None] * len(chunks)
             embedding_model = None
@@ -679,7 +682,7 @@ class PgVectorProvider(BaseRAGProvider):
 
         company_id_value = metadata.get("company_id")
         if company_id_value is not None and not isinstance(company_id_value, str):
-            raise ValueError("metadata.company_id должен быть строкой")
+            raise ValueError('metadata.company_id must be a string')
 
         rows: list[VectorDocument] = []
         for i, (chunk, emb) in enumerate(zip(rag_chunks, embeddings)):
@@ -719,11 +722,11 @@ class PgVectorProvider(BaseRAGProvider):
             delete_result = await session.execute(delete_stmt)
             deleted_count = get_rowcount(delete_result)
             if deleted_count:
-                logger.info(f"Удалены старые чанки документа '{document_name}': {deleted_count}")
+                logger.info("rag.pgvector.stale_chunks_deleted", document_name=document_name, deleted_count=deleted_count)
             session.add_all(rows)
             await session.commit()
 
-        logger.info(f"Загружен документ '{document_name}' в {namespace_id}: {len(chunks)} chunks")
+        logger.info("rag.pgvector.document_uploaded", document_name=document_name, namespace_id=namespace_id, chunk_count=len(chunks))
         merged_doc_meta = {
             **metadata,
             "indexing_runtime": indexing_runtime,
@@ -902,7 +905,7 @@ class PgVectorProvider(BaseRAGProvider):
                 )
             )
 
-        logger.info(f"Найдено {len(docs)} документов с фильтрами в {namespace_id}")
+        logger.info("rag.pgvector.documents_listed", namespace_id=namespace_id, count=len(docs))
         return docs
 
     def _metadata_expr_for_scalar(
@@ -930,7 +933,7 @@ class PgVectorProvider(BaseRAGProvider):
         if operator == "$in":
             if not isinstance(op_value, list) or len(op_value) == 0:
                 raise ValueError(
-                    f"RAG filters: $in требует непустой список значений для ключа {key!r}",
+                    f"RAG filters: $in requires a non-empty value list for key {key!r}",
                 )
             vals = op_value
             if len(vals) == 1:
@@ -943,7 +946,7 @@ class PgVectorProvider(BaseRAGProvider):
         if operator == "$nin":
             if not isinstance(op_value, list) or len(op_value) == 0:
                 raise ValueError(
-                    f"RAG filters: $nin требует непустой список значений для ключа {key!r}",
+                    f"RAG filters: $nin requires a non-empty value list for key {key!r}",
                 )
             vals = op_value
             if len(vals) == 1:
@@ -966,7 +969,7 @@ class PgVectorProvider(BaseRAGProvider):
                 return col_int <= op_value
         if not isinstance(op_value, (int, float)) or isinstance(op_value, bool):
             raise ValueError(
-                f"RAG filters: {key}.{operator} поддерживает только number"
+                f"RAG filters: {key}.{operator} supports only number"
             )
         fv = float(op_value)
         if operator == "$gt":
@@ -978,7 +981,7 @@ class PgVectorProvider(BaseRAGProvider):
         if operator == "$lte":
             return self._metadata_expr_for_scalar(key, fv) <= fv
 
-        raise ValueError(f"RAG filters: неподдерживаемый оператор {operator}")
+        raise ValueError(f"RAG filters: unsupported operator {operator}")
 
     def _build_metadata_filter_expression(self, filters: RAGMetadataFilter) -> ColumnElement[bool]:
         validate_metadata_filters(filters)
@@ -988,7 +991,7 @@ class PgVectorProvider(BaseRAGProvider):
         if "$and" in node:
             and_items = node["$and"]
             if not isinstance(and_items, list):
-                raise ValueError("RAG filters: $and должен быть массивом условий")
+                raise ValueError('RAG filters: $and must be an array of conditions')
             and_expressions: list[ColumnElement[bool]] = [
                 self._build_metadata_filter_node(
                     require_json_object(item, "RAG filters $and item")
@@ -999,7 +1002,7 @@ class PgVectorProvider(BaseRAGProvider):
         if "$or" in node:
             or_items = node["$or"]
             if not isinstance(or_items, list):
-                raise ValueError("RAG filters: $or должен быть массивом условий")
+                raise ValueError('RAG filters: $or must be an array of conditions')
             or_expressions: list[ColumnElement[bool]] = [
                 self._build_metadata_filter_node(
                     require_json_object(item, "RAG filters $or item")
@@ -1029,7 +1032,7 @@ class PgVectorProvider(BaseRAGProvider):
             deleted = get_rowcount(result)
 
         if deleted:
-            logger.info(f"Удален документ {document_id}: {deleted} chunks")
+            logger.info("rag.pgvector.document_deleted", document_id=document_id, deleted=deleted)
         return deleted > 0
 
     async def batch_document_semantic_index_status(

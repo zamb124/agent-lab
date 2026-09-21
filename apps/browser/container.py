@@ -70,7 +70,7 @@ class BrowserContainer(BaseContainer):
 def _create_browser_container() -> BrowserContainer:
     settings = get_browser_settings()
     if not settings.database.shared_url:
-        raise ValueError("database.shared_url is required для сервиса browser")
+        raise ValueError("database.shared_url is required for the browser service")
     return BrowserContainer(
         db_url=settings.database.shared_url,
         shared_db_url=settings.database.shared_url,

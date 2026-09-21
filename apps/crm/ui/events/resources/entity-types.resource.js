@@ -14,6 +14,7 @@
 import {
     createResourceCollection,
     createAsyncOp,
+    upsertItem,
 } from '@platform/lib/events/index.js';
 
 const ROW_SEP = '\u0000';
@@ -32,6 +33,32 @@ function rowIdFromRaw(raw) {
     }
     return `${ns}${ROW_SEP}${tid}`;
 }
+
+function mapEntityType(raw) {
+    if (!raw || typeof raw !== 'object') {
+        throw new Error('crm/entity_types mapItem: item object required');
+    }
+    const listEntityType = raw.list_entity_type;
+    if (typeof listEntityType !== 'string' || listEntityType.length === 0) {
+        throw new Error('crm/entity_types mapItem: list_entity_type string required');
+    }
+    let listEntitySubtype = raw.list_entity_subtype;
+    if (listEntitySubtype === undefined || listEntitySubtype === null) {
+        listEntitySubtype = null;
+    } else if (typeof listEntitySubtype !== 'string') {
+        throw new Error('crm/entity_types mapItem: list_entity_subtype must be string or null');
+    } else if (listEntitySubtype.length === 0) {
+        listEntitySubtype = null;
+    }
+    return {
+        ...raw,
+        crm_entity_type_row_id: rowIdFromRaw(raw),
+        list_entity_type: listEntityType,
+        list_entity_subtype: listEntitySubtype,
+    };
+}
+
+const ENTITY_TYPE_UPDATE_SUCCEEDED = 'crm/entity_type_update/succeeded';
 
 export const entityTypesResource = createResourceCollection({
     name: 'crm/entity_types',
@@ -53,31 +80,19 @@ export const entityTypesResource = createResourceCollection({
         }
         return query;
     },
-    mapItem: (raw) => {
-        if (!raw || typeof raw !== 'object') {
-            throw new Error('crm/entity_types mapItem: item object required');
-        }
-        const listEntityType = raw.list_entity_type;
-        if (typeof listEntityType !== 'string' || listEntityType.length === 0) {
-            throw new Error('crm/entity_types mapItem: list_entity_type string required');
-        }
-        let listEntitySubtype = raw.list_entity_subtype;
-        if (listEntitySubtype === undefined || listEntitySubtype === null) {
-            listEntitySubtype = null;
-        } else if (typeof listEntitySubtype !== 'string') {
-            throw new Error('crm/entity_types mapItem: list_entity_subtype must be string or null');
-        } else if (listEntitySubtype.length === 0) {
-            listEntitySubtype = null;
-        }
-        return {
-            ...raw,
-            crm_entity_type_row_id: rowIdFromRaw(raw),
-            list_entity_type: listEntityType,
-            list_entity_subtype: listEntitySubtype,
-        };
-    },
+    mapItem: mapEntityType,
     toastKeys: {
         create: 'crm:toast.entity_type.created',
+    },
+    extraReducer: (state, event) => {
+        if (event.type !== ENTITY_TYPE_UPDATE_SUCCEEDED) {
+            return state;
+        }
+        const updated = event.payload.result;
+        if (!updated || typeof updated !== 'object' || typeof updated.type_id !== 'string') {
+            return state;
+        }
+        return upsertItem(state, mapEntityType(updated), 'crm_entity_type_row_id');
     },
 });
 

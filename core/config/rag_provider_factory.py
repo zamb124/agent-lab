@@ -65,11 +65,11 @@ def _runtime_from_company_embedding(
     settings: BaseSettings,
 ) -> RagEmbeddingRuntime:
     if resolved.model is None or not resolved.model.strip():
-        raise ValueError("company embedding override: model обязателен")
+        raise ValueError('company embedding override: model is required')
     if resolved.dimension is None:
-        raise ValueError("company embedding override: dimension обязателен")
+        raise ValueError('company embedding override: dimension is required')
     if resolved.provider is None or not resolved.provider.strip():
-        raise ValueError("company embedding override: provider обязателен")
+        raise ValueError('company embedding override: provider is required')
     provider = resolved.provider
     if provider == PROVIDER_LITSERVE:
         base_url = (
@@ -80,7 +80,7 @@ def _runtime_from_company_embedding(
     elif provider == CUSTOM_PROVIDER_SLUG:
         base_url = (resolved.base_url or "").strip()
         if not base_url:
-            raise ValueError("company custom embedding override: base_url обязателен")
+            raise ValueError('company custom embedding override: base_url is required')
     else:
         base_url = (resolved.base_url or "").strip()
         if not base_url:
@@ -188,7 +188,7 @@ def get_rag_provider(
     if bundle.provider_key not in registry:
         available = ", ".join(sorted(registry.keys()))
         raise ValueError(
-            f"RAG провайдер {bundle.provider_key!r} не зарегистрирован в фабрике. Доступные: {available}"
+            f"RAG provider {bundle.provider_key!r} is not registered in the factory. Available: {available}"
         )
 
     provider_class = registry[bundle.provider_key]
@@ -201,7 +201,7 @@ def get_rag_provider(
         instance = provider_class(bundle.provider_config)
 
     _provider_instances_cache[cache_key] = instance
-    logger.info("Создан RAG провайдер: %s", bundle.provider_key)
+    logger.info("config.rag", provider_key=bundle.provider_key)
     return instance
 
 

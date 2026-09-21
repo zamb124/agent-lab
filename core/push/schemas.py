@@ -20,7 +20,7 @@ def _normalize_apns_device_token(raw: str) -> str:
     if s.startswith("0x"):
         s = s[2:]
     if not re.fullmatch(r"[0-9a-f]{8,200}", s):
-        raise ValueError("keys.device_token должен быть hex-строкой (8–200 символов)")
+        raise ValueError('keys.device_token must be a hex string (8–200 characters)')
     return s
 
 
@@ -28,7 +28,7 @@ def _normalize_fcm_registration_token(raw: str) -> str:
     s = raw.strip()
     if not re.fullmatch(r"[A-Za-z0-9_:\-]{20,4096}", s):
         raise ValueError(
-            "android_fcm: keys.device_token должен быть FCM registration token (буквы, цифры, _, -, :, длиной 20–4096 символов)"
+            'android_fcm: keys.device_token must be an FCM registration token (letters, digits, _, -, :, length 20–4096)'
         )
     return s
 
@@ -42,14 +42,14 @@ def _parse_transport(raw: JsonValue | None) -> PushTransport:
         return "ios_apns"
     if raw == "android_fcm":
         return "android_fcm"
-    raise ValueError("transport должен быть web_vapid, ios_apns или android_fcm")
+    raise ValueError('transport must be web_vapid, ios_apns, or android_fcm')
 
 
 def _parse_optional_string(raw: JsonValue | None, field_name: str, default: str) -> str:
     if raw is None:
         return default
     if not isinstance(raw, str):
-        raise ValueError(f"{field_name} должен быть строкой")
+        raise ValueError(f"{field_name} must be a string")
     return raw
 
 
@@ -60,7 +60,7 @@ def _parse_push_keys(raw: JsonValue | None) -> PushSubscriptionKeys:
     keys: PushSubscriptionKeys = {}
     for key, value in raw_keys.items():
         if not isinstance(value, str):
-            raise ValueError(f"keys.{key} должен быть строкой")
+            raise ValueError(f"keys.{key} must be a string")
         keys[key] = value
     return keys
 
@@ -85,11 +85,11 @@ class SubscribeRequest(StrictBaseModel):
         if transport == "web_vapid":
             ep = endpoint.strip()
             if not ep.startswith("https://"):
-                raise ValueError("web_vapid: endpoint должен начинаться с https://")
+                raise ValueError('web_vapid: endpoint must start with https://')
             for key_name in ("p256dh", "auth"):
                 value = keys.get(key_name)
                 if not value or not value.strip():
-                    raise ValueError(f"web_vapid: keys.{key_name} обязателен")
+                    raise ValueError(f"web_vapid: keys.{key_name} is required")
             payload["transport"] = transport
             payload["endpoint"] = ep
             payload["keys"] = {
@@ -102,7 +102,7 @@ class SubscribeRequest(StrictBaseModel):
         if transport == "ios_apns":
             token_raw = keys.get("device_token")
             if not token_raw:
-                raise ValueError("ios_apns: keys.device_token обязателен")
+                raise ValueError('ios_apns: keys.device_token is required')
             normalized = _normalize_apns_device_token(token_raw)
             payload["transport"] = transport
             payload["endpoint"] = f"apns:{normalized}"
@@ -112,7 +112,7 @@ class SubscribeRequest(StrictBaseModel):
 
         token_raw = keys.get("device_token")
         if not token_raw:
-            raise ValueError("android_fcm: keys.device_token обязателен")
+            raise ValueError('android_fcm: keys.device_token is required')
         normalized = _normalize_fcm_registration_token(token_raw)
         payload["transport"] = transport
         payload["endpoint"] = f"fcm:{normalized}"

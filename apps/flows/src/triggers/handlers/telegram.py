@@ -170,10 +170,10 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         trigger.config["_bot_token_resolved"] = bot_token
 
         logger.info(
-            "Telegram webhook registered: flow_id=%s, trigger=%s, url=%s",
-            flow_id,
-            trigger.trigger_id,
-            webhook_url,
+            "flows.telegram.webhook.registered.flow_id.trigger",
+            flow_id=flow_id,
+            trigger=trigger.trigger_id,
+            url=webhook_url,
         )
 
         return trigger
@@ -235,11 +235,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
                 message=f"Telegram deleteWebhook warning: {description}",
             )
 
-        logger.info(
-            "Telegram webhook deleted: flow_id=%s, trigger=%s",
-            flow_id,
-            trigger.trigger_id,
-        )
+        logger.info("flows.telegram.webhook.deleted.flow_id.trigger", flow_id=flow_id, trigger=trigger.trigger_id)
 
     @override
     async def handle(

@@ -904,7 +904,7 @@ async def test_create_config_with_nonexistent_agent(frontend_client: AsyncClient
 
     # Должна быть ошибка 404 - агент не найден
     assert response.status_code == 404
-    assert "не найден" in response.json()["detail"].lower()
+    assert "not found" in response.json()["detail"].lower()
 
 
 @pytest.mark.asyncio
@@ -1017,7 +1017,7 @@ async def test_issue_embed_session_token_for_disabled_config(frontend_client: As
         json={"origin": "https://larashved.ru", "expires_in_seconds": 300},
     )
     assert token_response.status_code == 403
-    assert "отключена" in token_response.json()["detail"]
+    assert "disabled" in token_response.json()["detail"].lower()
 
     await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
 

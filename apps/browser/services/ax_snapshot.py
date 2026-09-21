@@ -118,7 +118,7 @@ async def dom_accessibility_tree_dict_from_page(
     except Exception as exc:
         raise BrowserCapabilityError(
             "dom_accessibility_unavailable",
-            "Не удалось построить интерактивный snapshot через page.evaluate",
+            "Failed to build an interactive snapshot via page.evaluate",
             details={"error": str(exc)},
         ) from exc
 
@@ -127,6 +127,6 @@ async def dom_accessibility_tree_dict_from_page(
     except ValueError as exc:
         raise BrowserCapabilityError(
             "ax_snapshot_invalid",
-            "DOM snapshot вернул не JSON object",
+            "DOM snapshot did not return a JSON object",
             details={"type": type(data).__name__},
         ) from exc

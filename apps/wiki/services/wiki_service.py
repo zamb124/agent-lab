@@ -108,7 +108,7 @@ class WikiService:
     async def require_page(self, company_id: str, namespace: str, wiki_page_id: str) -> WikiPage:
         page = await self._repo.get_page(company_id, namespace, wiki_page_id)
         if page is None:
-            raise PlatformNotFoundError(f"Страница {wiki_page_id} не найдена в {namespace}")
+            raise PlatformNotFoundError(f"Page {wiki_page_id} not found in {namespace}", error_code="not_found")
         return page
 
     async def page_response(self, page: WikiPage, *, user_id: str) -> WikiPageResponse:
@@ -125,7 +125,7 @@ class WikiService:
         try:
             await self._authz.require_can_view(AuthzObject.wiki_page(wiki_page_id), user_id=user_id)
         except AuthzDenied as exc:
-            raise PlatformAccessDeniedError(f"Нет доступа к странице {wiki_page_id}") from exc
+            raise PlatformAccessDeniedError(f"No access to page {wiki_page_id}", error_code="forbidden") from exc
         return page
 
     async def require_editable_page(
@@ -136,7 +136,8 @@ class WikiService:
             await self._authz.require_can_edit(AuthzObject.wiki_page(wiki_page_id), user_id=user_id)
         except AuthzDenied as exc:
             raise PlatformAccessDeniedError(
-                f"Нет прав на изменение страницы {wiki_page_id}"
+                f"No permission to edit page {wiki_page_id}",
+                error_code="forbidden",
             ) from exc
         return page
 
@@ -452,7 +453,7 @@ class WikiService:
 
         if new_parent_page_id is not None:
             if new_parent_page_id in subtree_ids:
-                raise ValueError("Нельзя перенести страницу внутрь её собственного поддерева")
+                raise ValueError("Cannot move a page into its own subtree")
             parent = await self.require_editable_page(
                 company_id, namespace, new_parent_page_id, user_id
             )
@@ -506,7 +507,7 @@ class WikiService:
         целиком.
         """
         if target_namespace == namespace:
-            raise ValueError("Целевое пространство совпадает с текущим")
+            raise ValueError("Target workspace is the same as the current one")
 
         page = await self.require_editable_page(company_id, namespace, wiki_page_id, user_id)
         subtree = await self._repo.list_subtree(company_id, namespace, wiki_page_id)
@@ -574,7 +575,8 @@ class WikiService:
             )
         except AuthzDenied as exc:
             raise PlatformAccessDeniedError(
-                f"Нет прав на удаление страницы {wiki_page_id}"
+                f"No permission to delete page {wiki_page_id}",
+                error_code="forbidden",
             ) from exc
 
         subtree = await self._repo.list_subtree(company_id, namespace, wiki_page_id)
@@ -642,7 +644,7 @@ class WikiService:
     ) -> WikiRevision:
         revision = await self._repo.get_revision(company_id, namespace, wiki_revision_id)
         if revision is None:
-            raise PlatformNotFoundError(f"Ревизия {wiki_revision_id} не найдена")
+            raise PlatformNotFoundError(f"Revision {wiki_revision_id} not found", error_code="not_found")
         _ = await self.require_viewable_page(company_id, namespace, revision.wiki_page_id, user_id)
         return revision
 
@@ -698,12 +700,13 @@ class WikiService:
             )
         except AuthzDenied as exc:
             raise PlatformAccessDeniedError(
-                f"Нет прав на изменение доступа {wiki_page_id}"
+                f"No permission to change access {wiki_page_id}",
+                error_code="forbidden",
             ) from exc
         if page.company_visible:
             raise ValueError(
-                "Страница доступна всей компании; участники добавляются только после "
-                + "ограничения доступа"
+                "Page is visible to the whole company; members can be added only after "
+                + "restricting access"
             )
 
         await self._access.add_member(wiki_page_id, user_id=member_user_id, relation=relation)
@@ -726,7 +729,8 @@ class WikiService:
             )
         except AuthzDenied as exc:
             raise PlatformAccessDeniedError(
-                f"Нет прав на изменение доступа {wiki_page_id}"
+                f"No permission to change access {wiki_page_id}",
+                error_code="forbidden",
             ) from exc
 
         await self._access.remove_member(wiki_page_id, user_id=member_user_id)
@@ -754,7 +758,8 @@ class WikiService:
             )
         except AuthzDenied as exc:
             raise PlatformAccessDeniedError(
-                f"Нет прав на изменение доступа {wiki_page_id}"
+                f"No permission to change access {wiki_page_id}",
+                error_code="forbidden",
             ) from exc
 
         if company_visible:
@@ -787,7 +792,8 @@ class WikiService:
             )
         except AuthzDenied as exc:
             raise PlatformAccessDeniedError(
-                f"Нет прав на публикацию ссылки {wiki_page_id}"
+                f"No permission to publish a link {wiki_page_id}",
+                error_code="forbidden",
             ) from exc
 
         if not enabled:
@@ -1068,7 +1074,7 @@ class WikiService:
             company_id, namespace, wiki_comment_id, user_id if resolved else None
         )
         if stored is None:
-            raise PlatformNotFoundError(f"Комментарий {wiki_comment_id} не найден")
+            raise PlatformNotFoundError(f"Comment {wiki_comment_id} not found", error_code="not_found")
         await publish_wiki_comment_event(WIKI_COMMENT_RESOLVED, stored, company_id)
         return stored
 
@@ -1078,7 +1084,7 @@ class WikiService:
         _ = user_id
         deleted_count = await self._repo.delete_comment(company_id, namespace, wiki_comment_id)
         if deleted_count == 0:
-            raise PlatformNotFoundError(f"Комментарий {wiki_comment_id} не найден")
+            raise PlatformNotFoundError(f"Comment {wiki_comment_id} not found", error_code="not_found")
 
     # --- вспомогательное ---
 

@@ -72,7 +72,7 @@ async def test_tool_call_save_html_to_s3_returns_s3_path_and_links() -> None:
         arguments={"session_id": "sess-1", "links_limit": 5},
         container=container,  # pyright: ignore[reportArgumentType]
     )
-    assert result.isError is False
+    assert result.is_error is False
     text_raw = result.content[0].get("text")
     assert isinstance(text_raw, str)
     payload = json.loads(text_raw)

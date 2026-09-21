@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import ClassVar, Self
+from typing import ClassVar, Literal, Self
 
 from pydantic import ConfigDict, Field, model_validator
 
@@ -50,6 +50,32 @@ def validate_mcp_output_schema(output_schema: JsonObject, label: str) -> JsonObj
     if properties is not None and not isinstance(properties, dict):
         raise ValueError(f"{label}: output_schema.properties must be an object")
     return output_schema
+
+
+class MCPJsonRpcRequest(StrictBaseModel):
+    """JSON-RPC 2.0 запрос MCP."""
+
+    jsonrpc: Literal["2.0"] = "2.0"
+    id: int | str | None = None
+    method: str
+    params: JsonObject | None = None
+
+
+class MCPJsonRpcError(StrictBaseModel):
+    """JSON-RPC 2.0 ошибка MCP."""
+
+    code: int
+    message: str
+    data: JsonObject | None = None
+
+
+class MCPJsonRpcResponse(StrictBaseModel):
+    """JSON-RPC 2.0 ответ MCP."""
+
+    jsonrpc: Literal["2.0"] = "2.0"
+    id: int | str | None
+    result: JsonObject | None = None
+    error: MCPJsonRpcError | None = None
 
 
 class MCPInitializeResult(StrictBaseModel):
@@ -178,6 +204,36 @@ class MCPToolDefinition(StrictBaseModel):
         )
 
 
+class MCPToolsListResult(StrictBaseModel):
+    """Ответ MCP tools/list."""
+
+    tools: list[MCPToolDefinition]
+
+
+class MCPToolCallResult(StrictBaseModel):
+    """Ответ MCP tools/call."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="forbid",
+        validate_assignment=True,
+        str_strip_whitespace=True,
+        validate_default=True,
+        populate_by_name=True,
+    )
+
+    content: list[JsonObject]
+    structured_content: JsonObject | None = Field(
+        default=None,
+        validation_alias="structuredContent",
+        serialization_alias="structuredContent",
+    )
+    is_error: bool = Field(
+        default=False,
+        validation_alias="isError",
+        serialization_alias="isError",
+    )
+
+
 class MCPDiscoveredTool(StrictBaseModel):
     """Внутренний платформенный контракт для обнаруженного MCP tool."""
 
@@ -216,7 +272,12 @@ class MCPDiscoveredTool(StrictBaseModel):
 __all__ = [
     "MCPDiscoveredTool",
     "MCPInitializeResult",
+    "MCPJsonRpcError",
+    "MCPJsonRpcRequest",
+    "MCPJsonRpcResponse",
+    "MCPToolCallResult",
     "MCPToolDefinition",
+    "MCPToolsListResult",
     "MCP_PROTOCOL_VERSION",
     "mcp_parameters_schema_hash",
     "mcp_tool_reference_id",

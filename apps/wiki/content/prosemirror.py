@@ -46,7 +46,7 @@ class ProseMirrorNode(WikiContentModel):
     @classmethod
     def _text_only_for_text_nodes(cls, value: str | None) -> str | None:
         if value is not None and value == "":
-            raise ValueError("ProseMirror text node не может быть пустой строкой")
+            raise ValueError("ProseMirror text node cannot be an empty string")
         return value
 
 

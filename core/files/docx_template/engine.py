@@ -24,18 +24,18 @@ def _validate_docx_zip(template_bytes: bytes) -> None:
     if not template_bytes:
         raise DocxTemplateInvalidError(
             reason="empty",
-            message="Шаблон DOCX пустой (0 байт)",
+            message="DOCX template is empty (0 bytes)",
         )
     if not template_bytes.startswith(b"PK"):
         raise DocxTemplateInvalidError(
             reason="not_zip",
-            message="Файл не похож на DOCX (ожидается ZIP OOXML)",
+            message="File does not look like DOCX (ZIP OOXML expected)",
         )
     bio = BytesIO(template_bytes)
     if not zipfile.is_zipfile(bio):
         raise DocxTemplateInvalidError(
             reason="invalid_zip",
-            message="Байты не являются корректным ZIP (невалидный DOCX)",
+            message="Bytes are not a valid ZIP (invalid DOCX)",
         )
 
 
@@ -70,7 +70,7 @@ def render_docx_template_bytes(
         if missing:
             raise DocxTemplateContextError(
                 message=(
-                    "В контексте не хватает переменных, используемых в шаблоне: "
+                    "Template context is missing variables used in the template: "
                     + ", ".join(sorted(missing))
                 ),
                 missing_variables=sorted(missing),
@@ -79,7 +79,7 @@ def render_docx_template_bytes(
         if extra:
             raise DocxTemplateContextError(
                 message=(
-                    "В контексте есть лишние ключи верхнего уровня относительно шаблона: "
+                    "Template context has extra top-level keys not used in the template: "
                     + ", ".join(sorted(extra))
                 ),
                 extra_keys=sorted(extra),
@@ -98,7 +98,7 @@ def render_docx_template_bytes(
         ) from exc
     except UndefinedError as exc:
         raise DocxTemplateContextError(
-            message=f"Неопределённая переменная в шаблоне: {exc}",
+            message=f"Undefined variable in template: {exc}",
         ) from exc
 
     out = BytesIO()
@@ -107,7 +107,7 @@ def render_docx_template_bytes(
     if not data:
         raise DocxTemplateInvalidError(
             reason="render_empty",
-            message="После рендера получен пустой DOCX",
+            message="Rendered DOCX is empty",
         )
     return data
 

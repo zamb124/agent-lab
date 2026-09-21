@@ -198,11 +198,11 @@ async function fetchHumanitecToolkitsCatalog(
   if (!response.ok) {
     throw new Error(`toolkits catalog failed: HTTP ${response.status}`);
   }
-  const body = (await response.json()) as HumanitecToolkitCatalogItemPayload[];
-  if (!Array.isArray(body)) {
-    throw new Error('toolkits catalog response must be an array');
+  const body = (await response.json()) as { items?: HumanitecToolkitCatalogItemPayload[] };
+  if (!body || !Array.isArray(body.items)) {
+    throw new Error('toolkits catalog response must be a ListResponse with items[]');
   }
-  return body;
+  return body.items;
 }
 
 async function fetchHumanitecLlmModelIds(

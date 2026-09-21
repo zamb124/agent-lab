@@ -122,7 +122,6 @@ export class FrontendNamespacesPage extends PlatformPage {
         this._form = this.useForm(FORM);
         this.useEvent(this._namespaces.resource.events.CREATED, () => {
             this._showCreate = false;
-            this._namespaces.load();
         });
     }
 

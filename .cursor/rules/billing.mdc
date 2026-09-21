@@ -19,7 +19,13 @@ alwaysApply: false
 
 ## Pre-flight: balance > 0 перед billable-операцией
 
-Перед стартом операций с `billing_pending_settlement` (LLM в flows, RAG embed, vision reader, billable LiveKit) — `BillingService.require_balance_for_billable_operation(company_id, user_id, operation_code=..., notification_service=...)`. Обязательны `user_id` (для `notify_user`) и код из `BALANCE_BLOCK_OPERATION_*` (`core/billing/service.py`). При `Company.balance <= 0` — сначала `notify_user` с текстом из `billing.notifications.*` (`core/i18n/translations/*/billing.json`, язык из контекста или RU), затем `BillingBalanceBlockedError` (HTTP 403, `code: billing_balance_blocked` через `create_service_app`).
+Перед стартом операций с `billing_pending_settlement` — `BillingService.require_balance_for_billable_operation(company_id, user_id, operation_code=..., notification_service=...)`. Обязательны `user_id` (для `notify_user`) и код из `BALANCE_BLOCK_OPERATION_*` (`core/billing/service.py`). При `Company.balance <= 0` — сначала `notify_user` с текстом из `billing.notifications.*` (`core/i18n/translations/*/billing.json`, язык из контекста или RU), затем `BillingBalanceBlockedError` (HTTP 403, `code: billing_balance_blocked` через `create_service_app`).
+
+LLM (включая vision и image gen через тот же клиент) — только `LLMClient.prepare_billing()` / `record_llm_client_response` (`core/clients/llm/billing.py`). Call-site (`llm_runner`, `llm_proxy`, `llm_tasks`, evaluation lab, `TextTransformService`, FileReader vision) не вызывает `require_balance` и не пишет `record_llm_response` / pending span. HTTP streaming proxy вызывает `prepare_billing()` до `StreamingResponse`. В pytest pre-flight пропускается (`is_testing()`), запись span остаётся. Free-pool: `company_may_incur_billable_operation_charge` вместо hard pre-flight; платный fallback режется в `_resolve_candidates`. BYOK (`cost_origin=company`) pre-flight не делает. Image gen (`AICapability.IMAGE_GEN`) — тот же `llm.{model}` span, `operation_code=image`.
+
+Voice WS: pre-flight `BALANCE_BLOCK_OPERATION_SPEECH` при открытии сессии; финальный STT и utterance TTS — `record_stt_usage_span` / `record_tts_usage_span`. HTTP `/transcribe` и `/synthesize` пишут те же spans.
+
+CI `scripts/check_billing_span_canon.py`: `require_balance_for_billable_operation` и `record_llm_response` только в allowlist (`core/clients/llm/billing.py`, embedding, livekit, guest farm, search meta, voice session).
 
 Флаги: `billing.balance_enforcement_enabled`, `billing.balance_enforcement_exempt_company_ids` (`BillingConfig`); по умолчанию exempt — `system`.
 
@@ -33,7 +39,7 @@ Pre-flight **не заменяет settlement**: джоба пишет usage б�
 
 ## OpenRouter и рубли
 
-Дефолтный каталог (`default_settlement_rules_document`) содержит правило **`llm_openrouter_usd_to_rub`** (`first_win`, приоритет выше токенов): `operation_name` `llm.*`, `platform.llm.provider == openrouter`, наличие `platform.billing.settlement_quantity_rub`. Quantity = этот атрибут; ресурс `billing:rub` с базовой ценой `1.0` (1 ₽ за единицу). На span атрибут выставляется в flows при `provider_reported_cost > 0` как `round(USD × rate)` (минимум 1 при попадании в запись). Без USD в ответе остаётся правило по токенам (`llm_tracer_tokens`).
+Дефолтный каталог (`default_settlement_rules_document`) содержит правило **`llm_openrouter_usd_to_rub`** (`first_win`, приоритет выше токенов): `operation_name` `llm.*`, `platform.llm.provider == openrouter`, наличие `platform.billing.settlement_quantity_rub`. Quantity = этот атрибут; ресурс `billing:rub` с базовой ценой `1.0` (1 ₽ за единицу). На span атрибут выставляется в `LLMClient` при `provider_reported_cost > 0` как `round(USD × rate)` (минимум 1 при попадании в запись). Без USD в ответе остаётся правило по токенам (`llm_tracer_tokens`).
 
 Курс — **актуальный от ЦБ РФ** (`core/billing/cbr_rate_provider.py`): при старте сервиса запрашивается `cbr.ru/scripts/XML_daily.asp`, далее обновляется каждые 5 минут (jitter 0–10с). Недоступность ЦБ → fallback `billing.usd_to_rub_rate` из `conf.json`. `get_cbr_usd_to_rub_rate(fallback=settings.billing.usd_to_rub_rate)` возвращает кэш или fallback синхронно без IO.
 
@@ -73,11 +79,9 @@ Pre-flight **не заменяет settlement**: джоба пишет usage б�
 
 | `operation_name` | Файл | `usage_type` | `billing_resource_name` | `quantity` |
 |---|---|---|---|---|
-| `llm.{model}` | `core/tracing/tracer.py::record_llm_response` | `llm_request` | `llm:{model}` | total_tokens |
+| `llm.{model}` | `core/clients/llm/billing.py` → `record_llm_response` на CLIENT span | `llm_request` | `llm:{model}` | total_tokens |
 | BYOK (`record_llm_response` с `billing_resource_name`) | то же | `llm_request` | `llm:byok` | total_tokens |
-| `flows.llm.invoke_task` | `apps/flows/src/tasks/llm_tasks.py` | `llm_request` | `llm:default` | токены |
 | `flows.llm_resource.*` | `apps/flows/src/runtime/llm_resource_config.py` | `llm_request` | `llm:{model}` или `llm:byok` при BYOK в ресурсе | из attr |
-| `core.files.reader.image` | `core/files/reader/service.py` | `llm_request` | `llm:{model}` | 1 |
 | `rag.embed.batch` | `core.ai.runtime` / `core.ai.embedding_client` | `embedding_request` | `embedding:{model}` | token_count |
 | `rerank.{model}` | `core/ai/rerank_client.py` | `rerank_request` | `rerank:{model}` или `rerank:byok` (`resource_name_from_span`) | tiktoken-токены |
 | `stt.{provider}` / `tts.{provider}` | `core/billing/speech_usage.py` | `tool_call` | `stt:{provider}` / `tts:{provider}` или `*:byok` (`resource_name_from_span`) | секунды аудио (ceil) / символы |

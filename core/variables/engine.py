@@ -89,7 +89,7 @@ class ResolutionEngine:
         if spec.value_kind == VariableValueKind.EXPRESSION:
             if spec.expression is None:
                 raise VariableResolutionError(
-                    f"Variable '{definition.variable_key}' имеет value_kind=expression, но expression не задан"
+                    f"Variable '{definition.variable_key}' has value_kind=expression but expression is not set"
                 )
             return cls._substitute_string(spec.expression, resolved, context)
         return cls._substitute(spec.value, resolved, context)
@@ -130,7 +130,7 @@ class ResolutionEngine:
                 return actual == condition.value
             case ScopeOp.IN:
                 if not isinstance(condition.value, list):
-                    raise VariableResolutionError("ScopeOp.IN требует list в value условия")
+                    raise VariableResolutionError('ScopeOp.IN requires a list in the condition value')
                 return actual in condition.value
 
     @classmethod
@@ -142,10 +142,10 @@ class ResolutionEngine:
     ) -> JsonValue:
         if condition.field == ScopeField.VAR:
             if not condition.ref_key:
-                raise VariableResolutionError("ScopeField.VAR требует ref_key")
+                raise VariableResolutionError('ScopeField.VAR requires ref_key')
             if condition.ref_key not in resolved:
                 raise VariableResolutionError(
-                    f"Условие scope ссылается на нерезолвнутую переменную '@var:{condition.ref_key}'"
+                    f"Scope condition references unresolved variable '@var:{condition.ref_key}'"
                 )
             return resolved[condition.ref_key]
         return context.field_value(condition.field)
@@ -199,7 +199,7 @@ class ResolutionEngine:
     @classmethod
     def _context_value(cls, name: str, context: ResolutionContext) -> JsonValue:
         if name not in _CTX_FIELDS:
-            raise VariableResolutionError(f"Неизвестное поле контекста '@ctx:{name}'")
+            raise VariableResolutionError(f"Unknown context field '@ctx:{name}'")
         return context.field_value(cls._CTX_FIELD_BY_NAME[name])
 
     @classmethod
@@ -217,7 +217,7 @@ class ResolutionEngine:
                 return
             if state == 1:
                 cycle = " -> ".join((*stack, node))
-                raise VariableCycleError(f"Цикл зависимостей переменных: {cycle}")
+                raise VariableCycleError(f"Variable dependency cycle: {cycle}")
             visited[node] = 1
             for dep in sorted(dependencies[node]):
                 visit(dep, (*stack, node))

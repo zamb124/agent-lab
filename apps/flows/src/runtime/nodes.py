@@ -186,7 +186,7 @@ def _config_mapping(config: JsonObject, field_name: str) -> JsonObject | None:
         return None
     value = config[field_name]
     if not isinstance(value, Mapping):
-        raise ValueError(f"{field_name}: ожидается object")
+        raise ValueError(f"{field_name}: expected object")
     return require_json_object(value, field_name)
 
 
@@ -204,7 +204,7 @@ def _config_string_map(config: JsonObject, field_name: str) -> dict[str, str] | 
     out: dict[str, str] = {}
     for key, item in value.items():
         if not isinstance(item, str):
-            raise ValueError(f"{field_name}.{key}: ожидается строка")
+            raise ValueError(f"{field_name}.{key}: expected string")
         out[key] = item
     return out
 
@@ -221,7 +221,7 @@ def _config_optional_string(config: JsonObject, field_name: str) -> str | None:
         return None
     value = config[field_name]
     if not isinstance(value, str):
-        raise ValueError(f"{field_name}: ожидается строка")
+        raise ValueError(f"{field_name}: expected string")
     return value
 
 
@@ -237,7 +237,7 @@ def _config_bool(config: JsonObject, field_name: str, default: bool) -> bool:
         return default
     value = config[field_name]
     if not isinstance(value, bool):
-        raise ValueError(f"{field_name}: ожидается bool")
+        raise ValueError(f"{field_name}: expected bool")
     return value
 
 
@@ -246,7 +246,7 @@ def _config_optional_int(config: JsonObject, field_name: str) -> int | None:
         return None
     value = config[field_name]
     if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError(f"{field_name}: ожидается int")
+        raise ValueError(f"{field_name}: expected int")
     return value
 
 
@@ -255,7 +255,7 @@ def _config_float(config: JsonObject, field_name: str, default: float) -> float:
         return default
     value = config[field_name]
     if isinstance(value, bool) or not isinstance(value, int | float):
-        raise ValueError(f"{field_name}: ожидается number")
+        raise ValueError(f"{field_name}: expected number")
     return float(value)
 
 
@@ -282,10 +282,10 @@ def _config_messages_filter(
         out: list[str] = []
         for item in value:
             if not isinstance(item, str) or not item.strip():
-                raise ValueError(f"{field_name}: список должен содержать непустые строки")
+                raise ValueError(f"{field_name}: list must contain non-empty strings")
             out.append(item)
         return out
-    raise ValueError(f"{field_name}: ожидается 'all', 'own' или list[str]")
+    raise ValueError(f"{field_name}: expected 'all', 'own' or list[str]")
 
 
 def _config_tool_refs(config: JsonObject, field_name: str) -> list[str | ToolMaterializeInput]:
@@ -293,7 +293,7 @@ def _config_tool_refs(config: JsonObject, field_name: str) -> list[str | ToolMat
         return []
     value = config[field_name]
     if not isinstance(value, list):
-        raise ValueError(f"{field_name}: ожидается list")
+        raise ValueError(f"{field_name}: expected list")
     out: list[str | ToolMaterializeInput] = []
     for item in value:
         if isinstance(item, str):
@@ -302,7 +302,7 @@ def _config_tool_refs(config: JsonObject, field_name: str) -> list[str | ToolMat
         if isinstance(item, Mapping):
             out.append(require_json_object(item, f"{field_name}[]"))
             continue
-        raise ValueError(f"{field_name}: ожидается string или object")
+        raise ValueError(f"{field_name}: expected string or object")
     return out
 
 
@@ -311,12 +311,12 @@ def _config_string_list(config: JsonObject, field_name: str) -> list[str]:
         return []
     value = config[field_name]
     if not isinstance(value, list):
-        raise ValueError(f"{field_name}: ожидается list[str]")
+        raise ValueError(f"{field_name}: expected list[str]")
     out: list[str] = []
     seen: set[str] = set()
     for item in value:
         if not isinstance(item, str) or not item.strip():
-            raise ValueError(f"{field_name}: ожидаются непустые строки")
+            raise ValueError(f"{field_name}: expected non-empty strings")
         normalized = item.strip()
         if normalized in seen:
             raise ValueError(f"{field_name}: duplicate id {normalized}")
@@ -331,7 +331,7 @@ def _config_parameters_schema(config: JsonObject) -> JsonObject | None:
         return None
     schema = require_json_object(value, "parameters_schema")
     if schema.get("type") != "object" or not isinstance(schema.get("properties"), Mapping):
-        raise ValueError("parameters_schema: ожидается JSON Schema object с properties")
+        raise ValueError("parameters_schema: expected a JSON Schema object with properties")
     return schema
 
 
@@ -340,7 +340,7 @@ def _config_resource_refs(config: JsonObject, field_name: str = "resources") -> 
     out: dict[str, ResourceReferenceInput] = {}
     for resource_key, resource_value in raw.items():
         if not isinstance(resource_value, Mapping):
-            raise ValueError(f"{field_name}.{resource_key}: ожидается object")
+            raise ValueError(f"{field_name}.{resource_key}: expected object")
         out[resource_key] = require_json_object(
             resource_value,
             f"{field_name}.{resource_key}",
@@ -721,7 +721,7 @@ class BaseNode(ABC):
         try:
             if node_timeout is not None:
                 if isinstance(node_timeout, bool) or not isinstance(node_timeout, int):
-                    raise ValueError("node_timeout_seconds: ожидается integer")
+                    raise ValueError("node_timeout_seconds: expected integer")
                 nto = node_timeout
                 result = await asyncio.wait_for(
                     self._run_impl(state, inputs),
@@ -1068,7 +1068,7 @@ class LlmNode(BaseNode):
         # выглядеть как будто вернула structured output, даже если это не так.
         runner_state.clear_structured_output_result()
 
-        logger.info(f"[node:{self.node_id}] Запуск LlmNode")
+        logger.info("flows.node.llm_started", node_id=self.node_id)
 
         content = runner_state.content or ""
         input_data: JsonObject = {"content": content}
@@ -1228,11 +1228,11 @@ class LlmNode(BaseNode):
         base = self._node_config or self._create_default_config()
         effective = resolve_effective_llm_config_for_node(base)
         logger.info(
-            "[create_llm_client] node_id=%s provider=%s model=%s source=%s",
-            self.node_id,
-            effective.config.provider,
-            effective.config.model,
-            effective.source,
+            "flows.create_llm_client.node_id.provider.model.source",
+            node_id=self.node_id,
+            provider=effective.config.provider,
+            model=effective.config.model,
+            source=effective.source,
         )
         return create_llm_client_from_call_config(
             effective.config,
@@ -1249,7 +1249,7 @@ class LlmNode(BaseNode):
         explicit = llm_config.llm_resource_key and str(llm_config.llm_resource_key).strip()
         if state is None:
             if explicit:
-                raise ValueError("ExecutionState обязателен при заданном llm_resource_key")
+                raise ValueError("ExecutionState is required when llm_resource_key is set")
             return base
         container = self.container
         flow_resources, skill_resources = await container.flow_factory.get_resource_maps(
@@ -1301,7 +1301,7 @@ class LlmNode(BaseNode):
         has_node_resources = bool(node_resources_raw)
         if state is None:
             if explicit or has_node_resources:
-                raise ValueError("ExecutionState обязателен для LLM context resources")
+                raise ValueError("ExecutionState is required for LLM context resources")
             return await resolve_llm_context_policy_for_runtime(
                 llm_context_resource_key=None,
                 flow_resources={},
@@ -1351,7 +1351,7 @@ class LlmNode(BaseNode):
         has_node_resources = bool(node_resources_raw)
         if state is None:
             if has_node_resources:
-                raise ValueError("ExecutionState обязателен для LLM context RAG resources")
+                raise ValueError("ExecutionState is required for LLM context RAG resources")
             return None
 
         container = self.container
@@ -1418,7 +1418,7 @@ class LlmNode(BaseNode):
             raw_allow = self.config.get("exception_allow_types")
             if raw_allow is not None:
                 if not isinstance(raw_allow, list):
-                    raise ValueError("exception_allow_types: ожидается list[str]")
+                    raise ValueError("exception_allow_types: expected list[str]")
                 exc_allow = [ExceptionAbsorbAllowName(str(item)) for item in raw_allow]
         resources = {
             key: ResourceReference.model_validate(value)
@@ -1531,7 +1531,7 @@ class CodeNode(BaseNode):
         code = self.code
         if code is None or code.strip() == "":
             raise ValueError(
-                f"Node '{self.node_id}': требуется непустой inline code (tool_id без кода не исполняется)"
+                f"Node '{self.node_id}': non-empty inline code is required (tool_id without code is not executed)"
             )
         if self.config.get("resources"):
             raise ValueError(
@@ -1539,7 +1539,7 @@ class CodeNode(BaseNode):
                 + "Use tools.<tool_id>(...) / tools.call('<tool_id>', ...) from the sandbox SDK or a dedicated platform capability."
             )
         args = self._build_args(inputs)
-        logger.info(f"[node:{self.node_id}] execute_tool с args: {list(args.keys())}")
+        logger.info("flows.node.tool_execute", node_id=self.node_id, arg_keys=list(args.keys()))
 
         runner = self._get_runner()
         input_payload = require_json_object(
@@ -2668,7 +2668,7 @@ class ExternalAPINode(BaseNode):
         """Строит конфиг API."""
         raw_url = self.api_config.get("url")
         if not isinstance(raw_url, str) or not raw_url.strip():
-            raise ValueError(f"ExternalAPINode {self.node_id}: url обязателен")
+            raise ValueError(f"ExternalAPINode {self.node_id}: url is required")
         return ExternalAPIConfig(
             api_id=self.node_id,
             name=_config_string(self.api_config, "name", self.node_id),
@@ -2709,8 +2709,8 @@ class ExternalAPINode(BaseNode):
                 interrupt_data = result["interrupt"]
                 if not isinstance(interrupt_data, dict):
                     raise ValueError(
-                        "ExternalAPINode: interrupt должен быть dict, "
-                        + f"получено {type(interrupt_data)}"
+                        "ExternalAPINode: interrupt must be a dict, "
+                        + f"got {type(interrupt_data)}"
                     )
                 body = parse_interrupt_body_from_external_dict(
                     require_json_object(interrupt_data, "external_api.interrupt"),
@@ -2721,7 +2721,7 @@ class ExternalAPINode(BaseNode):
             if result.get("status") == "error":
                 err = result.get("error")
                 if err is None:
-                    raise ValueError("ExternalAPINode: status=error без поля 'error'")
+                    raise ValueError("ExternalAPINode: status=error without an 'error' field")
                 raise ValueError(f"External API error: {err}")
 
             for response_field, state_field in api_cfg.state_mapping.items():
@@ -2790,11 +2790,7 @@ class MCPNode(BaseNode):
         tool_id = mcp_tool_reference_id(server_id, tool_name)
         tool_ref = await container.tool_repository.get(tool_id)
         if tool_ref is None:
-            logger.info(
-                "MCPNode '%s': syncing missing ToolReference '%s'",
-                self.node_id,
-                tool_id,
-            )
+            logger.info("flows.mcpnode.syncing.missing.toolreference", node_id=self.node_id, tool_id=tool_id)
             try:
                 _tool_ids, _tools = await sync_mcp_server_tools(
                     container=container,
@@ -3004,11 +3000,11 @@ class ChannelNode(BaseNode):
 
         channel_value = cfg.get("channel")
         if not isinstance(channel_value, str) or not channel_value.strip():
-            raise ValueError("channel: обязательная непустая строка")
+            raise ValueError("channel: required non-empty string")
         self.channel: ChannelType = ChannelType(channel_value.strip())
         action_value = cfg.get("action")
         if not isinstance(action_value, str) or not action_value.strip():
-            raise ValueError("action: обязательная непустая строка")
+            raise ValueError("action: required non-empty string")
         self.action: str = action_value.strip()
         self.channel_config: JsonObject = _config_mapping_default(cfg, "channel_config")
 
@@ -3068,8 +3064,10 @@ class ChannelNode(BaseNode):
             state["result"] = result
 
             logger.info(
-                f"[node:{self.node_id}] Channel {self.channel.value} "
-                + f"action {self.action} completed"
+                "flows.node.channel_complete",
+                node_id=self.node_id,
+                channel=self.channel.value,
+                action=self.action,
             )
 
             return result
@@ -3102,7 +3100,7 @@ class HitlNode(BaseNode):
         raw = template.strip()
         if not raw:
             raise ValueError(
-                f"hitl_node {self.node_id}: пустой шаблон title/message"
+                f"hitl_node {self.node_id}: empty title/message template"
             )
         return MappingResolver.resolve_interpolated_string(
             raw,
@@ -3115,7 +3113,7 @@ class HitlNode(BaseNode):
         ctx = get_request_context()
         if ctx is None or ctx.active_company is None:
             raise ValueError(
-                f"hitl_node {self.node_id}: нужен Context с active_company"
+                f"hitl_node {self.node_id}: Context with active_company is required"
             )
         company_id = ctx.active_company.company_id
         cid_resume = state.hitl_handoff_correlation_id
@@ -3126,12 +3124,12 @@ class HitlNode(BaseNode):
             )
             if existing_resume is None:
                 raise ValueError(
-                    f"hitl_node {self.node_id}: resume с correlation_id={cid_resume!r}, "
-                    + "задача оператора не найдена"
+                    f"hitl_node {self.node_id}: resume with correlation_id={cid_resume!r}, "
+                    + "operator task not found"
                 )
             if existing_resume.state != WorkItemState.DONE:
                 raise ValueError(
-                    f"hitl_node {self.node_id}: задача оператора ещё не завершена "
+                    f"hitl_node {self.node_id}: operator task is not completed yet "
                     + f"(state={existing_resume.state.value!r})"
                 )
             snapshot = self._hitl_snapshot_from_work_item(existing_resume)
@@ -3172,14 +3170,14 @@ class HitlNode(BaseNode):
             slug_effective = slug_cfg.strip()
         else:
             raise ValueError(
-                f"hitl_node {self.node_id}: укажите work_queue_slug "
-                + "или input_mapping.assignee_queue"
+                f"hitl_node {self.node_id}: specify work_queue_slug "
+                + "or input_mapping.assignee_queue"
             )
 
         title_raw = inputs.get("task_title") or self.config.get("handoff_task_title")
         if not title_raw or not str(title_raw).strip():
             raise ValueError(
-                f"hitl_node {self.node_id}: нужен task_title (input_mapping или handoff_task_title)"
+                f"hitl_node {self.node_id}: task_title is required (input_mapping or handoff_task_title)"
             )
         message_raw = (
             inputs.get("user_facing_message")
@@ -3188,7 +3186,7 @@ class HitlNode(BaseNode):
         )
         if not message_raw or not str(message_raw).strip():
             raise ValueError(
-                f"hitl_node {self.node_id}: нужен текст для пользователя "
+                f"hitl_node {self.node_id}: user-facing text is required "
                 + "(user_facing_message / question / handoff_user_message)"
             )
 
@@ -3205,11 +3203,11 @@ class HitlNode(BaseNode):
         question = self._resolve_hitl_text(str(message_raw), state)
         if not task_title:
             raise ValueError(
-                f"hitl_node {self.node_id}: после резолва task_title пуст"
+                f"hitl_node {self.node_id}: task_title is empty after resolve"
             )
         if not question:
             raise ValueError(
-                f"hitl_node {self.node_id}: после резолва user message пуст"
+                f"hitl_node {self.node_id}: user message is empty after resolve"
             )
         handoff_command = build_hitl_handoff_command(
             state=state,
@@ -3269,7 +3267,7 @@ class HitlNode(BaseNode):
         )
         correlation_id = handoff.get("correlation_id")
         if not isinstance(correlation_id, str) or not correlation_id:
-            raise ValueError("hitl_handoff.result.correlation_id: обязательная строка")
+            raise ValueError("hitl_handoff.result.correlation_id: required string")
         work_item_id_raw = handoff.get("work_item_id")
         work_item_id = work_item_id_raw if isinstance(work_item_id_raw, str) else None
         raise FlowInterrupt(
@@ -3295,7 +3293,7 @@ class HitlNode(BaseNode):
             if isinstance(snapshot_raw, dict):
                 return HitlInterruptSnapshot.model_validate(snapshot_raw)
         raise ValueError(
-            f"WorkItem {work_item.work_item_id!r} без interrupt_snapshot в hook.binding"
+            f"WorkItem {work_item.work_item_id!r} without interrupt_snapshot in hook.binding"
         )
 
 
@@ -3604,7 +3602,7 @@ async def create_node(
     if not isinstance(node_type_value, str) or not node_type_value.strip():
         keys = sorted(node_config.keys())
         raise ValueError(
-            f"Node '{node_id}': type is required as a non-empty string (поля: {keys})"
+            f"Node '{node_id}': type is required as a non-empty string (fields: {keys})"
         )
 
     try:

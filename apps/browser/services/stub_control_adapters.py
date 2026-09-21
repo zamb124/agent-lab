@@ -44,7 +44,7 @@ class BrowserUseAdapter:
     def _raise(self) -> None:
         raise BrowserCapabilityError(
             "backend_not_configured",
-            "BrowserUseAdapter: интеграция browser-use не подключена в этом билде",
+            "BrowserUseAdapter: browser-use integration is not enabled in this build",
         )
 
     async def start(self, req: BrowserAcquireRequest) -> BrowserAcquireResult:
@@ -95,7 +95,7 @@ class AgentBrowserAdapter:
     def _raise(self) -> None:
         raise BrowserCapabilityError(
             "backend_not_configured",
-            "AgentBrowserAdapter: интеграция agent-browser не подключена в этом билде",
+            "AgentBrowserAdapter: agent-browser integration is not enabled in this build",
         )
 
     async def start(self, req: BrowserAcquireRequest) -> BrowserAcquireResult:

@@ -32,8 +32,9 @@ from core.files.chunked_upload import (
     ChunkedUploadService,
 )
 from core.files.create_spec import FileCreateSpec
+from core.files.file_ref import FileRef, stored_file_ref
 from core.files.http_range import RangeNotSatisfiableError
-from core.files.models import FileReadPreviewResponse, FileRecord, FileResponse
+from core.files.models import FileReadPreviewResponse, FileRecord
 from core.files.read_preview import build_stored_file_text_preview
 from core.files.reader.exceptions import FileReadError
 from core.files.s3_client import S3ClientFactory
@@ -206,7 +207,7 @@ def build_files_router(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    async def complete_chunked_upload(upload_id: str, request: Request) -> FileResponse:
+    async def complete_chunked_upload(upload_id: str, request: Request) -> FileRef:
         _ = await _require_company_can_view(request)
         service = _chunked()
         try:
@@ -215,7 +216,7 @@ def build_files_router(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except RuntimeError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
-        return FileResponse.from_record(file_record, route_segment=route_segment)
+        return stored_file_ref(file_record, route_segment=route_segment)
 
     async def abort_chunked_upload(upload_id: str, request: Request) -> Response:
         _ = await _require_company_can_view(request)
@@ -226,7 +227,7 @@ def build_files_router(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return Response(status_code=204)
 
-    async def register_s3(body: RegisterS3Request, request: Request) -> FileResponse:
+    async def register_s3(body: RegisterS3Request, request: Request) -> FileRef:
         _ = await _require_company_can_view(request)
         register_settings = get_settings()
         if not register_settings.s3.enabled:
@@ -244,7 +245,7 @@ def build_files_router(
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return FileResponse.from_record(file_record, route_segment=route_segment)
+        return stored_file_ref(file_record, route_segment=route_segment)
 
     async def bind_file(file_id: str, placement: DocsPlacement, request: Request) -> dict[str, str]:
         _ = await _require_company_can_view(request)
@@ -350,7 +351,7 @@ def build_files_router(
         except FileReadError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    async def get_file_metadata(file_id: str, request: Request) -> FileResponse:
+    async def get_file_metadata(file_id: str, request: Request) -> FileRef:
         service = get_files_service()
         try:
             file_record = await service.get(file_id)
@@ -358,7 +359,7 @@ def build_files_router(
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
         await _ensure_file_record_access(request, file_record)
-        return FileResponse.from_record(file_record)
+        return stored_file_ref(file_record)
 
     router.add_api_route(
         "/upload-config",
@@ -382,7 +383,7 @@ def build_files_router(
         "/uploads/{upload_id}/complete",
         complete_chunked_upload,
         methods=["POST"],
-        response_model=FileResponse,
+        response_model=FileRef,
     )
     router.add_api_route(
         "/uploads/{upload_id}",
@@ -395,7 +396,7 @@ def build_files_router(
         "/register-s3",
         register_s3,
         methods=["POST"],
-        response_model=FileResponse,
+        response_model=FileRef,
     )
     router.add_api_route(
         "/{file_id}/bind",
@@ -419,7 +420,7 @@ def build_files_router(
         "/{file_id}",
         get_file_metadata,
         methods=["GET"],
-        response_model=FileResponse,
+        response_model=FileRef,
     )
     return router
 

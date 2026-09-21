@@ -89,10 +89,10 @@ class HTTPRepositoryProxy(Generic[T]):
         url = f"{self._get_base_url()}{path}"
 
         logger.info(
-            "HTTPRepositoryProxy request: %s %s, trace_id=%s",
-            method,
-            url,
-            request_headers.get("X-Trace-Id"),
+            "db.httprepositoryproxy.request.trace_id",
+            method=method,
+            url=url,
+            trace_id=request_headers.get('X-Trace-Id'),
         )
 
         async with get_httpx_client(timeout=30.0) as client:

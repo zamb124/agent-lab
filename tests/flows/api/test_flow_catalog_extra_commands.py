@@ -9,7 +9,6 @@ import pytest
 from httpx import AsyncClient
 
 from apps.flows.realtime.operations import (
-    FlowsEmptyPayload,
     FlowsFlowIdPayload,
     FlowsFlowVersionPayload,
     op_flows_store_bundles,
@@ -22,6 +21,7 @@ from apps.flows.src.models.flow_api import FlowValidateRequest
 from core.context import reset_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import User
+from core.websocket import EmptyPayload
 from tests.fixtures.ai_provider_defaults import make_test_company
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.timeout(60)]
@@ -59,7 +59,7 @@ async def test_store_bundles_rest_and_op_share_payload(
     assert len(http_items) > 0
     with _system_scope(system_user_id) as user:
         listed = await op_flows_store_bundles(
-            FlowsEmptyPayload(),
+            EmptyPayload(),
             user=user,
             container=container,
         )

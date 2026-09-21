@@ -36,10 +36,10 @@ class HuggingFaceModelCatalogAdapter(OpenAICompatibleModelCatalogAdapter):
     @override
     async def list_models(self, *, probe_embeddings: bool = True) -> list[AIModelRecord]:
         if not self.is_configured():
-            raise ValueError("huggingface model provider не настроен")
+            raise ValueError('huggingface model provider is not configured')
         cfg = self._configured_llm_provider()
         if cfg is None:
-            raise ValueError("huggingface provider config не настроен")
+            raise ValueError('huggingface provider config is not configured')
         headers = self.provider_model_list_headers()
         payload = await self._fetch_provider_catalog_payload(
             url=self._provider_models_url(cfg),

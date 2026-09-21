@@ -146,17 +146,17 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
     ) -> MessageCursorWindow:
         """Курсорная выборка сообщений основной ленты канала."""
         if limit < 1:
-            raise ValueError("limit должен быть >= 1.")
+            raise ValueError("limit must be >= 1.")
         if before_sent_at is not None and before_message_id is None:
-            raise ValueError("before_message_id обязателен при before_sent_at.")
+            raise ValueError("before_message_id is required when before_sent_at is set.")
         if before_sent_at is None and before_message_id is not None:
-            raise ValueError("before_sent_at обязателен при before_message_id.")
+            raise ValueError("before_sent_at is required when before_message_id is set.")
         if after_sent_at is not None and after_message_id is None:
-            raise ValueError("after_message_id обязателен при after_sent_at.")
+            raise ValueError("after_message_id is required when after_sent_at is set.")
         if after_sent_at is None and after_message_id is not None:
-            raise ValueError("after_sent_at обязателен при after_message_id.")
+            raise ValueError("after_sent_at is required when after_message_id is set.")
         if before_sent_at is not None and after_sent_at is not None:
-            raise ValueError("Нельзя одновременно передавать before и after.")
+            raise ValueError("Cannot pass before and after at the same time.")
 
         async with self._db.session() as session:
             base_conditions = [
@@ -170,7 +170,7 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
 
             if before_sent_at is not None:
                 if before_message_id is None:
-                    raise ValueError("before_message_id обязателен при before_sent_at.")
+                    raise ValueError("before_message_id is required when before_sent_at is set.")
                 stmt = (
                     select(SyncMessage)
                     .where(
@@ -193,7 +193,7 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
 
             if after_sent_at is not None:
                 if after_message_id is None:
-                    raise ValueError("after_message_id обязателен при after_sent_at.")
+                    raise ValueError("after_message_id is required when after_sent_at is set.")
                 stmt = (
                     select(SyncMessage)
                     .where(

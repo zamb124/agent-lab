@@ -14,7 +14,9 @@ from apps.office.realtime.data_table_operations import (
     OfficeDataTableAddColumnPayload,
     OfficeDataTableCreateTablePayload,
     OfficeDataTableDeleteRowsPayload,
+    OfficeDataTableExportPayload,
     OfficeDataTableFileIdPayload,
+    OfficeDataTableImportPayload,
     OfficeDataTableInsertRowsPayload,
     OfficeDataTablePromotePayload,
     OfficeDataTableQueryPayload,
@@ -22,7 +24,9 @@ from apps.office.realtime.data_table_operations import (
     OfficeDataTableUpdateRowPayload,
     op_data_tables_column_add,
     op_data_tables_create,
+    op_data_tables_export,
     op_data_tables_get,
+    op_data_tables_import,
     op_data_tables_promote,
     op_data_tables_query,
     op_data_tables_row_update,
@@ -30,6 +34,16 @@ from apps.office.realtime.data_table_operations import (
     op_data_tables_rows_insert,
     op_data_tables_rows_list,
     op_data_tables_table_create,
+)
+from apps.office.realtime.editor_operations import (
+    OfficeDocumentShareResolvePayload,
+    OfficeEditorConfigPayload,
+    OfficeEditorSyncPayload,
+    op_document_share_resolve,
+    op_editor_document_config,
+    op_editor_document_sync,
+    op_editor_file_config,
+    op_editor_file_sync,
 )
 from apps.office.realtime.operations import (
     OfficeCatalogAccessRotatePayload,
@@ -51,7 +65,6 @@ from apps.office.realtime.operations import (
     OfficeDocumentShareCreatePayload,
     OfficeDocumentsListPayload,
     OfficeDocumentUpdateCellsPayload,
-    OfficeEmptyPayload,
     OfficeFileIdPayload,
     op_catalogs_access,
     op_catalogs_access_rotate_link,
@@ -72,7 +85,6 @@ from apps.office.realtime.operations import (
     op_catalogs_rag_status,
     op_catalogs_remove,
     op_catalogs_update,
-    op_company_members_list,
     op_documents_access,
     op_documents_access_rotate_link,
     op_documents_access_update,
@@ -107,30 +119,31 @@ from apps.office.realtime.operations import (
 )
 from core.data_tables.models import DataTableCreateRequest
 from core.documents.placement import DocsEnsurePathRequest, DocsPlacement
+from core.identity.team_operations import op_team_members_list
 from core.logging import get_logger
 from core.namespace.operations import NamespacesListPayload, op_namespaces_list
-from core.websocket import Operation, RegisteredOperation, register_service_operations
+from core.websocket import EmptyPayload, Operation, RegisteredOperation, register_service_operations
 
 logger = get_logger(__name__)
 
 OFFICE_OPERATIONS: dict[str, RegisteredOperation[OfficeContainer]] = {
     "office/integration/status_requested": Operation(
-        payload_model=OfficeEmptyPayload, fn=op_integration_status
+        payload_model=EmptyPayload, fn=op_integration_status
     ),
     "office/namespaces/list_requested": Operation(
         payload_model=NamespacesListPayload, fn=op_namespaces_list
     ),
     "office/namespaces/templates_requested": Operation(
-        payload_model=OfficeEmptyPayload, fn=op_namespaces_templates
+        payload_model=EmptyPayload, fn=op_namespaces_templates
     ),
     "office/namespaces/create_requested": Operation(
         payload_model=OfficeNamespaceCreateRequest, fn=op_namespaces_create
     ),
     "office/company_members/list_requested": Operation(
-        payload_model=OfficeEmptyPayload, fn=op_company_members_list
+        payload_model=EmptyPayload, fn=op_team_members_list
     ),
     "office/catalogs/list_requested": Operation(
-        payload_model=OfficeEmptyPayload, fn=op_catalogs_list
+        payload_model=EmptyPayload, fn=op_catalogs_list
     ),
     "office/catalogs/ensure_path_requested": Operation(
         payload_model=DocsEnsurePathRequest, fn=op_catalogs_ensure_path
@@ -204,6 +217,21 @@ OFFICE_OPERATIONS: dict[str, RegisteredOperation[OfficeContainer]] = {
     "office/documents/editor_session_requested": Operation(
         payload_model=OfficeFileIdPayload, fn=op_documents_editor_session
     ),
+    "office/editor/file_config_requested": Operation(
+        payload_model=OfficeEditorConfigPayload, fn=op_editor_file_config
+    ),
+    "office/editor/document_config_requested": Operation(
+        payload_model=OfficeEditorConfigPayload, fn=op_editor_document_config
+    ),
+    "office/editor/file_sync_requested": Operation(
+        payload_model=OfficeEditorSyncPayload, fn=op_editor_file_sync
+    ),
+    "office/editor/document_sync_requested": Operation(
+        payload_model=OfficeEditorSyncPayload, fn=op_editor_document_sync
+    ),
+    "office/document_share/resolve_requested": Operation(
+        payload_model=OfficeDocumentShareResolvePayload, fn=op_document_share_resolve
+    ),
     "office/documents/replace_text_requested": Operation(
         payload_model=OfficeDocumentReplaceTextPayload, fn=op_documents_replace_text
     ),
@@ -220,7 +248,7 @@ OFFICE_OPERATIONS: dict[str, RegisteredOperation[OfficeContainer]] = {
         payload_model=OfficeFileIdPayload, fn=op_documents_remove
     ),
     "office/documents/deleted_list_requested": Operation(
-        payload_model=OfficeEmptyPayload, fn=op_documents_deleted_list
+        payload_model=EmptyPayload, fn=op_documents_deleted_list
     ),
     "office/documents/restore_requested": Operation(
         payload_model=OfficeFileIdPayload, fn=op_documents_restore
@@ -300,12 +328,15 @@ OFFICE_OPERATIONS: dict[str, RegisteredOperation[OfficeContainer]] = {
     "office/data_tables/query_requested": Operation(
         payload_model=OfficeDataTableQueryPayload, fn=op_data_tables_query
     ),
+    "office/data_tables/export_requested": Operation(
+        payload_model=OfficeDataTableExportPayload, fn=op_data_tables_export
+    ),
+    "office/data_tables/import_requested": Operation(
+        payload_model=OfficeDataTableImportPayload, fn=op_data_tables_import
+    ),
 }
 
 
 def register_office_ws_commands() -> None:
     register_service_operations(OFFICE_OPERATIONS, get_office_container)
-    logger.info(
-        "Documents WS command-handlers зарегистрированы (%d операций)",
-        len(OFFICE_OPERATIONS),
-    )
+    logger.info("office.documents.ws.command.handlers", OFFICE_OPERATIONS_count=len(OFFICE_OPERATIONS))

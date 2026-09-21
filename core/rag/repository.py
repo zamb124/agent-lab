@@ -69,7 +69,7 @@ class RAGRepository:
         ctx = get_context()
         if ctx is None or ctx.active_company is None:
             raise ValueError(
-                "RAGRepository.search_namespace: нужен company_id (аргумент, bind или контекст с active_company)"
+                'RAGRepository.search_namespace: company_id is required (argument, bind, or context with active_company)'
             )
         return {COMPANY_ID_HEADER: ctx.active_company.company_id}
 
@@ -83,7 +83,7 @@ class RAGRepository:
             ns = bind.namespace
         if not ns:
             raise ValueError(
-                "RAGRepository: нужен namespace_id или bind.namespace (RagResourceBindParams)"
+                'RAGRepository: namespace_id or bind.namespace is required (RagResourceBindParams)'
             )
         return ns
 
@@ -102,7 +102,7 @@ class RAGRepository:
     def _require_service_client(self) -> ServiceClient:
         if self._service_client is None:
             raise ValueError(
-                "RAGRepository.search_namespace: не задан service_client (нужен для HTTP-поиска)"
+                'RAGRepository.search_namespace: service_client is not set (required for HTTP search)'
             )
         return self._service_client
 
@@ -165,7 +165,7 @@ class RAGRepository:
         limit: int = 100,
     ) -> list[RAGDocument]:
         documents = await self.provider.list_documents(namespace_id, limit=limit)
-        logger.info("Найдено %s документов в namespace %s", len(documents), namespace_id)
+        logger.info("rag.namespace", documents_count=len(documents), namespace_id=namespace_id)
         return documents
 
     async def list_with_filters(
@@ -179,7 +179,7 @@ class RAGRepository:
             where=filters,
             limit=limit,
         )
-        logger.info("Найдено %s документов с фильтрами в %s", len(documents), namespace_id)
+        logger.info("rag.event", documents_count=len(documents), namespace_id=namespace_id)
         return documents
 
     async def get_document(
@@ -209,7 +209,7 @@ class RAGRepository:
             document_name=document_name,
             metadata=metadata or {},
         )
-        logger.info("Документ %s загружен в namespace %s", document.document_id, namespace_id)
+        logger.info("rag.namespace", document_id=document.document_id, namespace_id=namespace_id)
         return document
 
     async def upload_text(
@@ -225,11 +225,7 @@ class RAGRepository:
             document_name=document_name,
             metadata=metadata or {},
         )
-        logger.info(
-            "Текст загружен в namespace %s, document_id=%s",
-            namespace_id,
-            document.document_id,
-        )
+        logger.info("rag.namespace.document_id", namespace_id=namespace_id, document_id=document.document_id)
         return document
 
     async def delete_document(
@@ -239,7 +235,7 @@ class RAGRepository:
     ) -> bool:
         success = await self.provider.delete_document(namespace_id, document_id)
         if success:
-            logger.info("Документ %s удален из namespace %s", document_id, namespace_id)
+            logger.info("rag.namespace", document_id=document_id, namespace_id=namespace_id)
         return success
 
     async def search(
@@ -257,7 +253,12 @@ class RAGRepository:
             filters=filters,
             search_options=search_options,
         )
-        logger.debug("Поиск '%s' в namespace %s: найдено %s результатов", query, namespace_id, len(results))
+        logger.debug(
+            "rag.namespace",
+            query=query,
+            namespace_id=namespace_id,
+            results_count=len(results),
+        )
         return results
 
     async def search_multiple_namespaces(
@@ -282,7 +283,7 @@ class RAGRepository:
         description: str | None = None,
     ) -> RAGNamespace:
         namespace = await self.provider.create_namespace(name, description)
-        logger.info("Создан namespace: %s", namespace.namespace_id)
+        logger.info("rag.namespace", namespace_id=namespace.namespace_id)
         return namespace
 
     async def get_namespace(self, namespace_id: str) -> RAGNamespace | None:
@@ -294,5 +295,5 @@ class RAGRepository:
     async def delete_namespace(self, namespace_id: str) -> bool:
         success = await self.provider.delete_namespace(namespace_id)
         if success:
-            logger.info("Namespace %s удален", namespace_id)
+            logger.info("rag.namespace", namespace_id=namespace_id)
         return success

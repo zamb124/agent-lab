@@ -117,16 +117,16 @@ class GoogleDocsClient:
     ) -> None:
         if credentials_json and access_token:
             raise ValueError(
-                "Передайте credentials_json или access_token, не оба."
+                "Pass credentials_json or access_token, not both."
             )
         if not credentials_json and not access_token:
             raise ValueError(
-                "Передайте credentials_json (Service Account JSON) "
-                + "или access_token (OAuth2 Bearer-токен)."
+                "Pass credentials_json (Service Account JSON) "
+                + "or access_token (OAuth2 Bearer token)."
             )
         if subject and not credentials_json:
             raise ValueError(
-                "subject (impersonation) работает только с credentials_json."
+                "subject (impersonation) works only with credentials_json."
             )
 
         resolved_bases = api_bases

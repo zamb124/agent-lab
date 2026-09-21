@@ -50,7 +50,7 @@ def init_worker_tracing(service_name: str, container: object) -> None:
     if settings.tracing.postgres_enabled and hasattr(container, "span_repository"):
         if not settings.database.tracing_url:
             raise ValueError(
-                "tracing.postgres_enabled требует database.tracing_url (DATABASE__TRACING_URL)"
+                'tracing.postgres_enabled requires database.tracing_url (DATABASE__TRACING_URL)'
             )
         set_tracing_service_name(service_name)
         set_span_repository(cast(_SpanRepoContainer, container).span_repository)
@@ -64,7 +64,7 @@ def init_worker_testing_mock_llm(redis_client: RedisClient, *, service_name: str
     _ = get_or_create_global_mock_llm("mock-gpt-4")
     mock_llm = configure_mock_llm_redis(redis_client)
     if mock_llm is None:
-        raise RuntimeError(f"{service_name}: MockLLM не зарегистрирован для Redis")
+        raise RuntimeError(f"{service_name}: MockLLM is not registered for Redis")
     logger.info("worker.mock_llm_configured", service=service_name)
 
 

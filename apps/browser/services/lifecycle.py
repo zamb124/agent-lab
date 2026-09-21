@@ -45,7 +45,7 @@ class CDPLifecycleManagerImpl:
 
     async def drain(self, endpoint_key: str, timeout_sec: int) -> bool:
         if timeout_sec <= 0:
-            raise ValueError("timeout_sec должен быть положительным")
+            raise ValueError("timeout_sec must be positive")
         self._lease_manager.set_endpoint_drain(endpoint_key, True)
         deadline = time.monotonic() + timeout_sec
         try:

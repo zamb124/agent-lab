@@ -64,7 +64,7 @@ class VoiceClientChannel:
 
     def __init__(self, websocket: WebSocket, *, session_id: str) -> None:
         if session_id == "":
-            raise ValueError("VoiceClientChannel: session_id не может быть пустым.")
+            raise ValueError("VoiceClientChannel: session_id must not be empty.")
         self._websocket: WebSocket = websocket
         self._session_id: str = session_id
         self._lock: asyncio.Lock = asyncio.Lock()
@@ -101,7 +101,7 @@ class VoiceClientChannel:
         Отправляется один раз сразу после принятия WS.
         """
         if mime_type == "":
-            raise ValueError("VoiceClientChannel.send_media_config: mime_type обязателен.")
+            raise ValueError("VoiceClientChannel.send_media_config: mime_type is required.")
         if sample_rate <= 0:
             raise ValueError("VoiceClientChannel.send_media_config: sample_rate > 0.")
         if channels <= 0:
@@ -160,7 +160,7 @@ class VoiceClientChannel:
     async def send_error(self, *, code: str, detail: str) -> None:
         """Отправить клиенту ошибку media-уровня."""
         if code == "":
-            raise ValueError("VoiceClientChannel.send_error: code обязателен.")
+            raise ValueError("VoiceClientChannel.send_error: code is required.")
         await self._send_json({"type": "error", "code": code, "detail": detail})
 
     async def send_ping(self) -> None:

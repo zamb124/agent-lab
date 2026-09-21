@@ -838,7 +838,7 @@ class CalendarService:
             public_base = settings.server.platform_public_base_url
             if public_base is None or public_base.strip() == "":
                 raise ValueError(
-                    "Для встречи Sync в конфигурации задан server.platform_public_base_url."
+                    'Sync meeting requires server.platform_public_base_url in configuration.'
                 )
             invited = await self._resolve_invited_platform_user_ids(
                 company_id=company_id,
@@ -863,16 +863,16 @@ class CalendarService:
                 )
                 token = data.get("link_token")
                 if not isinstance(token, str) or token == "":
-                    raise ValueError("Ответ sync calls/links без link_token")
+                    raise ValueError('sync calls/links response has no link_token')
                 channel_id = data.get("channel_id")
                 if not isinstance(channel_id, str) or channel_id == "":
-                    raise ValueError("Ответ sync calls/links без channel_id")
+                    raise ValueError('sync calls/links response has no channel_id')
                 metadata[SYNC_LINK_TOKEN_META] = token
                 metadata[SYNC_CHANNEL_ID_META] = channel_id
                 metadata[SYNC_MEETING_FLAG_META] = "1"
                 join = data.get("join_url")
                 if not isinstance(join, str) or join == "":
-                    raise ValueError("Ответ sync calls/links без join_url")
+                    raise ValueError('sync calls/links response has no join_url')
                 return True, join
             patch_body: JsonObject = {
                 "scheduled_title": title,
@@ -890,16 +890,16 @@ class CalendarService:
             )
             token = data.get("link_token")
             if not isinstance(token, str) or token == "":
-                raise ValueError("Ответ sync calls/links без link_token")
+                raise ValueError('sync calls/links response has no link_token')
             channel_id = data.get("channel_id")
             if not isinstance(channel_id, str) or channel_id == "":
-                raise ValueError("Ответ sync calls/links без channel_id")
+                raise ValueError('sync calls/links response has no channel_id')
             metadata[SYNC_LINK_TOKEN_META] = token
             metadata[SYNC_CHANNEL_ID_META] = channel_id
             metadata[SYNC_MEETING_FLAG_META] = "1"
             join = data.get("join_url")
             if not isinstance(join, str) or join == "":
-                raise ValueError("Ответ sync calls/links без join_url")
+                raise ValueError('sync calls/links response has no join_url')
             return True, join
 
         if prev_token:
@@ -1040,7 +1040,7 @@ class CalendarService:
     async def sync_meeting_reminder_recipient_user_ids(self, event: CalendarEvent) -> list[str]:
         organizer = event.created_by_user_id
         if organizer is None or organizer == "":
-            raise ValueError("Для напоминания Sync нужен created_by_user_id у события.")
+            raise ValueError('Sync reminder requires created_by_user_id on the event.')
         invited = await self._resolve_invited_platform_user_ids(
             company_id=event.company_id,
             organizer_user_id=organizer,

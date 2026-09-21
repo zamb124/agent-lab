@@ -1,46 +1,30 @@
 /**
- * Namespace Sync — фабрики для платформенного namespace в UI Sync.
+ * Пространства в UI Sync — platform Namespace 1:1.
  *
- * Источник правды списка — `core/db/repositories/namespace_repository.py`
- * (shared KV `namespaces`); в UI достаётся через REST `apps/sync/api/namespaces.py`
- * (`GET /sync/api/v1/namespaces`). Обновление sync-настроек namespace —
- * `PUT /sync/api/v1/namespaces/{name}` с телом `{ sync_settings: NamespaceSyncSettings | null }`.
- *
- * Создание/удаление namespace выполняется в CRM (`apps/crm/api/namespaces.py`)
- * — sync только читает и пишет свою секцию `Namespace.sync_settings`.
- *
- * Паттерн полностью повторяет `apps/crm/ui/events/resources/namespaces.resource.js`:
- * `createResourceCollection` (operations: ['list']) + отдельный
- * `createAsyncOp` для PUT-апдейта (стандартный resource.update шлёт PATCH,
- * а REST-зеркало хочет PUT — поэтому отдельный op с явным `request`).
+ * Список — общий op реестра (`sync/namespaces/list_requested` → `op_namespaces_list`),
+ * запись — только секция `Namespace.sync_settings` (`sync/namespace/sync_settings_update_requested`).
+ * Создание/удаление пространства — CRM.
  */
 
-import { createAsyncOp, createResourceCollection, httpRequest } from '@platform/lib/events/index.js';
+import { createAsyncOp, createResourceCollection } from '@platform/lib/events/index.js';
 
 export const namespacesResource = createResourceCollection({
     name: 'sync/namespaces',
     baseUrl: '/sync/api/v1/namespaces',
     idField: 'name',
     operations: ['list'],
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
     listQuery: () => ({ limit: 200, offset: 0 }),
+    restMirror: { list: { method: 'GET', path: '/sync/api/v1/namespaces' } },
 });
 
 export const namespaceUpdateOp = createAsyncOp({
     name: 'sync/namespace_update',
     successToastKey: 'sync:namespace_settings.toast_saved',
     errorToastKey: 'sync:namespace_settings.toast_save_failed',
-    restMirror: { method: 'PUT', path: '/sync/api/v1/namespaces/:namespace_name' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.name !== 'string' || payload.name === '') {
-            throw new Error('namespaceUpdateOp: payload.name (string) required');
-        }
-        if (!payload.body || typeof payload.body !== 'object') {
-            throw new Error('namespaceUpdateOp: payload.body (object) required');
-        }
-        return await httpRequest({
-            method: 'PUT',
-            url: `/sync/api/v1/namespaces/${encodeURIComponent(payload.name)}`,
-            body: payload.body,
-        });
-    },
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'sync/namespace/sync_settings_update_requested',
+    restMirror: { method: 'PUT', path: '/sync/api/v1/namespaces/:name' },
 });

@@ -41,7 +41,10 @@ from core.authz.models import AuthzObject
 from core.clients.browser.control_types import (
     BrowserCapabilityError,
     ControlHumanTakeoverBody,
+    ControlHumanTakeoverResponse,
+    ControlOkResponse,
     ControlPointerClickBody,
+    ControlPointerClickResponse,
     ControlPointerKeyBody,
     ControlPointerTextBody,
     ControlSessionStatusResponse,
@@ -87,25 +90,6 @@ class ControlObserveResponse(TypedDict):
     session_id: str
     url: str
     snapshot: ControlSnapshotResponse
-
-
-class ControlOkResponse(TypedDict):
-    ok: bool
-
-
-class ControlPointerClickResponse(TypedDict):
-    ok: bool
-    x: float
-    y: float
-    viewport_width: float
-    viewport_height: float
-    url: str
-
-
-class ControlHumanTakeoverResponse(TypedDict):
-    ok: bool
-    human_takeover: bool
-    owner: str | None
 
 
 class ControlDeleteResponse(TypedDict):
@@ -368,7 +352,7 @@ async def create_control_session(
     if ctx.page_mode != body.page_mode:
         raise HTTPException(
             status_code=422,
-            detail="context.page_mode должен совпадать с page_mode",
+            detail="context.page_mode must match page_mode",
         )
     _ = get_interaction_profile(ctx.interaction_profile)
     sig = ContextSignature(
@@ -607,15 +591,15 @@ async def control_action(
 def _locator_from_ref(page: BrowserPage, refs: RefMap, raw_ref: str) -> BrowserLocator:
     ref = parse_ref(raw_ref)
     if ref not in refs:
-        raise HTTPException(status_code=422, detail=f"ref не найден в последнем snapshot: {raw_ref!r}")
+        raise HTTPException(status_code=422, detail=f"ref was not found in the last snapshot: {raw_ref!r}")
     meta = refs[ref]
     role = meta.get("role")
     name = meta.get("name")
     nth = meta.get("nth")
     if not role:
-        raise HTTPException(status_code=500, detail=f"refs[{ref}].role должен быть непустой строкой")
+        raise HTTPException(status_code=500, detail=f"refs[{ref}].role must be a non-empty string")
     if nth < 0:
-        raise HTTPException(status_code=500, detail=f"refs[{ref}].nth должен быть int >= 0")
+        raise HTTPException(status_code=500, detail=f"refs[{ref}].nth must be int >= 0")
     loc = page.get_by_role(role, name=name, exact=True)
     if nth:
         loc = loc.nth(nth)
@@ -664,7 +648,7 @@ async def control_click(
             await inter.click(page, loc, profile=profile, rnd=rnd, timeout_ms=body.timeout_ms)
         except PlaywrightError as exc:
             raise HTTPException(status_code=502, detail=f"click playwright error for {session_id}: {exc}") from exc
-        out: ControlOkResponse = {"ok": True}
+        out = ControlOkResponse(ok=True)
         _log_control_event(
             op="control.click",
             session_id=session_id,
@@ -737,14 +721,14 @@ async def control_pointer_click(
             status_code=409,
             detail=f"browser page is not available for pointer click: {exc}",
         ) from exc
-    out: ControlPointerClickResponse = {
-        "ok": True,
-        "x": x,
-        "y": y,
-        "viewport_width": viewport_width,
-        "viewport_height": viewport_height,
-        "url": page_url,
-    }
+    out = ControlPointerClickResponse(
+        ok=True,
+        x=x,
+        y=y,
+        viewport_width=viewport_width,
+        viewport_height=viewport_height,
+        url=page_url,
+    )
     _log_control_event(
         op="control.pointer_click",
         session_id=session_id,
@@ -770,11 +754,7 @@ async def control_human_takeover(
     if page.is_closed():
         raise HTTPException(status_code=410, detail="browser page is closed")
     record = await runtime.lease_manager.begin_human_takeover(session_id, owner=body.owner)
-    out: ControlHumanTakeoverResponse = {
-        "ok": True,
-        "human_takeover": True,
-        "owner": record.owner,
-    }
+    out = ControlHumanTakeoverResponse(ok=True, human_takeover=True, owner=record.owner)
     _log_control_event(
         op="control.human_takeover.begin",
         session_id=session_id,
@@ -791,11 +771,11 @@ async def control_human_takeover_release(
     await _require_company_view_when_user_context(container)
     runtime = container.browser_runtime
     record = await runtime.lease_manager.end_human_takeover(session_id)
-    out: ControlHumanTakeoverResponse = {
-        "ok": True,
-        "human_takeover": False,
-        "owner": record.owner if record is not None else None,
-    }
+    out = ControlHumanTakeoverResponse(
+        ok=True,
+        human_takeover=False,
+        owner=record.owner if record is not None else None,
+    )
     _log_control_event(
         op="control.human_takeover.release",
         session_id=session_id,
@@ -825,7 +805,7 @@ async def control_pointer_key(
             status_code=409,
             detail=f"browser page is not available for keyboard input: {exc}",
         ) from exc
-    out: ControlOkResponse = {"ok": True}
+    out = ControlOkResponse(ok=True)
     _log_control_event(
         op="control.pointer_key",
         session_id=session_id,
@@ -855,7 +835,7 @@ async def control_pointer_text(
             status_code=409,
             detail=f"browser page is not available for text input: {exc}",
         ) from exc
-    out: ControlOkResponse = {"ok": True}
+    out = ControlOkResponse(ok=True)
     _log_control_event(
         op="control.pointer_text",
         session_id=session_id,
@@ -898,7 +878,7 @@ async def control_fill(
             )
         except PlaywrightError as exc:
             raise HTTPException(status_code=502, detail=f"fill playwright error for {session_id}: {exc}") from exc
-        out: ControlOkResponse = {"ok": True}
+        out = ControlOkResponse(ok=True)
         _log_control_event(
             op="control.fill",
             session_id=session_id,
@@ -924,7 +904,7 @@ async def control_press(
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         inter, profile, rnd = _interaction_for_session(runtime, session_id)
         await inter.press(page, body.key, profile=profile, rnd=rnd)
-        out: ControlOkResponse = {"ok": True}
+        out = ControlOkResponse(ok=True)
         _log_control_event(
             op="control.press",
             session_id=session_id,
@@ -956,8 +936,8 @@ async def control_wait(
         except PlaywrightError as exc:
             raise HTTPException(status_code=502, detail=f"wait playwright error for {session_id}: {exc}") from exc
         if body.load_state is None and body.selector is None:
-            raise HTTPException(status_code=422, detail="Нужно задать selector и/или load_state")
-        out: ControlOkResponse = {"ok": True}
+            raise HTTPException(status_code=422, detail="selector and/or load_state is required")
+        out = ControlOkResponse(ok=True)
         _log_control_event(
             op="control.wait",
             session_id=session_id,

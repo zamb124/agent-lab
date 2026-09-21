@@ -44,7 +44,7 @@ def _resolve_int_env(name: str, default: int) -> int:
         return default
     value = int(raw)
     if value < 1:
-        raise ValueError(f"{name}={value!r} должно быть >= 1")
+        raise ValueError(f"{name}={value!r} must be >= 1")
     return value
 
 

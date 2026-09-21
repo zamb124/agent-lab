@@ -1,5 +1,5 @@
 /**
- * Company variables — канонический REST к secrets-сервису.
+ * Company variables — команды `secrets/variables/*` владельца secrets (WS + REST-зеркало).
  */
 
 import { createResourceCollection } from '@platform/lib/events/index.js';
@@ -90,6 +90,8 @@ export const secretsVariablesResource = createResourceCollection({
     itemPathTemplate: '/secrets/api/v1/variables/:variable_key',
     buildItemUrl: (id) => `/secrets/api/v1/variables/${encodeURIComponent(id)}`,
     operations: ['list', 'get', 'create', 'remove'],
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
     mapItem: mapPlatformVariable,
     toastKeys: {
         create: 'company_variables:toast.created',

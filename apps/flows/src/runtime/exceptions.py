@@ -27,14 +27,14 @@ class FlowInterrupt(Exception):
     ) -> None:
         if body is not None:
             if question is not None:
-                raise ValueError("FlowInterrupt: нельзя передавать одновременно body и question")
+                raise ValueError("FlowInterrupt: cannot pass both body and question")
             self.body: InterruptBody = body
         elif question is not None:
             if not question.strip():
-                raise ValueError("FlowInterrupt: question должен быть непустой строкой")
+                raise ValueError("FlowInterrupt: question must be a non-empty string")
             self.body = UserMessageInterrupt(question=question.strip())
         else:
-            raise ValueError("FlowInterrupt: укажите question или body")
+            raise ValueError("FlowInterrupt: specify question or body")
         self.tool_call: LLMToolCall | None = tool_call
         self.flow_id: str = flow_id
         self.correlation_id: UUID | None = correlation_id

@@ -5,13 +5,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
-from fastapi import HTTPException
-
 from apps.agent.authz.tuples import agent_device_company_link, agent_device_owner_tuple
 from apps.agent.models import AgentDeviceRecord, DevicePolicy
 from apps.agent.service import DEVICE_KEY_PREFIX, list_company_devices, revoke_device
 from core.authz.company_sync import sync_company_member_roles
 from core.authz.models import AuthzObject
+from core.errors.boundary import PlatformAccessDeniedError
 
 
 @pytest.mark.asyncio
@@ -60,14 +59,14 @@ async def test_revoke_device_non_owner_member_forbidden(
         ]
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(PlatformAccessDeniedError) as exc_info:
         await revoke_device(
             frontend_container,
             device_id=device_id,
             company_id=company_id,
             actor_user_id=other_id,
         )
-    assert exc_info.value.status_code == 403
+    assert exc_info.value.error_code == "device_revoke_forbidden"
 
 
 @pytest.mark.asyncio

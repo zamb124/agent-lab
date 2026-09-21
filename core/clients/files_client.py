@@ -11,8 +11,9 @@ from core.config import get_settings
 from core.context import get_context
 from core.db.storage import Storage
 from core.files.create_spec import FileCreateSpec
+from core.files.file_ref import FileRef
 from core.files.file_repository import FileRepository
-from core.files.models import FileRecord, FileResponse
+from core.files.models import FileRecord
 from core.files.s3_client import S3ClientFactory
 from core.files.urls import (
     files_api_prefix,
@@ -94,7 +95,7 @@ class FilesClient:
         *,
         original_name: str,
         content_type: str,
-    ) -> FileResponse:
+    ) -> FileRef:
         if len(data) == 0:
             raise ValueError("FilesClient.create: empty data")
         if original_name.strip() == "":
@@ -143,7 +144,7 @@ class FilesClient:
             f"{prefix}/uploads/{upload_id}/complete",
             timeout=120.0,
         )
-        return FileResponse.model_validate(complete_response)
+        return FileRef.model_validate(complete_response)
 
     async def register_s3(
         self,
@@ -154,7 +155,7 @@ class FilesClient:
         original_name: str,
         content_type: str,
         file_size: int,
-    ) -> FileResponse:
+    ) -> FileRef:
         body: JsonObject = {
             "spec": require_json_object(spec.model_dump(mode="json"), "spec"),
             "s3_key": s3_key,
@@ -169,7 +170,7 @@ class FilesClient:
             json=body,
             timeout=120.0,
         )
-        return FileResponse.model_validate(response)
+        return FileRef.model_validate(response)
 
     async def get_bytes(self, file_id: str) -> bytes:
         record = await self.get_record(file_id)

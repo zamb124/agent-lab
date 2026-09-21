@@ -104,7 +104,7 @@ def _build_renderer(format_name: str, console_colors: bool) -> Processor:
     if format_name == "console":
         return structlog.dev.ConsoleRenderer(colors=console_colors)
     raise LoggingMisconfigured(
-        f"Неизвестный формат логирования: {format_name!r}. Допустимо: 'json' | 'console'."
+        f"Unknown logging format: {format_name!r}. Allowed: 'json' | 'console'."
     )
 
 
@@ -148,13 +148,13 @@ def setup_logging(service_name: str, logging_config: LoggingConfig | None = None
     format_name = logging_config.format
     if format_name not in ("json", "console"):
         raise LoggingMisconfigured(
-            f"logging.format должен быть 'json' | 'console', получен {format_name!r}"
+            f"logging.format must be 'json' | 'console', got {format_name!r}"
         )
 
     level_name = logging_config.level.upper()
     level_value = logging.getLevelNamesMapping().get(level_name)
     if level_value is None:
-        raise LoggingMisconfigured(f"logging.level некорректен: {logging_config.level!r}")
+        raise LoggingMisconfigured(f"logging.level is invalid: {logging_config.level!r}")
 
     if _initialized:
         if _initialized_for == (service_name, format_name):
@@ -162,9 +162,9 @@ def setup_logging(service_name: str, logging_config: LoggingConfig | None = None
         if os.getenv("TESTING") == "true" or "PYTEST_CURRENT_TEST" in os.environ or "pytest" in sys.modules:
             return
         raise LoggingMisconfigured(
-            "setup_logging уже вызывался с другими параметрами: "
-            + f"было {_initialized_for}, повторно {(service_name, format_name)}. "
-            + "Инициализируйте логирование один раз на процесс."
+            'setup_logging was already called with different parameters: '
+            + f"was {_initialized_for}, again {(service_name, format_name)}. "
+            + 'Initialize logging once per process.'
         )
 
     environment = _resolve_environment()
@@ -269,7 +269,7 @@ def _silence_noisy_loggers(custom_levels: dict[str, str]) -> None:
             target.setLevel(level.upper())
         except (ValueError, TypeError) as exc:
             raise LoggingMisconfigured(
-                f"loggers_levels[{logger_name!r}] = {level!r} некорректен"
+                f"loggers_levels[{logger_name!r}] = {level!r} is invalid"
             ) from exc
 
 

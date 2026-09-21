@@ -106,6 +106,7 @@ from apps.crm.models.graph import (
     ShortestPathResponse,
 )
 from apps.crm.services.crm_note_broadcast import broadcast_crm_note_event
+from apps.crm.services.entity_export import CrmEntitiesExportPayload, export_entities_to_file
 from apps.crm.services.entity_response_enrichment import build_entity_responses_with_semantic_index
 from apps.crm.services.entity_service import SchemaValidationError
 from apps.crm.services.graph_service import GraphEntityLimitExceededError
@@ -117,6 +118,7 @@ from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzObject
 from core.context import resolve_namespace_or_raise
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
+from core.files.models import FileRecord
 from core.i18n.service import t
 from core.logging import get_logger
 from core.models.base import StrictBaseModel
@@ -126,6 +128,7 @@ from core.request_scope import CompanyScope, require_company
 from core.scheduler.models import PlatformScheduleCreateRequest, PlatformScheduleType
 from core.types import JsonObject
 from core.websocket import (
+    EmptyPayload,
     WsCommandError,
     raise_conflict,
     raise_forbidden,
@@ -181,10 +184,6 @@ SCHEMA_OPTIONS_RESPONSE = NamespaceTemplateSchemaOptionsResponse(
     defaults={"field_type": "string"},
     validation_limits={"max_fields_per_section": 128, "max_enum_values": 64},
 )
-
-
-class CrmEmptyPayload(StrictBaseModel):
-    pass
 
 
 class CrmCompanyInitPayload(StrictBaseModel):
@@ -504,7 +503,7 @@ async def op_templates_list(
 
 
 async def op_templates_schema_options(
-    payload: CrmEmptyPayload,
+    payload: EmptyPayload,
     *,
     user: User,
     container: CRMContainer,
@@ -665,7 +664,7 @@ async def op_templates_type_remove(
     if not REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS <= after_remove:
         raise_invalid(
             ValueError(
-                "Нельзя удалить тип: у шаблона пространства всегда должны оставаться note и task."
+                "cannot delete type: namespace template must always keep note and task"
             )
         )
     deleted = await template_repo.delete_type(template.template_key, payload.type_id)
@@ -907,7 +906,7 @@ async def op_entity_types_create(
     _ = await repo.create_custom_type(created, scope.company_id)
     refreshed = await repo.get_by_type_id(payload.type_id, namespace=namespace)
     if refreshed is None:
-        raise WsCommandError("internal", "EntityType not found after create")
+        raise WsCommandError("internal", "EntityType not found after create", error_code='internal')
     parent_map = await repo.get_parent_type_id_map_for_namespace(namespace)
     return _entity_type_to_response(refreshed, parent_map)
 
@@ -1546,6 +1545,18 @@ async def op_entities_aggregate(
     return await container.entity_service.aggregate_facets(namespace=payload.namespace)
 
 
+async def op_entities_export(
+    payload: CrmEntitiesExportPayload,
+    *,
+    user: User,
+    container: CRMContainer,
+) -> FileRecord:
+    """Выгрузка сущностей в CSV/JSON; клиент скачивает файл по `download_url`."""
+    _ = user
+    _ = _company_scope()
+    return await export_entities_to_file(container, payload)
+
+
 class CrmNoteIdPayload(StrictBaseModel):
     note_id: str = Field(min_length=1)
 
@@ -1633,13 +1644,13 @@ async def op_notes_analysis_draft_repair(
         raise_forbidden(exc)
     raw_attrs = note.attributes
     if not isinstance(raw_attrs.get("ai_analysis_draft"), dict):
-        raise_invalid(ValueError("У заметки нет черновика ai_analysis_draft"))
+        raise_invalid(ValueError("note has no ai_analysis_draft"))
     summary_raw = raw_attrs.get("ai_analysis_last_error")
     summary_ok = isinstance(summary_raw, str) and summary_raw.strip() != ""
     failures_raw = raw_attrs.get("ai_analysis_apply_failures")
     failures_ok = isinstance(failures_raw, list) and len(failures_raw) > 0
     if not summary_ok and not failures_ok:
-        raise_invalid(ValueError("Нет сохранённой ошибки применения черновика"))
+        raise_invalid(ValueError("no stored draft apply error"))
     namespace = resolve_namespace_or_raise(note.namespace)
     note_date_iso = note.note_date.isoformat() if note.note_date is not None else None
     await broadcast_crm_note_event(
@@ -1805,7 +1816,7 @@ class CrmExclusiveRelatedResponse(StrictBaseModel):
 
 
 async def op_entities_person_self(
-    payload: CrmEmptyPayload,
+    payload: EmptyPayload,
     *,
     user: User,
     container: CRMContainer,
@@ -2478,7 +2489,7 @@ async def op_tasks_item(
             await container.authz_service.require_can_view(
                 AuthzObject.company(scope.company_id), user_id=scope.user_id
             )
-            raise_not_found(PlatformNotFoundError("Задача не найдена"))
+            raise_not_found(PlatformNotFoundError("task not found"))
         await container.authz_service.require_can_view(
             AuthzObject.crm_namespace(scope.company_id, row.namespace),
             user_id=scope.user_id,
@@ -2499,7 +2510,7 @@ async def op_tasks_created_entities(
     try:
         return await container.task_service.get_task_created_entities(payload.task_id)
     except LookupError:
-        raise_not_found(PlatformNotFoundError("Задача не найдена"))
+        raise_not_found(PlatformNotFoundError("task not found"))
     except ValueError as exc:
         raise_invalid(exc)
 
@@ -2546,7 +2557,7 @@ async def op_tasks_review_complete(
     try:
         row = await container.task_service.complete_task_review(payload.task_id)
     except LookupError:
-        raise_not_found(PlatformNotFoundError("Задача не найдена"))
+        raise_not_found(PlatformNotFoundError("task not found"))
     except ValueError as exc:
         raise_invalid(exc)
     return TaskResponse.model_validate(row)
@@ -2593,7 +2604,7 @@ async def op_tasks_retry(
     try:
         row = await container.task_service.retry_task(payload.task_id)
     except LookupError:
-        raise_not_found(PlatformNotFoundError("Задача не найдена"))
+        raise_not_found(PlatformNotFoundError("task not found"))
     except ActiveTaskExistsError as exc:
         raise_conflict(exc)
     except ValueError as exc:
@@ -2638,7 +2649,7 @@ async def op_activity_tasks_create(
         entity_id=entity.entity_id,
     )
     if work_item is None:
-        raise RuntimeError("Парный WorkItem не создан для CRM-задачи")
+        raise RuntimeError("Paired WorkItem was not created for the CRM task")
     return ActivityTaskResponse(
         entity=await build_entity_response(container, entity),
         work_item=work_item,

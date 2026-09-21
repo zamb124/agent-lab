@@ -295,10 +295,10 @@ class EmailChannelHandler(BaseChannelHandler):
         )
         result = await self._mail_service.send_message(payload)
         logger.info(
-            "Email channel send_message delivery=mailbox mailbox_binding_id=%s to=%s message_id=%s",
-            mailbox_binding_id,
-            to_addresses,
-            result.message_id,
+            "flows.email.channel.send_message.delivery.mailbox",
+            mailbox_binding_id=mailbox_binding_id,
+            to=to_addresses,
+            message_id=result.message_id,
         )
         return {
             "message_id": result.message_id,
@@ -347,11 +347,11 @@ class EmailChannelHandler(BaseChannelHandler):
             use_tls=use_tls,
         )
         logger.info(
-            "Email channel send_message delivery=smtp host=%s from=%s to=%s message_id=%s",
-            smtp_host,
-            from_email,
-            to_addresses,
-            result["message_id"],
+            "flows.email.channel.send_message.delivery.smtp",
+            host=smtp_host,
+            from_value=from_email,
+            to=to_addresses,
+            message_id=result['message_id'],
         )
         return result
 

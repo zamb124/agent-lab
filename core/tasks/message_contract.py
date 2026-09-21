@@ -42,7 +42,7 @@ def task_message_string_labels(
         if value is None:
             continue
         if not isinstance(value, str):
-            raise ValueError(f"Платформенная TaskIQ-метка {key!r} должна быть строкой")
+            raise ValueError(f"Platform TaskIQ label {key!r} must be a string")
         typed_labels[key] = value
     return typed_labels
 
@@ -52,7 +52,7 @@ def task_message_string_label(message: TaskiqMessage, key: str) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str):
-        raise ValueError(f"Платформенная TaskIQ-метка {key!r} должна быть строкой")
+        raise ValueError(f"Platform TaskIQ label {key!r} must be a string")
     return value
 
 
@@ -64,12 +64,12 @@ def task_message_int_label(message: TaskiqMessage, key: str) -> int | None:
         return value
     if isinstance(value, str):
         return int(value)
-    raise ValueError(f"TaskIQ-метка {key!r} должна быть совместима с int")
+    raise ValueError(f"TaskIQ label {key!r} must be compatible with int")
 
 
 def set_task_message_string_label(message: TaskiqMessage, key: str, value: str) -> None:
     if not value:
-        raise ValueError(f"Платформенная TaskIQ-метка {key!r} должна быть непустой строкой")
+        raise ValueError(f"Platform TaskIQ label {key!r} must be a non-empty string")
     message.labels[key] = value
     if message.labels_types is None:
         message.labels_types = {}

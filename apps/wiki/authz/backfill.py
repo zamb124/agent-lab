@@ -59,7 +59,7 @@ async def backfill_wiki_authz(*, limit: int | None = None) -> int:
         await authz.write(writes)
         pages_written += 1
 
-    logger.info("wiki authz backfill complete pages=%s", pages_written)
+    logger.info("wiki.authz.backfill.complete.pages", pages=pages_written)
     return pages_written
 
 

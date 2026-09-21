@@ -299,11 +299,7 @@ async def mail_sync_tick(
         max_lag_seconds=lag.max_lag_seconds,
     )
     if stats.bindings_total == 0:
-        logger.info(
-            "mail_sync_tick: no enabled bindings pending=%s max_lag_seconds=%s",
-            lag.bindings_pending,
-            lag.max_lag_seconds,
-        )
+        logger.info("idle.mail_sync_tick", pending=lag.bindings_pending, max_lag_seconds=lag.max_lag_seconds)
         return {
             **_empty_tick_result(),
             "bindings_pending": lag.bindings_pending,
@@ -342,13 +338,13 @@ async def mail_sync_tick(
                 error_message=str(outcome),
             )
             logger.error(
-                "mail_sync_tick: sync failed for mailbox_binding_id=%s company_id=%s user_id=%s error_type=%s failure_kind=%s error=%s",
-                binding.mailbox_binding_id,
-                binding.company_id,
-                binding.user_id,
-                type(outcome).__name__,
-                failure_kind.value,
-                str(outcome),
+                "idle.mail_sync_tick",
+                mailbox_binding_id=binding.mailbox_binding_id,
+                company_id=binding.company_id,
+                user_id=binding.user_id,
+                error_type=type(outcome).__name__,
+                failure_kind=failure_kind.value,
+                error=str(outcome),
                 exc_info=(type(outcome), outcome, outcome.__traceback__),
             )
             continue
@@ -374,23 +370,23 @@ async def mail_sync_tick(
         )
 
     logger.info(
-        "mail_sync_tick done: bindings_total=%s success=%s failed=%s skipped=%s auth_failed=%s network_failed=%s validation_failed=%s unknown_failed=%s new_messages=%s notifications=%s bootstraps=%s bindings_pending=%s max_lag_seconds=%s drain_depth=%s schedule_task_id=%s company_id=%s",
-        stats.bindings_total,
-        stats.bindings_success,
-        stats.bindings_failed,
-        stats.bindings_skipped,
-        stats.failures_auth,
-        stats.failures_network,
-        stats.failures_validation,
-        stats.failures_unknown,
-        stats.messages_new,
-        stats.notifications_sent,
-        stats.bootstraps,
-        stats.bindings_pending,
-        stats.max_lag_seconds,
-        drain_depth,
-        schedule_task_id,
-        company_id,
+        "idle.mail_sync_tick",
+        bindings_total=stats.bindings_total,
+        success=stats.bindings_success,
+        failed=stats.bindings_failed,
+        skipped=stats.bindings_skipped,
+        auth_failed=stats.failures_auth,
+        network_failed=stats.failures_network,
+        validation_failed=stats.failures_validation,
+        unknown_failed=stats.failures_unknown,
+        new_messages=stats.messages_new,
+        notifications=stats.notifications_sent,
+        bootstraps=stats.bootstraps,
+        bindings_pending=stats.bindings_pending,
+        max_lag_seconds=stats.max_lag_seconds,
+        drain_depth=drain_depth,
+        schedule_task_id=schedule_task_id,
+        company_id=company_id,
     )
     return {
         "bindings_total": stats.bindings_total,

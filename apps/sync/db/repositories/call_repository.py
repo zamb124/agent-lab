@@ -51,7 +51,7 @@ class CallRepository(BaseSyncRepository[SyncCall]):
         async with self._db.session() as session:
             row = await session.get(SyncCall, call_id)
             if row is None or row.company_id != company_id:
-                raise PlatformNotFoundError(f"Звонок {call_id} не найден")
+                raise PlatformNotFoundError(f"Call {call_id} not found", error_code='not_found')
             return row
 
     async def get_active_call_for_channel(
@@ -156,9 +156,9 @@ class CallRepository(BaseSyncRepository[SyncCall]):
         async with self._db.session() as session:
             row = await session.get(SyncCallLink, link_token)
             if row is None:
-                raise ValueError(f"Ссылка {link_token} не найдена.")
+                raise ValueError(f"Link {link_token} not found.")
             if row.expires_at < datetime.now(UTC):
-                raise ValueError("Ссылка истекла.")
+                raise ValueError("Link expired.")
             return row
 
     async def attach_call_to_link(self, link_token: str, call_id: str) -> None:
@@ -175,7 +175,7 @@ class CallRepository(BaseSyncRepository[SyncCall]):
         async with self._db.session() as session:
             row = await session.get(SyncCallLink, link_token)
             if row is None or row.company_id != company_id:
-                raise ValueError(f"Ссылка {link_token} не найдена.")
+                raise ValueError(f"Link {link_token} not found.")
             return row
 
     async def get_link_by_calendar_event(
@@ -230,7 +230,7 @@ class CallRepository(BaseSyncRepository[SyncCall]):
     ) -> None:
         row = await self.get_link_for_company(link_token, company_id)
         if row.calendar_event_id is None:
-            raise ValueError("Ссылка не привязана к событию календаря.")
+            raise ValueError("Link is not bound to a calendar event.")
         values: dict[str, SqlParameterValue] = {}
         if title is not None:
             values["title"] = title

@@ -88,7 +88,7 @@ def resolve_namespace_or_raise(override: str | None = None) -> str:
         if ns:
             return ns
     raise ValueError(
-        "resolve_namespace_or_raise: namespace не определён ни override-аргументом, ни Context.active_namespace. Тихий fallback на 'default' запрещён (Zero-Guess)."
+        "resolve_namespace_or_raise: namespace is not set by override argument or Context.active_namespace. Silent fallback to 'default' is forbidden (Zero-Guess)."
     )
 
 

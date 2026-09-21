@@ -202,7 +202,7 @@ def validate_platform_provider_for_capability(provider: str, capability: AICapab
     if not provider_supports_capability(slug, cap):
         allowed = ", ".join(spec.provider for spec in platform_provider_specs_for_capability(cap))
         raise ValueError(
-            f"provider {slug!r} не поддерживает capability {cap.value!r}; разрешены: {allowed}"
+            f"provider {slug!r} does not support capability {cap.value!r}; allowed: {allowed}"
         )
     return slug
 

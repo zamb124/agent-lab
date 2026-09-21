@@ -106,7 +106,7 @@ async def test_record_cookie_consent_accept_all_requires_configured_analytics(
         assert response.json()["decision"] == "accept_all"
         assert response.json()["analytics_allowed"] is True
         return
-    assert response.status_code == 422
+    assert response.status_code == 400
 
 
 @pytest.mark.asyncio
@@ -117,7 +117,7 @@ async def test_record_cookie_consent_necessary_only_rejects_analytics(
         "/frontend/api/public/cookie-consent",
         json=_body(analytics_allowed=True),
     )
-    assert response.status_code == 422
+    assert response.status_code == 400
 
 
 @pytest.mark.asyncio

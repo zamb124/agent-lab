@@ -112,17 +112,17 @@ def settings_to_runtime_view(settings: HasBrowserRuntimeConfig) -> BrowserRuntim
         endpoints[cfg.default_endpoint_key] = cfg.cdp_url
     if len(endpoints) == 0:
         raise ValueError(
-            "Не задан CDP endpoint: укажите browser.cdp_url или browser.cdp_endpoints "
-            + "(например ENV BROWSER__CDP_URL)."
+            "CDP endpoint is not set: specify browser.cdp_url or browser.cdp_endpoints "
+            + "(for example ENV BROWSER__CDP_URL)."
         )
     if cfg.default_endpoint_key not in endpoints:
         raise ValueError(
-            f"default_endpoint_key={cfg.default_endpoint_key!r} отсутствует в browser.cdp_endpoints"
+            f"default_endpoint_key={cfg.default_endpoint_key!r} is missing from browser.cdp_endpoints"
         )
     empty_keys = sorted(key for key, value in endpoints.items() if not value)
     if len(empty_keys) > 0:
         joined = ", ".join(empty_keys)
-        raise ValueError(f"Пустой CDP URL для endpoint(s): {joined}")
+        raise ValueError(f"Empty CDP URL for endpoint(s): {joined}")
     return BrowserRuntimeSettingsView(
         default_endpoint_key=cfg.default_endpoint_key,
         cdp_urls_by_endpoint=endpoints,

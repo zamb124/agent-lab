@@ -285,7 +285,7 @@ class RedisClient:
             return
         if self._client_loop is running:
             return
-        logger.warning("RedisClient: event loop changed, dropping connection")
+        logger.warning("clients.redisclient.event.loop.changed.dropping")
         self._client = None
         self._client_loop = None
 
@@ -309,9 +309,9 @@ class RedisClient:
             )
             _ = await self._client.ping()
             self._client_loop = asyncio.get_running_loop()
-            logger.info("RedisClient: подключение к Redis установлено")
+            logger.info("clients.redisclient.redis")
         except (RedisError, OSError, asyncio.TimeoutError) as e:
-            logger.warning(f"RedisClient: не удалось подключиться к Redis: {e}")
+            logger.warning("redis.connect_failed", error=str(e))
             self._client = None
             self._client_loop = None
 
@@ -322,7 +322,7 @@ class RedisClient:
             await self._client.aclose()
             self._client = None
             self._client_loop = None
-            logger.info("RedisClient: соединение закрыто")
+            logger.info("clients.redisclient")
 
     async def _ensure_connected(self) -> bool:
         """Автоматическое переподключение с retry и экспоненциальной задержкой"""
@@ -333,25 +333,29 @@ class RedisClient:
                     _ = await self._client.ping()
                     return True
                 except (RedisError, OSError, asyncio.TimeoutError):
-                    logger.warning("Redis connection lost, reconnecting...")
+                    logger.warning("clients.redis.connection.lost.reconnecting")
                     self._client = None
 
             for attempt in range(self._max_retries):
                 try:
                     await self.connect()
                     if self._client:
-                        logger.info("Redis reconnected successfully")
+                        logger.info("clients.redis.reconnected.successfully")
                         return True
                 except (RedisError, OSError, asyncio.TimeoutError) as e:
                     if attempt < self._max_retries - 1:
                         wait_time: int = 1 << attempt
                         logger.warning(
-                            f"Reconnect attempt {attempt + 1} failed: {e}, retry in {wait_time}s"
+                            "redis.reconnect_retry",
+                            attempt=attempt + 1,
+                            error=str(e),
+                            retry_in_s=wait_time,
                         )
                         await asyncio.sleep(wait_time)
                     else:
                         logger.error(
-                            f"Failed to reconnect to Redis after {self._max_retries} attempts"
+                            "redis.reconnect_failed",
+                            attempts=self._max_retries,
                         )
 
             return False
@@ -377,13 +381,13 @@ class RedisClient:
         try:
             return await client.get(key)
         except (RedisError, OSError, asyncio.TimeoutError) as e:
-            logger.error(f"Get failed for key {key}: {e}")
+            logger.error("redis.get_failed", key=key, error=str(e))
             if await self._ensure_connected():
                 try:
                     client = self._require_client()
                     return await client.get(key)
                 except (RedisError, OSError, asyncio.TimeoutError) as retry_error:
-                    logger.error(f"Get retry failed for key {key}: {retry_error}")
+                    logger.error("redis.get_retry_failed", key=key, error=str(retry_error))
             return None
 
     async def getdel(self, key: str) -> str | None:
@@ -395,16 +399,16 @@ class RedisClient:
         перепутать "ключа не было" и "не смогли достучаться до Redis".
         """
         if not await self._ensure_connected():
-            raise RedisOperationError(f"getdel({key}): Redis недоступен после retry")
+            raise RedisOperationError(f"getdel({key}): Redis is unavailable after retry")
         client = self._require_client()
         try:
             return await client.getdel(key)
         except (RedisError, OSError, asyncio.TimeoutError) as primary_error:
-            logger.error(f"getdel failed for key {key}: {primary_error}")
+            logger.error("redis.getdel_failed", key=key, error=str(primary_error))
 
         lua = "local v = redis.call('GET', KEYS[1]); if v then redis.call('DEL', KEYS[1]) end; return v"
         if not await self._ensure_connected():
-            raise RedisOperationError(f"getdel({key}) lua: Redis недоступен после retry")
+            raise RedisOperationError(f"getdel({key}) lua: Redis is unavailable after retry")
         try:
             client = self._require_client()
             lua_result = await client.eval(lua, 1, key)
@@ -412,7 +416,7 @@ class RedisClient:
             raise RedisOperationError(f"getdel({key}) lua: {lua_error}") from lua_error
         if lua_result is None or isinstance(lua_result, str):
             return lua_result
-        raise RedisOperationError(f"getdel({key}) lua вернул non-string: {type(lua_result).__name__}")
+        raise RedisOperationError(f"getdel({key}) lua returned non-string: {type(lua_result).__name__}")
 
     async def set(self, key: str, value: str, *, ttl: int) -> bool:
         """Устанавливает значение по ключу с обязательным TTL (секунды)."""
@@ -429,21 +433,21 @@ class RedisClient:
             except (RedisError, OSError, asyncio.TimeoutError) as e:
                 if attempt == 0 and await self._ensure_connected():
                     continue
-                logger.error(f"Set failed for key {key}: {e}")
+                logger.error("redis.set_failed", key=key, error=str(e))
                 return False
         return False
 
     async def set_persist(self, key: str, value: str) -> None:
         """SET без expiry. Redis недоступен — RedisOperationError."""
         if not await self._ensure_connected():
-            raise RedisOperationError(f"set_persist({key}): Redis недоступен после retry")
+            raise RedisOperationError(f"set_persist({key}): Redis is unavailable after retry")
         try:
             client = self._require_client()
             _ = await client.set(key, value)
         except (RedisError, OSError, asyncio.TimeoutError) as primary_error:
             if not await self._ensure_connected():
                 raise RedisOperationError(
-                    f"set_persist({key}): Redis недоступен после retry"
+                    f"set_persist({key}): Redis is unavailable after retry"
                 ) from primary_error
             try:
                 client = self._require_client()
@@ -461,16 +465,16 @@ class RedisClient:
         прямой путь к double-execution.
         """
         if not await self._ensure_connected():
-            raise RedisOperationError(f"set_nx({key}): Redis недоступен после retry")
+            raise RedisOperationError(f"set_nx({key}): Redis is unavailable after retry")
         try:
             client = self._require_client()
             ok = await client.set(key, value, nx=True, ex=ttl_seconds)
             return bool(ok)
         except (RedisError, OSError, asyncio.TimeoutError) as primary_error:
-            logger.error(f"set_nx failed for key {key}: {primary_error}")
+            logger.error("redis.set_nx_failed", key=key, error=str(primary_error))
             if not await self._ensure_connected():
                 raise RedisOperationError(
-                    f"set_nx({key}): Redis недоступен после retry"
+                    f"set_nx({key}): Redis is unavailable after retry"
                 ) from primary_error
             try:
                 client = self._require_client()
@@ -490,7 +494,7 @@ class RedisClient:
             _ = await client.setex(key, seconds, value)
             return True
         except (RedisError, OSError, asyncio.TimeoutError) as e:
-            logger.error(f"RedisClient: ошибка установки ключа {key} с TTL: {e}")
+            logger.error("redis.setex_failed", key=key, error=str(e))
             return False
 
     async def sadd(self, key: str, *members: str) -> int:
@@ -498,14 +502,14 @@ class RedisClient:
         if not members:
             return 0
         if not await self._ensure_connected():
-            raise RedisOperationError(f"sadd({key}): Redis недоступен после retry")
+            raise RedisOperationError(f"sadd({key}): Redis is unavailable after retry")
         try:
             client = self._require_client()
             return await client.sadd(key, *members)
         except (RedisError, OSError, asyncio.TimeoutError) as primary_error:
             if not await self._ensure_connected():
                 raise RedisOperationError(
-                    f"sadd({key}): Redis недоступен после retry"
+                    f"sadd({key}): Redis is unavailable after retry"
                 ) from primary_error
             try:
                 client = self._require_client()
@@ -518,14 +522,14 @@ class RedisClient:
         if not members:
             return 0
         if not await self._ensure_connected():
-            raise RedisOperationError(f"srem({key}): Redis недоступен после retry")
+            raise RedisOperationError(f"srem({key}): Redis is unavailable after retry")
         try:
             client = self._require_client()
             return await client.srem(key, *members)
         except (RedisError, OSError, asyncio.TimeoutError) as primary_error:
             if not await self._ensure_connected():
                 raise RedisOperationError(
-                    f"srem({key}): Redis недоступен после retry"
+                    f"srem({key}): Redis is unavailable after retry"
                 ) from primary_error
             try:
                 client = self._require_client()
@@ -548,7 +552,7 @@ class RedisClient:
         Тихий `return 0` маскирует "не смогли удалить" под "ключей не было".
         """
         if not await self._ensure_connected():
-            raise RedisOperationError(f"delete({keys}): Redis недоступен после retry")
+            raise RedisOperationError(f"delete({keys}): Redis is unavailable after retry")
         try:
             client = self._require_client()
             return await client.delete(*keys)
@@ -565,7 +569,7 @@ class RedisClient:
             client = self._require_client()
             return await client.exists(*keys)
         except (RedisError, OSError, asyncio.TimeoutError) as e:
-            logger.error(f"RedisClient: ошибка EXISTS {keys}: {e}")
+            logger.error("redis.exists_failed", keys=keys, error=str(e))
             return 0
 
     async def scan_keys(self, match: str, *, count: int = 500) -> list[str]:
@@ -581,14 +585,14 @@ class RedisClient:
         command: Callable[[_RedisSdkConnection], Awaitable[T]],
     ) -> T:
         if not await self._ensure_connected():
-            raise RedisOperationError(f"{operation_name}: Redis недоступен после retry")
+            raise RedisOperationError(f"{operation_name}: Redis is unavailable after retry")
         try:
             client = self._require_client()
             return await command(client)
         except (RedisError, OSError, asyncio.TimeoutError) as primary_error:
             if not await self._ensure_connected():
                 raise RedisOperationError(
-                    f"{operation_name}: Redis недоступен после retry"
+                    f"{operation_name}: Redis is unavailable after retry"
                 ) from primary_error
             try:
                 client = self._require_client()
@@ -616,7 +620,7 @@ class RedisClient:
         if not keys:
             return []
         if not await self._ensure_connected():
-            raise RedisOperationError("ttl_batch: Redis недоступен после retry")
+            raise RedisOperationError("ttl_batch: Redis is unavailable after retry")
         try:
             client = self._require_client()
             pipeline = client.pipeline()
@@ -626,7 +630,7 @@ class RedisClient:
         except (RedisError, OSError, asyncio.TimeoutError) as primary_error:
             if not await self._ensure_connected():
                 raise RedisOperationError(
-                    "ttl_batch: Redis недоступен после retry"
+                    "ttl_batch: Redis is unavailable after retry"
                 ) from primary_error
             try:
                 client = self._require_client()
@@ -648,7 +652,7 @@ class RedisClient:
         if not keys:
             return []
         if not await self._ensure_connected():
-            raise RedisOperationError("get_batch: Redis недоступен после retry")
+            raise RedisOperationError("get_batch: Redis is unavailable after retry")
         try:
             client = self._require_client()
             pipeline = client.pipeline()
@@ -658,7 +662,7 @@ class RedisClient:
         except (RedisError, OSError, asyncio.TimeoutError) as primary_error:
             if not await self._ensure_connected():
                 raise RedisOperationError(
-                    "get_batch: Redis недоступен после retry"
+                    "get_batch: Redis is unavailable after retry"
                 ) from primary_error
             try:
                 client = self._require_client()
@@ -717,7 +721,7 @@ class RedisClient:
         if not values:
             raise ValueError("rpush requires at least one value")
         if not await self._ensure_connected():
-            raise RedisOperationError(f"rpush({key}): Redis недоступен после retry")
+            raise RedisOperationError(f"rpush({key}): Redis is unavailable after retry")
         try:
             client = self._require_client()
             pushed = await client.rpush(key, *values)
@@ -744,7 +748,7 @@ class RedisClient:
             client = self._require_client()
             return await client.lrange(key, start, end)
         except (RedisError, OSError, asyncio.TimeoutError) as e:
-            logger.error(f"RedisClient: ошибка LRANGE из {key}: {e}")
+            logger.error("redis.lrange_failed", key=key, error=str(e))
             return []
 
     async def ping(self) -> bool:
@@ -785,10 +789,10 @@ class RedisClient:
                 return await client.publish(channel, message)
             except Exception as e:
                 if attempt == 0:
-                    logger.warning(f"Publish failed, reconnecting: {e}")
+                    logger.warning("redis.publish_retry", error=str(e))
                     if await self._ensure_connected():
                         continue
-                logger.error(f"Publish failed after retry: {e}")
+                logger.error("redis.publish_failed", error=str(e))
                 raise
         raise RuntimeError("Redis publish retry loop exited without result")
 
@@ -822,7 +826,7 @@ class RedisClient:
 
         try:
             await pubsub.subscribe(channel)
-            logger.debug(f"Subscribed to {channel}")
+            logger.debug("redis.subscribed", channel=channel)
 
             if ready_event:
                 ready_event.set()
@@ -833,16 +837,10 @@ class RedisClient:
             while True:
                 now = time.monotonic()
                 if now - start_time >= max_timeout:
-                    logger.warning(
-                        "Subscription max-timeout on %s after %.1fs", channel, now - start_time
-                    )
+                    logger.warning("clients.subscription.max.timeout.s", channel=channel, now=now - start_time)
                     break
                 if now - last_activity >= timeout:
-                    logger.warning(
-                        "Subscription idle-timeout on %s after %.1fs idle",
-                        channel,
-                        now - last_activity,
-                    )
+                    logger.warning("clients.subscription.idle.timeout.s.idle", channel=channel, now=now - last_activity)
                     break
 
                 try:
@@ -851,7 +849,7 @@ class RedisClient:
                         last_activity = time.monotonic()
                         yield message["data"]
                 except (RedisError, OSError, asyncio.TimeoutError) as e:
-                    logger.error(f"Error receiving message from {channel}: {e}")
+                    logger.error("redis.receive_failed", channel=channel, error=str(e))
                     if await self._ensure_connected():
                         try:
                             await pubsub.unsubscribe(channel)
@@ -859,9 +857,9 @@ class RedisClient:
                             client = self._require_client()
                             pubsub = client.pubsub()
                             await pubsub.subscribe(channel)
-                            logger.info(f"Resubscribed to {channel}")
+                            logger.info("redis.resubscribed", channel=channel)
                         except (RedisError, OSError, asyncio.TimeoutError) as resub_error:
-                            logger.error(f"Failed to resubscribe to {channel}: {resub_error}")
+                            logger.error("redis.resubscribe_failed", channel=channel, error=str(resub_error))
                             break
                     else:
                         break

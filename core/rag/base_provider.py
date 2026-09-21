@@ -43,32 +43,32 @@ def _is_number(value: JsonValue) -> bool:
 
 def _validate_in_values(field_name: str, operator: str, value: JsonValue) -> None:
     if not isinstance(value, list) or not value:
-        raise ValueError(f"RAG filters: {field_name}.{operator} должен быть непустым массивом")
+        raise ValueError(f"RAG filters: {field_name}.{operator} must be a non-empty array")
     first = value[0]
     if isinstance(first, bool):
         for item in value:
             if not isinstance(item, bool):
                 raise ValueError(
-                    f"RAG filters: {field_name}.{operator} должен содержать значения одного типа"
+                    f"RAG filters: {field_name}.{operator} must contain values of one type"
                 )
         return
     elif isinstance(first, str):
         for item in value:
             if not isinstance(item, str):
                 raise ValueError(
-                    f"RAG filters: {field_name}.{operator} должен содержать значения одного типа"
+                    f"RAG filters: {field_name}.{operator} must contain values of one type"
                 )
         return
     elif _is_number(first):
         for item in value:
             if not _is_number(item):
                 raise ValueError(
-                    f"RAG filters: {field_name}.{operator} должен содержать значения одного типа"
+                    f"RAG filters: {field_name}.{operator} must contain values of one type"
                 )
         return
     else:
         raise ValueError(
-            f"RAG filters: {field_name}.{operator} поддерживает только string/number/boolean"
+            f"RAG filters: {field_name}.{operator} supports only string/number/boolean"
         )
 
 
@@ -81,21 +81,21 @@ def validate_metadata_filters(filters: RAGMetadataFilter) -> None:
 
     def _validate_node(node: JsonValue, path: str) -> None:
         if not isinstance(node, dict) or not node:
-            raise ValueError(f"RAG filters: {path} должен быть непустым объектом")
+            raise ValueError(f"RAG filters: {path} must be a non-empty object")
 
         has_operator_key = any(key.startswith("$") for key in node)
         if has_operator_key:
             if len(node) != 1:
                 raise ValueError(
-                    f"RAG filters: {path} не может смешивать логические операторы и поля"
+                    f"RAG filters: {path} cannot mix logical operators and fields"
                 )
             logical_op = next(iter(node))
             if logical_op not in _LOGICAL_OPERATORS:
-                raise ValueError(f"RAG filters: неподдерживаемый оператор {logical_op}")
+                raise ValueError(f"RAG filters: unsupported operator {logical_op}")
             nested_filters = node[logical_op]
             if not isinstance(nested_filters, list) or len(nested_filters) < 2:
                 raise ValueError(
-                    f"RAG filters: {logical_op} в {path} должен быть массивом минимум из 2 условий"
+                    f"RAG filters: {logical_op} in {path} must be an array of at least 2 conditions"
                 )
             for index, child in enumerate(nested_filters):
                 _validate_node(child, f"{path}.{logical_op}[{index}]")
@@ -103,33 +103,33 @@ def validate_metadata_filters(filters: RAGMetadataFilter) -> None:
 
         for field_name, field_filter in node.items():
             if field_name.startswith("$"):
-                raise ValueError(f"RAG filters: недопустимый ключ {field_name} в {path}")
+                raise ValueError(f"RAG filters: invalid key {field_name} in {path}")
             if isinstance(field_filter, dict):
                 if len(field_filter) != 1:
                     raise ValueError(
-                        f"RAG filters: {path}.{field_name} должен содержать ровно один оператор"
+                        f"RAG filters: {path}.{field_name} must contain exactly one operator"
                     )
                 op, op_value = next(iter(field_filter.items()))
                 if op not in _COMPARISON_OPERATORS:
                     raise ValueError(
-                        f"RAG filters: неподдерживаемый оператор {op} для поля {field_name}"
+                        f"RAG filters: unsupported operator {op} for field {field_name}"
                     )
                 if op in {"$gt", "$gte", "$lt", "$lte"}:
                     if not _is_number(op_value):
                         raise ValueError(
-                            f"RAG filters: {field_name}.{op} поддерживает только number"
+                            f"RAG filters: {field_name}.{op} supports only number"
                         )
                 elif op in {"$in", "$nin"}:
                     _validate_in_values(field_name, op, op_value)
                 else:
                     if not _is_scalar_filter_value(op_value):
                         raise ValueError(
-                            f"RAG filters: {field_name}.{op} поддерживает только string/number/boolean"
+                            f"RAG filters: {field_name}.{op} supports only string/number/boolean"
                         )
             else:
                 if not _is_scalar_filter_value(field_filter):
                     raise ValueError(
-                        f"RAG filters: {path}.{field_name} должен быть string/number/boolean или объектом оператора"
+                        f"RAG filters: {path}.{field_name} must be string/number/boolean or an operator object"
                     )
 
     _validate_node(filters, "filters")
@@ -157,7 +157,7 @@ class BaseRAGProvider(ABC):
         """Загружает файл в S3 и возвращает (s3_key, bucket_name, original_filename)."""
         path = Path(file_path)
         if not path.exists():
-            raise FileNotFoundError(f"Файл не найден: {file_path}")
+            raise FileNotFoundError(f"File not found: {file_path}")
 
         s3_client = S3ClientFactory.create_default_client()
         prefix = "rag_public" if public else "rag"
@@ -177,7 +177,7 @@ class BaseRAGProvider(ABC):
         finally:
             await s3_client.close()
 
-        logger.info(f"Файл загружен в S3: {s3_key} (public={public})")
+        logger.info("rag.s3.file_uploaded", s3_key=s3_key, public=public)
         return s3_key, bucket_name, path.name
 
     async def _download_file_from_s3(
@@ -228,7 +228,7 @@ class BaseRAGProvider(ABC):
         finally:
             await s3_client.close()
 
-        logger.info(f"Файл загружен в S3: {s3_key}")
+        logger.info("rag.s3.file_uploaded", s3_key=s3_key)
         return s3_key, bucket_name
 
     async def _upload_text_to_s3(
@@ -257,7 +257,7 @@ class BaseRAGProvider(ABC):
         finally:
             await s3_client.close()
 
-        logger.info(f"Текст загружен в S3: {s3_key}")
+        logger.info("rag.s3.text_uploaded", s3_key=s3_key)
         return s3_key, bucket_name
 
 
@@ -416,14 +416,14 @@ class BaseRAGProvider(ABC):
                 search_options=search_options,
             )
             results[ns_id] = ns_results
-            logger.debug(f"Поиск в {ns_id}: найдено {len(ns_results)} результатов")
+            logger.debug("rag.search.namespace_hits", namespace_id=ns_id, count=len(ns_results))
 
         return results
 
     async def delete_orphan_company_chunks(self, *, limit: int) -> int:
         """Удаляет chunks без company_id, если backend хранит company-scoped chunks."""
         raise NotImplementedError(
-            f"{self.provider_name} не поддерживает orphan chunks cleanup (limit={limit})"
+            f"{self.provider_name} does not support orphan chunks cleanup (limit={limit})"
         )
 
     async def close(self) -> None:

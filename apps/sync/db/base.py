@@ -59,7 +59,7 @@ class SyncDatabase:
                 settings = get_settings()
                 db_url = settings.database.sync_url
                 if not db_url:
-                    raise ValueError("database.sync_url не задан")
+                    raise ValueError("database.sync_url is not set")
             cls._instance = cls(db_url)
         return cls._instance
 

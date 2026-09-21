@@ -161,16 +161,16 @@ def _build_audio_api_pairs_from_entries(
         hf_id = entry.hf_model_id.strip()
         if not api_id:
             raise ValueError(
-                f"provider_litserve {kind_label}_models: пустой api_model_id в записи"
+                f"provider_litserve {kind_label}_models: empty api_model_id in record"
             )
         if not hf_id:
             raise ValueError(
-                f"provider_litserve {kind_label}_models: пустой hf_model_id для api_model_id={api_id!r}"
+                f"provider_litserve {kind_label}_models: empty hf_model_id for api_model_id={api_id!r}"
             )
         api_lower = api_id.lower()
         if api_lower in seen_api_lower:
             raise ValueError(
-                f"provider_litserve {kind_label}_models: дубликат api_model_id={api_id!r}"
+                f"provider_litserve {kind_label}_models: duplicate api_model_id={api_id!r}"
             )
         seen_api_lower.add(api_lower)
         out[api_id] = hf_id
@@ -178,7 +178,7 @@ def _build_audio_api_pairs_from_entries(
     default_normalized = default_api_model_id.strip()
     if not default_normalized:
         raise ValueError(
-            f"provider_litserve {kind_label}_default_api_model_id не должен быть пустым"
+            f"provider_litserve {kind_label}_default_api_model_id must not be empty"
         )
     if default_normalized.lower() not in seen_api_lower:
         message = (

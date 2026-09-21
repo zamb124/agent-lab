@@ -103,7 +103,7 @@ async def synthesize(body: SynthesizeRequest, container: ContainerDep) -> Stream
     if company is None or company.company_id == "":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Активная компания не определена в контексте запроса.",
+            detail="Active company is not set in the request context.",
         )
     company_id = company.company_id
 
@@ -164,9 +164,7 @@ async def synthesize(body: SynthesizeRequest, container: ContainerDep) -> Stream
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=(
-                "TTS-провайдер недоступен: нет соединения с сервисом синтеза. "
-                "Проверьте, что провайдер запущен и в конфигурации voice.tts "
-                "(например litserve base_url) указан верный адрес."
+                "TTS provider is unavailable: no connection to the synthesis service. Check that the provider is running and voice.tts (for example litserve base_url) has the correct address."
             ),
         ) from exc
     except StopAsyncIteration:
@@ -181,8 +179,7 @@ async def synthesize(body: SynthesizeRequest, container: ContainerDep) -> Stream
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=(
-                "TTS вернул 0 байт аудио; провайдер см. заголовок X-Voice-Provider "
-                "и лог voice.synthesize.empty_audio_body по request_id."
+                "TTS returned 0 audio bytes; see X-Voice-Provider header and voice.synthesize.empty_audio_body log by request_id."
             ),
         )
 

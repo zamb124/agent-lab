@@ -118,7 +118,7 @@ class OfficeEmptyCreateRequest(BaseModel):
     def spreadsheet_format_only_for_cell(self) -> Self:
         if self.document_type != "cell":
             if self.spreadsheet_format is not None:
-                raise ValueError("spreadsheet_format допустим только при document_type=cell")
+                raise ValueError("spreadsheet_format is allowed only when document_type=cell")
             return self
         if self.spreadsheet_format is None:
             self.spreadsheet_format = "xlsx"
@@ -235,7 +235,7 @@ class OnlyOfficeCallbackContextClaims(BaseModel):
     @model_validator(mode="after")
     def namespace_required_for_catalog_scope(self) -> Self:
         if self.viewer_scope == "catalog" and (self.namespace is None or self.namespace == ""):
-            raise ValueError("namespace обязателен для catalog callback-токена")
+            raise ValueError("namespace is required for a catalog callback token")
         return self
 
 
@@ -276,7 +276,7 @@ class OfficeCatalogPatchRequest(BaseModel):
     @model_validator(mode="after")
     def at_least_one_field(self) -> Self:
         if self.title is None and self.company_visible is None:
-            raise ValueError("Укажите title и/или company_visible")
+            raise ValueError("Specify title and/or company_visible")
         return self
 
 
@@ -375,8 +375,8 @@ class OfficeCatalogRagIndexSettingsPatchRequest(RAGSearchOptions):
         )
         if not has_include and not has_clear and not has_search_options:
             raise ValueError(
-                "patch должен содержать include_subcatalogs, clear_search_options "
-                + "или хотя бы одно поле search_options"
+                "patch must contain include_subcatalogs, clear_search_options "
+                + "or at least one search_options field"
             )
         return self
 

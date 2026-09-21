@@ -70,8 +70,8 @@ class FrontendContainer(BaseContainer):
         url = get_settings().database.flows_url
         if not url:
             raise ValueError(
-                "database.flows_url обязателен для FrontendContainer.flows_storage: "
-                + "frontend читает flow-конфиги напрямую из БД flows для landing-страниц"
+                "database.flows_url is required for FrontendContainer.flows_storage: "
+                + "frontend reads flow configs directly from the flows DB for landing pages"
             )
         return Storage(db_url=url, get_context_func=get_context)
 
@@ -142,7 +142,7 @@ class FrontendContainer(BaseContainer):
 def _create_frontend_container() -> FrontendContainer:
     settings = get_settings()
     if not settings.database.shared_url:
-        raise ValueError("database.shared_url не задан")
+        raise ValueError("database.shared_url is not set")
     return FrontendContainer(
         db_url=settings.database.shared_url,
         shared_db_url=settings.database.shared_url,

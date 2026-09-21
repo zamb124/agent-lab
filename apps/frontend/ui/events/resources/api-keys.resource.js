@@ -9,8 +9,8 @@
  * хранится в обычном items[], а кладётся в `lastSecret` через extraReducer,
  * чтобы страница смогла показать баннер до явного `secret_dismissed`.
  *
- * Скоупы соответствуют backend whitelist VALID_SCOPES в
- * apps/frontend/api/api_keys.py.
+ * Команды `frontend/api_keys/{list,create,update,remove}_requested`
+ * (REST-зеркало `apps/frontend/api/api_keys.py`); скоупы — backend whitelist VALID_SCOPES.
  */
 
 import { createResourceCollection } from '@platform/lib/events/index.js';
@@ -20,6 +20,9 @@ export const apiKeysResource = createResourceCollection({
     baseUrl: '/frontend/api/api-keys',
     idField: 'key_id',
     operations: ['list', 'create', 'update', 'remove'],
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    listQuery: () => ({ limit: 200, offset: 0 }),
     toastKeys: {
         create: 'frontend:api_key_modal.toast_created',
         create_error: 'frontend:api_key_modal.err_create_failed',

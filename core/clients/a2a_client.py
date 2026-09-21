@@ -201,7 +201,7 @@ class A2AClient:
         if branch_id and branch_id != "default":
             final_metadata["branch"] = branch_id
 
-        logger.debug(f"A2A send_task to {base_url}: {content[:100]}...")
+        logger.debug("a2a.send_task", base_url=base_url, content_preview=content[:100])
         overall_timeout = self.timeout if timeout is None else timeout
         enqueue_timeout = min(_SEND_TASK_ENQUEUE_HTTP_TIMEOUT_SECONDS, overall_timeout)
         submitted = await self.send_message(

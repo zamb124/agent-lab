@@ -105,22 +105,23 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> Js
         # Создаем новый context_id и формируем session_id
         context_id = str(uuid.uuid4())
         session_id = f"{request.flow_id}:{context_id}"
-    logger.info(f"API database_url: {container.db_url}")
+    logger.info("flows.api.database_url", db_url=container.db_url)
 
     state = await container.workflow_runtime.get_state(session_id)
 
     if state is None:
         branch_id = request.branch_id
         is_resume = False
-        logger.info(f"API: New session {session_id}, is_resume=False")
+        logger.info("flows.api.session_created", session_id=session_id)
     else:
         branch_id = state.branch_id
         is_resume = bool(state.interrupt)
         logger.info(
-            f"API: Existing session {session_id}, "
-            + f"current_nodes={state.current_nodes}, "
-            + f"interrupt={bool(state.interrupt)}, "
-            + f"is_resume={is_resume}"
+            "flows.api.session_existing",
+            session_id=session_id,
+            current_nodes=state.current_nodes,
+            interrupt=bool(state.interrupt),
+            is_resume=is_resume,
         )
 
     task = await enqueue(
@@ -142,7 +143,7 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> Js
 
     if result.is_err:
         error_msg = str(result.error)
-        logger.error(f"Task {task_id} failed: {error_msg}")
+        logger.error("flows.api.task_failed", task_id=task_id, error=error_msg)
         if "не найден" in error_msg:
             raise HTTPException(status_code=404, detail=error_msg)
         raise HTTPException(status_code=500, detail=error_msg)

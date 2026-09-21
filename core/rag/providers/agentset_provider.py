@@ -49,7 +49,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
 
         api_key = config.api_key
         if not api_key:
-            raise ValueError("api_key обязателен для Agentset провайдера")
+            raise ValueError('api_key is required for the Agentset provider')
         self.api_key: str = api_key
 
         self.base_url: str = (config.base_url or "https://api.agentset.ai").rstrip("/")
@@ -65,7 +65,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
             }
         )
 
-        logger.info(f"Agentset RAG провайдер инициализирован: {self.base_url}")
+        logger.info("rag.agentset.initialized", base_url=self.base_url)
 
     @property
     @override
@@ -97,14 +97,14 @@ class AgentsetRAGProvider(BaseRAGProvider):
             "slug": slug
         }
 
-        logger.info(f"Создание namespace: name='{name}', slug='{slug}'")
+        logger.info("rag.agentset.namespace_create_started", name=name, slug=slug)
 
         try:
             response = await self._client.post("/v1/namespace", json=payload)
             _ = response.raise_for_status()
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 409:
-                logger.info(f"Namespace '{name}' уже существует (slug='{slug}'), получаем его")
+                logger.info("rag.agentset.namespace_exists", name=name, slug=slug)
                 namespaces = await self.list_namespaces()
                 for ns in namespaces:
                     agentset_data = ns.metadata.get("agentset_data")
@@ -112,11 +112,11 @@ class AgentsetRAGProvider(BaseRAGProvider):
                         continue
                     ns_slug = agentset_data.get("slug")
                     if ns_slug == slug or ns.name == name:
-                        logger.info(f"Найден существующий namespace: {name} (ID: {ns.namespace_id})")
+                        logger.info("rag.agentset.namespace_found", name=name, namespace_id=ns.namespace_id)
                         return ns
 
                 raise ValueError(
-                    f"Namespace '{name}' уже существует, но не найден в списке. Попробуйте другое имя."
+                    f"Namespace '{name}' already exists but was not found in the list. Try another name."
                 )
 
             error_detail = ""
@@ -127,7 +127,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
                 error_detail = f" Тело ответа: {e.response.text[:500]}"
 
             raise httpx.HTTPStatusError(
-                f"Ошибка создания namespace в AgentSet (name='{name}', slug='{slug}'): {e.response.status_code} - {e.response.reason_phrase}{error_detail}",
+                f"Failed to create namespace in AgentSet (name='{name}', slug='{slug}'): {e.response.status_code} - {e.response.reason_phrase}{error_detail}",
                 request=e.request,
                 response=e.response,
             ) from e
@@ -136,7 +136,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
         data_raw = result.get("data", result)
         data = require_json_object(data_raw, "agentset create namespace data")
 
-        logger.info(f"Создан namespace: {name} (ID: {data.get('id')})")
+        logger.info("rag.agentset.namespace_created", name=name, namespace_id=data.get("id"))
 
         return RAGNamespace.model_validate(
             {
@@ -207,11 +207,11 @@ class AgentsetRAGProvider(BaseRAGProvider):
 
         # 422/500 - баг Agentset с полем createdAt (expected date, received string)
         if response.status_code in (422, 500):
-            logger.warning(f"Не удалось удалить namespace {namespace_id}: {response.text}")
+            logger.warning("rag.agentset.namespace_delete_failed", namespace_id=namespace_id, response_text=response.text)
             return False
 
         _ = response.raise_for_status()
-        logger.info(f"Удален namespace: {namespace_id}")
+        logger.info("rag.agentset.namespace_deleted", namespace_id=namespace_id)
         return True
 
     async def _create_ingest_job_from_url(
@@ -252,7 +252,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
         data_raw = result.get("data", result)
         data = require_json_object(data_raw, "agentset ingest job data")
 
-        logger.info(f"Ingest job создан с именем: {encoded_name}")
+        logger.info("rag.agentset.ingest_job_created", name=encoded_name)
 
         return data
 
@@ -291,7 +291,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
             doc_metadata
         )
 
-        logger.info(f"Документ '{doc_name}' загружен в namespace {namespace_id} через S3: {file_url}")
+        logger.info("rag.agentset.document_uploaded", document_name=doc_name, namespace_id=namespace_id, file_url=file_url)
 
         return RAGDocument.model_validate(
             {
@@ -324,7 +324,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
         4. После индексации URL протухнет, но документ уже в RAG
         """
         if upload_profile is not None:
-            raise ValueError("upload_profile поддерживается только провайдером pgvector")
+            raise ValueError('upload_profile is supported only by the pgvector provider')
 
         # Генерируем signed URL на 24 часа для индексации Agentset
         signed_url = await self._generate_signed_url(s3_key, expiration=86400)
@@ -346,7 +346,9 @@ class AgentsetRAGProvider(BaseRAGProvider):
         )
 
         logger.info(
-            f"Документ '{doc_name}' загружен в namespace {namespace_id} через signed URL (срок индексации: 24ч, файл остается приватным)"
+            "rag.agentset.document_uploaded",
+            document_name=doc_name,
+            namespace_id=namespace_id,
         )
 
         return RAGDocument.model_validate(
@@ -540,7 +542,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
     ) -> list[RAGDocument]:
         if where:
             validate_metadata_filters(where)
-            raise ValueError("AgentsetRAGProvider не поддерживает list_documents_with_filters")
+            raise ValueError('AgentsetRAGProvider does not support list_documents_with_filters')
         return await self.list_documents(namespace_id, limit=limit)
 
     @override
@@ -557,7 +559,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
             return False
 
         _ = response.raise_for_status()
-        logger.info(f"Удален документ: {document_id}")
+        logger.info("rag.agentset.document_deleted", document_id=document_id)
         return True
 
     @override
@@ -571,12 +573,12 @@ class AgentsetRAGProvider(BaseRAGProvider):
     ) -> list[RAGSearchResult]:
         """Семантический поиск в Agentset"""
         if search_options is not None and search_options.channels is not None and search_options.channels.lexical:
-            raise ValueError("Лексический канал и гибридный поиск (RRF) поддерживаются только провайдером pgvector")
+            raise ValueError('Lexical channel and hybrid search (RRF) are supported only by the pgvector provider')
         if search_options is not None and (
             search_options.freshness_weight is not None
             or search_options.freshness_half_life_days is not None
         ):
-            raise ValueError("freshness_weight/freshness_half_life_days поддерживаются только провайдером pgvector")
+            raise ValueError('freshness_weight/freshness_half_life_days are supported only by the pgvector provider')
 
         payload: JsonObject = {
             "query": query,
@@ -598,7 +600,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
             raise ValueError("agentset search data must be an array")
         results = [require_json_object(item, "agentset search item") for item in results_raw]
 
-        logger.info(f"Поиск '{query}' в {namespace_id}: найдено {len(results)}")
+        logger.info("rag.agentset.search_completed", query=query, namespace_id=namespace_id, result_count=len(results))
 
         return [
             RAGSearchResult.model_validate(

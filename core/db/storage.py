@@ -90,7 +90,7 @@ class _SessionContextManager:
     async def __aenter__(self) -> AsyncSession:
         if self._storage.session_factory is None:
             self._storage.session_factory = await get_session_factory(self._storage.db_url)
-            logger.debug("Session factory инициализирован в Storage")
+            logger.debug("db.session.factory.storage")
 
         session_factory = self._storage.session_factory
         self._session = session_factory()
@@ -466,7 +466,7 @@ class Storage:
 
         deleted = get_rowcount(result) > 0
         if deleted:
-            logger.debug(f"Удалено: {key} из таблицы {table_name}")
+            logger.debug("db.storage.deleted", key=key, table_name=table_name)
         return deleted
 
     async def list_by_prefix(
@@ -689,7 +689,7 @@ class Storage:
         в full scan. Здесь фильтр уходит в PostgreSQL: `value->>'<field>' = ?`.
         """
         if offset < 0:
-            raise ValueError("offset должен быть >= 0")
+            raise ValueError('offset must be >= 0')
         async with self.get_session() as session:
             table = self._get_table(table_name)
             value_column = table.c["value"]
@@ -728,7 +728,7 @@ class Storage:
             Словарь {key: value_json}
         """
         if offset < 0:
-            raise ValueError("offset должен быть >= 0")
+            raise ValueError('offset must be >= 0')
         async with self.get_session() as session:
             table = self._get_table(table_name)
             result = await session.execute(
@@ -790,7 +790,7 @@ class Storage:
         Не читает полный value (в т.ч. тяжёлые вложенные документы вроде Flow UI).
         """
         if offset < 0:
-            raise ValueError("offset должен быть >= 0")
+            raise ValueError('offset must be >= 0')
         if not fields:
             raise ValueError("fields must be non-empty")
         async with self.get_session() as session:

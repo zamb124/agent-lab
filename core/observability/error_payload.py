@@ -28,11 +28,11 @@ def merge_platform_error_into_dict(
     grafana_public_url + grafana_loki_datasource_uid.
     """
     if not trace_id.strip():
-        raise ValueError("merge_platform_error_into_dict: trace_id обязателен")
+        raise ValueError('merge_platform_error_into_dict: trace_id is required')
     if not platform_request_id.strip():
-        raise ValueError("merge_platform_error_into_dict: platform_request_id обязателен")
+        raise ValueError('merge_platform_error_into_dict: platform_request_id is required')
     if not service_name.strip():
-        raise ValueError("merge_platform_error_into_dict: service_name обязателен")
+        raise ValueError('merge_platform_error_into_dict: service_name is required')
 
     merged: JsonObject = dict(body)
     merged["request_id"] = platform_request_id.strip()

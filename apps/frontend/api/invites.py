@@ -1,19 +1,24 @@
 """
 API для приглашений в компанию по ссылке.
 
-Генерация: POST /api/invites/generate — owner/admin компании.
+Генерация: POST /api/invites/generate — REST-зеркало `frontend/invites/generate_requested`.
 Просмотр: POST /api/invites/preview  — публично, по short_code (компания, роль, пригласивший).
 Принятие: POST /api/invites/accept   — любой авторизованный пользователь.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import jwt
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from apps.frontend.dependencies import ContainerDep
-from core.context import get_context
+from apps.frontend.realtime.company_operations import (
+    InviteGenerated,
+    InviteGeneratePayload,
+    op_invites_generate,
+)
+from core.context import get_context, require_context
 from core.identity.company_membership import (
     set_company_member_roles,
     sync_existing_company_member,
@@ -23,7 +28,6 @@ from core.models.identity_models import Company, User
 from core.namespace import ensure_personal_namespace_for_user
 from core.utils.auth_session_rebind import attach_session_auth_cookie, rebind_session_to_company
 from core.utils.invite_tokens import (
-    INVITE_EXPIRES_SECONDS,
     burn_invite_token,
     get_invite_token_service,
     invite_jti_already_used,
@@ -40,7 +44,7 @@ def _company_subdomain_for_response(company: Company) -> str:
     if raw is None or raw.strip() == "":
         raise HTTPException(
             status_code=403,
-            detail="У компании не задан субдомен для входа.",
+            detail="Company has no subdomain for sign-in.",
         )
     return raw.strip()
 
@@ -76,66 +80,15 @@ class PreviewInviteResponse(BaseModel):
 def _require_invite_user() -> User:
     context = get_context()
     if context is None:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
+        raise HTTPException(status_code=401, detail="Authorization is required")
     return context.user
 
 
-def _require_invite_company() -> Company:
-    context = get_context()
-    if context is None:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
-    company = context.active_company
-    if company is None:
-        raise HTTPException(status_code=400, detail="Компания не выбрана")
-    return company
 
+@router.post("/generate", response_model=InviteGenerated)
+async def generate_invite(body: InviteGeneratePayload, container: ContainerDep) -> InviteGenerated:
+    return await op_invites_generate(body, user=require_context().user, container=container)
 
-@router.post("/generate", response_model=GenerateInviteResponse)
-async def generate_invite(
-    body: GenerateInviteRequest,
-    container: ContainerDep,
-) -> GenerateInviteResponse:
-    """
-    Генерирует одноразовую ссылку-приглашение в компанию.
-    Доступно только owner/admin компании.
-    """
-    user = _require_invite_user()
-    company = _require_invite_company()
-
-    await container.authz_service.require_company_admin(
-        company_id=company.company_id,
-        user_id=user.user_id,
-    )
-
-    if body.role not in VALID_ROLES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Недопустимая роль. Допустимые: {', '.join(VALID_ROLES)}",
-        )
-
-    svc = get_invite_token_service()
-    token, _ = svc.create(
-        company_id=company.company_id,
-        role=body.role,
-        invited_by=user.user_id,
-    )
-
-    expires_at = datetime.now(timezone.utc) + timedelta(seconds=INVITE_EXPIRES_SECONDS)
-    short = container.short_link_service
-    invite_url = await short.mint_company_invite(token, expires_at)
-
-    logger.info(
-        "Сгенерирован инвайт для компании %s, роль=%s, инициатор=%s",
-        company.company_id,
-        body.role,
-        user.user_id,
-    )
-
-    return GenerateInviteResponse(
-        invite_url=invite_url,
-        role=body.role,
-        expires_in_seconds=INVITE_EXPIRES_SECONDS,
-    )
 
 @router.post("/preview", response_model=PreviewInviteResponse)
 async def preview_invite(
@@ -148,33 +101,33 @@ async def preview_invite(
     """
     code = body.short_code.strip()
     if code == "":
-        raise HTTPException(status_code=400, detail="Код приглашения не задан")
+        raise HTTPException(status_code=400, detail="Invite code is not set")
 
     short = container.short_link_service
     jwt_str = await short.get_invite_jwt_by_code(code)
     if jwt_str is None:
-        raise HTTPException(status_code=404, detail="Ссылка-приглашение не найдена или истекла")
+        raise HTTPException(status_code=404, detail="Invite link not found or expired")
 
     svc = get_invite_token_service()
     try:
         invite = svc.validate(jwt_str)
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=410, detail="Ссылка-приглашение устарела")
+        raise HTTPException(status_code=410, detail="Invite link is stale")
     except (jwt.InvalidTokenError, ValueError):
-        raise HTTPException(status_code=403, detail="Недействительная ссылка-приглашение")
+        raise HTTPException(status_code=403, detail="Invalid invite link")
 
     if await invite_jti_already_used(invite.jti):
-        raise HTTPException(status_code=410, detail="Ссылка-приглашение уже была использована")
+        raise HTTPException(status_code=410, detail="Invite link has already been used")
 
     company_repo = container.company_repository
     company = await company_repo.get(invite.company_id)
     if not company:
-        raise HTTPException(status_code=404, detail="Компания не найдена или была удалена")
+        raise HTTPException(status_code=404, detail="Company not found or was deleted")
 
     user_repo = container.user_repository
     inviter = await user_repo.get(invite.invited_by)
     if not inviter:
-        raise HTTPException(status_code=404, detail="Инициатор приглашения не найден")
+        raise HTTPException(status_code=404, detail="Invite initiator not found")
 
     return PreviewInviteResponse(
         company_id=company.company_id,
@@ -201,35 +154,31 @@ async def accept_invite(
 
     code = body.short_code.strip()
     if code == "":
-        raise HTTPException(status_code=400, detail="Код приглашения не задан")
+        raise HTTPException(status_code=400, detail="Invite code is not set")
 
     short = container.short_link_service
     jwt_str = await short.get_invite_jwt_by_code(code)
     if jwt_str is None:
-        raise HTTPException(status_code=404, detail="Ссылка-приглашение не найдена или истекла")
+        raise HTTPException(status_code=404, detail="Invite link not found or expired")
 
     svc = get_invite_token_service()
     try:
         invite = svc.validate(jwt_str)
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=410, detail="Ссылка-приглашение устарела")
+        raise HTTPException(status_code=410, detail="Invite link is stale")
     except (jwt.InvalidTokenError, ValueError):
-        raise HTTPException(status_code=403, detail="Недействительная ссылка-приглашение")
+        raise HTTPException(status_code=403, detail="Invalid invite link")
 
     company_repo = container.company_repository
     company = await company_repo.get(invite.company_id)
     if not company:
-        raise HTTPException(status_code=404, detail="Компания не найдена или была удалена")
+        raise HTTPException(status_code=404, detail="Company not found or was deleted")
 
     # Уже участник: не расходуем одноразовый токен; активная компания и JWT
     # совпадают с компанией приглашения (тот же перевыпуск, что host-wins в middleware).
     if user.user_id in company.members:
         roles_list = list(company.members[user.user_id])
-        logger.info(
-            "Пользователь %s уже участник компании %s",
-            user.user_id,
-            company.company_id,
-        )
+        logger.info("frontend.event", user_id=user.user_id, company_id=company.company_id)
         await sync_existing_company_member(
             authz=container.authz_service,
             company_id=company.company_id,
@@ -259,7 +208,7 @@ async def accept_invite(
     )
     burned = await burn_invite_token(invite.jti, ttl_seconds=remaining_seconds)
     if not burned:
-        raise HTTPException(status_code=410, detail="Ссылка-приглашение уже была использована")
+        raise HTTPException(status_code=410, detail="Invite link has already been used")
 
     # Добавляем пользователя в компанию
     roles = [invite.role]
@@ -281,10 +230,10 @@ async def accept_invite(
     )
 
     logger.info(
-        "Пользователь %s вступил в компанию %s с ролью %s",
-        user.user_id,
-        company.company_id,
-        invite.role,
+        "frontend.event",
+        user_id=user.user_id,
+        company_id=company.company_id,
+        role=invite.role,
     )
 
     _ = await short.delete_by_code(code)

@@ -180,31 +180,33 @@ class EventSubscriber(BaseSubscriber):
         if after_sequence < 0:
             raise ValueError("after_sequence must be >= 0")
         channel = f"stream:{task_id}"
-        logger.debug(f"[Subscriber] Subscribing to {channel}")
+        logger.debug("flows.stream.subscribe", channel=channel)
 
         event_count = 0
         async for message in self.redis.subscribe(channel, timeout=timeout, ready_event=ready_event):
             try:
                 event = parse_event(message)
             except (ValueError, DecodeError, TypeError) as e:
-                logger.error(f"[Subscriber] Error parsing event on {channel}: {e}")
+                logger.error("flows.stream.parse_failed", channel=channel, error=str(e))
                 continue
             sequence = event_platform_sequence(event)
             if sequence is not None and sequence <= after_sequence:
                 logger.debug(
-                    f"[Subscriber] Skipping duplicate sequence {sequence} on {channel}"
+                    "flows.subscriber.duplicate_sequence",
+                    sequence=sequence,
+                    channel=channel,
                 )
                 continue
             event_count += 1
             event_kind = message[:50]
-            logger.debug(f"[Subscriber] Received event #{event_count} on {channel}: {event_kind}")
+            logger.debug("flows.stream.event", channel=channel, event_count=event_count, event_kind=event_kind)
             yield event
 
             if is_final_event(event):
-                logger.debug(f"[Subscriber] Final event on {channel}, closing subscription")
+                logger.debug("flows.stream.final", channel=channel)
                 break
 
-        logger.debug(f"[Subscriber] Subscription ended on {channel}, received {event_count} events")
+        logger.debug("flows.stream.ended", channel=channel, event_count=event_count)
 
     @override
     async def collect(

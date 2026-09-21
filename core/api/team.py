@@ -6,78 +6,29 @@ API для получения участников команды компани
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from starlette.responses import JSONResponse, Response
 
 from core.app_state import require_platform_app_state
-from core.authz.models import AuthzObject
-from core.context import get_context
-from core.identity.flow_employee import (
-    flow_employee_curator_user_ids,
-    is_flow_employee,
-    require_flow_employee_flow_id,
-)
+from core.context import get_context, require_context
+from core.identity.flow_employee import flow_employee_curator_user_ids, is_flow_employee
+from core.identity.team_operations import TeamMemberResponse, op_team_members_list
 from core.pagination import ListResponse
 from core.utils.auth_session_rebind import attach_session_auth_cookie
 from core.utils.tokens import TokenService, get_token_service
+from core.websocket import EmptyPayload
 
 router = APIRouter(tags=["team"])
 
 
-class TeamMemberResponse(BaseModel):
-    user_id: str
-    name: str
-    email: str | None = None
-    roles: list[str] = Field(default_factory=list)
-    joined_at: datetime | None = None
-    avatar_url: str | None = None
-    is_flow_employee: bool = False
-    flow_id: str | None = None
-    curator_user_ids: list[str] = Field(default_factory=list)
-
-
 @router.get("/members", response_model=ListResponse[TeamMemberResponse])
 async def get_team_members(request: Request) -> ListResponse[TeamMemberResponse]:
-    ctx = get_context()
-    if ctx is None or ctx.active_company is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
-    company = ctx.active_company
-    app_state = require_platform_app_state(request)
-    await app_state.container.authz_service.require_can_view(
-        AuthzObject.company(company.company_id)
+    return await op_team_members_list(
+        EmptyPayload(), user=require_context().user, container=require_platform_app_state(request).container
     )
-    company_repo = app_state.container.company_repository
-    user_repo = app_state.container.user_repository
-    stored_company = await company_repo.get(company.company_id)
-    if stored_company is None:
-        raise HTTPException(status_code=404, detail=f"Company {company.company_id} not found")
-
-    users_by_id = await user_repo.get_many(list(stored_company.members.keys()))
-    members: list[TeamMemberResponse] = []
-    for user_id, roles in stored_company.members.items():
-        member_user = users_by_id.get(user_id)
-        if member_user is None:
-            continue
-        member_email = member_user.emails[0] if member_user.emails else None
-        member_is_employee = is_flow_employee(member_user)
-        members.append(TeamMemberResponse(
-            user_id=user_id,
-            name=member_user.name,
-            email=member_email,
-            roles=roles,
-            joined_at=member_user.created_at,
-            avatar_url=member_user.avatar_url,
-            is_flow_employee=member_is_employee,
-            flow_id=require_flow_employee_flow_id(member_user) if member_is_employee else None,
-            curator_user_ids=flow_employee_curator_user_ids(member_user) if member_is_employee else [],
-        ))
-
-    return ListResponse[TeamMemberResponse](items=members)
 
 
 class UserSearchResult(BaseModel):
@@ -137,11 +88,11 @@ async def act_as_employee(request: Request, user_id: str) -> Response:
     if target is None:
         raise HTTPException(status_code=404, detail=f"User {user_id} not found")
     if not is_flow_employee(target):
-        raise HTTPException(status_code=403, detail="act-as разрешён только для flow-сотрудников")
+        raise HTTPException(status_code=403, detail='act-as is allowed only for flow employees')
 
     company_id = ctx.active_company.company_id
     if company_id not in target.companies:
-        raise HTTPException(status_code=403, detail="Сотрудник не состоит в этой компании")
+        raise HTTPException(status_code=403, detail='Employee is not a member of this company')
 
     stored_company = await company_repo.get(company_id)
     if stored_company is None:
@@ -153,11 +104,11 @@ async def act_as_employee(request: Request, user_id: str) -> Response:
         user_id=caller_id,
     )
     if caller_id not in curators and not is_admin:
-        raise HTTPException(status_code=403, detail="Только куратор или админ компании может войти как сотрудник")
+        raise HTTPException(status_code=403, detail='Only a curator or company admin can sign in as an employee')
 
     roles = target.companies[company_id]
     if not roles:
-        raise HTTPException(status_code=409, detail="У сотрудника нет ролей в компании")
+        raise HTTPException(status_code=409, detail='Employee has no roles in the company')
 
     token_service = get_token_service()
     token = token_service.create_token(
@@ -188,7 +139,7 @@ async def stop_act_as(request: Request) -> Response:
 
     impersonated_by = ctx.metadata.get("impersonated_by")
     if not isinstance(impersonated_by, str) or not impersonated_by:
-        raise HTTPException(status_code=409, detail="Сессия не в режиме act-as")
+        raise HTTPException(status_code=409, detail='Session is not in act-as mode')
 
     app_state = require_platform_app_state(request)
     user_repo = app_state.container.user_repository
@@ -204,7 +155,7 @@ async def stop_act_as(request: Request) -> Response:
         raise HTTPException(status_code=404, detail=f"Company {company_id} not found")
     roles = stored_company.members.get(curator.user_id, [])
     if not roles:
-        raise HTTPException(status_code=409, detail="У куратора нет ролей в компании")
+        raise HTTPException(status_code=409, detail='Curator has no roles in the company')
 
     token_service = get_token_service()
     token = token_service.create_token(

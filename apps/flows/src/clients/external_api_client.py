@@ -81,7 +81,7 @@ class ExternalAPIClient:
             else:
                 data_body = body
 
-        logger.debug(f"ExternalAPI call: {config.method.value} {url}")
+        logger.debug("flows.external_api.call", method=config.method.value, url=url)
 
         async with traced_operation(
             "flows.external_api.call",
@@ -129,7 +129,7 @@ class ExternalAPIClient:
             response = await client.request(method, url, **request_kwargs)
 
         if response.status_code in PROXY_RETRY_STATUS_CODES and not self._is_local_url(url):
-            logger.debug(f"Got {response.status_code}, retrying with proxy")
+            logger.debug("flows.external_api.retry_proxy", status_code=response.status_code)
             async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.PROXY_ONLY) as client:
                 response = await client.request(method, url, **request_kwargs)
 

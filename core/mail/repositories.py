@@ -21,6 +21,7 @@ from core.db.utils import get_rowcount
 from core.mail.models import (
     CompanyMailConnection,
     IspmanagerProvisionConfig,
+    MailAttachment,
     MailboxBinding,
     MailboxBindingKind,
     MailboxSyncCursor,
@@ -31,7 +32,6 @@ from core.mail.models import (
     MailRagIndexStatus,
     MailSyncErrorKind,
     MailSyncLagStats,
-    StoredMailAttachmentRef,
     StoredMailboxFolder,
     StoredMailMessage,
 )
@@ -662,12 +662,12 @@ class MailboxSyncCursorRepository:
 
 def _attachment_refs_from_json(
     raw: list[JsonObject] | None,
-) -> list[StoredMailAttachmentRef]:
+) -> list[MailAttachment]:
     if raw is None:
         return []
-    refs: list[StoredMailAttachmentRef] = []
+    refs: list[MailAttachment] = []
     for item in raw:
-        refs.append(StoredMailAttachmentRef.model_validate(item))
+        refs.append(MailAttachment.model_validate(item))
     return refs
 
 

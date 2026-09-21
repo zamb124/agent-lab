@@ -80,7 +80,7 @@ class InviteTokenService:
         settings = get_settings()
         secret = settings.auth.jwt_secret_key
         if not secret:
-            raise ValueError("JWT secret key не настроен (auth.jwt_secret_key)")
+            raise ValueError('JWT secret key is not configured (auth.jwt_secret_key)')
         self._secret: str = secret
         self._algorithm: str = "HS256"
 
@@ -111,7 +111,11 @@ class InviteTokenService:
 
         token = jwt.encode(payload, self._secret, algorithm=self._algorithm)
         logger.info(
-            f"Создан инвайт-токен jti={jti} для компании {company_id}, роль={role}, invited_by={invited_by}"
+            "invite.token_created",
+            jti=jti,
+            company_id=company_id,
+            role=role,
+            invited_by=invited_by,
         )
         return token, jti
 
@@ -133,10 +137,10 @@ class InviteTokenService:
         data = InviteTokenData.model_validate(payload)
 
         if data.typ != INVITE_TOKEN_TYPE:
-            raise ValueError(f"Неверный тип токена: {data.typ!r}")
+            raise ValueError(f"Invalid token type: {data.typ!r}")
 
         if data.invited_by == "":
-            raise ValueError("Инвайт-токен без invited_by")
+            raise ValueError('Invite token without invited_by')
 
         return data
 

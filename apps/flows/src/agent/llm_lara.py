@@ -6,7 +6,6 @@ import uuid
 
 from a2a.types import Message, Part, SendMessageRequest
 from a2a.types.a2a_pb2 import ROLE_USER
-from fastapi import HTTPException
 from google.protobuf.json_format import MessageToDict
 
 from apps.flows.src.channels.a2a import A2AChannel
@@ -17,6 +16,7 @@ from core.context import get_context
 from core.office.ai_settings import LARA_DOCUMENTS_MODEL_ID, parse_lara_branch_model_id
 from core.office.platform_ai_claims import OfficePlatformAiClaims
 from core.types import JsonObject, require_json_object
+from core.websocket import WsCommandError
 
 _LARA_FLOW_ID = "lara"
 
@@ -43,10 +43,18 @@ def list_lara_branch_model_ids(branch_ids: list[str]) -> list[str]:
 async def load_lara_branch_ids(container: ContainerDep) -> list[str]:
     flow_config = await container.flow_repository.get(_LARA_FLOW_ID)
     if flow_config is None:
-        raise HTTPException(status_code=503, detail="flow lara не найден")
+        raise WsCommandError(
+            "unavailable",
+            "lara flow not found",
+            error_code="lara_flow_not_found",
+        )
     branches = flow_config.branches
     if not branches:
-        raise HTTPException(status_code=503, detail="flow lara не содержит branches")
+        raise WsCommandError(
+            "unavailable",
+            "lara flow has no branches",
+            error_code="lara_branches_missing",
+        )
     return sorted(branches.keys())
 
 
@@ -69,7 +77,11 @@ def _user_text_from_openai_messages(messages: list[JsonObject]) -> str:
                     if isinstance(text_value, str) and text_value.strip():
                         texts.append(text_value.strip())
     if not texts:
-        raise HTTPException(status_code=400, detail="messages должны содержать текстовый content")
+        raise WsCommandError(
+            "ws_invalid_payload",
+            "messages must contain text content",
+            error_code="lara_messages_empty",
+        )
     return "\n\n".join(texts)
 
 
@@ -77,7 +89,11 @@ def _extract_task_text(task_payload: JsonObject) -> str:
     try:
         return extract_text_from_task_json(task_payload)
     except ValueError as exc:
-        raise HTTPException(status_code=502, detail="Lara не вернула текст ответа") from exc
+        raise WsCommandError(
+            "upstream",
+            "lara returned no response text",
+            error_code="lara_empty_response",
+        ) from exc
 
 
 async def run_lara_chat_completion(
@@ -89,17 +105,35 @@ async def run_lara_chat_completion(
 ) -> str:
     branch_id = parse_lara_branch_model_id(model_id)
     if branch_id is None:
-        raise HTTPException(status_code=400, detail=f"model {model_id!r} не является lara:<branch>")
+        raise WsCommandError(
+            "ws_invalid_payload",
+            f"model {model_id!r} is not lara:<branch>",
+            error_code="lara_model_invalid",
+            error_params={"model": model_id},
+        )
 
     flow_config = await container.flow_repository.get(_LARA_FLOW_ID)
     if flow_config is None:
-        raise HTTPException(status_code=503, detail="flow lara не найден")
+        raise WsCommandError(
+            "unavailable",
+            "lara flow not found",
+            error_code="lara_flow_not_found",
+        )
     if branch_id not in flow_config.branches:
-        raise HTTPException(status_code=400, detail=f"Lara branch {branch_id!r} не найден")
+        raise WsCommandError(
+            "ws_invalid_payload",
+            f"lara branch {branch_id!r} not found",
+            error_code="lara_branch_not_found",
+            error_params={"branch_id": branch_id},
+        )
 
     context = get_context()
     if context is None:
-        raise HTTPException(status_code=401, detail="Контекст не установлен")
+        raise WsCommandError(
+            "unauthorized",
+            "context is not set",
+            error_code="context_not_set",
+        )
 
     user_message = _user_text_from_openai_messages(openai_messages)
     context_id = str(uuid.uuid4())
@@ -134,7 +168,11 @@ async def run_lara_chat_completion(
     if isinstance(status_value, dict):
         state = status_value.get("state")
         if state == "TASK_STATE_FAILED":
-            raise HTTPException(status_code=502, detail="Lara task failed")
+            raise WsCommandError(
+                "upstream",
+                "lara task failed",
+                error_code="lara_task_failed",
+            )
     return _extract_task_text(task_payload)
 
 

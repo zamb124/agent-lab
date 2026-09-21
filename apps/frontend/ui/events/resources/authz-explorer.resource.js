@@ -1,110 +1,55 @@
 /**
- * Access Explorer — by-user / by-object / why / objects / revoke + UI slice.
+ * Access Explorer — by-user / by-object / why / objects / revoke (команды `frontend/authz_explorer/*`,
+ * REST-зеркало `apps/frontend/api/authz_explorer.py`) + UI slice.
  */
 import { createAsyncOp, createSlice } from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
+
+const WS_TIMEOUT_MS = 15_000;
 
 export const authzExplorerByUserOp = createAsyncOp({
     name: 'frontend/authz_explorer_by_user',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: WS_TIMEOUT_MS,
+    commandType: 'frontend/authz_explorer/by_user_requested',
     restMirror: { method: 'GET', path: '/frontend/api/authz/explorer/by-user' },
-    request: async ({ payload }) => {
-        const userId = payload && payload.user_id;
-        if (typeof userId !== 'string' || userId.length === 0) {
-            throw new Error('authzExplorerByUserOp: user_id required');
-        }
-        return httpRequest({
-            method: 'GET',
-            url: '/frontend/api/authz/explorer/by-user',
-            query: { user_id: userId },
-        });
-    },
 });
 
 export const authzExplorerByObjectOp = createAsyncOp({
     name: 'frontend/authz_explorer_by_object',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: WS_TIMEOUT_MS,
+    commandType: 'frontend/authz_explorer/by_object_requested',
     restMirror: { method: 'GET', path: '/frontend/api/authz/explorer/by-object' },
-    request: async ({ payload }) => {
-        const objectType = payload && payload.object_type;
-        const objectKey = payload && payload.object_key;
-        if (typeof objectType !== 'string' || objectType.length === 0) {
-            throw new Error('authzExplorerByObjectOp: object_type required');
-        }
-        if (typeof objectKey !== 'string' || objectKey.length === 0) {
-            throw new Error('authzExplorerByObjectOp: object_key required');
-        }
-        return httpRequest({
-            method: 'GET',
-            url: '/frontend/api/authz/explorer/by-object',
-            query: { object_type: objectType, object_key: objectKey },
-        });
-    },
 });
 
 export const authzExplorerWhyOp = createAsyncOp({
     name: 'frontend/authz_explorer_why',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: WS_TIMEOUT_MS,
+    commandType: 'frontend/authz_explorer/why_requested',
     restMirror: { method: 'GET', path: '/frontend/api/authz/explorer/why' },
-    request: async ({ payload }) => {
-        const userId = payload && payload.user_id;
-        const objectType = payload && payload.object_type;
-        const objectKey = payload && payload.object_key;
-        if (typeof userId !== 'string' || userId.length === 0) {
-            throw new Error('authzExplorerWhyOp: user_id required');
-        }
-        if (typeof objectType !== 'string' || objectType.length === 0) {
-            throw new Error('authzExplorerWhyOp: object_type required');
-        }
-        if (typeof objectKey !== 'string' || objectKey.length === 0) {
-            throw new Error('authzExplorerWhyOp: object_key required');
-        }
-        return httpRequest({
-            method: 'GET',
-            url: '/frontend/api/authz/explorer/why',
-            query: {
-                user_id: userId,
-                object_type: objectType,
-                object_key: objectKey,
-            },
-        });
-    },
 });
 
 export const authzExplorerObjectsOp = createAsyncOp({
     name: 'frontend/authz_explorer_objects',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: WS_TIMEOUT_MS,
+    commandType: 'frontend/authz_explorer/objects_requested',
     restMirror: { method: 'GET', path: '/frontend/api/authz/explorer/objects' },
-    request: async ({ payload }) => {
-        const query = payload && typeof payload.q === 'string' ? payload.q : '';
-        const objectType = payload && payload.object_type;
-        const params = { q: query };
-        if (typeof objectType === 'string' && objectType.length > 0) {
-            params.object_type = objectType;
-        }
-        return httpRequest({
-            method: 'GET',
-            url: '/frontend/api/authz/explorer/objects',
-            query: params,
-        });
-    },
 });
 
 export const authzExplorerRevokeOp = createAsyncOp({
     name: 'frontend/authz_explorer_revoke',
     successToastKey: 'frontend:access_page.toast_revoked',
     errorToastKey: 'frontend:access_page.err_revoke',
+    transport: 'ws',
+    wsTimeoutMs: WS_TIMEOUT_MS,
+    commandType: 'frontend/authz_explorer/revoke_requested',
     restMirror: { method: 'POST', path: '/frontend/api/authz/explorer/revoke' },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('authzExplorerRevokeOp: payload required');
-        }
-        return httpRequest({
-            method: 'POST',
-            url: '/frontend/api/authz/explorer/revoke',
-            body: payload,
-        });
-    },
 });
 
 export const authzExplorerUiSlice = createSlice({

@@ -119,3 +119,28 @@ class ControlSessionStatusResponse(BaseModel):
     closed: bool = False
     human_takeover: bool = False
     human_takeover_owner: str | None = None
+
+
+class ControlOkResponse(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    ok: bool
+
+
+class ControlPointerClickResponse(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    ok: bool
+    x: float
+    y: float
+    viewport_width: float
+    viewport_height: float
+    url: str
+
+
+class ControlHumanTakeoverResponse(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    ok: bool
+    human_takeover: bool
+    owner: str | None = None

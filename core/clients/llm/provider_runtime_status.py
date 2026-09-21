@@ -99,13 +99,13 @@ def _require_resolved_candidate(candidate: LLMCallConfig) -> tuple[str, str, str
     model = candidate.model
     api_key = candidate.api_key
     if provider is None or not provider.strip():
-        raise ValueError("probe: provider обязателен")
+        raise ValueError("probe: provider is required")
     if model is None or not model.strip():
-        raise ValueError("probe: model обязателен")
+        raise ValueError("probe: model is required")
     if api_key is None or not api_key.strip():
-        raise ValueError("probe: api_key обязателен")
+        raise ValueError("probe: api_key is required")
     if candidate.base_url is None or not candidate.base_url.strip():
-        raise ValueError("probe: base_url обязателен")
+        raise ValueError("probe: base_url is required")
     return provider, model, api_key
 
 
@@ -281,7 +281,7 @@ async def probe_platform_free_provider(
 ) -> LLMProviderProbeSnapshot:
     probed_at = datetime.now(timezone.utc)
     if not provider_is_configured_for_free_pool(settings.llm, provider):
-        raise ValueError(f"probe: provider {provider!r} не настроен для free-pool")
+        raise ValueError(f"probe: provider {provider!r} is not configured for free-pool")
     smoke_model = provider_smoke_model(settings.llm, provider)
     candidates = llm_call_configs_for_provider_model(
         provider=provider,
@@ -289,11 +289,11 @@ async def probe_platform_free_provider(
         settings=settings,
     )
     if not candidates:
-        raise ValueError(f"probe: нет api_key для provider={provider!r}")
+        raise ValueError(f"probe: no api_key for provider={provider!r}")
     candidate = candidates[0]
     resolved_provider, resolved_model, resolved_api_key = _require_resolved_candidate(candidate)
     if candidate.base_url is None:
-        raise ValueError(f"probe: base_url обязателен для {provider}")
+        raise ValueError(f"probe: base_url is required for {provider}")
     pool = settings.llm.platform_free_pool
     client = LLMClient(
         model=resolved_model,

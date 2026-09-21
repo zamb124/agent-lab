@@ -115,17 +115,17 @@ async def _resolve_rag_config_for_reference(
         if ref.type != ResourceType.RAG:
             return None
         if ref.config is None:
-            raise ValueError(f"Ресурс '{key}': inline RAG без config")
+            raise ValueError(f"Resource '{key}': inline RAG without config")
         return _ResolvedRagConfig(config=ref.config, permission=list(ref.permission))
 
     if repository is None:
-        raise ValueError("resource_repository обязателен для shared RAG resources")
+        raise ValueError("resource_repository is required for shared RAG resources")
     resource_id = ref.resource_id
     if resource_id is None:
-        raise ValueError(f"Ресурс '{key}': shared reference без resource_id")
+        raise ValueError(f"Resource '{key}': shared reference without resource_id")
     definition = await repository.get(resource_id)
     if definition is None:
-        raise ValueError(f"Shared resource '{resource_id}' не найден в БД")
+        raise ValueError(f"Shared resource '{resource_id}' not found in the database")
     if definition.type != ResourceType.RAG:
         return None
     if ref.config:
@@ -146,7 +146,7 @@ async def _assert_rag_resource_permission(
     state: ExecutionState | None,
 ) -> None:
     if state is None:
-        raise PermissionError(f"У пользователя нет прав на RAG-ресурс '{key}'")
+        raise PermissionError(f"User has no access to RAG resource '{key}'")
     runtime = get_current_container()
     if runtime is None:
         raise RuntimeError("FlowContainer is required for RAG permission checks")
@@ -178,11 +178,11 @@ async def _assert_rag_resource_permission(
     except AuthzDenied as exc:
         groups = ", ".join(permission)
         raise PermissionError(
-            f"У пользователя нет прав на RAG-ресурс '{key}'. Требуется одна из групп: {groups}"
+            f"User has no access to RAG resource '{key}'. One of these groups is required: {groups}"
         ) from exc
     groups = ", ".join(permission)
     raise PermissionError(
-        f"У пользователя нет прав на RAG-ресурс '{key}'. Требуется одна из групп: {groups}"
+        f"User has no access to RAG resource '{key}'. One of these groups is required: {groups}"
     )
 
 
@@ -192,7 +192,7 @@ async def _ensure_rag_namespace(
 ) -> None:
     namespace_id = bind.namespace.strip()
     if not namespace_id:
-        raise ValueError("RAG resource: namespace обязателен")
+        raise ValueError("RAG resource: namespace is required")
     _ = await namespace_service.get_or_create(
         namespace_id,
         description=bind.namespace_description,

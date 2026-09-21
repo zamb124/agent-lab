@@ -49,7 +49,7 @@ def decode_download_token(token: str, secret: str) -> OnlyOfficeDownloadTokenCla
     try:
         return OnlyOfficeDownloadTokenClaims.model_validate(data)
     except ValueError as exc:
-        raise OnlyOfficeJwtError("Некорректный токен скачивания") from exc
+        raise OnlyOfficeJwtError("Invalid download token") from exc
 
 
 def decode_callback_authorization(bearer_token: str, secret: str) -> JsonObject:

@@ -15,14 +15,11 @@ from core.a2a import (
     part_has_text,
 )
 from core.ai.providers import AICapability
-from core.ai.resolver import COST_ORIGIN_COMPANY, resolve_ai_model
+from core.ai.resolver import resolve_ai_model
 from core.ai.runtime import create_llm_client_from_ai_model
-from core.billing import get_billing_service
-from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
 from core.context import clear_context, get_context, set_context
 from core.llm_context import LLMContextBlock
 from core.logging import get_logger
-from core.models.billing_models import UsageType
 from core.models.context_models import Context
 from core.tasks import platform_task
 from core.tracing.operation_span import traced_operation
@@ -65,9 +62,9 @@ async def invoke_llm(
         trace_extra: dict[str, str] = {}
         actx = get_context()
         if actx is None or actx.active_company is None:
-            raise ValueError("Контекст с active_company обязателен для invoke_llm")
+            raise ValueError("Context with active_company is required for invoke_llm")
         if not str(actx.user.user_id).strip():
-            raise ValueError("Контекст с user обязателен для invoke_llm (биллинг и уведомления)")
+            raise ValueError("Context with user is required for invoke_llm (billing and notifications)")
         uid = str(actx.user.user_id).strip()
         resolved = resolve_ai_model(
             AICapability.LLM_CHAT,
@@ -75,16 +72,9 @@ async def invoke_llm(
         )
         if resolved is None:
             raise ValueError(
-                "invoke_llm: platform default для capability=llm_chat не настроен"
+                "invoke_llm: platform default for capability=llm_chat is not configured"
             )
         llm = create_llm_client_from_ai_model(resolved)
-        if resolved.cost_origin != COST_ORIGIN_COMPANY:
-            await get_billing_service().require_balance_for_billable_operation(
-                actx.active_company.company_id,
-                uid,
-                operation_code=BALANCE_BLOCK_OPERATION_LLM,
-                notification_service="flows",
-            )
         trace_extra[trace_attributes.ATTR_USER_ID] = uid
         trace_extra[trace_attributes.ATTR_TENANT_COMPANY_ID] = actx.active_company.company_id
 
@@ -92,10 +82,6 @@ async def invoke_llm(
             "flows.llm.invoke_task",
             event_type="llm.invoke",
             operation_category="llm",
-            billing_usage_type=UsageType.LLM_REQUEST.value,
-            billing_resource_name=resolved.billing_resource_name,
-            billing_quantity=1,
-            billing_pending_settlement=True,
             extra_attributes=trace_extra if trace_extra else None,
         ) as span:
             content_parts: list[str] = []

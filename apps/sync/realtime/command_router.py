@@ -104,6 +104,12 @@ from apps.sync.realtime.operations import (
     op_threads_list,
 )
 from core.logging import get_logger
+from core.namespace.operations import (
+    NamespacesListPayload,
+    NamespaceSyncSettingsUpdatePayload,
+    op_namespaces_list,
+    op_namespaces_sync_settings_update,
+)
 from core.websocket import Operation, RegisteredOperation, register_service_operations
 
 logger = get_logger(__name__)
@@ -302,6 +308,11 @@ SYNC_OPERATIONS: dict[str, RegisteredOperation[SyncContainer]] = {
         payload_model=FilesUploadCompletedPayload,
         fn=op_files_upload_completed,
     ),
+    # пространства: список — общий op реестра Namespace, запись — только секция sync_settings
+    "sync/namespaces/list_requested": Operation(payload_model=NamespacesListPayload, fn=op_namespaces_list),
+    "sync/namespace/sync_settings_update_requested": Operation(
+        payload_model=NamespaceSyncSettingsUpdatePayload, fn=op_namespaces_sync_settings_update
+    ),
 }
 
 
@@ -309,6 +320,4 @@ SYNC_OPERATIONS: dict[str, RegisteredOperation[SyncContainer]] = {
 def register_sync_ws_commands() -> None:
     """Зарегистрировать все sync command-handler'ы. Вызывать на on_startup."""
     register_service_operations(SYNC_OPERATIONS, get_sync_container)
-    logger.info(
-        "Sync WS command-handlers зарегистрированы (%d операций)", len(SYNC_OPERATIONS)
-    )
+    logger.info("sync.ws.command.handlers", SYNC_OPERATIONS_count=len(SYNC_OPERATIONS))

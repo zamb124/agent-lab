@@ -5,7 +5,6 @@ from __future__ import annotations
 from pydantic import ValidationError
 
 from apps.flows.realtime.operations import (
-    FlowsEmptyPayload,
     FlowsFlowIdPayload,
     require_company_member,
     require_edit_flow,
@@ -49,6 +48,7 @@ from core.pagination import ListResponse
 from core.types import JsonObject
 from core.variables.resolver import VariableResolutionError
 from core.websocket import (
+    EmptyPayload,
     raise_conflict,
     raise_invalid,
     raise_not_found,
@@ -256,9 +256,7 @@ async def op_flows_triggers_create(
     updated_trigger = flow_config.triggers.get(payload.trigger_id)
     if updated_trigger is None:
         raise RuntimeError(f"Trigger '{payload.trigger_id}' missing after sync")
-    logger.info(
-        "Trigger created: flow_id=%s trigger=%s", payload.flow_id, payload.trigger_id
-    )
+    logger.info("flows.trigger.created.flow_id.trigger", flow_id=payload.flow_id, trigger=payload.trigger_id)
     return _trigger_response(updated_trigger)
 
 
@@ -311,9 +309,7 @@ async def op_flows_triggers_update(
     updated_trigger = flow_config.triggers.get(payload.trigger_id)
     if updated_trigger is None:
         raise RuntimeError(f"Trigger '{payload.trigger_id}' missing after sync")
-    logger.info(
-        "Trigger updated: flow_id=%s trigger=%s", payload.flow_id, payload.trigger_id
-    )
+    logger.info("flows.trigger.updated.flow_id.trigger", flow_id=payload.flow_id, trigger=payload.trigger_id)
     return _trigger_response(updated_trigger)
 
 
@@ -335,23 +331,19 @@ async def op_flows_triggers_reregister(
             payload.flow_id, trigger
         )
     except TriggerReregisterDisabledError:
-        raise_invalid(ValueError("Включите триггер перед перерегистрацией хуков."))
+        raise_invalid(ValueError("enable the trigger before reregistering hooks"))
     except TriggerReregisterUnsupportedError as exc:
         tstr = exc.trigger_type.value
         raise_conflict(
             ValueError(
-                f"Перерегистрация внешних хуков для типа {tstr} не реализована. Сейчас поддерживается только Telegram (setWebhook)."
+                f"external hook reregistration for type {tstr} is not implemented. only Telegram (setWebhook) is supported"
             )
         )
 
     flow_config.triggers[payload.trigger_id] = updated
     _ = await container.flow_repository.set(flow_config)
     out = flow_config.triggers[payload.trigger_id]
-    logger.info(
-        "Trigger reregistered: flow_id=%s trigger=%s",
-        payload.flow_id,
-        payload.trigger_id,
-    )
+    logger.info("flows.trigger.reregistered.flow_id.trigger", flow_id=payload.flow_id, trigger=payload.trigger_id)
     return _trigger_response(out)
 
 
@@ -374,9 +366,7 @@ async def op_flows_triggers_remove(
         new_config=flow_config,
     )
     _ = await container.flow_repository.set(flow_config)
-    logger.info(
-        "Trigger deleted: flow_id=%s trigger=%s", payload.flow_id, payload.trigger_id
-    )
+    logger.info("flows.trigger.deleted.flow_id.trigger", flow_id=payload.flow_id, trigger=payload.trigger_id)
     return TriggerDeletedResponse(status="deleted", trigger_id=payload.trigger_id)
 
 
@@ -405,7 +395,7 @@ async def op_flows_triggers_test(
 
 
 async def op_flows_platform_events_catalog(
-    payload: FlowsEmptyPayload,
+    payload: EmptyPayload,
     *,
     user: User,
     container: FlowContainer,

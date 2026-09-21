@@ -50,20 +50,20 @@ class YandexProvider(BaseAuthProvider):
         )
 
         if response.status_code != 200:
-            logger.error(f"Ошибка получения токена Yandex: {response.text}")
-            raise ValueError(f"Yandex вернул ошибку: {response.status_code}")
+            logger.error("auth.yandex.token_failed", body=response.text)
+            raise ValueError(f"Yandex returned an error: {response.status_code}")
 
         token_data = parse_json_object(response.content, "yandex.token.response")
 
         access_token = token_data.get("access_token")
         if not isinstance(access_token, str) or not access_token:
-            raise ValueError("Yandex не вернул access_token")
+            raise ValueError('Yandex did not return access_token')
 
         refresh_token = token_data.get("refresh_token")
         if refresh_token is not None and not isinstance(refresh_token, str):
-            raise ValueError("Yandex вернул refresh_token не строкой")
+            raise ValueError('Yandex returned refresh_token that is not a string')
 
-        logger.info("Токены Yandex получены успешно")
+        logger.info("identity.yandex")
         return access_token, refresh_token
 
     @override
@@ -76,32 +76,32 @@ class YandexProvider(BaseAuthProvider):
         response = await request_public_oauth("GET", self.userinfo_url, headers=headers)
 
         if response.status_code != 200:
-            logger.error(f"Ошибка получения данных пользователя Yandex: {response.text}")
-            raise ValueError(f"Не удалось получить данные пользователя: {response.status_code}")
+            logger.error("auth.yandex.userinfo_failed", body=response.text)
+            raise ValueError(f"Failed to fetch user data: {response.status_code}")
 
         user_data = parse_json_object(response.content, "yandex.userinfo.response")
 
         provider_user_id = user_data.get("id")
         if not isinstance(provider_user_id, str) or not provider_user_id:
-            raise ValueError("Yandex не предоставил обязательные данные пользователя")
+            raise ValueError('Yandex did not provide required user data')
 
         email = user_data.get("default_email", "")
         if not isinstance(email, str) or not email:
-            raise ValueError("Yandex не предоставил обязательные данные пользователя")
+            raise ValueError('Yandex did not provide required user data')
 
         first_name_value = user_data.get("first_name")
         if first_name_value is not None and not isinstance(first_name_value, str):
-            raise ValueError("Yandex вернул first_name не строкой")
+            raise ValueError('Yandex returned first_name that is not a string')
         first_name = "" if first_name_value is None else first_name_value
 
         last_name_value = user_data.get("last_name")
         if last_name_value is not None and not isinstance(last_name_value, str):
-            raise ValueError("Yandex вернул last_name не строкой")
+            raise ValueError('Yandex returned last_name that is not a string')
         last_name = "" if last_name_value is None else last_name_value
 
         display_name_value = user_data.get("display_name")
         if display_name_value is not None and not isinstance(display_name_value, str):
-            raise ValueError("Yandex вернул display_name не строкой")
+            raise ValueError('Yandex returned display_name that is not a string')
         display_name = "" if display_name_value is None else display_name_value
 
         full_name = f"{first_name} {last_name}".strip()
@@ -116,10 +116,10 @@ class YandexProvider(BaseAuthProvider):
         if "default_avatar_id" in user_data:
             avatar_id = user_data["default_avatar_id"]
             if not isinstance(avatar_id, str) or not avatar_id:
-                raise ValueError("Yandex вернул default_avatar_id не строкой")
+                raise ValueError('Yandex returned default_avatar_id that is not a string')
             avatar_url = f"https://avatars.yandex.net/get-yapic/{avatar_id}/islands-200"
 
-        logger.info(f"Данные пользователя Yandex получены: {email}")
+        logger.info("auth.yandex.userinfo_ok", email=email)
 
         return ProviderUserInfo(
             provider_user_id=provider_user_id,

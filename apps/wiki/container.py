@@ -56,9 +56,9 @@ class WikiContainer(BaseContainer):
 def _create_wiki_container() -> WikiContainer:
     settings = get_settings()
     if not settings.database.wiki_url:
-        raise ValueError("database.wiki_url не задан")
+        raise ValueError("database.wiki_url is not set")
     if not settings.database.shared_url:
-        raise ValueError("database.shared_url не задан")
+        raise ValueError("database.shared_url is not set")
     return WikiContainer(
         db_url=settings.database.wiki_url,
         shared_db_url=settings.database.shared_url,

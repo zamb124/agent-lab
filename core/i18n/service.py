@@ -92,7 +92,8 @@ class TranslationManager:
         await self._ensure_directories()
         await self._load_translations()
         logger.debug(
-            f"Загружено переводов: {sum(len(t) for t in self._translations_cache.values())} ключей"
+            "i18n.translations_loaded",
+            key_count=sum(len(t) for t in self._translations_cache.values()),
         )
 
     async def initialize(self) -> None:
@@ -137,7 +138,9 @@ class TranslationManager:
                 translations = await self._load_modular_translations(lang_dir)
                 self._translations_cache[language] = translations
                 logger.debug(
-                    f"Загружено {len(translations)} переводов для языка {language.value}"
+                    "i18n.language_loaded",
+                    language=language.value,
+                    translation_count=len(translations),
                 )
             else:
                 raise FileNotFoundError(f"Translations directory not found: {lang_dir}")
@@ -160,7 +163,7 @@ class TranslationManager:
                 # Добавляем переводы с префиксом модуля
                 self._extract_nested_translations(module_data, translations, prefix=module_name)
             except Exception as e:
-                logger.warning(f"Ошибка загрузки модуля {json_file}: {e}")
+                logger.warning("i18n.module_load_failed", path=str(json_file), error=str(e))
 
         # Загружаем models/* (поддиректория)
         models_dir = lang_dir / "models"
@@ -179,7 +182,7 @@ class TranslationManager:
                         model_data, translations, prefix=f"models.{model_name}"
                     )
                 except Exception as e:
-                    logger.warning(f"Ошибка загрузки модели {json_file}: {e}")
+                    logger.warning("i18n.model_load_failed", path=str(json_file), error=str(e))
 
         return translations
 
@@ -201,7 +204,7 @@ class TranslationManager:
 
     async def _auto_generate_translations(self):
         """Автоматическая генерация переводов из кода"""
-        logger.info("Сканирование кода для автогенерации переводов...")
+        logger.info("i18n.event")
 
         # Сканируем различные источники
         await self._scan_pydantic_models()
@@ -218,7 +221,7 @@ class TranslationManager:
 
     async def _scan_pydantic_models(self):
         """Сканирует Pydantic модели для извлечения ключей переводов"""
-        logger.debug("Сканирование Pydantic моделей...")
+        logger.debug("i18n.pydantic")
 
         # Сканируем директории с моделями
         model_dirs = [Path("apps/flows/models"), Path("apps/frontend")]
@@ -232,7 +235,7 @@ class TranslationManager:
                     try:
                         await self._scan_python_file(py_file)
                     except Exception as e:
-                        logger.warning(f"Ошибка сканирования файла {py_file}: {e}")
+                        logger.warning("i18n.python_scan_failed", path=str(py_file), error=str(e))
 
     async def _scan_python_file(self, file_path: Path):
         """Сканирует Python файл для поиска Field() с title, description и т.д."""
@@ -278,7 +281,7 @@ class TranslationManager:
                                         )
 
         except Exception as e:
-            logger.debug(f"Ошибка парсинга {file_path}: {e}")
+            logger.debug("i18n.python_parse_failed", path=str(file_path), error=str(e))
 
     def _is_pydantic_model(self, node: ast.ClassDef) -> bool:
         """Проверяет, является ли класс наследником BaseModel"""
@@ -304,7 +307,7 @@ class TranslationManager:
 
     async def _scan_html_templates(self):
         """Сканирует HTML шаблоны для поиска вызовов t() и других функций перевода"""
-        logger.debug("Сканирование HTML шаблонов...")
+        logger.debug("i18n.html")
 
         template_dirs = [Path("apps/frontend/shared/templates"), Path("apps/frontend/modules")]
 
@@ -314,7 +317,7 @@ class TranslationManager:
                     try:
                         await self._scan_html_file(html_file)
                     except Exception as e:
-                        logger.warning(f"Ошибка сканирования шаблона {html_file}: {e}")
+                        logger.warning("i18n.html_scan_failed", path=str(html_file), error=str(e))
 
     async def _scan_html_file(self, file_path: Path):
         """Сканирует HTML файл для поиска вызовов функций перевода"""
@@ -335,11 +338,11 @@ class TranslationManager:
                     )
 
         except Exception as e:
-            logger.debug(f"Ошибка сканирования HTML {file_path}: {e}")
+            logger.debug("i18n.html_parse_failed", path=str(file_path), error=str(e))
 
     async def _scan_javascript_files(self):
         """Сканирует JavaScript файлы для поиска вызовов app.i18n.t()"""
-        logger.debug("Сканирование JavaScript файлов...")
+        logger.debug("i18n.javascript")
 
         js_dirs = [Path("apps/frontend/shared/static")]
 
@@ -349,7 +352,7 @@ class TranslationManager:
                     try:
                         await self._scan_js_file(js_file)
                     except Exception as e:
-                        logger.warning(f"Ошибка сканирования JS файла {js_file}: {e}")
+                        logger.warning("i18n.js_scan_failed", path=str(js_file), error=str(e))
 
     async def _scan_js_file(self, file_path: Path):
         """Сканирует JS файл для поиска вызовов функций перевода"""
@@ -371,14 +374,14 @@ class TranslationManager:
                         )
 
         except Exception as e:
-            logger.debug(f"Ошибка сканирования JS {file_path}: {e}")
+            logger.debug("i18n.js_parse_failed", path=str(file_path), error=str(e))
 
     async def _update_translation_files(self):
         """Обновляет файлы переводов новыми найденными ключами"""
         if not self._discovered_keys:
             return
 
-        logger.info(f"Обновление файлов переводов ({len(self._discovered_keys)} новых ключей)...")
+        logger.info("i18n.translations_update_started", new_key_count=len(self._discovered_keys))
 
         translations_path = self.translations_dir / "translations"
 
@@ -492,7 +495,7 @@ class TranslationManager:
 
     async def _generate_js_modules(self):
         """Генерирует JavaScript модули для фронтенда"""
-        logger.debug("Генерация JavaScript модулей...")
+        logger.debug("i18n.javascript")
 
         # Генерируем только в static директорию для веб-доступа
         frontend_static_path = Path("apps/frontend/shared/static/i18n/generated")
@@ -517,7 +520,7 @@ class TranslationManager:
                 with open(static_js_file, "w", encoding="utf-8") as f:
                     _ = f.write(js_content)
 
-        logger.debug(f"Сгенерированы JS модули для {len(Language)} языков")
+        logger.debug("i18n.js_modules_generated", language_count=len(Language))
 
     def t(self, key: str, language: Language | None = None, **kwargs: object) -> str:
         """
@@ -548,14 +551,14 @@ class TranslationManager:
         # Если перевод все еще не найден, возвращаем ключ
         if translation is None:
             translation = key
-            logger.warning(f"Перевод не найден для ключа: {key} (язык: {language})")
+            logger.warning("i18n.translation_missing", key=key, language=str(language))
 
         # Подставляем параметры
         if kwargs:
             try:
                 translation = translation.format(**kwargs)
             except KeyError as e:
-                logger.warning(f"Ошибка подстановки параметров в перевод '{key}': {e}")
+                logger.warning("i18n.translation_format_failed", key=key, error=str(e))
 
         return translation
 

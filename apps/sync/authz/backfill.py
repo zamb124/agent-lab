@@ -59,9 +59,7 @@ async def backfill_sync_authz(*, limit: int | None = None) -> int:
             )
             written += 1
 
-    logger.info(
-        "sync authz backfill: settings-rows have no role; admin/owner besides creator are FGA-only and are not restored from SQL"
-    )
+    logger.info("sync.authz.backfill.settings.rows")
     for row in member_rows:
         channel_id = cast(str, row["channel_id"])
         user_id = cast(str, row["user_id"])
@@ -74,18 +72,14 @@ async def backfill_sync_authz(*, limit: int | None = None) -> int:
             if item.subject.kind is AuthzSubjectKind.USER and item.subject.value == user_id
         }
         if AuthzRelation.OWNER in existing_relations or AuthzRelation.ADMIN in existing_relations:
-            logger.info(
-                "sync authz backfill skip member downgrade channel_id=%s user_id=%s",
-                channel_id,
-                user_id,
-            )
+            logger.info("sync.authz.backfill.skip.member", channel_id=channel_id, user_id=user_id)
             continue
         if AuthzRelation.MEMBER in existing_relations:
             continue
         await authz.write([sync_channel_member_tuple(channel_id, user_id, AuthzRelation.MEMBER)])
         written += 1
 
-    logger.info("sync authz backfill wrote tuples=%s", written)
+    logger.info("sync.authz.backfill.wrote.tuples", tuples=written)
     return written
 
 

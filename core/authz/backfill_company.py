@@ -45,7 +45,7 @@ async def backfill_company_members(*, limit: int | None = None) -> int:
                 written += 1
     finally:
         await authz.close()
-    logger.info("company backfill complete tuples_synced=%s", written)
+    logger.info("authz.company.backfill.complete.tuples_synced", tuples_synced=written)
     return written
 
 

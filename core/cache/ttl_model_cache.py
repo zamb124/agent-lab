@@ -66,7 +66,7 @@ class TtlModelCache(Generic[TModel]):
                     self._set_memory(key, ttl_seconds, model)
                     return model
                 except ValidationError as exc:
-                    logger.warning("%s.invalid_payload", self._name, error=str(exc))
+                    logger.warning("cache.invalid_payload", _name=self._name, error=str(exc))
 
             model = await builder()
             await self._set_redis(key, model.model_dump_json(), ttl_seconds)
@@ -93,4 +93,4 @@ class TtlModelCache(Generic[TModel]):
     async def _set_redis(self, key: str, value: str, ttl_seconds: int) -> None:
         ok = await self._redis_client_factory().set(key, value, ttl=ttl_seconds)
         if not ok:
-            logger.warning("%s.redis_set_failed", self._name)
+            logger.warning("cache.redis_set_failed", _name=self._name)

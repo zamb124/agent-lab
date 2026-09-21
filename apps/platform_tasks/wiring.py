@@ -65,12 +65,12 @@ def wire_brokers() -> None:
 def wire_worker(queue: str) -> RedisStreamBroker:
     """Импортировать брокер очереди и зарегистрировать её impl-задачи."""
     if queue not in _QUEUE_BROKER_MODULE:
-        raise ValueError(f"wire_worker: неизвестная очередь {queue!r}")
+        raise ValueError(f"wire_worker: unknown queue {queue!r}")
     _ = importlib.import_module(_QUEUE_BROKER_MODULE[queue])
     _ = import_task_modules(_QUEUE_TASK_MODULES[queue])
     broker = queue_broker(queue)
     if not isinstance(broker, RedisStreamBroker):
-        raise RuntimeError(f"wire_worker: брокер очереди {queue!r} не зарегистрирован")
+        raise RuntimeError(f"wire_worker: queue broker {queue!r} is not registered")
     return broker
 
 

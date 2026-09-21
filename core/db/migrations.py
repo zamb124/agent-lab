@@ -28,7 +28,7 @@ def _make_alembic_config(script_location: str, db_url: str) -> Config:
     ini_path = root / script_location / "alembic.ini"
 
     if not ini_path.exists():
-        raise FileNotFoundError(f"alembic.ini не найден: {ini_path}")
+        raise FileNotFoundError(f"alembic.ini not found: {ini_path}")
 
     cfg = Config(str(ini_path))
     cfg.set_main_option("script_location", str(root / script_location))
@@ -43,10 +43,10 @@ def _assert_full_registry() -> None:
     extra = names - expected
     if missing or extra:
         raise ValueError(
-            "Реестр миграций не совпадает с манифестом для текущего конфига: "
-            + f"ожидались {sorted(expected)}, в реестре {sorted(names)}. "
-            + "Вызовите core.db.migration_manifest.bootstrap_migration_registry() "
-            + "или: python -m scripts.db_migrate …"
+            'Migration registry does not match the manifest for the current config: '
+            + f"expected {sorted(expected)}, in registry {sorted(names)}. "
+            + 'Call core.db.migration_manifest.bootstrap_migration_registry() '
+            + 'or: python -m scripts.db_migrate …'
         )
 
 
@@ -68,22 +68,22 @@ async def run_migrations_async(service: str | None = None) -> None:
         services = [s for s in services if s.name == service]
         if not services:
             raise ValueError(
-                f"Сервис {service!r} не в реестре миграций "
-                + "(для optional-сервисов задайте database URL, см. migrations/services.json)"
+                f"Service {service!r} is not in the migration registry "
+                + '(for optional services set the database URL, see migrations/services.json)'
             )
 
     for svc in services:
         db_url = svc.get_db_url()
         cfg = _make_alembic_config(svc.alembic_script_location, db_url)
 
-        logger.info(f"Миграция сервиса '{svc.name}' → {db_url[:60]}…")
+        logger.info("db.migrate.started", service=svc.name, db_url=db_url[:60])
 
         engine = create_async_engine(db_url, poolclass=pool.NullPool)
         async with engine.connect() as conn:
             await conn.run_sync(_run_upgrade, cfg)
         await engine.dispose()
 
-        logger.info(f"Миграция '{svc.name}' завершена")
+        logger.info("db.migrate.finished", service=svc.name)
 
 
 def _run_upgrade(sync_conn: Connection, cfg: Config) -> None:

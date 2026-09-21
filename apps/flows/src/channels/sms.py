@@ -136,16 +136,12 @@ class SmsChannelHandler(BaseChannelHandler):
             response = await client.request(method, url, **request_kwargs)
 
         if response.status_code >= 400:
-            logger.error(
-                "SMS HTTP request failed: %s - %s",
-                response.status_code,
-                response.text,
-            )
+            logger.error("flows.sms.http.request.failed", status_code=response.status_code, text=response.text)
             raise RuntimeError(
                 f"SMS channel error: {response.status_code} - {response.text}"
             )
 
-        logger.info("SMS sent via HTTP to %s: %s", url, response.status_code)
+        logger.info("flows.sms.sent.http", url=url, status_code=response.status_code)
         return parse_json_object(response.content, "sms.response")
 
     def _resolve_method(self, config: JsonObject) -> str:

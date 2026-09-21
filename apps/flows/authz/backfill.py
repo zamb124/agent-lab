@@ -75,7 +75,7 @@ async def _write_tuple_chunks(authz: AuthzService, tuples: list[AuthzTuple]) -> 
         await authz.write(tuples[start : start + _OPENFGA_WRITE_CHUNK])
         done = min(start + _OPENFGA_WRITE_CHUNK, total)
         if done == total or done % 10000 == 0:
-            logger.info("flows authz backfill tuples written=%s/%s", done, total)
+            logger.info("flows.authz.backfill.tuples.written", written=done, total=total)
 
 
 async def _delete_tuple_chunks(authz: AuthzService, tuples: list[AuthzTuple]) -> None:
@@ -84,7 +84,7 @@ async def _delete_tuple_chunks(authz: AuthzService, tuples: list[AuthzTuple]) ->
         await authz.delete(tuples[start : start + _OPENFGA_WRITE_CHUNK])
         done = min(start + _OPENFGA_WRITE_CHUNK, total)
         if done == total or done % 10000 == 0:
-            logger.info("flows authz backfill tuples deleted=%s/%s", done, total)
+            logger.info("flows.authz.backfill.tuples.deleted", deleted=done, total=total)
 
 
 async def _iter_company_prefixed_rows(
@@ -211,11 +211,7 @@ async def backfill_flows_authz(*, limit: int | None = None) -> tuple[int, int, i
     unscoped_branches = await _delete_unscoped_compound_tuples(
         authz, AuthzObjectType.FLOW_BRANCH
     )
-    logger.info(
-        "flows authz backfill purged unscoped flows=%s branches=%s",
-        unscoped_flows,
-        unscoped_branches,
-    )
+    logger.info("flows.authz.backfill.purged.unscoped", flows=unscoped_flows, branches=unscoped_branches)
 
     storage = Storage(db_url=str(settings.database.flows_url))
     flows_written = 0
@@ -267,7 +263,7 @@ async def backfill_flows_authz(*, limit: int | None = None) -> tuple[int, int, i
                     list(branch_existing_set - branch_desired_set),
                 )
             flows_written += 1
-        logger.info("flows authz backfill flows written=%s", flows_written)
+        logger.info("flows.authz.backfill.flows.written", written=flows_written)
 
         tool_desired_all: list[AuthzTuple] = []
         async for storage_key, raw_value in _iter_company_prefixed_rows(storage, "tools"):
@@ -286,24 +282,14 @@ async def backfill_flows_authz(*, limit: int | None = None) -> tuple[int, int, i
             )
             tools_written += 1
             if tools_written % 20000 == 0:
-                logger.info(
-                    "flows authz backfill tools scanned=%s",
-                    tools_written,
-                )
-        logger.info(
-            "flows authz backfill tools loaded=%s desired_tuples=%s",
-            tools_written,
-            len(tool_desired_all),
-        )
+                logger.info("flows.authz.backfill.tools.scanned", scanned=tools_written)
+        logger.info("flows.authz.backfill.tools.loaded", loaded=tools_written, desired_tuples=len(tool_desired_all))
         unscoped_tools = 0
         if limit is None:
             unscoped_tools = await _delete_unscoped_compound_tuples(
                 authz, AuthzObjectType.TOOL
             )
-        logger.info(
-            "flows authz backfill purged unscoped tools=%s",
-            unscoped_tools,
-        )
+        logger.info("flows.authz.backfill.purged.unscoped", tools=unscoped_tools)
         tool_desired_set = frozenset(tool_desired_all)
         if limit is None:
             tool_existing = await authz.list_tuples(object_type=AuthzObjectType.TOOL)
@@ -361,11 +347,7 @@ async def backfill_flows_authz(*, limit: int | None = None) -> tuple[int, int, i
             elif permission == "viewer":
                 writes.append(flow_ui_share_public_viewer_tuple(grant_id))
             else:
-                logger.error(
-                    "flows authz backfill skip share grant_id=%s permission=%s (wire is viewer|editor)",
-                    grant_id,
-                    permission,
-                )
+                logger.error("flows.authz.backfill.skip.share", grant_id=grant_id, permission=permission)
                 continue
             await authz.write(writes)
             shares_written += 1
@@ -373,10 +355,10 @@ async def backfill_flows_authz(*, limit: int | None = None) -> tuple[int, int, i
         await authz.close()
 
     logger.info(
-        "flows authz backfill complete flows=%s tools=%s shares=%s",
-        flows_written,
-        tools_written,
-        shares_written,
+        "flows.authz.backfill.complete.flows",
+        flows=flows_written,
+        tools=tools_written,
+        shares=shares_written,
     )
     return flows_written, tools_written, shares_written
 

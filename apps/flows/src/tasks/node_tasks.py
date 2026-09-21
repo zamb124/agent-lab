@@ -95,7 +95,7 @@ async def execute_node(
         superstep_sequence=superstep_event.sequence,
     )
 
-    logger.debug(f"Executing node {node_id} (type={node_type})")
+    logger.debug("flows.node.execute", node_id=node_id, node_type=node_type)
     before_state = ExecutionState.model_validate(
         state.model_dump(mode="python", exclude_none=False)
     )

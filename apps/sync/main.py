@@ -35,7 +35,7 @@ async def on_startup(app: FastAPI, container: SyncContainer, settings: SyncSetti
     """
     _ = app, container, settings
     register_sync_ws_commands()
-    logger.info("Sync Service: command-router op_* зарегистрирован")
+    logger.info("sync.service.command.router.op_")
 
 
 app = create_service_app(

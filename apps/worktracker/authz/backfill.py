@@ -50,7 +50,7 @@ async def backfill_worktracker_authz(*, limit: int | None = None) -> int:
         await authz.write(writes)
         written += len(writes)
 
-    logger.info("worktracker authz backfill wrote tuples=%s", written)
+    logger.info("worktracker.authz.backfill.wrote.tuples", tuples=written)
     return written
 
 

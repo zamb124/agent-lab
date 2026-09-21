@@ -68,7 +68,7 @@ class VADDetectionInput(BaseModel):
 
 def _coerce_audio_bytes(raw: VADRawValue | None) -> bytes:
     if raw is None:
-        raise HTTPException(status_code=422, detail="VAD: поле audio (или file) обязательно")
+        raise HTTPException(status_code=422, detail="VAD: audio (or file) field is required")
     if isinstance(raw, bytes):
         audio_bytes = raw
     elif isinstance(raw, bytearray | memoryview):
@@ -77,16 +77,16 @@ def _coerce_audio_bytes(raw: VADRawValue | None) -> bytes:
         byte_values: list[int] = []
         for item in raw:
             if not isinstance(item, int) or isinstance(item, bool):
-                raise HTTPException(status_code=422, detail="VAD: audio должен быть bytes или list[int]")
+                raise HTTPException(status_code=422, detail="VAD: audio must be bytes or list[int]")
             byte_values.append(item)
         try:
             audio_bytes = bytes(byte_values)
         except ValueError as exc:
-            raise HTTPException(status_code=422, detail="VAD: audio содержит байт вне диапазона 0..255") from exc
+            raise HTTPException(status_code=422, detail="VAD: audio contains a byte outside 0..255") from exc
     else:
-        raise HTTPException(status_code=422, detail="VAD: audio должен быть bytes или list[int]")
+        raise HTTPException(status_code=422, detail="VAD: audio must be bytes or list[int]")
     if len(audio_bytes) == 0:
-        raise HTTPException(status_code=422, detail="VAD: поле audio (или file) обязательно")
+        raise HTTPException(status_code=422, detail="VAD: audio (or file) field is required")
     return audio_bytes
 
 
@@ -101,7 +101,7 @@ def parse_vad_body(
     ``sample_rate`` (опционально, переопределяет дефолт модели).
     """
     if isinstance(raw, Request):
-        raise HTTPException(status_code=422, detail="VAD: LitServe должен передать подготовленное тело запроса")
+        raise HTTPException(status_code=422, detail="VAD: LitServe must pass a prepared request body")
 
     audio_raw = raw.get("audio")
     if audio_raw is None:
@@ -114,13 +114,13 @@ def parse_vad_body(
     elif isinstance(model_raw, str):
         requested_model = model_raw.strip()
     else:
-        raise HTTPException(status_code=422, detail="VAD: model должен быть строкой")
+        raise HTTPException(status_code=422, detail="VAD: model must be a string")
     if requested_model == "":
         requested_model = default_api_model_id.strip()
     if requested_model == "":
         raise HTTPException(
             status_code=422,
-            detail="VAD: model обязателен (либо явно, либо vad_default_api_model_id в конфиге)",
+            detail="VAD: model is required (explicitly or vad_default_api_model_id in config)",
         )
 
     sample_rate_raw = raw.get("sample_rate")
@@ -129,7 +129,7 @@ def parse_vad_body(
     elif isinstance(sample_rate_raw, int) and not isinstance(sample_rate_raw, bool):
         sample_rate_override = sample_rate_raw
     else:
-        raise HTTPException(status_code=422, detail="VAD: sample_rate должен быть целым числом")
+        raise HTTPException(status_code=422, detail="VAD: sample_rate must be an integer")
 
     threshold_raw = raw.get("threshold")
     if threshold_raw is None:
@@ -137,7 +137,7 @@ def parse_vad_body(
     elif isinstance(threshold_raw, int | float) and not isinstance(threshold_raw, bool):
         threshold_override = float(threshold_raw)
     else:
-        raise HTTPException(status_code=422, detail="VAD: threshold должен быть числом")
+        raise HTTPException(status_code=422, detail="VAD: threshold must be a number")
 
     return VADDetectionInput(
         audio_bytes=audio_bytes,
@@ -163,12 +163,12 @@ class LocalVADEngine:
         hf = resolve_hf_model_id("vad", requested_api_model_id, self._cfg)
         if hf is None:
             raise ValueError(
-                f"VAD: неизвестная модель {requested_api_model_id!r}; доступные: {sorted(allowed)}"
+                f"VAD: unknown model {requested_api_model_id!r}; available: {sorted(allowed)}"
             )
         entry = find_vad_entry(self._cfg, requested_api_model_id)
         if entry is None:
             raise ValueError(
-                f"VAD: для api_model_id={requested_api_model_id!r} нет entry в cfg.vad_models"
+                f"VAD: for api_model_id={requested_api_model_id!r} has no entry in cfg.vad_models"
             )
         return entry
 
@@ -176,16 +176,12 @@ class LocalVADEngine:
         if entry.api_model_id in self._models:
             return self._models[entry.api_model_id]
 
-        logger.info(
-            "Загрузка VAD-модели: api=%s hf=%s", entry.api_model_id, entry.hf_model_id
-        )
+        logger.info("provider_litserve.vad.api.hf", api=entry.api_model_id, hf=entry.hf_model_id)
         started = time.monotonic()
         model = load_silero_vad()
         timestamp_getter = get_speech_timestamps
         self._models[entry.api_model_id] = (model, timestamp_getter)
-        logger.info(
-            "VAD-модель %s загружена за %.2fs", entry.api_model_id, time.monotonic() - started
-        )
+        logger.info("provider_litserve.vad.s", api_model_id=entry.api_model_id, value_1=time.monotonic() - started)
         return self._models[entry.api_model_id]
 
     def detect_segments(
@@ -200,12 +196,12 @@ class LocalVADEngine:
         sample_rate = sample_rate_override or entry.sample_rate
         if not sample_rate:
             raise ValueError(
-                f"VAD: sample_rate не задан (ни в payload, ни в cfg.vad_models[{api_model_id}].sample_rate)"
+                f"VAD: sample_rate is not set (neither in payload nor in cfg.vad_models[{api_model_id}].sample_rate)"
             )
         threshold = threshold_override if threshold_override is not None else entry.threshold
         if threshold is None:
             raise ValueError(
-                f"VAD: threshold не задан в cfg.vad_models[{api_model_id}].threshold"
+                f"VAD: threshold is not set in cfg.vad_models[{api_model_id}].threshold"
             )
 
         model, get_speech_ts = self._ensure_model(entry)

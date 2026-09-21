@@ -192,16 +192,26 @@ export class ApiKeysPage extends PlatformPage {
 
 **Выбор источника** (`a.b || a.c`) — только через helpers сервиса в `apps/<svc>/ui/_helpers/<svc>-id-resolvers.js`, не в pages/modals/components.
 
-## Push-события в фабрике
+## Push и исходы команд — мерж в фабрике, не reload в странице
 
-Push с бэка (`PlatformEvent` без `delivery`) фабрика принимает **только** в `extraReducer` / `extraEffect` ресурса и точечно мержит в slice (эталон: Sync, worktracker). Page-level `useEvent(push) → full reload` запрещён. Публикация на бэке и wire — **`events.mdc`** § «Backend → UI».
+Push с бэка (`PlatformEvent` без `delivery`) и исходы мутаций (`<op>/succeeded`, `resource.events.CREATED|UPDATED|REMOVED`) фабрика принимает **только** в `extraReducer` / `extraEffect` / `onSuccess` и точечно мержит в slice (эталон: Sync, worktracker, `crm/grants_list`, `crm/access_requests`). В pages/modals/components запрещены `useEvent(<push | исход мутации | WS_CONNECTED>) → .load()/.reload()/.run(<читающий op>)/dispatch(*_LOAD_REQUESTED)`; допустимы только цепочки зависимых загрузок после **чтения** (`*_list/succeeded → run(...)`) и смена области данных (`UI_NAMESPACE_CHANGED`, `*_RELOAD_REQUESTED`, `ROUTER_*`, `AUTH_USER_LOADED`, `AUTH_COMPANY_SWITCHED`). Гейт — `scripts/check_platform_events_canon.py::_check_push_reload`. Публикация на бэке и wire — **`events.mdc`** § «Backend → UI».
+
+Инструменты `@platform/lib/events/index.js` (`factories/merge.js`):
+
+- `upsertItem(state, item, idField)` / `removeItem(state, id, idField)` — мерж в slice `createResourceCollection` из `extraReducer`; `mapItem` фабрики применяется вручную (`upsertItem(state, mapEntityType(result), idField)`).
+- SUCCEEDED-payload `createAsyncOp` = `{ result, request }` — `request` (payload команды) даёт id для удаления, когда `result` пустой (`grantRevokeOp`).
+- `slice.lastRequest = { payload }` (async-op) и `slice.lastListQuery = { payload }` (коллекция) — последний запрос; `null` до первого запуска.
+- `rerunLastRequest(ctx, op, { when })` / `reloadLastList(ctx, resource, { when })` — повтор последнего запроса **из фабрики** (`onSuccess`, `extraEffect`) для данных, которые нельзя смержить из исхода: граф (`crm/timeline_bounds` после `entity_merge`), карточка с relationships (`crm/entity_card`), вложения с асинхронной обработкой, досинхронизация активных задач на `CoreEvents.WS_CONNECTED` (`crm/tasks`). Если фабрика не запускалась — запроса нет.
+- Загрузка по выбору пользователя (активная доска, вкладка) — в `updated(changed)` по изменению state-свойства, не в обработчике события (`worktracker/board-page`).
 
 ```js
 // apps/<svc>/ui/events/resources/*.resource.js
 extraReducer: (state, event) => {
-  if (event.type !== 'crm/task/updated') return state;
-  return mergeTask(state, event.payload.task);
+  if (event.type === 'crm/task/updated') return mergeTask(state, event.payload.task);
+  if (event.type === 'crm/namespace_update/succeeded') return upsertItem(state, event.payload.result, 'name');
+  return state;
 },
+onSuccess: (ctx, result) => rerunLastRequest(ctx, entityCardOp, { when: (r) => r.entity_id === result.entity_id }),
 ```
 
 ## i18n-ключи фабрик
@@ -216,7 +226,7 @@ extraReducer: (state, event) => {
 
 - `scripts/check_ui_canon.sh` — для каждого сервиса в `FACTORY_CANON_SERVICES`: zero-import canon, запрет `new XController`/прямого dispatch UI-семейств/папок `services|store|features`/`*.service.js`/`fetch` вне resources/`||`-фолбеков.
 - `scripts/check_ui_factories.py` — уникальность `name`, формат `<svc>/<entity>`, парность toast-ключей в ru+en, `baseUrl` соответствует FastAPI route, `idField` соответствует pydantic schema.
-- `scripts/check_command_rest_mirror.py` — каждая factory operation имеет `restMirror`, FastAPI route существует, push-имя ≠ имени команды; `COMMAND_WS_SERVICES` (`sync`, `worktracker`, `wiki`, `rag`, `office`, `crm`, `flows`, `search`) требуют `transport: 'ws'`, кроме `COMMAND_WS_HTTP_ALLOWLIST`.
+- `scripts/check_command_rest_mirror.py` — каждая factory operation имеет `restMirror`, FastAPI route существует, push-имя ≠ имени команды; `COMMAND_WS_SERVICES` (`sync`, `worktracker`, `wiki`, `rag`, `office`, `crm`, `flows`, `search`, `secrets`, `scheduler`, `frontend`) требуют `transport: 'ws'`, кроме `COMMAND_WS_HTTP_ALLOWLIST`.
 
 Сборная цель: `make check-events-canon`. Любая ошибка — exit 1.
 

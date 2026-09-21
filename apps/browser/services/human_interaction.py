@@ -25,7 +25,7 @@ class InteractionRng:
     def randint_range(self, bounds: tuple[int, int]) -> int:
         lo, hi = bounds
         if lo > hi:
-            raise ValueError("Некорректный диапазон")
+            raise ValueError("Invalid range")
         if lo == hi:
             return lo
         return self.rng.randint(lo, hi)
@@ -110,9 +110,9 @@ class HumanInteraction:
         typing_delay_ms: int | None = None,
     ) -> None:
         if text == "":
-            raise ValueError("text должен быть непустой строкой")
+            raise ValueError("text must be a non-empty string")
         if typing_delay_ms is not None and typing_delay_ms < 0:
-            raise ValueError("typing_delay_ms должен быть >= 0")
+            raise ValueError("typing_delay_ms must be >= 0")
         if profile.name == "off":
             # Быстрый путь: программное заполнение.
             if typing_delay_ms is None:
@@ -140,7 +140,7 @@ class HumanInteraction:
 
     async def press(self, page: BrowserPage, key: str, *, profile: InteractionProfile, rnd: InteractionRng) -> None:
         if not key:
-            raise ValueError("key обязателен")
+            raise ValueError("key is required")
         if profile.name != "off":
             await self.pre_action_signals(page, profile=profile, rnd=rnd)
         await page.keyboard.press(key)

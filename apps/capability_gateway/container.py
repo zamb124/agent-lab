@@ -53,7 +53,7 @@ class CapabilityGatewayContainer(BaseContainer):
 def _create_capability_gateway_container() -> CapabilityGatewayContainer:
     settings = get_capability_gateway_settings()
     if not settings.database.shared_url:
-        raise ValueError("database.shared_url is required для capability-gateway")
+        raise ValueError("database.shared_url is required for capability-gateway")
     return CapabilityGatewayContainer(
         db_url=settings.database.shared_url,
         shared_db_url=settings.database.shared_url,

@@ -51,20 +51,20 @@ class GoogleProvider(BaseAuthProvider):
         )
 
         if response.status_code != 200:
-            logger.error(f"Ошибка получения токена Google: {response.text}")
-            raise ValueError(f"Google вернул ошибку: {response.status_code}")
+            logger.error("auth.google.token_failed", body=response.text)
+            raise ValueError(f"Google returned an error: {response.status_code}")
 
         token_data = parse_json_object(response.content, "google.token.response")
 
         access_token = token_data.get("access_token")
         if not isinstance(access_token, str) or not access_token:
-            raise ValueError("Google не вернул access_token")
+            raise ValueError('Google did not return access_token')
 
         refresh_token = token_data.get("refresh_token")
         if refresh_token is not None and not isinstance(refresh_token, str):
-            raise ValueError("Google вернул refresh_token не строкой")
+            raise ValueError('Google returned refresh_token that is not a string')
 
-        logger.info("Токены Google получены успешно")
+        logger.info("identity.google")
         return access_token, refresh_token
 
     @override
@@ -79,31 +79,31 @@ class GoogleProvider(BaseAuthProvider):
         )
 
         if response.status_code != 200:
-            logger.error(f"Ошибка получения данных пользователя Google: {response.text}")
-            raise ValueError(f"Не удалось получить данные пользователя: {response.status_code}")
+            logger.error("auth.google.userinfo_failed", body=response.text)
+            raise ValueError(f"Failed to fetch user data: {response.status_code}")
 
         user_data = parse_json_object(response.content, "google.userinfo.response")
-        logger.info(f"Ответ от Google UserInfo API: {user_data}")
+        logger.info("auth.google.userinfo", user_data=user_data)
 
         provider_user_id = user_data.get("sub")
         if provider_user_id is None:
             provider_user_id = user_data.get("id")
         if not isinstance(provider_user_id, str) or not provider_user_id:
-            logger.error(f"Google не вернул provider_user_id (sub/id). Данные: {user_data}")
+            logger.error("auth.google.missing_provider_user_id", user_data=user_data)
             raise ValueError(
-                "Google не предоставил обязательные данные пользователя (provider_user_id отсутствует)"
+                'Google did not provide required user data (provider_user_id is missing)'
             )
 
         email = user_data.get("email")
         if not isinstance(email, str) or not email:
-            logger.error(f"Google не вернул email. Данные: {user_data}")
+            logger.error("auth.google.missing_email", user_data=user_data)
             raise ValueError(
-                "Google не предоставил обязательные данные пользователя (email отсутствует)"
+                'Google did not provide required user data (email is missing)'
             )
 
         name_value = user_data.get("name")
         if name_value is not None and not isinstance(name_value, str):
-            raise ValueError("Google вернул name не строкой")
+            raise ValueError('Google returned name that is not a string')
         name = "" if name_value is None else name_value
 
         if not name:
@@ -111,9 +111,9 @@ class GoogleProvider(BaseAuthProvider):
 
         avatar_url = user_data.get("picture")
         if avatar_url is not None and not isinstance(avatar_url, str):
-            raise ValueError("Google вернул picture не строкой")
+            raise ValueError('Google returned picture that is not a string')
 
-        logger.info(f"Данные пользователя Google получены: {email}")
+        logger.info("auth.google.userinfo_ok", email=email)
 
         return ProviderUserInfo(
             provider_user_id=provider_user_id,

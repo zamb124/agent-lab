@@ -44,8 +44,8 @@ def flow_variables_from_request_context(context: Context | None) -> JsonObject:
     active_namespace = (context.active_namespace or "").strip()
     if not active_namespace:
         raise ValueError(
-            "flow_variables_from_request_context: Context.active_namespace пуст — "
-            + "переменная active_namespace для промпта не определена (Zero-Guess)."
+            "flow_variables_from_request_context: Context.active_namespace is empty — "
+            + "active_namespace variable for the prompt is not defined (Zero-Guess)."
         )
 
     return {

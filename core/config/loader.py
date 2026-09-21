@@ -25,7 +25,7 @@ def get_project_root() -> Path:
     if env:
         p = Path(env).expanduser().resolve()
         if not p.is_dir():
-            raise ValueError(f"{_PROJECT_ROOT_ENV} не каталог: {p}")
+            raise ValueError(f"{_PROJECT_ROOT_ENV} is not a directory: {p}")
         return p
 
     start = Path(__file__).resolve()
@@ -38,7 +38,7 @@ def get_project_root() -> Path:
             return d
 
     raise RuntimeError(
-        f"Корень репозитория agent-lab не найден (ожидаются pyproject.toml, core/, apps/ вверх по пути от {start}). Задайте {_PROJECT_ROOT_ENV} или запускайте из дерева исходников (uv sync из корня репозитория)."
+        f"agent-lab repository root not found (expected pyproject.toml, core/, apps/ walking up from {start}). Set {_PROJECT_ROOT_ENV} or run from the source tree (uv sync from the repository root)."
     )
 
 def load_json_config(config_path: str | Path, *, silent: bool = False) -> JsonObject:

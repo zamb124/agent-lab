@@ -111,7 +111,7 @@ def _make_db_url_getter(database_url_key: MigrationDatabaseUrlKey) -> Callable[[
         url = database_url_for_migration_key(settings.database, database_url_key)
         if not url:
             raise ValueError(
-                f"В настройках database.{database_url_key} не задан URL (миграции и conf.json)"
+                f"In database settings.{database_url_key} URL is not set (migrations and conf.json)"
             )
         return url
 

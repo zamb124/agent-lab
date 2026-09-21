@@ -44,8 +44,9 @@ from core.logging.attributes import (
     LOG_HTTP_STATUS_CODE,
     LOG_HTTP_USER_AGENT,
     LOG_REQUEST_ID,
+    LOG_TEST_SCOPE,
 )
-from core.test_scope import LOG_TEST_SCOPE, TEST_SCOPE_HEADER
+from core.test_scope import TEST_SCOPE_HEADER
 from core.types import JsonObject
 
 REQUEST_ID_HEADER = "X-Request-Id"
@@ -63,7 +64,7 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
     ) -> None:
         super().__init__(app)
         if not service_name.strip():
-            raise ValueError("AccessLogMiddleware: service_name обязателен")
+            raise ValueError('AccessLogMiddleware: service_name is required')
         self._service_name: str = service_name
         self._logger: structlog.stdlib.BoundLogger = get_logger("platform.http")
 

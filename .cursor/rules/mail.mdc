@@ -13,6 +13,7 @@ alwaysApply: false
 3. Runtime (sync/send/folders/IDLE/mutations) резолвит **только** `binding.company_mail_connection_id` → connection → `build_mail_server_port` + `binding_secret`. Не `get_by_company` в runtime.
 4. У одного `user_id` может быть **много** user-bindings (company + personal); ровно один `is_default=true`.
 5. `company_id=system` — company-scoped connection из `settings.mail.system` (auto-seed), PUT connection запрещён (только reconcile).
+6. API отдаёт те же `CompanyMailConnection` и `MailboxBinding`. `password_encrypted`, `IspmanagerProvisionConfig.authinfo_password_encrypted` и `MailAttachment.content` — `Field(exclude=True)`. `has_password` и `has_ispmanager_auth` — computed. Хосты IMAP/SMTP на binding для UI заполняет `MailService.public_binding` из connection. `CalendarIntegration.credentials` тоже `exclude=True`.
 6. **Local-first:** UI/HTTP read только `mail_messages` / `mailbox_folders`. IMAP — sync, ensure, mutation confirm, IDLE wake.
 
 | Scope | Кто создаёт | Unique | Provision |

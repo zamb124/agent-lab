@@ -999,7 +999,7 @@ class RerankerRuntimeConfig(BaseModel):
     @model_validator(mode="after")
     def _require_api_object_for_provider_litserve(self) -> Self:
         if self.provider == "provider_litserve" and self.api is None:
-            raise ValueError("rag.reranker.api обязателен для provider_litserve")
+            raise ValueError('rag.reranker.api is required for provider_litserve')
         return self
 
     @property
@@ -1117,7 +1117,7 @@ class ProviderLitserveTTSModelEntry(BaseModel):
         if v is None:
             return None
         if not isinstance(v, str):
-            raise ValueError(f"TTS voice: ожидалась str или None, получено {type(v).__name__}")
+            raise ValueError(f"TTS voice: expected str or None, got {type(v).__name__}")
         s = v.strip().lower()
         if not s:
             return None
@@ -1127,13 +1127,13 @@ class ProviderLitserveTTSModelEntry(BaseModel):
     @classmethod
     def normalize_silero_bundle(cls, v: JsonValue) -> str:
         if not isinstance(v, str):
-            raise ValueError(f"TTS silero_bundle: ожидалась str, получено {type(v).__name__}")
+            raise ValueError(f"TTS silero_bundle: expected str, got {type(v).__name__}")
         s = v.strip().lower()
         if not s:
-            raise ValueError("TTS silero_bundle: не может быть пустым")
+            raise ValueError('TTS silero_bundle: cannot be empty')
         if s not in SILERO_TTS_RU_V5_BUNDLES:
             allowed = ", ".join(sorted(SILERO_TTS_RU_V5_BUNDLES))
-            raise ValueError(f"TTS silero_bundle={v!r} не из поддерживаемых русских v5: {allowed}")
+            raise ValueError(f"TTS silero_bundle={v!r} is not a supported Russian v5 bundle: {allowed}")
         return s
 
     @field_validator("synthesis_locale", mode="before")
@@ -1143,14 +1143,14 @@ class ProviderLitserveTTSModelEntry(BaseModel):
             return None
         if not isinstance(v, str):
             raise ValueError(
-                f"TTS synthesis_locale: ожидалась str или None, получено {type(v).__name__}"
+                f"TTS synthesis_locale: expected str or None, got {type(v).__name__}"
             )
         s = v.strip().lower()
         if s == "":
             return None
         base = s.split("-")[0].split("_")[0]
         if len(base) < 2:
-            raise ValueError("TTS synthesis_locale: нужна ISO 639-1 (минимум 2 буквы)")
+            raise ValueError('TTS synthesis_locale: ISO 639-1 required (at least 2 letters)')
         return base[:2]
 
     @field_validator("tts_input_steps", mode="before")
@@ -1159,20 +1159,20 @@ class ProviderLitserveTTSModelEntry(BaseModel):
         if v is None:
             return ("silero_ru_latin_to_cyrillic",)
         if isinstance(v, str):
-            raise ValueError("tts_input_steps: ожидался tuple или list имён шагов, не str")
+            raise ValueError('tts_input_steps: expected a tuple or list of step names, not str')
         if not isinstance(v, list | tuple):
             raise ValueError(
-                f"tts_input_steps: ожидался tuple или list, получено {type(v).__name__}"
+                f"tts_input_steps: expected tuple or list, got {type(v).__name__}"
             )
         out: list[str] = []
         for i, item in enumerate(v):
             if not isinstance(item, str):
                 raise ValueError(
-                    f"tts_input_steps[{i}]: ожидалась str, получено {type(item).__name__}"
+                    f"tts_input_steps[{i}]: expected str, got {type(item).__name__}"
                 )
             s = item.strip()
             if s == "":
-                raise ValueError(f"tts_input_steps[{i}]: пустая строка")
+                raise ValueError(f"tts_input_steps[{i}]: empty string")
             out.append(s)
         return tuple(out)
 
@@ -1182,7 +1182,7 @@ class ProviderLitserveTTSModelEntry(BaseModel):
             return self
         if self.sample_rate not in (8000, 24000, 48000):
             raise ValueError(
-                f"TTS sample_rate={self.sample_rate}: для Silero ru v5 допустимы только 8000, 24000, 48000"
+                f"TTS sample_rate={self.sample_rate}: for Silero ru v5 only 8000, 24000, 48000 are allowed"
             )
         return self
 
@@ -1192,11 +1192,11 @@ class ProviderLitserveTTSModelEntry(BaseModel):
             return self
         allowed = SILERO_V5_RU_SPEAKERS_BY_BUNDLE.get(self.silero_bundle)
         if allowed is None:
-            raise ValueError(f"TTS: нет таблицы голосов для silero_bundle={self.silero_bundle!r}")
+            raise ValueError(f"TTS: no voice table for silero_bundle={self.silero_bundle!r}")
         if self.voice not in allowed:
             opts = ", ".join(sorted(allowed))
             raise ValueError(
-                "TTS voice={!r} недопустим для silero_bundle={!r}; допустимы: {}".format(
+                'TTS voice={!r} is invalid for silero_bundle={!r}; allowed: {}'.format(
                     self.voice,
                     self.silero_bundle,
                     opts,
@@ -1210,7 +1210,7 @@ class ProviderLitserveTTSModelEntry(BaseModel):
         if unknown:
             allowed = ", ".join(sorted(TTS_INPUT_STEP_IDS))
             raise ValueError(
-                f"tts_input_steps: неизвестные шаги {unknown}; зарегистрированы: {allowed}"
+                f"tts_input_steps: unknown steps {unknown}; registered: {allowed}"
             )
         return self
 
@@ -1403,7 +1403,7 @@ class ProviderLitserveConfig(BaseModel):
     def resolve_openai_v1_base_url(self) -> str:
         raw = self.api.base_url
         if raw is None or not str(raw).strip():
-            raise ValueError("provider_litserve.api.base_url пуст")
+            raise ValueError('provider_litserve.api.base_url is empty')
         return normalize_openai_v1_base_url(str(raw).strip())
 
 
@@ -1491,16 +1491,16 @@ class RAGConfig(BaseModel):
     def get_enabled_provider_key(self, override: str | None = None) -> str:
         """Имя провайдера из ``override`` или ``default_provider`` с проверкой ``rag.enabled`` и ``providers[name].enabled``."""
         if not self.enabled:
-            raise ValueError("RAG не включен в конфигурации (rag.enabled = false)")
+            raise ValueError('RAG is disabled in configuration (rag.enabled = false)')
         key = (override if override is not None else self.default_provider).strip()
         if not key:
-            raise ValueError("rag.default_provider пуст")
+            raise ValueError('rag.default_provider is empty')
         if key not in self.providers:
             available = ", ".join(sorted(self.providers.keys()))
-            raise ValueError(f"Неизвестный RAG провайдер: {key}. Доступные: {available}")
+            raise ValueError(f"Unknown RAG provider: {key}. Available: {available}")
         pcfg = self.providers[key]
         if not pcfg.enabled:
-            raise ValueError(f"Провайдер {key} отключен (enabled = false)")
+            raise ValueError(f"Provider {key} is disabled (enabled = false)")
         return key
 
 
@@ -1984,7 +1984,7 @@ class PlatformFreePoolPaidFallbackConfig(BaseModel):
     @classmethod
     def _strip_required_string(cls, value: JsonValue) -> str:
         if not isinstance(value, str) or not value.strip():
-            raise ValueError("provider/model должны быть непустыми строками")
+            raise ValueError('provider/model must be non-empty strings')
         return value.strip()
 
     @field_validator("provider")
@@ -1992,7 +1992,7 @@ class PlatformFreePoolPaidFallbackConfig(BaseModel):
     def _provider_must_be_platform_llm_provider(cls, value: str) -> str:
         if value not in OPENAI_COMPATIBLE_LLM_PROVIDER_SLUGS:
             allowed = ", ".join(OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER)
-            raise ValueError(f"provider должен быть одним из: {allowed}")
+            raise ValueError(f"provider must be one of: {allowed}")
         return value
 
 
@@ -2033,7 +2033,7 @@ class PlatformFreePoolConfig(BaseModel):
     def _ttl_covers_refresh_interval(self) -> Self:
         if self.cache_ttl_seconds <= self.refresh_interval_seconds:
             raise ValueError(
-                "llm.platform_free_pool.cache_ttl_seconds должен быть больше refresh_interval_seconds"
+                'llm.platform_free_pool.cache_ttl_seconds must be greater than refresh_interval_seconds'
             )
         return self
 
@@ -2317,7 +2317,7 @@ class SpeechToChatConfig(BaseModel):
     def _poll_lock_refresh_before_ttl(self) -> SpeechToChatConfig:
         if self.poll_lock_refresh_interval_seconds >= self.poll_lock_ttl_seconds:
             raise ValueError(
-                "poll_lock_refresh_interval_seconds должен быть меньше poll_lock_ttl_seconds"
+                'poll_lock_refresh_interval_seconds must be less than poll_lock_ttl_seconds'
             )
         return self
 

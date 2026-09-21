@@ -4,13 +4,9 @@ API для работы с entities.
 Единый endpoint для всех типов entities.
 """
 
-import csv
-import io
-import json as json_lib
 from typing import Annotated
 
 from fastapi import APIRouter, Query
-from fastapi.responses import StreamingResponse
 from starlette.responses import Response
 
 from apps.crm.dependencies import ContainerDep
@@ -38,7 +34,6 @@ from apps.crm.models.api import (
     SearchMentionsRequest,
 )
 from apps.crm.realtime.operations import (
-    CrmEmptyPayload,
     CrmEntitiesAggregatePayload,
     CrmEntitiesTimelineBoundsPayload,
     CrmEntityIdPayload,
@@ -56,6 +51,7 @@ from apps.crm.realtime.operations import (
     op_entities_create,
     op_entities_daily_summary,
     op_entities_exclusive_related,
+    op_entities_export,
     op_entities_item,
     op_entities_mentions_search,
     op_entities_merge,
@@ -72,10 +68,16 @@ from apps.crm.realtime.operations import (
     op_notes_analysis_error_dismiss,
     op_notes_markdown_format,
 )
-from apps.crm.services.entity_response_enrichment import build_entity_responses_with_semantic_index
-from core.context import require_context, resolve_namespace_or_raise
+from apps.crm.services.entity_export import (
+    EXPORT_MAX_ROWS,
+    CrmEntitiesExportPayload,
+    ExportFormat,
+)
+from core.context import require_context
+from core.files.models import FileRecord
 from core.pagination import CursorPage, ListResponse
 from core.types import JsonObject
+from core.websocket import EmptyPayload
 
 router = APIRouter(prefix="/entities", tags=["Entities"])
 
@@ -85,7 +87,7 @@ async def get_person_entity_for_current_user(
     container: ContainerDep,
 ) -> EntityResponse:
     return await op_entities_person_self(
-        CrmEmptyPayload(),
+        EmptyPayload(),
         user=require_context().user,
         container=container,
     )
@@ -153,115 +155,27 @@ async def aggregate_entities(
     )
 
 
-_EXPORT_PAGE_SIZE = 500
-_EXPORT_MAX_ROWS = 10000
-
-
-@router.get("/export")
+@router.get("/export", response_model=FileRecord)
 async def export_entities(
     container: ContainerDep,
-    format: Annotated[str, Query(description="csv | json")] = "json",
+    export_format: Annotated[ExportFormat, Query()] = "json",
     entity_type: Annotated[str | None, Query()] = None,
     entity_subtype: Annotated[str | None, Query()] = None,
     namespace: Annotated[str | None, Query()] = None,
     status: Annotated[str | None, Query()] = None,
-    limit: Annotated[int, Query(le=_EXPORT_MAX_ROWS)] = 5000,
-):
-    """Streaming export сущностей постраничными чанками (не материализует весь список в памяти)."""
-    filters_arg: JsonObject | None = None
-    filter_field_types: dict[str, str] = {}
-    if status:
-        filters_arg = {"field": "status", "op": "$eq", "value": status}
-        filter_field_types = await container.entity_service.resolve_filter_field_types(
-            namespace=resolve_namespace_or_raise(namespace),
+    limit: Annotated[int, Query(ge=1, le=EXPORT_MAX_ROWS)] = 5000,
+) -> FileRecord:
+    return await op_entities_export(
+        CrmEntitiesExportPayload(
+            export_format=export_format,
             entity_type=entity_type,
             entity_subtype=entity_subtype,
-            filters=filters_arg,
-        )
-
-    if format == "csv":
-
-        async def _csv_generator():
-            header_buf = io.StringIO()
-            csv.writer(header_buf).writerow(
-                ["entity_id", "entity_type", "name", "description", "status", "tags", "created_at"]
-            )
-            yield header_buf.getvalue()
-
-            remaining = limit
-            cursor: str | None = None
-            while remaining > 0:
-                page_size = min(_EXPORT_PAGE_SIZE, remaining)
-                batch, cursor, has_more = await container.entity_service.list_entities(
-                    entity_type=entity_type,
-                    entity_subtype=entity_subtype,
-                    namespace=namespace,
-                    filters=filters_arg,
-                    filter_field_types=filter_field_types,
-                    limit=page_size,
-                    cursor=cursor,
-                )
-                for e in batch:
-                    row_buf = io.StringIO()
-                    csv.writer(row_buf).writerow(
-                        [
-                            e.entity_id,
-                            e.entity_type,
-                            e.name,
-                            e.description or "",
-                            e.status,
-                            ",".join(e.tags or []),
-                            e.created_at.isoformat() if e.created_at else "",
-                        ]
-                    )
-                    yield row_buf.getvalue()
-                remaining -= len(batch)
-                if not has_more or cursor is None:
-                    break
-
-        return StreamingResponse(
-            _csv_generator(),
-            media_type="text/csv",
-            headers={"Content-Disposition": "attachment; filename=entities.csv"},
-        )
-
-    async def _json_generator():
-        yield "[\n"
-        first = True
-        remaining = limit
-        cursor: str | None = None
-        while remaining > 0:
-            page_size = min(_EXPORT_PAGE_SIZE, remaining)
-            batch, cursor, has_more = await container.entity_service.list_entities(
-                entity_type=entity_type,
-                entity_subtype=entity_subtype,
-                namespace=namespace,
-                filters=filters_arg,
-                filter_field_types=filter_field_types,
-                limit=page_size,
-                cursor=cursor,
-            )
-            enriched_batch = await build_entity_responses_with_semantic_index(
-                container.entity_repository,
-                batch,
-                crm_work_item_service=container.crm_work_item_service,
-            )
-            for resp in enriched_batch:
-                prefix = "" if first else ",\n"
-                first = False
-                yield prefix + json_lib.dumps(
-                    resp.model_dump(mode="json"),
-                    ensure_ascii=False,
-                )
-            remaining -= len(batch)
-            if not has_more or cursor is None:
-                break
-        yield "\n]"
-
-    return StreamingResponse(
-        _json_generator(),
-        media_type="application/json",
-        headers={"Content-Disposition": "attachment; filename=entities.json"},
+            namespace=namespace,
+            status=status,
+            limit=limit,
+        ),
+        user=require_context().user,
+        container=container,
     )
 
 

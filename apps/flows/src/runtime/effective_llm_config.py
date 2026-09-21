@@ -54,7 +54,7 @@ def llm_capability_from_node_config(node_config: NodeConfig | None) -> AICapabil
     except ValueError as exc:
         node_id = node_config.node_id if node_config is not None else "<unknown>"
         raise ValueError(
-            f"LlmNode {node_id}: неизвестный llm_capability {cap_value!r}"
+            f"LlmNode {node_id}: unknown llm_capability {cap_value!r}"
         ) from exc
 
 
@@ -69,7 +69,7 @@ def _apply_resolved_company_llm(
     resolved: ResolvedAIModel,
 ) -> NodeLLMConfig:
     if resolved.model is None:
-        raise ValueError(f"capability {resolved.capability.value}: resolved LLM model пуст")
+        raise ValueError(f"capability {resolved.capability.value}: resolved LLM model is empty")
     data = base.model_dump(mode="python", exclude_none=True)
     for field in _COMPANY_CONTROLLED_FIELDS:
         data.pop(field, None)
@@ -93,7 +93,7 @@ def _apply_resolved_custom_llm(
     resolved: ResolvedAIModel,
 ) -> NodeLLMConfig:
     if resolved.model is None:
-        raise ValueError(f"capability {resolved.capability.value}: resolved custom LLM model пуст")
+        raise ValueError(f"capability {resolved.capability.value}: resolved custom LLM model is empty")
     data = base.model_dump(mode="python", exclude_none=True)
     data.update(
         {
@@ -134,8 +134,8 @@ def _validate_explicit_primary(
             and split_humanitec_llms_model_ref(base.model) is None
         ):
             raise ValueError(
-                f"capability {capability.value}: provider=humanitec_llm поддерживает "
-                + "model='auto' или provider-prefixed free-pool модель '<provider>:<model_id>'"
+                f"capability {capability.value}: provider=humanitec_llm supports "
+                + "model='auto' or a provider-prefixed free-pool model '<provider>:<model_id>'"
             )
         return
     if base.provider is None or base.model is None:
@@ -195,7 +195,7 @@ def resolve_effective_llm_config_for_node(
         )
         if resolved_custom is None:
             raise ValueError(
-                f"capability {capability.value}: custom provider {base.provider!r} не удалось разрешить"
+                f"capability {capability.value}: custom provider {base.provider!r} could not be resolved"
             )
         return EffectiveLLMConfig(
             config=_apply_resolved_custom_llm(base, resolved_custom),

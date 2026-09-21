@@ -17,7 +17,7 @@ _REGISTERED_NAME = "NotoSansWriter"
 @lru_cache(maxsize=1)
 def register_pdf_unicode_font() -> str:
     if not _FONT_PATH.is_file():
-        raise FileWriteError(f"PDF: не найден файл шрифта {_FONT_PATH}")
+        raise FileWriteError(f"PDF: font file not found {_FONT_PATH}")
     font = TTFont(_REGISTERED_NAME, str(_FONT_PATH))
     pdfmetrics.registerFont(font)
     return _REGISTERED_NAME

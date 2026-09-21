@@ -162,7 +162,7 @@ async def ensure_platform_search_worker_prerequisites(
     setup_database_before_tests,
     frontend_container,
 ):
-    """Worker context (build_search_system_context) и seed runet требуют system admin email."""
+    """Worker context (build_system_admin_job_context) и seed runet требуют system admin email."""
     _ = setup_database_before_tests
     from core.identity.system_bootstrap import (
         ADMIN_ROLE,

@@ -53,14 +53,14 @@ class LLMResourceConfig(LLMCallConfig):
     @model_validator(mode="after")
     def _provider_and_model_required(self) -> Self:
         if self.provider is None:
-            raise ValueError("LLMResourceConfig.provider обязателен")
+            raise ValueError("LLMResourceConfig.provider is required")
         if self.model is None:
-            raise ValueError("LLMResourceConfig.model обязателен")
+            raise ValueError("LLMResourceConfig.model is required")
         return self
 
     def required_identity(self) -> tuple[str, str]:
         if self.provider is None or self.model is None:
-            raise ValueError("LLMResourceConfig.provider/model обязательны")
+            raise ValueError("LLMResourceConfig.provider/model are required")
         return self.provider, self.model
 
 
@@ -104,7 +104,7 @@ class LLMResourcePatch(StrictBaseModel):
             return None
         if isinstance(value, dict):
             return require_json_object(value, "extra_request_body")
-        raise ValueError("extra_request_body должен быть объектом JSON, не массивом и не скаляром")
+        raise ValueError("extra_request_body must be a JSON object, not an array or scalar")
 
     @field_validator("extra_request_headers", mode="before")
     @classmethod
@@ -112,13 +112,13 @@ class LLMResourcePatch(StrictBaseModel):
         if value is None:
             return None
         if not isinstance(value, dict):
-            raise ValueError("extra_request_headers должен быть объектом JSON, не массивом и не скаляром")
+            raise ValueError("extra_request_headers must be a JSON object, not an array or scalar")
         headers: dict[str, str] = {}
         for key, val in value.items():
             if not key.strip():
-                raise ValueError("extra_request_headers: ключи — непустые строки")
+                raise ValueError("extra_request_headers: keys must be non-empty strings")
             if not isinstance(val, str):
-                raise ValueError("extra_request_headers: значения должны быть строками")
+                raise ValueError("extra_request_headers: values must be strings")
             headers[key] = val
         return headers
 

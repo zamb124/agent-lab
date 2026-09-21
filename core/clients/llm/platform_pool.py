@@ -172,8 +172,8 @@ def _humanitec_llms_ref_or_raise(model: str) -> tuple[str, str]:
     parsed = split_humanitec_llms_model_ref(model)
     if parsed is None:
         raise ValueError(
-            "humanitec_llm model должен быть 'auto' или provider-prefixed "
-            + "free-pool модель '<provider>:<model_id>'"
+            "humanitec_llm model must be 'auto' or a provider-prefixed "
+            + "free-pool model '<provider>:<model_id>'"
         )
     return parsed
 
@@ -417,9 +417,9 @@ def _make_platform_default_candidate_resolver(
             candidates.append(_platform_paid_fallback_candidate(settings))
         if not candidates:
             raise RuntimeError(
-                "platform free-pool: нет кандидатов — задайте api_key хотя бы "
-                + "для одного провайдера из free-pool (обычно llm.openrouter) "
-                + "или включите paid_fallback."
+                "platform free-pool: no candidates — set api_key for at least "
+                + "one free-pool provider (usually llm.openrouter) "
+                + "or enable paid_fallback."
             )
         return candidates
 

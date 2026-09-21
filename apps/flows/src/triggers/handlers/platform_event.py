@@ -220,10 +220,10 @@ class PlatformEventTriggerHandler(BaseTriggerHandler):
         trigger.status = TriggerStatus.ACTIVE
         trigger.last_error = None
         logger.info(
-            "Platform event trigger registered: flow_id=%s trigger=%s event_type=%s",
-            flow_id,
-            trigger.trigger_id,
-            config.event_type,
+            "flows.platform.event.trigger.registered.flow_id",
+            flow_id=flow_id,
+            trigger=trigger.trigger_id,
+            event_type=config.event_type,
         )
         return trigger
 
@@ -236,11 +236,7 @@ class PlatformEventTriggerHandler(BaseTriggerHandler):
         self._log_unregister(flow_id, trigger.trigger_id)
         raw_event_type = trigger.config.get("event_type")
         if not isinstance(raw_event_type, str) or not raw_event_type.strip():
-            logger.warning(
-                "Platform event trigger unregister skipped (no event_type): flow_id=%s trigger=%s",
-                flow_id,
-                trigger.trigger_id,
-            )
+            logger.warning("flows.platform.event.trigger.unregister.skipped", flow_id=flow_id, trigger=trigger.trigger_id)
             return
 
         ctx = get_context()
@@ -250,11 +246,7 @@ class PlatformEventTriggerHandler(BaseTriggerHandler):
             else None
         )
         if company_id is None:
-            logger.warning(
-                "Platform event trigger unregister without company context: flow_id=%s trigger=%s",
-                flow_id,
-                trigger.trigger_id,
-            )
+            logger.warning("flows.platform.event.trigger.unregister.without", flow_id=flow_id, trigger=trigger.trigger_id)
             return
 
         member = platform_event_trigger_index_member(
@@ -312,10 +304,7 @@ async def dispatch_platform_event_triggers(
 
     company = await container.company_repository.get(event.company_id)
     if company is None:
-        logger.error(
-            "platform event trigger dispatch: company not found company_id=%s",
-            event.company_id,
-        )
+        logger.error("flows.platform.event.trigger.dispatch.company", company_id=event.company_id)
         return 0
 
     actor_user_id = event.meta.actor_user_id
@@ -324,11 +313,7 @@ async def dispatch_platform_event_triggers(
         try:
             event_actor = await _event_actor_user(container, actor_user_id)
         except ValueError as exc:
-            logger.error(
-                "platform event trigger dispatch: invalid actor company_id=%s error=%s",
-                event.company_id,
-                exc,
-            )
+            logger.error("flows.platform.event.trigger.dispatch.invalid", company_id=event.company_id, error=exc)
             return 0
 
     event_payload: JsonObject = {
@@ -346,7 +331,7 @@ async def dispatch_platform_event_triggers(
         for member in members:
             parsed = parse_platform_event_trigger_index_member(member)
             if parsed is None:
-                logger.warning("platform event trigger index: invalid member %r", member)
+                logger.warning("flows.platform.event.trigger.index.invalid", member=member)
                 continue
             company_id, flow_id, trigger_id = parsed
             if company_id != event.company_id:
@@ -355,10 +340,7 @@ async def dispatch_platform_event_triggers(
             index_key = platform_event_trigger_index_key(event.type)
             flow_config = await container.flow_repository.get(flow_id)
             if flow_config is None:
-                logger.warning(
-                    "platform event trigger dispatch: flow not found flow_id=%s",
-                    flow_id,
-                )
+                logger.warning("flows.platform.event.trigger.dispatch.flow", flow_id=flow_id)
                 _ = await container.redis_client.srem(index_key, member)
                 continue
             trigger = flow_config.triggers.get(trigger_id)
@@ -372,10 +354,10 @@ async def dispatch_platform_event_triggers(
                 trigger_config = PlatformEventTriggerConfig.model_validate(trigger.config)
             except Exception as exc:
                 logger.warning(
-                    "platform event trigger dispatch: invalid config flow_id=%s trigger=%s error=%s",
-                    flow_id,
-                    trigger_id,
-                    exc,
+                    "flows.platform.event.trigger.dispatch.invalid",
+                    flow_id=flow_id,
+                    trigger=trigger_id,
+                    error=exc,
                 )
                 continue
             if trigger_config.event_type != event.type:
@@ -429,10 +411,10 @@ async def dispatch_platform_event_triggers(
                 )
             except Exception as exc:
                 logger.error(
-                    "platform event trigger dispatch failed: flow_id=%s trigger=%s error=%s",
-                    flow_id,
-                    trigger_id,
-                    exc,
+                    "flows.platform.event.trigger.dispatch.failed",
+                    flow_id=flow_id,
+                    trigger=trigger_id,
+                    error=exc,
                     exc_info=True,
                 )
                 continue

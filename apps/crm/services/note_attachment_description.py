@@ -68,7 +68,7 @@ def merge_attachment_extracted_into_description(
 def split_text_into_summarize_chunks(text: str, max_chunk_chars: int) -> list[str]:
     """Разбить текст на части для последовательной суммаризации (умные границы по \\n\\n / \\n)."""
     if max_chunk_chars <= 0:
-        raise ValueError("max_chunk_chars должен быть положительным")
+        raise ValueError("max_chunk_chars must be positive")
     t = text.strip()
     if not t:
         return []

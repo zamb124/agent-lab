@@ -7,8 +7,28 @@
  * подписанный на доменное событие.
  */
 
+import { formatPlatformError } from '../utils/platform-error-message.js';
+
+function _errorParams(errorData) {
+    if (
+        errorData
+        && typeof errorData === 'object'
+        && !Array.isArray(errorData)
+        && errorData.error_params
+        && typeof errorData.error_params === 'object'
+        && !Array.isArray(errorData.error_params)
+    ) {
+        return errorData.error_params;
+    }
+    return null;
+}
+
 function _formatError(errorData, status) {
     if (!errorData) return `HTTP ${status}`;
+
+    if (typeof errorData.error_code === 'string' && errorData.error_code.length > 0) {
+        return formatPlatformError(errorData.error_code, _errorParams(errorData));
+    }
 
     if (Array.isArray(errorData.detail)) {
         const messages = errorData.detail.map((err) => {
@@ -105,6 +125,15 @@ export class HttpError extends Error {
         this.trace_id = env.trace_id;
         this.service = env.service;
         this.observability = env.observability;
+        this.error_code =
+            body !== null
+            && typeof body === 'object'
+            && !Array.isArray(body)
+            && typeof body.error_code === 'string'
+            && body.error_code.length > 0
+                ? body.error_code
+                : null;
+        this.error_params = _errorParams(body);
     }
 }
 

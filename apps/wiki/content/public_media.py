@@ -47,7 +47,7 @@ def _string_attr(attrs: dict[str, ProseMirrorAttrValue], name: str) -> str:
     if value is None:
         return ""
     if not isinstance(value, str):
-        raise ValueError(f"Атрибут {name} узла документа должен быть строкой")
+        raise ValueError(f"Attribute {name} of the document node must be a string")
     return value
 
 

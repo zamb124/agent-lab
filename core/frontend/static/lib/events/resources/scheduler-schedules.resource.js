@@ -1,13 +1,12 @@
 /**
- * Ресурсы scheduler — расписания платформенного scheduler (cron / interval / one-time)
- * напрямую через REST владельца `/scheduler/api/v1/schedules/*`.
+ * Ресурсы scheduler — расписания платформенного scheduler (cron / interval / one-time),
+ * команды `scheduler/schedule_tasks/*` владельца (WS + REST-зеркало `/scheduler/api/v1/schedules/*`).
  *
  * Состав:
  *   - schedulerTasksResource: createResourceCollection (list, create) — основная коллекция
- *     с фильтром через listQuery.
- *   - schedulerPauseOp / schedulerResumeOp / schedulerCancelOp: createAsyncOp, silent,
- *     по успеху перезагружают список (onSuccess).
- *   - schedulerRunNowOp: createAsyncOp, silent, по успеху эмитит toast и перезагружает.
+ *     с фильтром через listQuery; исходы pause/resume/cancel/run-now мержатся в неё.
+ *   - schedulerPauseOp / schedulerResumeOp / schedulerCancelOp / schedulerRunNowOp: createAsyncOp,
+ *     silent; результат — обновлённая PlatformScheduledTask.
  *   - schedulerRedisOp: createAsyncOp, silent, держит snapshot Redis по schedule_task_id в slice
  *     (`snapshotByScheduleTaskId`) — UI показывает inline под строкой задачи без модалки.
  *
@@ -17,17 +16,24 @@
 import {
     createResourceCollection,
     createAsyncOp,
+    upsertItem,
 } from '../index.js';
-import { httpRequest } from '../http.js';
 import { CoreEvents } from '../contract.js';
 
-const BASE = '/scheduler/api/v1/schedules';
+const SCHEDULE_TASK_MUTATION_SUCCEEDED = new Set([
+    'scheduler/schedule_pause/succeeded',
+    'scheduler/schedule_resume/succeeded',
+    'scheduler/schedule_cancel/succeeded',
+    'scheduler/schedule_run_now/succeeded',
+]);
 
 export const schedulerTasksResource = createResourceCollection({
     name: 'scheduler/schedule_tasks',
     baseUrl: '/scheduler/api/v1/schedules',
     idField: 'schedule_task_id',
     operations: ['list', 'create'],
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
     toastKeys: {
         create: 'frontend:scheduler_modal.toast_created',
     },
@@ -38,92 +44,68 @@ export const schedulerTasksResource = createResourceCollection({
         if (payload && payload.task_name) q.task_name = payload.task_name;
         return q;
     },
+    extraReducer: (state, event) => {
+        if (!SCHEDULE_TASK_MUTATION_SUCCEEDED.has(event.type)) {
+            return state;
+        }
+        const task = event.payload.result;
+        if (!task || typeof task.schedule_task_id !== 'string') {
+            return state;
+        }
+        return upsertItem(state, task, 'schedule_task_id');
+    },
 });
-
-function _reloadList(ctx) {
-    ctx.dispatch(schedulerTasksResource.events.LIST_REQUESTED, null, { source: 'local' });
-}
 
 export const schedulerPauseOp = createAsyncOp({
     name: 'scheduler/schedule_pause',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'scheduler/schedule_tasks/pause_requested',
     restMirror: { method: 'POST', path: '/scheduler/api/v1/schedules/:schedule_task_id/pause' },
-    request: async ({ payload }) => {
-        const scheduleTaskId = payload && payload.schedule_task_id;
-        if (!scheduleTaskId) throw new Error('schedulerPauseOp: schedule_task_id required');
-        return await httpRequest({
-            method: 'POST',
-            url: `${BASE}/${encodeURIComponent(scheduleTaskId)}/pause`,
-        });
-    },
-    onSuccess: (ctx) => _reloadList(ctx),
 });
 
 export const schedulerResumeOp = createAsyncOp({
     name: 'scheduler/schedule_resume',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'scheduler/schedule_tasks/resume_requested',
     restMirror: { method: 'POST', path: '/scheduler/api/v1/schedules/:schedule_task_id/resume' },
-    request: async ({ payload }) => {
-        const scheduleTaskId = payload && payload.schedule_task_id;
-        if (!scheduleTaskId) throw new Error('schedulerResumeOp: schedule_task_id required');
-        return await httpRequest({
-            method: 'POST',
-            url: `${BASE}/${encodeURIComponent(scheduleTaskId)}/resume`,
-        });
-    },
-    onSuccess: (ctx) => _reloadList(ctx),
 });
 
 export const schedulerCancelOp = createAsyncOp({
     name: 'scheduler/schedule_cancel',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'scheduler/schedule_tasks/cancel_requested',
     restMirror: { method: 'POST', path: '/scheduler/api/v1/schedules/:schedule_task_id/cancel' },
-    request: async ({ payload }) => {
-        const scheduleTaskId = payload && payload.schedule_task_id;
-        if (!scheduleTaskId) throw new Error('schedulerCancelOp: schedule_task_id required');
-        return await httpRequest({
-            method: 'POST',
-            url: `${BASE}/${encodeURIComponent(scheduleTaskId)}/cancel`,
-        });
-    },
-    onSuccess: (ctx) => _reloadList(ctx),
 });
 
 export const schedulerRunNowOp = createAsyncOp({
     name: 'scheduler/schedule_run_now',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'scheduler/schedule_tasks/run_now_requested',
     restMirror: { method: 'POST', path: '/scheduler/api/v1/schedules/:schedule_task_id/run-now' },
-    request: async ({ payload }) => {
-        const scheduleTaskId = payload && payload.schedule_task_id;
-        if (!scheduleTaskId) throw new Error('schedulerRunNowOp: schedule_task_id required');
-        return await httpRequest({
-            method: 'POST',
-            url: `${BASE}/${encodeURIComponent(scheduleTaskId)}/run-now`,
-        });
-    },
     onSuccess: (ctx) => {
         ctx.dispatch(
             CoreEvents.UI_TOAST_SHOW,
             { type: 'success', i18n_key: 'frontend:scheduler_page.toast_run_queued' },
             { source: 'local' },
         );
-        _reloadList(ctx);
     },
 });
 
 export const schedulerRedisOp = createAsyncOp({
     name: 'scheduler/schedule_redis',
     silent: true,
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    commandType: 'scheduler/schedule_tasks/redis_snapshot_requested',
     restMirror: { method: 'GET', path: '/scheduler/api/v1/schedules/:schedule_task_id/redis' },
-    request: async ({ payload }) => {
-        const scheduleTaskId = payload && payload.schedule_task_id;
-        if (!scheduleTaskId) throw new Error('schedulerRedisOp: schedule_task_id required');
-        const snapshot = await httpRequest({
-            method: 'GET',
-            url: `${BASE}/${encodeURIComponent(scheduleTaskId)}/redis`,
-        });
-        return { schedule_task_id: scheduleTaskId, snapshot };
-    },
     extraInitial: { snapshotByScheduleTaskId: {}, loadingByScheduleTaskId: {} },
     extraReducer: (state, event, events) => {
         if (event.type === events.REQUESTED) {
@@ -138,15 +120,15 @@ export const schedulerRedisOp = createAsyncOp({
             };
         }
         if (event.type === events.SUCCEEDED) {
-            const r = event.payload && event.payload.result;
-            if (!r || !r.schedule_task_id) return state;
+            const scheduleTaskId = event.payload.request && event.payload.request.schedule_task_id;
+            if (typeof scheduleTaskId !== 'string' || scheduleTaskId.length === 0) return state;
             const nextLoading = { ...state.loadingByScheduleTaskId };
-            delete nextLoading[r.schedule_task_id];
+            delete nextLoading[scheduleTaskId];
             return {
                 ...state,
                 snapshotByScheduleTaskId: {
                     ...state.snapshotByScheduleTaskId,
-                    [r.schedule_task_id]: r.snapshot,
+                    [scheduleTaskId]: event.payload.result,
                 },
                 loadingByScheduleTaskId: nextLoading,
             };

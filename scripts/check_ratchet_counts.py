@@ -39,6 +39,8 @@ METRICS: tuple[RatchetMetric, ...] = (
     RatchetMetric("raw_storage_in_services", ("apps",), r"^\s*(?!.*repositories).*\bStorage\(db_url", "database.mdc: Storage — приватный слой репозитория"),
     RatchetMetric("http_exception_in_services", ("apps",), r"raise HTTPException\(", "architecture.mdc: HTTPException только в api/, в op_*/services — WsCommandError/boundary errors"),
     RatchetMetric("logger_fstring", ("apps", "core"), r"logger\.(debug|info|warning|error|exception|critical)\(\s*f[\"']", "logging.mdc: event-id + kwargs вместо f-строк"),
+    RatchetMetric("logger_percent", ("apps", "core"), r"logger\.(debug|info|warning|error|exception|critical)\(\s*[\"'][^\"'\n]*%", "logging.mdc: event-id + kwargs вместо %-format"),
+    RatchetMetric("logger_sentence", ("apps", "core"), r"logger\.(debug|info|warning|error|exception|critical)\(\s*[\"'][^\"'\n]*\s", "logging.mdc: event-id + kwargs вместо предложения"),
     RatchetMetric("tests_monkeypatch_internal", ("tests",), r"monkeypatch\.setattr\(\s*[\"']?(core|apps)\.", "testing_invariants.mdc: внутренние компоненты не мокаются"),
     RatchetMetric("tests_asyncmock", ("tests",), r"\bAsyncMock\(", "testing_invariants.mdc: единственный мок — MockLLM"),
     RatchetMetric("tests_skip_markers", ("tests",), r"pytest\.mark\.skip\(|pytest\.skip\(", "testing.mdc: skip — только fail-loud с причиной инфраструктуры"),

@@ -306,7 +306,7 @@ def _normalize_attr_value(
     """
     if raw is None:
         if spec.required:
-            raise WikiSchemaError(f"{node_or_mark}.{attr_name}: обязательный атрибут пуст")
+            raise WikiSchemaError(f"{node_or_mark}.{attr_name}: required attribute is empty")
         return spec.default
 
     if spec.kind == WikiAttrKind.INT:
@@ -315,7 +315,7 @@ def _normalize_attr_value(
     if spec.kind == WikiAttrKind.INT_LIST:
         if not isinstance(raw, list):
             raise WikiSchemaError(
-                f"{node_or_mark}.{attr_name}: ожидался список целых, получено {raw!r}"
+                f"{node_or_mark}.{attr_name}: expected a list of integers, got {raw!r}"
             )
         return [
             _normalize_int_attr(node_or_mark, f"{attr_name}[{index}]", item)
@@ -324,16 +324,16 @@ def _normalize_attr_value(
 
     if spec.kind == WikiAttrKind.FLOAT:
         if isinstance(raw, bool) or not isinstance(raw, (int, float)):
-            raise WikiSchemaError(f"{node_or_mark}.{attr_name}: ожидалось число")
+            raise WikiSchemaError(f"{node_or_mark}.{attr_name}: expected number")
         return float(raw)
 
     if spec.kind == WikiAttrKind.BOOL:
         if not isinstance(raw, bool):
-            raise WikiSchemaError(f"{node_or_mark}.{attr_name}: ожидался bool")
+            raise WikiSchemaError(f"{node_or_mark}.{attr_name}: expected bool")
         return raw
 
     if not isinstance(raw, str):
-        raise WikiSchemaError(f"{node_or_mark}.{attr_name}: ожидалась строка")
+        raise WikiSchemaError(f"{node_or_mark}.{attr_name}: expected string")
     return raw
 
 
@@ -341,23 +341,23 @@ def _normalize_int_attr(
     node_or_mark: str, attr_name: str, raw: ProseMirrorAttrValue
 ) -> int:
     if isinstance(raw, bool):
-        raise WikiSchemaError(f"{node_or_mark}.{attr_name}: ожидалось целое, получен bool")
+        raise WikiSchemaError(f"{node_or_mark}.{attr_name}: expected integer, got bool")
     if isinstance(raw, float):
         if not raw.is_integer():
-            raise WikiSchemaError(f"{node_or_mark}.{attr_name}: ожидалось целое, получено {raw}")
+            raise WikiSchemaError(f"{node_or_mark}.{attr_name}: expected integer, got {raw}")
         return int(raw)
     if isinstance(raw, int):
         return raw
-    raise WikiSchemaError(f"{node_or_mark}.{attr_name}: ожидалось целое, получено {raw!r}")
+    raise WikiSchemaError(f"{node_or_mark}.{attr_name}: expected integer, got {raw!r}")
 
 
 def _normalize_mark(mark: ProseMirrorMark) -> ProseMirrorMark:
     spec = WIKI_MARKS.get(mark.type)
     if spec is None:
-        raise WikiSchemaError(f"Неизвестная марка: {mark.type}")
+        raise WikiSchemaError(f"Unknown mark: {mark.type}")
     unknown = set(mark.attrs) - set(spec.attrs)
     if unknown:
-        raise WikiSchemaError(f"Марка {mark.type}: неизвестные атрибуты {sorted(unknown)}")
+        raise WikiSchemaError(f"Mark {mark.type}: unknown attributes {sorted(unknown)}")
     attrs: dict[str, ProseMirrorAttrValue] = {}
     for attr_name, attr_spec in spec.attrs.items():
         attrs[attr_name] = _normalize_attr_value(
@@ -375,11 +375,11 @@ def normalize_document(node: ProseMirrorNode) -> ProseMirrorNode:
     """
     spec = WIKI_NODES.get(node.type)
     if spec is None:
-        raise WikiSchemaError(f"Неизвестный узел: {node.type}")
+        raise WikiSchemaError(f"Unknown node: {node.type}")
 
     unknown = set(node.attrs) - set(spec.attrs)
     if unknown:
-        raise WikiSchemaError(f"Узел {node.type}: неизвестные атрибуты {sorted(unknown)}")
+        raise WikiSchemaError(f"Node {node.type}: unknown attributes {sorted(unknown)}")
 
     attrs: dict[str, ProseMirrorAttrValue] = {}
     for attr_name, attr_spec in spec.attrs.items():
@@ -390,29 +390,29 @@ def normalize_document(node: ProseMirrorNode) -> ProseMirrorNode:
     if node.type == HEADING_NODE:
         level = attrs.get("level")
         if not isinstance(level, int) or level < 1 or level > MAX_HEADING_LEVEL:
-            raise WikiSchemaError(f"heading.level вне диапазона 1..{MAX_HEADING_LEVEL}: {level}")
+            raise WikiSchemaError(f"heading.level out of range 1..{MAX_HEADING_LEVEL}: {level}")
 
     if node.type == MENTION_NODE:
         raw_kind = attrs.get("mention_kind")
         if raw_kind not in {member.value for member in WikiMentionKind}:
-            raise WikiSchemaError(f"platform_mention.mention_kind неизвестен: {raw_kind!r}")
+            raise WikiSchemaError(f"platform_mention.mention_kind is unknown: {raw_kind!r}")
 
     if node.type in TABLE_CELL_NODES:
         raw_align = attrs.get("align")
         if raw_align not in {member.value for member in WikiTableAlign}:
-            raise WikiSchemaError(f"{node.type}.align неизвестен: {raw_align!r}")
+            raise WikiSchemaError(f"{node.type}.align is unknown: {raw_align!r}")
 
     if node.type == TEXT_NODE:
         if node.text is None:
-            raise WikiSchemaError("Текстовый узел без text")
+            raise WikiSchemaError("Text node has no text")
         if node.content:
-            raise WikiSchemaError("Текстовый узел не может иметь content")
+            raise WikiSchemaError("Text node cannot have content")
     elif node.text is not None:
-        raise WikiSchemaError(f"Узел {node.type} не может нести text")
+        raise WikiSchemaError(f"Node {node.type} cannot carry text")
 
     marks = [_normalize_mark(mark) for mark in node.marks]
     if marks and spec.marks == "":
-        raise WikiSchemaError(f"Узел {node.type} не допускает марки")
+        raise WikiSchemaError(f"Node {node.type} does not allow marks")
     marks.sort(key=lambda mark: MARK_SERIALIZATION_ORDER.index(mark.type))
 
     return ProseMirrorNode(

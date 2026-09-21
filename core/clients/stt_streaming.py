@@ -92,7 +92,7 @@ class BufferedSTTStreamer(BaseSTTStreamer):
         language: str | None = None,
     ) -> None:
         if sample_rate <= 0:
-            raise ValueError("BufferedSTTStreamer: sample_rate должен быть > 0.")
+            raise ValueError("BufferedSTTStreamer: sample_rate must be > 0.")
         self._stt_client: BaseSTTClient = stt_client
         self._sample_rate: int = sample_rate
         self._language: str | None = language

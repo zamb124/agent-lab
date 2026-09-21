@@ -69,16 +69,16 @@ class IntegrationExternalAuthorService:
     ) -> str:
         ext = str(external_user_id).strip()
         if not ext:
-            raise ValueError("external_user_id обязателен")
+            raise ValueError('external_user_id is required')
         email_norm = email.strip().lower()
         if not email_norm:
-            raise ValueError("email обязателен для привязки внешнего автора")
+            raise ValueError('email is required to bind an external author')
         prov = str(provider_id).strip()
         if not prov:
-            raise ValueError("provider_id обязателен")
+            raise ValueError('provider_id is required')
         acc = str(account_key).strip()
         if not acc:
-            raise ValueError("account_key обязателен")
+            raise ValueError('account_key is required')
 
         key = integration_external_author_storage_key(company_id, prov, acc, ext)
         cached = await self._storage.get(key, force_global=True)
@@ -86,7 +86,7 @@ class IntegrationExternalAuthorService:
             mapping = IntegrationExternalAuthorMapping.model_validate_json(cached)
             uid = mapping.user_id.strip()
             if uid == "":
-                raise ValueError(f"Повреждённая запись маппинга: {key}")
+                raise ValueError(f"Corrupt mapping record: {key}")
             existing = await self._user_repository.get(uid)
             if existing is not None:
                 return uid
@@ -95,13 +95,13 @@ class IntegrationExternalAuthorService:
         matches = await self._user_repository.find_all_by_email_ci(email_norm)
         if len(matches) > 1:
             raise ValueError(
-                f"Несколько пользователей с email {email_norm}: "
+                f"Multiple users with email {email_norm}: "
                 + f"{', '.join(u.user_id for u in matches)}"
             )
 
         company = await self._company_repository.get(company_id)
         if company is None:
-            raise ValueError(f"Компания не найдена: {company_id}")
+            raise ValueError(f"Company not found: {company_id}")
 
         if len(matches) == 1:
             user = matches[0]

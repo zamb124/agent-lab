@@ -25,8 +25,8 @@ from apps.flows.src.models.tool_reference import (
     ToolsListPayload,
     ToolsTagGroupsPayload,
     ToolsToolIdPayload,
-    ToolTagGroupResponse,
 )
+from apps.flows.src.models.tool_tag_group import ToolTagGroup
 from apps.flows.src.services.tool_preview import ToolPreviewRequest, ToolPreviewResponse
 from core.context import require_context
 from core.pagination import OffsetPage
@@ -73,12 +73,12 @@ async def list_all_tools_and_flows(
     )
 
 
-@router.get("/tag-groups", response_model=OffsetPage[ToolTagGroupResponse])
+@router.get("/tag-groups", response_model=OffsetPage[ToolTagGroup])
 async def list_tool_tag_groups(
     container: ContainerDep,
     limit: Annotated[int, Query(ge=1, le=200)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> OffsetPage[ToolTagGroupResponse]:
+) -> OffsetPage[ToolTagGroup]:
     return await op_flows_tools_tag_groups(
         ToolsTagGroupsPayload(limit=limit, offset=offset),
         user=require_context().user,

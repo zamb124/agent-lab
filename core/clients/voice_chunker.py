@@ -27,9 +27,9 @@ class VoiceChunker:
         min_words: int = 3,
     ) -> None:
         if chunk_max_chars <= 0:
-            raise ValueError("VoiceChunker: chunk_max_chars должен быть > 0.")
+            raise ValueError("VoiceChunker: chunk_max_chars must be > 0.")
         if min_words <= 0:
-            raise ValueError("VoiceChunker: min_words должен быть > 0.")
+            raise ValueError("VoiceChunker: min_words must be > 0.")
         self._chunk_max_chars: int = chunk_max_chars
         self._min_words: int = min_words
         self._buffer: str = ""

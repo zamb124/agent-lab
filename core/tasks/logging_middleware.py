@@ -54,6 +54,7 @@ from core.logging.attributes import (
     LOG_TASK_QUEUE,
     LOG_TASK_QUEUE_WAIT_MS,
     LOG_TASK_RETRY,
+    LOG_TEST_SCOPE,
 )
 from core.tasks.log_labels import build_log_labels
 from core.tasks.message_contract import (
@@ -63,7 +64,6 @@ from core.tasks.message_contract import (
     task_message_string_label,
     task_message_string_labels,
 )
-from core.test_scope import LOG_TEST_SCOPE
 from core.types import JsonValue, TaskLabelMap
 
 _LABEL_TRACE_ID = "trace_id"
@@ -98,9 +98,9 @@ class LoggingMiddleware(TaskiqMiddleware):
     def __init__(self, *, queue_name: str, service_name: str) -> None:
         super().__init__()
         if not queue_name.strip():
-            raise ValueError("LoggingMiddleware: queue_name обязателен")
+            raise ValueError('LoggingMiddleware: queue_name is required')
         if not service_name.strip():
-            raise ValueError("LoggingMiddleware: service_name обязателен")
+            raise ValueError('LoggingMiddleware: service_name is required')
         self._logger: structlog.stdlib.BoundLogger = get_logger("platform.task")
         self._queue_name: str = queue_name
         self._service_name: str = service_name

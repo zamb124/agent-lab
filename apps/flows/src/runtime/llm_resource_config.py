@@ -46,10 +46,10 @@ async def infer_unique_llm_resource_key_from_merged_maps(
                 llm_keys.append(key)
             continue
         if repository is None:
-            raise ValueError("resource_repository обязателен для shared LLM resources")
+            raise ValueError("resource_repository is required for shared LLM resources")
         resource_id = ref.resource_id
         if resource_id is None:
-            raise ValueError(f"Ресурс '{key}': shared reference без resource_id")
+            raise ValueError(f"Resource '{key}': shared reference without resource_id")
         definition = await repository.get(resource_id)
         if definition is not None and definition.type == ResourceType.LLM:
             llm_keys.append(key)
@@ -75,35 +75,35 @@ async def resolve_llm_config_with_resource_key(
         return llm_config
     key = str(llm_config.llm_resource_key).strip()
     if not key:
-        raise ValueError("llm_resource_key пуст")
+        raise ValueError("llm_resource_key is empty")
 
     merged = merge_flow_skill_node_resource_maps(
         flow_resources, skill_resources, node_resources_raw
     )
     if key not in merged:
-        raise ValueError(f"llm_resource_key '{key}' отсутствует в ресурсах flow/skill/node")
+        raise ValueError(f"llm_resource_key '{key}' is missing from flow/skill/node resources")
 
     ref_raw = merged[key]
     ref = ResourceReference.model_validate(ref_raw) if isinstance(ref_raw, dict) else ref_raw
 
     if ref.is_inline:
         if ref.type != ResourceType.LLM:
-            raise ValueError(f"Ресурс '{key}': ожидается type llm, получено {ref.type!r}")
+            raise ValueError(f"Resource '{key}': expected type llm, got {ref.type!r}")
         if ref.config is None:
-            raise ValueError(f"Ресурс '{key}': inline LLM без config")
+            raise ValueError(f"Resource '{key}': inline LLM without config")
         base_cfg = LLMResourceConfig.model_validate(ref.config)
     else:
         if repository is None:
-            raise ValueError("resource_repository обязателен для shared LLM resources")
+            raise ValueError("resource_repository is required for shared LLM resources")
         resource_id = ref.resource_id
         if resource_id is None:
-            raise ValueError(f"Ресурс '{key}': shared reference без resource_id")
+            raise ValueError(f"Resource '{key}': shared reference without resource_id")
         definition = await repository.get(resource_id)
         if definition is None:
-            raise ValueError(f"Shared resource '{resource_id}' не найден в БД")
+            raise ValueError(f"Shared resource '{resource_id}' not found in the database")
         if definition.type != ResourceType.LLM:
             raise ValueError(
-                f"Ресурс '{key}': shared '{resource_id}' не LLM, а {definition.type!r}"
+                f"Resource '{key}': shared '{resource_id}' is not LLM, got {definition.type!r}"
             )
         merged_dict = definition.config
         if ref.config:

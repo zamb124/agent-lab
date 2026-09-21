@@ -615,10 +615,31 @@ def _op(
     )
 
 
+async def _setup_namespaces_list(ctx: LiveCtx) -> JsonObject:
+    ctx.marker = await _namespace(ctx)
+    return {"limit": 200, "offset": 0}
+
+
+async def _setup_namespaces_update(ctx: LiveCtx) -> JsonObject:
+    namespace = await _namespace(ctx)
+    return {
+        "name": namespace,
+        "sync_settings": {"transcribe_voice_messages": True, "speech_to_chat_enabled": False},
+    }
+
+
 _CASES: dict[str, OpCase] = {
     "sync/channels/list_requested": _op(
         "GET", f"{_API}/channels/", "query", _setup_channels_list,
         same=True, compare="marker_row",
+    ),
+    "sync/namespaces/list_requested": _op(
+        "GET", f"{_API}/namespaces", "query", _setup_namespaces_list,
+        same=True, compare="marker_row",
+    ),
+    "sync/namespace/sync_settings_update_requested": _op(
+        "PUT", f"{_API}/namespaces/{{name}}", "body_minus_path", _setup_namespaces_update,
+        same=True,
     ),
     "sync/channels/create_requested": _op(
         "POST", f"{_API}/channels/", "body", _setup_channels_create, same=False,

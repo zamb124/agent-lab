@@ -8,7 +8,7 @@ import time
 import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import suppress
-from typing import Protocol
+from typing import NamedTuple, Protocol
 
 import httpx
 from a2a.helpers.proto_helpers import new_text_message
@@ -67,6 +67,11 @@ from core.types import (
 from core.utils.background import run_with_log_context
 
 logger = get_logger(__name__)
+
+
+class LLMInvokeTransportResult(NamedTuple):
+    content: str | JsonObject
+    usage: JsonObject
 
 
 class LLMTransportClient(Protocol):
@@ -272,10 +277,10 @@ async def stream_once(
                             )
                             if idle_seconds >= idle_limit:
                                 logger.error(
-                                    "LLM stream idle timeout: %.1fs without data, chunks_received=%d, model=%s",
-                                    idle_seconds,
-                                    chunks_received,
-                                    client.model,
+                                    "clients.llm.stream.idle.timeout.s",
+                                    idle_seconds=idle_seconds,
+                                    chunks_received=chunks_received,
+                                    model=client.model,
                                 )
                                 idle_timeout_evt.set()
                                 with suppress(Exception):
@@ -301,10 +306,10 @@ async def stream_once(
                             chunks_received += 1
                             if inter_chunk_seconds > _INTER_CHUNK_WARN_SECONDS:
                                 logger.warning(
-                                    "LLM stream slow chunk: %.1fs gap before chunk #%d, model=%s",
-                                    inter_chunk_seconds,
-                                    chunks_received,
-                                    client.model,
+                                    "clients.llm.stream.slow.chunk.s",
+                                    inter_chunk_seconds=inter_chunk_seconds,
+                                    chunks_received=chunks_received,
+                                    model=client.model,
                                 )
                             if not line.startswith("data: "):
                                 continue
@@ -667,7 +672,7 @@ async def invoke_once(
     max_tokens: int | None = None,
     extra_body: JsonObject | None = None,
     extra_headers: dict[str, str] | None = None,
-) -> str | JsonObject:
+) -> LLMInvokeTransportResult:
     """
     Non-streaming вызов LLM.
 
@@ -759,13 +764,24 @@ async def invoke_once(
         content_length=len(content) if content else 0,
     )
 
-    if json_output and content:
-        return require_json_object(
-            parse_json_value(content, "llm.invoke.response.content"),
-            "llm.invoke.response.content",
+    usage_raw = response_payload.get("usage")
+    usage_data: JsonObject = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+    if usage_raw is not None:
+        _merge_openai_compatible_usage_into_usage_data(
+            require_json_object(usage_raw, "llm.invoke.response.usage"),
+            usage_data,
         )
 
-    return content or ""
+    if json_output and content:
+        return LLMInvokeTransportResult(
+            content=require_json_object(
+                parse_json_value(content, "llm.invoke.response.content"),
+                "llm.invoke.response.content",
+            ),
+            usage=usage_data,
+        )
+
+    return LLMInvokeTransportResult(content=content or "", usage=usage_data)
 
 
-__all__ = ["invoke_once", "stream_once"]
+__all__ = ["LLMInvokeTransportResult", "invoke_once", "stream_once"]

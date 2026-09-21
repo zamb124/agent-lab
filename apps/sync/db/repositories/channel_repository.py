@@ -174,7 +174,7 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
             if existing is not None:
                 if existing.company_id != cid:
                     raise ValueError(
-                        f"Запись участника принадлежит другой компании: channel_id={channel_id}."
+                        f"Member row belongs to another company: channel_id={channel_id}."
                     )
                 return
             member = SyncChannelMember(
@@ -214,11 +214,11 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
             row = await session.get(SyncChannelMember, (channel_id, user_id))
             if row is None:
                 raise ValueError(
-                    f"Участник канала не найден: channel_id={channel_id}, user_id={user_id}."
+                    f"Channel member not found: channel_id={channel_id}, user_id={user_id}."
                 )
             if row.company_id != cid:
                 raise ValueError(
-                    f"Запись участника принадлежит другой компании: channel_id={channel_id}."
+                    f"Member row belongs to another company: channel_id={channel_id}."
                 )
             row.last_read_at = at
             await session.commit()
@@ -234,7 +234,7 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
             row = await session.get(SyncChannelMember, (channel_id, user_id))
             if row is None or row.company_id != cid:
                 raise ValueError(
-                    f"Участник канала не найден: channel_id={channel_id}, user_id={user_id}."
+                    f"Channel member not found: channel_id={channel_id}, user_id={user_id}."
                 )
             return bool(row.notifications_muted)
 
@@ -250,7 +250,7 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
             row = await session.get(SyncChannelMember, (channel_id, user_id))
             if row is None or row.company_id != cid:
                 raise ValueError(
-                    f"Участник канала не найден: channel_id={channel_id}, user_id={user_id}."
+                    f"Channel member not found: channel_id={channel_id}, user_id={user_id}."
                 )
             row.notifications_muted = muted
             await session.commit()

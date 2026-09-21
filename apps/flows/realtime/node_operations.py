@@ -103,7 +103,7 @@ async def op_flows_nodes_catalog_create(
         raise_conflict(ValueError(f"Node '{payload.node_id}' already exists"))
     await _require_node_tools(container, payload, allow_node_id=None)
     _ = await container.node_repository.set(payload)
-    logger.info("Node created: %s", payload.node_id)
+    logger.info("flows.node.created", node_id=payload.node_id)
     return payload
 
 
@@ -120,7 +120,7 @@ async def op_flows_nodes_catalog_update(
         raise_not_found(LookupError("Node not found"))
     await _require_node_tools(container, payload, allow_node_id=payload.node_id)
     _ = await container.node_repository.set(payload)
-    logger.info("Node updated: %s", payload.node_id)
+    logger.info("flows.node.updated", node_id=payload.node_id)
     return payload
 
 
@@ -135,5 +135,5 @@ async def op_flows_nodes_catalog_remove(
     deleted = await container.node_repository.delete(payload.node_id)
     if not deleted:
         raise_not_found(LookupError("Node not found"))
-    logger.info("Node deleted: %s", payload.node_id)
+    logger.info("flows.node.deleted", node_id=payload.node_id)
     return NodeDeletedResponse(status="deleted", node_id=payload.node_id)

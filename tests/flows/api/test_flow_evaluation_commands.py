@@ -17,7 +17,6 @@ from apps.flows.realtime.evaluation_operations import (
     op_flows_evaluation_suite_item,
     op_flows_evaluation_suites_list,
 )
-from apps.flows.realtime.operations import FlowsEmptyPayload
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.evaluation_lab import (
     EvaluationBuiltinEvaluatorCatalog,
@@ -35,7 +34,7 @@ from core.context import reset_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import User
 from core.pagination import ListResponse
-from core.websocket import WsCommandError
+from core.websocket import EmptyPayload, WsCommandError
 from tests.fixtures.ai_provider_defaults import make_test_company
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.timeout(60)]
@@ -152,7 +151,7 @@ async def test_evaluation_catalog_and_suite_rest_match_op(
 
     with _system_scope(system_user_id) as user:
         catalog = await op_flows_evaluation_evaluator_catalog(
-            FlowsEmptyPayload(),
+            EmptyPayload(),
             user=user,
             container=container,
         )

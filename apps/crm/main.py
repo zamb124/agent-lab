@@ -45,10 +45,7 @@ async def on_startup(_app: FastAPI, container: CRMContainer, _settings: CRMSetti
             "system",
             reseed=True,
         )
-        logger.info(
-            "Системные типы entities инициализированы для компании 'system'",
-            result=init_result,
-        )
+        logger.info("crm.entities.system", result=init_result)
     finally:
         clear_context()
 

@@ -18,7 +18,10 @@
 import {
     createResourceCollection,
     createAsyncOp,
+    upsertItem,
 } from '@platform/lib/events/index.js';
+
+const TEMPLATE_UPDATE_SUCCEEDED = 'crm/template_update/succeeded';
 
 export const templatesResource = createResourceCollection({
     name: 'crm/templates',
@@ -31,6 +34,16 @@ export const templatesResource = createResourceCollection({
     toastKeys: {
         create: 'crm:toast.template.created',
         remove: 'crm:toast.template.removed',
+    },
+    extraReducer: (state, event) => {
+        if (event.type !== TEMPLATE_UPDATE_SUCCEEDED) {
+            return state;
+        }
+        const template = event.payload.result;
+        if (!template || typeof template.template_id !== 'string') {
+            return state;
+        }
+        return upsertItem(state, template, 'template_id');
     },
 });
 

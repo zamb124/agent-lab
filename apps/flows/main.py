@@ -142,22 +142,25 @@ async def on_startup(_app: FastAPI, container: FlowContainer, settings: FlowSett
     )
 
     # Подключаемся к Redis с retry
-    logger.info("Connecting to Redis...")
+    logger.info("flows.connecting.redis")
     max_startup_retries = 5
     for attempt in range(max_startup_retries):
         try:
             await container.redis_client.connect()
-            logger.info("Redis connected")
+            logger.info("flows.redis.connected")
             break
         except Exception as e:
             if attempt < max_startup_retries - 1:
                 wait = 1 << attempt
                 logger.warning(
-                    f"Redis connection failed (attempt {attempt + 1}), retry in {wait}s: {e}"
+                    "flows.startup.redis_retry",
+                    attempt=attempt + 1,
+                    wait_seconds=wait,
+                    error=str(e),
                 )
                 await asyncio.sleep(wait)
             else:
-                logger.error("Failed to connect to Redis on startup")
+                logger.error("flows.failed.connect.redis.startup")
                 raise
 
     configure_tunnel_bus_storage(container.storage)
@@ -189,43 +192,35 @@ async def on_startup(_app: FastAPI, container: FlowContainer, settings: FlowSett
                 container.tool_repository,
                 flow_access_service=container.flow_access_service,
             )
-            logger.info(f"Загружено tools: {loaded_tools}")
+            logger.info("flows.startup.tools_loaded", tools=loaded_tools)
 
-            logger.info("Загрузка flows из bundles синхронно (TESTING=true)...")
+            logger.info("flows.bundles.testing.true")
             loaded_flow_ids = await load_flows_to_db(
                 container.flow_repository,
                 container.node_repository,
                 container.tool_repository,
                 container.flow_access_service,
             )
-            logger.info(f"Загружено flows: {loaded_flow_ids}")
+            logger.info("flows.startup.flows_loaded", flow_ids=loaded_flow_ids)
 
             try:
                 runtime_container = as_flow_runtime_container(container)
                 _ = await ensure_default_mcp_servers_for_company(container=runtime_container)
                 synced = await sync_auto_mcp_servers_for_company(container=runtime_container)
-                logger.info(
-                    "MCP синхронизация для system: servers=%s tools=%s",
-                    synced["servers"],
-                    synced["tools"],
-                )
+                logger.info("flows.mcp.system.servers.tools", servers=synced['servers'], tools=synced['tools'])
             except Exception as mcp_err:
-                logger.warning(
-                    "MCP синхронизация при старте тестов пропущена: %s",
-                    mcp_err,
-                    exc_info=True,
-                )
+                logger.warning("flows.mcp", mcp_err=mcp_err, exc_info=True)
             seeded_variables = await seed_demo_company_variables(
                 container.variables_service,
                 "system",
             )
-            logger.info("Демо-переменные system: count=%s", seeded_variables)
+            logger.info("flows.system.count", count=seeded_variables)
             seeded_skills = await seed_platform_assistant_skills(
                 container.agent_skill_service,
                 container.files_service,
                 "system",
             )
-            logger.info("platform_assistant skills system: count=%s", seeded_skills)
+            logger.info("flows.platform_assistant", count=seeded_skills)
             stored_company = await container.company_repository.get("system")
             member_user_ids = (
                 await hitl_demo_operator_user_ids(container.authz_service, "system")
@@ -238,21 +233,21 @@ async def on_startup(_app: FastAPI, container: FlowContainer, settings: FlowSett
                 member_user_ids=member_user_ids,
             )
         except Exception as e:
-            logger.error(f"Ошибка запуска миграции в system: {e}", exc_info=True)
+            logger.error("flows.startup.system_migrate_failed", error=str(e), exc_info=True)
         finally:
             clear_context()
 
     if is_testing():
-        logger.info("Пропускаем синхронизацию LLM моделей (TESTING)")
+        logger.info("flows.llm.testing")
 
         _ = get_or_create_global_mock_llm("mock-gpt-4")
         _ = configure_mock_llm_redis(container.redis_client)
-        logger.info("MockLLM: очередь ответов из Redis (как в TaskIQ worker)")
+        logger.info("flows.mockllm.redis.taskiq.worker")
 
     # Telegram Dev Polling (только в development)
     if settings.server.env == "development" and not is_testing():
         await start_dev_polling()
-        logger.info("Telegram dev polling запущен")
+        logger.info("flows.telegram.dev.polling")
 
 
 async def on_shutdown(_app: FastAPI, container: FlowContainer) -> None:
@@ -262,7 +257,7 @@ async def on_shutdown(_app: FastAPI, container: FlowContainer) -> None:
     try:
         await stop_dev_polling()
     except Exception as e:
-        logger.warning(f"Error stopping dev polling: {e}")
+        logger.warning("flows.shutdown.dev_polling_stop_failed", error=str(e))
 
     # Закрываем Redis с error handling
     try:
@@ -279,7 +274,7 @@ _flow_settings = FlowSettings.model_validate(_FLOWS_BOOTSTRAP_MERGED)
 _flows_brand = _flow_settings.platform_brands[_flow_settings.primary_platform_domain]
 _cors_regex = _flow_settings.cors_allow_origin_regex
 if "*" in _flow_settings.cors_allow_origins:
-    raise ValueError("flows.cors_allow_origins не может содержать '*' для embed/A2A")
+    raise ValueError("flows.cors_allow_origins cannot contain '*' for embed/A2A")
 if _cors_regex is None and _flow_settings.server.debug and not is_testing():
     _cors_regex = _FLOWS_DEV_CORS_ORIGIN_REGEX
 

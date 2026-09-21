@@ -238,7 +238,7 @@ def _stt_model_dtype_name(device: str) -> STTModelDTypeName:
 
 def _coerce_audio_bytes(raw: STTRawValue | None) -> bytes:
     if raw is None:
-        raise HTTPException(status_code=422, detail="STT: поле file обязательно")
+        raise HTTPException(status_code=422, detail="STT: file field is required")
     if isinstance(raw, bytes):
         audio_bytes = raw
     elif isinstance(raw, bytearray | memoryview):
@@ -247,16 +247,16 @@ def _coerce_audio_bytes(raw: STTRawValue | None) -> bytes:
         byte_values: list[int] = []
         for item in raw:
             if not isinstance(item, int) or isinstance(item, bool):
-                raise HTTPException(status_code=422, detail="STT: file должен быть bytes или list[int]")
+                raise HTTPException(status_code=422, detail="STT: file must be bytes or list[int]")
             byte_values.append(item)
         try:
             audio_bytes = bytes(byte_values)
         except ValueError as exc:
-            raise HTTPException(status_code=422, detail="STT: file содержит байт вне диапазона 0..255") from exc
+            raise HTTPException(status_code=422, detail="STT: file contains a byte outside 0..255") from exc
     else:
-        raise HTTPException(status_code=422, detail="STT: file должен быть bytes или list[int]")
+        raise HTTPException(status_code=422, detail="STT: file must be bytes or list[int]")
     if len(audio_bytes) == 0:
-        raise HTTPException(status_code=422, detail="STT: поле file обязательно")
+        raise HTTPException(status_code=422, detail="STT: file field is required")
     return audio_bytes
 
 
@@ -271,7 +271,7 @@ def parse_stt_body(
     api id из ``cfg.stt_models``, ``language`` (опционально, для Whisper).
     """
     if isinstance(raw, Request):
-        raise HTTPException(status_code=422, detail="STT: LitServe должен передать подготовленное тело запроса")
+        raise HTTPException(status_code=422, detail="STT: LitServe must pass a prepared request body")
     audio_raw = raw.get("file")
     if audio_raw is None:
         audio_raw = raw.get("audio")
@@ -283,13 +283,13 @@ def parse_stt_body(
     elif isinstance(model_raw, str):
         requested_model = model_raw.strip()
     else:
-        raise HTTPException(status_code=422, detail="STT: model должен быть строкой")
+        raise HTTPException(status_code=422, detail="STT: model must be a string")
     if requested_model == "":
         requested_model = default_api_model_id.strip()
     if requested_model == "":
         raise HTTPException(
             status_code=422,
-            detail="STT: model обязателен (либо явно в payload, либо stt_default_api_model_id в конфиге)",
+            detail="STT: model is required (explicitly in payload or stt_default_api_model_id in config)",
         )
 
     language_raw = raw.get("language")
@@ -298,7 +298,7 @@ def parse_stt_body(
     elif isinstance(language_raw, str):
         language = language_raw.strip() or None
     else:
-        raise HTTPException(status_code=422, detail="STT: language должен быть строкой")
+        raise HTTPException(status_code=422, detail="STT: language must be a string")
     return STTTranscriptionInput(audio_bytes=audio_bytes, model=requested_model, language=language)
 
 
@@ -309,13 +309,13 @@ def _decode_audio_to_floats(audio_bytes: bytes) -> tuple[list[float], int]:
     provider_litserve. Сырой PCM без заголовка не принимается.
     """
     if not audio_bytes:
-        raise ValueError("STT: пустые аудио-данные")
+        raise ValueError("STT: empty audio data")
     try:
         buf = io.BytesIO(audio_bytes)
         data, sr = sf.read(buf, dtype="float32", always_2d=False)
     except (RuntimeError, ValueError) as exc:
         raise ValueError(
-            "STT: контейнер не распознан (нужен WAV/FLAC/OGG/MP3)."
+            "STT: container is not recognized (need WAV/FLAC/OGG/MP3)."
         ) from exc
     if data.ndim == 2:
         data = data.mean(axis=1)
@@ -382,7 +382,12 @@ class _GigaAMAdapter(_BaseSTTAdapter[GigaAMModel]):
     @override
     def load(self, hf_model_id: str, revision: str | None) -> GigaAMModel:
         _require_cuda_when_selected(self._device)
-        logger.info("STT gigaam: загрузка hf=%s revision=%s device=%s", hf_model_id, revision, self._device)
+        logger.info(
+            "provider_litserve.stt.gigaam.hf.revision.device",
+            hf=hf_model_id,
+            revision=revision,
+            device=self._device,
+        )
         started = time.monotonic()
         load_model = cast(GigaAMModelLoader, AutoModel.from_pretrained)
         model = load_model(
@@ -395,7 +400,7 @@ class _GigaAMAdapter(_BaseSTTAdapter[GigaAMModel]):
             _ = model.to(self._device)
         except Exception:  # noqa: BLE001 - GigaAM сам управляет device через .transcribe
             pass
-        logger.info("STT gigaam: %s загружен за %.2fs", hf_model_id, time.monotonic() - started)
+        logger.info("provider_litserve.stt.gigaam.s", hf_model_id=hf_model_id, value_1=time.monotonic() - started)
         return model
 
     @override
@@ -403,20 +408,20 @@ class _GigaAMAdapter(_BaseSTTAdapter[GigaAMModel]):
         _ = language
         floats, decoded_sample_rate = _decode_audio_to_floats(audio_bytes)
         if len(floats) == 0:
-            raise ValueError("STT: пустые аудио-данные")
+            raise ValueError("STT: empty audio data")
         sample_rate = _gigaam_wav_sample_rate(decoded_sample_rate)
         duration_seconds = len(floats) / float(sample_rate)
         if duration_seconds <= GIGAAM_SHORTFORM_MAX_SECONDS:
             return _transcribe_gigaam_wav(model_obj, floats, sample_rate)
         window_samples = int(GIGAAM_WINDOW_SECONDS * sample_rate)
         if window_samples <= 0:
-            raise ValueError("GigaAM: размер окна должен быть > 0")
+            raise ValueError("GigaAM: window size must be > 0")
         pieces: list[str] = []
         offset = 0
         while offset < len(floats):
             chunk = floats[offset : offset + window_samples]
             if len(chunk) == 0:
-                raise ValueError("GigaAM: пустое окно PCM")
+                raise ValueError("GigaAM: empty PCM window")
             piece = _transcribe_gigaam_wav(model_obj, chunk, sample_rate)
             if piece != "":
                 pieces.append(piece)
@@ -431,8 +436,10 @@ class _HuggingfaceCTCAdapter(_BaseSTTAdapter[CTCBundle]):
     def load(self, hf_model_id: str, revision: str | None) -> CTCBundle:
         _require_cuda_when_selected(self._device)
         logger.info(
-            "STT huggingface_ctc: загрузка hf=%s revision=%s device=%s",
-            hf_model_id, revision, self._device,
+            "provider_litserve.stt.huggingface_ctc.hf.revision.device",
+            hf=hf_model_id,
+            revision=revision,
+            device=self._device,
         )
         started = time.monotonic()
         load_processor = cast(CTCProcessorLoader, AutoProcessor.from_pretrained)
@@ -446,7 +453,7 @@ class _HuggingfaceCTCAdapter(_BaseSTTAdapter[CTCBundle]):
         )
         _ = model.to(self._device)
         _ = model.eval()
-        logger.info("STT huggingface_ctc: %s загружен за %.2fs", hf_model_id, time.monotonic() - started)
+        logger.info("provider_litserve.stt.huggingface_ctc.s", hf_model_id=hf_model_id, value_1=time.monotonic() - started)
         return CTCBundle(processor=processor, model=model)
 
     @override
@@ -475,7 +482,12 @@ class _WhisperAdapter(_BaseSTTAdapter[WhisperASRPipeline]):
     @override
     def load(self, hf_model_id: str, revision: str | None) -> WhisperASRPipeline:
         _require_cuda_when_selected(self._device)
-        logger.info("STT whisper: загрузка hf=%s revision=%s device=%s", hf_model_id, revision, self._device)
+        logger.info(
+            "provider_litserve.stt.whisper.hf.revision.device",
+            hf=hf_model_id,
+            revision=revision,
+            device=self._device,
+        )
         started = time.monotonic()
         load_processor = cast(WhisperProcessorLoader, AutoProcessor.from_pretrained)
         load_model = cast(WhisperModelLoader, AutoModelForSpeechSeq2Seq.from_pretrained)
@@ -495,7 +507,7 @@ class _WhisperAdapter(_BaseSTTAdapter[WhisperASRPipeline]):
             feature_extractor=processor.feature_extractor,
             device=self._device,
         )
-        logger.info("STT whisper: %s загружен за %.2fs", hf_model_id, time.monotonic() - started)
+        logger.info("provider_litserve.stt.whisper.s", hf_model_id=hf_model_id, value_1=time.monotonic() - started)
         return pipe
 
     @override
@@ -538,7 +550,7 @@ class LocalSTTEngine:
         if entry is None:
             raise HTTPException(
                 status_code=422,
-                detail=f"STT: для api_model_id={requested_api_model_id!r} нет entry в cfg.stt_models",
+                detail=f"STT: for api_model_id={requested_api_model_id!r} has no entry in cfg.stt_models",
             )
         return entry
 
@@ -585,10 +597,10 @@ class LocalSTTEngine:
             text = self._transcribe_entry(entry, audio_bytes, language)
             results.append(text)
             logger.info(
-                "STT транскрипция: model=%s backend=%s chars=%d duration=%.2fs",
-                requested_model,
-                entry.backend,
-                len(text),
-                time.monotonic() - started,
+                "provider_litserve.stt.model.backend.chars.duration",
+                model=requested_model,
+                backend=entry.backend,
+                chars=len(text),
+                duration=time.monotonic() - started,
             )
         return results

@@ -49,13 +49,10 @@ from core.mail.html_text import looks_like_html, mail_snippet, mail_visible_text
 from core.mail.imip import calendar_upsert_payload_from_imip, extract_imip_ics
 from core.mail.models import (
     CompanyMailConnection,
-    CompanyMailConnectionPublic,
     CompanyMailConnectionUpsertPayload,
     InboundMailMessage,
-    InboundMailMessagePublic,
     IspmanagerProvisionConfig,
     MailAttachment,
-    MailAttachmentPublic,
     MailboxBinding,
     MailboxBindingCreatePayload,
     MailboxBindingHealthcheckPayload,
@@ -64,7 +61,6 @@ from core.mail.models import (
     MailboxBindingMemberPayload,
     MailboxBindingMemberRole,
     MailboxBindingPatchPayload,
-    MailboxBindingPublic,
     MailboxEnsureSpec,
     MailboxSecret,
     MailboxSyncCursor,
@@ -102,14 +98,13 @@ from core.mail.models import (
     MailSyncNowPayload,
     MailSyncNowResult,
     MailSystemEnsureResult,
-    MailThreadMessagePublic,
+    MailThreadMessage,
     MailThreadPayload,
     MailThreadResult,
     MailUidSearchCriteria,
     OutboundMailMessage,
     PersonalMailboxConnectPayload,
     PersonalMailboxHealthcheckPayload,
-    StoredMailAttachmentRef,
     StoredMailboxFolder,
     StoredMailMessage,
 )
@@ -177,63 +172,6 @@ def _slug_local_part(user: User) -> str:
     return slug
 
 
-def to_public_connection(connection: CompanyMailConnection) -> CompanyMailConnectionPublic:
-    has_ispmanager_auth = (
-        connection.ispmanager is not None
-        and connection.ispmanager.authinfo_password_encrypted is not None
-        and bool(connection.ispmanager.authinfo_password_encrypted.strip())
-    )
-    return CompanyMailConnectionPublic(
-        company_mail_connection_id=connection.company_mail_connection_id,
-        company_id=connection.company_id,
-        scope=connection.scope,
-        owner_user_id=connection.owner_user_id,
-        mail_domain=connection.mail_domain,
-        provider=connection.provider,
-        imap_host=connection.imap_host,
-        imap_port=connection.imap_port,
-        smtp_host=connection.smtp_host,
-        smtp_port=connection.smtp_port,
-        use_ssl=connection.use_ssl,
-        supports_provision=connection.supports_provision,
-        status=connection.status,
-        has_ispmanager_auth=has_ispmanager_auth,
-        created_at=connection.created_at,
-        updated_at=connection.updated_at,
-    )
-
-
-def to_public_binding(
-    binding: MailboxBinding,
-    *,
-    connection: CompanyMailConnection | None = None,
-) -> MailboxBindingPublic:
-    scope = connection.scope if connection is not None else MailConnectionScope.COMPANY
-    return MailboxBindingPublic(
-        mailbox_binding_id=binding.mailbox_binding_id,
-        company_id=binding.company_id,
-        company_mail_connection_id=binding.company_mail_connection_id,
-        connection_scope=scope,
-        user_id=binding.user_id,
-        kind=binding.kind,
-        email_address=binding.email_address,
-        local_part=binding.local_part,
-        sync_enabled=binding.sync_enabled,
-        is_default=binding.is_default,
-        calendar_color=binding.calendar_color,
-        calendar_autolink_status=binding.calendar_autolink_status,
-        calendar_autolink_detail=binding.calendar_autolink_detail,
-        has_password=bool(binding.password_encrypted and binding.password_encrypted.strip()),
-        imap_host=connection.imap_host if connection is not None else None,
-        imap_port=connection.imap_port if connection is not None else None,
-        smtp_host=connection.smtp_host if connection is not None else None,
-        smtp_port=connection.smtp_port if connection is not None else None,
-        use_ssl=connection.use_ssl if connection is not None else None,
-        created_at=binding.created_at,
-        updated_at=binding.updated_at,
-    )
-
-
 def to_message_list_item(message: InboundMailMessage) -> MailMessageListItem:
     clipped = mail_snippet(body_text=message.body_text, body_html=message.body_html)
     snippet: str | None = clipped if clipped else None
@@ -290,28 +228,6 @@ def decode_mail_list_cursor(cursor: str) -> tuple[datetime | None, int]:
     if entity_id.startswith("null:"):
         return None, int(entity_id.removeprefix("null:"))
     return created_at, int(entity_id)
-
-
-def to_thread_message_public(
-    message: InboundMailMessagePublic,
-    *,
-    folder: str,
-) -> MailThreadMessagePublic:
-    return MailThreadMessagePublic(
-        folder=folder,
-        uid=message.uid,
-        message_id=message.message_id,
-        subject=message.subject,
-        from_address=message.from_address,
-        to_addresses=list(message.to_addresses),
-        body_text=message.body_text,
-        body_html=message.body_html,
-        unread=message.unread,
-        date=message.date,
-        in_reply_to=message.in_reply_to,
-        references=message.references,
-        attachments=list(message.attachments),
-    )
 
 
 def _parse_email_address(raw: str | None) -> str | None:
@@ -420,9 +336,20 @@ class MailService:
         """Connection for binding FK (company or personal). Not get_by_company."""
         return await self._require_connection_for_binding(binding)
 
-    async def public_binding(self, binding: MailboxBinding) -> MailboxBindingPublic:
+    async def public_binding(self, binding: MailboxBinding) -> MailboxBinding:
         connection = await self._connection_for_binding(binding)
-        return to_public_binding(binding, connection=connection)
+        if connection is None:
+            return binding
+        return binding.model_copy(
+            update={
+                "connection_scope": connection.scope,
+                "imap_host": connection.imap_host,
+                "imap_port": connection.imap_port,
+                "smtp_host": connection.smtp_host,
+                "smtp_port": connection.smtp_port,
+                "use_ssl": connection.use_ssl,
+            }
+        )
 
     async def get_connection(self, company_id: str | None = None) -> CompanyMailConnection | None:
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
@@ -1853,21 +1780,15 @@ class MailService:
         await self._persist_folder_cache(binding, folders_result)
         return folders_result.model_copy(update={"stale": False})
 
-    def _stored_to_public(self, stored: StoredMailMessage) -> InboundMailMessagePublic:
-        attachments: list[MailAttachmentPublic] = []
+    def _inbound_message(self, stored: StoredMailMessage) -> InboundMailMessage:
+        attachments: list[MailAttachment] = []
         for ref in stored.attachments:
             attachments.append(
-                MailAttachmentPublic(
-                    filename=ref.filename,
-                    content_type=ref.content_type,
-                    size=ref.size,
-                    available=ref.available and ref.file_id is not None,
-                    parse_error=ref.parse_error,
-                    file_id=ref.file_id,
-                    content_id=ref.content_id,
+                ref.model_copy(
+                    update={"available": ref.available and ref.file_id is not None}
                 )
             )
-        return InboundMailMessagePublic(
+        return InboundMailMessage(
             uid=str(stored.uid),
             message_id=stored.message_id,
             subject=stored.subject if stored.subject.strip() else None,
@@ -1876,6 +1797,9 @@ class MailService:
             body_text=stored.body_text,
             body_html=stored.body_html,
             unread=stored.unread,
+            flagged=stored.flagged,
+            answered=stored.answered,
+            draft=stored.draft,
             date=stored.date_at,
             in_reply_to=stored.in_reply_to,
             references=stored.references,
@@ -1889,7 +1813,7 @@ class MailService:
         uid: str,
         folder: str = "INBOX",
         company_id: str | None = None,
-    ) -> InboundMailMessagePublic:
+    ) -> InboundMailMessage:
         if not uid.strip():
             raise ValueError("uid is required")
         resolved_company_id = company_id if company_id is not None else self._active_company_id()
@@ -1918,7 +1842,7 @@ class MailService:
                 unread=False,
             )
             stored = stored.model_copy(update={"unread": False})
-        return self._stored_to_public(stored)
+        return self._inbound_message(stored)
 
     async def get_thread(
         self,
@@ -1959,7 +1883,7 @@ class MailService:
         # Открытие треда = прочитаны все непрочитанные письма текущей папки в этом треде
         # (не только якорь uid из UI).
         marked_seen_uids: list[str] = []
-        public_items: list[MailThreadMessagePublic] = []
+        public_items: list[MailThreadMessage] = []
         participants: set[str] = set()
         subject: str | None = anchor.subject if anchor.subject.strip() else None
         for row in thread_rows:
@@ -1972,8 +1896,12 @@ class MailService:
                 )
                 marked_seen_uids.append(str(row.uid))
                 row = row.model_copy(update={"unread": False})
-            public = self._stored_to_public(row)
-            public_items.append(to_thread_message_public(public, folder=row.folder))
+            message = self._inbound_message(row)
+            public_items.append(
+                MailThreadMessage.model_validate(
+                    {**message.model_dump(mode="json"), "folder": row.folder}
+                )
+            )
             from_email = _parse_email_address(row.from_address)
             if from_email is not None:
                 participants.add(from_email)
@@ -3448,14 +3376,14 @@ class MailService:
                 mailbox_binding_id=binding.mailbox_binding_id,
                 mailbox_email=binding.email_address,
             )
-            attachment_refs: list[StoredMailAttachmentRef] = []
+            attachment_refs: list[MailAttachment] = []
             attachment_names: list[str] = []
             for index, attachment in enumerate(message.attachments):
                 if attachment.filename.strip():
                     attachment_names.append(attachment.filename)
                 file_id = file_ids.get(index)
                 attachment_refs.append(
-                    StoredMailAttachmentRef(
+                    MailAttachment(
                         filename=attachment.filename,
                         content_type=attachment.content_type,
                         size=attachment.size if attachment.size > 0 else len(attachment.content),
@@ -3744,7 +3672,7 @@ class MailService:
     async def ensure_system_mail_connection(self) -> CompanyMailConnection | None:
         system_cfg = self._mail_config.system
         if not system_cfg.enabled:
-            logger.info("mail.system.ensure skipped: mail.system.enabled=false")
+            logger.info("mail.system.ensure")
             return None
         if system_cfg.imap_host is None or not system_cfg.imap_host.strip():
             raise MailConfigError("mail.system.imap_host is required when enabled")

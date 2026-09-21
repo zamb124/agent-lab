@@ -85,17 +85,17 @@ def _wrap_with_mark(text: str, mark: ProseMirrorMark) -> str:
     if mark.type == "link":
         href = mark.attrs.get("href")
         if not isinstance(href, str) or not href:
-            raise WikiSchemaError("link.href пуст при сериализации")
+            raise WikiSchemaError("link.href is empty during serialization")
         title = mark.attrs.get("title")
         if isinstance(title, str) and title:
             return f'[{text}]({href} "{title}")'
         return f"[{text}]({href})"
-    raise WikiSchemaError(f"Марка {mark.type} не поддержана сериализатором")
+    raise WikiSchemaError(f"Mark {mark.type} is not supported by the serializer")
 
 
 def _serialize_text_node(node: ProseMirrorNode) -> str:
     if node.text is None:
-        raise WikiSchemaError("Текстовый узел без text")
+        raise WikiSchemaError("Text node has no text")
     has_code = any(mark.type == "code" for mark in node.marks)
     text = node.text if has_code else _escape_text(node.text)
     # Внешняя марка применяется последней, поэтому идём от конца канонического порядка.
@@ -109,11 +109,11 @@ def _serialize_text_node(node: ProseMirrorNode) -> str:
 def _serialize_mention(node: ProseMirrorNode) -> str:
     raw_kind = node.attrs.get("mention_kind")
     if not isinstance(raw_kind, str):
-        raise WikiSchemaError("platform_mention.mention_kind отсутствует")
+        raise WikiSchemaError("platform_mention.mention_kind is missing")
     kind = WikiMentionKind(raw_kind)
     target_id = node.attrs.get("target_id")
     if not isinstance(target_id, str) or not target_id:
-        raise WikiSchemaError("platform_mention.target_id пуст")
+        raise WikiSchemaError("platform_mention.target_id is empty")
     label = node.attrs.get("label")
     label_text = label if isinstance(label, str) and label else target_id
     return f"@[{label_text}]({MENTION_LINK_SCHEME[kind]}:{target_id})"
@@ -122,7 +122,7 @@ def _serialize_mention(node: ProseMirrorNode) -> str:
 def _required_attr(node: ProseMirrorNode, name: str) -> str:
     value = node.attrs.get(name)
     if not isinstance(value, str) or not value:
-        raise WikiSchemaError(f"{node.type}.{name} пуст при сериализации")
+        raise WikiSchemaError(f"{node.type}.{name} is empty during serialization")
     return value
 
 
@@ -148,7 +148,7 @@ def _serialize_inline(nodes: list[ProseMirrorNode]) -> str:
         elif node.type == MATH_INLINE_NODE:
             parts.append(f"${_required_attr(node, 'formula')}$")
         else:
-            raise WikiSchemaError(f"Узел {node.type} не является inline")
+            raise WikiSchemaError(f"Node {node.type} is not inline")
         after_break = False
     return "".join(parts)
 
@@ -176,7 +176,7 @@ def _align_separator(align: str) -> str:
 
 def _serialize_table(node: ProseMirrorNode) -> str:
     if not node.content:
-        raise WikiSchemaError("Таблица без строк")
+        raise WikiSchemaError("Table has no rows")
     rows: list[list[str]] = []
     for row in node.content:
         cells: list[str] = []
@@ -243,10 +243,10 @@ def _serialize_callout(node: ProseMirrorNode) -> str:
 
 def _serialize_toggle(node: ProseMirrorNode) -> str:
     if not node.content:
-        raise WikiSchemaError("toggle без содержимого")
+        raise WikiSchemaError("toggle has no content")
     summary_node = node.content[0]
     if summary_node.type != "toggle_summary":
-        raise WikiSchemaError("Первый ребёнок toggle должен быть toggle_summary")
+        raise WikiSchemaError("First child of toggle must be toggle_summary")
     summary = _serialize_inline(summary_node.content)
     body = _serialize_blocks(node.content[1:])
     return _indent_block(f"[!TOGGLE] {summary}\n\n{body}", "> ")
@@ -258,7 +258,7 @@ def _serialize_block(node: ProseMirrorNode) -> str:
     if node.type == "heading":
         level = node.attrs.get("level")
         if not isinstance(level, int):
-            raise WikiSchemaError("heading.level отсутствует")
+            raise WikiSchemaError("heading.level is missing")
         return f"{'#' * level} {_serialize_inline(node.content)}"
     if node.type == "blockquote":
         return _indent_block(_serialize_blocks(node.content), "> ")
@@ -280,7 +280,7 @@ def _serialize_block(node: ProseMirrorNode) -> str:
     if node.type == "image":
         src = node.attrs.get("src")
         if not isinstance(src, str) or not src:
-            raise WikiSchemaError("image.src пуст")
+            raise WikiSchemaError("image.src is empty")
         alt = node.attrs.get("alt")
         alt_text = alt if isinstance(alt, str) else ""
         title = node.attrs.get("title")
@@ -290,7 +290,7 @@ def _serialize_block(node: ProseMirrorNode) -> str:
     if node.type == "platform_file":
         file_id = node.attrs.get("file_id")
         if not isinstance(file_id, str) or not file_id:
-            raise WikiSchemaError("platform_file.file_id пуст")
+            raise WikiSchemaError("platform_file.file_id is empty")
         original_name = node.attrs.get("original_name")
         label = original_name if isinstance(original_name, str) and original_name else file_id
         return f"[{label}]({PLATFORM_FILE_SCHEME}:{file_id})"
@@ -302,7 +302,7 @@ def _serialize_block(node: ProseMirrorNode) -> str:
         label = _required_attr(node, "label")
         body = _serialize_blocks(node.content)
         return _indent_block(body, "    ", f"[^{label}]: ")
-    raise WikiSchemaError(f"Узел {node.type} не поддержан сериализатором")
+    raise WikiSchemaError(f"Node {node.type} is not supported by the serializer")
 
 
 def _serialize_blocks(nodes: list[ProseMirrorNode]) -> str:
@@ -322,7 +322,7 @@ def document_to_markdown(document: ProseMirrorNode) -> str:
     """
     normalized = normalize_document(document)
     if normalized.type != "doc":
-        raise WikiSchemaError(f"Ожидался doc, получен {normalized.type}")
+        raise WikiSchemaError(f"Expected doc, got {normalized.type}")
     body = [
         node for node in normalized.content if node.type != FOOTNOTE_DEFINITION_NODE
     ]

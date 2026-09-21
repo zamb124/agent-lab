@@ -170,8 +170,10 @@ export class PlatformCompanyVariablesPanel extends PlatformElement {
             limit: 20,
             offset: 0,
         });
+        // Нормализованные версии лежат в slice (extraReducer), сырой result — только маркер успеха.
+        const page = response === null ? null : this._versionsLoad.lastResult;
         this._historyKey = variableKey;
-        this._historyItems = response && Array.isArray(response.items) ? response.items : [];
+        this._historyItems = page && Array.isArray(page.items) ? page.items : [];
     }
 
     _renderHelp() {

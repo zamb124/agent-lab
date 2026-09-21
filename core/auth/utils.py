@@ -50,13 +50,13 @@ def get_token_info(
             },
         )
     except JWTError as e:
-        logger.warning(f"Invalid JWT: {e}")
+        logger.warning("auth.jwt.invalid", error=str(e))
         return None
 
     try:
         payload = require_json_object(decoded_payload, "jwt.payload")
     except ValueError as e:
-        logger.warning(f"Invalid JWT payload: {e}")
+        logger.warning("auth.jwt.payload_invalid", error=str(e))
         return None
 
     user_id = payload.get("id")
@@ -70,7 +70,7 @@ def get_token_info(
         or not isinstance(email, str)
         or not isinstance(session_id, str)
     ):
-        logger.warning("Invalid JWT payload claims")
+        logger.warning("auth.invalid.jwt.payload.claims")
         return None
 
     # grps - claim из Blitz IDP (AddGroupsToToken flow)

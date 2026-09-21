@@ -79,7 +79,7 @@ class FcmPushService:
     ) -> None:
         if not project_id or not client_email or not private_key_pem or not token_uri:
             raise ValueError(
-                "FCM: project_id, client_email, private_key_pem и token_uri обязательны"
+                'FCM: project_id, client_email, private_key_pem and token_uri are required'
             )
         self._project_id: str = project_id
         self._client_email: str = client_email
@@ -132,7 +132,7 @@ class FcmPushService:
                 algorithm="RS256",
             )
         except PyJWTError as e:
-            raise ValueError(f"FCM: не удалось подписать JWT: {e}") from e
+            raise ValueError(f"FCM: failed to sign JWT: {e}") from e
 
         response = await self._get_http_client().post(
             self._token_uri,
@@ -144,7 +144,7 @@ class FcmPushService:
         )
         if response.status_code != 200:
             raise ValueError(
-                f"FCM: получение access_token провалилось status={response.status_code} body={response.text[:300]}"
+                f"FCM: failed to obtain access_token status={response.status_code} body={response.text[:300]}"
             )
         token_data = FcmAccessTokenResponse.model_validate_json(response.text)
         self._access_token = token_data.access_token
@@ -216,18 +216,10 @@ class FcmPushService:
                 "INVALID_ARGUMENT",
                 "NOT_FOUND",
             }:
-                logger.info(
-                    "FCM: токен невалиден (%s, status=%s), подписка будет удалена",
-                    error_status,
-                    response.status_code,
-                )
+                logger.info("push.fcm.status", error_status=error_status, status=response.status_code)
                 return False, True
 
-        logger.error(
-            "FCM: ошибка отправки status=%s body=%s",
-            response.status_code,
-            response.text[:500],
-        )
+        logger.error("push.fcm.status.body", status=response.status_code, body=response.text[:500])
         return False, False
 
 

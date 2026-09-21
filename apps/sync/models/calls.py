@@ -91,20 +91,20 @@ class CallLinkCreate(BaseModel):
     def _calendar_or_channel(self) -> "CallLinkCreate":
         if self.calendar_event_id:
             if self.channel_id is not None:
-                raise ValueError("При calendar_event_id не передавайте channel_id.")
+                raise ValueError("Do not pass channel_id when calendar_event_id is set.")
             if self.scheduled_title is None or self.scheduled_title.strip() == "":
-                raise ValueError("Для календарной ссылки нужен scheduled_title.")
+                raise ValueError("Calendar link requires scheduled_title.")
             if self.scheduled_start_at is None or self.scheduled_end_at is None:
-                raise ValueError("Нужны scheduled_start_at и scheduled_end_at.")
+                raise ValueError("scheduled_start_at and scheduled_end_at are required.")
             if self.scheduled_start_at >= self.scheduled_end_at:
-                raise ValueError("scheduled_start_at должен быть раньше scheduled_end_at.")
+                raise ValueError("scheduled_start_at must be earlier than scheduled_end_at.")
             if self.calendar_member_user_ids is None:
-                raise ValueError("Передайте calendar_member_user_ids (список, может быть пустым).")
+                raise ValueError("Pass calendar_member_user_ids (list, may be empty).")
             if self.call_id is not None:
-                raise ValueError("call_id несовместим с календарной ссылкой.")
+                raise ValueError("call_id is incompatible with a calendar link.")
         else:
             if self.channel_id is None or self.channel_id == "":
-                raise ValueError("Укажите channel_id или блок календаря с calendar_event_id.")
+                raise ValueError("Provide channel_id or a calendar block with calendar_event_id.")
         return self
 
 
@@ -138,13 +138,13 @@ class CallLinkPatch(BaseModel):
         )
         has_members = self.calendar_member_user_ids is not None
         if not has_schedule and not has_members:
-            raise ValueError("Укажите хотя бы одно поле для обновления.")
+            raise ValueError("Provide at least one field to update.")
         if (
             self.scheduled_start_at is not None
             and self.scheduled_end_at is not None
             and self.scheduled_start_at >= self.scheduled_end_at
         ):
-            raise ValueError("scheduled_start_at должен быть раньше scheduled_end_at.")
+            raise ValueError("scheduled_start_at must be earlier than scheduled_end_at.")
         return self
 
 

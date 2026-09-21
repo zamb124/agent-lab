@@ -21,8 +21,6 @@ from core.models import (
     CalendarEventUpsertPayload,
     CalendarIntegration,
     CalendarIntegrationConnectPayload,
-    CalendarIntegrationSettings,
-    CalendarProvider,
 )
 from core.pagination import ListResponse
 from core.utils.domain import get_host_with_port, is_local
@@ -51,33 +49,9 @@ class CalendarSyncRequest(BaseModel):
     end_at: datetime
 
 
-class CalendarIntegrationPublic(BaseModel):
-    integration_id: str
-    company_id: str
-    user_id: str
-    provider: CalendarProvider
-    mailbox_binding_id: str | None = None
-    settings: CalendarIntegrationSettings
-    created_at: datetime
-    updated_at: datetime
-
-
 class CalendarListResponse(BaseModel):
     events: list[CalendarEvent]
-    integrations: list[CalendarIntegrationPublic]
-
-
-def _to_public_integration(integration: CalendarIntegration) -> CalendarIntegrationPublic:
-    return CalendarIntegrationPublic(
-        integration_id=integration.integration_id,
-        company_id=integration.company_id,
-        user_id=integration.user_id,
-        provider=integration.provider,
-        mailbox_binding_id=integration.mailbox_binding_id,
-        settings=integration.settings,
-        created_at=integration.created_at,
-        updated_at=integration.updated_at,
-    )
+    integrations: list[CalendarIntegration]
 
 
 def _get_calendar_service(request: Request) -> CalendarService:
@@ -125,8 +99,7 @@ async def list_calendar_events(payload: CalendarListRequest, service: CalendarSe
         )
     except Exception as exc:
         _raise_http_for_calendar_service_error(exc)
-    public_integrations = [_to_public_integration(item) for item in integrations]
-    return CalendarListResponse(events=events, integrations=public_integrations)
+    return CalendarListResponse(events=events, integrations=integrations)
 
 
 @router.post("/events", response_model=CalendarEvent)
@@ -176,8 +149,8 @@ async def delete_calendar_event(event_id: str, service: CalendarServiceDep) -> d
     return {"success": True}
 
 
-@router.get("/integrations", response_model=ListResponse[CalendarIntegrationPublic])
-async def list_calendar_integrations(service: CalendarServiceDep) -> ListResponse[CalendarIntegrationPublic]:
+@router.get("/integrations", response_model=ListResponse[CalendarIntegration])
+async def list_calendar_integrations(service: CalendarServiceDep) -> ListResponse[CalendarIntegration]:
     ctx = get_context()
     if not ctx or not ctx.user or not ctx.active_company:
         raise HTTPException(status_code=401, detail="Authentication required")
@@ -186,16 +159,16 @@ async def list_calendar_integrations(service: CalendarServiceDep) -> ListRespons
             user_id=ctx.user.user_id,
             company_id=ctx.active_company.company_id,
         )
-        return ListResponse[CalendarIntegrationPublic](items=[_to_public_integration(item) for item in integrations])
+        return ListResponse[CalendarIntegration](items=integrations)
     except Exception as exc:
         _raise_http_for_calendar_service_error(exc)
 
 
-@router.post("/integrations/connect", response_model=CalendarIntegrationPublic)
+@router.post("/integrations/connect", response_model=CalendarIntegration)
 async def connect_calendar_integration(
     payload: CalendarConnectIntegrationRequest,
     service: CalendarServiceDep,
-) -> CalendarIntegrationPublic:
+) -> CalendarIntegration:
     ctx = get_context()
     if not ctx or not ctx.user or not ctx.active_company:
         raise HTTPException(status_code=401, detail="Authentication required")
@@ -205,7 +178,7 @@ async def connect_calendar_integration(
             company_id=ctx.active_company.company_id,
             payload=payload,
         )
-        return _to_public_integration(integration)
+        return integration
     except Exception as exc:
         _raise_http_for_calendar_service_error(exc)
 

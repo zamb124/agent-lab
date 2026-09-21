@@ -69,7 +69,7 @@ class LLMModelsService:
         normalized_provider = provider.strip()
         registry = self._registry()
         if not registry.has(normalized_provider):
-            raise ValueError(f"Неизвестный провайдер: {provider}")
+            raise ValueError(f"Unknown provider: {provider}")
         return registry.get(normalized_provider)
 
     async def fetch_models_by_provider(self, provider: str) -> list[str]:
@@ -108,7 +108,7 @@ class LLMModelsService:
         """Sync model records from one provider into the single catalog storage."""
         records = await self.fetch_model_records_by_provider(provider)
         if not records:
-            raise RuntimeError(f"провайдер {provider} не вернул моделей")
+            raise RuntimeError(f"provider {provider} did not return models")
 
         for model in records:
             existing = await self._repository.get_provider_model(model.provider, model.model_id)
@@ -122,7 +122,7 @@ class LLMModelsService:
                 )
             _ = await self._repository.set(model)
 
-        logger.info("Синхронизировано %d моделей от %s", len(records), provider)
+        logger.info("ai.event", records_count=len(records), provider=provider)
         return len(records)
 
     async def sync_models(self) -> int:
@@ -143,7 +143,7 @@ class LLMModelsService:
         results = dict(zip(providers, counts, strict=True))
 
         total = sum(results.values())
-        logger.info("Синхронизировано %d моделей от всех провайдеров: %s", total, results)
+        logger.info("ai.event", total=total, results=results)
         return results
 
     async def get_default_model_ids_by_capability(
@@ -311,19 +311,13 @@ class LLMModelsService:
         pending = self._pick_single_or_raise(schedules, ScheduledTaskStatus.PENDING)
         if pending is not None:
             self._sync_schedule_task_id = pending.schedule_task_id
-            logger.info(
-                "Фоновая синхронизация уже запланирована (schedule_task_id=%s)",
-                pending.schedule_task_id,
-            )
+            logger.info("ai.schedule_task_id", schedule_task_id=pending.schedule_task_id)
             return
         paused = self._pick_single_or_raise(schedules, ScheduledTaskStatus.PAUSED)
         if paused is not None:
             resumed = await self._scheduler_client.resume_schedule(paused.schedule_task_id)
             self._sync_schedule_task_id = resumed.schedule_task_id
-            logger.info(
-                "Фоновая синхронизация возобновлена (schedule_task_id=%s)",
-                resumed.schedule_task_id,
-            )
+            logger.info("ai.schedule_task_id", schedule_task_id=resumed.schedule_task_id)
             return
         request = PlatformScheduleCreateRequest(
             target_service=_LLM_SYNC_TARGET_SERVICE,
@@ -337,10 +331,7 @@ class LLMModelsService:
         )
         schedule = await self._scheduler_client.create_schedule(request)
         self._sync_schedule_task_id = schedule.schedule_task_id
-        logger.info(
-            "Фоновая синхронизация моделей запланирована в scheduler (schedule_task_id=%s)",
-            schedule.schedule_task_id,
-        )
+        logger.info("ai.scheduler.schedule_task_id", schedule_task_id=schedule.schedule_task_id)
 
     async def start_platform_free_models_sync(self, interval: int) -> None:
         """Create recurring scheduler task for Redis platform free-pool refresh."""
@@ -350,19 +341,13 @@ class LLMModelsService:
         pending = self._pick_single_or_raise(schedules, ScheduledTaskStatus.PENDING)
         if pending is not None:
             self._platform_free_schedule_task_id = pending.schedule_task_id
-            logger.info(
-                "Platform free-pool sync уже запланирован (schedule_task_id=%s)",
-                pending.schedule_task_id,
-            )
+            logger.info("ai.platform.free.pool.sync.schedule_task_id", schedule_task_id=pending.schedule_task_id)
             return
         paused = self._pick_single_or_raise(schedules, ScheduledTaskStatus.PAUSED)
         if paused is not None:
             resumed = await self._scheduler_client.resume_schedule(paused.schedule_task_id)
             self._platform_free_schedule_task_id = resumed.schedule_task_id
-            logger.info(
-                "Platform free-pool sync возобновлен (schedule_task_id=%s)",
-                resumed.schedule_task_id,
-            )
+            logger.info("ai.platform.free.pool.sync.schedule_task_id", schedule_task_id=resumed.schedule_task_id)
             return
         request = PlatformScheduleCreateRequest(
             target_service=_LLM_SYNC_TARGET_SERVICE,
@@ -376,20 +361,14 @@ class LLMModelsService:
         )
         schedule = await self._scheduler_client.create_schedule(request)
         self._platform_free_schedule_task_id = schedule.schedule_task_id
-        logger.info(
-            "Platform free-pool sync запланирован (schedule_task_id=%s)",
-            schedule.schedule_task_id,
-        )
+        logger.info("ai.platform.free.pool.sync.schedule_task_id", schedule_task_id=schedule.schedule_task_id)
 
     async def stop_background_sync(self) -> None:
         """Cancel recurring provider model catalog sync."""
         if not self._sync_schedule_task_id:
             return
         _ = await self._scheduler_client.cancel_schedule(self._sync_schedule_task_id)
-        logger.info(
-            "Фоновая синхронизация моделей остановлена (schedule_task_id=%s)",
-            self._sync_schedule_task_id,
-        )
+        logger.info("ai.schedule_task_id", schedule_task_id=self._sync_schedule_task_id)
         self._sync_schedule_task_id = None
 
     async def stop_platform_free_models_sync(self) -> None:
@@ -397,8 +376,5 @@ class LLMModelsService:
         if not self._platform_free_schedule_task_id:
             return
         _ = await self._scheduler_client.cancel_schedule(self._platform_free_schedule_task_id)
-        logger.info(
-            "Platform free-pool sync остановлен (schedule_task_id=%s)",
-            self._platform_free_schedule_task_id,
-        )
+        logger.info("ai.platform.free.pool.sync.schedule_task_id", schedule_task_id=self._platform_free_schedule_task_id)
         self._platform_free_schedule_task_id = None

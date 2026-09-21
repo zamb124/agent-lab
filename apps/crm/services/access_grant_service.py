@@ -168,7 +168,7 @@ class AccessGrantService:
             target_company_id=None,
         )
         await self._authz.write([tuple_item])
-        logger.info("Entity %s made public by %s", entity_id, created_by)
+        logger.info("crm.entity.made.public", entity_id=entity_id, created_by=created_by)
         return _response_from_tuple(
             obj=tuple_item.obj,
             relation=tuple_item.relation,
@@ -198,7 +198,10 @@ class AccessGrantService:
         )
         await self._authz.write([tuple_item])
         logger.info(
-            "Entity %s shared with user %s (role=%s)", entity_id, target_user_id, role
+            "crm.entity.shared.user.role",
+            entity_id=entity_id,
+            target_user_id=target_user_id,
+            role=role,
         )
         return _response_from_tuple(
             obj=tuple_item.obj,
@@ -229,10 +232,10 @@ class AccessGrantService:
         )
         await self._authz.write([tuple_item])
         logger.info(
-            "Entity %s shared with company %s (role=%s)",
-            entity_id,
-            target_company_id,
-            role,
+            "crm.entity.shared.company.role",
+            entity_id=entity_id,
+            target_company_id=target_company_id,
+            role=role,
         )
         return _response_from_tuple(
             obj=tuple_item.obj,
@@ -272,10 +275,10 @@ class AccessGrantService:
         )
         await self._authz.write([tuple_item])
         logger.info(
-            "Namespace %s shared with user %s (role=%s)",
-            namespace,
-            target_user_id,
-            role,
+            "crm.namespace.shared.user.role",
+            namespace=namespace,
+            target_user_id=target_user_id,
+            role=role,
         )
         return _response_from_tuple(
             obj=tuple_item.obj,
@@ -304,10 +307,10 @@ class AccessGrantService:
         )
         await self._authz.write([tuple_item])
         logger.info(
-            "Namespace %s shared with company %s (role=%s)",
-            namespace,
-            target_company_id,
-            role,
+            "crm.namespace.shared.company.role",
+            namespace=namespace,
+            target_company_id=target_company_id,
+            role=role,
         )
         return _response_from_tuple(
             obj=tuple_item.obj,
@@ -328,7 +331,7 @@ class AccessGrantService:
         await self._authz.delete(
             [AuthzTuple(subject=subject, relation=relation, obj=obj)]
         )
-        logger.info("Grant %s revoked by %s", grant_id, user_id)
+        logger.info("crm.grant.revoked", grant_id=grant_id, user_id=user_id)
 
     async def list_grants(
         self,

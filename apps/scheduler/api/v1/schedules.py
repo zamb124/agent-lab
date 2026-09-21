@@ -1,15 +1,24 @@
-"""API управления платформенными расписаниями."""
+"""REST-зеркало команд `scheduler/schedule_tasks/*`."""
 
 from __future__ import annotations
 
-import asyncio
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 
 from apps.scheduler.dependencies import ContainerDep
-from core.authz.models import AuthzObject
-from core.context import require_active_company, require_context
+from apps.scheduler.realtime.operations import (
+    SchedulerTaskIdPayload,
+    op_schedule_tasks_cancel,
+    op_schedule_tasks_create,
+    op_schedule_tasks_item,
+    op_schedule_tasks_list,
+    op_schedule_tasks_pause,
+    op_schedule_tasks_redis_snapshot,
+    op_schedule_tasks_resume,
+    op_schedule_tasks_run_now,
+)
+from core.context import require_context
 from core.pagination import OffsetPage
 from core.scheduler.models import (
     PlatformRedisScheduleSnapshot,
@@ -22,34 +31,13 @@ from core.scheduler.models import (
 router = APIRouter(tags=["scheduler"])
 
 
-def _company_id_from_context() -> str:
-    return require_active_company().company_id
-
-
-def _user_id_from_context() -> str:
-    return require_context().user.user_id
-
-
-async def _require_company_view(container: ContainerDep) -> str:
-    company_id = _company_id_from_context()
-    await container.authz_service.require_can_view(AuthzObject.company(company_id))
-    return company_id
-
-
-async def _require_company_admin(container: ContainerDep) -> str:
-    company_id = _company_id_from_context()
-    await container.authz_service.require_company_admin(company_id=company_id)
-    return company_id
-
-
 @router.post("/schedules", response_model=PlatformScheduledTask)
-async def create_schedule(request: PlatformScheduleCreateRequest, container: ContainerDep) -> PlatformScheduledTask:
-    company_id = await _require_company_admin(container)
-    user_id = _user_id_from_context()
-    try:
-        return await container.scheduler_service.create(company_id=company_id, user_id=user_id, request=request)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+async def create_schedule(
+    request_body: PlatformScheduleCreateRequest, container: ContainerDep
+) -> PlatformScheduledTask:
+    return await op_schedule_tasks_create(
+        request_body, user=require_context().user, container=container
+    )
 
 
 @router.get("/schedules", response_model=OffsetPage[PlatformScheduledTask])
@@ -61,73 +49,70 @@ async def list_schedules(
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[PlatformScheduledTask]:
-    company_id = await _require_company_view(container)
-    filters = PlatformScheduleFilter(
-        status=status,
-        target_service=target_service,
-        task_name=task_name,
-        limit=limit,
-        offset=offset,
+    return await op_schedule_tasks_list(
+        PlatformScheduleFilter(
+            status=status,
+            target_service=target_service,
+            task_name=task_name,
+            limit=limit,
+            offset=offset,
+        ),
+        user=require_context().user,
+        container=container,
     )
-    items, total = await asyncio.gather(
-        container.scheduler_service.list(company_id=company_id, filters=filters),
-        container.scheduler_service.count(company_id=company_id, filters=filters),
-    )
-    return OffsetPage[PlatformScheduledTask](items=items, total=total, limit=limit, offset=offset)
 
 
 @router.get("/schedules/{schedule_task_id}", response_model=PlatformScheduledTask)
 async def get_schedule(schedule_task_id: str, container: ContainerDep) -> PlatformScheduledTask:
-    company_id = await _require_company_view(container)
-    try:
-        return await container.scheduler_service.get(company_id=company_id, schedule_task_id=schedule_task_id)
-    except ValueError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
+    return await op_schedule_tasks_item(
+        SchedulerTaskIdPayload(schedule_task_id=schedule_task_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post("/schedules/{schedule_task_id}/pause", response_model=PlatformScheduledTask)
 async def pause_schedule(schedule_task_id: str, container: ContainerDep) -> PlatformScheduledTask:
-    company_id = await _require_company_admin(container)
-    try:
-        return await container.scheduler_service.pause(company_id=company_id, schedule_task_id=schedule_task_id)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+    return await op_schedule_tasks_pause(
+        SchedulerTaskIdPayload(schedule_task_id=schedule_task_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post("/schedules/{schedule_task_id}/resume", response_model=PlatformScheduledTask)
 async def resume_schedule(schedule_task_id: str, container: ContainerDep) -> PlatformScheduledTask:
-    company_id = await _require_company_admin(container)
-    try:
-        return await container.scheduler_service.resume(company_id=company_id, schedule_task_id=schedule_task_id)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+    return await op_schedule_tasks_resume(
+        SchedulerTaskIdPayload(schedule_task_id=schedule_task_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post("/schedules/{schedule_task_id}/cancel", response_model=PlatformScheduledTask)
 async def cancel_schedule(schedule_task_id: str, container: ContainerDep) -> PlatformScheduledTask:
-    company_id = await _require_company_admin(container)
-    try:
-        return await container.scheduler_service.cancel(company_id=company_id, schedule_task_id=schedule_task_id)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+    return await op_schedule_tasks_cancel(
+        SchedulerTaskIdPayload(schedule_task_id=schedule_task_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post("/schedules/{schedule_task_id}/run-now", response_model=PlatformScheduledTask)
 async def run_schedule_now(schedule_task_id: str, container: ContainerDep) -> PlatformScheduledTask:
-    company_id = await _require_company_admin(container)
-    try:
-        return await container.scheduler_service.run_now(company_id=company_id, schedule_task_id=schedule_task_id)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+    return await op_schedule_tasks_run_now(
+        SchedulerTaskIdPayload(schedule_task_id=schedule_task_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.get("/schedules/{schedule_task_id}/redis", response_model=PlatformRedisScheduleSnapshot)
-async def get_schedule_redis_snapshot(schedule_task_id: str, container: ContainerDep) -> PlatformRedisScheduleSnapshot:
-    company_id = await _require_company_view(container)
-    try:
-        return await container.scheduler_service.get_redis_snapshot(
-            company_id=company_id,
-            schedule_task_id=schedule_task_id,
-        )
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+async def get_schedule_redis_snapshot(
+    schedule_task_id: str, container: ContainerDep
+) -> PlatformRedisScheduleSnapshot:
+    return await op_schedule_tasks_redis_snapshot(
+        SchedulerTaskIdPayload(schedule_task_id=schedule_task_id),
+        user=require_context().user,
+        container=container,
+    )

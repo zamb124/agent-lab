@@ -28,7 +28,7 @@ def read_livekit_egress_id(egress_info: object) -> str:
         raise RuntimeError("LiveKit egress_info missing egress_id")
     egress_id = cast(LiveKitEgressInfo, egress_info).egress_id
     if egress_id == "":
-        raise RuntimeError("LiveKit не вернул egress_id после старта записи.")
+        raise RuntimeError("LiveKit did not return egress_id after recording start.")
     return egress_id
 
 

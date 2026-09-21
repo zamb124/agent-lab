@@ -134,10 +134,10 @@ class EmailTriggerHandler(BaseTriggerHandler):
         trigger.status = TriggerStatus.ACTIVE
         trigger.last_error = None
         logger.info(
-            "Email trigger registered: flow_id=%s trigger=%s mailbox_binding_id=%s",
-            flow_id,
-            trigger.trigger_id,
-            binding.mailbox_binding_id,
+            "flows.email.trigger.registered.flow_id.trigger",
+            flow_id=flow_id,
+            trigger=trigger.trigger_id,
+            mailbox_binding_id=binding.mailbox_binding_id,
         )
         return trigger
 
@@ -150,11 +150,7 @@ class EmailTriggerHandler(BaseTriggerHandler):
         self._log_unregister(flow_id, trigger.trigger_id)
         raw_binding_id = trigger.config.get("mailbox_binding_id")
         if not isinstance(raw_binding_id, str) or not raw_binding_id.strip():
-            logger.warning(
-                "Email trigger unregister skipped (no mailbox_binding_id): flow_id=%s trigger=%s",
-                flow_id,
-                trigger.trigger_id,
-            )
+            logger.warning("flows.email.trigger.unregister.skipped.mailbox_binding_id", flow_id=flow_id, trigger=trigger.trigger_id)
             return
 
         ctx = get_context()
@@ -164,11 +160,7 @@ class EmailTriggerHandler(BaseTriggerHandler):
             else None
         )
         if company_id is None:
-            logger.warning(
-                "Email trigger unregister without company context: flow_id=%s trigger=%s",
-                flow_id,
-                trigger.trigger_id,
-            )
+            logger.warning("flows.email.trigger.unregister.without.company", flow_id=flow_id, trigger=trigger.trigger_id)
             return
 
         member = email_trigger_index_member(
@@ -260,10 +252,7 @@ async def dispatch_email_triggers_for_messages(
 
     company = await container.company_repository.get(binding.company_id)
     if company is None:
-        logger.error(
-            "email trigger dispatch: company not found company_id=%s",
-            binding.company_id,
-        )
+        logger.error("flows.email.trigger.dispatch.company.found", company_id=binding.company_id)
         return 0
 
     user = await container.user_repository.get(binding.user_id)
@@ -287,7 +276,7 @@ async def dispatch_email_triggers_for_messages(
         for member in members:
             parsed = parse_email_trigger_index_member(member)
             if parsed is None:
-                logger.warning("email trigger index: invalid member %r", member)
+                logger.warning("flows.email.trigger.index.invalid.member", member=member)
                 continue
             company_id, flow_id, trigger_id = parsed
             if company_id != binding.company_id:
@@ -295,10 +284,7 @@ async def dispatch_email_triggers_for_messages(
 
             flow_config = await container.flow_repository.get(flow_id)
             if flow_config is None:
-                logger.warning(
-                    "email trigger dispatch: flow not found flow_id=%s",
-                    flow_id,
-                )
+                logger.warning("flows.email.trigger.dispatch.flow.found", flow_id=flow_id)
                 continue
             trigger = flow_config.triggers.get(trigger_id)
             if trigger is None or trigger.type != TriggerType.EMAIL or not trigger.enabled:
@@ -308,10 +294,10 @@ async def dispatch_email_triggers_for_messages(
                 email_config = EmailTriggerConfig.model_validate(trigger.config)
             except Exception as exc:
                 logger.warning(
-                    "email trigger dispatch: invalid config flow_id=%s trigger=%s error=%s",
-                    flow_id,
-                    trigger_id,
-                    exc,
+                    "flows.email.trigger.dispatch.invalid.config",
+                    flow_id=flow_id,
+                    trigger=trigger_id,
+                    error=exc,
                 )
                 continue
 

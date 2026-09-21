@@ -73,7 +73,7 @@ class SandboxCodegenArgs(BaseModel):
         if value is None:
             return ""
         if not isinstance(value, str):
-            raise ValueError("model должен быть строкой")
+            raise ValueError("model must be a string")
         return value
 
     @field_validator("run_args", "run_variables", mode="before")
@@ -155,22 +155,22 @@ def _resolve_codegen_llm_selection(model: str) -> ResolvedAIModel:
     selected_model = model.strip() if model and model.strip() else ""
     if not selected_model:
         raise ValueError(
-            "sandbox_codegen: platform default для capability=llm_codegen не настроен."
+            "sandbox_codegen: platform default for capability=llm_codegen is not configured."
         )
     explicit_provider, explicit_model = split_provider_prefixed_model(None, selected_model)
     resolved_model = str(explicit_model or selected_model).strip()
     if not resolved_model:
-        raise ValueError("sandbox_codegen: model не удалось разобрать в непустую модель")
+        raise ValueError("sandbox_codegen: model could not be parsed into a non-empty model")
     provider = explicit_provider or str(get_settings().llm.provider).strip()
     if not provider:
-        raise ValueError("sandbox_codegen: settings.llm.provider обязателен для явной model")
+        raise ValueError("sandbox_codegen: settings.llm.provider is required for an explicit model")
     resolved = resolve_ai_model(
         AICapability.LLM_CODEGEN,
         selection=AISelection(provider=provider, model=resolved_model),
         include_platform_default=False,
     )
     if resolved is None:
-        raise ValueError("sandbox_codegen: explicit provider/model не удалось разрешить")
+        raise ValueError("sandbox_codegen: explicit provider/model could not be resolved")
     return resolved
 
 

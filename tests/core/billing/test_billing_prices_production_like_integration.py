@@ -189,7 +189,7 @@ async def test_search_provider_company_origin_records_zero_cost_usage(
     )
 
     assert n == 1
-    recs = await frontend_container.usage_repository.admin_search_usage_records(company_id=cid, limit=20)
+    recs = (await frontend_container.usage_repository.admin_search_usage_records(company_id=cid, limit=20)).items
     row = next(r for r in recs if r.metadata.get("span_id") == span.span_id)
     assert row.resource_name == "search:serper"
     assert row.cost == 0.0
@@ -473,7 +473,7 @@ async def test_settle_span_rule_charge_cost_matches_unit_times_quantity_livekit(
         rule=rule,
         settlement=settlement,
     )
-    recs = await frontend_container.usage_repository.admin_search_usage_records(company_id=cid, limit=30)
+    recs = (await frontend_container.usage_repository.admin_search_usage_records(company_id=cid, limit=30)).items
     row = next(r for r in recs if r.usage_id == usage_id)
     assert row.quantity == qty
     assert row.cost == pytest.approx(expected)
@@ -528,7 +528,7 @@ async def test_settle_span_rule_charge_llm_tokens_attr_production_base(
         rule=rule,
         settlement=settlement,
     )
-    recs = await frontend_container.usage_repository.admin_search_usage_records(company_id=cid, limit=30)
+    recs = (await frontend_container.usage_repository.admin_search_usage_records(company_id=cid, limit=30)).items
     row = next(r for r in recs if r.usage_id == usage_id)
     assert row.quantity == tokens
     assert row.cost == pytest.approx(expected)
@@ -597,7 +597,7 @@ async def test_settle_pending_first_win_single_usage_high_priority_rule(
     unit_star = await billing.get_resource_cost_for_company(fresh, "livekit:custom")
     assert unit_room != unit_star
 
-    recs = await frontend_container.usage_repository.admin_search_usage_records(company_id=cid, limit=20)
+    recs = (await frontend_container.usage_repository.admin_search_usage_records(company_id=cid, limit=20)).items
     span_recs = [r for r in recs if r.metadata.get("span_id") == span.span_id]
     assert len(span_recs) == 1
     assert span_recs[0].metadata.get("rule_id") == f"r_hi_{unique_id}"

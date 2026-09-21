@@ -52,7 +52,7 @@ def _public_page_response(page: WikiPage, link_token: str) -> WikiPublicPageResp
 async def get_public_page(container: ContainerDep, link_token: str) -> WikiPublicPageResponse:
     page = await container.wiki_service.get_public_page(link_token)
     if page is None:
-        raise HTTPException(status_code=404, detail="Страница не найдена")
+        raise HTTPException(status_code=404, detail="Page not found")
     return _public_page_response(page, link_token)
 
 
@@ -62,7 +62,7 @@ async def get_public_page_markdown(
 ) -> WikiMarkdownResponse:
     page = await container.wiki_service.get_public_page(link_token)
     if page is None:
-        raise HTTPException(status_code=404, detail="Страница не найдена")
+        raise HTTPException(status_code=404, detail="Page not found")
     return WikiMarkdownResponse(
         wiki_page_id=page.wiki_page_id,
         title=page.title,
@@ -74,7 +74,7 @@ async def get_public_page_markdown(
 async def get_public_site_tree(container: ContainerDep, link_token: str) -> WikiPublicTreeResponse:
     items = await container.wiki_service.get_public_site_tree(link_token)
     if not items:
-        raise HTTPException(status_code=404, detail="Страница не найдена")
+        raise HTTPException(status_code=404, detail="Page not found")
     return WikiPublicTreeResponse(
         root_page_id=items[0].wiki_page_id,
         items=[
@@ -96,7 +96,7 @@ async def get_public_site_page(
 ) -> WikiPublicPageResponse:
     page = await container.wiki_service.get_public_site_page(link_token, wiki_page_id)
     if page is None:
-        raise HTTPException(status_code=404, detail="Страница не найдена")
+        raise HTTPException(status_code=404, detail="Page not found")
     return _public_page_response(page, link_token)
 
 
@@ -108,7 +108,7 @@ async def get_public_site_page_markdown(
 ) -> WikiMarkdownResponse:
     page = await container.wiki_service.get_public_site_page(link_token, wiki_page_id)
     if page is None:
-        raise HTTPException(status_code=404, detail="Страница не найдена")
+        raise HTTPException(status_code=404, detail="Page not found")
     return WikiMarkdownResponse(
         wiki_page_id=page.wiki_page_id,
         title=page.title,
@@ -127,17 +127,17 @@ async def get_public_site_file(
     внешние хранилища через публичную ссылку не проксируем.
     """
     if not await container.wiki_service.public_site_has_file(link_token, file_id):
-        raise HTTPException(status_code=404, detail="Файл не найден")
+        raise HTTPException(status_code=404, detail="File not found")
 
     try:
         file_record = await container.files_service.get(file_id)
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail="Файл не найден") from exc
+        raise HTTPException(status_code=404, detail="File not found") from exc
 
     if file_record.s3_bucket == "" or file_record.s3_key == "":
-        raise HTTPException(status_code=404, detail="Файл не найден")
+        raise HTTPException(status_code=404, detail="File not found")
     if file_record.content_type == "":
-        raise HTTPException(status_code=500, detail="У файла не задан content_type")
+        raise HTTPException(status_code=500, detail="File has no content_type")
 
     s3_client = S3ClientFactory.create_client_for_bucket(file_record.s3_bucket)
     range_raw = request.headers.get("range")
@@ -155,6 +155,6 @@ async def get_public_site_file(
         code = exc.response["Error"]["Code"]
         status = exc.response["ResponseMetadata"]["HTTPStatusCode"]
         if code in ("404", "NoSuchKey", "NotFound") or status == 404:
-            raise HTTPException(status_code=404, detail="Файл не найден") from exc
+            raise HTTPException(status_code=404, detail="File not found") from exc
         logger.exception("wiki.public_file_download_failed", file_id=file_id)
-        raise HTTPException(status_code=502, detail="Не удалось прочитать файл") from exc
+        raise HTTPException(status_code=502, detail="Failed to read file") from exc

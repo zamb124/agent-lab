@@ -70,7 +70,7 @@ class TriggerRegistry:
         """
         handler = handler_class(self.base_url, container=self.container)
         self._handlers[trigger_type] = handler
-        logger.info(f"Registered trigger handler: {trigger_type.value}")
+        logger.info("flows.trigger.registered", trigger_type=trigger_type.value)
 
     def get_handler(self, trigger_type: TriggerType) -> BaseTriggerHandler | None:
         """
@@ -224,8 +224,10 @@ class TriggerRegistry:
 
         if handler is None:
             logger.warning(
-                f"No handler for trigger type {trigger_type_str}, "
-                + f"flow_id={flow_id}, trigger={trigger.trigger_id}"
+                "trigger.handler_missing",
+                trigger_type=trigger_type_str,
+                flow_id=flow_id,
+                trigger_id=trigger.trigger_id,
             )
             trigger.status = TriggerStatus.ERROR
             trigger.last_error = f"No handler for type {trigger_type_str}"
@@ -234,14 +236,18 @@ class TriggerRegistry:
         try:
             updated_trigger = await handler.register(flow_id, trigger)
             logger.info(
-                f"Trigger registered: flow_id={flow_id}, "
-                + f"trigger={trigger.trigger_id}, type={trigger_type_str}"
+                "trigger.registered",
+                flow_id=flow_id,
+                trigger_id=trigger.trigger_id,
+                trigger_type=trigger_type_str,
             )
             return updated_trigger
         except Exception as e:
             logger.error(
-                f"Failed to register trigger: flow_id={flow_id}, "
-                + f"trigger={trigger.trigger_id}, error={e}"
+                "trigger.register_failed",
+                flow_id=flow_id,
+                trigger_id=trigger.trigger_id,
+                error=str(e),
             )
             trigger.status = TriggerStatus.ERROR
             trigger.last_error = str(e)
@@ -264,21 +270,27 @@ class TriggerRegistry:
 
         if handler is None:
             logger.warning(
-                f"No handler for trigger type {trigger_type_str}, "
-                + f"cannot unregister: flow_id={flow_id}, trigger={trigger.trigger_id}"
+                "trigger.unregister_handler_missing",
+                trigger_type=trigger_type_str,
+                flow_id=flow_id,
+                trigger_id=trigger.trigger_id,
             )
             return
 
         try:
             await handler.unregister(flow_id, trigger)
             logger.info(
-                f"Trigger unregistered: flow_id={flow_id}, "
-                + f"trigger={trigger.trigger_id}, type={trigger_type_str}"
+                "trigger.unregistered",
+                flow_id=flow_id,
+                trigger_id=trigger.trigger_id,
+                trigger_type=trigger_type_str,
             )
         except Exception as e:
             logger.error(
-                f"Failed to unregister trigger: flow_id={flow_id}, "
-                + f"trigger={trigger.trigger_id}, error={e}"
+                "trigger.unregister_failed",
+                flow_id=flow_id,
+                trigger_id=trigger.trigger_id,
+                error=str(e),
             )
 
     def _trigger_changed(

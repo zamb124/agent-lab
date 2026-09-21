@@ -1,18 +1,19 @@
-"""HTTP API DataTable: тонкое REST-зеркало `op_data_tables_*`; байты (export/import) остаются REST."""
+"""HTTP API DataTable: тонкое REST-зеркало `op_data_tables_*`."""
 
 from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
-from fastapi.responses import Response
+from fastapi import APIRouter, Query
 
 from apps.office.dependencies import ContainerDep
 from apps.office.realtime.data_table_operations import (
     OfficeDataTableAddColumnPayload,
     OfficeDataTableCreateTablePayload,
     OfficeDataTableDeleteRowsPayload,
+    OfficeDataTableExportPayload,
     OfficeDataTableFileIdPayload,
+    OfficeDataTableImportPayload,
     OfficeDataTableInsertRowsPayload,
     OfficeDataTablePromotePayload,
     OfficeDataTableQueryPayload,
@@ -20,7 +21,9 @@ from apps.office.realtime.data_table_operations import (
     OfficeDataTableUpdateRowPayload,
     op_data_tables_column_add,
     op_data_tables_create,
+    op_data_tables_export,
     op_data_tables_get,
+    op_data_tables_import,
     op_data_tables_promote,
     op_data_tables_query,
     op_data_tables_row_update,
@@ -29,9 +32,7 @@ from apps.office.realtime.data_table_operations import (
     op_data_tables_rows_list,
     op_data_tables_table_create,
 )
-from core.authz.models import AuthzObject
-from core.context import require_active_company, require_context
-from core.data_tables.lock import DataTableLockedError
+from core.context import require_context
 from core.data_tables.models import (
     MAX_PAGE_LIMIT,
     MAX_SEARCH_Q_LENGTH,
@@ -41,6 +42,7 @@ from core.data_tables.models import (
     DataTableDeleteRowsRequest,
     DataTableDeleteRowsResponse,
     DataTableFileSnapshot,
+    DataTableImportRequest,
     DataTableInsertRowsRequest,
     DataTableInsertRowsResponse,
     DataTablePromoteRequest,
@@ -51,32 +53,10 @@ from core.data_tables.models import (
     DataTableUpdateRowRequest,
     DataTableUpdateRowResponse,
 )
-from core.data_tables.service import DataTableNotFoundError
 from core.files.models import FileRecord
-from core.files.types import ext_to_mime
 from core.pagination import CursorPage
 
 router = APIRouter(tags=["data-tables"])
-
-
-def _http_from_data_table_error(exc: Exception) -> HTTPException:
-    if isinstance(exc, DataTableNotFoundError):
-        return HTTPException(status_code=404, detail=str(exc))
-    if isinstance(exc, DataTableLockedError):
-        return HTTPException(status_code=409, detail=str(exc))
-    if isinstance(exc, ValueError):
-        return HTTPException(status_code=400, detail=str(exc))
-    raise exc
-
-
-async def _require_view(container: ContainerDep, file_id: str) -> None:
-    _ = require_active_company()
-    await container.authz_service.require_can_view(AuthzObject.office_document(file_id))
-
-
-async def _require_edit(container: ContainerDep, file_id: str) -> None:
-    _ = require_active_company()
-    await container.authz_service.require_can_edit(AuthzObject.office_document(file_id))
 
 
 @router.post("/data-tables", response_model=FileRecord)
@@ -185,27 +165,19 @@ async def list_data_table_rows(
     )
 
 
-@router.get("/data-tables/{file_id}/tables/{table_name}/export")
+@router.get("/data-tables/{file_id}/tables/{table_name}/export", response_model=FileRecord)
 async def export_data_table_table(
     file_id: str,
     table_name: str,
     container: ContainerDep,
-    source_format: Annotated[Literal["csv", "xlsx"], Query(alias="format")],
-) -> Response:
-    await _require_view(container, file_id)
-    try:
-        payload, filename = await container.data_table_service.export_tabular(
-            file_id,
-            table_name=table_name,
-            source_format=source_format,
-        )
-    except (DataTableNotFoundError, DataTableLockedError, ValueError) as exc:
-        raise _http_from_data_table_error(exc) from exc
-    media_type = ext_to_mime(f".{source_format}")
-    return Response(
-        content=payload,
-        media_type=media_type,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    source_format: Annotated[Literal["csv", "xlsx"], Query()],
+) -> FileRecord:
+    return await op_data_tables_export(
+        OfficeDataTableExportPayload(
+            file_id=file_id, table_name=table_name, source_format=source_format
+        ),
+        user=require_context().user,
+        container=container,
     )
 
 
@@ -284,19 +256,16 @@ async def query_data_table(
 )
 async def import_data_table_tabular(
     file_id: str,
-    table_name: str,
-    source_format: Literal["csv", "xlsx"],
+    body: DataTableImportRequest,
     container: ContainerDep,
-    upload: Annotated[UploadFile, File()],
 ) -> DataTableSchemaSnapshot:
-    await _require_edit(container, file_id)
-    raw = await upload.read()
-    try:
-        return await container.data_table_service.import_tabular(
-            file_id,
-            table_name=table_name,
-            source_format=source_format,
-            raw=raw,
-        )
-    except (DataTableNotFoundError, DataTableLockedError, ValueError) as exc:
-        raise _http_from_data_table_error(exc) from exc
+    return await op_data_tables_import(
+        OfficeDataTableImportPayload(
+            file_id=file_id,
+            table_name=body.table_name,
+            source_format=body.source_format,
+            upload_file_id=body.upload_file_id,
+        ),
+        user=require_context().user,
+        container=container,
+    )

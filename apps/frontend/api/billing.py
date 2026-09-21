@@ -1,8 +1,6 @@
-"""
-API для биллинга, пополнения баланса и управления подпиской.
-"""
+"""REST-зеркало команд `frontend/billing/*`."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.models import (
@@ -10,140 +8,52 @@ from apps.frontend.models import (
     BillingSubscription,
     BillingUsage,
     ChangePlanRequest,
-    PaymentHistoryResponse,
 )
-from core.authz.models import AuthzObject
-from core.authz.types import AuthzRelation
-from core.clients.payment import PaymentProviderFactory
+from apps.frontend.realtime.billing_operations import (
+    BillingTopupPayload,
+    op_billing_payment_history,
+    op_billing_plan_change,
+    op_billing_subscription,
+    op_billing_topup,
+    op_billing_usage,
+)
 from core.context import require_context
-from core.logging import get_logger
-from core.models.billing_models import TariffPlan
-from core.models.identity_models import Company, User
 from core.models.payment_models import (
     CreatePaymentRequest,
     CreatePaymentResponse,
     TransactionResponse,
 )
+from core.pagination import ListResponse
+from core.websocket import EmptyPayload
 
-logger = get_logger(__name__)
 router = APIRouter(prefix="/api/billing", tags=["billing"])
 
 
-def _require_billing_principal() -> tuple[User, Company]:
-    context = require_context()
-    company = context.active_company
-    if company is None:
-        raise HTTPException(status_code=400, detail="Компания не выбрана")
-    return context.user, company
-
-
 @router.get("/subscription", response_model=BillingSubscription)
-async def get_subscription() -> BillingSubscription:
-    _, company = _require_billing_principal()
-    return BillingSubscription(
-        plan=company.tariff_plan.value,
-        balance=company.balance,
-        monthly_budget=company.monthly_budget,
-        current_month_spent=company.current_month_spent,
-        billing_period_start=company.billing_period_start,
-    )
+async def get_subscription(container: ContainerDep) -> BillingSubscription:
+    return await op_billing_subscription(EmptyPayload(), user=require_context().user, container=container)
 
 
 @router.get("/usage", response_model=BillingUsage)
 async def get_usage_stats(container: ContainerDep) -> BillingUsage:
-    _, company = _require_billing_principal()
-    stats = await container.billing_service.get_company_usage_stats(company.company_id)
-    return BillingUsage.model_validate(stats)
+    return await op_billing_usage(EmptyPayload(), user=require_context().user, container=container)
 
 
 @router.patch("/plan", response_model=BillingPlanChangeResponse)
-async def change_plan(
-    plan_request: ChangePlanRequest,
-    container: ContainerDep,
-) -> BillingPlanChangeResponse:
-    user, company = _require_billing_principal()
-
-    await container.authz_service.require_relation(
-        AuthzRelation.OWNER,
-        AuthzObject.company(company.company_id),
-        user_id=user.user_id,
-    )
-
-    try:
-        tariff = TariffPlan(plan_request.plan)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail="Недопустимый тариф. Допустимые: free, basic, premium, enterprise",
-        ) from exc
-
-    if tariff == company.tariff_plan:
-        raise HTTPException(status_code=400, detail="Компания уже использует этот тариф")
-
-    company.tariff_plan = tariff
-    _ = await container.company_repository.set(company)
-
-    logger.info("Тариф компании %s изменен на %s", company.company_id, tariff.value)
-
-    return BillingPlanChangeResponse(
-        success=True,
-        plan=tariff.value,
-        message=f"Тариф успешно изменен на {tariff.value}",
-    )
+async def change_plan(plan_request: ChangePlanRequest, container: ContainerDep) -> BillingPlanChangeResponse:
+    return await op_billing_plan_change(plan_request, user=require_context().user, container=container)
 
 
 @router.post("/topup", response_model=CreatePaymentResponse)
-async def create_topup_payment(
-    payment_request: CreatePaymentRequest,
-    container: ContainerDep,
-) -> CreatePaymentResponse:
-    user, company = _require_billing_principal()
-
-    await container.authz_service.require_company_admin(
-        company_id=company.company_id,
-        user_id=user.user_id,
-    )
-
-    provider = PaymentProviderFactory.get_default_provider()
-    if provider is None:
-        raise HTTPException(status_code=503, detail="Платежный провайдер не настроен")
-
-    host = require_context().host.strip()
-    if host == "":
-        raise ValueError("request host is required for payment redirects")
-
-    return await container.payment_service.create_payment(
-        company=company,
-        user=user,
-        amount=payment_request.amount,
-        provider=provider,
-        host=host,
+async def create_topup_payment(payment_request: CreatePaymentRequest, container: ContainerDep) -> CreatePaymentResponse:
+    context = require_context()
+    return await op_billing_topup(
+        BillingTopupPayload(amount=payment_request.amount, public_host=context.host),
+        user=context.user,
+        container=container,
     )
 
 
-@router.get("/history", response_model=PaymentHistoryResponse)
-async def get_payment_history(
-    container: ContainerDep,
-) -> PaymentHistoryResponse:
-    _, company = _require_billing_principal()
-
-    transactions = await container.payment_service.get_company_transactions(
-        company_id=company.company_id,
-    )
-
-    payments = [
-        TransactionResponse(
-            transaction_id=t.transaction_id,
-            company_id=t.company_id,
-            amount=t.amount,
-            status=t.status,
-            payment_provider=t.payment_provider,
-            external_payment_id=t.external_payment_id,
-            created_at=t.created_at,
-            completed_at=t.completed_at,
-            metadata=t.metadata,
-        )
-        for t in transactions
-    ]
-
-    return PaymentHistoryResponse(payments=payments)
+@router.get("/history", response_model=ListResponse[TransactionResponse])
+async def get_payment_history(container: ContainerDep) -> ListResponse[TransactionResponse]:
+    return await op_billing_payment_history(EmptyPayload(), user=require_context().user, container=container)

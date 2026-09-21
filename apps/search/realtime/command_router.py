@@ -16,7 +16,6 @@ from apps.search.realtime.operations import (
     CrawlProfileUpdatePayload,
     CrawlUrlRefPayload,
     CrawlUrlsListPayload,
-    SearchEmptyPayload,
     SearchIndexesListPayload,
     SearchIndexIdPayload,
     SearchIndexUpdatePayload,
@@ -66,7 +65,7 @@ from core.search.models import (
     MetaSearchSerpMoreRequest,
     SerpClickEvent,
 )
-from core.websocket import Operation, RegisteredOperation, register_service_operations
+from core.websocket import EmptyPayload, Operation, RegisteredOperation, register_service_operations
 
 logger = get_logger(__name__)
 
@@ -117,9 +116,9 @@ SEARCH_OPERATIONS: dict[str, RegisteredOperation[SearchContainer]] = {
     ),
     "search/query/serp_click_requested": Operation(payload_model=SerpClickEvent, fn=op_query_serp_click),
     "search/query/providers_snapshot_requested": Operation(
-        payload_model=SearchEmptyPayload, fn=op_query_providers_snapshot
+        payload_model=EmptyPayload, fn=op_query_providers_snapshot
     ),
-    "search/providers/list_requested": Operation(payload_model=SearchEmptyPayload, fn=op_providers_list),
+    "search/providers/list_requested": Operation(payload_model=EmptyPayload, fn=op_providers_list),
     "search/providers/update_requested": Operation(payload_model=SearchProviderUpdatePayload, fn=op_providers_update),
     "search/providers/order_update_requested": Operation(
         payload_model=SearchProviderOrderPayload, fn=op_providers_order_update

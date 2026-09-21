@@ -103,7 +103,7 @@ def openai_compat_http_root(raw: str) -> str:
     """Корень OpenAI-совместимого HTTP API: ``.../v1`` нормализуется, иначе как есть."""
     cleaned = raw.strip().rstrip("/")
     if not cleaned:
-        raise ValueError("Нужен непустой base_url")
+        raise ValueError('Non-empty base_url is required')
     if cleaned.endswith("/v1"):
         return normalize_openai_v1_base_url(cleaned)
     return cleaned
@@ -115,7 +115,7 @@ def _active_llm_provider_block(
     p = (llm.provider or "").strip().lower()
     if p == HUMANITEC_LLM_PROVIDER:
         raise ValueError(
-            f"llm.provider={p!r} не поддержан для OpenAI-совместимого API."
+            f"llm.provider={p!r} is not supported for the OpenAI-compatible API."
         )
     return p, llm_provider_block(llm, p)
 
@@ -127,7 +127,7 @@ def llm_provider_block(
     """Provider sub-config by explicit slug, independent of active ``llm.provider``."""
     p = provider.strip().lower()
     if p not in OPENAI_COMPATIBLE_LLM_PROVIDER_SLUGS:
-        raise ValueError(f"provider={p!r} не поддержан для OpenAI-совместимого API.")
+        raise ValueError(f"provider={p!r} is not supported for the OpenAI-compatible API.")
     blocks: dict[str, _LLMProviderConfig | None] = {
         "openai": llm.openai,
         "openrouter": llm.openrouter,
@@ -146,7 +146,7 @@ def llm_provider_block(
         "caila": llm.caila,
     }
     if p not in blocks:
-        raise ValueError(f"provider={p!r} нет поля в LLMConfig")
+        raise ValueError(f"provider={p!r} has no field in LLMConfig")
     return blocks[p]
 
 
@@ -173,7 +173,7 @@ def first_provider_api_key(cfg: _LLMProviderConfig) -> str:
     """Первый usable ключ блока. Нет ключей — ошибка, не пустая строка."""
     keys = collect_provider_api_keys(cfg)
     if not keys:
-        raise ValueError("Нужен хотя бы один api_key в конфиге провайдера")
+        raise ValueError('At least one api_key is required in the provider config')
     return keys[0]
 
 
@@ -192,7 +192,7 @@ def provider_is_configured_for_free_pool(llm: LLMConfig, provider: str) -> bool:
         return False
     if p in ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS:
         if not isinstance(cfg, _ACCOUNT_FREE_TIER_PROVIDER_CONFIGS):
-            raise ValueError(f"provider {p!r} должен иметь smoke_model")
+            raise ValueError(f"provider {p!r} must have smoke_model")
         return bool(cfg.smoke_model.strip())
     return True
 
@@ -202,10 +202,10 @@ def provider_smoke_model(llm: LLMConfig, provider: str) -> str:
     p = provider.strip().lower()
     cfg = llm_provider_block(llm, p)
     if cfg is None:
-        raise ValueError(f"Конфиг провайдера не задан для provider={p!r}")
+        raise ValueError(f"Provider config is not set for provider={p!r}")
     smoke_model = cfg.smoke_model
     if not isinstance(smoke_model, str) or not smoke_model.strip():
-        raise ValueError(f"llm.{p}.smoke_model обязателен")
+        raise ValueError(f"llm.{p}.smoke_model is required")
     return smoke_model.strip()
 
 
@@ -213,10 +213,10 @@ def resolve_provider_api_keys(llm: LLMConfig, provider: str) -> list[str]:
     """Все активные API ключи провайдера (основной api_key + дополнительные api_keys)."""
     cfg = llm_provider_block(llm, provider)
     if cfg is None:
-        raise ValueError(f"Конфиг провайдера не задан для provider={provider!r}")
+        raise ValueError(f"Provider config is not set for provider={provider!r}")
     keys = collect_provider_api_keys(cfg)
     if not keys:
-        raise ValueError(f"Нужен хотя бы один api_key для provider={provider!r}.")
+        raise ValueError(f"At least one api_key is required for provider={provider!r}.")
     return keys
 
 
@@ -224,10 +224,10 @@ def resolve_llm_api_key_for_openai_compatible_calls(llm: LLMConfig) -> str:
     """Ключ для ``POST .../embeddings`` при привязке эмбеддингов к активному ``llm``."""
     p, cfg = _active_llm_provider_block(llm)
     if cfg is None:
-        raise ValueError(f"Конфиг провайдера не задан для llm.provider={p!r}")
+        raise ValueError(f"Provider config is not set for llm.provider={p!r}")
     keys = collect_provider_api_keys(cfg)
     if not keys:
-        raise ValueError(f"Нужен непустой api_key для llm.provider={p!r} (эмбеддинги).")
+        raise ValueError(f"Non-empty api_key is required for llm.provider={p!r} (embeddings).")
     return keys[0]
 
 
@@ -240,10 +240,10 @@ def yandex_provider_http_headers(cfg: YandexLLMProviderConfig) -> dict[str, str]
     """Заголовки Yandex по подблоку ``llm.yandex`` (без требования ``llm.provider``)."""
     keys = collect_provider_api_keys(cfg)
     if not keys:
-        raise ValueError("Нужен непустой api_key в конфиге Yandex LLM")
+        raise ValueError('Non-empty api_key is required in the Yandex LLM config')
     fid = cfg.folder_id
     if fid is None or not fid.strip():
-        raise ValueError("Нужен непустой folder_id в конфиге Yandex LLM")
+        raise ValueError('Non-empty folder_id is required in the Yandex LLM config')
     return {
         "Authorization": f"Api-Key {keys[0]}",
         "x-folder-id": fid.strip(),
@@ -262,10 +262,10 @@ def yandex_llm_http_headers(llm: LLMConfig) -> dict[str, str]:
     """Заголовки ``Authorization: Api-Key`` и ``x-folder-id`` для Yandex OpenAI-compatible API."""
     p = (llm.provider or "").strip().lower()
     if p != "yandex":
-        raise ValueError(f"yandex_llm_http_headers: ожидался yandex, получено {p!r}")
+        raise ValueError(f"yandex_llm_http_headers: expected yandex, got {p!r}")
     cfg = llm.yandex
     if cfg is None:
-        raise ValueError("llm.yandex не задан")
+        raise ValueError('llm.yandex is not set')
     return yandex_provider_http_headers(cfg)
 
 
@@ -283,7 +283,7 @@ def _provider_openai_v1_base_url(
         default_base_url = LLM_PROVIDER_DEFAULT_BASE_URLS.get(provider)
         if default_base_url is not None and provider != "yandex":
             return openai_compat_http_root(default_base_url)
-        raise ValueError(f"Конфиг провайдера не задан для provider={provider!r}")
+        raise ValueError(f"Provider config is not set for provider={provider!r}")
     if provider == "openai":
         raw = cfg.base_url
         if raw is None or not raw.strip():
@@ -291,11 +291,11 @@ def _provider_openai_v1_base_url(
         return openai_compat_http_root(raw.strip())
     if provider == "yandex":
         if not isinstance(cfg, YandexLLMProviderConfig):
-            raise ValueError("llm.yandex не задан")
+            raise ValueError('llm.yandex is not set')
         return yandex_llm_openai_root_from_provider_cfg(cfg)
     raw = cfg.base_url
     if raw is None or not str(raw).strip():
-        raise ValueError(f"Нужен непустой base_url для provider={provider!r}")
+        raise ValueError(f"Non-empty base_url is required for provider={provider!r}")
     return openai_compat_http_root(str(raw).strip())
 
 

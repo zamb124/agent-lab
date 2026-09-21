@@ -35,9 +35,9 @@ async def upsert_canonical_by_external_ref(
 ) -> tuple[CRMEntity, bool]:
     rid = str(record_id).strip()
     if not rid:
-        raise ValueError("record_id обязателен")
+        raise ValueError("record_id is required")
     if "external_refs" in patch_attributes:
-        raise ValueError("patch_attributes не должен содержать external_refs")
+        raise ValueError("patch_attributes must not contain external_refs")
 
     ref = external_ref_now(record_id=rid, account_key=account_key, raw_version=raw_version)
 
@@ -50,7 +50,7 @@ async def upsert_canonical_by_external_ref(
     )
     if len(existing_list) > 1:
         raise ValueError(
-            f"Несколько сущностей для ref {source_id}/{rid} в {namespace}/{entity_type}"
+            f"Multiple entities for ref {source_id}/{rid} in {namespace}/{entity_type}"
         )
 
     if existing_list:

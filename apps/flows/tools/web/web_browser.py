@@ -106,16 +106,16 @@ class BrowserDuckduckgoLinksBatchArgs(BaseModel):
     @classmethod
     def _normalize_queries(cls, value: JsonValue) -> list[str]:
         if not isinstance(value, list):
-            raise TypeError("queries должен быть массивом строк")
+            raise TypeError("queries must be an array of strings")
         out: list[str] = []
         for index, item in enumerate(value):
             if not isinstance(item, str):
-                raise TypeError(f"queries[{index}] должен быть строкой")
+                raise TypeError(f"queries[{index}] must be a string")
             s = item.strip()
             if s != "":
                 out.append(s)
         if len(out) == 0:
-            raise ValueError("queries: нет непустых строк")
+            raise ValueError("queries: no non-empty strings")
         return out
 
 

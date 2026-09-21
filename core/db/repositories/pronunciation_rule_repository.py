@@ -15,9 +15,32 @@ from datetime import datetime, timezone
 
 from sqlalchemy import delete, func, select
 
+from core.clients.tts_pronunciation.models import PronunciationRule, PronunciationRuleKind
 from core.db.database import get_session_factory
 from core.db.models.platform import CompanyPronunciationRule, PlatformPronunciationRule
 from core.db.utils import get_rowcount
+
+
+def _rule_kind(value: str) -> PronunciationRuleKind:
+    if value not in ("alias", "regex", "stress"):
+        raise ValueError(f"unknown pronunciation rule kind: {value!r}")
+    return value
+
+
+def pronunciation_rule(row: PlatformPronunciationRule | CompanyPronunciationRule) -> PronunciationRule:
+    return PronunciationRule(
+        id=row.id,
+        kind=_rule_kind(row.kind),
+        pattern=row.pattern,
+        replacement=row.replacement,
+        language=row.language,
+        case_sensitive=row.case_sensitive,
+        word_boundary=row.word_boundary,
+        providers=list(row.providers) if row.providers else None,
+        voices=list(row.voices) if row.voices else None,
+        enabled=row.enabled,
+        note=row.note,
+    )
 
 
 class PlatformPronunciationRuleRepository:
@@ -25,7 +48,7 @@ class PlatformPronunciationRuleRepository:
 
     def __init__(self, db_url: str) -> None:
         if db_url == "":
-            raise ValueError("PlatformPronunciationRuleRepository: db_url не может быть пустым.")
+            raise ValueError('PlatformPronunciationRuleRepository: db_url cannot be empty.')
         self._db_url: str = db_url
 
     async def list_enabled(self) -> list[PlatformPronunciationRule]:
@@ -48,7 +71,7 @@ class PlatformPronunciationRuleRepository:
 
     async def get(self, rule_id: str) -> PlatformPronunciationRule | None:
         if rule_id == "":
-            raise ValueError("rule_id не может быть пустым.")
+            raise ValueError('rule_id cannot be empty.')
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
             result = await session.execute(
@@ -71,7 +94,7 @@ class PlatformPronunciationRuleRepository:
         note: str | None = None,
     ) -> PlatformPronunciationRule:
         if pattern == "":
-            raise ValueError("pattern не может быть пустым.")
+            raise ValueError('pattern cannot be empty.')
         now = datetime.now(timezone.utc)
         rule = PlatformPronunciationRule(
             id=str(uuid.uuid4()),
@@ -111,7 +134,7 @@ class PlatformPronunciationRuleRepository:
         note: str | None = None,
     ) -> PlatformPronunciationRule | None:
         if rule_id == "":
-            raise ValueError("rule_id не может быть пустым.")
+            raise ValueError('rule_id cannot be empty.')
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
             result = await session.execute(
@@ -147,7 +170,7 @@ class PlatformPronunciationRuleRepository:
 
     async def delete(self, rule_id: str) -> bool:
         if rule_id == "":
-            raise ValueError("rule_id не может быть пустым.")
+            raise ValueError('rule_id cannot be empty.')
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
             result = await session.execute(
@@ -162,12 +185,12 @@ class CompanyPronunciationRuleRepository:
 
     def __init__(self, db_url: str) -> None:
         if db_url == "":
-            raise ValueError("CompanyPronunciationRuleRepository: db_url не может быть пустым.")
+            raise ValueError('CompanyPronunciationRuleRepository: db_url cannot be empty.')
         self._db_url: str = db_url
 
     async def count_by_company(self, *, company_id: str) -> int:
         if company_id == "":
-            raise ValueError("company_id не может быть пустым.")
+            raise ValueError('company_id cannot be empty.')
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
             result = await session.execute(
@@ -177,7 +200,7 @@ class CompanyPronunciationRuleRepository:
 
     async def list_enabled(self, *, company_id: str) -> list[CompanyPronunciationRule]:
         if company_id == "":
-            raise ValueError("company_id не может быть пустым.")
+            raise ValueError('company_id cannot be empty.')
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
             result = await session.execute(
@@ -192,7 +215,7 @@ class CompanyPronunciationRuleRepository:
 
     async def list_all(self, *, company_id: str) -> list[CompanyPronunciationRule]:
         if company_id == "":
-            raise ValueError("company_id не может быть пустым.")
+            raise ValueError('company_id cannot be empty.')
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
             result = await session.execute(
@@ -204,9 +227,9 @@ class CompanyPronunciationRuleRepository:
 
     async def get(self, *, company_id: str, rule_id: str) -> CompanyPronunciationRule | None:
         if company_id == "":
-            raise ValueError("company_id не может быть пустым.")
+            raise ValueError('company_id cannot be empty.')
         if rule_id == "":
-            raise ValueError("rule_id не может быть пустым.")
+            raise ValueError('rule_id cannot be empty.')
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
             result = await session.execute(
@@ -234,14 +257,14 @@ class CompanyPronunciationRuleRepository:
         max_rules: int = 1000,
     ) -> CompanyPronunciationRule:
         if company_id == "":
-            raise ValueError("company_id не может быть пустым.")
+            raise ValueError('company_id cannot be empty.')
         if pattern == "":
-            raise ValueError("pattern не может быть пустым.")
+            raise ValueError('pattern cannot be empty.')
         current_count = await self.count_by_company(company_id=company_id)
         if current_count >= max_rules:
             raise ValueError(
-                f"Достигнут лимит правил для компании {company_id!r}: " +
-                f"{current_count}/{max_rules}. Удалите часть правил перед добавлением."
+                f"Pronunciation rule limit reached for company {company_id!r}: " +
+                f"{current_count}/{max_rules}. Remove some rules before adding more."
             )
         now = datetime.now(timezone.utc)
         rule = CompanyPronunciationRule(
@@ -284,9 +307,9 @@ class CompanyPronunciationRuleRepository:
         note: str | None = None,
     ) -> CompanyPronunciationRule | None:
         if company_id == "":
-            raise ValueError("company_id не может быть пустым.")
+            raise ValueError('company_id cannot be empty.')
         if rule_id == "":
-            raise ValueError("rule_id не может быть пустым.")
+            raise ValueError('rule_id cannot be empty.')
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
             result = await session.execute(
@@ -325,9 +348,9 @@ class CompanyPronunciationRuleRepository:
 
     async def delete(self, *, company_id: str, rule_id: str) -> bool:
         if company_id == "":
-            raise ValueError("company_id не может быть пустым.")
+            raise ValueError('company_id cannot be empty.')
         if rule_id == "":
-            raise ValueError("rule_id не может быть пустым.")
+            raise ValueError('rule_id cannot be empty.')
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
             result = await session.execute(

@@ -6,7 +6,6 @@ from fastapi import APIRouter
 
 from apps.search.dependencies import ContainerDep
 from apps.search.realtime.operations import (
-    SearchEmptyPayload,
     op_query_providers_snapshot,
     op_query_search,
     op_query_serp_click,
@@ -22,6 +21,7 @@ from core.search.models import (
     SearchProvidersSnapshot,
     SerpClickEvent,
 )
+from core.websocket import EmptyPayload
 
 router = APIRouter(tags=["search"])
 
@@ -48,4 +48,4 @@ async def meta_search_serp_click(body: SerpClickEvent, container: ContainerDep) 
 
 @router.get("/providers", response_model=SearchProvidersSnapshot)
 async def list_search_providers(container: ContainerDep) -> SearchProvidersSnapshot:
-    return await op_query_providers_snapshot(SearchEmptyPayload(), user=require_context().user, container=container)
+    return await op_query_providers_snapshot(EmptyPayload(), user=require_context().user, container=container)

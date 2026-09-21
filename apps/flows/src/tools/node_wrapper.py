@@ -82,7 +82,7 @@ def _infer_node_type_for_tool(node: BaseNode) -> NodeType:
     if isinstance(node, ResourceNode):
         return NodeType.RESOURCE
     raise ValueError(
-        f"Не удалось определить type ноды для as_tool: {type(node).__name__}, задайте node_type"
+        f"Failed to determine node type for as_tool: {type(node).__name__}, set node_type"
     )
 
 
@@ -270,7 +270,7 @@ class NodeAsToolWrapper(BaseTool):
         node_id = self.node_config.node_id
         node_type = self.node_config.type
 
-        logger.info(f"[wrapper:{node_id}] run with args: {list(args.keys())}")
+        logger.info("flows.wrapper.run", node_id=node_id, arg_keys=list(args.keys()))
 
         # При call_type="handoff" бросаем HandoffInterrupt вместо ожидания result
         if self.call_type == NodeToolCallType.HANDOFF:
@@ -334,7 +334,7 @@ class NodeAsToolWrapper(BaseTool):
             # Передаем оставшийся путь interrupt (без первого элемента)
             nested_state.interrupt_path = list(parent_state.interrupt_path[1:])
             content_preview = (parent_state.content or "")[:50]
-            logger.info(f"[wrapper:{node_id}] resume with answer='{content_preview}...'")
+            logger.info("flows.wrapper.resume", node_id=node_id, content_preview=content_preview)
         else:
             # Первый вызов: создаем новый state для субагента
             nested_state = self._create_nested_state(parent_state, args)
@@ -358,8 +358,9 @@ class NodeAsToolWrapper(BaseTool):
         except FlowInterrupt as e:
             # Сохраняем state субагента для resume
             logger.info(
-                f"[wrapper:{node_id}] interrupt, saving nested_state: "
-                + f"messages={len(nested_state.messages)}"
+                "wrapper.interrupt",
+                node_id=node_id,
+                messages=len(nested_state.messages),
             )
             InterruptManager.save_nested_state(parent_state, node_id, nested_state)
 
@@ -376,7 +377,7 @@ class NodeAsToolWrapper(BaseTool):
                 ),
             )
 
-            logger.info(f"[wrapper:{node_id}] interrupt: {e.question[:50]}...")
+            logger.info("flows.wrapper.interrupt", node_id=node_id, question=e.question[:50])
             raise
 
     def _create_nested_state(
@@ -390,8 +391,8 @@ class NodeAsToolWrapper(BaseTool):
             text = args.get("request")
         if text is None or (isinstance(text, str) and not text.strip()):
             raise ValueError(
-                "Аргументы вызова llm_node как tool должны содержать непустой "
-                + "'query', 'content' или 'request'"
+                "Arguments for calling llm_node as a tool must contain a non-empty "
+                + "'query', 'content' or 'request'"
             )
 
         nested_state = ExecutionState(
@@ -435,8 +436,8 @@ class NodeAsToolWrapper(BaseTool):
             if result.result is not None:
                 return require_json_value(result.result, f"node.{self.node_config.node_id}.result")
             raise ValueError(
-                "Нода завершилась без непустого state.response и без state.result "
-                + "после вызова как tool"
+                "Node finished without a non-empty state.response and without state.result "
+                + "after being called as a tool"
             )
         if isinstance(result, dict):
             if "response" in result and result["response"] is not None:
@@ -444,10 +445,10 @@ class NodeAsToolWrapper(BaseTool):
             if "result" in result:
                 return result["result"]
             raise ValueError(
-                f"Результат ноды-dict без полей 'response' или 'result': keys={list(result.keys())}"
+                f"Node dict result has no 'response' or 'result' fields: keys={list(result.keys())}"
             )
         if result is None:
-            raise ValueError("Результат вызова ноды как tool — None")
+            raise ValueError("Result of calling the node as a tool is None")
         return result
 
     @override

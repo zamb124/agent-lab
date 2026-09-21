@@ -62,7 +62,7 @@ def _entity_namespace(entity: CRMEntity) -> str:
     ns = (entity.namespace or "").strip()
     if not ns:
         raise ValueError(
-            f"CRMEntity.namespace пуст для entity_id={entity.entity_id!r} company_id={entity.company_id!r}"
+            f"CRMEntity.namespace is empty for entity_id={entity.entity_id!r} company_id={entity.company_id!r}"
         )
     return ns
 
@@ -99,7 +99,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
     def _get_company_id(self) -> str:
         context = get_context()
         if not context or not context.active_company:
-            raise ValueError("Нет активной компании в контексте")
+            raise ValueError("No active company in context")
         return context.active_company.company_id
 
     _SKIP_SEARCH_ATTRIBUTE_KEYS: ClassVar[frozenset[str]] = frozenset(
@@ -276,10 +276,12 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             )
         except Exception as exc:
             logger.warning(
-                f"RAG indexing failed for entity {entity.entity_id} (will be retried by reembed task): {exc}"
+                "crm.entity.rag_index_failed",
+                entity_id=entity.entity_id,
+                error=str(exc),
             )
 
-        logger.info(f"Created entity: {entity.entity_id}, type={entity.full_type}")
+        logger.info("crm.entity.created", entity_id=entity.entity_id, entity_type=entity.full_type)
         return entity
 
     @override
@@ -353,7 +355,9 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             )
         except Exception as exc:
             logger.warning(
-                f"RAG re-indexing failed for entity {entity.entity_id} (will be retried by reembed task): {exc}"
+                "crm.entity.rag_reindex_failed",
+                entity_id=entity.entity_id,
+                error=str(exc),
             )
 
     @override
@@ -365,7 +369,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             await session.refresh(merged)
 
         await self._reindex_entity(merged)
-        logger.info(f"Updated entity: {merged.entity_id}, type={merged.full_type}")
+        logger.info("crm.entity.updated", entity_id=merged.entity_id, entity_type=merged.full_type)
         return merged
 
     async def update_attributes(self, entity_id: str, attributes: JsonObject) -> CRMEntity:
@@ -385,9 +389,9 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             row = result.scalar_one_or_none()
             await session.commit()
         if row is None:
-            raise ValueError(f"Сущность не найдена: {entity_id}")
+            raise ValueError(f"Entity not found: {entity_id}")
         await self._reindex_entity(row)
-        logger.info(f"Updated entity attributes: {row.entity_id}, type={row.full_type}")
+        logger.info("crm.entity.attributes_updated", entity_id=row.entity_id, entity_type=row.full_type)
         return row
 
     async def update_description_if_current(
@@ -416,7 +420,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         if row is None:
             return None
         await self._reindex_entity(row)
-        logger.info(f"Updated entity description: {row.entity_id}, type={row.full_type}")
+        logger.info("crm.entity.description_updated", entity_id=row.entity_id, entity_type=row.full_type)
         return row
 
     @override
@@ -434,7 +438,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
 
         if deleted:
             _ = await self._rag.delete_document(rag_namespace, entity_id)
-            logger.info(f"Deleted entity: {entity_id}")
+            logger.info("crm.entity.deleted", entity_id=entity_id)
 
         return deleted
 
@@ -446,7 +450,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
     ) -> int:
         """Поля source_entity_id в crm_entities, указывающие на old, переназначаются на new."""
         if old_entity_id == new_entity_id:
-            raise ValueError("old_entity_id и new_entity_id должны различаться")
+            raise ValueError("old_entity_id and new_entity_id must differ")
         async with self._db.session() as session:
             result = await session.execute(
                 update(CRMEntity)
@@ -924,7 +928,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         resolved_namespace = resolve_namespace_or_raise(namespace)
         actx = get_context()
         if actx is None or str(actx.user.user_id).strip() == "":
-            raise ValueError("Контекст пользователя обязателен для семантического поиска CRM.")
+            raise ValueError("User context is required for CRM semantic search.")
         user_id = str(actx.user.user_id).strip()
         async with traced_operation(
             "crm.semantic.search_entities",
@@ -975,7 +979,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
                 score_cache=self._rerank_score_cache,
             )
             if not search_results:
-                logger.info(f"search_with_similarity('{query[:50]}...') -> 0 entities")
+                logger.info("crm.entity.similarity_empty", query_preview=query[:50])
                 search_span.set_attribute("platform.crm.search_hits_raw", 0)
                 return []
 
@@ -1021,7 +1025,9 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
 
             search_span.set_attribute("platform.crm.search_results_count", len(scored_entities))
             logger.info(
-                f"search_with_similarity('{query[:50]}...') -> {len(scored_entities)} entities"
+                "crm.entity.search_similarity",
+                query_preview=query[:50],
+                result_count=len(scored_entities),
             )
             return scored_entities
 

@@ -84,7 +84,7 @@ def _parse_optional_due_date(value: str | None) -> datetime | None:
         return None
     stripped = value.strip()
     if stripped == "":
-        raise ValueError("due_date: пустая строка запрещена; передай ISO 8601 или omit/null")
+        raise ValueError("due_date: empty string is forbidden; pass ISO 8601 or omit/null")
     return datetime.fromisoformat(stripped.replace("Z", "+00:00"))
 
 
@@ -338,22 +338,22 @@ async def _build_assignment(
         return UsersAssignment(user_ids=[flow_employee_user_id(state.session_flow_id)])
     if normalized == "flow_employee":
         if not assignee_flow_id:
-            raise ValueError("assignee_type=flow_employee|agent требует assignee_flow_id")
+            raise ValueError("assignee_type=flow_employee|agent requires assignee_flow_id")
         return UsersAssignment(user_ids=[flow_employee_user_id(assignee_flow_id)])
     if normalized == "user":
         if not assignee_user_id:
-            raise ValueError("assignee_type=user требует assignee_user_id из team tools")
+            raise ValueError("assignee_type=user requires assignee_user_id from team tools")
         return UsersAssignment(user_ids=[assignee_user_id])
     if normalized == "queue":
         if not assignee_queue_slug:
-            raise ValueError("assignee_type=queue требует assignee_queue_slug")
+            raise ValueError("assignee_type=queue requires assignee_queue_slug")
         queue = await WorktrackerClient().get_queue_by_slug(company_id, assignee_queue_slug)
         return QueueAssignment(work_queue_id=queue.work_queue_id)
     if normalized == "unassigned":
         return UnassignedAssignment()
     raise ValueError(
-        f"Неизвестный assignee_type={assignee_type!r}; "
-        + "ожидается unassigned|self|user|queue|flow_employee|agent"
+        f"Unknown assignee_type={assignee_type!r}; "
+        + "expected unassigned|self|user|queue|flow_employee|agent"
     )
 
 
@@ -366,7 +366,7 @@ def _file_refs_from_ids(file_ids: list[str], state: "ExecutionState") -> list[Fi
         ref = by_id.get(file_id)
         if ref is None:
             raise ValueError(
-                f"file_id={file_id!r} нет в state.files; сначала create_file / прикрепи файл к run"
+                f"file_id={file_id!r} is not in state.files; create_file first or attach a file to the run"
             )
         resolved.append(ref)
     return resolved
@@ -774,7 +774,7 @@ async def work_item_move(
         item_state=item_state,
     )
     if args.board_column_id is None and args.item_state is None:
-        raise ValueError("Нужен board_column_id и/или item_state")
+        raise ValueError("board_column_id and/or item_state is required")
     item = await WorktrackerClient().move(
         company_id=require_active_company().company_id,
         work_item_id=args.work_item_id,

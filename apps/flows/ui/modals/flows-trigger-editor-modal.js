@@ -487,7 +487,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         });
         this.useEvent(MAIL_EVENTS.BINDING_CREATED, () => {
             if (this._type === 'email') {
-                this._ensureMailLoaded();
+                this._maybeAutofillMailboxBinding();
             }
         });
     }

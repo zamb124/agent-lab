@@ -18,6 +18,14 @@ import pytest
 from httpx import AsyncClient, Response
 
 from apps.flows.realtime.command_router import FLOWS_OPERATIONS
+from apps.flows.src.services.browser_preview import create_browser_preview_token
+from core.capabilities import CapabilityExecutionContext
+from core.capabilities.tokens import (
+    CapabilityExecutionTokenClaims,
+    execution_token_exp,
+    issue_execution_token,
+)
+from core.platform_brand.resolver import platform_public_base_url
 from core.types import JsonObject, JsonValue, require_json_object
 from core.utils.tokens import get_token_service
 from tests.realtime.centrifugo_ws import connect_centrifugo, rpc_platform_event
@@ -1397,6 +1405,96 @@ async def _setup_workspace_put(_ctx: LiveCtx) -> JsonObject:
     return {"service_account_json": "{not-json"}
 
 
+async def _setup_toolkits_catalog(ctx: LiveCtx) -> JsonObject:
+    """REST для локального Host отдаёт `server.platform_public_base_url`; WS передаёт его явно."""
+    _ = ctx
+    return {"frontend_base_url": platform_public_base_url(), "desktop_only": False}
+
+
+async def _setup_tool_runtime_call(ctx: LiveCtx) -> JsonObject:
+    """Подписанный capability context: tool runtime поднимает контекст из него, не из сессии."""
+    claims = CapabilityExecutionTokenClaims(
+        company_id="system",
+        user_id=ctx.system_user2_id,
+        flow_id=f"live-tool-runtime-{ctx.unique_id}",
+        branch_id="main",
+        session_id=f"live-tool-runtime-{ctx.unique_id}:ctx",
+        task_id=f"task-{ctx.unique_id}",
+        context_id=f"ctx-{ctx.unique_id}",
+        channel="test",
+        exp=execution_token_exp(120),
+    )
+    context = CapabilityExecutionContext(
+        execution_token=issue_execution_token(claims),
+        company_id=claims.company_id,
+        user_id=claims.user_id,
+        flow_id=claims.flow_id,
+        branch_id=claims.branch_id,
+        session_id=claims.session_id,
+        task_id=claims.task_id,
+        context_id=claims.context_id,
+        channel=claims.channel,
+    )
+    return {
+        "context": require_json_object(context.model_dump(mode="json"), "execution context"),
+        "tool_id": "calculator",
+        "arguments": {"expression": "2 + 2"},
+        "state": {
+            "task_id": claims.task_id,
+            "context_id": claims.context_id,
+            "user_id": ctx.system_user2_id,
+            "session_id": claims.session_id,
+            "flow_id": claims.flow_id,
+        },
+    }
+
+
+def _browser_preview_ids(ctx: LiveCtx) -> tuple[str, str, str]:
+    """Сессии Browser Runtime в тестовом стеке нет: token валиден, а сам вызов — ошибка peer."""
+    session_id = f"live-bp-session-{ctx.unique_id}"
+    task_id = f"live-bp-task-{ctx.unique_id}"
+    return session_id, task_id, create_browser_preview_token(session_id=session_id, task_id=task_id)
+
+
+async def _setup_browser_preview_session(ctx: LiveCtx) -> JsonObject:
+    session_id, _task_id, token = _browser_preview_ids(ctx)
+    return {"session_id": session_id, "token": token}
+
+
+async def _setup_browser_preview_task(ctx: LiveCtx) -> JsonObject:
+    _session_id, task_id, token = _browser_preview_ids(ctx)
+    return {"task_id": task_id, "token": token}
+
+
+async def _setup_browser_preview_click(ctx: LiveCtx) -> JsonObject:
+    session_id, _task_id, token = _browser_preview_ids(ctx)
+    return {
+        "session_id": session_id,
+        "token": token,
+        "x": 10.0,
+        "y": 20.0,
+        "image_width": 800.0,
+        "image_height": 600.0,
+        "button": "left",
+        "click_count": 1,
+    }
+
+
+async def _setup_browser_preview_key(ctx: LiveCtx) -> JsonObject:
+    session_id, _task_id, token = _browser_preview_ids(ctx)
+    return {"session_id": session_id, "token": token, "key": "Enter"}
+
+
+async def _setup_browser_preview_text(ctx: LiveCtx) -> JsonObject:
+    session_id, _task_id, token = _browser_preview_ids(ctx)
+    return {"session_id": session_id, "token": token, "text": "hello"}
+
+
+async def _setup_browser_preview_takeover(ctx: LiveCtx) -> JsonObject:
+    session_id, _task_id, token = _browser_preview_ids(ctx)
+    return {"session_id": session_id, "token": token, "owner": "human"}
+
+
 def _op(
     method: str,
     url: str,
@@ -1870,6 +1968,77 @@ _CASES: dict[str, OpCase] = {
     ),
     "flows/agent_toolkits/list_requested": _op(
         "GET", f"{_API}/agent/toolkits/manage", "none", _empty, same=True,
+    ),
+    "flows/agent_toolkits/catalog_list_requested": _op(
+        "GET", f"{_API}/agent/toolkits", "none", _setup_toolkits_catalog, same=True,
+    ),
+    # REST-маршрут анонимный (peer capability-gateway без сессии): без company tools,
+    # WS идёт с контекстом компании — сравнивается только успех.
+    "flows/tool_runtime/manifest_requested": _op(
+        "GET", f"{_API}/tool-runtime/manifest", "none", _empty, same=True, compare="succeeded_only",
+    ),
+    "flows/tool_runtime/call_requested": _op(
+        "POST", f"{_API}/tool-runtime/call", "body", _setup_tool_runtime_call, same=True,
+    ),
+    "flows/browser_preview/status_requested": _op(
+        "GET",
+        f"{_API}/browser-preview/sessions/{{session_id}}/status",
+        "query",
+        _setup_browser_preview_session,
+        same=True,
+        expect="failed",
+    ),
+    "flows/browser_preview/active_session_requested": _op(
+        "GET",
+        f"{_API}/browser-preview/tasks/{{task_id}}/active-session",
+        "query",
+        _setup_browser_preview_task,
+        same=True,
+    ),
+    "flows/browser_preview/click_requested": _op(
+        "POST",
+        f"{_API}/browser-preview/sessions/{{session_id}}/click",
+        "body_minus_path",
+        _setup_browser_preview_click,
+        same=True,
+        expect="failed",
+        query_keys=("token",),
+    ),
+    "flows/browser_preview/key_requested": _op(
+        "POST",
+        f"{_API}/browser-preview/sessions/{{session_id}}/key",
+        "body_minus_path",
+        _setup_browser_preview_key,
+        same=True,
+        expect="failed",
+        query_keys=("token",),
+    ),
+    "flows/browser_preview/text_requested": _op(
+        "POST",
+        f"{_API}/browser-preview/sessions/{{session_id}}/text",
+        "body_minus_path",
+        _setup_browser_preview_text,
+        same=True,
+        expect="failed",
+        query_keys=("token",),
+    ),
+    "flows/browser_preview/takeover_requested": _op(
+        "POST",
+        f"{_API}/browser-preview/sessions/{{session_id}}/takeover",
+        "body_minus_path",
+        _setup_browser_preview_takeover,
+        same=True,
+        expect="failed",
+        query_keys=("token",),
+    ),
+    "flows/browser_preview/takeover_release_requested": _op(
+        "POST",
+        f"{_API}/browser-preview/sessions/{{session_id}}/takeover/release",
+        "body_minus_path",
+        _setup_browser_preview_session,
+        same=True,
+        expect="failed",
+        query_keys=("token",),
     ),
     "flows/agent_toolkits/item_requested": _op(
         "GET",
@@ -2709,6 +2878,8 @@ async def _rest_command(
             if k not in path_params and k not in query_keys and v is not None
         }
         json_body = body
+        if query_keys:
+            query = {k: v for k, v in payload.items() if k in query_keys and v is not None}
     elif rest.strategy == "query":
         query = _query_params(payload, path_params)
     elif rest.strategy == "none":

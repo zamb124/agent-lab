@@ -150,7 +150,7 @@ def _resolve_custom_provider(
     aip: CompanyAIProviders, ref: str
 ) -> CompanyCustomOpenAICompatibleProvider:
     if not ref.startswith(CUSTOM_PROVIDER_REF_PREFIX):
-        raise ValueError(f"_resolve_custom_provider: ref должен начинаться с custom:, получено {ref!r}")
+        raise ValueError(f"_resolve_custom_provider: ref must start with custom:, got {ref!r}")
     cid = ref[len(CUSTOM_PROVIDER_REF_PREFIX) :]
     return aip.find_custom(cid)
 
@@ -179,28 +179,28 @@ def _resolve_llm_fallback_models(
     resolved_items: list[LLMCallConfig] = []
     for idx, fallback in enumerate(fallback_models):
         if fallback.provider is None:
-            raise ValueError(f"capability {capability.value}: fallback_models[{idx}].provider обязателен")
+            raise ValueError(f"capability {capability.value}: fallback_models[{idx}].provider is required")
         if (
             primary.cost_origin == COST_ORIGIN_COMPANY
             and not fallback.provider.startswith(CUSTOM_PROVIDER_REF_PREFIX)
         ):
             raise ValueError(
-                f"capability {capability.value}: fallback_models[{idx}] задаёт платформенный "
-                + f"provider={fallback.provider!r} после BYOK/custom primary. Это смешивает "
-                + "company-cost и platform-cost в одном failover; используйте custom:<id>."
+                f"capability {capability.value}: fallback_models[{idx}] sets a platform "
+                + f"provider={fallback.provider!r} after BYOK/custom primary. This mixes "
+                + 'company-cost and platform-cost in one failover; use custom:<id>.'
             )
         if fallback.provider and fallback.provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
             custom = _resolve_custom_provider(aip, fallback.provider)
             if capability.value not in custom.capabilities:
                 raise ValueError(
                     f"capability={capability.value}: custom_provider {custom.id!r} "
-                    + f"не поддерживает её (capabilities={custom.capabilities})"
+                    + f"does not support it (capabilities={custom.capabilities})"
                 )
             resolved_model = fallback.model or custom.model_by_capability.get(capability.value)
             if not resolved_model or not str(resolved_model).strip():
                 raise ValueError(
-                    f"capability {capability.value}: для custom_provider {custom.id!r} "
-                    + "не задана fallback model"
+                    f"capability {capability.value}: for custom_provider {custom.id!r} "
+                    + 'fallback model is not set'
                 )
             fallback_body: JsonObject = dict(custom.extra_request_body or {})
             fallback_body.update(fallback.extra_request_body or {})
@@ -258,7 +258,7 @@ def resolve_company_llm(
         AICapability.LLM_VISION,
         AICapability.IMAGE_GEN,
     }:
-        raise ValueError(f"resolve_company_llm: capability {capability} не LLM-типа")
+        raise ValueError(f"resolve_company_llm: capability {capability} is not an LLM capability")
 
     aip = load_company_ai_providers()
     override = aip.get_capability_override(capability)
@@ -274,8 +274,8 @@ def resolve_company_llm(
             default_model = platform_default_model(capability, default_provider)
             if default_model is None or not str(default_model).strip():
                 raise ValueError(
-                    f"capability {capability.value}: platform default model не настроен "
-                    + f"для provider {default_provider!r}"
+                    f"capability {capability.value}: platform default model is not configured "
+                    + f"for provider {default_provider!r}"
                 )
             return CompanyResolvedLLM(
                 provider=default_provider,
@@ -287,7 +287,7 @@ def resolve_company_llm(
 
     if not isinstance(override, CompanyLLMOverride):
         raise TypeError(
-            f"capability {capability} ожидает CompanyLLMOverride, получено {type(override).__name__}"
+            f"capability {capability} expects CompanyLLMOverride, got {type(override).__name__}"
         )
 
     if override.provider == HUMANITEC_LLM_PROVIDER:
@@ -318,8 +318,8 @@ def resolve_company_llm(
         )
         if not model or not str(model).strip():
             raise ValueError(
-                f"capability {capability.value}: для custom_provider {custom.id!r} не задана "
-                + f"модель (model_by_capability[{capability.value}] или override.model)"
+                f"capability {capability.value}: for custom_provider {custom.id!r} is not set "
+                + f"model (model_by_capability[{capability.value}] or override.model)"
             )
         resolved = CompanyResolvedLLM(
             provider=CUSTOM_PROVIDER_SLUG,
@@ -345,8 +345,8 @@ def resolve_company_llm(
     model = override.model or platform_default_model(capability, override.provider) or fallback_model
     if not model or not str(model).strip():
         raise ValueError(
-            f"capability {capability.value}: не удалось определить model "
-            + f"для provider {override.provider!r} (нет в platform_defaults и override.model пуст)"
+            f"capability {capability.value}: failed to resolve model "
+            + f"for provider {override.provider!r} (missing from platform_defaults and override.model is empty)"
         )
 
     resolved = CompanyResolvedLLM(
@@ -389,19 +389,19 @@ def resolve_company_custom_llm_provider_ref(
         AICapability.LLM_VISION,
         AICapability.IMAGE_GEN,
     }:
-        raise ValueError(f"resolve_company_custom_llm_provider_ref: capability {capability} не LLM-типа")
+        raise ValueError(f"resolve_company_custom_llm_provider_ref: capability {capability} is not an LLM capability")
     aip = load_company_ai_providers()
     custom = _resolve_custom_provider(aip, provider_ref)
     if capability.value not in custom.capabilities:
         raise ValueError(
-            f"capability={capability.value}: custom_provider {custom.id!r} не поддерживает её "
+            f"capability={capability.value}: custom_provider {custom.id!r} does not support it "
             + f"(capabilities={custom.capabilities})"
         )
     resolved_model = model or custom.model_by_capability.get(capability.value)
     if not resolved_model or not str(resolved_model).strip():
         raise ValueError(
-            f"capability {capability.value}: для custom_provider {custom.id!r} не задана "
-            + f"модель (model_by_capability[{capability.value}] или явный model)"
+            f"capability {capability.value}: for custom_provider {custom.id!r} is not set "
+            + f"model (model_by_capability[{capability.value}] or an explicit model)"
         )
     return CompanyResolvedLLM(
         provider=CUSTOM_PROVIDER_SLUG,
@@ -427,7 +427,7 @@ def resolve_company_embedding() -> CompanyResolvedEmbedding | None:
         model = ov.model or custom.model_by_capability.get(AICapability.EMBEDDING.value)
         if not model:
             raise ValueError(
-                f"capability=embedding: custom_provider {custom.id!r} не задал model_by_capability['embedding']"
+                f"capability=embedding: custom_provider {custom.id!r} did not set model_by_capability['embedding']"
             )
         return CompanyResolvedEmbedding(
             provider=CUSTOM_PROVIDER_SLUG,
@@ -482,17 +482,17 @@ def resolve_company_rerank() -> CompanyResolvedRerank | None:
         )
     provider = ov.provider
     if provider is None:
-        raise ValueError("rerank.provider обязателен при enabled=true")
+        raise ValueError('rerank.provider is required when enabled=true')
     if provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
         custom = _resolve_custom_provider(aip, provider)
         if not custom.rerank_path:
             raise ValueError(
-                f"rerank: custom_provider {custom.id!r} не задал rerank_path"
+                f"rerank: custom_provider {custom.id!r} did not set rerank_path"
             )
         model = ov.model or custom.model_by_capability.get(AICapability.RERANK.value)
         if not model or not str(model).strip():
             raise ValueError(
-                f"capability=rerank: custom_provider {custom.id!r} не задал model"
+                f"capability=rerank: custom_provider {custom.id!r} did not set model"
             )
         url = custom.base_url.rstrip("/") + custom.rerank_path
         return CompanyResolvedRerank(
@@ -511,7 +511,7 @@ def resolve_company_rerank() -> CompanyResolvedRerank | None:
     cost_origin = COST_ORIGIN_COMPANY if has_byok else COST_ORIGIN_PLATFORM
     model = ov.model
     if not model or not str(model).strip():
-        raise ValueError(f"rerank: model обязателен для provider={provider!r}")
+        raise ValueError(f"rerank: model is required for provider={provider!r}")
     return CompanyResolvedRerank(
         enabled=True,
         provider=provider,
@@ -528,17 +528,17 @@ def resolve_company_rerank() -> CompanyResolvedRerank | None:
 def resolve_company_voice(capability: AICapability) -> CompanyResolvedVoice | None:
     """Резолв voice override (stt/tts/vad). None если override не задан."""
     if capability not in (AICapability.VOICE_STT, AICapability.VOICE_TTS, AICapability.VOICE_VAD):
-        raise ValueError(f"resolve_company_voice: capability {capability} не voice")
+        raise ValueError(f"resolve_company_voice: capability {capability} is not voice")
     aip = load_company_ai_providers()
     ov_raw = aip.get_capability_override(capability)
     if ov_raw is None:
         return None
     if not isinstance(ov_raw, CompanyVoiceOverride):
-        raise TypeError(f"resolve_company_voice: override {capability.value} должен быть CompanyVoiceOverride")
+        raise TypeError(f"resolve_company_voice: override {capability.value} must be CompanyVoiceOverride")
     ov = ov_raw
     if ov.provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
         if capability == AICapability.VOICE_VAD:
-            raise ValueError("voice_vad: custom провайдеры не поддерживаются")
+            raise ValueError('voice_vad: custom providers are not supported')
         custom = _resolve_custom_provider(aip, ov.provider)
         model = ov.model or custom.model_by_capability.get(capability.value)
         return CompanyResolvedVoice(

@@ -61,7 +61,7 @@ def onlyoffice_document_type_for_binding_row(
         dtype, _ = onlyoffice_document_type_for_upload(original_name, normalized_ct)
         return dtype
     except ValueError as exc:
-        raise ValueError(f"OnlyOffice тип не определён для {original_name}") from exc
+        raise ValueError(f"OnlyOffice type is not determined for {original_name}") from exc
 
 
 def migration_document_type_to_file_category(document_type: str) -> tuple[str, str | None]:

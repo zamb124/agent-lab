@@ -46,12 +46,12 @@ def merge_external_refs(
     Возвращает копию attributes с обновлённым external_refs[source_id] без затирания других источников.
     """
     if not source_id.strip():
-        raise ValueError("source_id обязателен")
+        raise ValueError("source_id is required")
     raw_refs = attributes.get("external_refs")
     if raw_refs is None:
         refs: JsonObject = {}
     elif not isinstance(raw_refs, dict):
-        raise ValueError("attributes.external_refs должен быть объектом")
+        raise ValueError("attributes.external_refs must be an object")
     else:
         refs = _as_json_object(type_cast(object, raw_refs), "attributes.external_refs")
     refs[source_id] = ref.to_json_dict()

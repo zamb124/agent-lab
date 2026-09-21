@@ -150,10 +150,8 @@ from apps.flows.src.services.flow_factory import FlowFactory
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_EVALUATION_RUN
 from core.a2a import coerce_usage_token_count, get_part_text, part_has_text
 from core.ai.providers import AICapability
-from core.ai.resolver import COST_ORIGIN_COMPANY, resolve_ai_model
+from core.ai.resolver import resolve_ai_model
 from core.ai.runtime import create_llm_client_from_ai_model, create_llm_client_from_call_config
-from core.billing import get_billing_service
-from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
 from core.clients.llm import LLMClient, MockLLM
 from core.context import get_context, require_active_company
 from core.errors.boundary import PlatformNotFoundError
@@ -161,7 +159,6 @@ from core.events import publish_event_to_company
 from core.llm_context import LLMContextPatch
 from core.logging import get_logger
 from core.models import StrictBaseModel
-from core.models.billing_models import UsageType
 from core.state import ExecutionState
 from core.tracing.context import get_current_trace_context
 from core.tracing.models import TraceSearchResult, TraceSpanRecord
@@ -1999,7 +1996,7 @@ class EvaluationLabService:
             )
             return case_run
         except Exception as exc:
-            logger.exception("Evaluation case failed: case_id=%s", case.case_id)
+            logger.exception("flows.evaluation.case.failed.case_id", case_id=case.case_id)
             case_run = await self._finish_case_run(
                 case_run=case_run,
                 state=EvaluationCaseRunState.ERROR,
@@ -3847,30 +3844,26 @@ class EvaluationLabService:
         node_config: NodeConfig | None,
         *,
         state: ExecutionState | None,
-    ) -> tuple[LLMClient | MockLLM, str | None, str]:
-        """Returns (client, billing_resource_name, cost_origin)."""
+    ) -> LLMClient | MockLLM:
         if node_config is not None:
             capability = llm_capability_from_node_config(node_config)
             company_resolved = resolve_ai_model(capability, include_platform_default=False)
             if node_config.llm is not None or company_resolved is not None:
                 effective: EffectiveLLMConfig = resolve_effective_llm_config_for_node(node_config)
-                client = create_llm_client_from_call_config(
+                return create_llm_client_from_call_config(
                     effective.config,
                     state=state,
                     fallback_models=effective.config.fallback_models,
+                    cost_origin=effective.cost_origin,
+                    billing_resource_name=effective.billing_resource_name,
                 )
-                return client, effective.billing_resource_name, effective.cost_origin
         resolved = resolve_ai_model(
             AICapability.LLM_CHAT,
             include_platform_default=True,
         )
         if resolved is None:
             raise EvaluationLabValidationError("evaluation LLM is not available")
-        return (
-            create_llm_client_from_ai_model(resolved),
-            resolved.billing_resource_name,
-            resolved.cost_origin,
-        )
+        return create_llm_client_from_ai_model(resolved)
 
     async def _judge_pairwise_with_llm(
         self,
@@ -4000,20 +3993,13 @@ class EvaluationLabService:
         if not str(actx.user.user_id).strip():
             raise EvaluationLabValidationError("user context is required")
         uid = str(actx.user.user_id).strip()
-        llm, billing_resource_name, cost_origin = self._bind_evaluation_llm(
+        llm = self._bind_evaluation_llm(
             node_config,
             state=state,
         )
         resolved_llm_context = (
             llm_context if llm_context is not None else self._llm_context_from_node(node_config)
         )
-        if cost_origin != COST_ORIGIN_COMPANY:
-            await get_billing_service().require_balance_for_billable_operation(
-                actx.active_company.company_id,
-                uid,
-                operation_code=BALANCE_BLOCK_OPERATION_LLM,
-                notification_service="flows",
-            )
         trace_extra = {
             trace_attributes.ATTR_USER_ID: uid,
             trace_attributes.ATTR_TENANT_COMPANY_ID: actx.active_company.company_id,
@@ -4022,10 +4008,6 @@ class EvaluationLabService:
             "flows.evaluation_lab.llm_tool",
             event_type="llm.invoke",
             operation_category="llm",
-            billing_usage_type=UsageType.LLM_REQUEST.value,
-            billing_resource_name=billing_resource_name,
-            billing_quantity=1,
-            billing_pending_settlement=True,
             extra_attributes=trace_extra,
         ) as span:
             input_tokens = 0
@@ -4205,20 +4187,13 @@ class EvaluationLabService:
         if not str(actx.user.user_id).strip():
             raise EvaluationLabValidationError("user context is required")
         uid = str(actx.user.user_id).strip()
-        llm, billing_resource_name, cost_origin = self._bind_evaluation_llm(
+        llm = self._bind_evaluation_llm(
             node_config,
             state=state,
         )
         resolved_llm_context = (
             llm_context if llm_context is not None else self._llm_context_from_node(node_config)
         )
-        if cost_origin != COST_ORIGIN_COMPANY:
-            await get_billing_service().require_balance_for_billable_operation(
-                actx.active_company.company_id,
-                uid,
-                operation_code=BALANCE_BLOCK_OPERATION_LLM,
-                notification_service="flows",
-            )
         trace_extra = {
             trace_attributes.ATTR_USER_ID: uid,
             trace_attributes.ATTR_TENANT_COMPANY_ID: actx.active_company.company_id,
@@ -4227,10 +4202,6 @@ class EvaluationLabService:
             "flows.evaluation_lab.llm",
             event_type="llm.invoke",
             operation_category="llm",
-            billing_usage_type=UsageType.LLM_REQUEST.value,
-            billing_resource_name=billing_resource_name,
-            billing_quantity=1,
-            billing_pending_settlement=True,
             extra_attributes=trace_extra,
         ) as span:
             content_parts: list[str] = []

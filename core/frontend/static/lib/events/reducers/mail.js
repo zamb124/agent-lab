@@ -1,3 +1,5 @@
+import { formatPlatformError } from '../../utils/platform-error-message.js';
+
 /**
  * Слайс mail (кроссервисный, как calendar).
  *
@@ -237,6 +239,21 @@ function normalizeAttachments(raw) {
     }));
 }
 
+function _mailFailureMessage(payload) {
+    if (!payload || typeof payload !== 'object') {
+        throw new Error('mail failure payload required');
+    }
+    if (typeof payload.error_code === 'string' && payload.error_code.length > 0) {
+        const errorParams = payload.error_params
+            && typeof payload.error_params === 'object'
+            && !Array.isArray(payload.error_params)
+            ? payload.error_params
+            : null;
+        return formatPlatformError(payload.error_code, errorParams);
+    }
+    throw new Error('mail failure payload.error_code required');
+}
+
 export function mailReducer(state = initialMailState, event) {
     switch (event.type) {
         case MAIL_EVENTS.BINDINGS_LOAD_REQUESTED:
@@ -299,21 +316,13 @@ export function mailReducer(state = initialMailState, event) {
                 loading: false,
                 sending: false,
                 syncInProgress: false,
-                errorMessage: (
-                    event.payload && typeof event.payload.message === 'string'
-                        ? event.payload.message
-                        : (event.payload && typeof event.payload.error_detail === 'string'
-                            ? event.payload.error_detail
-                            : 'mail error')
-                ),
+                errorMessage: _mailFailureMessage(event.payload),
             };
         case MAIL_EVENTS.MESSAGE_LOAD_FAILED:
             return {
                 ...state,
                 messageLoading: false,
-                errorMessage: event.payload && typeof event.payload.message === 'string'
-                    ? event.payload.message
-                    : 'mail error',
+                errorMessage: _mailFailureMessage(event.payload),
             };
         case MAIL_EVENTS.COMPANY_BINDINGS_LOADED:
             return {

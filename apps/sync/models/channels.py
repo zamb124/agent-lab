@@ -15,7 +15,7 @@ ChannelMemberRole = Literal["owner", "admin", "member"]
 
 def _validate_avatar_url(v: str | None) -> str | None:
     if v is not None and not v.startswith("/"):
-        raise ValueError("avatar_url должен быть относительным URL платформы (начинается с /)")
+        raise ValueError("avatar_url must be a relative platform URL (starts with /)")
     return v
 
 

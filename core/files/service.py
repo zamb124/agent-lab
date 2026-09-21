@@ -15,6 +15,7 @@ from core.files.models import FileRecord
 from core.files.registry import default_docs_placement
 from core.files.retention import FileRetentionKind
 from core.files.retention_promote import promote_file_retention_record
+from core.files.s3_client import S3ClientFactory
 from core.files.storage import FileStorage, retention_fields_from_spec
 from core.files.types import FileCategory, ext_to_category
 from core.files.urls import normalize_files_route_segment
@@ -166,6 +167,14 @@ class FilesService:
             raise ValueError("placement.file_id must match file_id argument")
         _ = await self.get(file_id)
         return await self._docs_bind_hook(placement)
+
+    async def read_bytes(self, file_record: FileRecord) -> bytes:
+        """Содержимое объекта S3 записи целиком; для больших файлов — `stream_s3_file`."""
+        s3 = S3ClientFactory.create_client_for_bucket(file_record.s3_bucket)
+        try:
+            return await s3.download_bytes(file_record.s3_key)
+        finally:
+            await s3.close()
 
     async def delete(self, file_id: str) -> bool:
         return await self._storage.delete(file_id)

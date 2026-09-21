@@ -85,7 +85,7 @@ class CallSpeechEgressTrackRepository(BaseSyncRepository[SyncCallSpeechEgressTra
         async with self._db.session() as session:
             ent = await session.get(SyncCallSpeechEgressTrack, row_id)
             if ent is None:
-                raise ValueError(f"Строка speech egress {row_id} не найдена.")
+                raise ValueError(f"Speech egress row {row_id} not found.")
             ent.segments_posted = value
             if not isinstance(last_segment_s3_key, _SegmentsS3CursorUnset):
                 ent.last_segment_s3_key = last_segment_s3_key

@@ -86,16 +86,6 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
         this._removeMemberOp = this.useOp('worktracker/work_queue_member_remove');
         this._teamMembersSel = this.select((s) => s.team.members);
         this._teamLoadingSel = this.select((s) => s.team.loading);
-        this.useEvent(this._addMemberOp.op.events.SUCCEEDED, () => {
-            if (this.workQueueId) {
-                this._membersOp.run({ work_queue_id: this.workQueueId });
-            }
-        });
-        this.useEvent(this._removeMemberOp.op.events.SUCCEEDED, () => {
-            if (this.workQueueId) {
-                this._membersOp.run({ work_queue_id: this.workQueueId });
-            }
-        });
     }
 
     connectedCallback() {

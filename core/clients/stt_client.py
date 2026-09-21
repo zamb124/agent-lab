@@ -112,7 +112,7 @@ def _raise_if_cloud_ru_error_body(body_json: JsonValue) -> None:
     if isinstance(err_raw, str):
         msg = err_raw.strip()
         if msg != "":
-            raise ValueError(f"STT cloud_ru вернул ошибку API: {msg}")
+            raise ValueError(f"STT cloud_ru returned an API error: {msg}")
         return
     if isinstance(err_raw, dict):
         err_object: JsonObject = require_json_object(err_raw, "stt.error_body.error")
@@ -127,7 +127,7 @@ def _raise_if_cloud_ru_error_body(body_json: JsonValue) -> None:
         if code is not None and str(code).strip() != "":
             parts.append(f"code={code}")
         if parts:
-            raise ValueError("STT cloud_ru вернул ошибку API: " + "; ".join(parts))
+            raise ValueError("STT cloud_ru returned an API error: " + "; ".join(parts))
 
 
 def _looks_like_stt_error_text(text: str) -> bool:
@@ -205,17 +205,17 @@ class CloudRuSTTClient(BaseSTTClient):
         timeout: float,
     ) -> None:
         if api_key == "":
-            raise ValueError("STT cloud_ru api_key не может быть пустым.")
+            raise ValueError("STT cloud_ru api_key cannot be empty.")
         if base_url == "":
-            raise ValueError("STT cloud_ru base_url не может быть пустым.")
+            raise ValueError("STT cloud_ru base_url cannot be empty.")
         if model == "":
-            raise ValueError("STT cloud_ru model не может быть пустым.")
+            raise ValueError("STT cloud_ru model cannot be empty.")
         if response_format == "":
-            raise ValueError("STT cloud_ru response_format не может быть пустым.")
+            raise ValueError("STT cloud_ru response_format cannot be empty.")
         if default_language == "":
-            raise ValueError("STT cloud_ru language не может быть пустым.")
+            raise ValueError("STT cloud_ru language cannot be empty.")
         if timeout <= 0:
-            raise ValueError("STT cloud_ru timeout должен быть больше 0.")
+            raise ValueError("STT cloud_ru timeout must be greater than 0.")
 
         self._api_key: str = api_key
         self._base_url: str = base_url
@@ -235,15 +235,15 @@ class CloudRuSTTClient(BaseSTTClient):
         language: str | None = None,
     ) -> STTTranscriptionResult:
         if not audio_bytes:
-            raise ValueError("audio_bytes не может быть пустым.")
+            raise ValueError("audio_bytes cannot be empty.")
         if file_name == "":
-            raise ValueError("file_name не может быть пустым.")
+            raise ValueError("file_name cannot be empty.")
         if content_type == "":
-            raise ValueError("content_type не может быть пустым.")
+            raise ValueError("content_type cannot be empty.")
 
         selected_language = language or self._default_language
         if selected_language == "":
-            raise ValueError("language не может быть пустым.")
+            raise ValueError("language cannot be empty.")
 
         payload = {
             "model": self._model,
@@ -323,7 +323,7 @@ class CloudRuSTTClient(BaseSTTClient):
             )
 
         if body_text == "":
-            raise ValueError("STT cloud_ru вернул пустой ответ.")
+            raise ValueError("STT cloud_ru returned an empty response.")
         if _looks_like_stt_error_text(body_text):
             message = (
                 "STT cloud_ru вернул текст ошибки вместо транскрипции: "
@@ -345,7 +345,7 @@ class MockSTTClient(BaseSTTClient):
 
     def __init__(self, *, transcript_text: str) -> None:
         if transcript_text == "":
-            raise ValueError("STT mock transcript_text не может быть пустым.")
+            raise ValueError("STT mock transcript_text cannot be empty.")
         self._transcript_text: str = transcript_text
 
     @override
@@ -358,11 +358,11 @@ class MockSTTClient(BaseSTTClient):
         language: str | None = None,
     ) -> STTTranscriptionResult:
         if not audio_bytes:
-            raise ValueError("audio_bytes не может быть пустым.")
+            raise ValueError("audio_bytes cannot be empty.")
         if file_name == "":
-            raise ValueError("file_name не может быть пустым.")
+            raise ValueError("file_name cannot be empty.")
         if content_type == "":
-            raise ValueError("content_type не может быть пустым.")
+            raise ValueError("content_type cannot be empty.")
         return STTTranscriptionResult(
             provider="mock",
             status=AudioTranscriptionStatus.DONE,
@@ -383,13 +383,13 @@ class LitserveSTTClient(BaseSTTClient):
         timeout: float,
     ) -> None:
         if base_url == "":
-            raise ValueError("STT litserve base_url не может быть пустым.")
+            raise ValueError("STT litserve base_url cannot be empty.")
         if model == "":
-            raise ValueError("STT litserve model не может быть пустым.")
+            raise ValueError("STT litserve model cannot be empty.")
         if default_language == "":
-            raise ValueError("STT litserve language не может быть пустым.")
+            raise ValueError("STT litserve language cannot be empty.")
         if timeout <= 0:
-            raise ValueError("STT litserve timeout должен быть больше 0.")
+            raise ValueError("STT litserve timeout must be greater than 0.")
 
         self._base_url: str = base_url.rstrip("/")
         self._model: str = model
@@ -417,15 +417,15 @@ class LitserveSTTClient(BaseSTTClient):
         в логах для совместимости с другими клиентами.
         """
         if not audio_bytes:
-            raise ValueError("audio_bytes не может быть пустым.")
+            raise ValueError("audio_bytes cannot be empty.")
         if file_name == "":
-            raise ValueError("file_name не может быть пустым.")
+            raise ValueError("file_name cannot be empty.")
         if content_type == "":
-            raise ValueError("content_type не может быть пустым.")
+            raise ValueError("content_type cannot be empty.")
 
         selected_language = language or self._default_language
         if selected_language == "":
-            raise ValueError("language не может быть пустым.")
+            raise ValueError("language cannot be empty.")
 
         url = f"{self._base_url}/v1/audio/transcriptions"
         payload = {
@@ -556,10 +556,10 @@ class STTClientFactory:
         для выбранного провайдера (строковые ключи из allowlist API).
         """
         if provider_name == "":
-            raise ValueError("STT provider не задан после tier-резолва.")
+            raise ValueError("STT provider is not set after tier resolve.")
         language = default_language or cfg.default_language
         if language == "":
-            raise ValueError("STT default_language пуст.")
+            raise ValueError("STT default_language is empty.")
 
         sec = secrets or {}
 
@@ -567,7 +567,7 @@ class STTClientFactory:
             backend = cfg.litserve
             if not backend.enabled:
                 raise ValueError(
-                    "STT провайдер `litserve` выключен в `voice.stt.litserve.enabled`."
+                    "STT provider `litserve` is disabled in `voice.stt.litserve.enabled`."
                 )
             chosen_model = model or cfg.default_model
             if not chosen_model:
@@ -620,14 +620,14 @@ class STTClientFactory:
         if provider_name == "mock":
             return MockSTTClient(transcript_text=cfg.mock_transcript_text)
 
-        raise ValueError(f"Неизвестный STT провайдер: {provider_name!r}")
+        raise ValueError(f"Unknown STT provider: {provider_name!r}")
 
     @staticmethod
     def _build_cloud_ru(config: "CloudRuSTTConfig") -> "CloudRuSTTClient":
         if not config.enabled:
-            raise ValueError("STT провайдер cloud_ru выключен в конфигурации.")
+            raise ValueError("STT provider cloud_ru is disabled in configuration.")
         if not config.api_key:
-            raise ValueError("STT cloud_ru api_key не настроен.")
+            raise ValueError("STT cloud_ru api_key is not configured.")
         return CloudRuSTTClient(
             api_key=config.api_key,
             base_url=config.base_url,

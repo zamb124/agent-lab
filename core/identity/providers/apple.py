@@ -29,7 +29,7 @@ DEFAULT_SCOPE = "name email"
 def _normalize_apple_pem(raw: str) -> str:
     text = raw.strip().replace("\\n", "\n")
     if "BEGIN PRIVATE KEY" not in text:
-        raise ValueError("apple_private_key должен быть PEM (BEGIN PRIVATE KEY)")
+        raise ValueError('apple_private_key must be PEM (BEGIN PRIVATE KEY)')
     return text
 
 
@@ -108,27 +108,27 @@ class AppleProvider(BaseAuthProvider):
     @override
     def validate_config(self) -> bool:
         if not self.config.enabled:
-            logger.warning("Провайдер apple отключен")
+            logger.warning("identity.apple")
             return False
         if not self.client_id:
-            logger.warning("client_id (Services ID) не настроен для apple")
+            logger.warning("identity.client_id")
             return False
         if not self._team_id:
-            logger.warning("apple_team_id не настроен для apple")
+            logger.warning("identity.apple_team_id")
             return False
         if not self._key_id:
-            logger.warning("apple_key_id не настроен для apple")
+            logger.warning("identity.apple_key_id")
             return False
         if not self.config.apple_private_key:
-            logger.warning("apple_private_key не настроен для apple")
+            logger.warning("identity.apple_private_key")
             return False
         try:
             _ = _normalize_apple_pem(self.config.apple_private_key)
         except ValueError as e:
-            logger.warning("apple_private_key некорректен: %s", e)
+            logger.warning("identity.apple_private_key", e=e)
             return False
         if not self.auth_url or not self.token_url:
-            logger.warning("auth_url или token_url не заданы для apple")
+            logger.warning("identity.auth_url")
             return False
         return True
 
@@ -142,7 +142,7 @@ class AppleProvider(BaseAuthProvider):
     ) -> str:
         effective_client_id = client_id if client_id is not None else self.client_id
         if not effective_client_id:
-            raise ValueError("client_id (Services ID) не настроен для apple")
+            raise ValueError('client_id (Services ID) is not configured for apple')
         params = {
             "client_id": effective_client_id,
             "redirect_uri": redirect_uri,
@@ -163,13 +163,13 @@ class AppleProvider(BaseAuthProvider):
     ) -> tuple[str, str | None]:
         effective_client_id = client_id if client_id is not None else self.client_id
         if not effective_client_id:
-            raise ValueError("client_id (Services ID) не настроен для apple")
+            raise ValueError('client_id (Services ID) is not configured for apple')
         if not self._team_id:
-            raise ValueError("apple_team_id не настроен для apple")
+            raise ValueError('apple_team_id is not configured for apple')
         if not self._key_id:
-            raise ValueError("apple_key_id не настроен для apple")
+            raise ValueError('apple_key_id is not configured for apple')
         if not self._private_key_pem:
-            raise ValueError("apple_private_key не настроен для apple")
+            raise ValueError('apple_private_key is not configured for apple')
         client_secret = build_apple_client_secret(
             self._team_id,
             effective_client_id,
@@ -191,15 +191,15 @@ class AppleProvider(BaseAuthProvider):
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
         if response.status_code != 200:
-            logger.error("Ошибка токена Apple: %s", response.text)
-            raise ValueError(f"Apple вернул ошибку: {response.status_code}")
+            logger.error("identity.apple", text=response.text)
+            raise ValueError(f"Apple returned an error: {response.status_code}")
         token_data = parse_json_object(response.content, "apple.token.response")
         id_token = token_data.get("id_token")
         if not isinstance(id_token, str) or not id_token:
-            raise ValueError("Apple не вернул id_token")
+            raise ValueError('Apple did not return id_token')
         refresh_token = token_data.get("refresh_token")
         if refresh_token is not None and not isinstance(refresh_token, str):
-            raise ValueError("Apple вернул refresh_token не строкой")
+            raise ValueError('Apple returned refresh_token that is not a string')
         return id_token, refresh_token
 
     @override
@@ -212,15 +212,15 @@ class AppleProvider(BaseAuthProvider):
     ) -> ProviderUserInfo:
         effective_client_id = client_id if client_id is not None else self.client_id
         if not effective_client_id:
-            raise ValueError("client_id (Services ID) не настроен для apple")
+            raise ValueError('client_id (Services ID) is not configured for apple')
         claims = decode_apple_id_token(access_token, effective_client_id)
         sub = claims.get("sub")
         if not isinstance(sub, str) or not sub:
-            raise ValueError("Apple id_token без sub")
+            raise ValueError('Apple id_token has no sub')
 
         email_value = claims.get("email")
         if not isinstance(email_value, str) or not email_value.strip():
-            raise ValueError("Apple id_token без email")
+            raise ValueError('Apple id_token has no email')
         email = email_value.strip()
 
         name = ""

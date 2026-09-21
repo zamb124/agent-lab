@@ -74,7 +74,7 @@ class EmbedConfigRepository(BaseRepository[EmbedConfig]):
                 entity = self.model_class.model_validate_json(data)
                 entities.append(entity)
             except Exception as e:
-                logger.error(f"Ошибка парсинга {key}: {e}")
+                logger.error("embed.config.parse_failed", key=key, error=str(e))
                 continue
         return entities
 
@@ -85,4 +85,4 @@ class EmbedConfigRepository(BaseRepository[EmbedConfig]):
             config.usage_count += 1
             config.last_used_at = datetime.now(timezone.utc)
             _ = await self.set(config)
-            logger.debug(f"Увеличен счетчик использований виджета {embed_id}: {config.usage_count}")
+            logger.debug("embed.config.usage_incremented", embed_id=embed_id, usage_count=config.usage_count)

@@ -508,7 +508,7 @@ async def test_e2e_audit_device_revoked(
         unique_id=unique_id,
     )
     revoke_response = await agent_frontend_http_client.delete(f"{AGENT_API_PREFIX}/devices/{device_id}")
-    assert revoke_response.status_code == 204
+    assert revoke_response.status_code == 200, revoke_response.text
     company_id = company_id_from_auth_token(auth_token)
     await assert_audit_event_in_redis(
         frontend_container,

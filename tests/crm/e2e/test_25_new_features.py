@@ -94,6 +94,23 @@ def _facet_counts(facets: dict[str, object]) -> dict[str, int]:
     return counts
 
 
+async def _download_export(
+    crm_client: AsyncClient,
+    headers: dict[str, str],
+    *,
+    params: dict[str, str],
+) -> Response:
+    """Экспорт отдаёт FileRecord; содержимое — по его `download_url` через Files API."""
+    exported = await crm_client.get(
+        "/crm/api/v1/entities/export", params=params, headers=headers
+    )
+    assert exported.status_code == 200, exported.text
+    download_url = object_str(_http_json(exported).get("download_url"), field="download_url")
+    downloaded = await crm_client.get(download_url, headers=headers)
+    assert downloaded.status_code == 200, downloaded.text
+    return downloaded
+
+
 def _export_json_items(text: str) -> list[dict[str, object]]:
     return object_list(cast(object, json.loads(text)))
 
@@ -514,12 +531,11 @@ class TestExport:
                 headers=auth_headers_system,
             )
 
-        resp = await crm_client.get(
-            "/crm/api/v1/entities/export",
-            params={"format": "json", "entity_type": "note"},
-            headers=auth_headers_system,
+        resp = await _download_export(
+            crm_client,
+            auth_headers_system,
+            params={"export_format": "json", "entity_type": "note"},
         )
-        assert resp.status_code == 200
         assert "application/json" in resp.headers["content-type"]
 
         items = _export_json_items(resp.text)
@@ -545,12 +561,11 @@ class TestExport:
                 headers=auth_headers_system,
             )
 
-        resp = await crm_client.get(
-            "/crm/api/v1/entities/export",
-            params={"format": "csv", "entity_type": "note"},
-            headers=auth_headers_system,
+        resp = await _download_export(
+            crm_client,
+            auth_headers_system,
+            params={"export_format": "csv", "entity_type": "note"},
         )
-        assert resp.status_code == 200
         assert "text/csv" in resp.headers["content-type"]
 
         reader = csv.reader(io.StringIO(resp.text))
@@ -568,23 +583,24 @@ class TestExport:
             assert f"CSV {i} {unique_id}" in exported_names
 
     @pytest.mark.asyncio
-    async def test_export_content_disposition(
+    async def test_export_returns_ephemeral_file_record(
         self,
         crm_client: AsyncClient,
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
-        """Content-Disposition содержит filename."""
+        """Экспорт — ephemeral FileRecord с именем по формату и `download_url` Files API."""
         _ = unique_id
         resp = await crm_client.get(
             "/crm/api/v1/entities/export",
-            params={"format": "json"},
+            params={"export_format": "json"},
             headers=auth_headers_system,
         )
-        assert resp.status_code == 200
-        raw_disposition = cast(object, resp.headers.get("content-disposition"))
-        content_disposition = raw_disposition if isinstance(raw_disposition, str) else ""
-        assert "filename=" in content_disposition
+        assert resp.status_code == 200, resp.text
+        record = _http_json(resp)
+        assert record["original_name"] == "entities.json"
+        assert record["content_type"] == "application/json"
+        assert isinstance(record["download_url"], str) and record["download_url"]
 
 
 class TestSearchModes:

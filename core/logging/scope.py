@@ -123,20 +123,20 @@ def enter_request_scope(
             requires_user=True и отсутствии user_id/company_id.
     """
     if not request_id.strip():
-        raise ValueError("enter_request_scope: request_id обязателен и непустой")
+        raise ValueError('enter_request_scope: request_id is required and must be non-empty')
     if not trace_id.strip():
-        raise ValueError("enter_request_scope: trace_id обязателен и непустой")
+        raise ValueError('enter_request_scope: trace_id is required and must be non-empty')
     if not service_name.strip():
-        raise ValueError("enter_request_scope: service_name обязателен и непустой")
+        raise ValueError('enter_request_scope: service_name is required and must be non-empty')
 
     if requires_user:
         if user_id is None or not user_id.strip():
             raise ValueError(
-                "enter_request_scope(requires_user=True): user_id обязателен"
+                'enter_request_scope(requires_user=True): user_id is required'
             )
         if company_id is None or not company_id.strip():
             raise ValueError(
-                "enter_request_scope(requires_user=True): company_id обязателен"
+                'enter_request_scope(requires_user=True): company_id is required'
             )
 
     snapshot = get_log_context()

@@ -9,6 +9,7 @@
 from core.websocket.command_router import (
     CommandHandler,
     WsCommandError,
+    command_failure_payload,
     derive_failed_type,
     derive_succeeded_type,
     dispatch_ws_command,
@@ -19,6 +20,7 @@ from core.websocket.command_router import (
     validate_ws_payload,
 )
 from core.websocket.operation import (
+    EmptyPayload,
     Operation,
     RegisteredOperation,
     raise_conflict,
@@ -34,9 +36,11 @@ from core.websocket.operation import (
 
 __all__ = [
     "CommandHandler",
+    "EmptyPayload",
     "Operation",
     "RegisteredOperation",
     "WsCommandError",
+    "command_failure_payload",
     "derive_failed_type",
     "derive_succeeded_type",
     "dispatch_ws_command",

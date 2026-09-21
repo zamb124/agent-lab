@@ -11,7 +11,10 @@ import yaml
 
 from apps.flows.config import get_settings
 from apps.flows.src.container_contracts import FlowRuntimeContainer
-from apps.flows.src.models.mcp_branding import MCPBrandingManifestFilePayload
+from apps.flows.src.models.mcp_branding import (
+    MCPBrandingManifestEntryPayload,
+    MCPBrandingManifestFilePayload,
+)
 from apps.flows.src.services.mcp_branding_aliases import (
     BRANDING_SERVER_ID_ALIASES,
     resolve_branding_server_id,
@@ -34,18 +37,10 @@ _CONTENT_TYPE_BY_SUFFIX: dict[str, str] = {
 
 
 @dataclass(frozen=True)
-class MCPBrandingManifestEntry:
-    server_id: str
-    file: str
-    source: str
-    license: str
-
-
-@dataclass(frozen=True)
 class MCPBrandingManifest:
     bundle_dir: Path
     default_icon: Path
-    entries: dict[str, MCPBrandingManifestEntry]
+    entries: dict[str, MCPBrandingManifestEntryPayload]
 
 
 @dataclass(frozen=True)
@@ -100,14 +95,14 @@ def load_mcp_branding_manifest(*, manifest_path: Path | None = None) -> MCPBrand
     if not default_icon.is_file():
         raise FileNotFoundError(f"MCP branding default_icon not found: {default_icon}")
 
-    entries: dict[str, MCPBrandingManifestEntry] = {}
+    entries: dict[str, MCPBrandingManifestEntryPayload] = {}
     for row in manifest_payload.entries:
         server_id = _validate_server_id(row.server_id)
         icon_path = bundle_dir / row.file.strip()
         if not icon_path.is_file():
             raise FileNotFoundError(f"MCP branding icon not found for {server_id}: {icon_path}")
 
-        entries[server_id] = MCPBrandingManifestEntry(
+        entries[server_id] = MCPBrandingManifestEntryPayload(
             server_id=server_id,
             file=row.file.strip(),
             source=row.source.strip(),
@@ -228,10 +223,10 @@ async def seed_mcp_branding_from_bundle(
         skipped_existing=skipped_existing,
     )
     logger.info(
-        "MCP branding seed done: targets=%s seeded=%s skipped_existing=%s dry_run=%s",
-        stats.targets,
-        stats.seeded,
-        stats.skipped_existing,
-        dry_run,
+        "flows.mcp.branding.seed.done.targets",
+        targets=stats.targets,
+        seeded=stats.seeded,
+        skipped_existing=stats.skipped_existing,
+        dry_run=dry_run,
     )
     return stats
