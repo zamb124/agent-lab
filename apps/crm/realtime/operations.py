@@ -107,7 +107,7 @@ from apps.crm.models.graph import (
 )
 from apps.crm.services.crm_note_broadcast import broadcast_crm_note_event
 from apps.crm.services.entity_response_enrichment import build_entity_responses_with_semantic_index
-from apps.crm.services.entity_service import DraftVersionConflictError, SchemaValidationError
+from apps.crm.services.entity_service import SchemaValidationError
 from apps.crm.services.graph_service import GraphEntityLimitExceededError
 from apps.crm.services.task_service import ActiveTaskExistsError
 from apps.crm.system_templates import REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS
@@ -1570,7 +1570,7 @@ async def op_notes_analysis_draft_save(
         return await container.entity_service.patch_analysis_draft(payload.note_id, payload)
     except AuthzDenied as exc:
         raise_forbidden(exc)
-    except DraftVersionConflictError as exc:
+    except PlatformConflictError as exc:
         raise_conflict(exc)
     except ValueError as exc:
         _raise_service_error(exc)

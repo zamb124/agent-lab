@@ -77,25 +77,11 @@ from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
 from core.authz.types import AuthzRelation
+from core.errors.boundary import PlatformAccessDeniedError, PlatformNotFoundError
 from core.logging import get_logger
 from core.utils.time import utcnow
 
 logger = get_logger(__name__)
-
-
-class WikiPageNotFoundError(LookupError):
-    """Страницы нет в этом пространстве.
-
-    Отдельный тип нужен, чтобы HTTP-слой всегда отвечал 404 — и для
-    несуществующей страницы, и для страницы чужого namespace: разное поведение
-    выдавало бы факт её существования.
-    """
-
-
-class WikiAccessDeniedError(PermissionError):
-    """Пользователю нельзя выполнить операцию над страницей."""
-
-
 
 
 def _new_id(prefix: str) -> str:
@@ -119,12 +105,10 @@ class WikiService:
 
     # --- доступ ---
 
-    async def require_page(
-        self, company_id: str, namespace: str, wiki_page_id: str
-    ) -> WikiPage:
+    async def require_page(self, company_id: str, namespace: str, wiki_page_id: str) -> WikiPage:
         page = await self._repo.get_page(company_id, namespace, wiki_page_id)
         if page is None:
-            raise WikiPageNotFoundError(f"Страница {wiki_page_id} не найдена в {namespace}")
+            raise PlatformNotFoundError(f"Страница {wiki_page_id} не найдена в {namespace}")
         return page
 
     async def page_response(self, page: WikiPage, *, user_id: str) -> WikiPageResponse:
@@ -139,11 +123,9 @@ class WikiService:
     ) -> WikiPage:
         page = await self.require_page(company_id, namespace, wiki_page_id)
         try:
-            await self._authz.require_can_view(
-                AuthzObject.wiki_page(wiki_page_id), user_id=user_id
-            )
+            await self._authz.require_can_view(AuthzObject.wiki_page(wiki_page_id), user_id=user_id)
         except AuthzDenied as exc:
-            raise WikiAccessDeniedError(f"Нет доступа к странице {wiki_page_id}") from exc
+            raise PlatformAccessDeniedError(f"Нет доступа к странице {wiki_page_id}") from exc
         return page
 
     async def require_editable_page(
@@ -151,11 +133,11 @@ class WikiService:
     ) -> WikiPage:
         page = await self.require_page(company_id, namespace, wiki_page_id)
         try:
-            await self._authz.require_can_edit(
-                AuthzObject.wiki_page(wiki_page_id), user_id=user_id
-            )
+            await self._authz.require_can_edit(AuthzObject.wiki_page(wiki_page_id), user_id=user_id)
         except AuthzDenied as exc:
-            raise WikiAccessDeniedError(f"Нет прав на изменение страницы {wiki_page_id}") from exc
+            raise PlatformAccessDeniedError(
+                f"Нет прав на изменение страницы {wiki_page_id}"
+            ) from exc
         return page
 
     # --- чтение ---
@@ -236,9 +218,7 @@ class WikiService:
                 root.company_id, root.namespace, root.wiki_page_id
             )
         }
-        pages = await self._repo.list_subtree(
-            root.company_id, root.namespace, root.wiki_page_id
-        )
+        pages = await self._repo.list_subtree(root.company_id, root.namespace, root.wiki_page_id)
         for page in pages:
             if page.wiki_page_id not in published_ids:
                 continue
@@ -402,9 +382,7 @@ class WikiService:
         parts = split_markdown_file(markdown)
         parsed = parse_markdown(parts.body)
         notices = [*parts.notices, *parsed.notices]
-        front_matter = (
-            parts.front_matter if apply_front_matter else WikiMarkdownFrontMatter()
-        )
+        front_matter = parts.front_matter if apply_front_matter else WikiMarkdownFrontMatter()
 
         if wiki_page_id is None:
             page = await self.create_page(
@@ -562,9 +540,7 @@ class WikiService:
             new_parent_page_id=new_parent_page_id,
         )
 
-        moved_subtree = await self._repo.list_subtree(
-            company_id, target_namespace, wiki_page_id
-        )
+        moved_subtree = await self._repo.list_subtree(company_id, target_namespace, wiki_page_id)
         await self._recalculate_company_visible(company_id, target_namespace, wiki_page_id)
         refreshed = await self._repo.list_subtree(company_id, target_namespace, wiki_page_id)
         await self._rag.reindex_subtree(refreshed)
@@ -597,7 +573,9 @@ class WikiService:
                 AuthzObject.wiki_page(wiki_page_id), user_id=user_id
             )
         except AuthzDenied as exc:
-            raise WikiAccessDeniedError(f"Нет прав на удаление страницы {wiki_page_id}") from exc
+            raise PlatformAccessDeniedError(
+                f"Нет прав на удаление страницы {wiki_page_id}"
+            ) from exc
 
         subtree = await self._repo.list_subtree(company_id, namespace, wiki_page_id)
         page_ids = [item.wiki_page_id for item in subtree]
@@ -664,10 +642,8 @@ class WikiService:
     ) -> WikiRevision:
         revision = await self._repo.get_revision(company_id, namespace, wiki_revision_id)
         if revision is None:
-            raise WikiPageNotFoundError(f"Ревизия {wiki_revision_id} не найдена")
-        _ = await self.require_viewable_page(
-            company_id, namespace, revision.wiki_page_id, user_id
-        )
+            raise PlatformNotFoundError(f"Ревизия {wiki_revision_id} не найдена")
+        _ = await self.require_viewable_page(company_id, namespace, revision.wiki_page_id, user_id)
         return revision
 
     async def restore_revision(
@@ -698,7 +674,9 @@ class WikiService:
             company_visible_by_id=company_visible_by_id,
         )
         inherited_from = (
-            restriction_root if restriction_root is not None and restriction_root != wiki_page_id else None
+            restriction_root
+            if restriction_root is not None and restriction_root != wiki_page_id
+            else None
         )
         return await self._access.build_access(page, inherited_from_page_id=inherited_from)
 
@@ -719,7 +697,9 @@ class WikiService:
                 user_id=user_id,
             )
         except AuthzDenied as exc:
-            raise WikiAccessDeniedError(f"Нет прав на изменение доступа {wiki_page_id}") from exc
+            raise PlatformAccessDeniedError(
+                f"Нет прав на изменение доступа {wiki_page_id}"
+            ) from exc
         if page.company_visible:
             raise ValueError(
                 "Страница доступна всей компании; участники добавляются только после "
@@ -745,7 +725,9 @@ class WikiService:
                 user_id=user_id,
             )
         except AuthzDenied as exc:
-            raise WikiAccessDeniedError(f"Нет прав на изменение доступа {wiki_page_id}") from exc
+            raise PlatformAccessDeniedError(
+                f"Нет прав на изменение доступа {wiki_page_id}"
+            ) from exc
 
         await self._access.remove_member(wiki_page_id, user_id=member_user_id)
         return await self.get_access(company_id, namespace, user_id, wiki_page_id)
@@ -771,7 +753,9 @@ class WikiService:
                 user_id=user_id,
             )
         except AuthzDenied as exc:
-            raise WikiAccessDeniedError(f"Нет прав на изменение доступа {wiki_page_id}") from exc
+            raise PlatformAccessDeniedError(
+                f"Нет прав на изменение доступа {wiki_page_id}"
+            ) from exc
 
         if company_visible:
             await self._access.clear_members(wiki_page_id)
@@ -802,7 +786,9 @@ class WikiService:
                 user_id=user_id,
             )
         except AuthzDenied as exc:
-            raise WikiAccessDeniedError(f"Нет прав на публикацию ссылки {wiki_page_id}") from exc
+            raise PlatformAccessDeniedError(
+                f"Нет прав на публикацию ссылки {wiki_page_id}"
+            ) from exc
 
         if not enabled:
             await self._repo.set_link_token(
@@ -951,9 +937,7 @@ class WikiService:
             return []
         return await self._repo.search_pages(company_id, namespace, query, limit, allowed)
 
-    async def accessible_page_ids(
-        self, company_id: str, namespace: str, user_id: str
-    ) -> list[str]:
+    async def accessible_page_ids(self, company_id: str, namespace: str, user_id: str) -> list[str]:
         tree = await self._repo.list_tree(company_id, namespace)
         return await self._access.filter_viewable_page_ids(
             [item.wiki_page_id for item in tree], user_id=user_id
@@ -978,9 +962,7 @@ class WikiService:
         """
         tree = await self._repo.list_tree(company_id, namespace)
         tree_ids = [item.wiki_page_id for item in tree]
-        allowed_ids = set(
-            await self._access.filter_viewable_page_ids(tree_ids, user_id=user_id)
-        )
+        allowed_ids = set(await self._access.filter_viewable_page_ids(tree_ids, user_id=user_id))
         if not allowed_ids:
             return []
 
@@ -1086,7 +1068,7 @@ class WikiService:
             company_id, namespace, wiki_comment_id, user_id if resolved else None
         )
         if stored is None:
-            raise WikiPageNotFoundError(f"Комментарий {wiki_comment_id} не найден")
+            raise PlatformNotFoundError(f"Комментарий {wiki_comment_id} не найден")
         await publish_wiki_comment_event(WIKI_COMMENT_RESOLVED, stored, company_id)
         return stored
 
@@ -1094,11 +1076,9 @@ class WikiService:
         self, company_id: str, namespace: str, user_id: str, wiki_comment_id: str
     ) -> None:
         _ = user_id
-        deleted_count = await self._repo.delete_comment(
-            company_id, namespace, wiki_comment_id
-        )
+        deleted_count = await self._repo.delete_comment(company_id, namespace, wiki_comment_id)
         if deleted_count == 0:
-            raise WikiPageNotFoundError(f"Комментарий {wiki_comment_id} не найден")
+            raise PlatformNotFoundError(f"Комментарий {wiki_comment_id} не найден")
 
     # --- вспомогательное ---
 
@@ -1124,8 +1104,4 @@ class WikiService:
         return await self._access.list_member_items(wiki_page_id)
 
 
-__all__ = [
-    "WikiAccessDeniedError",
-    "WikiPageNotFoundError",
-    "WikiService",
-]
+__all__ = ["WikiService"]

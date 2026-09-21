@@ -15,13 +15,8 @@ from apps.sync.db.models import (
     SyncCallParticipant,
     SyncChannelMember,
 )
+from core.errors.boundary import PlatformNotFoundError
 from core.types import SqlParameterValue
-
-
-class CallNotFoundError(ValueError):
-    """Звонок отсутствует или принадлежит другой компании."""
-
-    pass
 
 
 class CallRepository(BaseSyncRepository[SyncCall]):
@@ -56,7 +51,7 @@ class CallRepository(BaseSyncRepository[SyncCall]):
         async with self._db.session() as session:
             row = await session.get(SyncCall, call_id)
             if row is None or row.company_id != company_id:
-                raise CallNotFoundError(f"Звонок {call_id} не найден")
+                raise PlatformNotFoundError(f"Звонок {call_id} не найден")
             return row
 
     async def get_active_call_for_channel(

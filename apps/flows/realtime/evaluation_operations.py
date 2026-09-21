@@ -10,9 +10,6 @@ from apps.flows.realtime.operations import (
     require_company_member,
 )
 from apps.flows.src.container import FlowContainer
-from apps.flows.src.evaluation.lab_service import (
-    EvaluationLabNotFoundError,
-)
 from apps.flows.src.models.evaluation_lab import (
     EvaluationActiveMonitorCyclesRequest,
     EvaluationActiveMonitorCyclesResult,
@@ -90,6 +87,7 @@ from apps.flows.src.models.evaluation_lab import (
 )
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_EVALUATION_RUN
 from core.context import get_context
+from core.errors.boundary import PlatformNotFoundError
 from core.models.identity_models import User
 from core.pagination import ListResponse
 from core.tasks import enqueue
@@ -103,7 +101,7 @@ T = TypeVar("T")
 
 
 def raise_evaluation(exc: Exception) -> Never:
-    if isinstance(exc, EvaluationLabNotFoundError):
+    if isinstance(exc, PlatformNotFoundError):
         raise_not_found(exc)
     raise_invalid(exc)
 
@@ -111,7 +109,7 @@ def raise_evaluation(exc: Exception) -> Never:
 async def _lab(awaitable: Awaitable[T]) -> T:
     try:
         return await awaitable
-    except ValueError as exc:
+    except (ValueError, PlatformNotFoundError) as exc:
         raise_evaluation(exc)
 
 
@@ -367,7 +365,7 @@ async def op_flows_evaluation_rubric_create(
     _ = await require_company_member(container)
     try:
         rubric, version = await container.evaluation_lab_service.create_rubric(payload)
-    except ValueError as exc:
+    except (ValueError, PlatformNotFoundError) as exc:
         raise_evaluation(exc)
     return EvaluationRubricWithVersion(rubric=rubric, version=version)
 

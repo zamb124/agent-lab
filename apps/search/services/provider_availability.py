@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.clients.redis_client import RedisClient, RedisOperationError
+from core.utils.time import utcnow_iso
 
 
 class ProviderAvailabilityRecord(BaseModel):
@@ -66,7 +66,7 @@ class ProviderAvailabilityStore:
         record = ProviderAvailabilityRecord(
             provider_id=provider_id,
             available=True,
-            checked_at=self._now(),
+            checked_at=utcnow_iso(),
             consecutive_failures=0,
         )
         await self._set(scope_id, record, ttl_seconds=self._available_ttl_seconds)
@@ -86,7 +86,7 @@ class ProviderAvailabilityStore:
         record = ProviderAvailabilityRecord(
             provider_id=provider_id,
             available=False,
-            checked_at=self._now(),
+            checked_at=utcnow_iso(),
             consecutive_failures=consecutive_failures,
             last_error=error[:500],
         )
@@ -119,5 +119,3 @@ class ProviderAvailabilityStore:
                 f"search provider availability write failed: {record.provider_id}"
             )
 
-    def _now(self) -> str:
-        return datetime.now(tz=UTC).isoformat()

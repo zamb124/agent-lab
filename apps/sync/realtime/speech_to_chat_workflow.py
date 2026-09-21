@@ -24,7 +24,6 @@ from redis.asyncio.client import Redis
 
 from apps.sync.container import get_sync_container
 from apps.sync.db.models import SyncCallSpeechEgressTrack
-from apps.sync.db.repositories.call_repository import CallNotFoundError
 from apps.sync.models.messages import (
     MessageContentModel,
     MessageContentType,
@@ -39,6 +38,7 @@ from core.calls.livekit_client import LiveKitClient
 from core.calls.livekit_usage_spans import trace_livekit_egress_segmented_usage
 from core.config import get_settings
 from core.context import clear_context, get_context, set_context
+from core.errors.boundary import PlatformNotFoundError
 from core.files.audio_probe import probe_audio_duration_ms_from_bytes
 from core.files.audio_silence import (
     trim_leading_trailing_silence_from_bytes,
@@ -618,7 +618,7 @@ async def run_speech_to_chat_poll_cycle(
     container = get_sync_container()
     try:
         call = await container.call_repository.get_call(call_id, company_id)
-    except CallNotFoundError:
+    except PlatformNotFoundError:
         return SpeechToChatPollOutcome(schedule_next=False)
 
     if call.status != "active":

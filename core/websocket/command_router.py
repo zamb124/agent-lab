@@ -9,7 +9,10 @@
 Тип reply выводится механически: суффикс `_requested` → `_succeeded` / `_failed`.
 Команды без `_requested` запрещены — `register_ws_command_handler` бросает `ValueError`.
 
-Доменная ошибка — `WsCommandError`. Любая другая ошибка handler'а пробрасывается.
+Доменная ошибка — `WsCommandError`; ошибки границы `core/errors/boundary.py`
+(`PlatformNotFoundError` / `PlatformConflictError` / `PlatformAccessDeniedError`)
+превращаются в `not_found` / `conflict` / `forbidden` так же, как в REST-фабрике.
+Любая другая ошибка handler'а пробрасывается.
 """
 
 from __future__ import annotations
@@ -20,6 +23,11 @@ from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
 
+from core.errors.boundary import (
+    PlatformAccessDeniedError,
+    PlatformConflictError,
+    PlatformNotFoundError,
+)
 from core.events import register_platform_event
 from core.logging import get_logger
 from core.models.identity_models import User
@@ -155,8 +163,8 @@ async def dispatch_ws_command(
     Выполнить command-handler. Возвращает кортеж `(reply_type, reply_payload)`.
 
     - На успех: `(<command_type без _requested>_succeeded, handler_result)`.
-    - На `WsCommandError`: `(<command_type без _requested>_failed,
-       { error_code, error_detail })`.
+    - На `WsCommandError` и ошибки границы `Platform*Error`:
+      `(<command_type без _requested>_failed, { error_code, error_detail })`.
     - Любая другая ошибка handler'а пробрасывается наружу.
     """
     handler = get_ws_command_handler(command_type)
@@ -175,9 +183,11 @@ async def dispatch_ws_command(
     try:
         result = await handler(payload_dict, user)
     except WsCommandError as err:
-        failed_payload: JsonObject = {"error_code": err.code, "error_detail": err.detail}
-        return (
-            derive_failed_type(command_type),
-            failed_payload,
-        )
+        return derive_failed_type(command_type), {"error_code": err.code, "error_detail": err.detail}
+    except PlatformNotFoundError as err:
+        return derive_failed_type(command_type), {"error_code": "not_found", "error_detail": str(err)}
+    except PlatformConflictError as err:
+        return derive_failed_type(command_type), {"error_code": "conflict", "error_detail": str(err)}
+    except PlatformAccessDeniedError as err:
+        return derive_failed_type(command_type), {"error_code": "forbidden", "error_detail": str(err)}
     return (derive_succeeded_type(command_type), result)

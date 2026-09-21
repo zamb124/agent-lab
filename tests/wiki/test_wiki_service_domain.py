@@ -11,7 +11,7 @@ import pytest
 
 from apps.wiki.content.markdown_parser import markdown_to_document
 from apps.wiki.models.domain import WikiLinkTargetKind
-from apps.wiki.services.wiki_service import WikiAccessDeniedError, WikiPageNotFoundError
+from core.errors.boundary import PlatformAccessDeniedError, PlatformNotFoundError
 
 pytestmark = pytest.mark.no_test_doubles
 
@@ -140,7 +140,7 @@ async def test_repository_scopes_reads_by_company(
 
 
 async def test_require_page_raises_for_missing_page(wiki_service, wiki_namespace):
-    with pytest.raises(WikiPageNotFoundError):
+    with pytest.raises(PlatformNotFoundError):
         _ = await wiki_service.require_page(COMPANY, wiki_namespace, "wpg_nope")
 
 
@@ -156,7 +156,7 @@ async def test_restricted_page_denies_stranger_in_service_layer(
         company_visible=False,
     )
 
-    with pytest.raises(WikiAccessDeniedError):
+    with pytest.raises(PlatformAccessDeniedError):
         _ = await wiki_service.require_viewable_page(
             COMPANY, wiki_namespace, page.wiki_page_id, OTHER
         )

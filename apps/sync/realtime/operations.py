@@ -133,7 +133,6 @@ from apps.sync.realtime.handlers import (
     upsert_git_resource,
 )
 from apps.sync.realtime.livekit_sdk_boundary import read_livekit_egress_id
-from apps.sync.realtime.publish_events import publish_realtime_events
 from apps.sync.realtime.task_names import (
     SYNC_AGGREGATE_CALL_TRANSCRIPT,
     SYNC_TRANSCRIBE_AUDIO_MESSAGE,
@@ -147,6 +146,7 @@ from core.calls.livekit_client import LiveKitClient
 from core.calls.models import TurnCredentials
 from core.calls.turn import generate_turn_credentials
 from core.config import BaseSettings, get_settings
+from core.events import publish_events
 from core.events.contract import PlatformEvent
 from core.files.models import AudioTranscriptionStatus, FileRecord
 from core.logging import get_logger
@@ -364,7 +364,7 @@ async def op_channels_create(
         recipients = await channel_recipient_user_ids(
             container.channel_access_service, channel.channel_id
         )
-        await publish_realtime_events(
+        await publish_events(
             [
                 event_channel_created(
                     channel, company_id=company_id, recipient_user_ids=recipients
@@ -414,7 +414,7 @@ async def op_channels_mark_read(
     recipients = await channel_recipient_user_ids(
         container.channel_access_service, payload.channel_id
     )
-    await publish_realtime_events(
+    await publish_events(
         [
             event_channel_read_updated(
                 payload.channel_id,
@@ -458,7 +458,7 @@ async def op_channels_typing(
     recipients = await channel_recipient_user_ids(
         container.channel_access_service, payload.channel_id
     )
-    await publish_realtime_events(
+    await publish_events(
         [
             event_channel_typing(
                 channel_id=payload.channel_id,
@@ -533,7 +533,7 @@ async def op_channels_add_member(
     recipients = await container.channel_access_service.list_member_user_ids(
         payload.channel_id
     )
-    await publish_realtime_events(
+    await publish_events(
         [
             event_channel_member_added(
                 payload.channel_id,
@@ -653,7 +653,7 @@ async def op_threads_create(
     recipients = await channel_recipient_user_ids(
         container.channel_access_service, thread.channel_id
     )
-    await publish_realtime_events(
+    await publish_events(
         [
             event_thread_created(
                 thread, company_id=company_id, recipient_user_ids=recipients
@@ -887,7 +887,7 @@ async def op_messages_mark_read(
     recipients = await channel_recipient_user_ids(
         container.channel_access_service, payload.channel_id
     )
-    await publish_realtime_events(
+    await publish_events(
         [
             event_message_status_changed(
                 payload.channel_id,
@@ -935,7 +935,7 @@ async def op_messages_edit(
     recipients = await channel_recipient_user_ids(
         container.channel_access_service, payload.channel_id
     )
-    await publish_realtime_events(
+    await publish_events(
         [
             event_message_updated(
                 read, company_id=company_id, recipient_user_ids=recipients
@@ -997,7 +997,7 @@ async def op_messages_delete(
                         recipient_user_ids=recipients,
                     ),
                 )
-    await publish_realtime_events(events)
+    await publish_events(events)
     return payload
 
 
@@ -1052,7 +1052,7 @@ async def op_messages_forward(
     dst_ch = await container.channel_repository.get(payload.to_channel_id)
     if dst_ch is None:
         raise WsCommandError("not_found", "Целевой канал не найден.")
-    await publish_realtime_events(
+    await publish_events(
         [
             event_message_created(
                 new_read,
@@ -1114,7 +1114,7 @@ async def op_messages_react(
     recipients = await channel_recipient_user_ids(
         container.channel_access_service, payload.channel_id
     )
-    await publish_realtime_events(
+    await publish_events(
         [
             event_message_reaction_changed(
                 payload.channel_id,
@@ -1174,7 +1174,7 @@ async def op_messages_pin(
     recipients = await channel_recipient_user_ids(
         container.channel_access_service, payload.channel_id
     )
-    await publish_realtime_events(
+    await publish_events(
         [
             event_channel_pins_changed(
                 cr, company_id=company_id, recipient_user_ids=recipients
@@ -1237,7 +1237,7 @@ async def op_messages_transcribe_audio(
     recipients = await channel_recipient_user_ids(
         container.channel_access_service, payload.channel_id
     )
-    await publish_realtime_events(
+    await publish_events(
         [
             event_message_updated(
                 updated_read, company_id=company_id, recipient_user_ids=recipients
@@ -1300,7 +1300,7 @@ async def op_messages_transcribe_video(
     recipients = await channel_recipient_user_ids(
         container.channel_access_service, payload.channel_id
     )
-    await publish_realtime_events(
+    await publish_events(
         [
             event_message_updated(
                 updated_read, company_id=company_id, recipient_user_ids=recipients
@@ -1359,7 +1359,7 @@ async def op_git_resources_upsert(
     ref = await upsert_git_resource(
         payload.body, company_id=company_id, git_refs=container.git_resource_ref_repository
     )
-    await publish_realtime_events([event_git_resource_upserted(ref, company_id=company_id)])
+    await publish_events([event_git_resource_upserted(ref, company_id=company_id)])
     return ref
 
 
@@ -1498,7 +1498,7 @@ async def op_calls_invite(
             livekit_room_name=solo_call.livekit_room_name,
             channels=container.channel_repository,
         )
-    await publish_realtime_events(evs)
+    await publish_events(evs)
     return out
 
 
@@ -1527,7 +1527,7 @@ async def op_calls_accept(
             livekit_room_name=out.livekit_room_name,
             channels=container.channel_repository,
         )
-    await publish_realtime_events(evs)
+    await publish_events(evs)
     return out
 
 
@@ -1548,7 +1548,7 @@ async def op_calls_decline(
         )
     except ValueError as exc:
         raise WsCommandError("conflict", str(exc)) from exc
-    await publish_realtime_events(evs)
+    await publish_events(evs)
     return out
 
 
@@ -1615,7 +1615,7 @@ async def op_calls_hangup(
                 channel_type=hangup_channel.type,
             ),
         )
-    await publish_realtime_events(evs)
+    await publish_events(evs)
     return out
 
 
@@ -1722,7 +1722,7 @@ async def op_calls_recording_start(
     recipients = await channel_recipient_user_ids(
         container.channel_access_service, call.channel_id
     )
-    await publish_realtime_events(
+    await publish_events(
         [
             event_call_recording_started(
                 out, company_id=company_id, recipient_user_ids=recipients
@@ -1766,7 +1766,7 @@ async def op_calls_recording_stop(
     recipients = await channel_recipient_user_ids(
         container.channel_access_service, call.channel_id
     )
-    await publish_realtime_events(
+    await publish_events(
         [
             event_call_recording_stopped(
                 out, company_id=company_id, recipient_user_ids=recipients
@@ -1815,7 +1815,7 @@ async def op_calls_admin_transfer(
     recipients = await channel_recipient_user_ids(
         container.channel_access_service, out.channel_id
     )
-    await publish_realtime_events(
+    await publish_events(
         [
             event_call_admin_changed(
                 out, company_id=company_id, recipient_user_ids=recipients
@@ -1843,7 +1843,7 @@ async def op_calls_signal(
         target_user_id=payload.target_user_id,
         sender_user_id=user.user_id,
     )
-    await publish_realtime_events([event])
+    await publish_events([event])
     return None
 
 

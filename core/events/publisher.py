@@ -17,6 +17,8 @@ XADD в Redis Stream ``platform:events`` и publish в Centrifugo.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from core.context import get_context
 from core.events.contract import (
     SYSTEM_COMPANY_ID,
@@ -87,6 +89,12 @@ async def publish_event(event: PlatformEvent) -> None:
         platform_event_request_id=stored.meta.request_id,
         delivery=stored.delivery.model_dump(exclude_none=True) if stored.delivery else None,
     )
+
+
+async def publish_events(events: Sequence[PlatformEvent]) -> None:
+    """Опубликовать пачку событий по порядку (исход одной команды — несколько push)."""
+    for event in events:
+        await publish_event(event)
 
 
 async def publish_event_to_user(

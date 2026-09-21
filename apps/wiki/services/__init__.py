@@ -9,17 +9,11 @@ from apps.wiki.services.rag_metadata import (
     build_wiki_search_filter,
 )
 from apps.wiki.services.wiki_access_service import WikiAccessService
-from apps.wiki.services.wiki_service import (
-    WikiAccessDeniedError,
-    WikiPageNotFoundError,
-    WikiService,
-)
+from apps.wiki.services.wiki_service import WikiService
 
 __all__ = [
     "WIKI_SOURCE_KIND",
-    "WikiAccessDeniedError",
     "WikiAccessService",
-    "WikiPageNotFoundError",
     "WikiRagIndexService",
     "WikiSearchFilter",
     "WikiService",

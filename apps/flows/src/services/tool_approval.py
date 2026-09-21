@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from typing import Literal, Protocol
 from uuid import uuid4
 
@@ -17,6 +17,7 @@ from pydantic import Field
 from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.types import JsonObject
+from core.utils.time import utcnow
 
 logger = get_logger(__name__)
 
@@ -63,10 +64,6 @@ class ToolApprovalStore:
         self._ttl_seconds: int = ttl_seconds
 
     @staticmethod
-    def _now() -> datetime:
-        return datetime.now(UTC)
-
-    @staticmethod
     def _key(company_id: str, approval_id: str) -> str:
         return f"tool:approval:{company_id}:{approval_id}"
 
@@ -88,7 +85,7 @@ class ToolApprovalStore:
         if not definition_version.strip():
             raise ValueError("definition_version is required")
 
-        now = self._now()
+        now = utcnow()
         expires = now + timedelta(seconds=self._ttl_seconds)
         record = ToolApprovalRecord(
             approval_id=str(uuid4()),

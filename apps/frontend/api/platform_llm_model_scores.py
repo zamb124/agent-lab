@@ -17,7 +17,7 @@ from typing import ClassVar
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.frontend.dependencies import ContainerDep, require_frontend_context
+from apps.frontend.dependencies import ContainerDep
 from core.ai.free_pool import (
     catalog_record_map,
     fetch_platform_free_model_records,
@@ -39,6 +39,7 @@ from core.clients.llm.provider_runtime_status import (
     probe_platform_free_providers,
 )
 from core.config import get_settings
+from core.context import require_context
 from core.db.models.platform import LLMModelScore
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.logging import get_logger
@@ -113,7 +114,7 @@ class LLMModelScoreDeleteResponse(BaseModel):
 
 
 async def _require_system_admin(container: ContainerDep) -> User:
-    context = require_frontend_context()
+    context = require_context()
     company = context.active_company
     if company is None or company.company_id != SYSTEM_COMPANY_ID:
         raise HTTPException(status_code=403, detail="Доступно только для компании system")

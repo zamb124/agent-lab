@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from apps.frontend.dependencies import ContainerDep, require_frontend_user
+from apps.frontend.dependencies import ContainerDep
 from core.authz.explorer import (
     AuthzExplorerByObjectResponse,
     AuthzExplorerByUserResponse,
@@ -14,13 +14,13 @@ from core.authz.explorer import (
     AuthzExplorerWhyResponse,
 )
 from core.authz.types import AuthzObjectType
-from core.context import require_active_company
+from core.context import require_active_company, require_context
 
 router = APIRouter(prefix="/api/authz/explorer", tags=["authz-explorer"])
 
 
 async def _require_explorer_admin(container: ContainerDep) -> tuple[str, str]:
-    user = require_frontend_user()
+    user = require_context().user
     company = require_active_company()
     await container.authz_service.require_company_admin(
         company_id=company.company_id,

@@ -7,8 +7,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 
-from apps.frontend.dependencies import ContainerDep, require_frontend_active_company
+from apps.frontend.dependencies import ContainerDep
 from apps.frontend.models import LeadCreateBody, LeadCreateResponse, LeadRequestRecord
+from core.context import require_active_company
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.logging import get_logger
 from core.pagination import CursorPage, decode_cursor, encode_cursor
@@ -86,7 +87,7 @@ async def list_lead_requests(
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=LEAD_REQUEST_PAGE_MAX_LIMIT)] = 50,
 ) -> CursorPage[LeadRequestRecord]:
-    company = require_frontend_active_company()
+    company = require_active_company()
     if company.company_id != SYSTEM_COMPANY_ID:
         raise HTTPException(status_code=403, detail="Доступно только для компании system")
     storage = container.shared_storage

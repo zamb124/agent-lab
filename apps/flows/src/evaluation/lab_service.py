@@ -156,6 +156,7 @@ from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
 from core.clients.llm import LLMClient, MockLLM
 from core.context import get_context, require_active_company
+from core.errors.boundary import PlatformNotFoundError
 from core.events import publish_event_to_company
 from core.llm_context import LLMContextPatch
 from core.logging import get_logger
@@ -209,10 +210,6 @@ BUILTIN_METRIC_DEFAULT_THRESHOLDS: dict[EvaluationBuiltinMetricId, float] = {
 }
 
 TargetCallable = Callable[[ExecutionState], Awaitable[ExecutionState]]
-
-
-class EvaluationLabNotFoundError(ValueError):
-    """Requested evaluation lab object does not exist."""
 
 
 class EvaluationLabValidationError(ValueError):
@@ -348,7 +345,7 @@ class EvaluationLabService:
     async def create_suite(self, request: EvaluationSuiteCreateRequest) -> EvaluationSuite:
         flow = await self._flow_repository.get(request.flow_id)
         if flow is None:
-            raise EvaluationLabNotFoundError(f"Flow not found: {request.flow_id}")
+            raise PlatformNotFoundError(f"Flow not found: {request.flow_id}")
         now = _utc_now()
         suite = EvaluationSuite(
             suite_id=_new_id(),
@@ -636,7 +633,7 @@ class EvaluationLabService:
     async def delete_case(self, suite_id: str, case_id: str) -> None:
         deleted = await self._repository.delete_case(suite_id, case_id)
         if not deleted:
-            raise EvaluationLabNotFoundError(f"Evaluation case not found: {case_id}")
+            raise PlatformNotFoundError(f"Evaluation case not found: {case_id}")
 
     async def get_case(self, suite_id: str, case_id: str) -> EvaluationCase:
         return await self._require_case(suite_id, case_id)
@@ -769,7 +766,7 @@ class EvaluationLabService:
     ) -> tuple[EvaluationRubric, EvaluationRubricVersion]:
         flow = await self._flow_repository.get(request.flow_id)
         if flow is None:
-            raise EvaluationLabNotFoundError(f"Flow not found: {request.flow_id}")
+            raise PlatformNotFoundError(f"Flow not found: {request.flow_id}")
         now = _utc_now()
         rubric = EvaluationRubric(
             rubric_id=_new_id(),
@@ -864,7 +861,7 @@ class EvaluationLabService:
 
         flow = await self._flow_repository.get(suite.flow_id)
         if flow is None:
-            raise EvaluationLabNotFoundError(f"Flow not found: {suite.flow_id}")
+            raise PlatformNotFoundError(f"Flow not found: {suite.flow_id}")
         flow_config_version = flow.version.strip()
         if not flow_config_version:
             raise EvaluationLabValidationError(
@@ -959,7 +956,7 @@ class EvaluationLabService:
     async def get_run_job(self, run_id: str) -> EvaluationRunJob:
         job = await self._repository.get_run_job_by_run_id(run_id)
         if job is None:
-            raise EvaluationLabNotFoundError(f"Evaluation run job not found: {run_id}")
+            raise PlatformNotFoundError(f"Evaluation run job not found: {run_id}")
         return job
 
     async def list_pending_run_jobs(self, limit: int) -> list[EvaluationRunJob]:
@@ -1113,7 +1110,7 @@ class EvaluationLabService:
     async def get_run(self, run_id: str) -> EvaluationRunWithCases:
         run = await self._repository.get_run_with_cases(run_id)
         if run is None:
-            raise EvaluationLabNotFoundError(f"Evaluation run not found: {run_id}")
+            raise PlatformNotFoundError(f"Evaluation run not found: {run_id}")
         return run
 
     async def list_runs(self, suite_id: str, limit: int) -> list[EvaluationRun]:
@@ -1259,7 +1256,7 @@ class EvaluationLabService:
     async def delete_annotation(self, annotation_id: str) -> None:
         deleted = await self._repository.delete_annotation(annotation_id)
         if not deleted:
-            raise EvaluationLabNotFoundError(f"Evaluation annotation not found: {annotation_id}")
+            raise PlatformNotFoundError(f"Evaluation annotation not found: {annotation_id}")
 
     async def set_baseline(
         self,
@@ -1292,7 +1289,7 @@ class EvaluationLabService:
         _ = await self._require_suite(suite_id)
         baseline = await self._repository.get_baseline(suite_id, branch_id)
         if baseline is None:
-            raise EvaluationLabNotFoundError(f"Evaluation baseline not found: {branch_id}")
+            raise PlatformNotFoundError(f"Evaluation baseline not found: {branch_id}")
         return baseline
 
     async def list_baselines(self, suite_id: str) -> list[EvaluationBaseline]:
@@ -1391,7 +1388,7 @@ class EvaluationLabService:
         _ = await self._require_run_model(run_id)
         gate_result = await self._repository.get_gate_result(run_id)
         if gate_result is None:
-            raise EvaluationLabNotFoundError(f"Evaluation gate result not found: {run_id}")
+            raise PlatformNotFoundError(f"Evaluation gate result not found: {run_id}")
         return gate_result
 
     async def compare_runs(self, left_run_id: str, right_run_id: str) -> EvaluationRunComparison:
@@ -2677,7 +2674,7 @@ class EvaluationLabService:
             if target_flow_id != case.flow_id:
                 target_flow = await self._flow_repository.get(target_flow_id)
                 if target_flow is None:
-                    raise EvaluationLabNotFoundError(f"Flow not found: {target_flow_id}")
+                    raise PlatformNotFoundError(f"Flow not found: {target_flow_id}")
                 target_flow_config_version = target_flow.version.strip()
                 if not target_flow_config_version:
                     raise EvaluationLabValidationError(
@@ -2689,7 +2686,7 @@ class EvaluationLabService:
                 target_flow_config_version,
             )
             if runtime_flow is None:
-                raise EvaluationLabNotFoundError(f"Flow not found: {target_flow_id}")
+                raise PlatformNotFoundError(f"Flow not found: {target_flow_id}")
 
             async def run_flow(state: ExecutionState) -> ExecutionState:
                 state.flow_config_version = target_flow_config_version
@@ -2845,7 +2842,7 @@ class EvaluationLabService:
         selected: list[EvaluationCase] = []
         for case_id in scope.case_ids:
             if case_id not in by_id:
-                raise EvaluationLabNotFoundError(
+                raise PlatformNotFoundError(
                     f"Evaluation case not found in branch scope: {case_id}"
                 )
             case = by_id[case_id]
@@ -3088,19 +3085,19 @@ class EvaluationLabService:
     async def _require_suite(self, suite_id: str) -> EvaluationSuite:
         suite = await self._repository.get_suite(suite_id)
         if suite is None:
-            raise EvaluationLabNotFoundError(f"Evaluation suite not found: {suite_id}")
+            raise PlatformNotFoundError(f"Evaluation suite not found: {suite_id}")
         return suite
 
     async def _require_run_model(self, run_id: str) -> EvaluationRun:
         run = await self._repository.get_run(run_id)
         if run is None:
-            raise EvaluationLabNotFoundError(f"Evaluation run not found: {run_id}")
+            raise PlatformNotFoundError(f"Evaluation run not found: {run_id}")
         return run
 
     async def _require_suite_version(self, suite_version_id: str) -> EvaluationSuiteVersion:
         suite_version = await self._repository.get_suite_version(suite_version_id)
         if suite_version is None:
-            raise EvaluationLabNotFoundError(
+            raise PlatformNotFoundError(
                 f"Evaluation suite version not found: {suite_version_id}"
             )
         return suite_version
@@ -3108,13 +3105,13 @@ class EvaluationLabService:
     async def _require_case(self, suite_id: str, case_id: str) -> EvaluationCase:
         case = await self._repository.get_case(suite_id, case_id)
         if case is None:
-            raise EvaluationLabNotFoundError(f"Evaluation case not found: {case_id}")
+            raise PlatformNotFoundError(f"Evaluation case not found: {case_id}")
         return case
 
     async def _require_rubric(self, rubric_id: str) -> EvaluationRubric:
         rubric = await self._repository.get_rubric(rubric_id)
         if rubric is None:
-            raise EvaluationLabNotFoundError(f"Evaluation rubric not found: {rubric_id}")
+            raise PlatformNotFoundError(f"Evaluation rubric not found: {rubric_id}")
         return rubric
 
     async def _require_rubric_version(
@@ -3123,7 +3120,7 @@ class EvaluationLabService:
     ) -> EvaluationRubricVersion:
         rubric_version = await self._repository.get_rubric_version(rubric_version_id)
         if rubric_version is None:
-            raise EvaluationLabNotFoundError(
+            raise PlatformNotFoundError(
                 f"Evaluation rubric version not found: {rubric_version_id}"
             )
         return rubric_version
@@ -3131,13 +3128,13 @@ class EvaluationLabService:
     async def _require_gate_policy(self, gate_policy_id: str) -> EvaluationGatePolicy:
         policy = await self._repository.get_gate_policy(gate_policy_id)
         if policy is None:
-            raise EvaluationLabNotFoundError(f"Evaluation gate policy not found: {gate_policy_id}")
+            raise PlatformNotFoundError(f"Evaluation gate policy not found: {gate_policy_id}")
         return policy
 
     async def _require_monitor(self, monitor_id: str) -> EvaluationMonitor:
         monitor = await self._repository.get_monitor(monitor_id)
         if monitor is None:
-            raise EvaluationLabNotFoundError(f"Evaluation monitor not found: {monitor_id}")
+            raise PlatformNotFoundError(f"Evaluation monitor not found: {monitor_id}")
         return monitor
 
     async def _require_monitor_observation(
@@ -3147,7 +3144,7 @@ class EvaluationLabService:
     ) -> EvaluationMonitorObservation:
         observation = await self._repository.get_monitor_observation(monitor_id, trace_id)
         if observation is None:
-            raise EvaluationLabNotFoundError(
+            raise PlatformNotFoundError(
                 f"Evaluation monitor observation not found: {trace_id}"
             )
         return observation
@@ -3155,19 +3152,19 @@ class EvaluationLabService:
     async def _require_annotation(self, annotation_id: str) -> EvaluationAnnotation:
         annotation = await self._repository.get_annotation(annotation_id)
         if annotation is None:
-            raise EvaluationLabNotFoundError(f"Evaluation annotation not found: {annotation_id}")
+            raise PlatformNotFoundError(f"Evaluation annotation not found: {annotation_id}")
         return annotation
 
     async def _require_case_run(self, case_run_id: str) -> EvaluationCaseRun:
         case_run = await self._repository.get_case_run(case_run_id)
         if case_run is None:
-            raise EvaluationLabNotFoundError(f"Evaluation case run not found: {case_run_id}")
+            raise PlatformNotFoundError(f"Evaluation case run not found: {case_run_id}")
         return case_run
 
     async def _require_trace(self, trace_id: str) -> list[TraceSpanRecord]:
         spans = await self._span_repository.get_trace(trace_id)
         if not spans:
-            raise EvaluationLabNotFoundError(f"Trace not found: {trace_id}")
+            raise PlatformNotFoundError(f"Trace not found: {trace_id}")
         return spans
 
     def _validate_pairwise_case_runs(
@@ -3208,12 +3205,12 @@ class EvaluationLabService:
         for case_run in case_runs:
             if case_run.case_run_id == case_run_id:
                 return case_run
-        raise EvaluationLabNotFoundError(f"Evaluation case run not found: {case_run_id}")
+        raise PlatformNotFoundError(f"Evaluation case run not found: {case_run_id}")
 
     async def _run_id_for_case_run(self, case_run_id: str) -> str:
         case_run = await self._repository.get_case_run(case_run_id)
         if case_run is None:
-            raise EvaluationLabNotFoundError(f"Evaluation case run not found: {case_run_id}")
+            raise PlatformNotFoundError(f"Evaluation case run not found: {case_run_id}")
         return case_run.run_id
 
     def _current_user_id(self) -> str:
@@ -3793,7 +3790,7 @@ class EvaluationLabService:
             )
         flow = await self._flow_repository.get(left.flow_id)
         if flow is None:
-            raise EvaluationLabNotFoundError(f"Flow not found: {left.flow_id}")
+            raise PlatformNotFoundError(f"Flow not found: {left.flow_id}")
         state = self._case_run_resolution_state(left, flow.version)
         node_config = await self._resolve_evaluation_node_ref(
             node_id=request.judge_node_id,
@@ -3843,7 +3840,7 @@ class EvaluationLabService:
         node_config = await self._node_repository.get(node_id)
         if node_config is not None:
             return node_config
-        raise EvaluationLabNotFoundError(f"Evaluation node not found: {node_id}")
+        raise PlatformNotFoundError(f"Evaluation node not found: {node_id}")
 
     def _bind_evaluation_llm(
         self,
@@ -3890,7 +3887,7 @@ class EvaluationLabService:
         prompt = await self._pairwise_prompt(request, left)
         flow = await self._flow_repository.get(left.flow_id)
         if flow is None:
-            raise EvaluationLabNotFoundError(f"Flow not found: {left.flow_id}")
+            raise PlatformNotFoundError(f"Flow not found: {left.flow_id}")
         resolution_state = self._case_run_resolution_state(left, flow.version)
         judge_node = await self._resolve_evaluation_node_ref(
             node_id=request.judge_node_id,

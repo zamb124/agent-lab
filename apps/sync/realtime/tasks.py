@@ -35,7 +35,6 @@ from apps.sync.models.messages import (
     TextPlainContent,
 )
 from apps.sync.realtime.operations import MessagesSendPayload, op_messages_send
-from apps.sync.realtime.publish_events import publish_realtime_events
 from apps.sync.realtime.speech_to_chat_workflow import run_speech_to_chat_poll_cycle
 from apps.sync.realtime.task_names import (
     SYNC_AGGREGATE_CALL_TRANSCRIPT,
@@ -50,6 +49,7 @@ from core.clients.files_client import FilesClient
 from core.config import get_settings
 from core.context import clear_context, get_context, set_context
 from core.context.job_context import build_job_context
+from core.events import publish_events
 from core.files.media.audio_extract import extract_audio_from_video
 from core.files.media.chunked_stt import transcribe_audio_with_chunking
 from core.files.models import (
@@ -648,7 +648,7 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
                 fail_recipients = await container.channel_access_service.list_member_user_ids(
                     failed_read.channel_id
                 )
-                await publish_realtime_events(
+                await publish_events(
                     [
                         event_call_recording_failed(
                             failed_read,
@@ -761,7 +761,7 @@ async def transcribe_audio_message_core(
                 done_recipients = await container.channel_access_service.list_member_user_ids(
                     channel_id
                 )
-                await publish_realtime_events(
+                await publish_events(
                     [
                         event_message_updated(
                             done_message,
@@ -790,7 +790,7 @@ async def transcribe_audio_message_core(
             fail_audio_recipients = await container.channel_access_service.list_member_user_ids(
                     channel_id
                 )
-            await publish_realtime_events(
+            await publish_events(
                 [
                     event_message_updated(
                         failed_message,
@@ -904,7 +904,7 @@ async def transcribe_video_message_core(
             done_video_recipients = await container.channel_access_service.list_member_user_ids(
                     channel_id
                 )
-            await publish_realtime_events(
+            await publish_events(
                 [
                     event_message_updated(
                         done_message,
@@ -933,7 +933,7 @@ async def transcribe_video_message_core(
         fail_video_recipients = await container.channel_access_service.list_member_user_ids(
                     channel_id
                 )
-        await publish_realtime_events(
+        await publish_events(
             [
                 event_message_updated(
                     failed_message,

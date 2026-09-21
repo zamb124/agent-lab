@@ -8,10 +8,11 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from apps.frontend.dependencies import ContainerDep, require_frontend_user
+from apps.frontend.dependencies import ContainerDep
 from apps.idle_worker.tasks.task_names import TASK_INIT_NEW_COMPANY
 from core.api.companies import CompanyMembershipResponse, build_my_companies_response
 from core.config import get_settings
+from core.context import require_context
 from core.identity.company_membership import (
     remove_company_membership,
     set_company_member_roles,
@@ -114,7 +115,7 @@ async def create_company(
     """
     settings = get_settings()
 
-    user = require_frontend_user()
+    user = require_context().user
     name = request_data.name.strip()
     slug = request_data.slug.lower().strip()
 
@@ -248,7 +249,7 @@ async def get_my_companies(
     container: ContainerDep,
 ) -> ListResponse[CompanyMembershipResponse]:
     """Возвращает компании текущего пользователя с subdomain и ролями."""
-    user = require_frontend_user()
+    user = require_context().user
 
     return await build_my_companies_response(
         user=user,
@@ -262,7 +263,7 @@ async def enter_company_as_system_member(
     payload: SystemAccessRequest,
     container: ContainerDep,
 ) -> SystemAccessGrantedResponse:
-    user = require_frontend_user()
+    user = require_context().user
     _ensure_user_is_system_member(user)
 
     target_company_id = company_id.strip()
@@ -316,7 +317,7 @@ async def leave_company_as_system_member(
     request: Request,
     container: ContainerDep,
 ) -> JSONResponse:
-    user = require_frontend_user()
+    user = require_context().user
     _ensure_user_is_system_member(user)
 
     target_company_id = company_id.strip()

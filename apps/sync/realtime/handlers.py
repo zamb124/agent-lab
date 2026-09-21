@@ -52,7 +52,6 @@ from apps.sync.models.messages import (
     TextPlainContent,
 )
 from apps.sync.models.threads import ThreadCreate, ThreadRead
-from apps.sync.realtime.publish_events import publish_realtime_events
 from apps.sync.realtime.task_names import (
     DELIVER_CHANNEL_MESSAGE_NOTIFICATION,
     DELIVER_SYNC_MENTION_NOTIFICATION,
@@ -68,6 +67,7 @@ from core.calls.livekit_client import LiveKitClient
 from core.calls.livekit_usage_spans import trace_livekit_egress_composite_usage
 from core.config import get_settings
 from core.db.repositories.user_repository import UserRepository
+from core.events import publish_events
 from core.events.contract import PlatformEvent
 from core.files.models import (
     AudioAttachmentContent,
@@ -918,7 +918,7 @@ async def send_message_with_side_effects(
                     actor_user_id=user.user_id,
                     background_kind="sync_transcribe",
                 )
-    await publish_realtime_events(events)
+    await publish_events(events)
     return message
 
 

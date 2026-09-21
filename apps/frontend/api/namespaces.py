@@ -5,7 +5,8 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from apps.frontend.dependencies import ContainerDep, require_frontend_user
+from apps.frontend.dependencies import ContainerDep
+from core.context import require_context
 from core.models.identity_models import NamespaceKind
 from core.namespace import TECHNICAL_NAMESPACE_NAME_PREFIXES, personal_namespace_name
 from core.pagination import OffsetPage
@@ -32,7 +33,7 @@ class ConsoleNamespaceCreateRequest(BaseModel):
 
 
 async def _require_company_admin(container: ContainerDep) -> None:
-    user = require_frontend_user()
+    user = require_context().user
     company_id = user.active_company_id.strip()
     if company_id == "":
         raise HTTPException(status_code=400, detail="active_company_id is required")
@@ -118,7 +119,7 @@ async def create_console_namespace(
 @router.get("/me/personal", response_model=ConsoleNamespaceItem)
 async def get_my_personal_namespace(container: ContainerDep) -> ConsoleNamespaceItem:
     """Personal namespace текущего пользователя (ensure)."""
-    user = require_frontend_user()
+    user = require_context().user
     ns = await container.namespace_service.ensure_personal_namespace(
         user.user_id,
         display_name=user.name,

@@ -49,6 +49,7 @@ from core.events.publisher import (
     publish_event_to_company,
     publish_event_to_user,
     publish_event_to_users,
+    publish_events,
 )
 from core.events.redis_client import events_redis_client
 from core.events.registry import (
@@ -93,6 +94,7 @@ __all__ = [
     "platform_event_payload_model",
     "publish_domain_event",
     "publish_event",
+    "publish_events",
     "publish_event_broadcast",
     "publish_event_to_company",
     "publish_event_to_user",

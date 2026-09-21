@@ -84,6 +84,7 @@ from core.a2a import iter_json_parts, part_json_has_data, part_json_has_text
 from core.authz.service import AuthzService
 from core.clients.a2a_client import A2AClient, A2ATaskResult
 from core.context import get_context, resolve_namespace_or_raise
+from core.errors.boundary import PlatformConflictError
 from core.llm_context import (
     LLMContextBudgetError,
     LLMContextCompiler,
@@ -256,10 +257,6 @@ _MERGE_SCALAR_KEYS: tuple[str, ...] = (
     "entity_subtype",
     "note_date",
 )
-
-
-class DraftVersionConflictError(ValueError):
-    """Ожидаемая версия черновика не совпадает с сохранённой в заметке."""
 
 
 class ApplyAnalysisDraftEntityFailuresError(Exception):
@@ -2737,7 +2734,7 @@ class EntityService:
     ) -> AIAnalysisDraftStored:
         note, draft = await self._load_analysis_draft_from_note(note_id)
         if body.expected_version != draft.draft_version:
-            raise DraftVersionConflictError(
+            raise PlatformConflictError(
                 f"Версия черновика не совпадает: ожидалось {body.expected_version}, "
                 + f"в БД {draft.draft_version}"
             )

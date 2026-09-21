@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
 from typing import Literal
 
@@ -30,6 +29,7 @@ from apps.office.models.api import (
     OfficeResourceAccessRotateLinkResponse,
 )
 from apps.office.services.public_link_tokens import create_share_token
+from core.auth.utils import hash_token
 from core.authz.models import AuthzCheckItem, AuthzObject, AuthzSubject, AuthzTuple
 from core.authz.service import AuthzService
 from core.authz.types import AuthzRelation, AuthzSubjectKind
@@ -63,10 +63,6 @@ class OfficeAccessService:
         self._binding_repository: DocumentBindingRepository = document_binding_repository
         self._access_repository: OfficeAccessRepository = access_repository
         self._authz: AuthzService = authz
-
-    @staticmethod
-    def hash_link_token(raw_token: str) -> str:
-        return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
     @staticmethod
     def build_public_page_url(origin: str, raw_token: str) -> str:
@@ -267,7 +263,7 @@ class OfficeAccessService:
         normalized = raw_token.strip()
         if normalized == "":
             raise ValueError("token обязателен")
-        token_hash = self.hash_link_token(normalized)
+        token_hash = hash_token(normalized)
         binding = await self._access_repository.get_binding_by_link_token_hash(token_hash)
         if binding is not None:
             return PublicLinkTarget(

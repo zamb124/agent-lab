@@ -31,7 +31,6 @@ from apps.flows.src.evaluation.lab_service import (
     EVALUATION_BUILTIN_METRIC_TOOL_NAME,
     EVALUATION_JUDGE_TOOL_NAME,
     EVALUATION_PAIRWISE_TOOL_NAME,
-    EvaluationLabNotFoundError,
     EvaluationLabService,
     EvaluationLabValidationError,
     LlmUsageAccumulator,
@@ -114,6 +113,7 @@ from apps.flows_worker.evaluation_tasks import (
 )
 from core.clients.llm.mock import MockLLM, MockLLMQueuedResponse
 from core.context import clear_context, get_context, set_context
+from core.errors.boundary import PlatformNotFoundError
 from core.llm_context import LLMContextPatch
 from core.models.context_models import Context
 from core.models.identity_models import User
@@ -1898,7 +1898,7 @@ class TestEvaluationLabAPI:
 
             with pytest.raises(EvaluationLabValidationError):
                 await service._resolve_input_node(EvaluationInputNode(type="node"), state)
-            with pytest.raises(EvaluationLabNotFoundError):
+            with pytest.raises(PlatformNotFoundError):
                 await service._resolve_input_node(
                     EvaluationInputNode(type="node", node_id=f"missing-node-{unique_id}"),
                     state,
@@ -1916,7 +1916,7 @@ class TestEvaluationLabAPI:
                     )
                 }
             )
-            with pytest.raises(EvaluationLabNotFoundError):
+            with pytest.raises(PlatformNotFoundError):
                 await service._create_target_runtime(missing_flow_case, "default", flow.version)
 
             suite = await _create_suite(client, flow_id, f"Selection suite {unique_id}")
@@ -1933,7 +1933,7 @@ class TestEvaluationLabAPI:
                 other_branch_case_response.json()
             )
 
-            with pytest.raises(EvaluationLabNotFoundError):
+            with pytest.raises(PlatformNotFoundError):
                 await service._select_cases(
                     suite_id=suite.suite_id,
                     branch_id="default",

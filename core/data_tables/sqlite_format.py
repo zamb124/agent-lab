@@ -88,10 +88,6 @@ def _fetchone(
     return cast(sqlite3.Row | None, _execute(connection, sql, params).fetchone())
 
 
-def _utcnow_iso() -> str:
-    return utcnow().replace(microsecond=0).isoformat()
-
-
 def _parse_datetime(value: str) -> datetime:
     parsed = datetime.fromisoformat(value)
     if parsed.tzinfo is None:
@@ -140,7 +136,7 @@ def initialize_platform_schema(
     if session_id is not None and "session_id" not in existing:
         _set_meta(connection, "session_id", session_id)
     if "created_at" not in existing:
-        _set_meta(connection, "created_at", _utcnow_iso())
+        _set_meta(connection, "created_at", utcnow().replace(microsecond=0).isoformat())
     _import_foreign_tables(connection)
 
 
@@ -535,7 +531,7 @@ def insert_rows(
     name = validate_ident(table_name, kind="table")
     _require_user_table(connection, name)
     columns = _column_type_map(connection, name)
-    now = _utcnow_iso()
+    now = utcnow().replace(microsecond=0).isoformat()
     inserted: list[int] = []
     for row in rows:
         unknown = set(row) - set(columns)
@@ -576,7 +572,7 @@ def update_row(
     if unknown:
         raise ValueError(f"unknown columns for {name}: {sorted(unknown)}")
     assignments = ["updated_at = ?"]
-    params: list[object] = [_utcnow_iso()]
+    params: list[object] = [utcnow().replace(microsecond=0).isoformat()]
     for column_name, raw in values.items():
         assignments.append(f"{quote_sql_ident(column_name)} = ?")
         params.append(coerce_cell(columns[column_name], raw))
