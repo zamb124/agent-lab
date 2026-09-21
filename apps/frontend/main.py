@@ -28,6 +28,7 @@ from apps.frontend.api.auth import router as auth_router
 from apps.frontend.api.authz_explorer import router as authz_explorer_router
 from apps.frontend.api.billing import router as billing_router
 from apps.frontend.api.companies import router as companies_router
+from apps.frontend.api.dashboard import router as dashboard_router
 from apps.frontend.api.design_system import router as design_system_router
 from apps.frontend.api.embed_configs import router as embed_configs_router
 from apps.frontend.api.invites import router as invites_router
@@ -53,6 +54,7 @@ from apps.frontend.config import (
 )
 from apps.frontend.container import FrontendContainer, get_frontend_container
 from apps.frontend.dependencies import ContainerDep
+from apps.frontend.realtime.command_router import register_frontend_ws_commands
 from apps.frontend.services.docs_assistant_bootstrap import schedule_docs_assistant_bootstrap
 from apps.frontend.services.flow_embed_page_html import build_flow_embed_page_html
 from apps.frontend.services.flow_preview_guest_html import (
@@ -260,6 +262,7 @@ async def _seed_platform_pronunciation_rules(container: FrontendContainer) -> No
 
 async def on_startup(app: FastAPI, container: FrontendContainer, settings: FrontendSettings) -> None:
     _ = settings
+    register_frontend_ws_commands()
     await container.redis_client.connect()
     logger.info("frontend.redis.connected")
 
@@ -332,6 +335,7 @@ app = create_service_app(
         invites_router,
         team_router,
         authz_explorer_router,
+        dashboard_router,
         namespaces_router,
         api_keys_router,
         billing_router,

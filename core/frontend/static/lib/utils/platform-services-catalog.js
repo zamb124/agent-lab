@@ -1,6 +1,6 @@
 /**
  * Единый каталог продуктов платформы для витрины (иконки, бренд, ключи i18n).
- * Метрики dashboard — поля countOp / metricKey (только frontend app).
+ * Метрики dashboard — поля metricField (поле `DashboardStats`) / metricKey (только frontend app).
  */
 
 export const SERVICE_LOGO_BASE = '/static/core/assets/service_logos';
@@ -13,7 +13,7 @@ export const PLATFORM_SERVICES = Object.freeze([
         brandFrom: '#7c3aed',
         brandTo: '#0ea5e9',
         healthName: 'flows',
-        countOp: 'frontend/dashboard_flows_count',
+        metricField: 'flows_total',
         metricKey: 'console_home.stat_flows_count',
     }),
     Object.freeze({
@@ -23,7 +23,7 @@ export const PLATFORM_SERVICES = Object.freeze([
         brandFrom: '#ec4899',
         brandTo: '#f97316',
         healthName: 'crm',
-        countOp: 'frontend/dashboard_crm_namespaces_count',
+        metricField: 'namespaces_total',
         metricKey: 'console_home.stat_namespaces_count',
     }),
     Object.freeze({
@@ -33,7 +33,7 @@ export const PLATFORM_SERVICES = Object.freeze([
         brandFrom: '#10b981',
         brandTo: '#0ea5e9',
         healthName: 'rag',
-        countOp: 'frontend/dashboard_rag_namespaces_count',
+        metricField: 'rag_namespaces_total',
         metricKey: 'console_home.stat_namespaces_count',
     }),
     Object.freeze({
@@ -43,7 +43,7 @@ export const PLATFORM_SERVICES = Object.freeze([
         brandFrom: '#0ea5e9',
         brandTo: '#6366f1',
         healthName: 'sync',
-        countOp: 'frontend/dashboard_sync_spaces_count',
+        metricField: 'namespaces_total',
         metricKey: 'console_home.stat_spaces_count',
     }),
     Object.freeze({
@@ -53,7 +53,7 @@ export const PLATFORM_SERVICES = Object.freeze([
         brandFrom: '#6366f1',
         brandTo: '#14b8a6',
         healthName: 'worktracker',
-        countOp: null,
+        metricField: null,
         metricKey: null,
     }),
     Object.freeze({
@@ -63,7 +63,7 @@ export const PLATFORM_SERVICES = Object.freeze([
         brandFrom: '#f59e0b',
         brandTo: '#ef4444',
         healthName: 'office',
-        countOp: 'frontend/dashboard_documents_files_count',
+        metricField: 'documents_files_total',
         metricKey: 'console_home.stat_files_count',
     }),
     Object.freeze({
@@ -73,7 +73,7 @@ export const PLATFORM_SERVICES = Object.freeze([
         brandFrom: '#8b5cf6',
         brandTo: '#22d3ee',
         healthName: 'wiki',
-        countOp: null,
+        metricField: null,
         metricKey: null,
     }),
     Object.freeze({
@@ -83,7 +83,7 @@ export const PLATFORM_SERVICES = Object.freeze([
         brandFrom: '#6366f1',
         brandTo: '#0ea5e9',
         healthName: 'frontend',
-        countOp: null,
+        metricField: null,
         metricKey: null,
     }),
     Object.freeze({
@@ -93,7 +93,7 @@ export const PLATFORM_SERVICES = Object.freeze([
         brandFrom: '#8b5cf6',
         brandTo: '#d946ef',
         healthName: 'provider_litserve',
-        countOp: 'frontend/dashboard_humanitec_models_count',
+        metricField: 'litserve_models_total',
         metricKey: 'console_home.stat_models_count',
     }),
     Object.freeze({
@@ -103,7 +103,7 @@ export const PLATFORM_SERVICES = Object.freeze([
         brandFrom: '#f97316',
         brandTo: '#f59e0b',
         healthName: 'grafana',
-        countOp: null,
+        metricField: null,
         metricKey: null,
     }),
 ]);

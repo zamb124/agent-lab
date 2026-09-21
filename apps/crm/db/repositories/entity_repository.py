@@ -290,6 +290,26 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
+    async def get_in_company(self, entity_id: str, company_id: str) -> CRMEntity | None:
+        """Entity по id с явной компанией (Access Explorer вне контекста namespace)."""
+        async with self._db.session() as session:
+            stmt = select(CRMEntity).where(
+                CRMEntity.entity_id == entity_id,
+                CRMEntity.company_id == company_id,
+            )
+            return (await session.execute(stmt)).scalar_one_or_none()
+
+    async def search_by_name_in_company(
+        self, company_id: str, query: str, *, limit: int
+    ) -> list[CRMEntity]:
+        """Сущности компании по подстроке имени во всех пространствах."""
+        async with self._db.session() as session:
+            stmt = select(CRMEntity).where(CRMEntity.company_id == company_id)
+            if query != "":
+                stmt = stmt.where(CRMEntity.name.ilike(f"%{query}%"))
+            stmt = stmt.order_by(CRMEntity.name).limit(limit)
+            return list((await session.execute(stmt)).scalars().all())
+
     async def list_by_entity_ids_ordered(
         self,
         entity_ids: list[str],

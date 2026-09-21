@@ -321,6 +321,7 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/api/authz/explorer/*", context_type="api", auth_required=True),
     RouteRule("/frontend/api/authz/explorer", context_type="api", auth_required=True),
     RouteRule("/frontend/api/authz/explorer/*", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/dashboard/*", context_type="api", auth_required=True),
 
     # API фронтенда для управления API ключами
     RouteRule("/api/api-keys/*", context_type="api", auth_required=True),

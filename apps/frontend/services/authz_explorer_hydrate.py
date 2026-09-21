@@ -1,28 +1,25 @@
-"""Гидрация title/href для Access Explorer из доменных репозиториев и PK-select."""
+"""Гидрация title/href для Access Explorer через репозитории владельцев объектов.
+
+Frontend читает peer-БД только через репозитории сервисов-владельцев (architecture.mdc
+«Репозиторий приоритетнее»): SQL и ORM здесь не появляются. Репозиторий отсутствует,
+если URL БД домена не настроен — тогда объекты домена гидрируются как `UNAVAILABLE`.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import select
-
-from apps.crm.db.base import CRMDatabase
-from apps.crm.db.models import CRMEntity
+from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.flows.src.db.flow_repository import FlowRepository
-from apps.office.db.base import OfficeDatabase
-from apps.office.db.models import OfficeDocumentBinding, OfficeDocumentCatalog
-from apps.sync.db.base import SyncDatabase
-from apps.sync.db.models import SyncChannel
-from apps.wiki.db.base import WikiDatabase
-from apps.wiki.db.models import WikiPageRow
+from apps.office.db.repositories.catalog_repository import CatalogRepository
+from apps.office.db.repositories.document_binding_repository import DocumentBindingRepository
+from apps.sync.db.repositories.channel_repository import ChannelRepository
+from apps.wiki.db.repositories.wiki_repository import WikiRepository
 from core.authz.explorer import AuthzExplorerObjectHit, AuthzTitleStatus
 from core.authz.ids import format_namespace_key, parse_flow_branch_key, parse_namespace_key
 from core.authz.types import AuthzObjectType
-from core.config import get_settings
-from core.mail.models import MailboxBinding
 from core.mail.repositories import MailboxBindingRepository
-from core.worktracker.db import WorktrackerDatabase
-from core.worktracker.db_models import WorkQueueRow
+from core.worktracker.repository import WorktrackerRepository
 
 _SEARCH_LIMIT = 40
 
@@ -37,6 +34,20 @@ class AuthzHydratedObject:
     manage_href: str
     namespace: str | None
     company_id: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class AuthzExplorerRepositories:
+    """Репозитории владельцев; `None` — БД домена не настроена в этом процессе."""
+
+    flow: FlowRepository
+    mailbox_binding: MailboxBindingRepository
+    worktracker: WorktrackerRepository | None
+    wiki: WikiRepository | None
+    crm_entity: EntityRepository | None
+    office_catalog: CatalogRepository | None
+    office_binding: DocumentBindingRepository | None
+    sync_channel: ChannelRepository | None
 
 
 def explorer_hrefs(
@@ -84,87 +95,64 @@ def explorer_hrefs(
     return "", ""
 
 
+def _title_status(title: str | None) -> AuthzTitleStatus:
+    return AuthzTitleStatus.LOADED if title else AuthzTitleStatus.MISSING
+
+
+def _clean_title(raw: str | None) -> str | None:
+    if raw is None:
+        return None
+    stripped = raw.strip()
+    return stripped if stripped != "" else None
+
+
+def _hydrated(
+    object_type: AuthzObjectType,
+    object_key: str,
+    *,
+    title: str | None,
+    status: AuthzTitleStatus,
+    namespace: str | None,
+    company_id: str | None,
+) -> AuthzHydratedObject:
+    href, manage_href = explorer_hrefs(object_type, object_key, namespace=namespace)
+    return AuthzHydratedObject(
+        object_type=object_type,
+        object_key=object_key,
+        title=title,
+        title_status=status,
+        href=href,
+        manage_href=manage_href,
+        namespace=namespace,
+        company_id=company_id,
+    )
+
+
+def _missing(object_type: AuthzObjectType, object_key: str) -> AuthzHydratedObject:
+    return _hydrated(object_type, object_key, title=None, status=AuthzTitleStatus.MISSING, namespace=None, company_id=None)
+
+
+def _unavailable(object_type: AuthzObjectType, object_key: str) -> AuthzHydratedObject:
+    return _hydrated(
+        object_type, object_key, title=None, status=AuthzTitleStatus.UNAVAILABLE, namespace=None, company_id=None
+    )
+
+
+def _hit(object_type: AuthzObjectType, object_key: str, title: str | None, namespace: str | None) -> AuthzExplorerObjectHit:
+    href, _manage = explorer_hrefs(object_type, object_key, namespace=namespace)
+    return AuthzExplorerObjectHit(
+        object_type=object_type,
+        object_key=object_key,
+        title=title,
+        title_status=_title_status(title),
+        href=href,
+        namespace=namespace,
+    )
+
+
 class AuthzExplorerHydrator:
-    def __init__(
-        self,
-        *,
-        flow_repository: FlowRepository,
-        mailbox_binding_repository: MailboxBindingRepository,
-    ) -> None:
-        self._flow_repository: FlowRepository = flow_repository
-        self._mailbox_binding_repository: MailboxBindingRepository = (
-            mailbox_binding_repository
-        )
-        self._wiki_db: WikiDatabase | None = None
-        self._crm_db: CRMDatabase | None = None
-        self._office_db: OfficeDatabase | None = None
-        self._sync_db: SyncDatabase | None = None
-        self._worktracker_db: WorktrackerDatabase | None = None
-        self._wiki_unavailable: bool = False
-        self._crm_unavailable: bool = False
-        self._office_unavailable: bool = False
-        self._sync_unavailable: bool = False
-        self._worktracker_unavailable: bool = False
-
-    def _wiki(self) -> WikiDatabase | None:
-        if self._wiki_unavailable:
-            return None
-        if self._wiki_db is not None:
-            return self._wiki_db
-        url = get_settings().database.wiki_url
-        if url is None or url.strip() == "":
-            self._wiki_unavailable = True
-            return None
-        self._wiki_db = WikiDatabase(url)
-        return self._wiki_db
-
-    def _crm(self) -> CRMDatabase | None:
-        if self._crm_unavailable:
-            return None
-        if self._crm_db is not None:
-            return self._crm_db
-        url = get_settings().database.crm_url
-        if url is None or url.strip() == "":
-            self._crm_unavailable = True
-            return None
-        self._crm_db = CRMDatabase.get_instance(url)
-        return self._crm_db
-
-    def _office(self) -> OfficeDatabase | None:
-        if self._office_unavailable:
-            return None
-        if self._office_db is not None:
-            return self._office_db
-        url = get_settings().database.office_url
-        if url is None or url.strip() == "":
-            self._office_unavailable = True
-            return None
-        self._office_db = OfficeDatabase.get_instance(url)
-        return self._office_db
-
-    def _sync(self) -> SyncDatabase | None:
-        if self._sync_unavailable:
-            return None
-        if self._sync_db is not None:
-            return self._sync_db
-        url = get_settings().database.sync_url
-        if url is None or url.strip() == "":
-            self._sync_unavailable = True
-            return None
-        self._sync_db = SyncDatabase.get_instance(url)
-        return self._sync_db
-
-    def _worktracker(self) -> WorktrackerDatabase | None:
-        if self._worktracker_unavailable:
-            return None
-        if self._worktracker_db is not None:
-            return self._worktracker_db
-        url = get_settings().database.worktracker_url
-        if url is None or url.strip() == "":
-            self._worktracker_unavailable = True
-            return None
-        self._worktracker_db = WorktrackerDatabase(url)
-        return self._worktracker_db
+    def __init__(self, repositories: AuthzExplorerRepositories) -> None:
+        self._repositories: AuthzExplorerRepositories = repositories
 
     async def hydrate(
         self,
@@ -173,9 +161,7 @@ class AuthzExplorerHydrator:
         *,
         company_id: str,
     ) -> AuthzHydratedObject:
-        if object_type is AuthzObjectType.PLATFORM_NAMESPACE:
-            return self._hydrate_namespace(object_type, object_key, company_id)
-        if object_type is AuthzObjectType.CRM_NAMESPACE:
+        if object_type in (AuthzObjectType.PLATFORM_NAMESPACE, AuthzObjectType.CRM_NAMESPACE):
             return self._hydrate_namespace(object_type, object_key, company_id)
         if object_type is AuthzObjectType.WIKI_PAGE:
             return await self._hydrate_wiki_page(object_key, company_id)
@@ -197,452 +183,172 @@ class AuthzExplorerHydrator:
             return await self._hydrate_work_queue(object_key, company_id)
         if object_type is AuthzObjectType.MAILBOX_BINDING:
             return await self._hydrate_mailbox(object_key, company_id)
-        href, manage_href = explorer_hrefs(object_type, object_key, namespace=None)
-        return AuthzHydratedObject(
-            object_type=object_type,
-            object_key=object_key,
-            title=None,
-            title_status=AuthzTitleStatus.MISSING,
-            href=href,
-            manage_href=manage_href,
-            namespace=None,
-            company_id=None,
-        )
+        return _missing(object_type, object_key)
 
     def _hydrate_namespace(
-        self,
-        object_type: AuthzObjectType,
-        object_key: str,
-        company_id: str,
+        self, object_type: AuthzObjectType, object_key: str, company_id: str
     ) -> AuthzHydratedObject:
         key_company_id, namespace = parse_namespace_key(object_key)
-        href, manage_href = explorer_hrefs(object_type, object_key, namespace=namespace)
-        if key_company_id != company_id:
-            return AuthzHydratedObject(
-                object_type=object_type,
-                object_key=object_key,
-                title=None,
-                title_status=AuthzTitleStatus.MISSING,
-                href=href,
-                manage_href=manage_href,
-                namespace=namespace,
-                company_id=key_company_id,
-            )
-        return AuthzHydratedObject(
-            object_type=object_type,
-            object_key=object_key,
-            title=namespace,
-            title_status=AuthzTitleStatus.LOADED,
-            href=href,
-            manage_href=manage_href,
+        matched = key_company_id == company_id
+        return _hydrated(
+            object_type,
+            object_key,
+            title=namespace if matched else None,
+            status=AuthzTitleStatus.LOADED if matched else AuthzTitleStatus.MISSING,
             namespace=namespace,
             company_id=key_company_id,
         )
 
-    async def _hydrate_wiki_page(
-        self, wiki_page_id: str, company_id: str
-    ) -> AuthzHydratedObject:
-        href, manage_href = explorer_hrefs(
-            AuthzObjectType.WIKI_PAGE, wiki_page_id, namespace=None
-        )
-        db = self._wiki()
-        if db is None:
-            return AuthzHydratedObject(
-                object_type=AuthzObjectType.WIKI_PAGE,
-                object_key=wiki_page_id,
-                title=None,
-                title_status=AuthzTitleStatus.UNAVAILABLE,
-                href=href,
-                manage_href=manage_href,
-                namespace=None,
-                company_id=None,
-            )
-        async with db.session() as session:
-            row = (
-                await session.execute(
-                    select(WikiPageRow).where(
-                        WikiPageRow.wiki_page_id == wiki_page_id,
-                        WikiPageRow.company_id == company_id,
-                        WikiPageRow.deleted_at.is_(None),
-                    )
-                )
-            ).scalar_one_or_none()
-        if row is None:
-            return AuthzHydratedObject(
-                object_type=AuthzObjectType.WIKI_PAGE,
-                object_key=wiki_page_id,
-                title=None,
-                title_status=AuthzTitleStatus.MISSING,
-                href=href,
-                manage_href=manage_href,
-                namespace=None,
-                company_id=None,
-            )
-        title = row.title.strip()
-        return AuthzHydratedObject(
-            object_type=AuthzObjectType.WIKI_PAGE,
-            object_key=wiki_page_id,
-            title=title if title != "" else None,
-            title_status=AuthzTitleStatus.LOADED if title != "" else AuthzTitleStatus.MISSING,
-            href=href,
-            manage_href=manage_href,
-            namespace=row.namespace,
-            company_id=row.company_id,
+    async def _hydrate_wiki_page(self, wiki_page_id: str, company_id: str) -> AuthzHydratedObject:
+        repository = self._repositories.wiki
+        if repository is None:
+            return _unavailable(AuthzObjectType.WIKI_PAGE, wiki_page_id)
+        page = await repository.find_summary_in_company(company_id, wiki_page_id)
+        if page is None:
+            return _missing(AuthzObjectType.WIKI_PAGE, wiki_page_id)
+        title = _clean_title(page.title)
+        return _hydrated(
+            AuthzObjectType.WIKI_PAGE,
+            wiki_page_id,
+            title=title,
+            status=_title_status(title),
+            namespace=page.namespace,
+            company_id=company_id,
         )
 
-    async def _hydrate_crm_entity(
-        self, entity_id: str, company_id: str
-    ) -> AuthzHydratedObject:
-        href, manage_href = explorer_hrefs(
-            AuthzObjectType.CRM_ENTITY, entity_id, namespace=None
-        )
-        db = self._crm()
-        if db is None:
-            return AuthzHydratedObject(
-                object_type=AuthzObjectType.CRM_ENTITY,
-                object_key=entity_id,
-                title=None,
-                title_status=AuthzTitleStatus.UNAVAILABLE,
-                href=href,
-                manage_href=manage_href,
-                namespace=None,
-                company_id=None,
-            )
-        async with db.session() as session:
-            row = (
-                await session.execute(
-                    select(CRMEntity).where(
-                        CRMEntity.entity_id == entity_id,
-                        CRMEntity.company_id == company_id,
-                    )
-                )
-            ).scalar_one_or_none()
-        if row is None:
-            return AuthzHydratedObject(
-                object_type=AuthzObjectType.CRM_ENTITY,
-                object_key=entity_id,
-                title=None,
-                title_status=AuthzTitleStatus.MISSING,
-                href=href,
-                manage_href=manage_href,
-                namespace=None,
-                company_id=None,
-            )
-        name = row.name.strip()
-        return AuthzHydratedObject(
-            object_type=AuthzObjectType.CRM_ENTITY,
-            object_key=entity_id,
-            title=name if name != "" else None,
-            title_status=AuthzTitleStatus.LOADED if name != "" else AuthzTitleStatus.MISSING,
-            href=href,
-            manage_href=manage_href,
-            namespace=row.namespace,
-            company_id=row.company_id,
+    async def _hydrate_crm_entity(self, entity_id: str, company_id: str) -> AuthzHydratedObject:
+        repository = self._repositories.crm_entity
+        if repository is None:
+            return _unavailable(AuthzObjectType.CRM_ENTITY, entity_id)
+        entity = await repository.get_in_company(entity_id, company_id)
+        if entity is None:
+            return _missing(AuthzObjectType.CRM_ENTITY, entity_id)
+        title = _clean_title(entity.name)
+        return _hydrated(
+            AuthzObjectType.CRM_ENTITY,
+            entity_id,
+            title=title,
+            status=_title_status(title),
+            namespace=entity.namespace,
+            company_id=entity.company_id,
         )
 
-    async def _hydrate_office_catalog(
-        self, catalog_id: str, company_id: str
-    ) -> AuthzHydratedObject:
-        href, manage_href = explorer_hrefs(
-            AuthzObjectType.OFFICE_CATALOG, catalog_id, namespace=None
-        )
-        db = self._office()
-        if db is None:
-            return AuthzHydratedObject(
-                object_type=AuthzObjectType.OFFICE_CATALOG,
-                object_key=catalog_id,
-                title=None,
-                title_status=AuthzTitleStatus.UNAVAILABLE,
-                href=href,
-                manage_href=manage_href,
-                namespace=None,
-                company_id=None,
-            )
-        async with db.session() as session:
-            row = (
-                await session.execute(
-                    select(OfficeDocumentCatalog).where(
-                        OfficeDocumentCatalog.catalog_id == catalog_id,
-                        OfficeDocumentCatalog.company_id == company_id,
-                    )
-                )
-            ).scalar_one_or_none()
-        if row is None:
-            return AuthzHydratedObject(
-                object_type=AuthzObjectType.OFFICE_CATALOG,
-                object_key=catalog_id,
-                title=None,
-                title_status=AuthzTitleStatus.MISSING,
-                href=href,
-                manage_href=manage_href,
-                namespace=None,
-                company_id=None,
-            )
-        title = row.title.strip()
-        return AuthzHydratedObject(
-            object_type=AuthzObjectType.OFFICE_CATALOG,
-            object_key=catalog_id,
-            title=title if title != "" else None,
-            title_status=AuthzTitleStatus.LOADED if title != "" else AuthzTitleStatus.MISSING,
-            href=href,
-            manage_href=manage_href,
-            namespace=row.namespace,
-            company_id=row.company_id,
+    async def _hydrate_office_catalog(self, catalog_id: str, company_id: str) -> AuthzHydratedObject:
+        repository = self._repositories.office_catalog
+        if repository is None:
+            return _unavailable(AuthzObjectType.OFFICE_CATALOG, catalog_id)
+        catalog = await repository.get_in_company(catalog_id, company_id)
+        if catalog is None:
+            return _missing(AuthzObjectType.OFFICE_CATALOG, catalog_id)
+        title = _clean_title(catalog.title)
+        return _hydrated(
+            AuthzObjectType.OFFICE_CATALOG,
+            catalog_id,
+            title=title,
+            status=_title_status(title),
+            namespace=catalog.namespace,
+            company_id=catalog.company_id,
         )
 
-    async def _hydrate_office_document(
-        self, file_id: str, company_id: str
-    ) -> AuthzHydratedObject:
-        href, manage_href = explorer_hrefs(
-            AuthzObjectType.OFFICE_DOCUMENT, file_id, namespace=None
-        )
-        db = self._office()
-        if db is None:
-            return AuthzHydratedObject(
-                object_type=AuthzObjectType.OFFICE_DOCUMENT,
-                object_key=file_id,
-                title=None,
-                title_status=AuthzTitleStatus.UNAVAILABLE,
-                href=href,
-                manage_href=manage_href,
-                namespace=None,
-                company_id=None,
-            )
-        async with db.session() as session:
-            row = (
-                await session.execute(
-                    select(OfficeDocumentBinding).where(
-                        OfficeDocumentBinding.file_id == file_id,
-                        OfficeDocumentBinding.company_id == company_id,
-                        OfficeDocumentBinding.deleted_at.is_(None),
-                    )
-                )
-            ).scalar_one_or_none()
-        if row is None:
-            return AuthzHydratedObject(
-                object_type=AuthzObjectType.OFFICE_DOCUMENT,
-                object_key=file_id,
-                title=None,
-                title_status=AuthzTitleStatus.MISSING,
-                href=href,
-                manage_href=manage_href,
-                namespace=None,
-                company_id=None,
-            )
-        title = row.title.strip()
-        return AuthzHydratedObject(
-            object_type=AuthzObjectType.OFFICE_DOCUMENT,
-            object_key=file_id,
-            title=title if title != "" else None,
-            title_status=AuthzTitleStatus.LOADED if title != "" else AuthzTitleStatus.MISSING,
-            href=href,
-            manage_href=manage_href,
-            namespace=row.namespace,
-            company_id=row.company_id,
+    async def _hydrate_office_document(self, file_id: str, company_id: str) -> AuthzHydratedObject:
+        repository = self._repositories.office_binding
+        if repository is None:
+            return _unavailable(AuthzObjectType.OFFICE_DOCUMENT, file_id)
+        binding = await repository.get_by_file_and_company(file_id, company_id)
+        if binding is None or binding.deleted_at is not None:
+            return _missing(AuthzObjectType.OFFICE_DOCUMENT, file_id)
+        title = _clean_title(binding.title)
+        return _hydrated(
+            AuthzObjectType.OFFICE_DOCUMENT,
+            file_id,
+            title=title,
+            status=_title_status(title),
+            namespace=binding.namespace,
+            company_id=binding.company_id,
         )
 
     async def _hydrate_flow(self, object_key: str, company_id: str) -> AuthzHydratedObject:
-        href, manage_href = explorer_hrefs(AuthzObjectType.FLOW, object_key, namespace=None)
         key_company_id, flow_id = parse_namespace_key(object_key)
         if key_company_id != company_id:
-            return AuthzHydratedObject(
-                object_type=AuthzObjectType.FLOW,
-                object_key=object_key,
-                title=None,
-                title_status=AuthzTitleStatus.MISSING,
-                href=href,
-                manage_href=manage_href,
-                namespace=None,
-                company_id=None,
-            )
-        config = await self._flow_repository.get_latest(flow_id)
+            return _missing(AuthzObjectType.FLOW, object_key)
+        config = await self._repositories.flow.get_latest(flow_id)
         if config is None:
-            return AuthzHydratedObject(
-                object_type=AuthzObjectType.FLOW,
-                object_key=object_key,
-                title=None,
-                title_status=AuthzTitleStatus.MISSING,
-                href=href,
-                manage_href=manage_href,
-                namespace=None,
-                company_id=None,
-            )
-        name = config.name.strip()
-        return AuthzHydratedObject(
-            object_type=AuthzObjectType.FLOW,
-            object_key=object_key,
-            title=name if name != "" else None,
-            title_status=AuthzTitleStatus.LOADED if name != "" else AuthzTitleStatus.MISSING,
-            href=href,
-            manage_href=manage_href,
+            return _missing(AuthzObjectType.FLOW, object_key)
+        title = _clean_title(config.name)
+        return _hydrated(
+            AuthzObjectType.FLOW,
+            object_key,
+            title=title,
+            status=_title_status(title),
             namespace=None,
             company_id=company_id,
         )
 
-    def _hydrate_flow_branch(
-        self, object_key: str, company_id: str
-    ) -> AuthzHydratedObject:
-        href, manage_href = explorer_hrefs(
-            AuthzObjectType.FLOW_BRANCH, object_key, namespace=None
-        )
+    def _hydrate_flow_branch(self, object_key: str, company_id: str) -> AuthzHydratedObject:
         key_company_id, _flow_id, _branch_id = parse_flow_branch_key(object_key)
-        matched = key_company_id == company_id
-        return AuthzHydratedObject(
-            object_type=AuthzObjectType.FLOW_BRANCH,
-            object_key=object_key,
+        return _hydrated(
+            AuthzObjectType.FLOW_BRANCH,
+            object_key,
             title=None,
-            title_status=AuthzTitleStatus.MISSING,
-            href=href,
-            manage_href=manage_href,
+            status=AuthzTitleStatus.MISSING,
             namespace=None,
-            company_id=company_id if matched else None,
+            company_id=company_id if key_company_id == company_id else None,
         )
 
     def _hydrate_tool(self, object_key: str, company_id: str) -> AuthzHydratedObject:
-        href, manage_href = explorer_hrefs(
-            AuthzObjectType.TOOL, object_key, namespace=None
-        )
         key_company_id, _tool_id = parse_namespace_key(object_key)
-        matched = key_company_id == company_id
-        return AuthzHydratedObject(
-            object_type=AuthzObjectType.TOOL,
-            object_key=object_key,
+        return _hydrated(
+            AuthzObjectType.TOOL,
+            object_key,
             title=None,
-            title_status=AuthzTitleStatus.MISSING,
-            href=href,
-            manage_href=manage_href,
+            status=AuthzTitleStatus.MISSING,
             namespace=None,
-            company_id=company_id if matched else None,
+            company_id=company_id if key_company_id == company_id else None,
         )
 
-    async def _hydrate_sync_channel(
-        self, channel_id: str, company_id: str
-    ) -> AuthzHydratedObject:
-        href, manage_href = explorer_hrefs(
-            AuthzObjectType.SYNC_CHANNEL, channel_id, namespace=None
-        )
-        db = self._sync()
-        if db is None:
-            return AuthzHydratedObject(
-                object_type=AuthzObjectType.SYNC_CHANNEL,
-                object_key=channel_id,
-                title=None,
-                title_status=AuthzTitleStatus.UNAVAILABLE,
-                href=href,
-                manage_href=manage_href,
-                namespace=None,
-                company_id=None,
-            )
-        async with db.session() as session:
-            row = (
-                await session.execute(
-                    select(SyncChannel).where(
-                        SyncChannel.channel_id == channel_id,
-                        SyncChannel.company_id == company_id,
-                    )
-                )
-            ).scalar_one_or_none()
-        if row is None:
-            return AuthzHydratedObject(
-                object_type=AuthzObjectType.SYNC_CHANNEL,
-                object_key=channel_id,
-                title=None,
-                title_status=AuthzTitleStatus.MISSING,
-                href=href,
-                manage_href=manage_href,
-                namespace=None,
-                company_id=None,
-            )
-        raw_name = row.name
-        title = raw_name.strip() if raw_name is not None else ""
-        return AuthzHydratedObject(
-            object_type=AuthzObjectType.SYNC_CHANNEL,
-            object_key=channel_id,
-            title=title if title != "" else None,
-            title_status=AuthzTitleStatus.LOADED if title != "" else AuthzTitleStatus.MISSING,
-            href=href,
-            manage_href=manage_href,
-            namespace=row.namespace,
-            company_id=row.company_id,
+    async def _hydrate_sync_channel(self, channel_id: str, company_id: str) -> AuthzHydratedObject:
+        repository = self._repositories.sync_channel
+        if repository is None:
+            return _unavailable(AuthzObjectType.SYNC_CHANNEL, channel_id)
+        channel = await repository.get_in_company(channel_id, company_id)
+        if channel is None:
+            return _missing(AuthzObjectType.SYNC_CHANNEL, channel_id)
+        title = _clean_title(channel.name)
+        return _hydrated(
+            AuthzObjectType.SYNC_CHANNEL,
+            channel_id,
+            title=title,
+            status=_title_status(title),
+            namespace=channel.namespace,
+            company_id=channel.company_id,
         )
 
-    async def _hydrate_work_queue(
-        self, work_queue_id: str, company_id: str
-    ) -> AuthzHydratedObject:
-        href, manage_href = explorer_hrefs(
-            AuthzObjectType.WORK_QUEUE, work_queue_id, namespace=None
-        )
-        db = self._worktracker()
-        if db is None:
-            return AuthzHydratedObject(
-                object_type=AuthzObjectType.WORK_QUEUE,
-                object_key=work_queue_id,
-                title=None,
-                title_status=AuthzTitleStatus.UNAVAILABLE,
-                href=href,
-                manage_href=manage_href,
-                namespace=None,
-                company_id=None,
-            )
-        async with db.session() as session:
-            row = (
-                await session.execute(
-                    select(WorkQueueRow).where(
-                        WorkQueueRow.work_queue_id == work_queue_id,
-                        WorkQueueRow.company_id == company_id,
-                    )
-                )
-            ).scalar_one_or_none()
-        if row is None:
-            return AuthzHydratedObject(
-                object_type=AuthzObjectType.WORK_QUEUE,
-                object_key=work_queue_id,
-                title=None,
-                title_status=AuthzTitleStatus.MISSING,
-                href=href,
-                manage_href=manage_href,
-                namespace=None,
-                company_id=None,
-            )
-        name = row.name.strip()
-        return AuthzHydratedObject(
-            object_type=AuthzObjectType.WORK_QUEUE,
-            object_key=work_queue_id,
-            title=name if name != "" else None,
-            title_status=AuthzTitleStatus.LOADED if name != "" else AuthzTitleStatus.MISSING,
-            href=href,
-            manage_href=manage_href,
+    async def _hydrate_work_queue(self, work_queue_id: str, company_id: str) -> AuthzHydratedObject:
+        repository = self._repositories.worktracker
+        if repository is None:
+            return _unavailable(AuthzObjectType.WORK_QUEUE, work_queue_id)
+        queue = await repository.get_queue(company_id, work_queue_id)
+        if queue is None:
+            return _missing(AuthzObjectType.WORK_QUEUE, work_queue_id)
+        title = _clean_title(queue.name)
+        return _hydrated(
+            AuthzObjectType.WORK_QUEUE,
+            work_queue_id,
+            title=title,
+            status=_title_status(title),
             namespace=None,
-            company_id=row.company_id,
+            company_id=queue.company_id,
         )
 
-    async def _hydrate_mailbox(
-        self, mailbox_binding_id: str, company_id: str
-    ) -> AuthzHydratedObject:
-        href, manage_href = explorer_hrefs(
-            AuthzObjectType.MAILBOX_BINDING, mailbox_binding_id, namespace=None
-        )
-        binding: MailboxBinding | None = await self._mailbox_binding_repository.get(
-            mailbox_binding_id, company_id
-        )
+    async def _hydrate_mailbox(self, mailbox_binding_id: str, company_id: str) -> AuthzHydratedObject:
+        binding = await self._repositories.mailbox_binding.get(mailbox_binding_id, company_id)
         if binding is None:
-            return AuthzHydratedObject(
-                object_type=AuthzObjectType.MAILBOX_BINDING,
-                object_key=mailbox_binding_id,
-                title=None,
-                title_status=AuthzTitleStatus.MISSING,
-                href=href,
-                manage_href=manage_href,
-                namespace=None,
-                company_id=None,
-            )
-        return AuthzHydratedObject(
-            object_type=AuthzObjectType.MAILBOX_BINDING,
-            object_key=mailbox_binding_id,
+            return _missing(AuthzObjectType.MAILBOX_BINDING, mailbox_binding_id)
+        return _hydrated(
+            AuthzObjectType.MAILBOX_BINDING,
+            mailbox_binding_id,
             title=binding.email_address,
-            title_status=AuthzTitleStatus.LOADED,
-            href=href,
-            manage_href=manage_href,
+            status=AuthzTitleStatus.LOADED,
             namespace=None,
             company_id=binding.company_id,
         )
@@ -667,9 +373,7 @@ class AuthzExplorerHydrator:
             )
         hits: list[AuthzExplorerObjectHit] = []
         for search_type in types:
-            hits.extend(
-                await self._search_type(search_type, company_id=company_id, query=query)
-            )
+            hits.extend(await self._search_type(search_type, company_id=company_id, query=query.strip()))
             if len(hits) >= _SEARCH_LIMIT:
                 return hits[:_SEARCH_LIMIT]
         return hits
@@ -681,252 +385,94 @@ class AuthzExplorerHydrator:
         company_id: str,
         query: str,
     ) -> list[AuthzExplorerObjectHit]:
-        needle = query.strip()
         if object_type is AuthzObjectType.WIKI_PAGE:
-            return await self._search_wiki(company_id, needle)
+            return await self._search_wiki(company_id, query)
         if object_type is AuthzObjectType.CRM_ENTITY:
-            return await self._search_crm(company_id, needle)
+            return await self._search_crm(company_id, query)
         if object_type is AuthzObjectType.OFFICE_DOCUMENT:
-            return await self._search_office_documents(company_id, needle)
+            return await self._search_office_documents(company_id, query)
         if object_type is AuthzObjectType.OFFICE_CATALOG:
-            return await self._search_office_catalogs(company_id, needle)
+            return await self._search_office_catalogs(company_id, query)
         if object_type is AuthzObjectType.FLOW:
-            return await self._search_flows(company_id, needle)
+            return await self._search_flows(company_id, query)
         if object_type is AuthzObjectType.SYNC_CHANNEL:
-            return await self._search_sync(company_id, needle)
+            return await self._search_sync(company_id, query)
         if object_type is AuthzObjectType.WORK_QUEUE:
-            return await self._search_work_queues(company_id, needle)
-        if object_type is AuthzObjectType.PLATFORM_NAMESPACE:
-            return []
-        if object_type is AuthzObjectType.CRM_NAMESPACE:
-            return []
+            return await self._search_work_queues(company_id, query)
         return []
 
-    async def _search_wiki(
-        self, company_id: str, query: str
-    ) -> list[AuthzExplorerObjectHit]:
-        db = self._wiki()
-        if db is None:
+    async def _search_wiki(self, company_id: str, query: str) -> list[AuthzExplorerObjectHit]:
+        repository = self._repositories.wiki
+        if repository is None:
             return []
-        stmt = select(WikiPageRow).where(
-            WikiPageRow.company_id == company_id,
-            WikiPageRow.deleted_at.is_(None),
-        )
-        if query != "":
-            stmt = stmt.where(WikiPageRow.title.ilike(f"%{query}%"))
-        stmt = stmt.order_by(WikiPageRow.title).limit(_SEARCH_LIMIT)
-        async with db.session() as session:
-            rows = list((await session.execute(stmt)).scalars().all())
-        hits: list[AuthzExplorerObjectHit] = []
-        for row in rows:
-            title = row.title.strip()
-            href, _manage = explorer_hrefs(
-                AuthzObjectType.WIKI_PAGE, row.wiki_page_id, namespace=row.namespace
-            )
-            hits.append(
-                AuthzExplorerObjectHit(
-                    object_type=AuthzObjectType.WIKI_PAGE,
-                    object_key=row.wiki_page_id,
-                    title=title if title != "" else None,
-                    title_status=(
-                        AuthzTitleStatus.LOADED if title != "" else AuthzTitleStatus.MISSING
-                    ),
-                    href=href,
-                    namespace=row.namespace,
-                )
-            )
-        return hits
+        pages = await repository.search_summaries_in_company(company_id, query, limit=_SEARCH_LIMIT)
+        return [
+            _hit(AuthzObjectType.WIKI_PAGE, page.wiki_page_id, _clean_title(page.title), page.namespace)
+            for page in pages
+        ]
 
-    async def _search_crm(
-        self, company_id: str, query: str
-    ) -> list[AuthzExplorerObjectHit]:
-        db = self._crm()
-        if db is None:
+    async def _search_crm(self, company_id: str, query: str) -> list[AuthzExplorerObjectHit]:
+        repository = self._repositories.crm_entity
+        if repository is None:
             return []
-        stmt = select(CRMEntity).where(CRMEntity.company_id == company_id)
-        if query != "":
-            stmt = stmt.where(CRMEntity.name.ilike(f"%{query}%"))
-        stmt = stmt.order_by(CRMEntity.name).limit(_SEARCH_LIMIT)
-        async with db.session() as session:
-            rows = list((await session.execute(stmt)).scalars().all())
-        hits: list[AuthzExplorerObjectHit] = []
-        for row in rows:
-            name = row.name.strip()
-            href, _manage = explorer_hrefs(
-                AuthzObjectType.CRM_ENTITY, row.entity_id, namespace=row.namespace
-            )
-            hits.append(
-                AuthzExplorerObjectHit(
-                    object_type=AuthzObjectType.CRM_ENTITY,
-                    object_key=row.entity_id,
-                    title=name if name != "" else None,
-                    title_status=(
-                        AuthzTitleStatus.LOADED if name != "" else AuthzTitleStatus.MISSING
-                    ),
-                    href=href,
-                    namespace=row.namespace,
-                )
-            )
-        return hits
+        entities = await repository.search_by_name_in_company(company_id, query, limit=_SEARCH_LIMIT)
+        return [
+            _hit(AuthzObjectType.CRM_ENTITY, entity.entity_id, _clean_title(entity.name), entity.namespace)
+            for entity in entities
+        ]
 
-    async def _search_office_documents(
-        self, company_id: str, query: str
-    ) -> list[AuthzExplorerObjectHit]:
-        db = self._office()
-        if db is None:
+    async def _search_office_documents(self, company_id: str, query: str) -> list[AuthzExplorerObjectHit]:
+        repository = self._repositories.office_binding
+        if repository is None:
             return []
-        stmt = select(OfficeDocumentBinding).where(
-            OfficeDocumentBinding.company_id == company_id,
-            OfficeDocumentBinding.deleted_at.is_(None),
-        )
-        if query != "":
-            stmt = stmt.where(OfficeDocumentBinding.title.ilike(f"%{query}%"))
-        stmt = stmt.order_by(OfficeDocumentBinding.title).limit(_SEARCH_LIMIT)
-        async with db.session() as session:
-            rows = list((await session.execute(stmt)).scalars().all())
-        hits: list[AuthzExplorerObjectHit] = []
-        for row in rows:
-            title = row.title.strip()
-            href, _manage = explorer_hrefs(
-                AuthzObjectType.OFFICE_DOCUMENT, row.file_id, namespace=row.namespace
-            )
-            hits.append(
-                AuthzExplorerObjectHit(
-                    object_type=AuthzObjectType.OFFICE_DOCUMENT,
-                    object_key=row.file_id,
-                    title=title if title != "" else None,
-                    title_status=(
-                        AuthzTitleStatus.LOADED if title != "" else AuthzTitleStatus.MISSING
-                    ),
-                    href=href,
-                    namespace=row.namespace,
-                )
-            )
-        return hits
+        bindings = await repository.search_titles_in_company(company_id, query, limit=_SEARCH_LIMIT)
+        return [
+            _hit(AuthzObjectType.OFFICE_DOCUMENT, binding.file_id, _clean_title(binding.title), binding.namespace)
+            for binding in bindings
+        ]
 
-    async def _search_office_catalogs(
-        self, company_id: str, query: str
-    ) -> list[AuthzExplorerObjectHit]:
-        db = self._office()
-        if db is None:
+    async def _search_office_catalogs(self, company_id: str, query: str) -> list[AuthzExplorerObjectHit]:
+        repository = self._repositories.office_catalog
+        if repository is None:
             return []
-        stmt = select(OfficeDocumentCatalog).where(
-            OfficeDocumentCatalog.company_id == company_id,
-        )
-        if query != "":
-            stmt = stmt.where(OfficeDocumentCatalog.title.ilike(f"%{query}%"))
-        stmt = stmt.order_by(OfficeDocumentCatalog.title).limit(_SEARCH_LIMIT)
-        async with db.session() as session:
-            rows = list((await session.execute(stmt)).scalars().all())
-        hits: list[AuthzExplorerObjectHit] = []
-        for row in rows:
-            title = row.title.strip()
-            href, _manage = explorer_hrefs(
-                AuthzObjectType.OFFICE_CATALOG, row.catalog_id, namespace=row.namespace
-            )
-            hits.append(
-                AuthzExplorerObjectHit(
-                    object_type=AuthzObjectType.OFFICE_CATALOG,
-                    object_key=row.catalog_id,
-                    title=title if title != "" else None,
-                    title_status=(
-                        AuthzTitleStatus.LOADED if title != "" else AuthzTitleStatus.MISSING
-                    ),
-                    href=href,
-                    namespace=row.namespace,
-                )
-            )
-        return hits
+        catalogs = await repository.search_titles_in_company(company_id, query, limit=_SEARCH_LIMIT)
+        return [
+            _hit(AuthzObjectType.OFFICE_CATALOG, catalog.catalog_id, _clean_title(catalog.title), catalog.namespace)
+            for catalog in catalogs
+        ]
 
-    async def _search_flows(
-        self, company_id: str, query: str
-    ) -> list[AuthzExplorerObjectHit]:
-        configs = await self._flow_repository.list(limit=_SEARCH_LIMIT, offset=0)
-        hits: list[AuthzExplorerObjectHit] = []
+    async def _search_flows(self, company_id: str, query: str) -> list[AuthzExplorerObjectHit]:
+        configs = await self._repositories.flow.list(limit=_SEARCH_LIMIT, offset=0)
         needle = query.casefold()
+        hits: list[AuthzExplorerObjectHit] = []
         for config in configs:
-            name = config.name.strip()
-            if needle != "" and needle not in name.casefold():
+            title = _clean_title(config.name)
+            if needle != "" and needle not in (title or "").casefold():
                 continue
-            object_key = format_namespace_key(company_id, config.flow_id)
-            href, _manage = explorer_hrefs(
-                AuthzObjectType.FLOW, object_key, namespace=None
-            )
-            hits.append(
-                AuthzExplorerObjectHit(
-                    object_type=AuthzObjectType.FLOW,
-                    object_key=object_key,
-                    title=name if name != "" else None,
-                    title_status=(
-                        AuthzTitleStatus.LOADED if name != "" else AuthzTitleStatus.MISSING
-                    ),
-                    href=href,
-                    namespace=None,
-                )
-            )
+            hits.append(_hit(AuthzObjectType.FLOW, format_namespace_key(company_id, config.flow_id), title, None))
         return hits
 
-    async def _search_sync(
-        self, company_id: str, query: str
-    ) -> list[AuthzExplorerObjectHit]:
-        db = self._sync()
-        if db is None:
+    async def _search_sync(self, company_id: str, query: str) -> list[AuthzExplorerObjectHit]:
+        repository = self._repositories.sync_channel
+        if repository is None:
             return []
-        stmt = select(SyncChannel).where(SyncChannel.company_id == company_id)
-        if query != "":
-            stmt = stmt.where(SyncChannel.name.ilike(f"%{query}%"))
-        stmt = stmt.order_by(SyncChannel.name).limit(_SEARCH_LIMIT)
-        async with db.session() as session:
-            rows = list((await session.execute(stmt)).scalars().all())
-        hits: list[AuthzExplorerObjectHit] = []
-        for row in rows:
-            raw_name = row.name
-            title = raw_name.strip() if raw_name is not None else ""
-            href, _manage = explorer_hrefs(
-                AuthzObjectType.SYNC_CHANNEL, row.channel_id, namespace=row.namespace
-            )
-            hits.append(
-                AuthzExplorerObjectHit(
-                    object_type=AuthzObjectType.SYNC_CHANNEL,
-                    object_key=row.channel_id,
-                    title=title if title != "" else None,
-                    title_status=(
-                        AuthzTitleStatus.LOADED if title != "" else AuthzTitleStatus.MISSING
-                    ),
-                    href=href,
-                    namespace=row.namespace,
-                )
-            )
-        return hits
+        channels = await repository.search_by_name_in_company(company_id, query, limit=_SEARCH_LIMIT)
+        return [
+            _hit(AuthzObjectType.SYNC_CHANNEL, channel.channel_id, _clean_title(channel.name), channel.namespace)
+            for channel in channels
+        ]
 
-    async def _search_work_queues(
-        self, company_id: str, query: str
-    ) -> list[AuthzExplorerObjectHit]:
-        db = self._worktracker()
-        if db is None:
+    async def _search_work_queues(self, company_id: str, query: str) -> list[AuthzExplorerObjectHit]:
+        repository = self._repositories.worktracker
+        if repository is None:
             return []
-        stmt = select(WorkQueueRow).where(WorkQueueRow.company_id == company_id)
-        if query != "":
-            stmt = stmt.where(WorkQueueRow.name.ilike(f"%{query}%"))
-        stmt = stmt.order_by(WorkQueueRow.name).limit(_SEARCH_LIMIT)
-        async with db.session() as session:
-            rows = list((await session.execute(stmt)).scalars().all())
+        needle = query.casefold()
         hits: list[AuthzExplorerObjectHit] = []
-        for row in rows:
-            name = row.name.strip()
-            href, _manage = explorer_hrefs(
-                AuthzObjectType.WORK_QUEUE, row.work_queue_id, namespace=None
-            )
-            hits.append(
-                AuthzExplorerObjectHit(
-                    object_type=AuthzObjectType.WORK_QUEUE,
-                    object_key=row.work_queue_id,
-                    title=name if name != "" else None,
-                    title_status=(
-                        AuthzTitleStatus.LOADED if name != "" else AuthzTitleStatus.MISSING
-                    ),
-                    href=href,
-                    namespace=None,
-                )
-            )
+        for queue in await repository.list_queues(company_id):
+            title = _clean_title(queue.name)
+            if needle != "" and needle not in (title or "").casefold():
+                continue
+            hits.append(_hit(AuthzObjectType.WORK_QUEUE, queue.work_queue_id, title, None))
+            if len(hits) >= _SEARCH_LIMIT:
+                break
         return hits

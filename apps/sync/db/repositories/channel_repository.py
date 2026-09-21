@@ -35,6 +35,25 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
     def company_id_column(self) -> InstrumentedAttribute[str]:
         return SyncChannel.company_id
 
+    async def get_in_company(self, channel_id: str, company_id: str) -> SyncChannel | None:
+        """Канал по id с явной компанией (Access Explorer)."""
+        async with self._db.session() as session:
+            stmt = select(SyncChannel).where(
+                SyncChannel.channel_id == channel_id,
+                SyncChannel.company_id == company_id,
+            )
+            return (await session.execute(stmt)).scalar_one_or_none()
+
+    async def search_by_name_in_company(
+        self, company_id: str, query: str, *, limit: int
+    ) -> list[SyncChannel]:
+        async with self._db.session() as session:
+            stmt = select(SyncChannel).where(SyncChannel.company_id == company_id)
+            if query != "":
+                stmt = stmt.where(SyncChannel.name.ilike(f"%{query}%"))
+            stmt = stmt.order_by(SyncChannel.name).limit(limit)
+            return list((await session.execute(stmt)).scalars().all())
+
     async def list_by_namespace(
         self,
         namespace: str,

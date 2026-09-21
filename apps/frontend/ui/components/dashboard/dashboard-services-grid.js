@@ -79,7 +79,7 @@ export class DashboardServicesGrid extends PlatformElement {
     constructor() {
         super();
         this._status = this.useOp('frontend/services_status_load');
-        this._countOps = DASHBOARD_SERVICES.map((svc) => (svc.countOp ? this.useOp(svc.countOp) : null));
+        this._stats = this.useOp('frontend/dashboard_stats');
         this._activeCompanyId = this.select((s) => s.auth.activeCompanyId);
         this._countsBootstrapped = false;
         this._prevCompanyId = null;
@@ -94,26 +94,13 @@ export class DashboardServicesGrid extends PlatformElement {
         if (!this._countsBootstrapped) {
             this._countsBootstrapped = true;
             this._status.run(null);
-            for (let i = 0; i < this._countOps.length; i++) {
-                const svc = DASHBOARD_SERVICES[i];
-                const op = this._countOps[i];
-                if (!op) {
-                    continue;
-                }
-                if (svc.id === 'litserve' && cid !== 'system') {
-                    continue;
-                }
-                op.run(null);
-            }
+            this._stats.run(null);
             this._prevCompanyId = cid;
             return;
         }
         if (cid !== this._prevCompanyId) {
             this._prevCompanyId = cid;
-            const litIdx = DASHBOARD_SERVICES.findIndex((s) => s.id === 'litserve');
-            if (litIdx >= 0 && cid === 'system' && this._countOps[litIdx]) {
-                this._countOps[litIdx].run(null);
-            }
+            this._stats.run(null);
         }
     }
 
@@ -124,24 +111,23 @@ export class DashboardServicesGrid extends PlatformElement {
         return { state: 'healthy', latencyMs: 0 };
     }
 
-    _metricValue(idx, metricKey, svcId, activeCompanyId) {
-        if (!metricKey) {
+    _metricValue(metricField, metricKey, svcId, activeCompanyId) {
+        if (!metricKey || !metricField) {
             return '—';
         }
         if (svcId === 'litserve' && activeCompanyId !== 'system') {
             return '—';
         }
-        const op = this._countOps[idx];
-        if (!op) return '—';
-        const result = op.lastResult;
-        if (!result) return '—';
-        return this.t(metricKey, { count: result.total });
+        const stats = this._stats.lastResult;
+        if (!stats) return '—';
+        const count = stats[metricField];
+        if (typeof count !== 'number') return '—';
+        return this.t(metricKey, { count });
     }
 
     _serviceTiles(statusResult, activeCompanyId) {
         const visible = this._visibleServices(activeCompanyId);
         return visible.map((svc) => {
-            const idx = DASHBOARD_SERVICES.indexOf(svc);
             const health = this._healthForService(statusResult, svc.healthName, activeCompanyId);
             const litserveLocked = svc.id === 'litserve' && activeCompanyId !== 'system';
             const descriptionKey = descriptionKeyFromNameKey(svc.nameKey);
@@ -154,7 +140,7 @@ export class DashboardServicesGrid extends PlatformElement {
                     href=${buildServiceEntryUrl(svc.id)}
                     brand-from=${svc.brandFrom}
                     brand-to=${svc.brandTo}
-                    metric-value=${this._metricValue(idx, svc.metricKey, svc.id, activeCompanyId)}
+                    metric-value=${this._metricValue(svc.metricField, svc.metricKey, svc.id, activeCompanyId)}
                     health-state=${health.state}
                     latency-ms=${health.latencyMs}
                     ?disabled=${litserveLocked}

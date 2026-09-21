@@ -216,6 +216,32 @@ class WikiRepository:
             row = (await session.execute(stmt)).scalar_one_or_none()
             return _row_to_page(row) if row is not None else None
 
+    async def find_summary_in_company(self, company_id: str, wiki_page_id: str) -> WikiPageSummary | None:
+        """Страница по id в любом пространстве компании (Access Explorer, где namespace неизвестен)."""
+        async with self._db.session() as session:
+            stmt = select(WikiPageRow).where(
+                WikiPageRow.company_id == company_id,
+                WikiPageRow.wiki_page_id == wiki_page_id,
+                WikiPageRow.deleted_at.is_(None),
+            )
+            row = (await session.execute(stmt)).scalar_one_or_none()
+            return _row_to_summary(row, False) if row is not None else None
+
+    async def search_summaries_in_company(
+        self, company_id: str, query: str, *, limit: int
+    ) -> list[WikiPageSummary]:
+        """Страницы компании по подстроке заголовка во всех пространствах."""
+        async with self._db.session() as session:
+            stmt = select(WikiPageRow).where(
+                WikiPageRow.company_id == company_id,
+                WikiPageRow.deleted_at.is_(None),
+            )
+            if query != "":
+                stmt = stmt.where(WikiPageRow.title.ilike(f"%{query}%"))
+            stmt = stmt.order_by(WikiPageRow.title).limit(limit)
+            rows = list((await session.execute(stmt)).scalars().all())
+            return [_row_to_summary(row, False) for row in rows]
+
     async def get_public_page_by_link_token(self, link_token_hash: str) -> WikiPage | None:
         """Страница по хешу публичной ссылки.
 

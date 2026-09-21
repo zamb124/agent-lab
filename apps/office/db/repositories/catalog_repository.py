@@ -34,6 +34,27 @@ class CatalogRepository:
             )
             return result.scalar_one_or_none()
 
+    async def get_in_company(self, catalog_id: str, company_id: str) -> OfficeDocumentCatalog | None:
+        """Каталог по id в любом пространстве компании (Access Explorer)."""
+        async with self._db.session() as session:
+            result = await session.execute(
+                select(OfficeDocumentCatalog).where(
+                    OfficeDocumentCatalog.catalog_id == catalog_id,
+                    OfficeDocumentCatalog.company_id == company_id,
+                )
+            )
+            return result.scalar_one_or_none()
+
+    async def search_titles_in_company(
+        self, company_id: str, query: str, *, limit: int
+    ) -> list[OfficeDocumentCatalog]:
+        async with self._db.session() as session:
+            stmt = select(OfficeDocumentCatalog).where(OfficeDocumentCatalog.company_id == company_id)
+            if query != "":
+                stmt = stmt.where(OfficeDocumentCatalog.title.ilike(f"%{query}%"))
+            stmt = stmt.order_by(OfficeDocumentCatalog.title).limit(limit)
+            return list((await session.execute(stmt)).scalars().all())
+
     async def list_by_company_namespace(
         self,
         *,

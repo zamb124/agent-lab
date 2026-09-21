@@ -2,11 +2,23 @@
 Dependency Injection контейнер для Frontend
 """
 
+from apps.crm.db.base import CRMDatabase
+from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.flows.src.db.flow_repository import FlowRepository
-from apps.frontend.services.authz_explorer_hydrate import AuthzExplorerHydrator
+from apps.frontend.services.authz_explorer_hydrate import (
+    AuthzExplorerHydrator,
+    AuthzExplorerRepositories,
+)
 from apps.frontend.services.authz_explorer_service import AuthzExplorerService
 from apps.frontend.services.cookie_consent_repository import CookieConsentRepository
 from apps.frontend.services.cookie_consent_service import CookieConsentService
+from apps.office.db.base import OfficeDatabase
+from apps.office.db.repositories.catalog_repository import CatalogRepository
+from apps.office.db.repositories.document_binding_repository import DocumentBindingRepository
+from apps.sync.db.base import SyncDatabase
+from apps.sync.db.repositories.channel_repository import ChannelRepository
+from apps.wiki.db.base import WikiDatabase
+from apps.wiki.db.repositories.wiki_repository import WikiRepository
 from core.clients.rag_client import RagClient
 from core.config import get_settings
 from core.container import BaseContainer, ContainerRegistry, lazy
@@ -16,6 +28,9 @@ from core.db.repositories.embed_mapping_repository import EmbedMappingRepository
 from core.db.storage import Storage
 from core.logging import get_logger
 from core.payments import PaymentService
+from core.rag.post_retrieval_rerank import RerankScoreCache
+from core.worktracker.db import WorktrackerDatabase
+from core.worktracker.repository import WorktrackerRepository
 
 logger = get_logger(__name__)
 
@@ -66,11 +81,43 @@ class FrontendContainer(BaseContainer):
         return FlowRepository(storage=self.flows_storage)
 
     @lazy
-    def authz_explorer_hydrator(self) -> AuthzExplorerHydrator:
-        return AuthzExplorerHydrator(
-            flow_repository=self.flows_flow_repository,
-            mailbox_binding_repository=self.mailbox_binding_repository,
+    def authz_explorer_repositories(self) -> AuthzExplorerRepositories:
+        """Репозитории владельцев для Access Explorer; домен без URL БД гидрируется как unavailable."""
+        database = get_settings().database
+        return AuthzExplorerRepositories(
+            flow=self.flows_flow_repository,
+            mailbox_binding=self.mailbox_binding_repository,
+            worktracker=(
+                WorktrackerRepository(WorktrackerDatabase(database.worktracker_url))
+                if database.worktracker_url
+                else None
+            ),
+            wiki=WikiRepository(WikiDatabase(database.wiki_url)) if database.wiki_url else None,
+            crm_entity=(
+                EntityRepository(
+                    CRMDatabase.get_instance(database.crm_url),
+                    rag_repository=self.rag_repository,
+                    rerank_score_cache=RerankScoreCache(self.redis_client),
+                )
+                if database.crm_url
+                else None
+            ),
+            office_catalog=(
+                CatalogRepository(OfficeDatabase.get_instance(database.office_url)) if database.office_url else None
+            ),
+            office_binding=(
+                DocumentBindingRepository(OfficeDatabase.get_instance(database.office_url))
+                if database.office_url
+                else None
+            ),
+            sync_channel=(
+                ChannelRepository(SyncDatabase.get_instance(database.sync_url)) if database.sync_url else None
+            ),
         )
+
+    @lazy
+    def authz_explorer_hydrator(self) -> AuthzExplorerHydrator:
+        return AuthzExplorerHydrator(self.authz_explorer_repositories)
 
     @lazy
     def authz_explorer_service(self) -> AuthzExplorerService:

@@ -142,12 +142,7 @@ import {
 import { acceptInviteOp, previewInviteOp } from '../events/resources/invites.resource.js';
 import { servicesStatusLoadOp } from '../events/resources/services-status.resource.js';
 import {
-    dashboardFlowsCountOp,
-    dashboardCrmNamespacesCountOp,
-    dashboardRagNamespacesCountOp,
-    dashboardSyncSpacesCountOp,
-    dashboardDocumentsFilesCountOp,
-    dashboardHumanitecModelsCountOp,
+    dashboardStatsOp,
 } from '../events/resources/dashboard-stats.resource.js';
 import {
     publicSiteBundleOp,
@@ -412,12 +407,7 @@ export class FrontendApp extends PlatformApp {
         acceptInviteOp,
         previewInviteOp,
         servicesStatusLoadOp,
-        dashboardFlowsCountOp,
-        dashboardCrmNamespacesCountOp,
-        dashboardRagNamespacesCountOp,
-        dashboardSyncSpacesCountOp,
-        dashboardDocumentsFilesCountOp,
-        dashboardHumanitecModelsCountOp,
+        dashboardStatsOp,
         publicSiteBundleOp,
         publicBlogListOp,
         publicBlogPostOp,

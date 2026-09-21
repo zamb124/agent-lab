@@ -4,7 +4,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from apps.office.db.base import OfficeDatabase
 from apps.office.db.models import OfficeDocumentBinding
@@ -88,6 +88,29 @@ class DocumentBindingRepository:
             )
             rows = list(result.scalars().all())
         return [row for row in rows if needle in row.title.casefold()]
+
+    async def search_titles_in_company(
+        self, company_id: str, query: str, *, limit: int
+    ) -> list[OfficeDocumentBinding]:
+        """Живые документы компании по подстроке заголовка во всех пространствах."""
+        async with self._db.session() as session:
+            stmt = select(OfficeDocumentBinding).where(
+                OfficeDocumentBinding.company_id == company_id,
+                self._active_filter(),
+            )
+            if query != "":
+                stmt = stmt.where(OfficeDocumentBinding.title.ilike(f"%{query}%"))
+            stmt = stmt.order_by(OfficeDocumentBinding.title).limit(limit)
+            return list((await session.execute(stmt)).scalars().all())
+
+    async def count_active_in_company(self, company_id: str) -> int:
+        async with self._db.session() as session:
+            result = await session.execute(
+                select(func.count())
+                .select_from(OfficeDocumentBinding)
+                .where(OfficeDocumentBinding.company_id == company_id, self._active_filter())
+            )
+            return int(result.scalar_one())
 
     async def list_by_file_ids(
         self, company_id: str, namespace: str, file_ids: list[str]

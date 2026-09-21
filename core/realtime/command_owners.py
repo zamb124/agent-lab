@@ -2,7 +2,7 @@
 
 Владелец есть только у сервиса с каталогом `<SVC>_OPERATIONS`
 (`apps/<svc>/realtime/command_router.py`) — гейт `scripts/check_command_owner_catalogs.py`.
-Сервисы без каталога (`frontend`, `secrets`, `scheduler`) принимают только REST.
+Сервисы без каталога (`secrets`, `scheduler`) принимают только REST.
 Протокольные сервисы (`voice`, `browser`, `guest_runtime`, `capability_gateway`,
 `code_runner_*`, `realtime`) команд по шине не принимают: их API — собственный протокол
 (WS-сессии, CDP, sandbox) и REST.
@@ -19,6 +19,7 @@ _OWNER_BY_SCOPE: dict[str, str] = {
     "worktracker": "worktracker",
     "rag": "rag",
     "search": "search",
+    "frontend": "frontend",
 }
 
 
