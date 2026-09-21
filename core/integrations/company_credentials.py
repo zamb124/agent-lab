@@ -19,7 +19,6 @@ from core.clients.google_workspace_scopes import (
     GOOGLE_WORKSPACE_SCOPES,
 )
 from core.config.models import GoogleWorkspaceConfig
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.integrations.constants import (
     COMPANY_INTEGRATION_USER_ID,
     METADATA_IMPERSONATE_EMAIL,
@@ -29,6 +28,7 @@ from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.integrations.repository import IntegrationCredentialRepository
 from core.logging import get_logger
 from core.models.base import StrictBaseModel
+from core.models.identity_models import SYSTEM_COMPANY_ID
 from core.types import JsonObject, parse_json_object
 from core.utils.time import utcnow
 

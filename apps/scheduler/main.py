@@ -8,20 +8,20 @@ from apps.crm_worker.tasks.task_names import (
     CRM_RECONCILE_DAILY_SUMMARY,
     CRM_REEMBED_STALE_DOCUMENTS,
 )
+from apps.flows.src.tasks.task_names import (
+    TASK_MCP_CATALOG_CRAWL,
+    TASK_MCP_CATALOG_RESYNC_TOOLS,
+    TASK_TOOL_TAG_GROUPS_DESCRIBE_TICK,
+)
 from apps.idle_worker.tasks.task_names import (
     TASK_CALENDAR_SYNC_MEETING_REMINDER_TICK,
     TASK_CALENDAR_SYNC_TICK,
     TASK_FILE_RETENTION_BACKFILL_TICK,
     TASK_FILE_RETENTION_PURGE_TICK,
-    TASK_MCP_CATALOG_CRAWL,
-    TASK_MCP_CATALOG_RESYNC_TOOLS,
     TASK_PAYMENT_SYNC_TICK,
     TASK_PLATFORM_SCHEDULES_GC_TICK,
     TASK_REDIS_INVENTORY_TICK,
-    TASK_REFRESH_PLATFORM_FREE_MODELS,
     TASK_SPAN_BILLING_SETTLEMENT_TICK,
-    TASK_SYNC_LLM_MODELS,
-    TASK_TOOL_TAG_GROUPS_DESCRIBE_TICK,
 )
 from apps.rag_worker.tasks.task_names import (
     RAG_CLEANUP_EXPIRED_DOCUMENTS_TICK,
@@ -32,6 +32,7 @@ from apps.scheduler.api.v1 import api_v1_router
 from apps.scheduler.config import SchedulerSettings, get_scheduler_settings
 from apps.scheduler.container import SchedulerContainer, get_scheduler_container
 from apps.scheduler.crawl_schedule_bootstrap import ensure_search_crawl_schedules
+from core.ai.task_names import TASK_REFRESH_PLATFORM_FREE_MODELS, TASK_SYNC_LLM_MODELS
 from core.app import create_service_app
 from core.config.testing import is_testing
 from core.identity.system_bootstrap import (

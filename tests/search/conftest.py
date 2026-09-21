@@ -167,11 +167,10 @@ async def ensure_platform_search_worker_prerequisites(
     from core.identity.system_bootstrap import (
         ADMIN_ROLE,
         SYSTEM_ADMIN_EMAIL,
-        SYSTEM_COMPANY_ID,
         ensure_system_admin_membership,
         ensure_system_company_exists,
     )
-    from core.models.identity_models import User
+    from core.models.identity_models import SYSTEM_COMPANY_ID, User
 
     company = await ensure_system_company_exists(
         company_repository=frontend_container.company_repository,

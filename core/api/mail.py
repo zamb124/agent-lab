@@ -8,7 +8,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from core.app_state import require_platform_app_state
 from core.context import get_context
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.mail.enqueue import (
     enqueue_mail_archive,
     enqueue_mail_delete,
@@ -73,6 +72,7 @@ from core.mail.models import (
     PersonalMailboxHealthcheckPayload,
 )
 from core.mail.service import MailService, to_public_connection
+from core.models.identity_models import SYSTEM_COMPANY_ID
 from core.pagination import ListResponse
 
 router = APIRouter(tags=["mail"])

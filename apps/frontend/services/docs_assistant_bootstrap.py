@@ -24,14 +24,11 @@ from core.docs.assistant import (
     docs_build_hash,
     load_llms_full_pages,
 )
-from core.identity.system_bootstrap import (
-    SYSTEM_COMPANY_ID,
-    ensure_system_company_exists,
-)
+from core.identity.system_bootstrap import ensure_system_company_exists
 from core.logging import get_logger
 from core.models.embed_models import EmbedConfig, EmbedMapping, EmbedStatus
 from core.models.i18n_models import Language
-from core.models.identity_models import Company, User
+from core.models.identity_models import SYSTEM_COMPANY_ID, Company, User
 from core.utils.background import run_with_log_context
 
 if TYPE_CHECKING:

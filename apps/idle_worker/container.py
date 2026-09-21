@@ -1,62 +1,34 @@
 """
 DI контейнер idle worker.
 
-Архитектурное решение
----------------------
-idle_worker исполняет фоновые задачи, которые принадлежат сразу нескольким
-доменам платформы:
-
-- AI model catalog sync — shared (`core.ai.model_catalog_repository` живёт в shared БД).
-- Calendar / integrations sync — shared (`core/` репозитории).
-- Payment sync, span billing settlement — shared (`core/payments`, `core/billing`).
-- Push notifications — shared (`core/push`).
-
-Поэтому idle_worker задокументирован как **extension of flows**:
-он наследует `FlowContainer` (и через него весь `BaseContainer`),
-а не пересобирает зависимости. Это сознательное компромиссное решение
-вместо создания parallel-контейнера с дублирующимися `@lazy`-свойствами.
-
-Любые новые задачи idle_worker, которым нужно state из flows-БД, добавляются
-в `FlowContainer`. Задачи, которым flows-state не нужен (чисто `core/`),
-тоже идут сюда и получают доступ через унаследованные `@lazy` свойства
-`BaseContainer`. Это поддерживает Single Source of Truth для DI — нет
-дублирования `redis_client`/`storage`/`company_repository` в двух контейнерах.
-
-Worker lifecycle
-----------------
-- `apps/idle_worker/worker.py` создаёт singleton через `get_container()`.
-- `container.use_worker = False` отключает kiq-отправку в очередь
-  (задачи внутри idle_worker исполняются in-process).
+idle_worker исполняет фоновые задачи shared-доменов платформы (AI model catalog,
+почта и календарь, платежи и settlement биллинга, push, retention файлов), поэтому ему
+достаточно `BaseContainer`: все нужные репозитории и сервисы shared БД уже в нём.
+Задачи, которым нужен runtime flows (MCP catalog, tool tag groups, email-триггеры),
+живут в `apps/flows/src/tasks/` и исполняются flows_worker.
 """
 
 from __future__ import annotations
 
-from apps.flows.src.container import FlowContainer
 from core.config import get_settings
-from core.container import ContainerRegistry
+from core.container import BaseContainer, ContainerRegistry
 from core.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-class IdleWorkerContainer(FlowContainer):
-    """
-    Контейнер idle worker — extension of flows.
-
-    Расширяет `FlowContainer` без новых `@lazy`-свойств: все зависимости
-    наследуются. При необходимости задачи idle_worker могут переопределить
-    отдельные провайдеры (например, отключить kiq для in-process выполнения).
-    """
+class IdleWorkerContainer(BaseContainer):
+    """Контейнер idle worker — shared-домены платформы без flows-БД."""
 
 
 def _create_idle_worker_container() -> IdleWorkerContainer:
     settings = get_settings()
-    container = IdleWorkerContainer(
-        db_url=settings.database.flows_url,
+    if not settings.database.shared_url:
+        raise ValueError("database.shared_url не задан")
+    return IdleWorkerContainer(
+        db_url=settings.database.shared_url,
         shared_db_url=settings.database.shared_url,
     )
-    container.use_worker = False
-    return container
 
 
 _idle_worker_registry: ContainerRegistry[IdleWorkerContainer] = ContainerRegistry(

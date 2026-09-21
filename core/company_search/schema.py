@@ -121,3 +121,31 @@ class CompanySearchProviders(BaseModel):
             "tavily": self.tavily,
         }
         return providers[provider_id]
+
+
+class CompanySearchProviderView(BaseModel):
+    """Настройки провайдера для UI компании: ключ замаскирован, платформенный слой — флагами."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    provider_id: SearchProviderId
+    enabled: bool
+    credential_source: SearchCredentialSource
+    configured: bool
+    key_masked: str | None = None
+    base_url: str | None = None
+    timeout_seconds: float | None = None
+    platform_enabled: bool
+    platform_base_url: str | None = None
+    platform_key_configured: bool
+    depth: Literal["fast", "standard", "deep"] | None = None
+    search_depth: Literal["basic", "advanced"] | None = None
+    topic: Literal["general", "news", "finance"] | None = None
+    include_answer: bool | None = None
+
+
+class CompanySearchProvidersResponse(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    provider_order: list[SearchProviderId]
+    providers: list[CompanySearchProviderView]

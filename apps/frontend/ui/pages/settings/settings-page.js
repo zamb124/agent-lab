@@ -20,6 +20,13 @@ import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/llm/llm-config-editor.js';
 import '@platform/lib/components/llm/llm-context-editor.js';
+
+const SEARCH_PROVIDER_CATALOG = Object.freeze({
+    tinyfish: { label: 'TinyFish', logo: 'TF', tone: 'cyan', docs_url: 'https://app.tinyfish.ai' },
+    linkup: { label: 'Linkup', logo: 'LU', tone: 'green', docs_url: 'https://app.linkup.so' },
+    serper: { label: 'Serper', logo: 'G', tone: 'blue', docs_url: 'https://serper.dev' },
+    tavily: { label: 'Tavily', logo: 'TV', tone: 'violet', docs_url: 'https://tavily.com' },
+});
 import '@platform/lib/components/platform-help-hint.js';
 import {
     llmProviderErrorClassIsBlocking,
@@ -554,10 +561,10 @@ export class FrontendSettingsPage extends PlatformPage {
         this._contextDelete = this.useOp('frontend/ai_provider_llm_context_delete');
         this._customCreate = this.useOp('frontend/ai_custom_provider_create');
         this._customDelete = this.useOp('frontend/ai_custom_provider_delete');
-        this._searchLoad = this.useOp('frontend/search_providers_load');
-        this._searchProviderPut = this.useOp('frontend/search_provider_put');
-        this._searchProviderOrderPut = this.useOp('frontend/search_provider_order_put');
-        this._searchProviderDelete = this.useOp('frontend/search_provider_delete');
+        this._searchLoad = this.useOp('search/providers_load');
+        this._searchProviderPut = this.useOp('search/provider_update');
+        this._searchProviderOrderPut = this.useOp('search/provider_order_update');
+        this._searchProviderDelete = this.useOp('search/provider_reset');
         this._scoreLoad = this.useOp('frontend/llm_model_scores_load');
         this._scoreUpsert = this.useOp('frontend/llm_model_score_upsert');
         this._scoreDelete = this.useOp('frontend/llm_model_score_delete');
@@ -679,11 +686,11 @@ export class FrontendSettingsPage extends PlatformPage {
         const providers = Array.isArray(data.providers) ? data.providers : [];
         const drafts = {};
         for (const provider of providers) {
-            if (!provider || typeof provider !== 'object' || typeof provider.id !== 'string') {
+            if (!provider || typeof provider !== 'object' || typeof provider.provider_id !== 'string') {
                 continue;
             }
-            drafts[provider.id] = {
-                provider_id: provider.id,
+            drafts[provider.provider_id] = {
+                provider_id: provider.provider_id,
                 enabled: provider.enabled === true,
                 credential_source: provider.credential_source === 'company' ? 'company' : 'platform',
                 api_key: '',
@@ -1125,24 +1132,13 @@ export class FrontendSettingsPage extends PlatformPage {
         `;
     }
 
-    _searchCatalogById(data) {
-        const catalog = Array.isArray(data.catalog) ? data.catalog : [];
-        const out = {};
-        for (const item of catalog) {
-            if (item && typeof item === 'object' && typeof item.id === 'string') {
-                out[item.id] = item;
-            }
-        }
-        return out;
-    }
-
     _searchProviderDraft(provider) {
-        const draft = this._searchProviderDrafts[provider.id];
+        const draft = this._searchProviderDrafts[provider.provider_id];
         if (draft && typeof draft === 'object') {
             return draft;
         }
         return {
-            provider_id: provider.id,
+            provider_id: provider.provider_id,
             enabled: provider.enabled === true,
             credential_source: provider.credential_source === 'company' ? 'company' : 'platform',
             api_key: '',
@@ -1214,7 +1210,7 @@ export class FrontendSettingsPage extends PlatformPage {
     }
 
     _renderSearchProviderSpecificFields(provider, draft) {
-        if (provider.id === 'linkup') {
+        if (provider.provider_id === 'linkup') {
             return html`
                 <platform-field
                     type="enum"
@@ -1231,12 +1227,12 @@ export class FrontendSettingsPage extends PlatformPage {
                         if (!e.detail || typeof e.detail.value !== 'string') {
                             throw new Error('search provider depth expects string detail.value');
                         }
-                        this._setSearchProviderDraft(provider.id, { depth: e.detail.value });
+                        this._setSearchProviderDraft(provider.provider_id, { depth: e.detail.value });
                     }}
                 ></platform-field>
             `;
         }
-        if (provider.id === 'tavily') {
+        if (provider.provider_id === 'tavily') {
             return html`
                 <platform-field
                     type="enum"
@@ -1252,7 +1248,7 @@ export class FrontendSettingsPage extends PlatformPage {
                         if (!e.detail || typeof e.detail.value !== 'string') {
                             throw new Error('search provider search_depth expects string detail.value');
                         }
-                        this._setSearchProviderDraft(provider.id, { search_depth: e.detail.value });
+                        this._setSearchProviderDraft(provider.provider_id, { search_depth: e.detail.value });
                     }}
                 ></platform-field>
                 <platform-field
@@ -1270,7 +1266,7 @@ export class FrontendSettingsPage extends PlatformPage {
                         if (!e.detail || typeof e.detail.value !== 'string') {
                             throw new Error('search provider topic expects string detail.value');
                         }
-                        this._setSearchProviderDraft(provider.id, { topic: e.detail.value });
+                        this._setSearchProviderDraft(provider.provider_id, { topic: e.detail.value });
                     }}
                 ></platform-field>
                 <platform-field
@@ -1282,7 +1278,7 @@ export class FrontendSettingsPage extends PlatformPage {
                         if (!e.detail || typeof e.detail.value !== 'boolean') {
                             throw new Error('search provider include_answer expects boolean detail.value');
                         }
-                        this._setSearchProviderDraft(provider.id, { include_answer: e.detail.value });
+                        this._setSearchProviderDraft(provider.provider_id, { include_answer: e.detail.value });
                     }}
                 ></platform-field>
             `;
@@ -1290,16 +1286,15 @@ export class FrontendSettingsPage extends PlatformPage {
         return '';
     }
 
-    _renderSearchProviderCard(provider, catalog) {
+    _renderSearchProviderCard(provider) {
         const draft = this._searchProviderDraft(provider);
-        const meta = catalog[provider.id] && typeof catalog[provider.id] === 'object'
-            ? catalog[provider.id]
-            : {};
-        const label = typeof meta.label === 'string' ? meta.label : provider.id;
-        const logo = typeof meta.logo === 'string' ? meta.logo : provider.id.slice(0, 2).toUpperCase();
-        const tone = typeof meta.tone === 'string' ? meta.tone : 'blue';
-        const description = typeof meta.description === 'string' ? meta.description : '';
-        const tooltip = typeof meta.tooltip === 'string' ? meta.tooltip : '';
+        const meta = SEARCH_PROVIDER_CATALOG[provider.provider_id];
+        if (!meta) {
+            throw new Error(`settings-page: unknown search provider ${provider.provider_id}`);
+        }
+        const { label, logo, tone } = meta;
+        const description = this.t(`settings_page.search_providers.catalog.${provider.provider_id}.description`);
+        const tooltip = this.t(`settings_page.search_providers.catalog.${provider.provider_id}.tooltip`);
         const isCompany = draft.credential_source === 'company';
         return html`
             <article class="search-provider-card" data-source=${isCompany ? 'company' : 'platform'}>
@@ -1328,12 +1323,12 @@ export class FrontendSettingsPage extends PlatformPage {
                     <button
                         type="button"
                         data-active=${isCompany ? 'false' : 'true'}
-                        @click=${() => this._setSearchProviderDraft(provider.id, { credential_source: 'platform' })}
+                        @click=${() => this._setSearchProviderDraft(provider.provider_id, { credential_source: 'platform' })}
                     >${this.t('settings_page.search_providers.source_platform')}</button>
                     <button
                         type="button"
                         data-active=${isCompany ? 'true' : 'false'}
-                        @click=${() => this._setSearchProviderDraft(provider.id, { credential_source: 'company' })}
+                        @click=${() => this._setSearchProviderDraft(provider.provider_id, { credential_source: 'company' })}
                     >${this.t('settings_page.search_providers.source_company')}</button>
                 </div>
 
@@ -1347,7 +1342,7 @@ export class FrontendSettingsPage extends PlatformPage {
                             if (!e.detail || typeof e.detail.value !== 'boolean') {
                                 throw new Error('search provider enabled expects boolean detail.value');
                             }
-                            this._setSearchProviderDraft(provider.id, { enabled: e.detail.value });
+                            this._setSearchProviderDraft(provider.provider_id, { enabled: e.detail.value });
                         }}
                     ></platform-field>
                     <platform-field
@@ -1360,7 +1355,7 @@ export class FrontendSettingsPage extends PlatformPage {
                             if (!e.detail || (e.detail.value !== null && typeof e.detail.value !== 'number')) {
                                 throw new Error('search provider timeout expects numeric detail.value');
                             }
-                            this._setSearchProviderDraft(provider.id, { timeout_seconds: e.detail.value });
+                            this._setSearchProviderDraft(provider.provider_id, { timeout_seconds: e.detail.value });
                         }}
                     ></platform-field>
                     <platform-field
@@ -1373,7 +1368,7 @@ export class FrontendSettingsPage extends PlatformPage {
                             if (!e.detail || typeof e.detail.value !== 'string') {
                                 throw new Error('search provider base_url expects string detail.value');
                             }
-                            this._setSearchProviderDraft(provider.id, { base_url: e.detail.value });
+                            this._setSearchProviderDraft(provider.provider_id, { base_url: e.detail.value });
                         }}
                     ></platform-field>
                     ${isCompany
@@ -1391,7 +1386,7 @@ export class FrontendSettingsPage extends PlatformPage {
                                     if (!e.detail || typeof e.detail.value !== 'string') {
                                         throw new Error('search provider api_key expects string detail.value');
                                     }
-                                    this._setSearchProviderDraft(provider.id, { api_key: e.detail.value });
+                                    this._setSearchProviderDraft(provider.provider_id, { api_key: e.detail.value });
                                 }}
                             ></platform-field>
                         `
@@ -1404,12 +1399,12 @@ export class FrontendSettingsPage extends PlatformPage {
                         <glass-button
                             size="sm"
                             variant="ghost"
-                            @click=${() => this._moveSearchProvider(provider.id, -1)}
+                            @click=${() => this._moveSearchProvider(provider.provider_id, -1)}
                         >${this.t('settings_page.search_providers.move_up')}</glass-button>
                         <glass-button
                             size="sm"
                             variant="ghost"
-                            @click=${() => this._moveSearchProvider(provider.id, 1)}
+                            @click=${() => this._moveSearchProvider(provider.provider_id, 1)}
                         >${this.t('settings_page.search_providers.move_down')}</glass-button>
                     </div>
                     <div class="order-controls">
@@ -1417,12 +1412,12 @@ export class FrontendSettingsPage extends PlatformPage {
                             size="sm"
                             variant="ghost"
                             ?disabled=${this._searchProviderDelete.busy}
-                            @click=${() => this._resetSearchProvider(provider.id)}
+                            @click=${() => this._resetSearchProvider(provider.provider_id)}
                         >${this.t('settings_page.search_providers.reset')}</glass-button>
                         <glass-button
                             size="sm"
                             ?disabled=${this._searchProviderPut.busy}
-                            @click=${() => this._saveSearchProvider(provider.id)}
+                            @click=${() => this._saveSearchProvider(provider.provider_id)}
                         >${this.t('settings_page.search_providers.save')}</glass-button>
                     </div>
                 </div>
@@ -1436,13 +1431,12 @@ export class FrontendSettingsPage extends PlatformPage {
             return html`<div class="empty"><glass-spinner></glass-spinner></div>`;
         }
         const providers = Array.isArray(data.providers) ? data.providers : [];
-        const catalog = this._searchCatalogById(data);
         const order = Array.isArray(this._searchProviderOrder) ? this._searchProviderOrder : [];
         const orderedProviders = order
-            .map((id) => providers.find((provider) => provider && provider.id === id))
+            .map((id) => providers.find((provider) => provider && provider.provider_id === id))
             .filter((provider) => provider && typeof provider === 'object');
         for (const provider of providers) {
-            if (provider && typeof provider.id === 'string' && !order.includes(provider.id)) {
+            if (provider && typeof provider.provider_id === 'string' && !order.includes(provider.provider_id)) {
                 orderedProviders.push(provider);
             }
         }
@@ -1461,7 +1455,7 @@ export class FrontendSettingsPage extends PlatformPage {
             </section>
             <section>
                 <div class="search-provider-grid">
-                    ${orderedProviders.map((provider) => this._renderSearchProviderCard(provider, catalog))}
+                    ${orderedProviders.map((provider) => this._renderSearchProviderCard(provider))}
                 </div>
             </section>
         `;

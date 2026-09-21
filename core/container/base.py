@@ -29,6 +29,7 @@ from typing import (
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from core.ai.llm_models_service import LLMModelsService
 from core.ai.model_catalog_repository import AIModelCatalogRepository
 from core.api.crud_router import CRUDRouterGenerator
 from core.authz import AuthzService
@@ -316,6 +317,15 @@ class BaseContainer:
     def ai_model_catalog_repository(self) -> AIModelCatalogRepository:
         """Shared provider model catalog for LLM, embedding, rerank and image capabilities."""
         return AIModelCatalogRepository(storage=self.shared_storage)
+
+    @lazy
+    def llm_models_service(self) -> LLMModelsService:
+        """Синхронизация каталога моделей провайдеров и расписаний scheduler."""
+        return LLMModelsService(
+            repository=self.ai_model_catalog_repository,
+            scheduler_client=self.scheduler_client,
+            redis_client=self.redis_client,
+        )
 
     @lazy
     def file_repository(self) -> FileRepository:

@@ -160,7 +160,7 @@ List/get `ToolResponse` для builtins включает `effects`, `confirmatio
 
 - `ToolTagGroup` (`tool_tag_group:{tag}`, table `tool_tag_groups`, `is_global=True`) — `description_ru` / `description_en` + `content_hash`.
 - API: `GET /flows/api/v1/tools/tag-groups`; UI factory `flows/tool_tag_groups`.
-- Idle: `tool_tag_groups_describe_tick` — daily cron (`0 3 * * *`) + enqueue из `idle_worker_startup`; skip LLM если `content_hash` не изменился.
+- flows_worker: `tool_tag_groups_describe_tick` (`apps/flows/src/tasks/tool_tag_groups_tasks.py`) — daily cron (`0 3 * * *`) из scheduler; skip LLM если `content_hash` не изменился.
 - Не путать с `AgentSkill` и `AgentToolkit`.
 
 Новый platform API для пользовательского кода добавляется не как Python namespace helper, а как capability в `apps/capability_gateway/services/registry.py`.

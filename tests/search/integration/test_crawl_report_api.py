@@ -533,7 +533,7 @@ def _suppress_tick(monkeypatch: pytest.MonkeyPatch) -> None:
     async def _noop(task: object, *args: object, **kwargs: object) -> None:
         _ = task, args, kwargs
 
-    monkeypatch.setattr("apps.search.api.v1.crawl.enqueue", _noop)
+    monkeypatch.setattr("apps.search.realtime.operations.enqueue", _noop)
 
 
 @pytest.mark.asyncio

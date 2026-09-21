@@ -28,7 +28,6 @@ from core.events.consumer import (
 )
 from core.events.contract import (
     PLATFORM_EVENTS_STREAM,
-    SYSTEM_COMPANY_ID,
     CoreFrontendEventTypes,
     EventDelivery,
     PlatformEvent,
@@ -68,7 +67,6 @@ from core.events.registry import (
 __all__ = [
     "PLATFORM_EVENTS_STREAM",
     "PLATFORM_EVENT_CATALOG_KEY",
-    "SYSTEM_COMPANY_ID",
     "CoreFrontendEventTypes",
     "EventDelivery",
     "PlatformEvent",

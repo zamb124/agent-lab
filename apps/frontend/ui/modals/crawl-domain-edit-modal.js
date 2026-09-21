@@ -59,7 +59,7 @@ export class FrontendCrawlDomainEditModal extends PlatformFormModal {
         this._includePatterns = '';
         this._excludePatterns = '';
         this._initialized = false;
-        this._patchOp = this.useOp('frontend/crawl_domain_patch');
+        this._patchOp = this.useOp('search/crawl_domain_patch');
     }
 
     willUpdate(changed) {

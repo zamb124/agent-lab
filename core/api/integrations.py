@@ -34,7 +34,6 @@ from core.clients.google_workspace_scopes import (
 )
 from core.config import get_settings
 from core.context import get_context, require_context
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.integrations.company_credentials import (
     CompanyIntegrationConfigError,
     CompanyIntegrationPermissionError,
@@ -59,6 +58,7 @@ from core.integrations.operations import (
     op_integrations_workspace_company_put,
 )
 from core.logging import get_logger
+from core.models.identity_models import SYSTEM_COMPANY_ID
 from core.pagination import ListResponse
 from core.types import JsonObject
 

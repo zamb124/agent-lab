@@ -324,16 +324,16 @@ export class FrontendCrawlReportPage extends PlatformPage {
 
     constructor() {
         super();
-        this._profilesOp = this.useOp('frontend/crawl_profiles_load');
-        this._summaryOp = this.useOp('frontend/crawl_summary_load');
-        this._domains = this.useResource('frontend/crawl_domains');
-        this._urls = this.useResource('frontend/crawl_urls');
-        this._jobs = this.useResource('frontend/crawl_jobs');
-        this._queueTickOp = this.useOp('frontend/crawl_queue_tick');
-        this._domainRun = this.useOp('frontend/crawl_domain_run');
-        this._domainPatch = this.useOp('frontend/crawl_domain_patch');
-        this._domainDelete = this.useOp('frontend/crawl_domain_delete');
-        this._urlRecrawl = this.useOp('frontend/crawl_url_recrawl');
+        this._profilesOp = this.useOp('search/crawl_profiles_load');
+        this._summaryOp = this.useOp('search/crawl_summary_load');
+        this._domains = this.useResource('search/crawl_domains');
+        this._urls = this.useResource('search/crawl_urls');
+        this._jobs = this.useResource('search/crawl_jobs');
+        this._queueTickOp = this.useOp('search/crawl_queue_tick');
+        this._domainRun = this.useOp('search/crawl_domain_run');
+        this._domainPatch = this.useOp('search/crawl_domain_patch');
+        this._domainDelete = this.useOp('search/crawl_domain_delete');
+        this._urlRecrawl = this.useOp('search/crawl_url_recrawl');
         this._localeSel = this.select((state) => {
             const locale = state.i18n.locale;
             if (typeof locale !== 'string' || locale.length === 0) {
@@ -374,7 +374,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
     updated(changed) {
         if (!this._loaded) {
             this._loaded = true;
-            this._profilesOp.run({});
+            this._profilesOp.run({ limit: 200, offset: 0 });
             this._reloadAll();
         }
         if (!this._domainRun.state.busy && this._runningDomainId !== null) {

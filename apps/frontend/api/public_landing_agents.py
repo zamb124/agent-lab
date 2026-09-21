@@ -22,9 +22,10 @@ from apps.frontend.services.landing_demo_seed import (
 from core.identity.embed_guest_turns import EMBED_SESSION_ID_METADATA_KEY
 from core.identity.landing_public_demo import LANDING_PUBLIC_EMBED_SESSION_ISSUER
 from core.identity.runtime_users import ensure_persisted_runtime_user
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID, SYSTEM_COMPANY_SUBDOMAIN
+from core.identity.system_bootstrap import SYSTEM_COMPANY_SUBDOMAIN
 from core.logging import get_logger
 from core.models.embed_models import EmbedConfig, EmbedStatus
+from core.models.identity_models import SYSTEM_COMPANY_ID
 from core.utils.tokens import get_token_service
 
 logger = get_logger(__name__)

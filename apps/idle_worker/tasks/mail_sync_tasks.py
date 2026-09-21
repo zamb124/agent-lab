@@ -11,8 +11,7 @@ from datetime import datetime, timezone
 
 import httpx
 
-from apps.flows.src.container_contracts import as_flow_runtime_container
-from apps.flows.src.triggers.handlers.email import dispatch_email_triggers_for_messages
+from apps.flows.src.tasks.task_names import TASK_DISPATCH_EMAIL_TRIGGERS
 from apps.idle_worker.container import IdleWorkerContainer, get_container
 from apps.idle_worker.tasks.mail_job_context import (
     enter_mail_binding_context,
@@ -32,7 +31,7 @@ from core.mail.models import (
 from core.mail.service import to_message_list_item
 from core.mail.task_names import MAIL_SYNC_BINDING, MAIL_SYNC_TICK
 from core.mail.threads import thread_id_for_message
-from core.tasks import platform_task
+from core.tasks import enqueue, platform_task
 from core.types import JsonObject
 from core.websocket.publisher import (
     Notification,
@@ -223,13 +222,31 @@ async def _sync_single_binding(
             messages=result.new_messages,
             dedup_ttl_seconds=dedup_ttl_seconds,
         )
-        _ = await dispatch_email_triggers_for_messages(
-            container=as_flow_runtime_container(container),
+        await _enqueue_email_triggers(
             binding=binding,
             messages=result.new_messages,
             dedup_ttl_seconds=dedup_ttl_seconds,
         )
         return len(result.new_messages), sent, False, None
+
+
+async def _enqueue_email_triggers(
+    *,
+    binding: MailboxBinding,
+    messages: list[InboundMailMessage],
+    dedup_ttl_seconds: int,
+) -> None:
+    """Email-триггеры исполняет flows_worker: письма уходят без байтов вложений."""
+    _ = await enqueue(
+        TASK_DISPATCH_EMAIL_TRIGGERS,
+        company_id=binding.company_id,
+        mailbox_binding_id=binding.mailbox_binding_id,
+        messages=[
+            message.model_copy(update={"attachments": []}).model_dump(mode="json")
+            for message in messages
+        ],
+        dedup_ttl_seconds=dedup_ttl_seconds,
+    )
 
 
 def _empty_tick_result() -> dict[str, int]:
@@ -426,8 +443,7 @@ async def mail_sync_binding_task(
             messages=result.new_messages,
             dedup_ttl_seconds=config.notification_dedup_ttl_seconds,
         )
-        _ = await dispatch_email_triggers_for_messages(
-            container=as_flow_runtime_container(container),
+        await _enqueue_email_triggers(
             binding=binding,
             messages=result.new_messages,
             dedup_ttl_seconds=config.notification_dedup_ttl_seconds,

@@ -3,12 +3,12 @@
   "type_ignore": 3,
   "object_annotations": 385,
   "os_environ": 75,
-  "except_pass": 42,
+  "except_pass": 41,
   "force_global": 70,
   "raw_storage_in_services": 3,
-  "http_exception_in_services": 750,
+  "http_exception_in_services": 700,
   "logger_fstring": 405,
-  "tests_monkeypatch_internal": 187,
+  "tests_monkeypatch_internal": 186,
   "tests_asyncmock": 457,
   "tests_skip_markers": 199
 }

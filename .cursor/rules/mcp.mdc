@@ -87,7 +87,7 @@ active_servers = await mcp_repo.list_active()
 
 ### Источники и jobs
 
-- **Crawl:** `apps/idle_worker/tasks/mcp_catalog_tasks.py::mcp_catalog_crawl_task` — сначала verify/upsert yaml allowlist seeds (`upstream_url`), затем paginate Official Registry (`streamable-http`/`sse` + `https://`), verify через `MCPClient.initialize()` + `list_tools()`, upsert `MCPCatalogRepository`. Curated seeds с `upstream_url` не перезаписываются registry.
+- **Crawl:** `apps/flows/src/tasks/mcp_catalog_tasks.py::mcp_catalog_crawl_task` (очередь `flows_worker`) — сначала verify/upsert yaml allowlist seeds (`upstream_url`), затем paginate Official Registry (`streamable-http`/`sse` + `https://`), verify через `MCPClient.initialize()` + `list_tools()`, upsert `MCPCatalogRepository`. Curated seeds с `upstream_url` не перезаписываются registry.
 - **Company init seed:** `upsert_allowlist_seed_entries_only` в `init_company_resources` — каталог не пуст без полного crawl.
 - **Provision:** `mcp_catalog_provision_companies_task` — все компании → `provision_mcp_catalog_for_company` (noop при `auto_provision=disabled`).
 - **Resync:** `mcp_catalog_resync_tools_task` — `sync_mcp_server_tools` для `source=catalog` без `override_locked`.

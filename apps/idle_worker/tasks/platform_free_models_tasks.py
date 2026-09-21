@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from apps.idle_worker.container import get_container
-from apps.idle_worker.tasks.task_names import TASK_REFRESH_PLATFORM_FREE_MODELS
 from core.ai.free_pool import refresh_platform_free_models_cache
+from core.ai.task_names import TASK_REFRESH_PLATFORM_FREE_MODELS
 from core.config import get_settings
 from core.logging import get_logger
 from core.tasks import platform_task

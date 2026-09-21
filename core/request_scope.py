@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from core.authz.errors import AuthzDenied
+from core.authz.service import AuthzService
 from core.context import get_context, resolve_namespace_or_raise
 from core.models.base import StrictBaseModel
-from core.models.identity_models import ANONYMOUS_USER_ID
+from core.models.identity_models import ANONYMOUS_USER_ID, SYSTEM_COMPANY_ID
 from core.namespace.service import NamespaceService
-from core.websocket import WsCommandError
+from core.websocket import WsCommandError, raise_forbidden
 
 
 class CompanyScope(StrictBaseModel):
@@ -28,6 +30,24 @@ def require_company() -> CompanyScope:
         company_id=context.active_company.company_id,
         user_id=context.user.user_id,
     )
+
+
+async def require_company_admin(authz_service: AuthzService) -> CompanyScope:
+    """Активная компания + FGA `company#admin` для пользователя."""
+    scope = require_company()
+    try:
+        await authz_service.require_company_admin(company_id=scope.company_id, user_id=scope.user_id)
+    except AuthzDenied as exc:
+        raise_forbidden(exc)
+    return scope
+
+
+async def require_system_admin(authz_service: AuthzService) -> CompanyScope:
+    """Платформенный админ: активная компания `system` и FGA `company#admin` в ней."""
+    scope = require_company()
+    if scope.company_id != SYSTEM_COMPANY_ID:
+        raise WsCommandError("forbidden", "Доступно только для компании system")
+    return await require_company_admin(authz_service)
 
 
 async def require_namespace(namespace_service: NamespaceService) -> NamespaceScope:

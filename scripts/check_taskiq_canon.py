@@ -73,7 +73,7 @@ SCHEDULE_LITERAL_SCAN_PATHS: frozenset[str] = frozenset(
         "apps/scheduler/main.py",
         "apps/scheduler/crawl_schedule_bootstrap.py",
         "apps/flows/src/services/schedule_service.py",
-        "apps/flows/src/services/llm_models_service.py",
+        "core/ai/llm_models_service.py",
         "apps/crm/services/integration_auto_sync_service.py",
         "apps/crm/api/namespaces.py",
     }

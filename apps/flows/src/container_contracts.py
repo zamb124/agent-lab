@@ -54,12 +54,12 @@ if TYPE_CHECKING:
     from apps.flows.src.services.hitl_work_item_service import HitlWorkItemService
     from apps.flows.src.services.lara_action_engine import LaraActionEngine
     from apps.flows.src.services.lara_facade import LaraFacade
-    from apps.flows.src.services.llm_models_service import LLMModelsService
     from apps.flows.src.services.mcp_branding_service import MCPServerBrandingService
     from apps.flows.src.services.schedule_service import ScheduleService
     from apps.flows.src.services.tool_approval import ToolApprovalStore
     from apps.flows.src.tools.base import BaseTool
     from apps.flows.src.variables import VariablesService
+    from core.ai.llm_models_service import LLMModelsService
     from core.billing import BillingService
     from core.clients.a2a_client import A2AClient
     from core.clients.guest_runtime_client import GuestRuntimeClient

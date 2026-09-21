@@ -9,9 +9,8 @@ from core.docs.assistant import (
     DOCS_ASSISTANT_FLOW_ID,
     DOCS_ASSISTANT_SESSION_ISSUER,
 )
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.models.embed_models import EmbedConfig, EmbedMapping, EmbedStatus
-from core.models.identity_models import User
+from core.models.identity_models import SYSTEM_COMPANY_ID, User
 from core.utils.tokens import get_token_service
 
 

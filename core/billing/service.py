@@ -41,7 +41,7 @@ from core.billing.settlement_rules import (
     resolve_matched_rules,
 )
 from core.billing.span_billing_settlement import SpanBillingSettlement
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
+from core.models.identity_models import SYSTEM_COMPANY_ID
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 logger = get_logger(__name__)

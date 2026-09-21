@@ -34,14 +34,12 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from core.models.identity_models import SYSTEM_COMPANY_ID
 from core.types import JsonValue
 
 _EVENT_TYPE_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(\/[a-z][a-z0-9_]*){2,}$")
 
 PLATFORM_EVENTS_STREAM = "platform:events"
-
-SYSTEM_COMPANY_ID = "system"
-"""``company_id`` платформенных событий вне контекста конкретной компании."""
 
 
 def assert_platform_event_type(event_type: str) -> str:

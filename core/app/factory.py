@@ -564,13 +564,15 @@ def create_service_app(
         logger.info("service.router_attached", router="platform_brand", prefix=f"{brand_prefix}/api/platform")
         app.include_router(platform_brand_router, prefix=brand_prefix, tags=["platform-brand"])
 
-        command_prefix = f"/{service_name}/api"
-        logger.info(
-            "service.router_attached",
-            router="realtime_command",
-            path=f"{command_prefix}/internal/realtime/command",
-        )
-        app.include_router(realtime_command_router, prefix=command_prefix, tags=["realtime-command"])
+    # Internal hop bus realtime → владелец команды: монтируется на каждом сервисе,
+    # включая те, что без платформенных роутеров (search).
+    command_prefix = f"/{service_name}/api"
+    logger.info(
+        "service.router_attached",
+        router="realtime_command",
+        path=f"{command_prefix}/internal/realtime/command",
+    )
+    app.include_router(realtime_command_router, prefix=command_prefix, tags=["realtime-command"])
 
     # Pages роутеры (добавляем префикс сервиса к их собственному префиксу)
     if pages_routers:

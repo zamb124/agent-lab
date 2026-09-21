@@ -9,7 +9,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from apps.frontend.models import LeadRequestRecord
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
+from core.models.identity_models import SYSTEM_COMPANY_ID
 
 REQUEST_STORAGE_PREFIX = f"company:{SYSTEM_COMPANY_ID}:request:"
 

@@ -614,6 +614,17 @@ async def sync_client_http(sync_service):
 
 
 @pytest_asyncio.fixture
+async def search_client_http(search_service):
+    """HTTP клиент Search API (реальный Granian :9010)."""
+    _ = search_service
+    async with AsyncClient(
+        base_url="http://localhost:9010",
+        timeout=_E2E_HTTP_TIMEOUT_SECONDS,
+    ) as client:
+        yield client
+
+
+@pytest_asyncio.fixture
 async def wiki_client_http(wiki_service_http):
     """HTTP клиент Wiki API (реальный Granian :9023)."""
     _ = wiki_service_http

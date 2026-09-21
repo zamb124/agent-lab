@@ -1007,7 +1007,25 @@
             "toast_saved": "Search provider сохранён",
             "toast_order_saved": "Порядок search providers сохранён",
             "toast_reset": "Search provider сброшен",
-            "toast_failed": "Не удалось обновить search provider"
+            "toast_failed": "Не удалось обновить search provider",
+            "catalog": {
+                "tinyfish": {
+                    "description": "Быстрый недорогой SERP API для лёгкого веб-поиска и прототипов.",
+                    "tooltip": "Хорош для дешёвого первичного поиска. В биллинге считается как search:tinyfish."
+                },
+                "linkup": {
+                    "description": "Веб-поиск для LLM с управляемой глубиной.",
+                    "tooltip": "Можно выбирать глубину fast/standard/deep. BYOK не списывает баланс {platformName}."
+                },
+                "serper": {
+                    "description": "Выдача Google через Serper.dev с нормализованными органическими результатами.",
+                    "tooltip": "Google-подобная выдача. При платформенном ключе тарифицируется как search:serper."
+                },
+                "tavily": {
+                    "description": "AI-search API с глубиной basic/advanced и выбором темы.",
+                    "tooltip": "Дороже, но полезен для deep/research flow и RAG-friendly результатов."
+                }
+            }
         },
         "model_scoring": {
             "title": "Скоринг LLM-моделей",

@@ -32,6 +32,8 @@ class AuthProvider(str, Enum):
 
 ANONYMOUS_USER_ID = "anonymous"
 GUEST_USER_ID_PREFIX = "guest:"
+SYSTEM_COMPANY_ID = "system"
+"""Компания платформы: системный tenant админов и событий вне контекста компании."""
 
 
 def is_platform_user_id(user_id: str) -> bool:

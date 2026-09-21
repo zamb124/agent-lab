@@ -105,7 +105,7 @@ export class FrontendCrawlUrlDetailModal extends PlatformModal {
         this.crawl_profile_id = '';
         this._activeTab = 'metadata';
         this._loaded = false;
-        this._detailOp = this.useOp('frontend/crawl_url_detail');
+        this._detailOp = this.useOp('search/crawl_url_detail');
         this._localeSel = this.select((state) => {
             const locale = state.i18n.locale;
             if (typeof locale !== 'string' || locale.length === 0) {

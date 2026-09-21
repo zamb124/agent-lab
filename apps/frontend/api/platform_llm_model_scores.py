@@ -41,9 +41,8 @@ from core.clients.llm.provider_runtime_status import (
 from core.config import get_settings
 from core.context import require_context
 from core.db.models.platform import LLMModelScore
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.logging import get_logger
-from core.models.identity_models import User
+from core.models.identity_models import SYSTEM_COMPANY_ID, User
 from core.types import JsonObject
 
 logger = get_logger(__name__)

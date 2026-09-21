@@ -451,7 +451,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
 
     @pytest.mark.asyncio
     async def test_start_background_sync_reuses_existing_pending_schedule(self):
-        from apps.flows.src.services.llm_models_service import LLMModelsService
+        from core.ai.llm_models_service import LLMModelsService
 
         repository = MagicMock()
         scheduler_client = AsyncMock()
@@ -489,7 +489,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
 
     @pytest.mark.asyncio
     async def test_start_background_sync_resumes_paused_schedule(self):
-        from apps.flows.src.services.llm_models_service import LLMModelsService
+        from core.ai.llm_models_service import LLMModelsService
 
         repository = MagicMock()
         scheduler_client = AsyncMock()
@@ -550,7 +550,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
 
     @pytest.mark.asyncio
     async def test_start_background_sync_raises_on_duplicates(self):
-        from apps.flows.src.services.llm_models_service import LLMModelsService
+        from core.ai.llm_models_service import LLMModelsService
 
         repository = MagicMock()
         scheduler_client = AsyncMock()
@@ -609,7 +609,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
 
     @pytest.mark.asyncio
     async def test_stop_background_sync_cancels_cached_schedule_id(self):
-        from apps.flows.src.services.llm_models_service import LLMModelsService
+        from core.ai.llm_models_service import LLMModelsService
 
         repository = MagicMock()
         scheduler_client = AsyncMock()
@@ -659,7 +659,7 @@ class TestLLMModelsServiceRealAPI:
         Использует endpoint: https://bothub.chat/api/v2/model/list?children=1
         """
         from apps.flows.config import get_settings
-        from apps.flows.src.services.llm_models_service import LLMModelsService
+        from core.ai.llm_models_service import LLMModelsService
         from core.ai.model_catalog_repository import AIModelCatalogRepository
 
         settings = get_settings()
@@ -698,7 +698,7 @@ class TestLLMModelsServiceRealAPI:
         Использует endpoint: {base_url}/models
         """
         from apps.flows.config import get_settings
-        from apps.flows.src.services.llm_models_service import LLMModelsService
+        from core.ai.llm_models_service import LLMModelsService
         from core.ai.model_catalog_repository import AIModelCatalogRepository
 
         settings = get_settings()
@@ -744,7 +744,7 @@ class TestLLMModelsServiceRealAPI:
         Использует endpoint: {base_url}/models
         """
         from apps.flows.config import get_settings
-        from apps.flows.src.services.llm_models_service import LLMModelsService
+        from core.ai.llm_models_service import LLMModelsService
         from core.ai.model_catalog_repository import AIModelCatalogRepository
 
         settings = get_settings()
@@ -785,7 +785,7 @@ class TestLLMModelsServiceRealAPI:
         Полный цикл синхронизации: fetch от реального API и сохранение в БД.
         """
         from apps.flows.config import get_settings
-        from apps.flows.src.services.llm_models_service import LLMModelsService
+        from core.ai.llm_models_service import LLMModelsService
         from core.ai.model_catalog_repository import AIModelCatalogRepository
         from core.db import Storage
 
@@ -840,7 +840,7 @@ class TestLLMModelsServiceRealAPI:
         Синхронизация моделей от ВСЕХ настроенных провайдеров.
         """
         from apps.flows.config import get_settings
-        from apps.flows.src.services.llm_models_service import LLMModelsService
+        from core.ai.llm_models_service import LLMModelsService
         from core.ai.model_catalog_repository import AIModelCatalogRepository
         from core.db import Storage
 
@@ -894,7 +894,7 @@ class TestLLMModelsServiceRealAPI:
             "BotHub API key не настроен в конфиге"
         )
 
-        from apps.flows.src.services.llm_models_service import LLMModelsService
+        from core.ai.llm_models_service import LLMModelsService
         from core.ai.model_catalog_repository import AIModelCatalogRepository
 
         mock_repo = MagicMock(spec=AIModelCatalogRepository)

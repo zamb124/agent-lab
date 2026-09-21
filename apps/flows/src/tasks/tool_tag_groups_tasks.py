@@ -1,11 +1,11 @@
-"""Idle task: LLM-описания tag-групп platform tools."""
+"""Flows task: LLM-описания tag-групп platform tools."""
 
 from __future__ import annotations
 
-from apps.idle_worker.container import get_container
-from apps.idle_worker.tasks.llm_models_tasks import build_scheduler_auth_context
-from apps.idle_worker.tasks.task_names import TASK_TOOL_TAG_GROUPS_DESCRIBE_TICK
+from apps.flows.src.container import get_container
+from apps.flows.src.tasks.task_names import TASK_TOOL_TAG_GROUPS_DESCRIBE_TICK
 from core.context import clear_context, set_context
+from core.identity.system_bootstrap import build_system_admin_job_context
 from core.logging import get_logger
 from core.tasks import platform_task
 from core.types import JsonObject
@@ -23,8 +23,9 @@ async def tool_tag_groups_describe_tick(
     _ = company_id
     _ = system_task
     container = get_container()
-    scheduler_context = await build_scheduler_auth_context(
-        container=container,
+    scheduler_context = await build_system_admin_job_context(
+        company_repository=container.company_repository,
+        user_repository=container.user_repository,
         trace_id=f"scheduler:tool_tag_groups_describe:{schedule_task_id}",
         session_id=f"tool_tag_groups_describe:{schedule_task_id}",
     )

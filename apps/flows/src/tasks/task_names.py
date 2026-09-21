@@ -26,8 +26,20 @@ TASK_INVOKE_LLM = declare_task("invoke_llm", queue="flows_worker")
 TASK_INIT_COMPANY_RESOURCES = declare_task(
     "init_company_resources", queue="flows_worker", retry=True, max_retries=3
 )
+TASK_TOOL_TAG_GROUPS_DESCRIBE_TICK = declare_task(
+    "tool_tag_groups_describe_tick", queue="flows_worker", scheduled=True
+)
+TASK_MCP_CATALOG_CRAWL = declare_task("mcp_catalog_crawl_task", queue="flows_worker", scheduled=True)
+TASK_MCP_CATALOG_PROVISION_COMPANIES = declare_task(
+    "mcp_catalog_provision_companies_task", queue="flows_worker"
+)
+TASK_MCP_CATALOG_RESYNC_TOOLS = declare_task(
+    "mcp_catalog_resync_tools_task", queue="flows_worker", scheduled=True
+)
+TASK_DISPATCH_EMAIL_TRIGGERS = declare_task("dispatch_email_triggers", queue="flows_worker")
 
 __all__ = [
+    "TASK_DISPATCH_EMAIL_TRIGGERS",
     "TASK_ENQUEUE_PENDING_EVALUATION_RUNS",
     "TASK_EXECUTE_EVALUATION_RUN",
     "TASK_EXECUTE_NODE",
@@ -35,7 +47,11 @@ __all__ = [
     "TASK_EXECUTE_TOOL",
     "TASK_INIT_COMPANY_RESOURCES",
     "TASK_INVOKE_LLM",
+    "TASK_MCP_CATALOG_CRAWL",
+    "TASK_MCP_CATALOG_PROVISION_COMPANIES",
+    "TASK_MCP_CATALOG_RESYNC_TOOLS",
     "TASK_PROCESS_FLOW",
     "TASK_RUN_EVALUATION_GATE_POLICY",
     "TASK_RUN_EVALUATION_MONITOR_CYCLE",
+    "TASK_TOOL_TAG_GROUPS_DESCRIBE_TICK",
 ]

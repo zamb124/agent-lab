@@ -82,11 +82,13 @@ import {
     aiCustomProviderCreateOp,
     aiCustomProviderUpdateOp,
     aiCustomProviderDeleteOp,
+} from '../events/resources/settings.resource.js';
+import {
     searchProvidersLoadOp,
     searchProviderPutOp,
     searchProviderOrderPutOp,
     searchProviderDeleteOp,
-} from '../events/resources/settings.resource.js';
+} from '@platform/lib/events/resources/search-providers.resource.js';
 import {
     agentPairingCreateOp,
     agentDevicesLoadOp,
@@ -113,7 +115,7 @@ import {
     crawlDomainDeleteOp,
     crawlUrlAddOp,
     crawlUrlRecrawlOp,
-} from '../events/resources/crawl-report.resource.js';
+} from '@platform/lib/events/resources/search-crawl-report.resource.js';
 import {
     companiesOverviewLoadOp,
     companyResolveOp,

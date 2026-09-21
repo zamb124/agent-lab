@@ -61,6 +61,7 @@ COMMAND_WS_SERVICES = {
     "office",
     "crm",
     "flows",
+    "search",
 }
 
 COMMAND_WS_HTTP_ALLOWLIST: frozenset[str] = frozenset(

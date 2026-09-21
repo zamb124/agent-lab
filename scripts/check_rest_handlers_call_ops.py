@@ -19,7 +19,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 APPS_ROOT = REPO_ROOT / "apps"
 BASELINE_PATH = REPO_ROOT / "scripts" / "rest_handlers_without_op_baseline.json"
-COMMAND_WS_SERVICES: tuple[str, ...] = ("sync", "worktracker", "wiki", "rag", "office", "crm", "flows")
+COMMAND_WS_SERVICES: tuple[str, ...] = ("sync", "worktracker", "wiki", "rag", "office", "crm", "flows", "search")
 HTTP_METHODS: frozenset[str] = frozenset({"get", "post", "put", "patch", "delete", "websocket", "api_route"})
 
 

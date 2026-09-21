@@ -18,7 +18,6 @@ from core.config.models import (
     MailSystemConfig,
 )
 from core.identity.flow_employee import flow_employee_user_id
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.mail.exceptions import MailConnectionNotFoundError
 from core.mail.models import (
     CompanyMailConnection,
@@ -36,7 +35,7 @@ from core.mail.repositories import (
     MailboxSyncCursorRepository,
 )
 from core.mail.service import MailService, _slug_local_part
-from core.models.identity_models import User, UserStatus
+from core.models.identity_models import SYSTEM_COMPANY_ID, User, UserStatus
 from tests.core.mail.fakes import RecordingMailServerPort
 
 

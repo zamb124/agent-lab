@@ -31,9 +31,9 @@ from core.billing.default_settlement_rules import default_settlement_rules_docum
 from core.billing.service import company_resource_prices_storage_key
 from core.billing.settlement_rules import SettlementRulesDocument
 from core.context import get_context
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID, SYSTEM_COMPANY_SUBDOMAIN
+from core.identity.system_bootstrap import SYSTEM_COMPANY_SUBDOMAIN
 from core.models.billing_models import UsageType
-from core.models.identity_models import Company
+from core.models.identity_models import SYSTEM_COMPANY_ID, Company
 from core.tracing.repository import ADMIN_FACETS_MAX_LIMIT, facet_query_fragment
 from core.types import JsonObject, parse_json_object, require_json_object
 

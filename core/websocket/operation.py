@@ -119,12 +119,25 @@ class Operation(Generic[PayloadT, ContainerT]):
         return dump_ws_result(result)
 
 
+# command_type → id(Operation) каталога-владельца (каталоги — константы модуля на весь процесс).
+_registered_operation_ids: dict[str, int] = {}
+
+
 def register_service_operations(
     catalog: Mapping[str, RegisteredOperation[ContainerT]],
     get_container: Callable[[], ContainerT],
 ) -> None:
+    """Зарегистрировать каталог владельца.
+
+    Повторный вызов с тем же объектом `Operation` — no-op (lifespan сервиса может
+    подниматься несколько раз в одном процессе, например ASGI-клиенты в тестах);
+    другой handler на уже занятый `command_type` — ошибка.
+    """
     for command_type, operation in catalog.items():
+        if _registered_operation_ids.get(command_type) == id(operation):
+            continue
         register_ws_command_handler(command_type, _make_ws_handler(operation, get_container))
+        _registered_operation_ids[command_type] = id(operation)
 
 
 def _make_ws_handler(

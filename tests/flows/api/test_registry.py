@@ -14,12 +14,12 @@ from apps.flows.realtime.registry_operations import (
     _custom_provider_options,
     _platform_provider_options,
 )
-from apps.flows.src.services.llm_models_service import LLMModelsService
 from core.ai.company_settings import CompanyAIProviders, CompanyCustomOpenAICompatibleProvider
 from core.ai.free_pool import (
     PlatformFreeModelRecord,
     serialize_platform_free_models,
 )
+from core.ai.llm_models_service import LLMModelsService
 from core.ai.providers import (
     HUMANITEC_LLM_AUTO_MODEL,
     HUMANITEC_LLM_PROVIDER,
@@ -150,7 +150,7 @@ def test_configured_providers_follow_canonical_provider_order(monkeypatch):
             platform_free_pool=PlatformFreePoolConfig(enabled=True),
         )
     )
-    monkeypatch.setattr("apps.flows.src.services.llm_models_service.get_settings", lambda: settings)
+    monkeypatch.setattr("core.ai.llm_models_service.get_settings", lambda: settings)
 
     assert LLMModelsService.get_configured_providers() == [
         HUMANITEC_LLM_PROVIDER,
@@ -165,7 +165,7 @@ def test_humanitec_llm_available_with_account_free_tier_provider(monkeypatch):
             platform_free_pool=PlatformFreePoolConfig(enabled=True),
         )
     )
-    monkeypatch.setattr("apps.flows.src.services.llm_models_service.get_settings", lambda: settings)
+    monkeypatch.setattr("core.ai.llm_models_service.get_settings", lambda: settings)
 
     assert LLMModelsService.get_configured_providers() == [
         HUMANITEC_LLM_PROVIDER,

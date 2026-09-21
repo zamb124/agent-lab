@@ -29,7 +29,7 @@ from apps.flows.src.services.mcp_catalog_provisioner import (
     provision_mcp_catalog_for_company,
     resync_catalog_tools_for_company,
 )
-from apps.idle_worker.tasks.mcp_catalog_tasks import mcp_catalog_provision_companies_task
+from apps.flows.src.tasks.mcp_catalog_tasks import mcp_catalog_provision_companies_task
 from core.integrations.mcp import MCP_PROTOCOL_VERSION
 from tests.fixtures.mcp_registry_stub import build_registry_server_item
 from tests.flows.integration.mcp_catalog_helpers import (

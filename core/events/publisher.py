@@ -21,7 +21,6 @@ from collections.abc import Sequence
 
 from core.context import get_context
 from core.events.contract import (
-    SYSTEM_COMPANY_ID,
     EventDelivery,
     PlatformEvent,
     PlatformEventMeta,
@@ -29,6 +28,7 @@ from core.events.contract import (
 from core.events.redis_client import close_events_redis_client
 from core.events.registry import assert_publishable_platform_event_type
 from core.logging import get_log_context, get_logger
+from core.models.identity_models import SYSTEM_COMPANY_ID
 from core.realtime.submit import submit_platform_event
 from core.types import JsonValue
 

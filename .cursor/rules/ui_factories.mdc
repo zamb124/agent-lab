@@ -216,7 +216,7 @@ extraReducer: (state, event) => {
 
 - `scripts/check_ui_canon.sh` — для каждого сервиса в `FACTORY_CANON_SERVICES`: zero-import canon, запрет `new XController`/прямого dispatch UI-семейств/папок `services|store|features`/`*.service.js`/`fetch` вне resources/`||`-фолбеков.
 - `scripts/check_ui_factories.py` — уникальность `name`, формат `<svc>/<entity>`, парность toast-ключей в ru+en, `baseUrl` соответствует FastAPI route, `idField` соответствует pydantic schema.
-- `scripts/check_command_rest_mirror.py` — каждая factory operation имеет `restMirror`, FastAPI route существует, push-имя ≠ имени команды; `COMMAND_WS_SERVICES` (`sync`, `worktracker`, `wiki`, `rag`, `office`, `crm`, `flows`) требуют `transport: 'ws'`, кроме `COMMAND_WS_HTTP_ALLOWLIST`.
+- `scripts/check_command_rest_mirror.py` — каждая factory operation имеет `restMirror`, FastAPI route существует, push-имя ≠ имени команды; `COMMAND_WS_SERVICES` (`sync`, `worktracker`, `wiki`, `rag`, `office`, `crm`, `flows`, `search`) требуют `transport: 'ws'`, кроме `COMMAND_WS_HTTP_ALLOWLIST`.
 
 Сборная цель: `make check-events-canon`. Любая ошибка — exit 1.
 

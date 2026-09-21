@@ -1,16 +1,47 @@
-"""Crawl admin REST API."""
+"""REST-зеркало команд crawl-администрирования (`search/crawl_*`)."""
 
 from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 
 from apps.search.dependencies import ContainerDep
-from apps.search_worker.tasks.task_names import (
-    CRAWL_IMPORT_SEED_DOMAINS,
-    CRAWL_ORCHESTRATOR_TICK,
+from apps.search.realtime.operations import (
+    CrawlDomainCreatePayload,
+    CrawlDomainRefPayload,
+    CrawlDomainsListPayload,
+    CrawlDomainUpdatePayload,
+    CrawlDomainUrlsAddPayload,
+    CrawlJobIdPayload,
+    CrawlJobsListPayload,
+    CrawlProfileIdPayload,
+    CrawlProfileTrancoSeedPayload,
+    CrawlProfileTrancoSeedRequest,
+    CrawlProfileUpdatePayload,
+    CrawlUrlRefPayload,
+    CrawlUrlsListPayload,
+    SearchPagePayload,
+    op_crawl_domains_create,
+    op_crawl_domains_list,
+    op_crawl_domains_remove,
+    op_crawl_domains_run,
+    op_crawl_domains_update,
+    op_crawl_domains_urls_add,
+    op_crawl_jobs_get,
+    op_crawl_jobs_list,
+    op_crawl_jobs_queue,
+    op_crawl_profiles_create,
+    op_crawl_profiles_list,
+    op_crawl_profiles_summary,
+    op_crawl_profiles_tranco_seed,
+    op_crawl_profiles_update,
+    op_crawl_seed_import,
+    op_crawl_urls_get,
+    op_crawl_urls_list,
+    op_crawl_urls_recrawl,
 )
+from core.context import require_context
 from core.crawl.models import (
     CrawlDomain,
     CrawlDomainCreateRequest,
@@ -32,7 +63,6 @@ from core.crawl.models import (
     UpsertStats,
 )
 from core.pagination import OffsetPage
-from core.tasks import enqueue
 
 router = APIRouter(prefix="/crawl", tags=["crawl"])
 
@@ -43,48 +73,39 @@ async def list_crawl_profiles(
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[CrawlProfileWithIndex]:
-    return await container.crawl_service.list_profiles(limit=limit, offset=offset)
+    return await op_crawl_profiles_list(
+        SearchPagePayload(limit=limit, offset=offset), user=require_context().user, container=container
+    )
 
 
 @router.post("/profiles", response_model=CrawlProfileWithIndex, status_code=201)
-async def create_crawl_profile(
-    body: CrawlProfileCreateRequest,
-    container: ContainerDep,
-) -> CrawlProfileWithIndex:
-    try:
-        return await container.crawl_service.create_profile(body)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+async def create_crawl_profile(body: CrawlProfileCreateRequest, container: ContainerDep) -> CrawlProfileWithIndex:
+    return await op_crawl_profiles_create(body, user=require_context().user, container=container)
 
 
 @router.patch("/profiles/{crawl_profile_id}", response_model=CrawlProfileWithIndex)
 async def patch_crawl_profile(
-    crawl_profile_id: str,
-    body: CrawlProfilePatchRequest,
-    container: ContainerDep,
+    crawl_profile_id: str, body: CrawlProfilePatchRequest, container: ContainerDep
 ) -> CrawlProfileWithIndex:
-    try:
-        return await container.crawl_service.patch_profile(crawl_profile_id, body)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return await op_crawl_profiles_update(
+        CrawlProfileUpdatePayload.model_validate(
+            {**body.model_dump(exclude_unset=True), "crawl_profile_id": crawl_profile_id}
+        ),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post("/jobs", response_model=CrawlJobQueuedResponse, status_code=202)
 async def start_crawl_job(body: CrawlJobCreateRequest, container: ContainerDep) -> CrawlJobQueuedResponse:
-    _ = container
-    _ = await enqueue(CRAWL_ORCHESTRATOR_TICK, body.crawl_profile_id)
-    return CrawlJobQueuedResponse(crawl_profile_id=body.crawl_profile_id, status="queued")
+    return await op_crawl_jobs_queue(body, user=require_context().user, container=container)
 
 
 @router.get("/profiles/{crawl_profile_id}/summary", response_model=CrawlProfileSummary)
-async def get_crawl_profile_summary(
-    crawl_profile_id: str,
-    container: ContainerDep,
-) -> CrawlProfileSummary:
-    try:
-        return await container.crawl_report_service.get_profile_summary(crawl_profile_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+async def get_crawl_profile_summary(crawl_profile_id: str, container: ContainerDep) -> CrawlProfileSummary:
+    return await op_crawl_profiles_summary(
+        CrawlProfileIdPayload(crawl_profile_id=crawl_profile_id), user=require_context().user, container=container
+    )
 
 
 @router.get("/jobs", response_model=OffsetPage[CrawlJob])
@@ -95,15 +116,11 @@ async def list_crawl_jobs(
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[CrawlJob]:
-    try:
-        return await container.crawl_report_service.list_jobs(
-            crawl_profile_id=crawl_profile_id,
-            status=status,
-            limit=limit,
-            offset=offset,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return await op_crawl_jobs_list(
+        CrawlJobsListPayload(crawl_profile_id=crawl_profile_id, status=status, limit=limit, offset=offset),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.get("/urls", response_model=OffsetPage[CrawlUrlListItem])
@@ -118,8 +135,8 @@ async def list_crawl_urls(
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[CrawlUrlListItem]:
-    try:
-        return await container.crawl_report_service.list_urls(
+    return await op_crawl_urls_list(
+        CrawlUrlsListPayload(
             crawl_profile_id=crawl_profile_id,
             crawl_status=crawl_status,
             domain=domain,
@@ -128,29 +145,28 @@ async def list_crawl_urls(
             enriched_only=enriched_only,
             limit=limit,
             offset=offset,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        ),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.get("/urls/{crawl_url_id}", response_model=CrawlUrlDetail)
 async def get_crawl_url_detail(
-    crawl_url_id: str,
-    container: ContainerDep,
-    crawl_profile_id: Annotated[str, Query(min_length=1)],
+    crawl_url_id: str, container: ContainerDep, crawl_profile_id: Annotated[str, Query(min_length=1)]
 ) -> CrawlUrlDetail:
-    try:
-        return await container.crawl_report_service.get_url_detail(crawl_url_id, crawl_profile_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return await op_crawl_urls_get(
+        CrawlUrlRefPayload(crawl_url_id=crawl_url_id, crawl_profile_id=crawl_profile_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.get("/jobs/{crawl_job_id}", response_model=CrawlJob)
 async def get_crawl_job(crawl_job_id: str, container: ContainerDep) -> CrawlJob:
-    try:
-        return await container.crawl_service.get_job(crawl_job_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return await op_crawl_jobs_get(
+        CrawlJobIdPayload(crawl_job_id=crawl_job_id), user=require_context().user, container=container
+    )
 
 
 @router.get("/domains", response_model=OffsetPage[CrawlDomain])
@@ -161,38 +177,33 @@ async def list_crawl_domains(
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[CrawlDomain]:
-    return await container.crawl_domain_repository.list_page(
-        crawl_profile_id=crawl_profile_id,
-        status=status,
-        limit=limit,
-        offset=offset,
+    return await op_crawl_domains_list(
+        CrawlDomainsListPayload(crawl_profile_id=crawl_profile_id, status=status, limit=limit, offset=offset),
+        user=require_context().user,
+        container=container,
     )
 
 
 @router.post("/domains/{crawl_domain_id}/run", response_model=CrawlDomainRunResponse, status_code=202)
 async def run_crawl_domain(
-    crawl_domain_id: str,
-    container: ContainerDep,
-    crawl_profile_id: Annotated[str, Query(min_length=1)],
+    crawl_domain_id: str, container: ContainerDep, crawl_profile_id: Annotated[str, Query(min_length=1)]
 ) -> CrawlDomainRunResponse:
-    try:
-        return await container.crawl_service.run_domain(crawl_domain_id, crawl_profile_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return await op_crawl_domains_run(
+        CrawlDomainRefPayload(crawl_domain_id=crawl_domain_id, crawl_profile_id=crawl_profile_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post("/profiles/{crawl_profile_id}/domains", response_model=CrawlDomain, status_code=201)
 async def create_crawl_domain(
-    crawl_profile_id: str,
-    body: CrawlDomainCreateRequest,
-    container: ContainerDep,
+    crawl_profile_id: str, body: CrawlDomainCreateRequest, container: ContainerDep
 ) -> CrawlDomain:
-    try:
-        domain = await container.crawl_service.create_domain(crawl_profile_id, body)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    _ = await enqueue(CRAWL_ORCHESTRATOR_TICK, crawl_profile_id)
-    return domain
+    return await op_crawl_domains_create(
+        CrawlDomainCreatePayload.model_validate({**body.model_dump(), "crawl_profile_id": crawl_profile_id}),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.patch("/domains/{crawl_domain_id}", response_model=CrawlDomain)
@@ -202,22 +213,28 @@ async def patch_crawl_domain(
     container: ContainerDep,
     crawl_profile_id: Annotated[str, Query(min_length=1)],
 ) -> CrawlDomain:
-    try:
-        return await container.crawl_service.patch_domain(crawl_domain_id, crawl_profile_id, body)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return await op_crawl_domains_update(
+        CrawlDomainUpdatePayload.model_validate(
+            {
+                **body.model_dump(exclude_unset=True),
+                "crawl_domain_id": crawl_domain_id,
+                "crawl_profile_id": crawl_profile_id,
+            }
+        ),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.delete("/domains/{crawl_domain_id}", status_code=204)
 async def delete_crawl_domain(
-    crawl_domain_id: str,
-    container: ContainerDep,
-    crawl_profile_id: Annotated[str, Query(min_length=1)],
+    crawl_domain_id: str, container: ContainerDep, crawl_profile_id: Annotated[str, Query(min_length=1)]
 ) -> None:
-    try:
-        await container.crawl_service.delete_domain(crawl_domain_id, crawl_profile_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await op_crawl_domains_remove(
+        CrawlDomainRefPayload(crawl_domain_id=crawl_domain_id, crawl_profile_id=crawl_profile_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post("/domains/{crawl_domain_id}/urls", response_model=UpsertStats, status_code=202)
@@ -227,59 +244,35 @@ async def add_crawl_domain_urls(
     container: ContainerDep,
     crawl_profile_id: Annotated[str, Query(min_length=1)],
 ) -> UpsertStats:
-    try:
-        stats = await container.crawl_service.add_domain_urls(crawl_domain_id, crawl_profile_id, body)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    _ = await enqueue(CRAWL_ORCHESTRATOR_TICK, crawl_profile_id)
-    return stats
+    return await op_crawl_domains_urls_add(
+        CrawlDomainUrlsAddPayload(urls=body.urls, crawl_domain_id=crawl_domain_id, crawl_profile_id=crawl_profile_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post("/urls/{crawl_url_id}/recrawl", response_model=CrawlUrl, status_code=202)
 async def recrawl_crawl_url(
-    crawl_url_id: str,
-    container: ContainerDep,
-    crawl_profile_id: Annotated[str, Query(min_length=1)],
+    crawl_url_id: str, container: ContainerDep, crawl_profile_id: Annotated[str, Query(min_length=1)]
 ) -> CrawlUrl:
-    try:
-        crawl_url = await container.crawl_service.recrawl_url(crawl_url_id, crawl_profile_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    _ = await enqueue(CRAWL_ORCHESTRATOR_TICK, crawl_profile_id)
-    return crawl_url
+    return await op_crawl_urls_recrawl(
+        CrawlUrlRefPayload(crawl_url_id=crawl_url_id, crawl_profile_id=crawl_profile_id),
+        user=require_context().user,
+        container=container,
+    )
 
 
 @router.post("/seed/import", response_model=SeedImportResult)
 async def import_crawl_seed(body: SeedImportRequest, container: ContainerDep) -> SeedImportResult:
-    if body.seed_source == "tranco":
-        _ = await enqueue(
-            CRAWL_IMPORT_SEED_DOMAINS,
-            body.crawl_profile_id,
-            body.seed_source,
-            body.tranco_limit,
-        )
-        return SeedImportResult(imported=0, skipped=0)
-    try:
-        return await container.crawl_service.import_seed(body)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return await op_crawl_seed_import(body, user=require_context().user, container=container)
 
 
 @router.post("/profiles/{crawl_profile_id}/seed/tranco", response_model=SeedImportResult)
 async def import_tranco_seed_for_profile(
-    crawl_profile_id: str,
-    body: SeedImportRequest,
-    container: ContainerDep,
+    crawl_profile_id: str, body: CrawlProfileTrancoSeedRequest, container: ContainerDep
 ) -> SeedImportResult:
-    if body.crawl_profile_id != crawl_profile_id:
-        raise HTTPException(status_code=400, detail="crawl_profile_id mismatch")
-    if body.seed_source != "tranco":
-        raise HTTPException(status_code=400, detail="seed_source must be tranco")
-    _ = container
-    _ = await enqueue(
-        CRAWL_IMPORT_SEED_DOMAINS,
-        crawl_profile_id,
-        "tranco",
-        body.tranco_limit,
+    return await op_crawl_profiles_tranco_seed(
+        CrawlProfileTrancoSeedPayload(crawl_profile_id=crawl_profile_id, tranco_limit=body.tranco_limit),
+        user=require_context().user,
+        container=container,
     )
-    return SeedImportResult(imported=0, skipped=0)

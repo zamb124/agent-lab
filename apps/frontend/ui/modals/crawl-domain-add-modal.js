@@ -43,7 +43,7 @@ export class FrontendCrawlDomainAddModal extends PlatformFormModal {
         this._category = 'manual';
         this._refreshInterval = '';
         this._seedUrls = '';
-        this._createOp = this.useOp('frontend/crawl_domain_create');
+        this._createOp = this.useOp('search/crawl_domain_create');
     }
 
     willUpdate(changed) {

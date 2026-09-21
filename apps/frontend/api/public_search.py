@@ -29,10 +29,10 @@ from core.context import get_context
 from core.http import get_httpx_client
 from core.identity.embed_guest_turns import EMBED_SESSION_ID_METADATA_KEY
 from core.identity.runtime_users import ensure_persisted_runtime_user
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID, SYSTEM_COMPANY_SUBDOMAIN
+from core.identity.system_bootstrap import SYSTEM_COMPANY_SUBDOMAIN
 from core.logging import get_logger
 from core.models.embed_models import EmbedStatus
-from core.models.identity_models import User
+from core.models.identity_models import SYSTEM_COMPANY_ID, User
 from core.search import PUBLIC_SEARCH_FLOW_ID, PUBLIC_SEARCH_SESSION_ISSUER, PublicSearchMode
 from core.search.models import MetaSearchResponse, MetaSearchSerpMoreRequest, SerpClickEvent
 from core.types import JsonObject

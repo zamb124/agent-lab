@@ -22,12 +22,12 @@ FIXTURES_DIR = REPO_ROOT / "tests" / "core" / "ai" / "fixtures" / "scoring"
 
 sys.path.insert(0, str(REPO_ROOT))
 
-from apps.flows.src.services.llm_models_service import LLMModelsService  # noqa: E402
 from core.ai.adapters.catalog_base import AIProviderAdapterError  # noqa: E402
 from core.ai.free_pool import (  # noqa: E402
     fetch_artificial_analysis_indices,
     platform_free_records_from_model_records,
 )
+from core.ai.llm_models_service import LLMModelsService  # noqa: E402
 from core.ai.model_catalog_repository import AIModelCatalogRepository  # noqa: E402
 from core.ai.models import AIModelRecord  # noqa: E402
 from core.ai.provider_error import AIProviderErrorClass, classify_ai_provider_http  # noqa: E402

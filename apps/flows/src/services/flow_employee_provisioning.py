@@ -14,8 +14,8 @@ from core.identity.flow_employee import (
     ensure_flow_employee,
     flow_employee_user_id,
 )
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.logging import get_logger
+from core.models.identity_models import SYSTEM_COMPANY_ID
 
 logger = get_logger(__name__)
 

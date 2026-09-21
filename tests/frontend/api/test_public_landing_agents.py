@@ -18,10 +18,9 @@ from core.identity.embed_guest_turns import (
     EMBED_GUEST_USER_TURNS_REDIS_PREFIX,
     EMBED_SESSION_ID_METADATA_KEY,
 )
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.models.context_models import Context
 from core.models.embed_models import EmbedConfig, EmbedMapping, EmbedStatus
-from core.models.identity_models import User
+from core.models.identity_models import SYSTEM_COMPANY_ID, User
 from core.utils.tokens import get_token_service
 
 pytestmark = [pytest.mark.timeout(120, func_only=True)]

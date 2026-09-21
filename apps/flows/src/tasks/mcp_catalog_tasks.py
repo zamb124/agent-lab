@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TypedDict
 
+from apps.flows.src.container import get_container
 from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.services.mcp_branding_seed import seed_mcp_branding_from_bundle
 from apps.flows.src.services.mcp_catalog_crawler import MCPCatalogCrawlStats, crawl_mcp_registry
@@ -11,15 +12,14 @@ from apps.flows.src.services.mcp_catalog_provisioner import (
     provision_mcp_catalog_for_company,
     resync_catalog_tools_for_company,
 )
-from apps.idle_worker.container import get_container
-from apps.idle_worker.tasks.llm_models_tasks import build_scheduler_auth_context
-from apps.idle_worker.tasks.task_names import (
+from apps.flows.src.tasks.task_names import (
     TASK_MCP_CATALOG_CRAWL,
     TASK_MCP_CATALOG_PROVISION_COMPANIES,
     TASK_MCP_CATALOG_RESYNC_TOOLS,
 )
 from core.config import get_settings
 from core.context import Context, clear_context, set_context
+from core.identity.system_bootstrap import build_system_admin_job_context
 from core.logging import get_logger
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
@@ -88,8 +88,9 @@ async def mcp_catalog_crawl_task(
         }
 
     container = get_container()
-    scheduler_context = await build_scheduler_auth_context(
-        container=container,
+    scheduler_context = await build_system_admin_job_context(
+        company_repository=container.company_repository,
+        user_repository=container.user_repository,
         trace_id=f"scheduler:{TASK_MCP_CATALOG_CRAWL.name}:{schedule_task_id}",
         session_id=f"{TASK_MCP_CATALOG_CRAWL.name}:{schedule_task_id}",
     )

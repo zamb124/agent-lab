@@ -38,7 +38,7 @@ export class FrontendCrawlUrlAddModal extends PlatformFormModal {
         this.crawl_domain_id = '';
         this.domain = '';
         this._urls = '';
-        this._addOp = this.useOp('frontend/crawl_url_add');
+        this._addOp = this.useOp('search/crawl_url_add');
     }
 
     willUpdate(changed) {

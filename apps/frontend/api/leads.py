@@ -10,8 +10,8 @@ from fastapi import APIRouter, HTTPException, Query
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.models import LeadCreateBody, LeadCreateResponse, LeadRequestRecord
 from core.context import require_active_company
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.logging import get_logger
+from core.models.identity_models import SYSTEM_COMPANY_ID
 from core.pagination import CursorPage, decode_cursor, encode_cursor
 
 logger = get_logger(__name__)

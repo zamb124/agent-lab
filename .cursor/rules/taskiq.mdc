@@ -79,6 +79,8 @@ Middleware на каждом брокере (порядок важен):
 
 Имена задач — только `snake_case`, глобально уникальны (`declare_task` → raise при конфликте).
 
+Очередь `idle` — shared-домены платформы (AI model catalog, почта/календарь, платежи, settlement, push, retention); `IdleWorkerContainer(BaseContainer)` без flows-БД, настройки — `BaseSettings` слоя `idle_worker`. Задачи, которым нужен runtime flows (MCP catalog crawl/provision/resync, `tool_tag_groups_describe_tick`, `dispatch_email_triggers`), объявлены в `apps/flows/src/tasks/task_names.py` и исполняются `flows_worker`; declaration-модули core-доменов — `core/mail/task_names.py`, `core/ai/task_names.py` (impl в idle). Импорт `apps.<x>.tasks.task_names` разрешён из любого сервиса (единственный контракт постановки задачи).
+
 ## Wiring и autodiscover
 
 `apps/platform_tasks/wiring.py` — единственная топология:

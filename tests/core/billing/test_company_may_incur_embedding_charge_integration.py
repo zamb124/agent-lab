@@ -6,9 +6,8 @@ from __future__ import annotations
 import pytest
 
 from core.billing.service import BillingService
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.models.billing_models import DEFAULT_TARIFF_PRICES
-from core.models.identity_models import Company
+from core.models.identity_models import SYSTEM_COMPANY_ID, Company
 from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 

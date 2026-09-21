@@ -1007,7 +1007,25 @@
             "toast_saved": "Search provider saved",
             "toast_order_saved": "Search provider order saved",
             "toast_reset": "Search provider reset",
-            "toast_failed": "Failed to update search provider"
+            "toast_failed": "Failed to update search provider",
+            "catalog": {
+                "tinyfish": {
+                    "description": "Fast low-cost SERP API for lightweight web search and prototypes.",
+                    "tooltip": "Good for cheap first-pass search. Billed as search:tinyfish."
+                },
+                "linkup": {
+                    "description": "LLM-oriented web search with controllable depth.",
+                    "tooltip": "Depth fast/standard/deep. BYOK does not charge the {platformName} balance."
+                },
+                "serper": {
+                    "description": "Google SERP through Serper.dev with normalized organic results.",
+                    "tooltip": "Google-like results. With the platform key it is billed as search:serper."
+                },
+                "tavily": {
+                    "description": "AI-search API with basic/advanced depth and topic controls.",
+                    "tooltip": "Pricier, but useful for deep/research flows and RAG-friendly results."
+                }
+            }
         },
         "model_scoring": {
             "title": "LLM model scoring",

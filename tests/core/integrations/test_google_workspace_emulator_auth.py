@@ -19,7 +19,6 @@ from core.clients.google_workspace_auth import GoogleAuthMaterial
 from core.config import get_settings
 from core.config.models import AuthConfig, AuthProviderConfig
 from core.context import clear_context, set_context
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.integrations.company_credentials import (
     CompanyIntegrationCredentialService,
     GoogleWorkspaceCompanyCredentialPut,
@@ -31,6 +30,7 @@ from core.integrations.constants import (
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.integrations.repository import IntegrationCredentialRepository
 from core.models import Company, Context, User
+from core.models.identity_models import SYSTEM_COMPANY_ID
 from core.state import ExecutionState
 from core.state.interrupt import InterruptKind, OAuthInterrupt
 from tests.fixtures.google_api_emulator import GoogleApiEmulatorHandle

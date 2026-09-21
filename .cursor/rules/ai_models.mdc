@@ -31,7 +31,7 @@ alwaysApply: false
 ## Discovery
 
 - Provider-specific model discovery живёт только в `core.ai.adapters.*`.
-- `apps/flows/src/services/llm_models_service.py` — только orchestration: adapter registry → records → shared repository → scheduler.
+- `core/ai/llm_models_service.py::LLMModelsService` (`BaseContainer.llm_models_service`) — только orchestration: adapter registry → records → shared repository → scheduler; задачи `sync_llm_models_task` / `refresh_platform_free_models_task` объявлены в `core/ai/task_names.py` (очередь `idle`).
 - Новый provider добавляется один раз в `core.ai.providers`; если discovery нестандартный — отдельный adapter в `core.ai.adapters`.
 - `conf.json` задаёт credentials/base_url/models_url/enabled-параметры, но не список существующих providers.
 

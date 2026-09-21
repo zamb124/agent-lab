@@ -9,11 +9,10 @@ from typing import TYPE_CHECKING
 
 from apps.frontend.models import LandingDemoSpec
 from core.context import clear_context, set_context
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.embed_models import EmbedConfig, EmbedMapping, EmbedStatus
-from core.models.identity_models import User
+from core.models.identity_models import SYSTEM_COMPANY_ID, User
 
 if TYPE_CHECKING:
     from apps.frontend.container import FrontendContainer

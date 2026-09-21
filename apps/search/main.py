@@ -6,12 +6,15 @@ from apps.search.api.mcp import router as search_mcp_router
 from apps.search.api.v1.crawl import router as crawl_v1_router
 from apps.search.api.v1.search import router as search_v1_router
 from apps.search.api.v1.search_indexes import router as search_indexes_v1_router
+from apps.search.api.v1.search_providers import router as search_providers_v1_router
 from apps.search.config import SearchSettings, get_search_settings
 from apps.search.container import SearchContainer, get_search_container
+from apps.search.realtime.command_router import register_search_ws_commands
 from core.app import create_service_app
 
 
 async def on_startup(_app: FastAPI, container: SearchContainer, _settings: SearchSettings) -> None:
+    register_search_ws_commands()
     await container.redis_client.connect()
 
 
@@ -23,7 +26,13 @@ app = create_service_app(
     service_name="search",
     settings_class=SearchSettings,
     get_container=get_search_container,
-    routers=[search_mcp_router, search_v1_router, search_indexes_v1_router, crawl_v1_router],
+    routers=[
+        search_mcp_router,
+        search_v1_router,
+        search_indexes_v1_router,
+        search_providers_v1_router,
+        crawl_v1_router,
+    ],
     cors_origins=["*"],
     title="Platform Search",
     description="Search provider gateway and MCP server",

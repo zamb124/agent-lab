@@ -99,10 +99,13 @@ Ownership: `apps/search` + `apps/search_worker` + `platform_search`.
 - `crawl_import_seed_domains` после `imported > 0` → `kiq crawl_orchestrator_tick`.
 - Cron schedules: idempotent bootstrap в `apps/scheduler/crawl_schedule_bootstrap.py` (rollout/restart `scheduler-api`).
 
+## Команды (`SEARCH_OPERATIONS`)
+
+`apps/search/realtime/{command_router,operations}.py` — `search` в `_OWNER_BY_SCOPE` и `COMMAND_WS_SERVICES`; REST-зеркало `/search/api/v1/**` (crawl, search-indexes, search, providers/company) зовёт те же `op_*`. Crawl-администрирование и реестр индексов — `require_system_admin` (компания `system` + FGA `company#admin`); настройки провайдеров компании (`search/providers/*`, `Company.metadata.search_providers`) — `require_company_admin`; meta-поиск (`search/query/*`) доступен гостю публичного поиска. Каталог метаданных провайдеров (label/logo/docs_url + i18n `settings_page.search_providers.catalog.*`) живёт в UI, бэкенд отдаёт только `CompanySearchProvidersResponse`. `apps/search/api/mcp.py` — MCP JSON-RPC, не команда. Сервис внутренний: `/search` на ingress и dev-proxy — публичная страница поиска frontend, REST-зеркало доступно in-cluster и в тестовом стеке (`:9010`). Live identity WS=REST — `tests/realtime/test_search_commands.py`.
+
 ## Crawl report
 
-- Admin UI: `/frontend` → Crawl report (`frontend-crawl-report-page`): summary, domains/URLs/jobs, фильтры, transport badge, **LLM enriched** badge (`enriched_content_hash`), **Run** per domain, auto-refresh 15s при активном крауле.
-- Frontend proxy: `POST /frontend/api/crawl-report/domains/{crawl_domain_id}/run`
+- Admin UI: `/frontend` → Crawl report (`frontend-crawl-report-page`): summary, domains/URLs/jobs, фильтры, transport badge, **LLM enriched** badge (`enriched_content_hash`), **Run** per domain, auto-refresh 15s при активном крауле. Фабрики — `@platform/lib/events/resources/search-crawl-report.resource.js` (`search/crawl_*`, `transport: 'ws'`), BFF-прокси во frontend нет.
 - `crawl_urls.fetch_transport`: `http` | `browser` — UI badge в Crawl Report.
 - Job counters: `urls_enriched`, `urls_enrichment_failed`.
 

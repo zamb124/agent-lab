@@ -56,7 +56,6 @@ from apps.flows.src.services.hitl_conversation_service import HitlConversationSe
 from apps.flows.src.services.hitl_work_item_service import HitlWorkItemService
 from apps.flows.src.services.lara_action_engine import LaraActionEngine
 from apps.flows.src.services.lara_facade import LaraFacade
-from apps.flows.src.services.llm_models_service import LLMModelsService
 from apps.flows.src.services.mcp_branding_service import MCPServerBrandingService
 from apps.flows.src.services.platform_event_consumer import PlatformEventConsumerService
 from apps.flows.src.services.resource_loader import ResourceLoader
@@ -439,14 +438,6 @@ class FlowContainer(BaseContainer):
             node_repository=self.node_repository,
             tool_repository=self.tool_repository,
             container=self._runtime_contract(),
-        )
-
-    @lazy
-    def llm_models_service(self) -> LLMModelsService:
-        return LLMModelsService(
-            repository=self.ai_model_catalog_repository,
-            scheduler_client=self.scheduler_client,
-            redis_client=self.redis_client,
         )
 
     @lazy

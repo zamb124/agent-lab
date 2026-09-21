@@ -4,15 +4,16 @@ from __future__ import annotations
 
 from core.authz.company_sync import sync_company_member_roles
 from core.authz.service import AuthzService
+from core.context.job_context import build_job_context
 from core.db.repositories.company_repository import CompanyRepository
 from core.db.repositories.subdomain_repository import SubdomainRepository
 from core.db.repositories.user_repository import UserRepository
 from core.logging import get_logger
-from core.models.identity_models import Company, User
+from core.models.context_models import Context
+from core.models.identity_models import SYSTEM_COMPANY_ID, Company, User
 
 logger = get_logger(__name__)
 
-SYSTEM_COMPANY_ID = "system"
 SYSTEM_COMPANY_SUBDOMAIN = "system"
 SYSTEM_COMPANY_NAME = "System"
 SYSTEM_ADMIN_EMAIL = "zambas124@yandex.ru"
@@ -78,6 +79,28 @@ async def load_system_admin_membership(
             f"system admin roster missing admin role for {user_email} in {company.company_id}"
         )
     return company, target_user
+
+
+async def build_system_admin_job_context(
+    *,
+    company_repository: CompanyRepository,
+    user_repository: UserRepository,
+    trace_id: str,
+    session_id: str,
+) -> Context:
+    """``Context`` + JWT системного админа для scheduler-тиков и фоновых задач платформы."""
+    company, user = await load_system_admin_membership(
+        company_repository=company_repository,
+        user_repository=user_repository,
+    )
+    return build_job_context(
+        company=company,
+        user=user,
+        host="system",
+        trace_id=trace_id,
+        session_id=session_id,
+        channel="system",
+    )
 
 
 async def ensure_system_admin_membership(

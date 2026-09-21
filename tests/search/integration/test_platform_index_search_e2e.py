@@ -73,7 +73,7 @@ async def test_search_indexes_registry_crud(search_client, unique_id):
         json={"search_index_ids": [search_index_id]},
     )
     assert batch_response.status_code == 200
-    batch_items = batch_response.json()
+    batch_items = batch_response.json()["items"]
     assert len(batch_items) == 1
     assert batch_items[0]["search_index_id"] == search_index_id
 

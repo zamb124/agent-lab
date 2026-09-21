@@ -42,7 +42,7 @@ CI `scripts/check_command_rest_mirror.py` (`make check-events-canon`), `scripts/
 1. Каждая factory operation имеет `restMirror` (явный или auto).
 2. FastAPI route существует.
 3. Имя push-события ≠ имени команды.
-4. Сервис из `COMMAND_WS_SERVICES` (`sync`, `worktracker`, `wiki`, `rag`, `office`, `crm`, `flows`) — factory `transport: 'ws'`, кроме `COMMAND_WS_HTTP_ALLOWLIST` (гость/pre-WS: `sync/call_join_*`; `sync/namespaces*` ещё HTTP; `wiki/public_*`; `rag/document_upload`, `office/document_upload`, `crm/attachment_upload` — chunked Files; `office/document_editor_config` и `office/public_*` — OnlyOffice/анонимный viewer; CRM cursor-list `crm/entities_list`/`crm/notes_list`/`crm/relationships_list` — UI-filters; flows: `flows/google_workspace_authorize` (OAuth redirect), `flows/data_table_snapshot` (office GET), `flows/editor` (ui-only), `flows/api_console_run` (A2A), `flows/code_lsp_session` (LSP bootstrap)).
+4. Сервис из `COMMAND_WS_SERVICES` (`sync`, `worktracker`, `wiki`, `rag`, `office`, `crm`, `flows`, `search`) — factory `transport: 'ws'`, кроме `COMMAND_WS_HTTP_ALLOWLIST` (гость/pre-WS: `sync/call_join_*`; `sync/namespaces*` ещё HTTP; `wiki/public_*`; `rag/document_upload`, `office/document_upload`, `crm/attachment_upload` — chunked Files; `office/document_editor_config` и `office/public_*` — OnlyOffice/анонимный viewer; CRM cursor-list `crm/entities_list`/`crm/notes_list`/`crm/relationships_list` — UI-filters; flows: `flows/google_workspace_authorize` (OAuth redirect), `flows/data_table_snapshot` (office GET), `flows/editor` (ui-only), `flows/api_console_run` (A2A), `flows/code_lsp_session` (LSP bootstrap)).
 
 ### WebSocket request-reply
 
@@ -53,7 +53,7 @@ CI `scripts/check_command_rest_mirror.py` (`make check-events-canon`), `scripts/
 Centrifugo publish) → владелец по первому сегменту `type`
 (`core/realtime/command_owners.py::_OWNER_BY_SCOPE`) →
 `POST /{owner}/api/internal/realtime/command` (`core/realtime/command_http.py`,
-смонтирован `create_service_app` на каждом сервисе) → `dispatch_ws_command` → тот же `op_*`.
+смонтирован `create_service_app` на каждом сервисе независимо от `include_platform_routers`) → `dispatch_ws_command` → тот же `op_*`.
 Исход — publication `*_succeeded`/`*_failed` с `meta.causation_id = event_id`.
 Команда без исхода за `realtime.command_deadline_seconds` — bus-sweeper
 (`sweep_expired_commands`) публикует синтетический `*_failed` `deadline_exceeded`.

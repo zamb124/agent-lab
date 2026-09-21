@@ -17,9 +17,8 @@ from core.identity.company_membership import (
     remove_company_membership,
     set_company_member_roles,
 )
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.logging import get_logger
-from core.models.identity_models import Company, User
+from core.models.identity_models import SYSTEM_COMPANY_ID, Company, User
 from core.namespace import ensure_personal_namespace_for_user
 from core.pagination import ListResponse
 from core.tasks import enqueue

@@ -24,7 +24,6 @@ from core.files.create_spec import FileCreateSpec, FileSourceKind, FileSourceRef
 from core.files.reader.service import read_stored_file_by_id
 from core.files.registry import default_retention_for_source
 from core.files.service import FilesService
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.logging import get_logger
 from core.mail.attachment_index import MailAttachmentFileIndex
 from core.mail.authz.tuples import (
@@ -126,7 +125,7 @@ from core.mail.repositories import (
 )
 from core.mail.threads import thread_id_for_message
 from core.models.calendar_models import CalendarAutolinkStatus
-from core.models.identity_models import NamespaceKind, User
+from core.models.identity_models import SYSTEM_COMPANY_ID, NamespaceKind, User
 from core.namespace import (
     NamespaceService,
     ensure_personal_namespace_for_user,

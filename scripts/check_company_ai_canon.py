@@ -619,7 +619,7 @@ def main() -> int:
                     "use core.ai.runtime.rerank_scores"
                 )
 
-        if rel == "apps/flows/src/services/llm_models_service.py" and _APP_MODEL_CATALOG_DISCOVERY_RE.search(text):
+        if rel == "core/ai/llm_models_service.py" and _APP_MODEL_CATALOG_DISCOVERY_RE.search(text):
             failures.append(
                 f"{rel}: provider catalog HTTP/discovery code is forbidden in flows; "
                 "use core.ai.adapters"

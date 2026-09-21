@@ -22,8 +22,7 @@ from apps.frontend.models import (
 from core.context import get_context
 from core.db.repositories.company_repository import CompanyRepository
 from core.db.repositories.user_repository import UserRepository
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
-from core.models.identity_models import Company, User
+from core.models.identity_models import SYSTEM_COMPANY_ID, Company, User
 from core.pagination import CursorPage
 from core.tracing.models import TraceSpanRecord
 from core.tracing.repository import ADMIN_FACETS_MAX_LIMIT, ADMIN_SPANS_MAX_LIMIT

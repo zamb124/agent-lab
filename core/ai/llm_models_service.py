@@ -3,11 +3,6 @@
 import asyncio
 from datetime import datetime, timezone
 
-from apps.flows.config import get_settings
-from apps.idle_worker.tasks.task_names import (
-    TASK_REFRESH_PLATFORM_FREE_MODELS,
-    TASK_SYNC_LLM_MODELS,
-)
 from core.ai.adapters import AIProviderAdapter, create_model_catalog_adapter_registry
 from core.ai.free_pool import read_humanitec_llms_model_options
 from core.ai.model_catalog_repository import AIModelCatalogRepository
@@ -21,8 +16,10 @@ from core.ai.providers import (
     AICapability,
     platform_provider_specs_for_capability,
 )
+from core.ai.task_names import TASK_REFRESH_PLATFORM_FREE_MODELS, TASK_SYNC_LLM_MODELS
 from core.clients.redis_client import RedisClient
 from core.clients.scheduler_client import SchedulerClient
+from core.config import get_settings
 from core.logging import get_logger
 from core.scheduler.models import (
     PlatformScheduleCreateRequest,

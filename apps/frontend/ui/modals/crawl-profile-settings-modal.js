@@ -72,7 +72,7 @@ export class FrontendCrawlProfileSettingsModal extends PlatformFormModal {
         this._excludeExtensions = '';
         this._initialized = false;
         this.size = 'lg';
-        this._patchOp = this.useOp('frontend/crawl_profile_patch');
+        this._patchOp = this.useOp('search/crawl_profile_patch');
     }
 
     willUpdate(changed) {

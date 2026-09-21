@@ -21,7 +21,6 @@ from core.config.models import (
     GoogleWorkspaceSystemConfig,
 )
 from core.context import clear_context, set_context
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.integrations.company_credentials import (
     CompanyIntegrationConfigError,
     CompanyIntegrationCredentialService,
@@ -36,6 +35,7 @@ from core.integrations.constants import (
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.integrations.repository import IntegrationCredentialRepository
 from core.models import Company, Context, User
+from core.models.identity_models import SYSTEM_COMPANY_ID
 from core.state import ExecutionState
 from core.state.interrupt import InterruptKind, OAuthInterrupt
 

@@ -42,6 +42,7 @@
   "apps/office/api/viewer_routes.py::viewer_frame",
   "apps/office/api/viewer_routes.py::viewer_save",
   "apps/office/api/viewer_routes.py::viewer_stream",
+  "apps/search/api/mcp.py::mcp_jsonrpc",
   "apps/sync/api/namespaces.py::list_namespaces",
   "apps/sync/api/namespaces.py::update_namespace_sync_settings",
   "apps/wiki/api/public.py::get_public_page",
