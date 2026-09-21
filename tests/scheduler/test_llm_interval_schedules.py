@@ -7,12 +7,12 @@ from typing import Any
 
 import pytest
 
-from apps.idle_worker.tasks.task_names import TASK_REFRESH_PLATFORM_FREE_MODELS
 from apps.scheduler.main import (
     PLATFORM_FREE_MODELS_SYNC_PAYLOAD_MARKER,
     SYSTEM_SCHEDULER_COMPANY_ID,
     _ensure_idle_interval_schedule,
 )
+from core.ai.task_names import TASK_REFRESH_PLATFORM_FREE_MODELS
 from core.scheduler.models import (
     PlatformRedisScheduleSnapshot,
     PlatformScheduleCreateRequest,

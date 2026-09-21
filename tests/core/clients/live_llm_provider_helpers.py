@@ -18,7 +18,6 @@ from a2a.types.a2a_pb2 import (
     ROLE_USER,
 )
 
-from apps.flows.src.services.llm_models_service import LLMModelsService
 from core.ai.adapters.catalog_base import AIProviderAdapterError
 from core.ai.free_pool import (
     PlatformFreeModelRecord,
@@ -27,6 +26,7 @@ from core.ai.free_pool import (
     platform_free_records_from_model_records,
     sort_platform_free_records,
 )
+from core.ai.llm_models_service import LLMModelsService
 from core.ai.model_catalog_repository import AIModelCatalogRepository
 from core.ai.models import AIModelRecord
 from core.ai.provider_error import (

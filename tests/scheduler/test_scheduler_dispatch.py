@@ -7,8 +7,8 @@ from typing import Any
 import pytest
 from taskiq.scheduler.scheduled_task import ScheduledTask
 
-from apps.idle_worker.tasks.task_names import TASK_SYNC_LLM_MODELS
 from apps.scheduler import dispatch as scheduler_dispatch
+from core.ai.task_names import TASK_SYNC_LLM_MODELS
 
 
 class _FakeScheduleSource:
