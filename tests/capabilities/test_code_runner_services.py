@@ -67,11 +67,12 @@ def _documented_builtin_tool_ids() -> set[str]:
 def _decorated_tool_specs() -> set[tuple[str, str]]:
     specs: set[tuple[str, str]] = set()
     for package_root, module_prefix in _TOOL_PACKAGE_SCAN_ROOTS:
-        for path in sorted(package_root.glob("*.py")):
+        for path in sorted(package_root.rglob("*.py")):
             if path.name in {"__init__.py", "builtin_specs.py"}:
                 continue
             tree = ast.parse(path.read_text(encoding="utf-8"))
-            module_name = f"{module_prefix}.{path.stem}"
+            relative_module = ".".join(path.relative_to(package_root).with_suffix("").parts)
+            module_name = f"{module_prefix}.{relative_module}"
             for node in tree.body:
                 if not isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
                     continue
